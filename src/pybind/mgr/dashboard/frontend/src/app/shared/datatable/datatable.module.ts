@@ -3,7 +3,6 @@ import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import {
   TableModule,
@@ -26,6 +25,7 @@ import CheckIcon from '@carbon/icons/es/checkmark/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 import MaximizeIcon from '@carbon/icons/es/maximize/16';
 import ArrowDown from '@carbon/icons/es/caret--down/16';
+import ChevronDwon from '@carbon/icons/es/chevron--down/16';
 
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
@@ -51,7 +51,6 @@ import { TableDetailDirective } from './directives/table-detail.directive';
 @NgModule({
   imports: [
     CommonModule,
-    NgxPipeFunctionModule,
     FormsModule,
     NgbDropdownModule,
     NgbTooltipModule,
@@ -138,7 +137,8 @@ export class DataTableModule {
       CheckIcon,
       CloseIcon,
       MaximizeIcon,
-      ArrowDown
+      ArrowDown,
+      ChevronDwon
     ]);
   }
 }

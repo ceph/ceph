@@ -11,11 +11,11 @@
  * Foundation.  See file COPYING.
  */
 
+#include "mgr/ClusterState.h"
 #include "messages/MMgrDigest.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MPGStats.h"
 
-#include "mgr/ClusterState.h"
 #include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
 
@@ -89,6 +89,8 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
     pending_inc.update_stat(from, std::move(empty_stat));  
   }
 
+  const auto existing_pools_end_it = existing_pools.end();
+  const auto pg_map_pg_stat_end_it = pg_map.pg_stat.end();
   for (auto p : stats->pg_stat) {
     pg_t pgid = p.first;
     const auto &pg_stats = p.second;
@@ -96,7 +98,7 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
     // In case we're hearing about a PG that according to last
     // OSDMap update should not exist
     auto r = existing_pools.find(pgid.pool());
-    if (r == existing_pools.end()) {
+    if (r == existing_pools_end_it) {
       dout(15) << " got " << pgid
 	       << " reported at " << pg_stats.reported_epoch << ":"
                << pg_stats.reported_seq
@@ -117,7 +119,7 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
     // In case we already heard about more recent stats from this PG
     // from another OSD
     const auto q = pg_map.pg_stat.find(pgid);
-    if (q != pg_map.pg_stat.end() &&
+    if (q != pg_map_pg_stat_end_it &&
 	q->second.get_version_pair() > pg_stats.get_version_pair()) {
       dout(15) << " had " << pgid << " from "
 	       << q->second.reported_epoch << ":"
@@ -125,10 +127,10 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
       continue;
     }
 
-    pending_inc.pg_stat_updates[pgid] = pg_stats;
+    pending_inc.pg_stat_updates.insert_or_assign(pgid, pg_stats);
   }
   for (auto p : stats->pool_stat) {
-    pending_inc.pool_statfs_updates[std::make_pair(p.first, from)] = p.second;
+    pending_inc.pool_statfs_updates.insert_or_assign(std::make_pair(p.first, from), p.second);
   }
 }
 

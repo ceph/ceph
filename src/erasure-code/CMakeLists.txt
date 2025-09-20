@@ -21,6 +21,7 @@ add_subdirectory(jerasure)
 add_subdirectory(lrc)
 add_subdirectory(shec)
 add_subdirectory(clay)
+add_subdirectory(consistency)
 
 if(HAVE_NASM_X64_AVX2 OR HAVE_ARMV8_SIMD)
   set(WITH_EC_ISA_PLUGIN TRUE CACHE BOOL "")

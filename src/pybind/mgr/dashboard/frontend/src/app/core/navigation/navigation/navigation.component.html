@@ -33,13 +33,15 @@
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
-      <div class="cds--btn cds--btn--icon-only cds--header__action">
-        <cd-notifications (click)="toggleRightSidebar()"></cd-notifications>
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           (click)="toggleSidebar()">
+        <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
-      <div class="cds--btn cds--btn--icon-only cds--header__action">
+      <div class="cds--btn cds--btn--icon-only cds--header__action"
+           *ngIf="permissions.user.read">
         <cd-administration></cd-administration>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">
@@ -78,7 +80,9 @@
   <ng-template #cd_menu>
     <ng-container *ngIf="enabledFeature$ | async as enabledFeature">
       <cds-sidenav [expanded]="showMenuSidebar"
-                   class="mt-5">
+                   class="mt-5"
+                   (click)="onMenuClick($event)"
+                   #sidenavContainer>
         <!-- Dashboard -->
         <cds-sidenav-item route="/dashboard"
                           [useRouter]="true"
@@ -93,6 +97,7 @@
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
         <cds-sidenav-menu title="Multi-Cluster"
+                          *ngIf="permissions.configOpt.read"
                           i18n-title>
           <svg cdsIcon="edge-cluster"
                icon
@@ -205,16 +210,26 @@
                             i18n-title
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>
-          <cds-sidenav-item route="/rgw/bucket"
-                            title="Buckets"
-                            i18n-title
-                            [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/user"
                             title="Users"
                             i18n-title
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_rgw_users"><span i18n>Users</span></cds-sidenav-item>
+          <cds-sidenav-item route="/rgw/bucket"
+                            title="Buckets"
+                            i18n-title
+                            [useRouter]="true"
+                            class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
+          <cds-sidenav-item route="/rgw/topic"
+                            [useRouter]="true"
+                            title="Topics"
+                            i18n-title
+                            class="tc_submenuitem tc_submenuitem_rgw_topics"><span i18n>Topics</span></cds-sidenav-item>
+          <cds-sidenav-item route="/rgw/tiering"
+                            title="Tiering"
+                            i18n-title
+                            [useRouter]="true"
+                            class="tc_submenuitem tc_submenuitem_rgw_tiering"><span i18n>Tiering</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/multisite"
                             title="Multi-site"
                             i18n-title
@@ -240,7 +255,7 @@
         <!-- Filesystem -->
         <cds-sidenav-menu title="File"
                           i18n-title
-                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs"
+                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs || permissions.smb.read"
                           class="tc_menuitem_file">
           <svg cdsIcon="file-storage"
                icon
@@ -257,6 +272,12 @@
                             i18n-title
                             *ngIf="permissions.nfs.read && enabledFeature.nfs"
                             class="tc_submenuitem tc_submenuitem_file_nfs"><span i18n>NFS</span></cds-sidenav-item>
+          <cds-sidenav-item route="/cephfs/smb"
+                            [useRouter]="true"
+                            title="SMB"
+                            i18n-title
+                            *ngIf="permissions.smb.read"
+                            class="tc_submenuitem tc_submenuitem_file_smb"><span i18n>SMB</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Observability -->
         <cds-sidenav-menu title="Observability"

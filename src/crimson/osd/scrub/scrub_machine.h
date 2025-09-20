@@ -6,6 +6,7 @@
 #include <string>
 #include <ranges>
 
+#include <boost/optional.hpp>
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/deferral.hpp>
 #include <boost/statechart/event.hpp>
@@ -49,7 +50,7 @@ struct simple_event_t : sc::event<T> {
   }
 };
 
-template <typename T, has_formatter V>
+template <typename T, fmt::formattable V>
 struct value_event_t : sc::event<T> {
   const V value;
 
@@ -339,7 +340,7 @@ struct ScrubState : sc::state<S, P, T...> {
 struct Crash : ScrubState<Crash, ScrubMachine> {
   static constexpr std::string_view state_name = "Crash";
   explicit Crash(my_context ctx) : ScrubState(ctx) {
-    ceph_abort("Crash state impossible");
+    ceph_abort_msg("Crash state impossible");
   }
 
 };

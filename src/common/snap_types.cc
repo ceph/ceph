@@ -3,6 +3,7 @@
 
 #include "snap_types.h"
 #include "common/Formatter.h"
+#include "include/types.h" // for the ceph_mds_snap_realm encoder
 
 void SnapRealmInfo::encode(ceph::buffer::list& bl) const
 {
@@ -41,16 +42,18 @@ void SnapRealmInfo::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void SnapRealmInfo::generate_test_instances(std::list<SnapRealmInfo*>& o)
+std::list<SnapRealmInfo> SnapRealmInfo::generate_test_instances()
 {
-  o.push_back(new SnapRealmInfo);
-  o.push_back(new SnapRealmInfo(1, 10, 10, 0));
-  o.push_back(new SnapRealmInfo(1, 10, 10, 0));
-  o.back()->my_snaps.push_back(10);
-  o.push_back(new SnapRealmInfo(1, 10, 10, 5));
-  o.back()->my_snaps.push_back(10);
-  o.back()->prior_parent_snaps.push_back(3);
-  o.back()->prior_parent_snaps.push_back(5);
+  std::list<SnapRealmInfo> o;
+  o.emplace_back();
+  o.push_back(SnapRealmInfo(1, 10, 10, 0));
+  o.push_back(SnapRealmInfo(1, 10, 10, 0));
+  o.back().my_snaps.push_back(10);
+  o.push_back(SnapRealmInfo(1, 10, 10, 5));
+  o.back().my_snaps.push_back(10);
+  o.back().prior_parent_snaps.push_back(3);
+  o.back().prior_parent_snaps.push_back(5);
+  return o;
 }
 
 // -- "new" SnapRealmInfo --
@@ -82,16 +85,18 @@ void SnapRealmInfoNew::dump(ceph::Formatter *f) const
   f->dump_unsigned("change_attr", change_attr);
 }
 
-void SnapRealmInfoNew::generate_test_instances(std::list<SnapRealmInfoNew*>& o)
+std::list<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
 {
-  o.push_back(new SnapRealmInfoNew);
-  o.push_back(new SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0));
-  o.push_back(new SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1));
-  o.back()->info.my_snaps.push_back(10);
-  o.push_back(new SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 5), utime_t(), 2));
-  o.back()->info.my_snaps.push_back(10);
-  o.back()->info.prior_parent_snaps.push_back(3);
-  o.back()->info.prior_parent_snaps.push_back(5);
+  std::list<SnapRealmInfoNew> o;
+  o.emplace_back();
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0));
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1));
+  o.back().info.my_snaps.push_back(10);
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 5), utime_t(), 2));
+  o.back().info.my_snaps.push_back(10);
+  o.back().info.prior_parent_snaps.push_back(3);
+  o.back().info.prior_parent_snaps.push_back(5);
+  return o;
 }
 
 // -----
@@ -116,6 +121,18 @@ bool SnapContext::is_valid() const
   return true;
 }
 
+void SnapContext::encode(ceph::buffer::list& bl) const {
+  using ceph::encode;
+  encode(seq, bl);
+  encode(snaps, bl);
+}
+
+void SnapContext::decode(ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  decode(seq, bl);
+  decode(snaps, bl);
+}
+
 void SnapContext::dump(ceph::Formatter *f) const
 {
   f->dump_unsigned("seq", seq);
@@ -125,13 +142,19 @@ void SnapContext::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void SnapContext::generate_test_instances(std::list<SnapContext*>& o)
+std::list<SnapContext> SnapContext::generate_test_instances()
 {
-  o.push_back(new SnapContext);
+  std::list<SnapContext> o;
+  o.emplace_back();
   std::vector<snapid_t> v;
-  o.push_back(new SnapContext(10, v));
+  o.push_back(SnapContext(10, v));
   v.push_back(18);
   v.push_back(3);
   v.push_back(1);
-  o.push_back(new SnapContext(20, v));
+  o.push_back(SnapContext(20, v));
+  return o;
+}
+
+std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
+  return out << snapc.seq << "=" << snapc.snaps;
 }

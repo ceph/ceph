@@ -2,18 +2,13 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
-#include "common/ceph_context.h"
-#include "common/config.h"
 #include "common/snap_types.h"
 #include "common/Clock.h"
 #include "common/bit_vector.hpp"
-#include "include/encoding.h"
-#include "include/types.h"
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "include/rbd/object_map_types.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "cls/rbd/cls_rbd.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Types.h"
@@ -31,8 +26,6 @@ using cls::rbd::MIRROR_PEER_DIRECTION_RX;
 using cls::rbd::MIRROR_PEER_DIRECTION_TX;
 using cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
 using ::librbd::ParentImageInfo;
-using ceph::encode;
-using ceph::decode;
 
 static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
                         uint64_t snap_id, const std::string &snap_name) {
@@ -2156,7 +2149,7 @@ TEST_F(TestClsRbd, mirror_image_map)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-  ioctx.remove(RBD_MIRRORING);
+  ioctx.remove(RBD_MIRROR_LEADER);
 
   std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
   ASSERT_EQ(-ENOENT, mirror_image_map_list(&ioctx, "", 0, &image_mapping));
@@ -2177,7 +2170,7 @@ TEST_F(TestClsRbd, mirror_image_map)
 
       mirror_image_map_update(&op, global_image_id, mirror_image_map);
     }
-    ASSERT_EQ(0, ioctx.operate(RBD_MIRRORING, &op));
+    ASSERT_EQ(0, ioctx.operate(RBD_MIRROR_LEADER, &op));
   }
 
   ASSERT_EQ(0, mirror_image_map_list(&ioctx, "", 1000, &image_mapping));
@@ -2203,7 +2196,7 @@ TEST_F(TestClsRbd, mirror_image_map)
   librados::ObjectWriteOperation op;
   mirror_image_map_remove(&op, "1");
   mirror_image_map_update(&op, "10", expected_mirror_image_map);
-  ASSERT_EQ(0, ioctx.operate(RBD_MIRRORING, &op));
+  ASSERT_EQ(0, ioctx.operate(RBD_MIRROR_LEADER, &op));
 
   ASSERT_EQ(0, mirror_image_map_list(&ioctx, "0", 1, &image_mapping));
   ASSERT_EQ(1U, image_mapping.size());

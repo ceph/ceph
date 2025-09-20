@@ -21,6 +21,7 @@ import contextlib
 import copy
 import json
 import logging
+import threading
 
 from .config_store import ObjectCachingEntry
 from .proto import (
@@ -257,6 +258,7 @@ class SqliteStore:
         self._tables: Dict[str, Table] = {t.namespace: t for t in tables}
         self._prepared = False
         self._cursor: Optional[Cursor] = None
+        self._db_lock = threading.Lock()
 
     def _prepare_tables(self) -> None:
         """Automatic/internal table preparation."""
@@ -281,7 +283,7 @@ class SqliteStore:
     @contextlib.contextmanager
     def transaction(self) -> Iterator[None]:
         """Explicitly start a DB transaction."""
-        with self._db():
+        with self._db_lock, self._db():
             assert self._cursor
             self._cursor.execute('BEGIN;')
             yield None
@@ -504,6 +506,20 @@ class MirrorUsersAndGroups(Mirror):
         return filtered
 
 
+class MirrorTLSCredentials(Mirror):
+    """Mirroring configuration for objects in the tls_credentials namespace."""
+
+    def __init__(self, store: ConfigStore) -> None:
+        super().__init__('tls_credentials', store)
+
+    def filter_object(self, obj: Simplified) -> Simplified:
+        """Filter tls_credential for sqlite3 store."""
+        filtered = copy.deepcopy(obj)
+        if filtered.get('credential_type') and filtered.get('value'):
+            filtered.pop('value', None)
+        return filtered
+
+
 def _tables(
     *,
     specialize: bool = True,
@@ -524,6 +540,7 @@ def _tables(
         srt,
         SimpleTable('join_auths', 'join_auths'),
         SimpleTable('users_and_groups', 'users_and_groups'),
+        SimpleTable('tls_creds', 'tls_creds'),
     ]
 
 
@@ -537,6 +554,10 @@ def _mirror_join_auths(opts: Optional[Dict[str, str]] = None) -> bool:
 
 def _mirror_users_and_groups(opts: Optional[Dict[str, str]] = None) -> bool:
     return (opts or {}).get('mirror_users_and_groups') != 'no'
+
+
+def _mirror_tls_credentials(opts: Optional[Dict[str, str]] = None) -> bool:
+    return (opts or {}).get('mirror_tls_credentials') != 'no'
 
 
 def mgr_sqlite3_db(
@@ -564,6 +585,8 @@ def mgr_sqlite3_db_with_mirroring(
         mirrors.append(MirrorJoinAuths(mirror_store))
     if _mirror_users_and_groups(opts):
         mirrors.append(MirrorUsersAndGroups(mirror_store))
+    if _mirror_tls_credentials(opts):
+        mirrors.append(MirrorTLSCredentials(mirror_store))
     return SqliteMirroringStore(mgr, tables, mirrors)
 
 

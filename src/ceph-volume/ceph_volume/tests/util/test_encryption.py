@@ -1,5 +1,5 @@
 from ceph_volume.util import encryption
-from mock.mock import call, patch, Mock, MagicMock
+from unittest.mock import call, patch, Mock, MagicMock
 from typing import Any
 import base64
 import pytest
@@ -126,6 +126,23 @@ class TestLuksFormat(object):
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_with_extra_option(self, m_call, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            'luksFormat',
+            '--fake-custom-opt1',
+            '/dev/foo'
+        ]
+        encryption.luks_format('abcd', '/dev/foo', '--fake-custom-opt1')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call')
     def test_luks_format_command_with_custom_size(self, m_call, conf_ceph_stub):
         conf_ceph_stub('[global]\nfsid=abcd\n[osd]\nosd_dmcrypt_key_size=256')
         expected = [
@@ -177,6 +194,25 @@ class TestLuksOpen(object):
             '/dev/bar'
         ]
         encryption.luks_open('abcd', '/dev/foo', '/dev/bar')
+        assert m_call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_luks_format_with_extra_option(self, m_call, m_bypass_workqueue, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        expected = [
+            'cryptsetup',
+            '--key-size',
+            '512',
+            '--key-file',
+            '-',
+            '--allow-discards',
+            'luksOpen',
+            '--fake-custom-opt1',
+            '/dev/foo',
+            '/dev/bar'
+        ]
+        encryption.luks_open('abcd', '/dev/foo', '/dev/bar', options='--fake-custom-opt1')
         assert m_call.call_args[0][0] == expected
 
     @patch('ceph_volume.util.encryption.bypass_workqueue', return_value=False)

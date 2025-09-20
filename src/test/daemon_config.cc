@@ -21,6 +21,8 @@
 #include "include/rados/librados.h"
 
 #include <errno.h>
+
+#include <iostream> // for std::cout
 #include <sstream>
 #include <string>
 #include <string.h>

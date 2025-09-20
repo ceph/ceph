@@ -26,7 +26,8 @@
           <cd-table-actions [permission]="{read: true}"
                             [selection]="selection"
                             dropDownOnly="Cluster-wide configuration"
-                            btnColor="light"
+                            [dropDownOnlyOffset]="{ x: 110, y: 0 }"
+                            [dropDownOnlyBtnColor]="'tertiary'"
                             class="btn-group"
                             id="cluster-wide-actions"
                             [tableActions]="clusterWideActions">
@@ -50,7 +51,7 @@
                   [grafanaPath]="'osd-overview?'"
                   [type]="'metrics'"
                   uid="lo02I1Aiz"
-                  grafanaStyle="four">
+                  grafanaStyle="three">
       </cd-grafana>
     </ng-template>
   </ng-container>

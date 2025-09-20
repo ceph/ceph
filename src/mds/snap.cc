@@ -12,11 +12,11 @@
  * 
  */
 
-#include <string_view>
-
 #include "snap.h"
-
 #include "common/Formatter.h"
+
+#include <ostream>
+#include <sstream>
 
 using namespace std;
 /*
@@ -64,15 +64,17 @@ void SnapInfo::dump(Formatter *f) const
   f->close_section();
 }
 
-void SnapInfo::generate_test_instances(std::list<SnapInfo*>& ls)
+std::list<SnapInfo> SnapInfo::generate_test_instances()
 {
-  ls.push_back(new SnapInfo);
-  ls.push_back(new SnapInfo);
-  ls.back()->snapid = 1;
-  ls.back()->ino = 2;
-  ls.back()->stamp = utime_t(3, 4);
-  ls.back()->name = "foo";
-  ls.back()->metadata = {{"foo", "bar"}};
+  std::list<SnapInfo> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().snapid = 1;
+  ls.back().ino = 2;
+  ls.back().stamp = utime_t(3, 4);
+  ls.back().name = "foo";
+  ls.back().metadata = {{"foo", "bar"}};
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const SnapInfo &sn)
@@ -121,12 +123,14 @@ void snaplink_t::dump(Formatter *f) const
   f->dump_unsigned("first", first);
 }
 
-void snaplink_t::generate_test_instances(std::list<snaplink_t*>& ls)
+std::list<snaplink_t> snaplink_t::generate_test_instances()
 {
-  ls.push_back(new snaplink_t);
-  ls.push_back(new snaplink_t);
-  ls.back()->ino = 2;
-  ls.back()->first = 123;
+  std::list<snaplink_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().ino = 2;
+  ls.back().first = 123;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const snaplink_t &l)
@@ -219,25 +223,27 @@ void sr_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void sr_t::generate_test_instances(std::list<sr_t*>& ls)
+std::list<sr_t> sr_t::generate_test_instances()
 {
-  ls.push_back(new sr_t);
-  ls.push_back(new sr_t);
-  ls.back()->seq = 1;
-  ls.back()->created = 2;
-  ls.back()->last_created = 3;
-  ls.back()->last_destroyed = 4;
-  ls.back()->current_parent_since = 5;
-  ls.back()->snaps[123].snapid = 7;
-  ls.back()->snaps[123].ino = 8;
-  ls.back()->snaps[123].stamp = utime_t(9, 10);
-  ls.back()->snaps[123].name = "name1";
-  ls.back()->past_parents[12].ino = 12;
-  ls.back()->past_parents[12].first = 3;
+  std::list<sr_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().seq = 1;
+  ls.back().created = 2;
+  ls.back().last_created = 3;
+  ls.back().last_destroyed = 4;
+  ls.back().current_parent_since = 5;
+  ls.back().snaps[123].snapid = 7;
+  ls.back().snaps[123].ino = 8;
+  ls.back().snaps[123].stamp = utime_t(9, 10);
+  ls.back().snaps[123].name = "name1";
+  ls.back().past_parents[12].ino = 12;
+  ls.back().past_parents[12].first = 3;
 
-  ls.back()->past_parent_snaps.insert(5);
-  ls.back()->past_parent_snaps.insert(6);
-  ls.back()->last_modified = utime_t(9, 10);
-  ls.back()->change_attr++;
+  ls.back().past_parent_snaps.insert(5);
+  ls.back().past_parent_snaps.insert(6);
+  ls.back().last_modified = utime_t(9, 10);
+  ls.back().change_attr++;
+  return ls;
 }
 

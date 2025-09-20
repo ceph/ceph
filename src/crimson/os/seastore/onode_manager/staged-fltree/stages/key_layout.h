@@ -178,7 +178,7 @@ struct string_key_view_t {
     } else if (dedup_type == Type::MAX) {
       len = MARKER_MAX;
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
     std::memcpy(p_append, &len, sizeof(string_size_t));
   }
@@ -430,7 +430,7 @@ class key_hobj_t {
    * common interfaces as a full_key_t
    */
   shard_t shard() const {
-    return ghobj.shard_id;
+    return static_cast<shard_t>(ghobj.shard_id);
   }
   pool_t pool() const {
     return ghobj.hobj.pool;

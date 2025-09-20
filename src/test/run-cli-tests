@@ -42,6 +42,8 @@ for tool in "$SRCDIR"/cli/*; do
     toolname="$(basename "$tool")"
     install -d -m0755 -- "$BUILDDIR/cli/$toolname"
     if ! env -i \
+	ASAN_OPTIONS="$ASAN_OPTIONS" \
+	LSAN_OPTIONS="$LSAN_OPTIONS" \
 	PATH="$BUILDDIR_ABS/..:$SRCDIR_ABS/..:$PATH" \
 	CEPH_CONF=/dev/null \
 	CEPH_ARGS="--no-mon-config" \

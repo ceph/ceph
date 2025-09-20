@@ -12,22 +12,20 @@
  * 
  */
 
-
-#include "MDSRank.h"
-
 #include "MDSContext.h"
+#include "MDSRank.h"
+#include "MDLog.h"
 
-#include "common/dout.h"
+#include "common/debug.h"
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-void MDSContext::complete(int r) {
+void MDSContext::finish(int r) {
   MDSRank *mds = get_mds();
   ceph_assert(mds != nullptr);
   ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
-  dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
+  dout(10) << "MDSContext::finish: " << typeid(*this).name() << dendl;
   mds->heartbeat_reset();
-  return Context::complete(r);
 }
 
 void MDSInternalContextWrapper::finish(int r)
@@ -111,7 +109,7 @@ void MDSIOContextBase::complete(int r) {
   // It's possible that the osd op requests will be stuck and then times out
   // after "rados_osd_op_timeout", the mds won't know what we should it, just
   // respawn it.
-  if (r == -CEPHFS_EBLOCKLISTED || r == -CEPHFS_ETIMEDOUT) {
+  if (r == -EBLOCKLISTED || r == -ETIMEDOUT) {
     derr << "MDSIOContextBase: failed with " << r << ", restarting..." << dendl;
     mds->respawn();
   } else {

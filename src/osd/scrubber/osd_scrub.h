@@ -104,12 +104,16 @@ class OsdScrub {
    * chunks.
    *
    * Implementation Note: Returned value is either osd_scrub_sleep or
-   * osd_scrub_extended_sleep, depending on must_scrub_param and time
-   * of day (see configs osd_scrub_begin*)
+   * osd_scrub_extended_sleep:
+   * - if scrubs are allowed at this point in time - osd_scrub_sleep; otherwise
+   *   (i.e. - the current time is outside of the allowed scrubbing hours/days,
+   *   but the scrub started earlier):
+   * - if the scrub observes "extended sleep" (i.e. - it's a low urgency
+   *   scrub) - osd_scrub_extended_sleep.
    */
   std::chrono::milliseconds scrub_sleep_time(
-      utime_t t,
-      bool high_priority_scrub) const;
+      utime_t t_now,
+      bool scrub_respects_ext_sleep) const;
 
 
   /**
@@ -118,13 +122,13 @@ class OsdScrub {
   [[nodiscard]] bool scrub_time_permit(utime_t t) const;
 
   /**
-   * An external interface into the LoadTracker object. Used by
-   * the OSD tick to update the load data in the logger.
+   * Fetch the 1-minute load average. Used by
+   * the OSD heartbeat handler to update a performance counter.
+   * Also updates the number of CPUs, required internally by the
+   * scrub queue.
    *
-   * \returns 100*(the decaying (running) average of the CPU load
-   *          over the last 24 hours) or nullopt if the load is not
-   *          available.
-   * Note that the multiplication by 100 is required by the logger interface
+   * \returns the 1-minute element of getloadavg() or nullopt
+   *          if the load is not available.
    */
   std::optional<double> update_load_average();
 
@@ -140,14 +144,17 @@ class OsdScrub {
   /**
    * check the OSD-wide environment conditions (scrub resources, time, etc.).
    * These may restrict the type of scrubs we are allowed to start, maybe
-   * down to allowing only high-priority scrubs
+   * down to allowing only high-priority scrubs. See comments in scrub_job.h
+   * detailing which condiitions may prevent what types of scrubs.
    *
-   * Specifically:
-   * 'only high priority' flag is set for either of
-   * the following reasons: no local resources (too many scrubs on this OSD);
-   * a dice roll says we will not scrub in this tick;
-   * a recovery is in progress, and we are not allowed to scrub while recovery;
-   * a PG is trying to acquire replica resources.
+   * The following possible limiting conditions are checked:
+   * - high local OSD concurrency (i.e. too many scrubs on this OSD);
+   * - a "dice roll" says we will not scrub in this tick (note: this
+   *   specific condition is only checked if the "high concurrency" condition
+   *   above is not detected);
+   * - the CPU load is high (i.e. above osd_scrub_cpu_load_threshold);
+   * - the OSD is performing a recovery & osd_scrub_during_recovery is 'false';
+   * - the current time is outside of the allowed scrubbing hours/days
    */
   Scrub::OSDRestrictions restrictions_on_scrubbing(
       bool is_recovery_active,
@@ -192,30 +199,22 @@ class OsdScrub {
    */
   bool scrub_random_backoff() const;
 
-  /**
-   * tracking the average load on the CPU. Used both by the
-   * OSD logger, and by the scrub queue (as no scrubbing is allowed if
-   * the load is too high).
+  // tracking the CPU load
+  // ---------------------------------------------------------------
+
+  /*
+   * tracking the average load on the CPU. Used both by the OSD performance
+   * counters logger, and by the scrub queue (as no periodic scrubbing is
+   * allowed if the load is too high).
    */
-  class LoadTracker {
-    CephContext* cct;
-    const ceph::common::ConfigProxy& conf;
-    const std::string log_prefix;
-    double daily_loadavg{0.0};
 
-   public:
-    explicit LoadTracker(
-	CephContext* cct,
-	const ceph::common::ConfigProxy& config,
-	int node_id);
+  /// the number of CPUs
+  long loadavg_cpu_count{1};
 
-    std::optional<double> update_load_average();
+  /// true if the load average (the 1-minute system average divided by
+  /// the number of CPUs) is below the configured threshold
+  bool scrub_load_below_threshold() const;
 
-    [[nodiscard]] bool scrub_load_below_threshold() const;
-
-    std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
-  };
-  LoadTracker m_load_tracker;
 
   // the scrub performance counters collections
   // ---------------------------------------------------------------

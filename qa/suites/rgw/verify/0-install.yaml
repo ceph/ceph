@@ -2,9 +2,10 @@ tasks:
 - install:
       # extra packages added for the rgw-datacache task
       # java and maven needed for S3 trailer signature tests
+      # golang is needed by aws-sdk-go-v2 tests
       extra_system_packages:
-        deb: ['s3cmd', 'maven']
-        rpm: ['s3cmd', 'maven']
+        deb: ['s3cmd', 'maven', 'golang']
+        rpm: ['s3cmd', 'maven', 'golang']
 - ceph:
 - openssl_keys:
 - rgw:

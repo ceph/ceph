@@ -23,7 +23,7 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
   @Output()
   submitAction = new EventEmitter();
 
-  tooltips = this.crushRuleService.formTooltips;
+  tooltips!: Record<string, string>;
 
   form: CdFormGroup;
   names: string[];
@@ -67,6 +67,8 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
   }
 
   ngOnInit() {
+    this.tooltips = this.crushRuleService.formTooltips;
+
     this.crushRuleService
       .getInfo()
       .subscribe(({ names, nodes }: { names: string[]; nodes: CrushNode[] }) => {
@@ -74,7 +76,8 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
           nodes,
           this.form.get('root'),
           this.form.get('failure_domain'),
-          this.form.get('device_class')
+          this.form.get('device_class'),
+          false
         );
         this.names = names;
       });

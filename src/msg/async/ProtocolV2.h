@@ -5,6 +5,7 @@
 #define _MSG_ASYNC_PROTOCOL_V2_
 
 #include "Protocol.h"
+#include "AsyncConnection.h"
 #include "crypto_onwire.h"
 #include "compression_meta.h"
 #include "compression_onwire.h"
@@ -222,6 +223,8 @@ public:
   virtual void read_event() override;
   virtual void write_event() override;
   virtual bool is_queued() override;
+
+  virtual void dump(Formatter *f) override;
 
 private:
   // Client Protocol

@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subscription } from 'rxjs';
 import { UpgradeService } from '../../api/upgrade.service';
@@ -13,7 +13,7 @@ import { ExecutingTask } from '../../models/executing-task';
   templateUrl: './upgradable.component.html',
   styleUrls: ['./upgradable.component.scss']
 })
-export class UpgradableComponent {
+export class UpgradableComponent implements OnInit, OnDestroy {
   orchAvailable: boolean = false;
   upgradeInfo$: Observable<UpgradeInfoInterface>;
   upgradeStatus$: Observable<UpgradeStatusInterface>;

@@ -1,7 +1,6 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -9,13 +8,14 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { RgwUserCapabilities } from '../models/rgw-user-capabilities';
 import { RgwUserCapability } from '../models/rgw-user-capability';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-user-capability-modal',
   templateUrl: './rgw-user-capability-modal.component.html',
   styleUrls: ['./rgw-user-capability-modal.component.scss']
 })
-export class RgwUserCapabilityModalComponent {
+export class RgwUserCapabilityModalComponent extends BaseModal {
   /**
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
@@ -29,11 +29,8 @@ export class RgwUserCapabilityModalComponent {
   resource: string;
   action: string;
 
-  constructor(
-    private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
-    public actionLabels: ActionLabelsI18n
-  ) {
+  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+    super();
     this.resource = $localize`capability`;
     this.createForm();
   }
@@ -87,6 +84,6 @@ export class RgwUserCapabilityModalComponent {
   onSubmit() {
     const capability: RgwUserCapability = this.formGroup.value;
     this.submitAction.emit(capability);
-    this.activeModal.close();
+    this.closeModal();
   }
 }

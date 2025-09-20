@@ -10,6 +10,7 @@
 #include "common/admin_socket.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/intarith.h" // for p2roundup()
 #include "journal/Types.h"
 #include "librbd/ImageCtx.h"
 #include "perfglue/heap_profiler.h"

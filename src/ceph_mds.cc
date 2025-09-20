@@ -26,6 +26,7 @@
 #include "include/random.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/strtol.h"
 #include "common/numa.h"
 
@@ -81,7 +82,7 @@ static void handle_mds_signal(int signum)
 
 int main(int argc, const char **argv)
 {
-  ceph_pthread_setname(pthread_self(), "ceph-mds");
+  ceph_pthread_setname("ceph-mds");
 
   auto args = argv_to_vec(argc, argv);
   if (args.empty()) {

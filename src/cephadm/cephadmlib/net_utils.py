@@ -24,12 +24,22 @@ class EndPoint:
     def __init__(self, ip: str, port: int) -> None:
         self.ip = ip
         self.port = port
+        self.is_ipv4 = True
+        try:
+            if ip and ipaddress.ip_network(ip).version == 6:
+                self.is_ipv4 = False
+        except Exception:
+            logger.exception('Failed to check ip address version')
 
     def __str__(self) -> str:
-        return f'{self.ip}:{self.port}'
+        if self.is_ipv4:
+            return f'{self.ip}:{self.port}'
+        return f'[{self.ip}]:{self.port}'
 
     def __repr__(self) -> str:
-        return f'{self.ip}:{self.port}'
+        if self.is_ipv4:
+            return f'{self.ip}:{self.port}'
+        return f'[{self.ip}]:{self.port}'
 
 
 def attempt_bind(ctx, s, address, port):

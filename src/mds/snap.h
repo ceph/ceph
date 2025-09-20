@@ -15,13 +15,19 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
+#include <iosfwd>
+#include <list>
 #include <map>
+#include <set>
+#include <string>
 #include <string_view>
 
-#include "mdstypes.h"
 #include "common/snap_types.h"
+#include "include/buffer.h"
+#include "include/object.h" // for snapid_t
+#include "include/utime.h"
 
-#include "Capability.h"
+namespace ceph { class Formatter; }
 
 /*
  * generic snap descriptor.
@@ -30,7 +36,7 @@ struct SnapInfo {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapInfo*>& ls);
+  static std::list<SnapInfo> generate_test_instances();
 
   std::string_view get_long_name() const;
 
@@ -62,7 +68,7 @@ struct snaplink_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<snaplink_t*>& ls);
+  static std::list<snaplink_t> generate_test_instances();
 
   inodeno_t ino;
   snapid_t first;
@@ -84,7 +90,7 @@ struct sr_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<sr_t*>& ls);
+  static std::list<sr_t> generate_test_instances();
 
   snapid_t seq = 0;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created = 0;                 // when this realm was created.

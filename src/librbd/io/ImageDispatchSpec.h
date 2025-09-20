@@ -11,8 +11,8 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/ReadResult.h"
-#include <boost/variant/variant.hpp>
 #include <atomic>
+#include <variant>
 
 namespace librbd {
 
@@ -99,13 +99,13 @@ public:
     }
   };
 
-  typedef boost::variant<Read,
-                         Discard,
-                         Write,
-                         WriteSame,
-                         CompareAndWrite,
-                         Flush,
-                         ListSnaps> Request;
+  typedef std::variant<Read,
+                       Discard,
+                       Write,
+                       WriteSame,
+                       CompareAndWrite,
+                       Flush,
+                       ListSnaps> Request;
 
   C_Dispatcher dispatcher_ctx;
 

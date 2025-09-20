@@ -81,6 +81,7 @@ enum {
   s3PutBucketNotification,
   s3GetBucketLogging,
   s3PutBucketLogging,
+  s3PostBucketLogging,
   s3GetBucketTagging,
   s3PutBucketTagging,
   s3GetBucketWebsite,
@@ -114,6 +115,12 @@ enum {
   s3GetBucketEncryption,
   s3PutBucketEncryption,
   s3DescribeJob,
+  s3GetObjectAttributes,
+  s3GetObjectVersionAttributes,
+  s3ReplicateDelete,
+  s3ReplicateObject,
+  s3GetObjectVersionForReplication,
+  s3ReplicateTags,
   s3All,
 
   s3objectlambdaGetObject,
@@ -144,6 +151,7 @@ enum {
   iamGetOIDCProvider,
   iamListOIDCProviders,
   iamAddClientIdToOIDCProvider,
+  iamRemoveClientIdFromOIDCProvider,
   iamUpdateOIDCProviderThumbprint,
   iamTagRole,
   iamListRoleTags,
@@ -177,6 +185,7 @@ enum {
   iamGenerateServiceLastAccessedDetails,
   iamSimulateCustomPolicy,
   iamSimulatePrincipalPolicy,
+  iamGetAccountSummary,
   iamAll,
 
   stsAssumeRole,
@@ -246,11 +255,14 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionTagging:
   case s3GetObjectRetention:
   case s3GetObjectLegalHold:
+  case s3GetObjectAttributes:
+  case s3GetObjectVersionAttributes:
   case s3ListAllMyBuckets:
   case s3ListBucket:
   case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
+  case s3GetObjectVersionForReplication:
     return RGW_PERM_READ;
 
   case s3AbortMultipartUpload:
@@ -267,6 +279,9 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectRetention:
   case s3PutObjectLegalHold:
   case s3BypassGovernanceRetention:
+  case s3ReplicateDelete:
+  case s3ReplicateObject:
+  case s3ReplicateTags:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -288,6 +303,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetReplicationConfiguration:
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
+  case s3GetBucketOwnershipControls:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -298,6 +314,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutBucketCORS:
   case s3PutBucketEncryption:
   case s3PutBucketLogging:
+  case s3PostBucketLogging:
   case s3PutBucketNotification:
   case s3PutBucketPolicy:
   case s3PutBucketRequestPayment:
@@ -310,6 +327,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
+  case s3PutBucketOwnershipControls:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
@@ -318,6 +336,8 @@ inline int op_to_perm(std::uint64_t op) {
   return RGW_PERM_INVALID;
 }
 }
+
+const char* action_bit_string(uint64_t action);
 
 enum class PolicyPrincipal {
   Role,

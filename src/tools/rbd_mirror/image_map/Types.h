@@ -8,7 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
-#include <boost/variant.hpp>
+#include <variant>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
@@ -97,8 +97,8 @@ struct PolicyMetaUnknown {
   }
 };
 
-typedef boost::variant<PolicyMetaNone,
-                       PolicyMetaUnknown> PolicyMeta;
+typedef std::variant<PolicyMetaNone,
+		     PolicyMetaUnknown> PolicyMeta;
 
 struct PolicyData {
   PolicyData()
@@ -116,7 +116,7 @@ struct PolicyData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<PolicyData *> &o);
+  static std::list<PolicyData> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(PolicyData);

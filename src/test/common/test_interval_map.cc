@@ -13,6 +13,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <boost/container/flat_map.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int_distribution.hpp>
 #include <boost/mpl/apply.hpp>
@@ -27,10 +28,14 @@ public:
   using TestType = T;
 };
 
-template <typename _key>
+template <typename _key, typename _can_merge, template<typename, typename, typename ...> class _map = std::map, bool _nonconst_iterator = false>
 struct bufferlist_test_type {
   using key = _key;
   using value = bufferlist;
+
+  static constexpr bool can_merge()  {
+    return _can_merge::value;
+  }
 
   struct make_splitter {
     template <typename merge_t>
@@ -57,6 +62,9 @@ struct bufferlist_test_type {
     };
   };
 
+  using splitter = boost::mpl::apply<make_splitter, _can_merge>;
+  using imap = interval_map<key, value, splitter, _map, _nonconst_iterator>;
+
   struct generate_random {
     bufferlist operator()(key len) {
       bufferlist bl;
@@ -70,21 +78,28 @@ struct bufferlist_test_type {
   };
 };
 
-using IntervalMapTypes = ::testing::Types< bufferlist_test_type<uint64_t> >;
+using IntervalMapTypes = ::testing::Types<
+  bufferlist_test_type<uint64_t, std::false_type>,
+  bufferlist_test_type<uint64_t, std::true_type>,
+  bufferlist_test_type<uint64_t, std::false_type, boost::container::flat_map>,
+  bufferlist_test_type<uint64_t, std::true_type, boost::container::flat_map>,
+  bufferlist_test_type<uint64_t, std::true_type, boost::container::flat_map, true>
+>;
 
 TYPED_TEST_SUITE(IntervalMapTest, IntervalMapTypes);
 
+// Someone with more C++ foo can probably figure out a better way of doing this.
+// However, for now, we skip some tests if using the wrong merge.
 #define USING(_can_merge)					 \
   using TT = typename TestFixture::TestType;                     \
   using key = typename TT::key; (void)key(0);	                 \
   using val = typename TT::value; (void)val(0);			 \
-  using splitter = typename boost::mpl::apply<                   \
-    typename TT::make_splitter,                                  \
-    _can_merge>;                                                 \
-  using imap = interval_map<key, val, splitter>; (void)imap();	 \
+  using splitter = TT::splitter;                                 \
+  using imap = TT::imap; (void)imap();	                         \
   typename TT::generate_random gen;                              \
   val v(gen(5));	                                         \
-  splitter split; (void)split.split(0, 0, v);
+  splitter split; (void)split.split(0, 0, v);                    \
+  { _can_merge cm; if(TT::can_merge() != cm()) return; }
 
 #define USING_NO_MERGE USING(std::false_type)
 #define USING_WITH_MERGE USING(std::true_type)
@@ -334,4 +349,85 @@ TYPED_TEST(IntervalMapTest, merge) {
   imap m;
   m.insert(10, 4, gen(4));
   m.insert(11, 1, gen(1));
+}
+
+TYPED_TEST(IntervalMapTest, contains) {
+  USING_WITH_MERGE;
+  imap m;
+  m.insert(10, 4, gen(4));
+
+  ASSERT_TRUE(m.begin().contains(10,4));
+  ASSERT_TRUE(m.begin().contains(11,3));
+  ASSERT_TRUE(m.begin().contains(10,3));
+  ASSERT_TRUE(m.begin().contains(11,2));
+  ASSERT_FALSE(m.begin().contains(8,2));
+  ASSERT_FALSE(m.begin().contains(14,2));
+  ASSERT_FALSE(m.begin().contains(8,3));
+  ASSERT_FALSE(m.begin().contains(13,2));
+}
+
+TYPED_TEST(IntervalMapTest, get_start_end_off)
+{
+  USING_NO_MERGE;
+  imap m;
+
+  m.insert(0, 5, gen(5));
+  ASSERT_EQ(0, m.get_start_off());
+  ASSERT_EQ(5, m.get_end_off());
+
+  m.insert(5, 5, gen(5));
+  ASSERT_EQ(0, m.get_start_off());
+  ASSERT_EQ(10, m.get_end_off());
+
+  m.erase(0,5);
+  ASSERT_EQ(5, m.get_start_off());
+  ASSERT_EQ(10, m.get_end_off());
+
+  m.insert(20,5, gen(5));
+  ASSERT_EQ(5, m.get_start_off());
+  ASSERT_EQ(25, m.get_end_off());
+}
+
+TYPED_TEST(IntervalMapTest, print) {
+  USING_NO_MERGE;
+  imap m;
+
+  {
+    std::ostringstream out;
+    m.insert(0, 5, gen(5));
+    out << m;
+    ASSERT_EQ("{0~5(5)}", fmt::format("{}", m));
+    EXPECT_EQ("{0~5(5)}", out.str() );
+  }
+  {
+    std::ostringstream out;
+    m.insert(10, 5, gen(5));
+    out << m;
+    ASSERT_EQ("{0~5(5),10~5(5)}", fmt::format("{}", m));
+    EXPECT_EQ("{0~5(5),10~5(5)}", out.str() );
+  }
+}
+
+/* This test does nothing unless nonconst_iterator is set on the interval map
+ * If it is set, then the simple fact that append_zero() compiles means that
+ * the non-const iterator has been enabled and used. The test then checks that
+ * changing the size of a buffer is illegal.
+ */
+TYPED_TEST(IntervalMapTest, append_buffer_in_loop) {
+  USING_WITH_MERGE;
+  imap m;
+  if constexpr (m.nonconst_iterator_cond()) {
+    m.insert(0, 5, gen(5));
+    try {
+      for (auto && i : m) {
+        i.get_val().append_zero(10);
+      }
+      FAIL(); // Should panic
+    } catch (const std::out_of_range& exception) {
+      ASSERT_EQ("buffer length has changed"sv, exception.what());
+    } catch (const std::exception&) {
+      // Wrong exception.
+      FAIL();
+    }
+  }
 }

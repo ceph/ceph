@@ -59,7 +59,12 @@ class CloneIndex(Index):
         ens_with_ctime = []
         for en in entry_names:
             d_path = os.path.join(self.path, en)
-            stb = self.fs.lstat(d_path)
+            try:
+                stb = self.fs.lstat(d_path)
+            except cephfs.ObjectNotFound:
+                log.debug(f'path {d_path} went missing, perhaps clone job was '
+                          'finished')
+                continue
 
             # add ctime next to clone entry
             ens_with_ctime.append((en, stb.st_ctime))

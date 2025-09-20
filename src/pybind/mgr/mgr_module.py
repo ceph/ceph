@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     else:
         from typing_extensions import Literal
 
+import cephfs
 import inspect
 import logging
 import errno
@@ -472,11 +473,14 @@ class CLICommand(object):
         self.desc, self.arg_spec, self.first_default, self.args = \
             self._load_func_metadata(f)
 
-    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+    def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
         self.func = func
         self.COMMANDS[self.prefix] = self
         return self.func
+
+    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+        return self._register_handler(func)
 
     def _get_arg_value(self, kwargs_switch: bool, key: str, val: Any) -> Tuple[bool, str, Any]:
         def start_kwargs() -> bool:
@@ -1108,6 +1112,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         # Keep a librados instance for those that need it.
         self._rados: Optional[rados.Rados] = None
 
+        self._cephfs: Optional[cephfs.LibCephFS] = None
+
         # this does not change over the lifetime of an active mgr
         self._mgr_ips: Optional[str] = None
 
@@ -1285,7 +1291,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             if latest < version:
                 raise RuntimeError(f"main.db version is newer ({version}) than module ({latest})")
             for i in range(version, latest):
-                self.log.info(f"upgrading main.db for {self.module_name} from {i-1}:{i}")
+                self.log.info(f"upgrading main.db for {self.module_name} from {i - 1}:{i}")
                 for sql in self.SCHEMA_VERSIONED[i]:
                     db.execute(sql)
             if version < latest:
@@ -1335,10 +1341,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.create_mgr_pool()
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph"
         self.log.debug(f"using uri {uri}")
-        try:
-            db = sqlite3.connect(uri, check_same_thread=False, uri=True, autocommit=False)  # type: ignore[call-arg]
-        except TypeError:
-            db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)
+        db = sqlite3.connect(uri, check_same_thread=False, uri=True, isolation_level=None)  # type: ignore[call-arg]
         # if libcephsqlite reconnects, update the addrv for blocklist
         with db:
             cur = db.execute('SELECT json_extract(ceph_status(), "$.addr");')
@@ -1628,6 +1631,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(ServerInfoT, self._ceph_get_server(hostname))
 
     @API.expose
+    def get_unlabeled_perf_schema(
+        self, svc_type: str, svc_name: str
+    ) -> Dict[str, Dict[str, Dict[str, Union[str, int]]]]:
+        """
+        Called by the plugin to fetch unlabeled perf counter schema info.
+        svc_name can be nullptr, as can svc_type, in which case
+        they are wildcards
+
+        :param str svc_type:
+        :param str svc_name:
+        :return: list of dicts describing the counters requested
+        """
+        return self._ceph_get_unlabeled_perf_schema(svc_type, svc_name)
+
+    @API.expose
     def get_perf_schema(self,
                         svc_type: str,
                         svc_name: str) -> Dict[str,
@@ -1652,10 +1670,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return self._ceph_get_rocksdb_version()
 
     @API.expose
-    def get_counter(self,
-                    svc_type: str,
-                    svc_name: str,
-                    path: str) -> Dict[str, List[Tuple[float, int]]]:
+    def get_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, List[Tuple[float, int]]]:
         """
         Called by the plugin to fetch the latest performance counter data for a
         particular counter on a particular service.
@@ -1668,17 +1685,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             of two-tuples of (timestamp, value).  This may be empty if no data is
             available.
         """
-        return self._ceph_get_counter(svc_type, svc_name, path)
+        return self._ceph_get_unlabeled_counter(svc_type, svc_name, path)
 
     @API.expose
-    def get_latest_counter(self,
-                           svc_type: str,
-                           svc_name: str,
-                           path: str) -> Dict[str, Union[Tuple[float, int],
-                                                         Tuple[float, int, int]]]:
+    def get_latest_unlabeled_counter(
+        self, svc_type: str, svc_name: str, path: str
+    ) -> Dict[str, Union[Tuple[float, int], Tuple[float, int, int]]]:
         """
-        Called by the plugin to fetch only the newest performance counter data
-        point for a particular counter on a particular service.
+        Called by the plugin to fetch only the newest performance unlabeled counter
+        data point for a particular counter on a particular service.
 
         :param str svc_type:
         :param str svc_name:
@@ -1688,7 +1703,33 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             (timestamp, value, count) is returned.  This may be empty if no
             data is available.
         """
-        return self._ceph_get_latest_counter(svc_type, svc_name, path)
+        return self._ceph_get_latest_unlabeled_counter(svc_type, svc_name, path)
+
+    @API.expose
+    def get_latest_counter(self,
+                           svc_type: str,
+                           svc_name: str,
+                           counter_name: str,
+                           sub_counter_name: str,
+                           labels: List[Tuple[str, str]]) -> Dict[str, Union[Tuple[float, int],
+                                                                             Tuple[float, int, int]]]:
+        """
+        Called by the plugin to fetch only the newest performance counter data
+        point for a particular counter on a particular service.
+
+        :param str svc_type:
+        :param str svc_name:
+        :param str counter_name: the key_name of the counter, for example
+            "osd_scrub_sh_repl"
+        :param str sub_counter_name: the counters present under the key_name,
+            for example "successful_scrubs_elapsed"
+        :param list[(str, str)] labels: the labels associated with the counter,
+            for example "[("level", "deep"), ("pooltype", "ec")]"
+        :return: A list of two-tuples of (timestamp, value) or three-tuple of
+            (timestamp, value, count) is returned.  This may be empty if no
+            data is available.
+        """
+        return self._ceph_get_latest_counter(svc_type, svc_name, counter_name, sub_counter_name, labels)
 
     @API.expose
     def list_servers(self) -> List[ServerInfoT]:
@@ -1853,6 +1894,18 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return (rc, stdout, stderr)
 
+    class _CommandResultWrapper:
+        def __init__(self, module: 'MgrModule', tag: Optional[str], result: CommandResult):
+            if tag is None:
+                tag = ""
+            self.module = module
+            self.tag = tag
+            self.result = result
+
+        def complete(self, r: int, outb: bytes, outs: bytes) -> None:
+            self.result.complete(r, outb.decode('utf-8'), outs.decode('utf-8'))
+            self.module._ceph_notify_all("command", self.tag)
+
     def send_command(
             self,
             result: CommandResult,
@@ -1886,7 +1939,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param bool one_shot: a keyword-only param to make the command abort
             with EPIPE when the target resets or refuses to reconnect
         """
-        self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf, one_shot=one_shot)
+
+        if svc_type == "mds":
+            wrapped_result = self._CommandResultWrapper(self, tag, result)
+            self.log.info(f"do mds_command: mds.{svc_id} {command}")
+            self.cephfs.mds_command2(wrapped_result, svc_id, command, inbuf, one_shot=one_shot)
+        else:
+            self._ceph_send_command(result, svc_type, svc_id, command, tag, inbuf, one_shot=one_shot)
 
     def tool_exec(
         self,
@@ -2111,7 +2170,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     @API.expose
     def set_localized_module_option(self, key: str, val: Optional[str]) -> None:
         """
-        Set localized configuration for this ceph-mgr instance
+        Set localized configuration for this ceph-mgr instance.
+
         :param str key:
         :param str val:
         :return: str
@@ -2176,8 +2236,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(OSDMap, self._ceph_get_osdmap())
 
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
-        data = self.get_latest_counter(
+    def get_unlabeled_counter_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
             return data[1]
@@ -2185,9 +2245,31 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return 0
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+    def get_counter_latest(self, daemon_type: str, daemon_name: str, counter_name: str,
+                           sub_counter_name: str, labels: List[Tuple[str, str]]) -> int:
         data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
+        if data:
+            return data[1]
+        else:
+            return 0
+
+    @API.expose
+    def get_unlabeled_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+        data = self.get_latest_unlabeled_counter(
             daemon_type, daemon_name, counter)[counter]
+        if data:
+            # https://github.com/python/mypy/issues/1178
+            _, value, count = cast(Tuple[float, int, int], data)
+            return value, count
+        else:
+            return 0, 0
+
+    @API.expose
+    def get_counter_latest_avg(self, daemon_type: str, daemon_name: str, counter_name: str,
+                               sub_counter_name: str, labels: List[Tuple[str, str]]) -> Tuple[int, int]:
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter_name, sub_counter_name, labels)[counter_name]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
@@ -2229,7 +2311,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 if service['type'] not in services:
                     continue
 
-                schemas = self.get_perf_schema(service['type'], service['id'])
+                schemas = self.get_unlabeled_perf_schema(service['type'], service['id'])
                 if not schemas:
                     self.log.warning("No perf counter schema for {0}.{1}".format(
                         service['type'], service['id']
@@ -2257,7 +2339,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     counter_info = dict(counter_schema)
                     # Also populate count for the long running avgs
                     if tp & self.PERFCOUNTER_LONGRUNAVG:
-                        v, c = self.get_latest_avg(
+                        v, c = self.get_unlabeled_counter_latest_avg(
                             service['type'],
                             service['id'],
                             counter_path
@@ -2265,7 +2347,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         counter_info['value'], counter_info['count'] = v, c
                         result[svc_full_name][counter_path] = counter_info
                     else:
-                        counter_info['value'] = self.get_latest(
+                        counter_info['value'] = self.get_unlabeled_counter_latest(
                             service['type'],
                             service['id'],
                             counter_path
@@ -2273,6 +2355,127 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
                     result[svc_full_name][counter_path] = counter_info
 
+        self.log.debug("returning {0} counter".format(len(result)))
+
+        return result
+
+    @API.expose
+    @profile_method()
+    def get_perf_counters(
+        self,
+        prio_limit: int = PRIO_USEFUL,
+        services: Sequence[str] = (
+            "mds",
+            "mon",
+            "osd",
+            "rbd-mirror",
+            "cephfs-mirror",
+            "rgw",
+            "tcmu-runner",
+        ),
+    ) -> Dict[str, dict]:
+        """
+        Return the perf counters currently known to this ceph-mgr
+        instance, filtered by priority equal to or greater than `prio_limit`.
+        The result is a map of string to dict, associating services
+        (like "osd.123") with their counters.  The counter
+        dict for each service maps counter paths to a counter
+        info structure, which is the information from
+        the schema, plus an additional "value" member with the latest
+        value.
+
+        The returned dictionary looks like:
+        ```
+        {
+            "mon.a": {
+                "AsyncMessenger::Worker": [
+                    {
+                        "labels": {
+                            "id": "1"
+                        },
+                        "counters": {
+                            "msgr_connection_ready_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            },
+                            "msgr_connection_idle_timeouts": {
+                                "type": 10,
+                                "priority": 5,
+                                "units": 1,
+                                "value": 0
+                            }
+                        }
+                    }
+                ]
+            }
+        }
+        ```
+
+        """
+
+        result = defaultdict(dict)   # type: Dict[str, dict]
+
+        for server in self.list_servers():
+            for service in cast(List[ServiceInfoT], server['services']):
+                if service['type'] not in services:
+                    continue
+
+                schemas = self.get_perf_schema(service['type'], service['id'])
+
+                if not schemas:
+                    self.log.warning("No perf counter schema for {0}.{1}".format(
+                        service['type'], service['id']
+                    ))
+                    continue
+
+                # Value is returned in a potentially-multi-service format,
+                # get just the service we're asking about
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
+                labeled_schema = schemas[svc_full_name]
+
+                for counter_name, sub_counters_list in labeled_schema.items():
+                    result[svc_full_name][counter_name] = []
+                    for sub_counter in sub_counters_list:
+                        sub_counter_labels = []
+                        sub_counter_info = dict(sub_counter)
+
+                        for label_key, label_value in sub_counter["labels"].items():
+                            sub_counter_labels.append((label_key, label_value))
+
+                        for sub_counter_name, sub_counter_schema in sub_counter["counters"].items():
+                            priority = sub_counter_schema['priority']
+                            assert isinstance(priority, int)
+                            if priority < prio_limit:
+                                continue
+
+                            tp = sub_counter_schema['type']
+                            assert isinstance(tp, int)
+
+                            # Also populate count for the long running avgs
+                            if tp & self.PERFCOUNTER_LONGRUNAVG:
+                                v, c = self.get_counter_latest_avg(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels,
+                                )
+                                sub_counter_info['counters'][sub_counter_name]['value'] = v
+                                sub_counter_info['counters'][sub_counter_name]['count'] = c
+
+                            else:
+                                sub_counter_info['counters'][sub_counter_name]['value'] = self.get_counter_latest(
+                                    service['type'],
+                                    service['id'],
+                                    counter_name,
+                                    sub_counter_name,
+                                    sub_counter_labels
+                                )
+
+                        result[svc_full_name][counter_name].append(sub_counter_info)
         self.log.debug("returning {0} counter".format(len(result)))
 
         return result
@@ -2334,6 +2537,19 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._rados.connect()
         self._ceph_register_client(None, self._rados.get_addrs(), False)
         return self._rados
+
+    @property
+    def cephfs(self) -> cephfs.LibCephFS:
+        """
+        An (unmounted) cephfs instance to be shared by any classes within this
+        mgr module that want one.
+        """
+        if self._cephfs:
+            return self._cephfs
+
+        self._cephfs = cephfs.LibCephFS(rados_inst=self.rados)
+        self._cephfs.init()
+        return self._cephfs
 
     @staticmethod
     def can_run() -> Tuple[bool, str]:

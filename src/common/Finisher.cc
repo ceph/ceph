@@ -2,7 +2,15 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Finisher.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
+#include "include/types.h" // for operator<<(std::vector)
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #include <fmt/core.h>
 

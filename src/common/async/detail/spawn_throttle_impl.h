@@ -23,39 +23,45 @@
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/execution/context.hpp>
-#include <boost/asio/io_context.hpp>
 #include <boost/asio/query.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include "common/async/cancel_on_error.h"
 #include "common/async/service.h"
-#include "common/async/yield_context.h"
 
 namespace ceph::async::detail {
 
 struct spawn_throttle_handler;
 
-// Reference-counted spawn throttle interface.
+// Reference-counted spawn throttle implementation.
 class spawn_throttle_impl :
     public boost::intrusive_ref_counter<spawn_throttle_impl,
-        boost::thread_unsafe_counter>
+        boost::thread_unsafe_counter>,
+    public service_list_base_hook
 {
  public:
-  spawn_throttle_impl(size_t limit, cancel_on_error on_error)
-    : limit(limit), on_error(on_error),
+  spawn_throttle_impl(boost::asio::yield_context yield,
+                      size_t limit, cancel_on_error on_error)
+    : svc(boost::asio::use_service<service<spawn_throttle_impl>>(
+              boost::asio::query(yield.get_executor(),
+                                 boost::asio::execution::context))),
+      yield(yield), limit(limit), on_error(on_error),
       children(std::make_unique<child[]>(limit))
   {
+    // register for service_shutdown() notifications
+    svc.add(*this);
+
     // initialize the free list
     for (size_t i = 0; i < limit; i++) {
       free.push_back(children[i]);
     }
   }
-  virtual ~spawn_throttle_impl() {}
 
-  // factory function
-  static auto create(optional_yield y, size_t limit, cancel_on_error on_error)
-      -> boost::intrusive_ptr<spawn_throttle_impl>;
+  ~spawn_throttle_impl()
+  {
+    svc.remove(*this);
+  }
 
   // return the completion handler for a new child. may block due to throttling
   // or rethrow an exception from a previously-spawned child
@@ -68,19 +74,42 @@ class spawn_throttle_impl :
   };
 
   using executor_type = boost::asio::any_io_executor;
-  virtual executor_type get_executor() = 0;
+  executor_type get_executor()
+  {
+    return yield.get_executor();
+  }
 
   // wait until count <= target_count
-  virtual void wait_for(size_t target_count) = 0;
+  void wait_for(size_t target_count)
+  {
+    if (count > target_count) {
+      wait_for_count = target_count;
+
+      boost::asio::async_initiate<boost::asio::yield_context, WaitSignature>(
+          [this] (auto handler) {
+            auto slot = get_associated_cancellation_slot(handler);
+            if (slot.is_connected()) {
+              slot.template emplace<op_cancellation>(this);
+            }
+            waiter.emplace(std::move(handler));
+          }, yield);
+      // this is a coroutine, so the wait has completed by this point
+    }
+
+    report_exception(); // throw unreported exception
+  }
 
   // cancel outstanding coroutines
-  virtual void cancel(bool shutdown)
+  void cancel()
   {
     cancel_outstanding_from(outstanding.begin());
+    if (waiter) {
+      wait_complete(make_error_code(boost::asio::error::operation_aborted));
+    }
   }
 
   // complete the given child coroutine
-  virtual void on_complete(child& c, std::exception_ptr eptr)
+  void on_complete(child& c, std::exception_ptr eptr)
   {
     --count;
 
@@ -103,9 +132,21 @@ class spawn_throttle_impl :
       }
       cancel_outstanding_from(cancel_from);
     }
+
+    if (waiter && count <= wait_for_count) {
+      wait_complete({});
+    }
   }
 
- protected:
+
+  void service_shutdown()
+  {
+    waiter.reset();
+  }
+
+ private:
+  service<spawn_throttle_impl>& svc;
+  boost::asio::yield_context yield;
   const size_t limit;
   const cancel_on_error on_error;
   size_t count = 0;
@@ -117,7 +158,6 @@ class spawn_throttle_impl :
     }
   }
 
- private:
   std::exception_ptr unreported_exception;
   std::unique_ptr<child[]> children;
 
@@ -134,6 +174,42 @@ class spawn_throttle_impl :
       child& c = *i++;
       c.signal->emit(boost::asio::cancellation_type::terminal);
     }
+  }
+
+  using WaitSignature = void(boost::system::error_code);
+  struct wait_state {
+    using Work = boost::asio::executor_work_guard<
+        boost::asio::any_io_executor>;
+    using Handler = typename boost::asio::async_result<
+        boost::asio::yield_context, WaitSignature>::handler_type;
+
+    Work work;
+    Handler handler;
+
+    explicit wait_state(Handler&& h)
+      : work(make_work_guard(h)),
+        handler(std::move(h))
+    {}
+  };
+  std::optional<wait_state> waiter;
+  size_t wait_for_count = 0;
+
+  struct op_cancellation {
+    spawn_throttle_impl* self;
+    explicit op_cancellation(spawn_throttle_impl* self) noexcept
+      : self(self) {}
+    void operator()(boost::asio::cancellation_type type) {
+      if (type != boost::asio::cancellation_type::none) {
+        self->cancel();
+      }
+    }
+  };
+
+  void wait_complete(boost::system::error_code ec)
+  {
+    auto w = std::move(*waiter);
+    waiter.reset();
+    boost::asio::dispatch(boost::asio::append(std::move(w.handler), ec));
   }
 };
 
@@ -169,7 +245,7 @@ struct spawn_throttle_handler {
   }
 };
 
-spawn_throttle_handler spawn_throttle_impl::get()
+inline spawn_throttle_handler spawn_throttle_impl::get()
 {
   report_exception(); // throw unreported exception
 
@@ -187,174 +263,6 @@ spawn_throttle_handler spawn_throttle_impl::get()
   // spawn the coroutine with its associated cancellation signal
   c.signal.emplace();
   return {this, c};
-}
-
-
-// Spawn throttle implementation for use in synchronous contexts where wait()
-// blocks the calling thread until completion.
-class sync_spawn_throttle_impl final : public spawn_throttle_impl {
-  static constexpr int concurrency = 1; // only run from a single thread
- public:
-  sync_spawn_throttle_impl(size_t limit, cancel_on_error on_error)
-    : spawn_throttle_impl(limit, on_error),
-      ctx(std::in_place, concurrency)
-  {}
-
-  executor_type get_executor() override
-  {
-    return ctx->get_executor();
-  }
-
-  void wait_for(size_t target_count) override
-  {
-    while (count > target_count) {
-      if (ctx->stopped()) {
-        ctx->restart();
-      }
-      ctx->run_one();
-    }
-
-    report_exception(); // throw unreported exception
-  }
-
-  void cancel(bool shutdown) override
-  {
-    spawn_throttle_impl::cancel(shutdown);
-
-    if (shutdown) {
-      // destroy the io_context to trigger two-phase shutdown which
-      // destroys any completion handlers with a reference to 'this'
-      ctx.reset();
-      count = 0;
-    }
-  }
-
- private:
-  std::optional<boost::asio::io_context> ctx;
-};
-
-// Spawn throttle implementation for use in asynchronous contexts where wait()
-// suspends the calling stackful coroutine.
-class async_spawn_throttle_impl final :
-    public spawn_throttle_impl,
-    public service_list_base_hook
-{
- public:
-  async_spawn_throttle_impl(boost::asio::yield_context yield,
-                            size_t limit, cancel_on_error on_error)
-    : spawn_throttle_impl(limit, on_error),
-      svc(boost::asio::use_service<service<async_spawn_throttle_impl>>(
-              boost::asio::query(yield.get_executor(),
-                                 boost::asio::execution::context))),
-      yield(yield)
-  {
-    // register for service_shutdown() notifications
-    svc.add(*this);
-  }
-
-  ~async_spawn_throttle_impl()
-  {
-    svc.remove(*this);
-  }
-
-  executor_type get_executor() override
-  {
-    return yield.get_executor();
-  }
-
-  void service_shutdown()
-  {
-    waiter.reset();
-  }
-
- private:
-  service<async_spawn_throttle_impl>& svc;
-  boost::asio::yield_context yield;
-
-  using WaitSignature = void(boost::system::error_code);
-  struct wait_state {
-    using Work = boost::asio::executor_work_guard<
-        boost::asio::any_io_executor>;
-    using Handler = typename boost::asio::async_result<
-        boost::asio::yield_context, WaitSignature>::handler_type;
-
-    Work work;
-    Handler handler;
-
-    explicit wait_state(Handler&& h)
-      : work(make_work_guard(h)),
-        handler(std::move(h))
-    {}
-  };
-  std::optional<wait_state> waiter;
-  size_t wait_for_count = 0;
-
-  struct op_cancellation {
-    async_spawn_throttle_impl* self;
-    explicit op_cancellation(async_spawn_throttle_impl* self) noexcept
-      : self(self) {}
-    void operator()(boost::asio::cancellation_type type) {
-      if (type != boost::asio::cancellation_type::none) {
-        self->cancel(false);
-      }
-    }
-  };
-
-  void wait_for(size_t target_count) override
-  {
-    if (count > target_count) {
-      wait_for_count = target_count;
-
-      boost::asio::async_initiate<boost::asio::yield_context, WaitSignature>(
-          [this] (auto handler) {
-            auto slot = get_associated_cancellation_slot(handler);
-            if (slot.is_connected()) {
-              slot.template emplace<op_cancellation>(this);
-            }
-            waiter.emplace(std::move(handler));
-          }, yield);
-      // this is a coroutine, so the wait has completed by this point
-    }
-
-    report_exception(); // throw unreported exception
-  }
-
-  void wait_complete(boost::system::error_code ec)
-  {
-    auto w = std::move(*waiter);
-    waiter.reset();
-    boost::asio::dispatch(boost::asio::append(std::move(w.handler), ec));
-  }
-
-  void on_complete(child& c, std::exception_ptr eptr) override
-  {
-    spawn_throttle_impl::on_complete(c, eptr);
-
-    if (waiter && count <= wait_for_count) {
-      wait_complete({});
-    }
-  }
-
-  void cancel(bool shutdown) override
-  {
-    spawn_throttle_impl::cancel(shutdown);
-
-    if (waiter) {
-      wait_complete(make_error_code(boost::asio::error::operation_aborted));
-    }
-  }
-};
-
-auto spawn_throttle_impl::create(optional_yield y, size_t limit,
-                                 cancel_on_error on_error)
-    -> boost::intrusive_ptr<spawn_throttle_impl>
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    return new async_spawn_throttle_impl(yield, limit, on_error);
-  } else {
-    return new sync_spawn_throttle_impl(limit, on_error);
-  }
 }
 
 } // namespace ceph::async::detail

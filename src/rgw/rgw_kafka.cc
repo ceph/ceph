@@ -10,12 +10,16 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <shared_mutex> // for std::shared_lock
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
+#include "include/utime.h"
 
 #define dout_subsys ceph_subsys_rgw_notification
 
@@ -503,6 +507,7 @@ private:
   }
 
   void run() noexcept {
+    ceph_pthread_setname("kafka_manager");
     while (!stopped) {
 
       // publish all messages in the queue
@@ -575,12 +580,6 @@ public:
       // This is to prevent rehashing so that iterators are not invalidated 
       // when a new connection is added.
       connections.max_load_factor(10.0);
-      // give the runner thread a name for easier debugging
-      const char* thread_name = "kafka_manager";
-      if (const auto rc = ceph_pthread_setname(runner.native_handle(), thread_name); rc != 0) {
-        ldout(cct, 1) << "ERROR: failed to set kafka manager thread name to: " << thread_name
-          << ". error: " << rc << dendl;
-      }
   }
 
   // non copyable
@@ -600,7 +599,8 @@ public:
                boost::optional<const std::string&> ca_location,
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
-               boost::optional<const std::string&> topic_password) {
+               boost::optional<const std::string&> topic_password,
+               boost::optional<const std::string&> brokers) {
     if (stopped) {
       ldout(cct, 1) << "Kafka connect: manager is stopped" << dendl;
       return false;
@@ -608,8 +608,8 @@ public:
 
     std::string user;
     std::string password;
-    std::string broker;
-    if (!parse_url_authority(url, broker, user, password)) {
+    std::string broker_list;
+    if (!parse_url_authority(url, broker_list, user, password)) {
       // TODO: increment counter
       ldout(cct, 1) << "Kafka connect: URL parsing failed" << dendl;
       return false;
@@ -637,7 +637,13 @@ public:
       ldout(cct, 1) << "Kafka connect: user/password are only allowed over secure connection" << dendl;
       return false;
     }
-    connection_id_t tmp_id(broker, user, password, ca_location, mechanism,
+
+    if (brokers.has_value()) {
+      broker_list.append(",");
+      broker_list.append(brokers.get());
+    }
+
+    connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
                            use_ssl);
     std::lock_guard lock(connections_lock);
     const auto it = connections.find(tmp_id);
@@ -657,7 +663,7 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker, use_ssl, verify_ssl, ca_location, user, password, mechanism);
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password, mechanism);
     if (!new_producer(conn.get())) {
       ldout(cct, 10) << "Kafka connect: producer creation failed in new connection" << dendl;
       return false;
@@ -775,11 +781,12 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> ca_location,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
-             boost::optional<const std::string&> password) {
+             boost::optional<const std::string&> password,
+             boost::optional<const std::string&> brokers) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
   return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
-                            mechanism, user_name, password);
+                            mechanism, user_name, password, brokers);
 }
 
 int publish(const connection_id_t& conn_id,

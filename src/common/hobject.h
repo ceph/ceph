@@ -22,12 +22,17 @@
 #include <fmt/ostream.h>
 #endif
 
-#include "include/types.h"
-
 #include "json_spirit/json_spirit_value.h"
 #include "include/ceph_assert.h"   // spirit clobbers it!
+#include "include/object.h" // for object_t
+#include "include/types.h" // for version_t, shard_id_t
 
 #include "reverse.h"
+
+#include <cstdint>
+#include <iostream>
+#include <set>
+#include <string>
 
 namespace ceph {
   class Formatter;
@@ -339,7 +344,7 @@ public:
   void decode(ceph::bufferlist::const_iterator& bl);
   void decode(json_spirit::Value& v);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<hobject_t*>& o);
+  static std::list<hobject_t> generate_test_instances();
   friend int cmp(const hobject_t& l, const hobject_t& r);
   constexpr auto operator<=>(const hobject_t &rhs) const noexcept {
     auto cmp = max <=> rhs.max;
@@ -589,7 +594,7 @@ struct ghobject_t {
   void decode(json_spirit::Value& v);
   size_t encoded_size() const;
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ghobject_t*>& o);
+  static std::list<ghobject_t> generate_test_instances();
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
   constexpr auto operator<=>(const ghobject_t&) const = default;
   bool operator==(const ghobject_t&) const = default;

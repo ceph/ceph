@@ -19,6 +19,7 @@
 #include <optional>
 #include <shared_mutex> // for std::shared_lock
 
+#include <boost/asio/append.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
@@ -134,10 +135,8 @@ auto SharedMutexImpl::async_lock(Mutex& mtx, CompletionToken&& token)
           state = Exclusive;
 
           // post a successful completion
-          auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-          auto h = boost::asio::bind_executor(ex2, std::move(handler));
-          boost::asio::post(bind_handler(std::move(h), ec,
-                                         std::unique_lock{mtx, std::adopt_lock}));
+          boost::asio::post(ex1, boost::asio::append(std::move(handler),
+                  ec, std::unique_lock{mtx, std::adopt_lock}));
         } else {
           // create a request and add it to the exclusive list
           using LockCompletion = typename Request::LockCompletion;
@@ -224,10 +223,8 @@ auto SharedMutexImpl::async_lock_shared(Mutex& mtx, CompletionToken&& token)
         if (exclusive_queue.empty() && state < MaxShared) {
           state++;
 
-          auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-          auto h = boost::asio::bind_executor(ex2, std::move(handler));
-          boost::asio::post(bind_handler(std::move(h), ec,
-                                         std::shared_lock{mtx, std::adopt_lock}));
+          boost::asio::post(ex1, boost::asio::append(std::move(handler),
+                  ec, std::shared_lock{mtx, std::adopt_lock}));
         } else {
           using LockCompletion = typename Request::LockCompletion;
           auto request = LockCompletion::create(ex1, std::move(handler), mtx);

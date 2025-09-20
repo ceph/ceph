@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
 
+#include "Message.h"
+
 #ifdef ENCODE_DUMP
 # include <typeinfo>
 # include <cxxabi.h>
@@ -11,8 +13,6 @@
 #include "include/types.h"
 
 #include "global/global_context.h"
-
-#include "Message.h"
 
 #include "messages/MPGStats.h"
 
@@ -205,7 +205,9 @@
 #include "messages/MTimeCheck.h"
 #include "messages/MTimeCheck2.h"
 
+#include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/debug.h"
 
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
@@ -218,6 +220,8 @@
 
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+
+#include "messages/MOSDPGPCT.h"
 
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"
@@ -319,7 +323,7 @@ Message *decode_message(CephContext *cct,
                         ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   // In crimson, conn is independently maintained outside Message.
   ceph_assert(conn == nullptr);
 #endif
@@ -331,7 +335,7 @@ Message *decode_message(CephContext *cct,
     if (front_crc != footer.front_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in front " << front_crc << " != exp " << footer.front_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	              << " from " << conn->get_peer_addr()
 #endif
 	              << dendl;
@@ -344,7 +348,7 @@ Message *decode_message(CephContext *cct,
     if (middle_crc != footer.middle_crc) {
       if (cct) {
 	ldout(cct, 0) << "bad crc in middle " << middle_crc << " != exp " << footer.middle_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	              << " from " << conn->get_peer_addr()
 #endif
 	              << dendl;
@@ -361,7 +365,7 @@ Message *decode_message(CephContext *cct,
       if (data_crc != footer.data_crc) {
 	if (cct) {
 	  ldout(cct, 0) << "bad crc in data " << data_crc << " != exp " << footer.data_crc
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 	                << " from " << conn->get_peer_addr()
 #endif
 	                << dendl;
@@ -548,6 +552,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     m = make_message<MOSDPGUpdateLogMissingReply>();
+    break;
+  case MSG_OSD_PG_PCT:
+    m = make_message<MOSDPGPCT>();
     break;
   case CEPH_MSG_OSD_BACKOFF:
     m = make_message<MOSDBackoff>();

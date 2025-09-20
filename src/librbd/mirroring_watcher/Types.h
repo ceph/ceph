@@ -11,7 +11,7 @@
 #include <iosfwd>
 #include <list>
 #include <string>
-#include <boost/variant.hpp>
+#include <variant>
 
 namespace ceph { class Formatter; }
 
@@ -72,9 +72,9 @@ struct UnknownPayload {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<ModeUpdatedPayload,
-                       ImageUpdatedPayload,
-                       UnknownPayload> Payload;
+typedef std::variant<ModeUpdatedPayload,
+		     ImageUpdatedPayload,
+		     UnknownPayload> Payload;
 
 struct NotifyMessage {
   NotifyMessage(const Payload &payload = UnknownPayload()) : payload(payload) {
@@ -86,7 +86,7 @@ struct NotifyMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<NotifyMessage *> &o);
+  static std::list<NotifyMessage> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(NotifyMessage);

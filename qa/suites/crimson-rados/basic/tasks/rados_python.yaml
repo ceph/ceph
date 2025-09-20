@@ -17,4 +17,4 @@ tasks:
     timeout: 1h
     clients:
       client.0:
-        - rados/test_python.sh -m 'not (tier or ec)'
+        - rados/test_python.sh -m 'not (wait or tier or ec)'

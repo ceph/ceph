@@ -14,6 +14,7 @@
 
 #include "common/config.h"
 #include "CephxKeyServer.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include <sstream>
 
@@ -262,9 +263,11 @@ void KeyServer::dump(Formatter *f) const
   f->dump_object("data", data);
 }
 
-void KeyServer::generate_test_instances(std::list<KeyServer*>& ls)
+std::list<KeyServer> KeyServer::generate_test_instances()
 {
-  ls.push_back(new KeyServer(nullptr, nullptr));
+  std::list<KeyServer> ls;
+  ls.emplace_back(nullptr, nullptr);
+  return ls;
 }
 
 bool KeyServer::generate_secret(CryptoKey& secret)

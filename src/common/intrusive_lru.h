@@ -94,6 +94,8 @@ public:
   friend void intrusive_ptr_add_ref<>(intrusive_lru_base<Config> *);
   friend void intrusive_ptr_release<>(intrusive_lru_base<Config> *);
 
+  unsigned get_use_count() const { return use_count; }
+
   virtual ~intrusive_lru_base() {}
 };
 
@@ -176,6 +178,25 @@ class intrusive_lru {
     evict(lru_target_size);
   }
 
+  /// clear [from, to) invoking f upon and invalidating any live references
+  template <typename F>
+  void clear_range(
+    typename lru_set_t::iterator from, typename lru_set_t::iterator to,
+    F &&f) {
+    while (from != to) {
+      if (!(*from).lru) {
+	unreferenced_list.erase(lru_list_t::s_iterator_to(*from));
+	from = lru_set.erase_and_dispose(from, [](auto *p) { delete p; } );
+      } else {
+	std::invoke(f, static_cast<T&>(*from));
+	from->lru = nullptr;
+	assert(from->is_invalidated());
+	from = lru_set.erase_and_dispose(
+	  from, [](auto *p) { assert(p->use_count > 0); });
+      }
+    }
+  }
+
 public:
   /**
    * Returns the TRef corresponding to k if it exists or
@@ -198,38 +219,28 @@ public:
     }
   }
 
-  /*
-   * Clears unreferenced elements from the lru set [from, to]
+  /**
+   * clear_range
+   *
+   * Clears elements from the lru set in [from, to] invoking F upon and
+   * invalidating any with outstanding references
    */
-  void clear_range(
-    const K& from,
-    const K& to) {
-      auto from_iter = lru_set.lower_bound(from);
-      auto to_iter = lru_set.upper_bound(to);
-      for (auto i = from_iter; i != to_iter; ) {
-        if (!(*i).lru) {
-          unreferenced_list.erase(lru_list_t::s_iterator_to(*i));
-          i = lru_set.erase_and_dispose(i, [](auto *p)
-            { delete p; } );
-        } else {
-          i++;
-        }
-      }
+  template <typename F>
+  void clear_range(const K& from, const K& to, F &&f) {
+    auto from_iter = lru_set.lower_bound(from);
+    auto to_iter = lru_set.upper_bound(to);
+    clear_range(from_iter, to_iter, std::forward<F>(f));
   }
 
-  /// drop all elements from lru, invoke f on any with outstanding references
+  /**
+   * clear
+   *
+   * Clears all elements from the lru set invoking F upon and
+   * invalidating any with outstanding references
+   */
   template <typename F>
   void clear(F &&f) {
-    evict(0);
-    assert(unreferenced_list.empty());
-    for (auto &i: lru_set) {
-      std::invoke(f, static_cast<T&>(i));
-      i.lru = nullptr;
-      assert(i.is_invalidated());
-    }
-    lru_set.clear_and_dispose([](auto *i){
-      assert(i->use_count > 0); /* don't delete, still has a ref count */
-    });
+    clear_range(lru_set.begin(), lru_set.end(), std::forward<F>(f));
   }
 
   template <class F>

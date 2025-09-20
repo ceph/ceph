@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"

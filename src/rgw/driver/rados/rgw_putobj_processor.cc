@@ -35,17 +35,19 @@ namespace rgw::putobj {
  * cloudtier config info read from the attrs.
  * Since these attrs are used internally for only replication, do not store them
  * in the head object.
+ * 
+ * Update versioned epoch incase the object is being restored.
  */
-void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& category,
-                          RGWObjManifest& manifest) {
+int read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& category,
+                          std::optional<uint64_t>& olh_epoch, RGWObjManifest& manifest) {
   auto attr_iter = attrs.find(RGW_ATTR_CLOUD_TIER_TYPE);
   if (attr_iter != attrs.end()) {
     auto i = attr_iter->second;
     string m = i.to_str();
 
-    if (m == "cloud-s3") {
+    if (RGWTierType::is_tier_type_supported(m)) {
       category = RGWObjCategory::CloudTiered;
-      manifest.set_tier_type("cloud-s3");
+      manifest.set_tier_type(m);
 
       auto config_iter = attrs.find(RGW_ATTR_CLOUD_TIER_CONFIG);
       if (config_iter != attrs.end()) {
@@ -58,11 +60,37 @@ void read_cloudtier_info_from_attrs(rgw::sal::Attrs& attrs, RGWObjCategory& cate
           manifest.set_tier_config(tier_config);
           attrs.erase(config_iter);
         } catch (buffer::error& err) {
+          return -EIO;
         }
       }
     }
     attrs.erase(attr_iter);
   }
+  attr_iter = attrs.find(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+  if (attr_iter != attrs.end()) {
+    try {
+      using ceph::decode;
+      uint64_t v_epoch = 0;
+      decode(v_epoch, attr_iter->second);
+      olh_epoch = v_epoch;
+      /*
+       * Keep this attr only for Temp restored copies as its needed while
+       * resetting head object post expiry.
+       */
+      auto r_iter = attrs.find(RGW_ATTR_RESTORE_TYPE);
+      if (r_iter != attrs.end()) {
+        rgw::sal::RGWRestoreType restore_type;
+        using ceph::decode;
+        decode(restore_type, r_iter->second);
+        if (restore_type != rgw::sal::RGWRestoreType::Temporary) {
+	        attrs.erase(attr_iter);
+        }
+      }
+    } catch (buffer::error& err) {
+      return -EIO;
+    }
+  }
+  return 0;
 }
 
 int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
@@ -366,7 +394,7 @@ int AtomicObjectProcessor::complete(
     return r;
   }
 
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
 
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
 
@@ -390,7 +418,11 @@ int AtomicObjectProcessor::complete(
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
+  r = read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, obj_op.meta.olh_epoch, manifest);
+
+  if (r < 0) { // incase of any errors while decoding tier_config/restore attrs
+    return r;
+  }
 
   r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx,
                         writer.get_trace(), flags & rgw::sal::FLAG_LOG_OP);
@@ -578,7 +610,7 @@ int MultipartObjectProcessor::complete(
   op.assert_exists();
   cls_rgw_mp_upload_part_info_update(op, p, info);
   cls_version_inc(op);
-  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
+  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, std::move(op), rctx.y);
   ldpp_dout(rctx.dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
 
   if (r == -EOPNOTSUPP) {
@@ -593,10 +625,15 @@ int MultipartObjectProcessor::complete(
     op.assert_exists(); // detect races with abort
     op.omap_set(m);
     cls_version_inc(op);
-    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, &op, rctx.y);
+    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.ioctx, meta_obj_ref.obj.oid, std::move(op), rctx.y);
   }
 
   if (r < 0) {
+    if (r == -ETIMEDOUT) {
+      // The meta_obj_ref write may eventually succeed, clear the set of objects for deletion. if it
+      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      writer.clear_written();
+    }
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
   }
 
@@ -680,7 +717,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       tail_placement_rule.storage_class = RGW_STORAGE_CLASS_STANDARD;
     }
     manifest.set_prefix(cur_manifest->get_prefix());
-    astate->keep_tail = true;
+    keep_tail = true;
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
 
@@ -731,7 +768,7 @@ int AppendObjectProcessor::complete(
   if (r < 0) {
     return r;
   }
-  obj_ctx.set_atomic(head_obj);
+  obj_ctx.set_atomic(head_obj, true);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   //For Append obj, disable versioning
   op_target.set_versioning_disabled(true);
@@ -752,6 +789,7 @@ int AppendObjectProcessor::complete(
   obj_op.meta.user_data = user_data;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
+  obj_op.meta.keep_tail = keep_tail;
   obj_op.meta.appendable = true;
   //Add the append part number
   bufferlist cur_part_num_bl;
@@ -783,6 +821,11 @@ int AppendObjectProcessor::complete(
 			attrs, rctx, writer.get_trace(),
 			flags & rgw::sal::FLAG_LOG_OP);
   if (r < 0) {
+      if (r == -ETIMEDOUT) {
+      // The head object write may eventually succeed, clear the set of objects for deletion. if it
+      // doesn't ever succeed, we'll orphan any tail objects as if we'd crashed before that write
+      writer.clear_written();
+    }
     return r;
   }
   if (!obj_op.meta.canceled) {

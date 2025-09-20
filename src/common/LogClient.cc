@@ -20,6 +20,8 @@
 #include "mon/MonMap.h"
 #include "common/Graylog.h"
 
+#include <sstream>
+
 #define dout_subsys ceph_subsys_monc
 
 using std::map;

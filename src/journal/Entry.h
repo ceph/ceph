@@ -7,7 +7,9 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+
 #include <iosfwd>
+#include <list>
 #include <string>
 
 namespace ceph {
@@ -43,7 +45,7 @@ public:
   bool operator==(const Entry& rhs) const;
 
   static bool is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed);
-  static void generate_test_instances(std::list<Entry *> &o);
+  static std::list<Entry> generate_test_instances();
 
 private:
   static const uint64_t preamble = 0x3141592653589793;

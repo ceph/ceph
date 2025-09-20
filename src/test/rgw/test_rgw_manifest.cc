@@ -48,7 +48,6 @@ struct OldObjManifestPart {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<OldObjManifestPart*>& o);
 };
 WRITE_CLASS_ENCODER(OldObjManifestPart)
 

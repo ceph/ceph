@@ -8,7 +8,11 @@
           [formGroup]="exportTokenForm">
     <span *ngIf="loading"
           class="d-flex justify-content-center">
-    <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i></span>
+      <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+    <svg [cdsIcon]="icons.down"
+         [size]="icons.size24"
+         class="cds-info-color"></svg>
+  </span>
     <div class="modal-body"
          *ngIf="!loading">
       <cd-alert-panel *ngIf="!tokenValid"

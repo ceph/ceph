@@ -34,6 +34,7 @@ import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -632,13 +633,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       // Remove service types:
       // osd       - This is deployed a different way.
       // container - This should only be used in the CLI.
-      this.hiddenServices.push('osd', 'container');
+      // promtail  - This is deprecated and replaced by alloy.
+      this.hiddenServices.push('osd', 'container', 'promtail');
 
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
-    this.hostService.getAllHosts().subscribe((resp: object[]) => {
+    this.hostService.getAllHosts().subscribe((resp: Host[]) => {
       const options: SelectOption[] = [];
-      _.forEach(resp, (host: object) => {
+      _.forEach(resp, (host: Host) => {
         if (_.get(host, 'sources.orchestrator', false)) {
           const option = new SelectOption(false, _.get(host, 'hostname'), '');
           options.push(option);
@@ -752,10 +754,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                   .setValue(response[0].spec?.ssl_ciphers.join(':'));
               }
               if (response[0].spec?.ssl_cert) {
-                this.serviceForm.get('ssl_cert').setValue(response[0].spec.ssl_certificate);
+                this.serviceForm.get('ssl_cert').setValue(response[0].spec.ssl_cert);
               }
               if (response[0].spec?.ssl_key) {
-                this.serviceForm.get('ssl_key').setValue(response[0].spec.ssl_certificate_key);
+                this.serviceForm.get('ssl_key').setValue(response[0].spec.ssl_key);
               }
               if (response[0].spec?.enable_auth) {
                 this.serviceForm.get('enable_auth').setValue(response[0].spec.enable_auth);
@@ -1284,8 +1286,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['virtual_interface_networks'] = values['virtual_interface_networks'];
           break;
         case 'mgmt-gateway':
-          serviceSpec['ssl_certificate'] = values['ssl_cert']?.trim();
-          serviceSpec['ssl_certificate_key'] = values['ssl_key']?.trim();
+          serviceSpec['ssl_cert'] = values['ssl_cert']?.trim();
+          serviceSpec['ssl_key'] = values['ssl_key']?.trim();
           serviceSpec['enable_auth'] = values['enable_auth'];
           serviceSpec['port'] = values['port'];
           if (serviceSpec['port'] === (443 || 80)) {

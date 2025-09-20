@@ -1,22 +1,30 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string.hpp>
+#include "PGMap.h"
+#include "mon/health_check.h"
+#include "common/ceph_context.h"
 
 #include "include/rados.h"
-#include "PGMap.h"
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
 #include "global/global_context.h"
 #include "include/ceph_features.h"
+#include "include/health.h"
 #include "include/stringify.h"
 
 #include "osd/osd_types.h"
 #include "osd/OSDMap.h"
+
+#include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+
+#include <iomanip> // for std::setw()
+#include <sstream>
 
 #define dout_context g_ceph_context
 
@@ -48,8 +56,8 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 4;
-  assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
+  uint8_t v = 5;
+  ceph_assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
   encode(num_pg_active, bl);
@@ -69,13 +77,14 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(avail_space_by_rule, bl);
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
+  encode(pool_pg_unavailable_map, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(4, p);
-  assert(struct_v >= 4);
+  DECODE_START(5, p);
+  ceph_assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
   decode(num_pg_unknown, p);
@@ -94,6 +103,9 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(avail_space_by_rule, p);
   decode(purged_snaps, p);
   decode(osd_sum_by_class, p);
+  if (struct_v >= 5) {
+    decode(pool_pg_unavailable_map, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -143,6 +155,18 @@ void PGMapDigest::dump(ceph::Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("pool_pg_unavailable_map");
+  for (auto& p : pool_pg_unavailable_map) {
+    f->open_object_section("pool_pg_unavailable_map");
+    f->dump_string("poolid", std::to_string(p.first));
+    f->open_array_section("pgs");
+    for (const auto& pg : p.second) {
+      f->dump_stream("pg") << pg;
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("num_pg_by_osd");
   for (auto& p : num_pg_by_osd) {
     f->open_object_section("count");
@@ -170,9 +194,11 @@ void PGMapDigest::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void PGMapDigest::generate_test_instances(list<PGMapDigest*>& ls)
+list<PGMapDigest> PGMapDigest::generate_test_instances()
 {
-  ls.push_back(new PGMapDigest);
+  list<PGMapDigest> ls;
+  ls.emplace_back();
+  return ls;
 }
 
 inline std::string percentify(const float& a) {
@@ -1089,25 +1115,27 @@ void PGMap::Incremental::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
+list<PGMap::Incremental> PGMap::Incremental::generate_test_instances()
 {
-  o.push_back(new Incremental);
-  o.push_back(new Incremental);
-  o.back()->version = 1;
-  o.back()->stamp = utime_t(123,345);
-  o.push_back(new Incremental);
-  o.back()->version = 2;
-  o.back()->pg_stat_updates[pg_t(1,2)] = pg_stat_t();
-  o.back()->osd_stat_updates[5] = osd_stat_t();
-  o.push_back(new Incremental);
-  o.back()->version = 3;
-  o.back()->osdmap_epoch = 1;
-  o.back()->pg_scan = 2;
-  o.back()->pg_stat_updates[pg_t(4,5)] = pg_stat_t();
-  o.back()->osd_stat_updates[6] = osd_stat_t();
-  o.back()->pg_remove.insert(pg_t(1,2));
-  o.back()->osd_stat_rm.insert(5);
-  o.back()->pool_statfs_updates[std::make_pair(1234,4)] = store_statfs_t();
+  list<PGMap::Incremental> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().version = 1;
+  o.back().stamp = utime_t(123,345);
+  o.emplace_back();
+  o.back().version = 2;
+  o.back().pg_stat_updates[pg_t(1,2)] = pg_stat_t();
+  o.back().osd_stat_updates[5] = osd_stat_t();
+  o.emplace_back();
+  o.back().version = 3;
+  o.back().osdmap_epoch = 1;
+  o.back().pg_scan = 2;
+  o.back().pg_stat_updates[pg_t(4,5)] = pg_stat_t();
+  o.back().osd_stat_updates[6] = osd_stat_t();
+  o.back().pg_remove.insert(pg_t(1,2));
+  o.back().osd_stat_rm.insert(5);
+  o.back().pool_statfs_updates[std::make_pair(1234,4)] = store_statfs_t();
+  return o;
 }
 
 // --
@@ -1251,6 +1279,52 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     last_osdmap_epoch = inc.osdmap_epoch;
   if (inc.pg_scan)
     last_pg_scan = inc.pg_scan;
+}
+
+/*
+  Returns a map of all pools in a cluster. Each value lists any PGs that 
+  are in any of the following states: 
+  - non-active 
+  - stale 
+
+  Any PG that has unfound objects is also added to the map. 
+
+  Eg: {1=[1.0],2=[],3=[]}
+  Here the cluster has 3 pools with id 1,2,3 and pool 1 has an inactive PG 1.0
+*/
+void PGMap::get_unavailable_pg_in_pool_map(const OSDMap& osdmap)
+{
+  dout(20) << __func__ << dendl;
+  pool_pg_unavailable_map.clear();
+  utime_t now(ceph_clock_now());
+  utime_t cutoff = now - utime_t(g_conf().get_val<int64_t>("mon_pg_stuck_threshold"), 0);
+  for (auto i = pg_stat.begin();
+       i != pg_stat.end();
+       ++i) {
+    const auto poolid = i->first.pool();
+    pool_pg_unavailable_map[poolid];
+    utime_t val = cutoff;
+
+    if (!(i->second.state & PG_STATE_ACTIVE)) { // This case covers unknown state since unknow state bit == 0;
+      if (i->second.last_active < val)
+	val = i->second.last_active;
+    }
+
+    if (i->second.state & PG_STATE_STALE) {
+      if (i->second.last_unstale < val)
+	val = i->second.last_unstale;
+    }
+
+    if (val < cutoff) {
+      pool_pg_unavailable_map[poolid].push_back(i->first);
+      dout(20) << "pool: " << poolid << " pg: " << i->first
+         << " is stuck unavailable" << " state: " << i->second.state << dendl;
+    } else if (i->second.stats.sum.num_objects_unfound) {
+      pool_pg_unavailable_map[poolid].push_back(i->first);
+      dout(20) << "pool: " << poolid << " pg: " << i->first
+         << " has " << i->second.stats.sum.num_objects_unfound << " unfound objects" << dendl;
+    }
+  }
 }
 
 void PGMap::calc_stats()
@@ -1480,6 +1554,7 @@ void PGMap::encode_digest(const OSDMap& osdmap,
   get_rules_avail(osdmap, &avail_space_by_rule);
   calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
+  get_unavailable_pg_in_pool_map(osdmap);
   PGMapDigest::encode(bl, features);
 }
 
@@ -2186,21 +2261,19 @@ void PGMap::clear_delta()
   stamp_delta = utime_t();
 }
 
-void PGMap::generate_test_instances(list<PGMap*>& o)
+list<PGMap> PGMap::generate_test_instances()
 {
-  o.push_back(new PGMap);
-  list<Incremental*> inc;
-  Incremental::generate_test_instances(inc);
-  delete inc.front();
+  list<PGMap> o;
+  o.emplace_back();
+  list<Incremental> inc = Incremental::generate_test_instances();
   inc.pop_front();
   while (!inc.empty()) {
-    PGMap *pmp = new PGMap();
-    *pmp = *o.back();
+    PGMap pmp = o.back();
     o.push_back(pmp);
-    o.back()->apply_incremental(NULL, *inc.front());
-    delete inc.front();
+    o.back().apply_incremental(nullptr, inc.front());
     inc.pop_front();
   }
+  return o;
 }
 
 void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
@@ -3242,6 +3315,12 @@ void PGMap::get_health_checks(
         summary += " experiencing stalled read in wal device of BlueFS";
       } else if (asum.first == "DB_DEVICE_STALLED_READ_ALERT") {
         summary += " experiencing stalled read in db device of BlueFS";
+      } else if (asum.first.find("_DISCARD_QUEUE") != std::string::npos) {
+	for (auto str : asum.second.second) {
+	  summary += str;
+	}
+      } else if (asum.first == "BLUESTORE_FREE_FRAGMENTATION") {
+        summary += " experiencing high free space fragmentation of BlueStore";
       }
 
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);

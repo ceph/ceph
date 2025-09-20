@@ -1,80 +1,75 @@
 export enum Icons {
   /* Icons for Symbol */
-  add = 'fa fa-plus', // Create, Add
-  addCircle = 'fa fa-plus-circle', // Plus with Circle
-  minusCircle = 'fa fa-minus-circle', // Minus with Circle
-  edit = 'fa fa-pencil', // Edit, Edit Mode, Rename
-  destroy = 'fa fa-times', // Destroy, Remove, Delete
-  destroyCircle = 'fa fa-times-circle', // Destroy, Remove, Delete
-  exchange = 'fa fa-exchange', // Edit-Peer
-  copy = 'fa fa-copy', // Copy
-  clipboard = 'fa fa-clipboard', // Clipboard
-  flatten = 'fa fa-chain-broken', // Flatten, Link broken, Mark Lost
-  trash = 'fa fa-trash-o', // Move to trash
-  lock = 'fa fa-lock', // Protect
-  unlock = 'fa fa-unlock', // Unprotect
+  add = 'add', // Create, Add
+  addCircle = 'add--filled', // Plus with Circle
+  minusCircle = 'subtract--alt', // Minus with Circle
+  edit = 'edit', // Edit, Edit Mode, Rename
+  destroy = 'close', // Destroy, Remove, Delete
+  exchange = 'arrows--horizontal', // Edit-Peer
+  copy = 'copy', // Copy
+  clipboard = 'copy--file', // Clipboard
+  flatten = 'unlink', // Flatten, Link broken, Mark Lost
+  trash = 'trash-can', // Move to trash
+  lock = 'locked', // Protect
+  unlock = 'unlocked', // Unprotect
   clone = 'fa fa-clone', // clone
   undo = 'fa fa-undo', // Rollback, Restore
-  search = 'fa fa-search', // Search
+  search = 'search', // Search
   start = 'fa fa-play', // Enable
   stop = 'fa fa-stop', // Disable
   analyse = 'fa fa-stethoscope', // Scrub
-  deepCheck = 'fa fa-cog', // Deep Scrub, Setting, Configuration
+  deepCheck = 'settings', // Deep Scrub, Setting, Configuration
   cogs = 'fa fa-cogs', // Multiple Settings, Configurations
-  reweight = 'fa fa-balance-scale', // Reweight
-  up = 'fa fa-arrow-up', // Up
-  left = 'fa fa-arrow-left', // Mark out
-  right = 'fa fa-arrow-right', // Mark in
-  down = 'fa fa-arrow-down', // Mark Down
+  reweight = 'scales', // Reweight
+  up = 'arrow--up', // Up
+  left = 'arrow--left', // Mark out
+  right = 'arrow--right', // Mark in
+  down = 'arrow--down', // Mark Down
   erase = 'fa fa-eraser', // Purge  color: bd.$white;
   expand = 'maximize', // Expand cluster
-  user = 'fa fa-user', // User, Initiators
-  users = 'fa fa-users', // Users, Groups
-  share = 'fa fa-share-alt', // share
-  key = 'fa fa-key-modern', // S3 Keys, Swift Keys, Authentication
-  warning = 'fa fa-exclamation-triangle', // Notification warning
-  info = 'fa fa-info', // Notification information
-  infoCircle = 'fa fa-info-circle', // Info on landing page
-  questionCircle = 'fa fa-question-circle-o',
-  danger = 'fa fa-exclamation-circle',
-  success = 'fa fa-check-circle',
-  check = 'fa fa-check', // Notification check
-  show = 'fa fa-eye', // Show
+  user = 'user', // User, Initiators
+  users = 'user--multiple', // Users, Groups
+  share = 'share', // share
+  key = 'password', // S3 Keys, Swift Keys, Authentication
+  warning = 'warning--alt--filled', // Notification warning
+  info = 'information', // Notification information
+  infoCircle = 'information--filled', // Info on landing page
+  questionCircle = 'help',
+  danger = 'warning--filled',
+  success = 'checkmark--filled',
+  check = 'checkmark', // Notification check
+  show = 'view', // Show
   paragraph = 'fa fa-paragraph', // Silence Matcher - Attribute name
   terminal = 'fa fa-terminal', // Silence Matcher - Value
   magic = 'fa fa-magic', // Silence Matcher - Regex checkbox
   hourglass = 'fa fa-hourglass-o', // Task
   filledHourglass = 'fa fa-hourglass', // Task
   table = 'fa fa-table', // Table,
-  spinner = 'fa fa-spinner', // spinner, Load
-  refresh = 'fa fa-refresh', // Refresh
+  spinner = 'fa fa-spinner',
+  refresh = 'renew', // Refresh
   bullseye = 'fa fa-bullseye', // Target
   disk = 'fa fa-hdd-o', // Hard disk, disks
   server = 'fa fa-server', // Server, Portal
-  filter = 'fa fa-filter', // Filter
-  lineChart = 'fa fa-line-chart', // Line chart
+  filter = 'filter', // Filter
+  lineChart = 'analytics', // Line chart
   signOut = 'fa fa-sign-out', // Sign Out
-  health = 'fa fa-heartbeat', // Health
-  circle = 'fa fa-circle', // Circle
-  bell = 'fa fa-bell', // Notification
-  mute = 'fa fa-bell-slash', // Mute or silence
-  tag = 'fa fa-tag', // Tag, Badge
-  leftArrow = 'fa fa-angle-left', // Left facing angle
-  rightArrow = 'fa fa-angle-right', // Right facing angle
-  leftArrowDouble = 'fa fa-angle-double-left', // Left facing Double angle
-  rightArrowDouble = 'fa fa-angle-double-right', // Left facing Double angle
+  circle = 'dot-mark', // Circle
+  bell = 'notification', // Notification
+  mute = 'notification--off', // Mute or silence
+  leftArrow = 'caret--left', // Left facing angle
+  rightArrow = 'caret--right', // Right facing angle
+  downArrow = 'caret--down',
   flag = 'fa fa-flag', // OSD configuration
-  clearFilters = 'fa fa-window-close', // Clear filters, solid x
-  download = 'fa fa-download', // Download
+  clearFilters = 'close--filled', // Clear filters, solid x
+  download = 'download', // Download
   upload = 'fa fa-upload', // Upload
-  close = 'fa fa-times', // Close
-  json = 'fa fa-file-code-o', // JSON file
-  text = 'fa fa-file-text', // Text file
-  wrench = 'fa fa-wrench', // Configuration Error
+  code = 'code', // JSON file
+  document = 'document', // Text file
+  wrench = 'tools', // Configuration Error
   enter = 'fa fa-sign-in', // Enter
   exit = 'fa fa-sign-out', // Exit
   restart = 'fa fa-history', // Restart
-  deploy = 'fa fa-cube', // Deploy, Redeploy
+  deploy = 'cube', // Deploy, Redeploy
   cubes = 'fa fa-cubes', // Object storage
   sitemap = 'fa fa-sitemap', // Cluster, network, connections
   database = 'fa fa-database', // Database, Block storage
@@ -85,8 +80,17 @@ export enum Icons {
   calendar = 'fa fa-calendar',
   externalUrl = 'fa fa-external-link', // links to external page
   nfsExport = 'fa fa-server', // NFS export
-
+  launch = 'launch',
+  parentChild = 'parent-child',
+  dataTable = 'data-table',
+  idea = 'idea',
+  userAccessLocked = 'user--access-locked', // User access locked
+  chevronDown = 'chevron--down',
   /* Icons for special effect */
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32',
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
   large3x = 'fa fa-3x', // icon becomes 3 times larger
@@ -97,3 +101,18 @@ export enum Icons {
   spin = 'fa fa-spin', //  To get any icon to rotate
   inverse = 'fa fa-inverse' // To get an alternative icon color
 }
+
+export enum IconSize {
+  size16 = '16',
+  size20 = '20',
+  size24 = '24',
+  size32 = '32'
+}
+
+export const ICON_TYPE = {
+  copy: 'copy',
+  danger: 'danger',
+  infoCircle: 'info-circle',
+  success: 'success',
+  warning: 'warning'
+} as const;

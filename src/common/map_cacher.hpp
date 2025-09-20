@@ -19,6 +19,11 @@
 #include "include/expected.hpp"
 #include "common/sharedptr_registry.hpp"
 
+#include <boost/optional.hpp>
+
+#include <map>
+#include <set>
+
 namespace MapCacher {
 /**
  * Abstraction for ordering key updates

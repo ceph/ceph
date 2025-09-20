@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@angular/router';
+import { ActivatedRouteSnapshot, Router } from '@angular/router';
 
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -36,7 +36,7 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Injectable({
   providedIn: 'root'
 })
-export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
+export class ModuleStatusGuardService {
   // TODO: Hotfix - remove ALLOWLIST'ing when a generic ErrorComponent is implemented
   static readonly ALLOWLIST: string[] = ['501'];
 
@@ -86,6 +86,8 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
               secondary_button_name: config.secondary_button_name,
               secondary_button_route: config.secondary_button_route,
               secondary_button_title: config.secondary_button_title,
+              module_name: config.module_name,
+              navigate_to: config.navigate_to,
               uiConfig: config.uiConfig,
               uiApiPath: config.uiApiPath,
               icon: Icons.wrench,

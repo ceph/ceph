@@ -21,7 +21,6 @@ namespace crimson::osd {
 class OSD;
 class ShardServices;
 class PG;
-class BackfillRecovery;
 
 template <class T>
 class PeeringEvent : public PhasedOperationT<T> {
@@ -43,6 +42,10 @@ protected:
   spg_t pgid;
   float delay = 0;
   PGPeeringEvent evt;
+
+  epoch_t get_epoch_sent_at() const {
+    return evt.get_epoch_sent();
+  }
 
   const pg_shard_t get_from() const {
     return from;
@@ -84,17 +87,20 @@ public:
     evt(std::forward<Args>(args)...)
   {}
 
+  bool requires_pg() const final {
+    return evt.requires_pg;
+  }
+
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 };
 
-class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
+class RemotePeeringEvent :
+    public PeeringEvent<RemotePeeringEvent>,
+    public RemoteOperation {
 protected:
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
-
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
@@ -110,7 +116,7 @@ public:
   template <typename... Args>
   RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
-    l_conn(conn)
+    RemoteOperation(std::move(conn))
   {}
 
   std::tuple<
@@ -138,33 +144,6 @@ public:
   ConnectionPipeline &get_connection_pipeline();
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
-
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
 };
 
 class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {

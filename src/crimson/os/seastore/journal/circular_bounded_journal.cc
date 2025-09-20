@@ -29,7 +29,9 @@ CircularBoundedJournal::CircularBoundedJournal(
     crimson::common::get_conf<double>(
       "seastore_journal_batch_preferred_fullness"),
     cjs)
-  {}
+{
+  register_metrics();
+}
 
 CircularBoundedJournal::open_for_mkfs_ret
 CircularBoundedJournal::open_for_mkfs()
@@ -58,36 +60,56 @@ CircularBoundedJournal::close_ertr::future<> CircularBoundedJournal::close()
   return record_submitter.close();
 }
 
-CircularBoundedJournal::submit_record_ret
+CircularBoundedJournal::submit_record_ertr::future<>
 CircularBoundedJournal::submit_record(
     record_t &&record,
-    OrderingHandle &handle)
+    OrderingHandle &handle,
+    transaction_type_t t_src,
+    on_submission_func_t &&on_submission)
 {
   LOG_PREFIX(CircularBoundedJournal::submit_record);
   DEBUG("H{} {} start ...", (void*)&handle, record);
   assert(write_pipeline);
-  return do_submit_record(std::move(record), handle);
-}
 
-CircularBoundedJournal::submit_record_ret
-CircularBoundedJournal::do_submit_record(
-  record_t &&record,
-  OrderingHandle &handle)
-{
-  LOG_PREFIX(CircularBoundedJournal::do_submit_record);
-  if (!record_submitter.is_available()) {
-    DEBUG("H{} wait ...", (void*)&handle);
-    return record_submitter.wait_available(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
-    });
-  }
-  auto action = record_submitter.check_action(record.size);
-  if (action == RecordSubmitter::action_t::ROLL) {
-    return record_submitter.roll_segment(
-    ).safe_then([this, record=std::move(record), &handle]() mutable {
-      return do_submit_record(std::move(record), handle);
-    });
+  stats.submit_record_count++;
+  stats.submit_record_size += record.size.get_raw_mdlength();
+  auto start = ceph::mono_clock::now();
+
+  RecordSubmitter::action_t action;
+  bool waited = false;
+  bool rolled = false;
+  while (true) {
+    if (!record_submitter.is_available()) {
+      DEBUG("H{} wait ...", (void*)&handle);
+
+      auto wait_start = ceph::mono_clock::now();
+
+      co_await record_submitter.wait_available();
+
+      if (!waited) {
+	stats.submit_record_wait_count++;
+	waited = true;
+      }
+      stats.submit_record_wait_latency_total +=
+	ceph::mono_clock::now() - wait_start;
+      continue;
+    }
+    action = record_submitter.check_action(record.size);
+    if (action == RecordSubmitter::action_t::ROLL) {
+
+      auto roll_start = ceph::mono_clock::now();
+
+      co_await record_submitter.roll_segment();
+
+      if (!rolled) {
+	stats.submit_record_roll_count++;
+	rolled = true;
+      }
+      stats.submit_record_roll_latency_total +=
+	ceph::mono_clock::now() - roll_start;
+      continue;
+    }
+    break;
   }
 
   DEBUG("H{} submit {} ...",
@@ -96,18 +118,24 @@ CircularBoundedJournal::do_submit_record(
 	"FULL" : "NOT_FULL");
   auto submit_ret = record_submitter.submit(std::move(record));
   // submit_ret.record_base_regardless_md is wrong for journaling
-  return handle.enter(write_pipeline->device_submission
-  ).then([submit_fut=std::move(submit_ret.future)]() mutable {
-    return std::move(submit_fut);
-  }).safe_then([FNAME, this, &handle](record_locator_t result) {
-    return handle.enter(write_pipeline->finalize
-    ).then([FNAME, this, result, &handle] {
-      DEBUG("H{} finish with {}", (void*)&handle, result);
-      auto new_committed_to = result.write_result.get_end_seq();
-      record_submitter.update_committed_to(new_committed_to);
-      return result;
-    });
-  });
+  co_await handle.enter(write_pipeline->device_submission);
+
+  record_locator_t result = co_await std::move(submit_ret.future);
+
+  co_await handle.enter(write_pipeline->finalize);
+
+  DEBUG("H{} finish with {}", (void*)&handle, result);
+  auto new_committed_to = result.write_result.get_end_seq();
+  record_submitter.update_committed_to(new_committed_to);
+  std::invoke(on_submission, result);
+
+  stats.submit_record_latency_total += ceph::mono_clock::now() - start;
+
+  if (is_trim_transaction(t_src)) {
+    co_await update_journal_tail(
+      trimmer.get_dirty_tail(),
+      trimmer.get_alloc_tail());
+  }
 }
 
 Journal::replay_ret CircularBoundedJournal::replay_segment(
@@ -392,13 +420,84 @@ Journal::replay_ret CircularBoundedJournal::replay(
   });
 }
 
-seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
-  if (is_trim_transaction(type)) {
-    return update_journal_tail(
-      trimmer.get_dirty_tail(),
-      trimmer.get_alloc_tail());
-  }
-  return seastar::now();
+void CircularBoundedJournal::register_metrics()
+{
+  namespace sm = seastar::metrics;
+  metrics.add_group(
+    "seastore_cbj",
+    {
+      sm::make_gauge(
+	"submit_record_count",
+	[this] {
+	  return stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_size",
+	[this] {
+	  return stats.submit_record_size;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_latency_total",
+	[this] {
+	  return stats.submit_record_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_latency_average",
+	[this] {
+	  return stats.submit_record_latency_total.count() /
+	    stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_size_average",
+	[this] {
+	  return stats.submit_record_size /
+	    stats.submit_record_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_count",
+	[this] {
+	  return stats.submit_record_roll_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_latency_total",
+	[this] {
+	  return stats.submit_record_roll_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_roll_latency_average",
+	[this] {
+	  return stats.submit_record_roll_latency_total.count() /
+	    stats.submit_record_roll_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_count",
+	[this] {
+	  return stats.submit_record_wait_count;
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_latency_total",
+	[this] {
+	  return stats.submit_record_wait_latency_total.count();
+	}
+      ),
+      sm::make_gauge(
+	"submit_record_wait_latency_average",
+	[this] {
+	  return stats.submit_record_wait_latency_total.count() /
+	    stats.submit_record_wait_count;
+	}
+      )
+    }
+  );
 }
 
 }

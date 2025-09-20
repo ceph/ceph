@@ -30,12 +30,14 @@ void locker_id_t::dump(ceph::Formatter *f) const
   f->dump_string("cookie", cookie);
 }
 
-void locker_id_t::generate_test_instances(std::list<locker_id_t*>& o)
+std::list<locker_id_t> locker_id_t::generate_test_instances()
 {
-  locker_id_t *i = new locker_id_t;
-  generate_lock_id(*i, 1, "cookie");
-  o.push_back(i);
-  o.push_back(new locker_id_t);
+  std::list<locker_id_t> o;
+  locker_id_t i;
+  generate_lock_id(i, 1, "cookie");
+  o.push_back(std::move(i));
+  o.emplace_back();
+  return o;
 }
 
 void locker_info_t::dump(ceph::Formatter *f) const
@@ -57,14 +59,16 @@ static void generate_test_addr(entity_addr_t& a, int nonce, int port)
   a.set_port(port);
 }
 
-void locker_info_t::generate_test_instances(std::list<locker_info_t*>& o)
+std::list<locker_info_t> locker_info_t::generate_test_instances()
 {
-  locker_info_t *i = new locker_info_t;
-  i->expiration = utime_t(5, 0);
-  generate_test_addr(i->addr, 1, 2);
-  i->description = "description";
-  o.push_back(i);
-  o.push_back(new locker_info_t);
+  std::list<locker_info_t> o;
+  locker_info_t i;
+  i.expiration = utime_t(5, 0);
+  generate_test_addr(i.addr, 1, 2);
+  i.description = "description";
+  o.push_back(std::move(i));
+  o.emplace_back();
+  return o;
 }
 
 void lock_info_t::dump(ceph::Formatter *f) const
@@ -81,18 +85,20 @@ void lock_info_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void lock_info_t::generate_test_instances(std::list<lock_info_t *>& o)
+std::list<lock_info_t> lock_info_t::generate_test_instances()
 {
-  lock_info_t *i = new lock_info_t;
+  std::list<lock_info_t> o;
+  lock_info_t i;
   locker_id_t id;
   locker_info_t info;
   generate_lock_id(id, 1, "cookie");
   info.expiration = utime_t(5, 0);
   generate_test_addr(info.addr, 1, 2);
   info.description = "description";
-  i->lockers[id] = info;
-  i->lock_type = ClsLockType::EXCLUSIVE;
-  i->tag = "tag";
-  o.push_back(i);
-  o.push_back(new lock_info_t);
+  i.lockers[id] = info;
+  i.lock_type = ClsLockType::EXCLUSIVE;
+  i.tag = "tag";
+  o.push_back(std::move(i));
+  o.emplace_back();
+  return o;
 }

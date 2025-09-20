@@ -233,6 +233,11 @@ public:
     }
     void trim(
       const pg_log_entry_t &entry) override {}
+    void partial_write(
+        pg_info_t *info,
+        eversion_t previous_version,
+        const pg_log_entry_t &entry
+      ) override {}
   };
 
   template <typename missing_t>
@@ -291,7 +296,7 @@ public:
     bool dirty_big_info = false;
     merge_log(
       oinfo, std::move(olog), pg_shard_t(1, shard_id_t(0)), info,
-      &h, dirty_info, dirty_big_info);
+      pg_pool_t(), pg_shard_t(), &h, dirty_info, dirty_big_info, false);
 
     ASSERT_EQ(info.last_update, oinfo.last_update);
     verify_missing(tcase, missing);
@@ -310,7 +315,7 @@ public:
     pg_info_t oinfo = tcase.get_divinfo();
 
     proc_replica_log(
-      oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)));
+      oinfo, olog, omissing, pg_shard_t(1, shard_id_t(0)), false);
 
     ceph_assert(oinfo.last_update >= log.tail);
 
@@ -325,7 +330,7 @@ public:
 	if (i->is_delete() && tcase.deletes_during_peering) {
 	  omissing.rm(i->soid, i->version);
 	} else {
-	  omissing.add_next_event(*i);
+	  omissing.add_next_event(*i, pg_pool_t(), shard_id_t());
 	}
       }
     }
@@ -356,6 +361,11 @@ struct TestHandler : public PGLog::LogEntryHandler {
   }
   void trim(
     const pg_log_entry_t &entry) override {}
+  void partial_write(
+      pg_info_t *info,
+      eversion_t previous_version,
+      const pg_log_entry_t &entry
+    ) override {}
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
@@ -428,7 +438,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false);
 
     EXPECT_TRUE(log.objects.count(divergent));
     EXPECT_TRUE(missing.is_missing(divergent_object));
@@ -493,7 +503,7 @@ TEST_F(PGLogTest, rewind_divergent_log) {
 
     TestHandler h(remove_snap);
     rewind_divergent_log(newhead, info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false);
 
     EXPECT_TRUE(missing.is_missing(divergent_object));
     EXPECT_EQ(0U, log.objects.count(divergent_object));
@@ -530,11 +540,11 @@ TEST_F(PGLogTest, rewind_divergent_log) {
       add(e);
     }
     TestHandler h(remove_snap);
-    roll_forward_to(eversion_t(1, 6), &h);
+    roll_forward_to(eversion_t(1, 6), &info, &h);
     rewind_divergent_log(eversion_t(1, 5), info, &h,
-			 dirty_info, dirty_big_info);
+			 dirty_info, dirty_big_info, false);
     pg_log_t log;
-    reset_backfill_claim_log(log, &h);
+    reset_backfill_claim_log(log, &info, &h);
   }
 }
 
@@ -607,7 +617,7 @@ TEST_F(PGLogTest, merge_old_entry) {
     {
       pg_log_entry_t &ne = log.log.front();
       ne.op = pg_log_entry_t::MODIFY;
-      missing.add_next_event(ne);
+      missing.add_next_event(ne, pg_pool_t(), shard_id_t());
       pg_log_entry_t oe;
       oe.mark_unrollbackable();
       oe.version = eversion_t(1,1);
@@ -686,7 +696,7 @@ TEST_F(PGLogTest, merge_old_entry) {
 
     oe.version = eversion_t(2,1);
     oe.op = pg_log_entry_t::MODIFY;
-    missing.add_next_event(oe);
+    missing.add_next_event(oe, pg_pool_t(), shard_id_t());
 
     missing.flush();
     EXPECT_FALSE(is_dirty());
@@ -891,8 +901,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -941,8 +951,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h,dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(0U, log.log.size());
@@ -1046,8 +1056,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(3U, log.log.size());
@@ -1155,8 +1165,8 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_FALSE(dirty_big_info);
 
     TestHandler h(remove_snap);
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1274,8 +1284,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     /* When the divergent entry is a DELETE and the authoritative
        entry is a MODIFY, the object will be added to missing : it is
@@ -1376,8 +1386,8 @@ TEST_F(PGLogTest, merge_log) {
 
     TestHandler h(remove_snap);
     missing.may_include_deletes = false;
-    merge_log(oinfo, std::move(olog), fromosd, info, &h,
-              dirty_info, dirty_big_info);
+    merge_log(oinfo, std::move(olog), fromosd, info, pg_pool_t(), pg_shard_t(),
+              &h, dirty_info, dirty_big_info, false);
 
     EXPECT_FALSE(missing.have_missing());
     EXPECT_EQ(2U, log.log.size());
@@ -1411,7 +1421,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(last_complete, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_FALSE(omissing.have_missing());
     EXPECT_EQ(last_update, oinfo.last_update);
@@ -1485,7 +1495,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_FALSE(omissing.have_missing());
   }
@@ -1587,7 +1597,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1674,7 +1684,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1764,7 +1774,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.is_missing(divergent_object));
@@ -1858,7 +1868,7 @@ TEST_F(PGLogTest, proc_replica_log) {
     EXPECT_EQ(olog.head, oinfo.last_complete);
 
     missing.may_include_deletes = false;
-    proc_replica_log(oinfo, olog, omissing, from);
+    proc_replica_log(oinfo, olog, omissing, from, false);
 
     EXPECT_TRUE(omissing.have_missing());
     EXPECT_TRUE(omissing.get_items().begin()->second.need == eversion_t(1, 1));
@@ -2477,7 +2487,7 @@ public:
     clear();
     ostringstream err;
     read_log_and_missing(store.get(), ch, log_oid,
-			 pg_info_t(), err, false);
+			 pg_info_t(), err, false, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);
     auto dups_it = log.dups.begin();
@@ -2938,7 +2948,7 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
                                     orig_entries, oinfo,
                                     log.get_can_rollback_to(),
                                     missing, &rollbacker,
-                                    this);
+                                    false, this);
     // No core dump
   }
   {
@@ -2964,7 +2974,7 @@ TEST_F(PGLogTest, _merge_object_divergent_entries) {
                                     orig_entries, oinfo,
                                     log.get_can_rollback_to(),
                                     missing, &rollbacker,
-                                    this);
+                                    false, this);
     // No core dump
   }
 }

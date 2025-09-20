@@ -23,7 +23,6 @@ security fixes.
 
    Squid (v19.2.*) <squid>
    Reef (v18.2.*) <reef>
-   Quincy (v17.2.*) <quincy>
 
 .. ceph_releases:: releases.yml current
 
@@ -40,6 +39,7 @@ receive bug fixes or backports).
    :maxdepth: 1
    :hidden:
 
+   Quincy (v17.2.*) <quincy>
    Pacific (v16.2.*) <pacific>
    Octopus (v15.2.*) <octopus>
    Nautilus (v14.2.*) <nautilus>
@@ -65,12 +65,18 @@ Release timeline
 
 .. _Squid: squid
 .. _19.2.0: squid#v19-2-0-squid
+.. _19.2.1: squid#v19-2-1-squid
+.. _19.2.2: squid#v19-2-2-squid
+.. _19.2.3: squid#v19-2-3-squid
 
 .. _Reef: reef
 .. _18.2.0: reef#v18-2-0-reef
 .. _18.2.1: reef#v18-2-1-reef
 .. _18.2.2: reef#v18-2-2-reef
 .. _18.2.4: reef#v18-2-4-reef
+.. _18.2.5: reef#v18-2-5-reef
+.. _18.2.6: reef#v18-2-6-reef
+.. _18.2.7: reef#v18-2-7-reef
 
 .. _Quincy: quincy
 .. _17.2.0: quincy#v17-2-0-quincy
@@ -81,6 +87,8 @@ Release timeline
 .. _17.2.5: quincy#v17-2-5-quincy
 .. _17.2.6: quincy#v17-2-6-quincy
 .. _17.2.7: quincy#v17-2-7-quincy
+.. _17.2.8: quincy#v17-2-8-quincy
+.. _17.2.9: quincy#v17-2-9-quincy
 
 .. _Pacific: pacific
 .. _16.2.15: pacific#v16-2-15-pacific

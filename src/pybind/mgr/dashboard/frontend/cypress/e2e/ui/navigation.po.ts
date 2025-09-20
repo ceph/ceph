@@ -48,7 +48,8 @@ export class NavigationPageHelper extends PageHelper {
       menu: 'File',
       submenus: [
         { menu: 'File Systems', component: 'cd-cephfs-list' },
-        { menu: 'NFS', component: 'cd-error' }
+        { menu: 'NFS', component: 'cd-error' },
+        { menu: 'SMB', component: 'cd-smb-cluster-list' }
       ]
     },
     {

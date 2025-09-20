@@ -6,6 +6,7 @@
 #include <random>
 
 #include "crimson/os/seastore/transaction_manager.h"
+#include "crimson/os/seastore/logical_child_node.h"
 
 namespace crimson::os::seastore {
 
@@ -39,11 +40,11 @@ struct test_block_delta_t {
 
 inline std::ostream &operator<<(
   std::ostream &lhs, const test_extent_desc_t &rhs) {
-  return lhs << "test_extent_desc_t(len=" << rhs.len
-	     << ", checksum=" << rhs.checksum << ")";
+  return lhs << "test_extent_desc_t(len=0x" << std::hex << rhs.len
+	     << ", checksum=0x" << rhs.checksum << std::dec << ")";
 }
 
-struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
+struct TestBlock : crimson::os::seastore::LogicalChildNode {
   constexpr static extent_len_t SIZE = 4<<10;
   using Ref = TCachedExtentRef<TestBlock>;
 
@@ -51,12 +52,12 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   interval_set<extent_len_t> modified_region;
 
-  TestBlock(ceph::bufferptr &&ptr)
-    : LogicalCachedExtent(std::move(ptr)) {}
+  explicit TestBlock(ceph::bufferptr &&ptr)
+    : LogicalChildNode(std::move(ptr)) {}
+  explicit TestBlock(extent_len_t length)
+    : LogicalChildNode(length) {}
   TestBlock(const TestBlock &other)
-    : LogicalCachedExtent(other), modified_region(other.modified_region) {}
-  TestBlock(extent_len_t length)
-    : LogicalCachedExtent(length) {}
+    : LogicalChildNode(other), modified_region(other.modified_region) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
@@ -113,8 +114,10 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
 
   void on_rewrite(Transaction&, CachedExtent&, extent_len_t) final {}
 
-  TestBlockPhysical(ceph::bufferptr &&ptr)
+  explicit TestBlockPhysical(ceph::bufferptr &&ptr)
     : CachedExtent(std::move(ptr)) {}
+  explicit TestBlockPhysical(extent_len_t length)
+    : CachedExtent(length) {}
   TestBlockPhysical(const TestBlockPhysical &other)
     : CachedExtent(other) {}
 

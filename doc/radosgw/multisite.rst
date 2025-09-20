@@ -13,10 +13,10 @@ Single-zone Configurations
 A single-zone configuration typically consists of two things:
 
 #. One "zonegroup", which contains one zone. 
-#. One or more `ceph-radosgw` instances that have `ceph-radosgw` client
+#. One or more ``ceph-radosgw`` instances that have ``ceph-radosgw`` client
    requests load-balanced between them. 
 
-In a typical single-zone configuration, there are multiple `ceph-radosgw`
+In a typical single-zone configuration, there are multiple ``ceph-radosgw``
 instances that make use of a single Ceph storage cluster.  
 
 Varieties of Multi-site Configuration
@@ -29,7 +29,7 @@ for the Ceph Object Gateway:
 
 - **Multi-zone:** The "multi-zone" configuration has a complex topology. A
   multi-zone configuration consists of one zonegroup and multiple zones. Each
-  zone consists of one or more `ceph-radosgw` instances. **Each zone is backed
+  zone consists of one or more ``ceph-radosgw`` instances. **Each zone is backed
   by its own Ceph Storage Cluster.**
   
   The presence of multiple zones in a given zonegroup provides disaster
@@ -86,11 +86,11 @@ At the top of this diagram, we see two applications (also known as "clients").
 The application on the right is both writing and reading data from the Ceph
 Cluster, by means of the RADOS Gateway (RGW). The application on the left is
 only *reading* data from the Ceph Cluster, by means of an instance of RADOS
-Gateway (RGW). In both cases (read-and-write and read-only), the transmssion of
+Gateway. In both cases (read-and-write and read-only), the transmssion of
 data is handled RESTfully.
 
 In the middle of this diagram, we see two zones, each of which contains an
-instance of RADOS Gateway (RGW). These instances of RGW are handling the
+instance of RADOS Gateway. These instances of RADOS Gateway are handling the
 movement of data from the applications to the zonegroup. The arrow from the
 master zone (US-EAST) to the secondary zone (US-WEST) represents an act of data
 synchronization.
@@ -99,7 +99,7 @@ At the bottom of this diagram, we see the data distributed into the Ceph
 Storage Cluster.
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
-Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
+Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`_.
 
 Functional Changes from Infernalis
 ==================================
@@ -143,8 +143,8 @@ master zonegroup.
 See `Pools`_ for instructions on creating and tuning pools for Ceph Object
 Storage.
 
-See `Sync Policy Config`_ for instructions on defining fine-grained bucket sync
-policy rules.
+See :ref:`Sync Policy Config <radosgw-multisite-sync-policy>` for instructions
+on defining fine-grained bucket sync policy rules.
 
 .. _master-zone-label:
 
@@ -297,7 +297,10 @@ Delete Default Zonegroup and Zone
 
 #. Delete the ``default`` pools in your Ceph storage cluster if they exist.
 
-   .. important:: The following step assumes a multi-site configuration that uses newly installed systems that aren’t currently storing data. DO NOT DELETE the ``default`` zonegroup if you are already using it to store data.
+   .. important:: The following step assumes a multi-site configuration that
+      uses freshly installed pools (that together constitute a zone) that store
+      no data. DO NOT DELETE the ``default`` pools if you are already using
+      them to store data.
 
    .. prompt:: bash #
    
@@ -410,8 +413,8 @@ configuration of a non-default realm, specify the realm using the
 
 .. prompt:: bash #
 
-   radosgw-admin realm pull --url={url-to-master-zone-gateway}
-   --access-key={access-key} --secret={secret}
+   radosgw-admin realm pull --url={url-to-master-zone-gateway} \
+                              --access-key={access-key} --secret={secret}
 
 .. note:: Pulling the realm configuration also retrieves the remote's current
    period configuration, and makes it the current period on this host as well.
@@ -447,10 +450,10 @@ in the master zone of the master zonegroup. Run the following command:
 .. prompt:: bash #
 
    radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
-                                --rgw-zone={zone-name} \
-                                --access-key={system-key} --secret={secret} \
-                                --endpoints=http://{fqdn}:80 \
-                                [--read-only]
+                               --rgw-zone={zone-name} \
+                               --access-key={system-key} --secret={secret} \
+                               --endpoints=http://{fqdn}:80 \
+                               [--read-only]
 
 For example:
     
@@ -458,8 +461,8 @@ For example:
 .. prompt:: bash #
 
    radosgw-admin zone create --rgw-zonegroup=us --rgw-zone=us-west \
-                                --access-key={system-key} --secret={secret} \
-                                --endpoints=http://rgw2:80
+                               --access-key={system-key} --secret={secret} \
+                               --endpoints=http://rgw2:80
 
 .. important:: The following steps assume a multi-site configuration that uses
    newly installed systems that have not yet begun storing data. **DO NOT
@@ -579,10 +582,10 @@ Verifying an Object
 By default, after the successful synchronization of an object there is no
 subsequent verification of the object. However, you can enable verification by
 setting :confval:`rgw_sync_obj_etag_verify` to ``true``. After this value is
-set to true, an MD5 checksum is used to verify the integrity of the data that
+set to ``true``, an MD5 checksum is used to verify the integrity of the data that
 was transferred from the source to the destination. This ensures the integrity
 of any object that has been fetched from a remote server over HTTP (including
-multisite sync). This option may decrease the performance of your RGW because
+multi-site sync). This option may decrease the performance of your RGW because
 it requires more computation.
 
 
@@ -694,7 +697,7 @@ disaster recovery by following these steps:
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-zone={zone-name} --master --default \
-                                   --read-only=false
+                                  --read-only=false
 
 #. Update the period to make the changes take effect.
 
@@ -719,7 +722,7 @@ If the former master zone recovers, you can revert the failover operation by fol
    .. prompt:: bash #
 
       radosgw-admin realm pull --url={url-to-master-zone-gateway} \
-                                  --access-key={access-key} --secret={secret}
+                                 --access-key={access-key} --secret={secret}
 
 #. Make the recovered zone the master and default zone:
 
@@ -801,9 +804,9 @@ to a multi-site system, follow these steps:
    .. prompt:: bash #
 
       radosgw-admin zone modify --rgw-realm=<name> --rgw-zonegroup=<name> \
-                                --rgw-zone=<name> --endpoints http://<fqdn>:80 \
-                                --access-key=<access-key> --secret=<secret-key> \
-                                --master --default
+                                  --rgw-zone=<name> --endpoints http://<fqdn>:80 \
+                                  --access-key=<access-key> --secret=<secret-key> \
+                                  --master --default
 
 6. Create a system user. Replace ``<user-id>`` with the username.  Replace
    ``<display-name>`` with a display name. The display name is allowed to
@@ -812,9 +815,9 @@ to a multi-site system, follow these steps:
    .. prompt:: bash #
 
       radosgw-admin user create --uid=<user-id> \
-      --display-name="<display-name>" \ 
-      --access-key=<access-key> \ 
-      --secret=<secret-key> --system
+                                  --display-name="<display-name>" \
+                                  --access-key=<access-key> \
+                                  --secret=<secret-key> --system
 
 7. Commit the updated configuration:
 
@@ -828,9 +831,8 @@ to a multi-site system, follow these steps:
 
       systemctl restart ceph-radosgw@rgw.`hostname -s`
 
-After completing this procedure, proceed to `Configure a Secondary
-Zone <#configure-secondary-zones>`_ and create a secondary zone
-in the master zonegroup.
+After completing this procedure, proceed to :ref:`secondary-zone-label`
+and create a secondary zone in the master zonegroup.
 
 Multi-Site Configuration Reference
 ==================================
@@ -944,7 +946,7 @@ Set a Realm
 ~~~~~~~~~~~
 
 To set a realm, run ``realm set``, specify the realm name, and use the
-``--infile=`` option (make sure that  the ``--infile`` option has an input file
+``--infile=`` option (make sure that the ``--infile`` option has an input file
 name as an argument):
 
 .. prompt:: bash #
@@ -1245,7 +1247,7 @@ specifying the required settings. Here is a list of the required settings:
 
 7. ``zones``: A list of all zones within the zonegroup. Each zone has a name
    (required), a list of endpoints (optional), and a setting that determines
-   whether the gateway will log metadata and data operations (false by
+   whether the gateway will log metadata and data operations (``false`` by
    default).
 
 8. ``placement_targets``: A list of placement targets (optional). Each
@@ -1255,7 +1257,7 @@ specifying the required settings. Here is a list of the required settings:
    the user info).
 
 9. ``default_placement``: The default placement target for the object index and
-   object data. Set to ``default-placement`` by default. It is  also possible
+   object data. Set to ``default-placement`` by default. It is also possible
    to set a per-user default placement in the user info for each user.
 
 Setting a Zonegroup - Procedure
@@ -1379,7 +1381,7 @@ Zones
 -----
 
 A zone defines a logical group that consists of one or more Ceph Object Gateway
-instances. All RGWs in a given zone serve S3 objects that are backed by RADOS objects that are stored in the same set of pools in the same cluster. Ceph Object Gateway supports zones.
+instances. All Ceph Object Gateways in a given zone serve S3 objects that are backed by RADOS objects that are stored in the same set of pools in the same cluster. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
@@ -1399,10 +1401,11 @@ with the zonegroup name.
 .. prompt:: bash #
    
    radosgw-admin zone create --rgw-zone=<name> \
-                    [--zonegroup=<zonegroup-name]\
-                    [--endpoints=<endpoint>[,<endpoint>] \
-                    [--master] [--default] \
-                    --access-key $SYSTEM_ACCESS_KEY --secret $SYSTEM_SECRET_KEY
+                               [--zonegroup=<zonegroup-name] \
+                               [--endpoints=<endpoint>[,<endpoint>] \
+                               [--master] [--default] \
+                               --access-key $SYSTEM_ACCESS_KEY \
+                               --secret $SYSTEM_SECRET_KEY
 
 After you have created the zone, update the period:
 
@@ -1417,8 +1420,8 @@ To delete a zone, first remove it from the zonegroup:
 
 .. prompt:: bash #
    
-   radosgw-admin zonegroup remove --zonegroup=<name>\
-                                     --zone=<name>
+   radosgw-admin zonegroup remove --zonegroup=<name> \
+                                    --zone=<name>
 
 Then, update the period:
 
@@ -1533,9 +1536,8 @@ Setting a Zone
 
 Configuring a zone involves specifying a series of Ceph Object Gateway
 pools. For consistency, we recommend using a pool prefix that is the
-same as the zone name. See
-`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
-for details of configuring pools.
+same as the zone name. See :ref:`rados_pools` for details of
+configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save the
 object to a file (e.g., ``zone.json``); then, run the following
@@ -1572,9 +1574,9 @@ Zonegroup and Zone Settings
 ----------------------------
 
 When configuring a default zonegroup and zone, the pool name includes
-the zone name. For example:
+the zone name. For example::
 
--  ``default.rgw.control``
+    default.rgw.control
 
 To change the defaults, include the following settings in your Ceph
 configuration file under each ``[client.radosgw.{instance-name}]``
@@ -1600,4 +1602,3 @@ instance.
 
 
 .. _`Pools`: ../pools
-.. _`Sync Policy Config`: ../multisite-sync-policy

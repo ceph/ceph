@@ -33,9 +33,6 @@
                 [total]="row.info.bytes_quota"
                 [used]="row.info.bytes_used"
                 [title]="row.name"
-                [showFreeToolTip]="false"
-                customLegend="Quota"
-                [customLegendValue]="row.info.bytes_quota"
                 decimals="2"></cd-usage-bar>
 
   <ng-template #noLimitTpl>
@@ -76,12 +73,12 @@
        ngbTooltip="{{row.name}} is removed after retaining the snapshots"></i>
   </ng-template>
 
-  <cd-label [value]="row.info.type"
-            *ngIf="row.info.type !== 'subvolume'"></cd-label>
+  <cd-label [value]="row?.info?.type"
+            *ngIf="row?.info?.type !== 'subvolume'"></cd-label>
 
   <cd-label value="namespaced"
-            *ngIf="row.info.pool_namespace"
-            [tooltipText]="row.info.pool_namespace"></cd-label>
+            *ngIf="row?.info?.pool_namespace"
+            [tooltipText]="row?.info?.pool_namespace"></cd-label>
 </ng-template>
 
 <ng-template #removeTmpl

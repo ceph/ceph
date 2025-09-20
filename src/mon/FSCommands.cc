@@ -12,13 +12,16 @@
  * 
  */
 
-
-#include "OSDMonitor.h"
-
 #include "FSCommands.h"
+#include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
 #include "mds/cephfs_features.h"
+#include "mds/FSMap.h"
+#include "osd/OSDMap.h"
+#include "common/strtol.h" // for strict_strtoll()
+
+#include <boost/optional.hpp>
 
 using TOPNSPC::common::cmd_getval;
 
@@ -108,29 +111,29 @@ class FailHandler : public FileSystemCommandHandler
       return -ENOENT;
     }
 
-  bool confirm = false;
-  cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
-  if (!confirm &&
-      mon->mdsmon()->has_health_warnings({
-	MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
-    ss << errmsg_for_unhealthy_mds;
-    return -EPERM;
-  }
+    vector<mds_gid_t> mds_gids_to_fail;
+    for (const auto& p : fsp->get_mds_map().get_mds_info()) {
+      mds_gids_to_fail.push_back(p.first);
+    }
+
+    bool confirm = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+    if (!confirm &&
+	mon->mdsmon()->has_health_warnings({
+	  MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, mds_gids_to_fail)) {
+      ss << errmsg_for_unhealthy_mds;
+      return -EPERM;
+    }
 
     auto f = [](auto&& fs) {
       fs.get_mds_map().set_flag(CEPH_MDSMAP_NOT_JOINABLE);
     };
     fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
 
-    vector<mds_gid_t> to_fail;
-    for (const auto& p : fsp->get_mds_map().get_mds_info()) {
-      to_fail.push_back(p.first);
-    }
-
-    for (const auto& gid : to_fail) {
+    for (const auto& gid : mds_gids_to_fail) {
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
     }
-    if (!to_fail.empty()) {
+    if (!mds_gids_to_fail.empty()) {
       mon->osdmon()->propose_pending();
     }
 
@@ -416,9 +419,10 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
   const Filesystem* fsp;
   if (std::holds_alternative<Filesystem*>(fsv)) {
     fsp = std::get<Filesystem*>(fsv);
-  } else if (std::holds_alternative<fs_cluster_id_t>(fsv)) {
+  } else {
+    ceph_assert(std::holds_alternative<fs_cluster_id_t>(fsv));
     fsp = &fsmap.get_filesystem(std::get<fs_cluster_id_t>(fsv));
-  } else ceph_assert(0);
+  }
 
   {
     std::string interr;
@@ -596,6 +600,28 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         {
 	  fs.get_mds_map().clear_multimds_snaps_allowed();
         });
+      }
+    } else if (var == "allow_referent_inodes") {
+      bool allow_referent_inodes = false;
+      int r = parse_bool(val, &allow_referent_inodes, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      if (!allow_referent_inodes) {
+        modify_filesystem(fsmap, fsv,
+            [](auto&& fs)
+        {
+          fs.get_mds_map().clear_referent_inodes();
+        });
+	ss << "Disabled creation of referent inodes for hardlinks to store backtrace";
+      } else {
+        modify_filesystem(fsmap, fsv,
+            [](auto&& fs)
+        {
+          fs.get_mds_map().set_referent_inodes();
+        });
+	ss << "Enabled creation of referent inodes for hardlinks to store backtrace";
       }
     } else if (var == "allow_dirfrags") {
         ss << "Directory fragmentation is now permanently enabled."
@@ -1210,6 +1236,11 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     }
 
     fsmap.erase_filesystem(fsp->get_fscid());
+
+    ss << "If there are active snapshot schedules associated with this "
+       << "file-system, you might see EIO errors in the mgr logs or at the "
+       << "snap-schedule command-line due to the missing file-system. "
+       << "However, these errors are transient and will get auto-resolved.";
 
     return 0;
   }

@@ -85,13 +85,16 @@ options:
   type: size
   level: advanced
   desc: The maximum RGW chunk size.
-  long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
-    accessing data objects. RGW read and write operations will never request more than
-    this amount in a single request. This also defines the RGW head object size, as
-    head operations need to be atomic, and anything larger than this would require
-    more than a single operation. When RGW objects are written to the default
-    storage class, up to this amount of payload data will be stored alongside
-    metadata in the head object.
+  long_desc: The chunk size is the size of requests that RGW sends to
+    OSDs when accessing RADOS objects. RGW read and write operations will never
+    request more than this amount in a single request. This also defines the RGW
+    HEAD object size, as head operations need to be atomic, and anything larger
+    than this would require more than a single operation. When RGW objects are
+    written to the default storage class, up to this amount of payload data will
+    be stored alongside metadata in the head object.  Note that when writing
+    an RGW object to a non-default storage class the HEAD RADOS object is always
+    stored in the default storage class' pool but no inlining of payload data
+    is performed.
   default: 4_M
   services:
   - rgw
@@ -128,9 +131,12 @@ options:
   type: size
   level: advanced
   desc: The maximum size (in bytes) of regular (non multi-part) object upload.
-  long_desc: Plain object upload is capped at this amount of data. In order to upload
-    larger objects, a special upload mechanism is required. The S3 API provides the
-    multi-part upload, and Swift provides DLO and SLO.
+  long_desc: Plain object upload is capped at this amount of data. In order to
+    upload larger objects, a special composite upload mechanism is required
+    multi-part upload (MPU) for S3 and DLO and SLO for Swift.  Note that this
+    value also limits the size of individual chunks uploaded for MPU and
+    DLO/SLO objects, thus the largest composite object that can be uploaded is
+    of size ``rgw_max_put_size`` * ``rgw_multipart_part_upload_limit``
   default: 5_G
   services:
   - rgw
@@ -171,7 +177,7 @@ options:
 #
 # Represents the number of shards for the bucket index object, a value of zero
 # indicates there is no sharding. By default (no sharding, the name of the object
-# is '.dir.{marker}', with sharding, the name is '.dir.{markder}.{sharding_id}',
+# is '.dir.{marker}', with sharding, the name is '.dir.{marker}.{sharding_id}',
 # sharding_id is zero-based value. It is not recommended to set a too large value
 # (e.g. thousand) as it increases the cost for bucket listing.
 - name: rgw_override_bucket_index_max_shards
@@ -224,6 +230,7 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_lc_threads
+  - rgw_enable_restore_threads
   with_legacy: true
 - name: rgw_enable_gc_threads
   type: bool
@@ -240,12 +247,13 @@ options:
   see_also:
   - rgw_enable_quota_threads
   - rgw_enable_lc_threads
+  - rgw_enable_restore_threads
   with_legacy: true
 - name: rgw_enable_lc_threads
   type: bool
   level: advanced
   desc: Enables the lifecycle maintenance thread. This is required on at least one
-    rgw for each zone.
+    RGW daemon for each zone.
   long_desc: The lifecycle maintenance thread is responsible for lifecycle related
     maintenance work. The thread itself can be disabled, but in order for lifecycle
     to work correctly, at least one RGW in each zone needs to have this thread running.
@@ -257,6 +265,24 @@ options:
   see_also:
   - rgw_enable_gc_threads
   - rgw_enable_quota_threads
+  - rgw_enable_restore_threads
+  with_legacy: true
+- name: rgw_enable_restore_threads
+  type: bool
+  level: advanced
+  desc: Enables the objects' restore maintenance thread.
+  long_desc: The objects restore maintenance thread is responsible for all the objects
+    restoration related maintenance work. The thread itself can be disabled, but in order
+    for the restore from the cloud to work correctly, at least one RGW in each zone needs
+    to have this thread running. Having the thread enabled on multiple RGW processes within
+    the same zone can spread some of the maintenance work between them.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_gc_threads
+  - rgw_enable_quota_threads
+  - rgw_enable_lc_threads
   with_legacy: true
 - name: rgw_data
   type: str
@@ -273,11 +299,11 @@ options:
 - name: rgw_enable_apis
   type: str
   level: advanced
-  desc: A list of set of RESTful APIs that rgw handles.
+  desc: A list of RESTful APIs for RGW to enable
   fmt_desc: |
     Enables the specified APIs.
 
-      .. note:: Enabling the ``s3`` API is a requirement for
+      .. note:: Enabling the ``S3`` API is a requirement for
                 any ``radosgw`` instance that is meant to
                 participate in a `multi-site <../multisite>`_
                 configuration.
@@ -335,7 +361,7 @@ options:
 - name: rgw_numa_node
   type: int
   level: advanced
-  desc: set rgw's cpu affinity to a numa node (-1 for none)
+  desc: set the RGW daemon's CPU affinity to a NUMA node (-1 for none)
   default: -1
   services:
   - rgw
@@ -354,7 +380,7 @@ options:
   type: bool
   level: advanced
   desc: Multiple content length headers compatibility
-  long_desc: Try to handle requests with abiguous multiple content length headers
+  long_desc: Try to handle requests with ambiguous multiple content length headers
     (Content-Length, Http-Content-Length).
   fmt_desc: Enable compatibility handling of FCGI requests with both ``CONTENT_LENGTH``
     and ``HTTP_CONTENT_LENGTH`` set.
@@ -456,6 +482,29 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lc_ordered_list_threshold
+  type: uint
+  level: dev
+  desc: Threshold for enabling ordered listing in lifecycle processing.
+  long_desc: When bucket shard count is below this threshold, lifecycle processing will
+    use ordered listing for better performance. Above this threshold, unordered listing
+    is used to avoid excessive OSD requests. A value of 0 disables ordered listing entirely.
+  default: 500
+  min: 0
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_list_cnt
+  type: uint
+  level: dev
+  desc: The count of number of objects in per listing of lc processing from each bucket.
+  long_desc: Number of objects that will be requested when performing a listing request
+    of a bucket for lifecycle processing.
+  default: 1000
+  min: 100
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
   level: dev
@@ -466,6 +515,35 @@ options:
     For example, during debugging if one wanted every 10 minutes to be equivalent to one day,
     then this would be set to 600, the number of seconds in 10 minutes.
   default: -1
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_restore_max_objs
+  type: int
+  level: advanced
+  desc: Number of shards for restore processing
+  long_desc: Number of RADOS objects to use for storing restore entries which are in progress. This affects concurrency of restore maintenance, as shards can be processed in parallel.
+  default: 32
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_restore_lock_max_time
+  type: int
+  level: dev
+  default: 90
+  services:
+  - rgw
+  see_also:
+  with_legacy: true
+- name: rgw_restore_processor_period
+  type: int
+  level: advanced
+  desc: Restore cycle run time
+  long_desc: The amount of time between the start of consecutive runs of the restore
+    processing threads. If the thread runs takes more than this period, it will
+    not wait before running again.
+  fmt_desc: The cycle time for restore state processing.
+  default: 15_min
   services:
   - rgw
   with_legacy: true
@@ -838,6 +916,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_token_cache_ttl
+  type: int
+  level: advanced
+  desc: Keystone token secret key cache TTL
+  long_desc: The TTL for secret keys that are loaded from Keystone and stored in the cache system.
+  fmt_desc: The maximum TTL that a secret loaded from Keystone is maintained in the token cache system.
+  default: 300
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_verify_ssl
   type: bool
   level: advanced
@@ -852,7 +940,7 @@ options:
   level: advanced
   desc: RGW Keystone implicit tenants creation
   long_desc: Implicitly create new users in their own tenant with the same name when
-    authenticating via Keystone.  Can be limited to s3 or swift only.
+    authenticating via Keystone.  Can be limited to S3 or SWIFT only.
   default: 'false'
   services:
   - rgw
@@ -871,7 +959,7 @@ options:
   level: advanced
   desc: RGW handle cross domain policy
   long_desc: Returned cross domain policy when accessing the crossdomain.xml resource
-    (Swift compatiility).
+    (Swift compatibility).
   default: <allow-access-from domain="*" secure="false" />
   services:
   - rgw
@@ -886,7 +974,7 @@ options:
 - name: rgw_s3_auth_use_rados
   type: bool
   level: advanced
-  desc: Should S3 authentication use credentials stored in RADOS backend.
+  desc: Specify whether S3 authentication uses credentials stored in RADOS
   default: true
   services:
   - rgw
@@ -894,7 +982,7 @@ options:
 - name: rgw_s3_auth_use_keystone
   type: bool
   level: advanced
-  desc: Should S3 authentication use Keystone.
+  desc: Specify whether S3 authentication uses Keystone
   default: false
   services:
   - rgw
@@ -902,11 +990,11 @@ options:
 - name: rgw_s3_auth_order
   type: str
   level: advanced
-  desc: Authentication strategy order to use for s3 authentication
-  long_desc: Order of authentication strategies to try for s3 authentication, the
-    allowed options are a comma separated list of engines external, local. The default
-    order is to try all the externally configured engines before attempting local
-    rados based authentication
+  desc: Authentication strategy order to use for S3
+  long_desc: The order of authentication strategies to try for S3 authentication. The
+    value is a comma-separated list of engines, external and local. The default
+    order is to try all configured external engines before attempting local
+    RADOS based authentication
   default: sts, external, local
   services:
   - rgw
@@ -1019,6 +1107,8 @@ options:
   level: advanced
   desc: Path prefix to be used for accessing RGW RESTful admin API.
   fmt_desc: The entry point for an admin request URL.
+  long_desc: Note that multisite replication requires the value admin,
+    so this option must be left at the default in such deployments.
   default: admin
   services:
   - rgw
@@ -1127,11 +1217,27 @@ options:
   default: 8
   services:
   - rgw
+  see_also:
+  - rgw_cache_enabled
+  - rgw_max_control_aio
   with_legacy: true
+- name: rgw_max_control_aio
+  type: int
+  level: advanced
+  desc: Maximum number of concurrent operations over control objects.
+  long_desc: When metadata caching is enabled, a watch operation is sent to each
+    control object on startup, with a corresponding unwatch on shutdown. To
+    accelerate startup/shutdown, allow several concurrent operations to be sent
+    at once.
+  default: 8
+  services:
+  - rgw
+  see_also:
+  - rgw_num_control_oids
 - name: rgw_verify_ssl
   type: bool
   level: advanced
-  desc: Should RGW verify SSL when connecing to a remote HTTP server
+  desc: Should RGW verify SSL when connecting to a remote HTTP server
   long_desc: RGW can send requests to other RGW servers (e.g., in multi-site sync
     work). This configurable selects whether RGW should verify the certificate for
     the remote peer and host.
@@ -1142,12 +1248,23 @@ options:
   see_also:
   - rgw_keystone_verify_ssl
   with_legacy: true
+- name: rgw_enable_jwks_url_verification
+  type: bool
+  level: advanced
+  desc: Enable JWKS url verification for AWS compliance
+  long_desc:
+    Verifies the security of the JWKS url endpoint using the client provided thumbprints
+    for AWS compliance. If turned on, the legacy verification option of using thumbprints
+    to verify JWT x5c certs is disabled.
+  default: false
+  services:
+  - rgw
 # The following are tunables for caches of RGW NFS (and other file
 # client) objects.
 #
 # The file handle cache is a partitioned hash table
 # (fhcache_partitions), each with a closed hash part and backing
-# b-tree mapping.  The number of partions is expected to be a small
+# b-tree mapping.  The number of partitions is expected to be a small
 # prime, the cache size something larger but less than 5K, the total
 # size of the cache is n_part *  cache_size.
 - name: rgw_nfs_lru_lanes
@@ -1232,6 +1349,14 @@ options:
   type: bool
   level: advanced
   desc: run quota threads in librgw (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nfs_run_restore_threads
+  type: bool
+  level: advanced
+  desc: run objects' restore threads in librgw (default off)
   default: false
   services:
   - rgw
@@ -2067,7 +2192,7 @@ options:
   type: int
   level: advanced
   desc: Data log time window
-  long_desc: The data log keeps information about buckets that have objectst that
+  long_desc: The data log keeps information about buckets that have objects that
     were modified within a specific timeframe. The sync process then knows which buckets
     are needed to be scanned for data sync.
   fmt_desc: The data log entries window in seconds.
@@ -2081,7 +2206,7 @@ options:
   desc: Max size of pending changes in data log
   long_desc: RGW will trigger update to the data log if the number of pending entries
     reached this number.
-  fmt_dsec: The number of in-memory entries to hold for the data changes log.
+  fmt_desc: The number of in-memory entries to hold for the data changes log.
   default: 1000
   services:
   - rgw
@@ -2433,9 +2558,8 @@ options:
   type: bool
   level: basic
   desc: Enable static website APIs
-  long_desc: This configurable controls whether RGW handles the website control APIs.
-    RGW can server static websites if s3website hostnames are configured, and unrelated
-    to this configurable.
+  long_desc: This configurable controls whether RGW enables the website control APIs.
+    RGW can serve static websites if S3 website hostnames are configured.
   default: false
   services:
   - rgw
@@ -2444,7 +2568,7 @@ options:
   type: bool
   level: basic
   desc: Enable elastic metadata search APIs
-  long_desc: This configurable controls whether RGW handles the elastic metadata search APIs.
+  long_desc: This configurable controls whether RGW enables the elastic metadata search APIs.
   default: true
   services:
   - rgw
@@ -2720,7 +2844,7 @@ options:
   type: uint
   level: dev
   desc: Latency (in seconds) injected before rgw bucket index unlink op calls to simulate
-    queueing latency and validate behavior of simultaneuous delete requests which
+    queueing latency and validate behavior of simultaneous delete requests which
     target the same object.
   default: 0
   with_legacy: true
@@ -2937,7 +3061,7 @@ options:
   - rgw_crypt_vault_auth
   - rgw_crypt_vault_addr
   with_legacy: true
-#  Vault Namespace (only availabe in Vault Enterprise Version)
+#  Vault Namespace (only available in Vault Enterprise Version)
 - name: rgw_crypt_vault_namespace
   type: str
   level: advanced
@@ -3079,7 +3203,7 @@ options:
 - name: rgw_crypt_sse_s3_key_template
   type: str
   level: advanced
-  desc: template for per-bucket sse-s3 keys in vault.
+  desc: template for per-bucket SSE-S3 keys in Vault.
   long_desc: This is the template for per-bucket sse-s3 keys.
     This string may include ``%bucket_id`` which will be expanded out to
     the bucket marker, a unique uuid assigned to that bucket.
@@ -3314,7 +3438,7 @@ options:
   desc: Number of hours to delay bucket index shard reduction.
   long_desc: >-
     In order to avoid resharding buckets with object
-    counts that fluctuate up and down regularly, we implemement a delay
+    counts that fluctuate up and down regularly, we implement a delay
     between noting a shard reduction might be appropriate and when it's
     actually done. This allows us to cancel the reshard operation if the
     number of object significantly increases during this delay.
@@ -3442,8 +3566,11 @@ options:
   type: str
   level: advanced
   desc: STS Key
-  long_desc: Key used for encrypting/ decrypting session token.
-  default: sts
+  long_desc: Key used for encrypting/ decrypting role session tokens.
+    This key must consist of 16 hexadecimal characters, which can be
+    generated by the command 'openssl rand -hex 16'. All radosgw instances
+    in a zone should use the same key. In multisite configurations, all
+    zones in a realm should use the same key.
   services:
   - rgw
   with_legacy: true
@@ -3798,6 +3925,21 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_l1_write_open_flags
+  type: uint
+  level: advanced
+  desc: cache files write 'man 2 open' 'file status flags' modifiers
+  long_desc: For example, to configure synchronized I/O, fcntl-linux.h defines (converted from octal)
+    O_SYNC = 1052672
+    O_DSYNC = 4096
+    O_DIRECT = 16384
+    O_SYNC | O_DIRECT = 1118208
+    O_DSYNC | O_DIRECT = 65552
+    (0 for no modification of the flags)
+  default: 4096
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_libaio_aio_threads
   type: int
   level: advanced
@@ -3836,6 +3978,18 @@ options:
   default: 60
   services:
   - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: d4n_writecache_enabled
+  type: bool
+  level: advanced
+  desc: The d4n write cache
+  default: false
+  services: 
+  - rgw
+  flags:
+  - startup
   with_legacy: true
 - name: rgw_backend_store
   type: str
@@ -3850,6 +4004,7 @@ options:
   - dbstore
   - motr
   - daos
+  - posix
 - name: rgw_config_store
   type: str
   level: advanced
@@ -3873,7 +4028,6 @@ options:
   - none
   - base
   - d4n
-  - posix
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -4100,6 +4254,16 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_cache_cleaning_interval
+  type: int
+  level: advanced
+  desc: This is the interval in seconds for invoking write cache cleaning process
+  default: 1000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced
@@ -4207,7 +4371,7 @@ options:
   type: uint 
   level: advanced
   desc: Time in seconds to delete idle kafka connections
-  long_desc: A conection will be considered "idle" if no messages
+  long_desc: A connection will be considered "idle" if no messages
     are sent to it for more than the time defined.
     Note that the connection will not be considered idle, even if it is down,
     as long as there are attempts to send messages to it.
@@ -4237,6 +4401,42 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_http_notif_message_timeout
+  type: uint
+  level: advanced
+  desc: This is the maximum time in seconds to deliver a notification
+  long_desc: This is the maximum time in seconds to deliver a notification.
+    Delivery error occurs when the message timeout is exceeded.
+    This value includes the connection time, and hence must be larger than rgw_http_notif_connection_timeout.
+    If set to zero the http client will wait indefinitely.
+    see https://curl.se/libcurl/c/CURLOPT_TIMEOUT.html
+  default: 10
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_http_notif_connection_timeout
+  type: uint
+  level: advanced
+  desc: This is the maximum time in seconds to connect to an endpoint
+  long_desc: This is the maximum time in seconds to connect to an endpoint.
+    Delivery error occurs when the message timeout is exceeded.
+    If set to zero the default value of 300 seconds will be used.
+    see https://curl.se/libcurl/c/CURLOPT_CONNECTTIMEOUT.html
+  default: 5
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_http_notif_max_inflight
+  type: uint
+  level: advanced
+  desc: This is the maximum number of messages in-flight (across all http endpoints)
+  long_desc: This is the maximum number of messages in-flight (across all http endpoints).
+    Delivery error (BUSY) occurs when the number of messages is exceeded.
+    If set to zero there is no limit on the number of messages in-flight.
+  default: 8192
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
@@ -4250,3 +4450,76 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_bucket_logging_obj_roll_time
+  type: uint 
+  level: advanced
+  desc: Default time in seconds for the bucket logging object to roll
+  long_desc: Object roll time can be provided in the bucket logging configuration.
+    If not provided, this value will be used.
+  default: 300
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lua_max_runtime_per_state
+  type: uint
+  level: advanced
+  desc: Maximum runtime for each Lua state in milliseconds
+  long_desc: Sets the maximum runtime for each Lua state in milliseconds.
+    If exceeded, the script will be terminated. Defaults to 1000 milliseconds (1 second).
+    If set to zero, there is no limit.
+  default: 1000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lua_enable
+  type: bool
+  level: advanced
+  desc: Enable lua scripting.
+  default: true
+  services:
+  - rgw
+  flags:
+  - startup
+  see_also:
+  with_legacy: true
+- name: rgw_d4n_backend_address
+  type: str
+  level: advanced
+  desc: The backend address used by D4N cache 
+  default: 127.0.0.1:6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_bucket_eexist_override
+  type: bool
+  level: advanced
+  desc: CreateBucket on an existing bucket of the same owner returns 409/EEXIST, regardless of region.
+  long_desc: Overrides the documented RGW behavior that treats multiple CreateBucket operations by the same
+      owner as idempotent
+  default: false
+  services:
+  - rgw
+- name: rgw_redis_connection_pool_size
+  type: int
+  level: basic
+  desc: RGW connection pool size for Redis operation per D4N
+  long_desc: This option sets the size of the connection pool for Redis operations
+    in D4N. It is used to manage the number of concurrent connections to Redis.
+    A larger pool size can improve performance when multiple threads are accessing
+    Redis simultaneously, but it also increases resource usage.
+  fmt_desc: The size of the redis connection pool.
+  default: 512
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_bucket_persistent_notif_num_shards
+  type: uint
+  level: advanced
+  desc: Number of shards for a persistent topic.
+  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
+    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
+  default: 11
+  services: 
+    - rgw

@@ -20,9 +20,11 @@
 #include <atomic>
 #include <pthread.h>
 #include <climits>
+#include <deque>
 #include <list>
 #include <mutex>
 #include <map>
+#include <set>
 #include <functional>
 #include <optional>
 
@@ -242,6 +244,8 @@ private:
   }
 
   bool is_msgr2() const override;
+
+  void dump(Formatter* f, bool tcp_info);
 
   friend class Protocol;
   friend class ProtocolV1;

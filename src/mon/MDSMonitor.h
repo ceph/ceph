@@ -23,8 +23,10 @@
 #include <vector>
 
 #include "include/types.h"
+#include "Monitor.h"
 #include "PaxosFSMap.h"
 #include "PaxosService.h"
+#include "mds/MDSMap.h"
 #include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
 #include "CommandHandler.h"
@@ -52,7 +54,10 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
   bool preprocess_query(MonOpRequestRef op) override;  // true if processed.
   bool prepare_update(MonOpRequestRef op) override;
   bool should_propose(double& delay) override;
-  bool has_health_warnings(std::vector<mds_metric_t> warnings);
+  bool has_health_warnings(const std::vector<mds_metric_t>& warnings,
+			   const mds_gid_t& gid=MDS_GID_NONE);
+  bool has_health_warnings(const std::vector<mds_metric_t>& warnings,
+			   const std::vector<mds_gid_t>& gids);
   bool has_any_health_warning();
 
   bool should_print_status() const {

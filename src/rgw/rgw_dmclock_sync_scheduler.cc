@@ -5,6 +5,12 @@
 #include "rgw_dmclock_sync_scheduler.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
 namespace rgw::dmclock {
 
 SyncScheduler::~SyncScheduler()

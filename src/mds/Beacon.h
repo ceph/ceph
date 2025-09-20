@@ -12,23 +12,25 @@
  * 
  */
 
-
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
+#include <map>
 #include <mutex>
+#include <string>
 #include <string_view>
 #include <thread>
 
-#include "include/types.h"
-#include "include/Context.h"
+#include "include/common_fwd.h" // for CephContext
+#include "mds/MDSMap.h" // for MDSMap::DaemonState
 #include "msg/Dispatcher.h"
+#include "messages/MMDSBeacon.h" // for struct MDSHealth
 
-#include "messages/MMDSBeacon.h"
-
+class Connection;
+class Message;
 class MonClient;
 class MDSRank;
-
+class MMDSBeacon;
 
 /**
  * One of these per MDS.  Handle beacon logic in this separate class so
@@ -53,7 +55,7 @@ public:
   void init(const MDSMap &mdsmap);
   void shutdown();
 
-  bool ms_dispatch2(const ref_t<Message> &m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ref_t<Message> &m) override;
   void ms_handle_connect(Connection *c) override {}
   bool ms_handle_reset(Connection *c) override {return false;}
   void ms_handle_remote_reset(Connection *c) override {}

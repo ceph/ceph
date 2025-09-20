@@ -2,17 +2,15 @@
 
 import logging
 
-from typing import Tuple, List, Optional
+from typing import Tuple, List
 
 from .context import CephadmContext
 from .call_wrappers import call, CallVerbosity
-from .packagers import Packager
 
 logger = logging.getLogger()
 
 
-def check_unit(ctx, unit_name):
-    # type: (CephadmContext, str) -> Tuple[bool, str, bool]
+def check_unit(ctx: CephadmContext, unit_name: str) -> Tuple[bool, str, bool]:
     # NOTE: we ignore the exit code here because systemctl outputs
     # various exit codes based on the state of the service, but the
     # string result is more explicit (and sufficient).
@@ -56,17 +54,15 @@ def check_unit(ctx, unit_name):
     return (enabled, state, installed)
 
 
-def check_units(ctx, units, enabler=None):
-    # type: (CephadmContext, List[str], Optional[Packager]) -> bool
+def check_units(ctx: CephadmContext, units: List[str]) -> bool:
     for u in units:
         (enabled, state, installed) = check_unit(ctx, u)
         if enabled and state == 'running':
             logger.info('Unit %s is enabled and running' % u)
             return True
-        if enabler is not None:
-            if installed:
-                logger.info('Enabling unit %s' % u)
-                enabler.enable_service(u)
+        if installed:
+            logger.info('Enabling unit %s' % u)
+            enable_service(ctx, u)
     return False
 
 
@@ -84,5 +80,16 @@ def terminate_service(ctx: CephadmContext, service_name: str) -> None:
     call(
         ctx,
         ['systemctl', 'disable', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
+
+
+def enable_service(ctx: CephadmContext, service_name: str) -> None:
+    """
+    Start and enable the service (typically using systemd).
+    """
+    call(
+        ctx,
+        ['systemctl', 'enable', '--now', service_name],
         verbosity=CallVerbosity.DEBUG,
     )

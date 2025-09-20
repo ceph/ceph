@@ -23,6 +23,9 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/stringify.h"
 #include "osdc/Striper.h"
+
+#include <iomanip>
+#include <shared_mutex> // for std::shared_lock
 #include <sstream>
 
 #define dout_subsys ceph_subsys_rbd
@@ -104,32 +107,6 @@ bool ObjectMap<I>::object_may_exist(uint64_t object_no) const
   ldout(m_image_ctx.cct, 20) << "object_no=" << object_no << " r=" << exists
 			     << dendl;
   return exists;
-}
-
-template <typename I>
-bool ObjectMap<I>::object_may_not_exist(uint64_t object_no) const
-{
-  ceph_assert(ceph_mutex_is_locked(m_image_ctx.image_lock));
-
-  // Fall back to default logic if object map is disabled or invalid
-  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP,
-                                 m_image_ctx.image_lock)) {
-    return true;
-  }
-
-  bool flags_set;
-  int r = m_image_ctx.test_flags(m_image_ctx.snap_id,
-                                 RBD_FLAG_OBJECT_MAP_INVALID,
-                                 m_image_ctx.image_lock, &flags_set);
-  if (r < 0 || flags_set) {
-    return true;
-  }
-
-  uint8_t state = (*this)[object_no];
-  bool nonexistent = (state != OBJECT_EXISTS && state != OBJECT_EXISTS_CLEAN);
-  ldout(m_image_ctx.cct, 20) << "object_no=" << object_no << " r="
-                             << nonexistent << dendl;
-  return nonexistent;
 }
 
 template <typename I>

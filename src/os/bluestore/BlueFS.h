@@ -6,6 +6,7 @@
 #include <atomic>
 #include <mutex>
 #include <limits>
+#include <uuid/uuid.h>
 
 #include "bluefs_types.h"
 #include "blk/BlockDevice.h"
@@ -13,10 +14,13 @@
 #include "common/RefCountedObj.h"
 #include "common/ceph_context.h"
 #include "global/global_context.h"
+#include "include/byteorder.h"
+#include "include/ceph_hash.h"
 #include "include/common_fwd.h"
 
 #include "boost/intrusive/list.hpp"
 #include "boost/dynamic_bitset.hpp"
+#include "include/hash.h"
 
 class Allocator;
 
@@ -82,9 +86,6 @@ enum {
   l_bluefs_wal_alloc_lat,
   l_bluefs_db_alloc_lat,
   l_bluefs_slow_alloc_lat,
-  l_bluefs_wal_alloc_max_lat,
-  l_bluefs_db_alloc_max_lat,
-  l_bluefs_slow_alloc_max_lat,
   l_bluefs_last,
 };
 
@@ -94,6 +95,13 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+
+  /**
+  *  Update config parameters from the config database.
+  *
+  */
+  virtual void update_from_config(CephContext* cct) = 0;
+
   /**
   *  Method to learn a hint (aka logic level discriminator)  specific for
   *  BlueFS log
@@ -216,6 +224,36 @@ struct bluefs_shared_alloc_context_t {
   }
 };
 
+/*
+  Class debug_point is a helper intended for inserting debug tracepoints
+  in a least intrusive way.
+  The intention is to minimize both visual and code footprints.
+
+  In code, it should look like:
+  debug_async_compact(1);
+
+  Which should translate to:
+  if (debug_async_compact) debug_async_compact(1);
+
+  And in release builds be eliminated completely.
+*/
+template <class T>
+class debug_point_t {
+public:
+  debug_point_t() : m_func(nullptr) {};
+  debug_point_t(T&& func)
+  : m_func(func) {}
+  template<typename... Arg>
+  void operator()(Arg... arg) { if (m_func) m_func(std::forward<Arg...>(arg...)); }
+  void operator()() { if (m_func) m_func(); }
+  void operator=(T&& func) { m_func = std::move(func);}
+  void operator=(T& func) { m_func = func;}
+private:
+  T m_func;
+};
+
+
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -236,6 +274,57 @@ public:
   struct File : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
 
+    /*
+     * Envelope mode files in bluefs have a different format from normal ones. In order to not flush metadata 
+     * for every write we make to data extents, we create a package/envelope around the real data 
+     * that includes length of the data we want to flush and a unique stamp.
+     *
+     * The format on disk is:
+     * legend: l = length of envelope, d = data, s = stamp
+     *
+     * flush 0 l==24                                     flush 1 l==4             flush 2 l==12
+     * v                                                 v                        v
+     * llll llll dddd dddd dddd dddd dddd dddd ssss ssss llll llll dddd ssss ssss llll llll dddd dddd dddd ssss ssss
+     */
+    struct envelope_t {
+      typedef struct stamp_t {
+        uint8_t v[8] = {0};
+      } stamp_t;
+      typedef uint64_t envelope_len_t;
+      uint64_t file_offset = 0;
+      uint64_t content_offset = 0; // offset of start of flush, it should be length offset
+      uint32_t head_len = 0;
+      uint32_t tail_len = 0;
+      uint64_t content_length = 0;
+
+      static constexpr size_t head_size() {
+        return sizeof(envelope_len_t);
+      }
+
+      static constexpr size_t tail_size() {
+        return sizeof(stamp_t);
+      }
+
+      static stamp_t generate_stamp(uuid_d uuid, uint64_t ino) {
+        stamp_t m;
+        const char* uuid_bytes = uuid.bytes();
+        uint64_t hashed_ino = ino;
+        hashed_ino ^= hashed_ino << 5;
+        hashed_ino ^= hashed_ino << 11;
+        hashed_ino ^= hashed_ino << 23;
+        // use hashed ino in a endiness-agnostic way
+        // U0  U1  U2  U3  U4  U5  U6  U7
+        // U8  U9  U10 U11 U12 U13 U14 U15
+        // H0  H1  H2  H3  H4  H5  H6  H7
+        // ^   ^   ^   ^   ^   ^   ^   ^
+        // m0  m1  m2  m3  m4  m5  m6  m7
+        for (int i = 0; i < 8; i++) {
+          m.v[i] = uuid_bytes[i] ^ uuid_bytes[8 + i] ^ (hashed_ino >> (8 * i));
+        }
+        return m;
+      }
+    };
+
     bluefs_fnode_t fnode;
     int refs;
     uint64_t dirty_seq;
@@ -254,6 +343,12 @@ public:
        _replay, device_migrate_to_existing, device_migrate_to_new */
     ceph::mutex lock = ceph::make_mutex("BlueFS::File::lock");
 
+    bool envelopes_indexed; // Before reading from enveloped file all envelopes must be located.
+                             // The flag indicates whether `envelopes` is initialized.
+    std::vector<envelope_t> envelopes; // Reading from enveloped file requires having indexed envelopes.
+                                       // Its filled either on _replay() or when file is opened for read.
+    envelope_t::stamp_t stamp;
+
   private:
     FRIEND_MAKE_REF(File);
     File()
@@ -266,7 +361,8 @@ public:
 	num_readers(0),
 	num_writers(0),
 	num_reading(0),
-        vselector_hint(nullptr)
+        vselector_hint(nullptr),
+        envelopes_indexed(false)
       {}
     ~File() override {
       ceph_assert(num_readers.load() == 0);
@@ -274,6 +370,12 @@ public:
       ceph_assert(num_reading.load() == 0);
       ceph_assert(!locked);
     }
+
+  public:
+    bool envelope_mode() {
+      return (fnode.encoding == ENVELOPE || fnode.encoding == ENVELOPE_FIN);
+    }
+
   };
   using FileRef = ceph::ref_t<File>;
 
@@ -313,6 +415,7 @@ public:
       const unsigned length,
       const bluefs_super_t& super);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
+    bufferlist::contiguous_filler envelope_head_filler;
   public:
     int writer_type = 0;    ///< WRITER_*
     int write_hint = WRITE_LIFE_NOT_SET;
@@ -324,7 +427,7 @@ public:
     FileWriter(FileRef f)
       : file(std::move(f)),
        buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
+                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -335,6 +438,9 @@ public:
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
       --file->num_writers;
+      for (unsigned i = 0; i < MAX_BDEV; ++i) {
+        delete iocv[i];
+      }
     }
 
     // note: BlueRocksEnv uses this append exclusively, so it's safe
@@ -364,9 +470,14 @@ public:
       buffer_appender.append_zero(len);
     }
 
+    bufferlist::contiguous_filler append_hole(uint64_t len) {
+      return buffer.append_hole(len);
+    }
+
     uint64_t get_effective_write_pos() {
       return pos + buffer.length();
     }
+
   };
 
   struct FileReaderBuffer {
@@ -408,18 +519,15 @@ public:
 
     FileRef file;
     FileReaderBuffer buf;
-    bool random;
     bool ignore_eof;        ///< used when reading our log file
-
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
+    FileReader(FileRef f, uint64_t mpf, bool ie)
       : file(f),
 	buf(mpf),
-	random(rand),
 	ignore_eof(ie) {
       ++file->num_readers;
     }
@@ -446,8 +554,6 @@ private:
     l_bluefs_max_bytes_db,
   };
 
-  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
-
   // cache
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::nodes.lock");
@@ -457,12 +563,14 @@ private:
 
   bluefs_super_t super;        ///< latest superblock (as last written)
   uint64_t ino_last = 0;       ///< last assigned ino (this one is in use)
+  bool conf_wal_envelope_mode = false; ///< conf "bluefs_wal_envelope_mode" at mount
 
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::log.lock");
     uint64_t seq_live = 1;   //seq that log is currently writing to; mirrors dirty.seq_live
-    FileWriter *writer = 0;
+    FileWriter *writer = nullptr;
     bluefs_transaction_t t;
+    bool uses_envelope_mode = false; // true if any file is in envelope mode
   } log;
 
   struct {
@@ -491,9 +599,14 @@ private:
    */
   std::vector<BlockDevice*> bdev;                  ///< block devices we can use
   std::vector<IOContext*> ioc;                     ///< IOContexts for bdevs
-  std::vector<uint64_t> block_reserved;            ///< starting reserve extent per device
   std::vector<Allocator*> alloc;                   ///< allocators for bdevs
   std::vector<uint64_t> alloc_size;                ///< alloc size for each device
+  std::vector<bluefs_locked_extents_t> locked_alloc;  ///< candidate extents
+                                                      ///< at both dev's head and tail
+                                                      ///< locked for allocations,
+                                                      ///< no alloc/release reqs matching
+                                                      ///< these space to be issued to allocator.
+
 
   //std::vector<interval_set<uint64_t>> block_unused_too_granular;
 
@@ -524,11 +637,11 @@ private:
   void _pad_bl(ceph::buffer::list& bl, uint64_t pad_size = 0);
 
   uint64_t _get_used(unsigned id) const;
-  uint64_t _get_total(unsigned id) const;
-
+  uint64_t _get_block_device_size(unsigned id) const;
+  uint64_t _get_minimal_reserved(unsigned id) const;
 
   FileRef _get_file(uint64_t ino);
-  void _drop_link_D(FileRef f);
+  void _drop_link_DF(FileRef f);
 
   unsigned _get_slow_device_id() {
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
@@ -549,6 +662,8 @@ private:
   int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
+  int _flush_envelope_F(FileWriter *h);
+  int _fsync(FileWriter *h, bool force_dirty);
   uint64_t _flush_special(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
@@ -602,6 +717,23 @@ private:
   void _flush_bdev();  // this is safe to call without a lock
   void _flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs);  // this is safe to call without a lock
 
+  int64_t _read_envmode(
+    FileReader *h,   ///< [in] read from here
+    uint64_t offset, ///< [in] offset
+    size_t len,      ///< [in] this many bytes
+    ceph::buffer::list *outbl,   ///< [out] optional: reference the result here
+    char *out);      ///< [out] optional: or copy it here
+  void _envmode_index_file(
+    FileRef file);
+  int _envmode_seek_to(
+    FileReader *h,         ///< [in] wal-file to read
+    uint64_t off,          ///< [in] offset in wal datastream
+    File::envelope_t* fl);///< [out] set wal envelope params
+  bool _read_envelope(
+    FileReader *h,         ///< [in] wal-file to read
+    uint64_t file_ofs,     ///< [in] offset to expect envelope
+    uint64_t env_ofs,      ///< [in] respective offset in wal datastream
+    File::envelope_t* fl);///< [out] set wal envelope params
   int64_t _read(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
@@ -643,6 +775,7 @@ private:
       _check_vselector_LNF();
     }
   }
+
 public:
   BlueFS(CephContext* cct);
   ~BlueFS();
@@ -655,6 +788,7 @@ public:
   int prepare_new_device(int id, const bluefs_layout_t& layout);
   
   int log_dump();
+  int super_dump();
 
   void collect_metadata(std::map<std::string,std::string> *pm, unsigned skip_bdev_id);
   void get_devices(std::set<std::string> *ls);
@@ -673,11 +807,13 @@ public:
     const std::set<int>& devs_source,
     int dev_target,
     const bluefs_layout_t& layout);
+  int revert_wal_to_plain();
 
   uint64_t get_used();
-  uint64_t get_total(unsigned id);
+  uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
+  uint64_t get_full_reserved(unsigned id);
   void dump_perf_counters(ceph::Formatter *f);
 
   void dump_block_extents(std::ostream& out);
@@ -699,7 +835,7 @@ public:
     FileReader **h,
     bool random = false);
 
-  // data added after last fsync() is lost
+
   void close_writer(FileWriter *h);
 
   int rename(std::string_view old_dir, std::string_view old_file,
@@ -729,17 +865,22 @@ public:
     vselector.reset(s);
   }
   void dump_volume_selector(std::ostream& sout) {
+    ceph_assert(vselector);
     vselector->dump(sout);
+  }
+  void update_volume_selector_from_config() {
+    ceph_assert(vselector);
+    vselector->update_from_config(cct);
   }
   void get_vselector_paths(const std::string& base,
                            BlueFSVolumeSelector::paths& res) const {
+    ceph_assert(vselector);
     return vselector->get_paths(base, res);
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
                        bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
-  uint64_t get_block_device_size(unsigned bdev) const;
   BlockDevice* get_block_device(unsigned bdev) const;
 
   // handler for discard event
@@ -755,6 +896,9 @@ public:
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
+    if (h->file->envelope_mode()) {
+      return _read_envmode(h, offset, len, outbl, out);
+    }
     return _read(h, offset, len, outbl, out);
   }
   int64_t read_random(FileReader *h, uint64_t offset, size_t len,
@@ -776,7 +920,9 @@ public:
   }
   uint64_t debug_get_dirty_seq(FileWriter *h);
   bool debug_get_is_dev_dirty(FileWriter *h, uint8_t dev);
+  debug_point_t<std::function<void(uint32_t)>> tracepoint_async_compact;
   void trim_free_space(const std::string& type, std::ostream& outss);
+  debug_point_t<std::function<void()>> unittest_inject_delay;
 
 private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
@@ -797,6 +943,10 @@ private:
 			       size_t read_len,
 			       bufferlist* bl);
   void _check_vselector_LNF();
+  int revert_wal_to_plain(
+    const std::string& dir,
+    const std::string& name
+  );
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {
@@ -811,6 +961,7 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
+  void update_from_config(CephContext* cct) override {}
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 

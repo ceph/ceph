@@ -19,15 +19,16 @@ add_executable(crimson-osd
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
-  osd_operations/client_request_common.cc
   osd_operations/internal_client_request.cc
   osd_operations/peering_event.cc
   osd_operations/pg_advance_map.cc
   osd_operations/replicated_request.cc
+  osd_operations/replicated_request_reply.cc
   osd_operations/logmissing_request.cc
   osd_operations/logmissing_request_reply.cc
   osd_operations/background_recovery.cc
   osd_operations/recovery_subrequest.cc
+  osd_operations/pgpct_request.cc
   osd_operations/snaptrim_event.cc
   osd_operations/scrub_events.cc
   pg_recovery.cc
@@ -46,6 +47,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/objclass/class_api.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
@@ -54,8 +56,8 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
   ${PROJECT_SOURCE_DIR}/src/osd/SnapMapper.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   watch.cc
   )
 if(HAS_VTA)

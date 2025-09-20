@@ -1,0 +1,13 @@
+<!-- Account quota -->
+<div *ngIf="selection.quota">
+  <legend i18n>Account quota</legend>
+  <cd-table-key-value [data]="quota">
+  </cd-table-key-value>
+</div>
+
+<!-- Bucket quota -->
+<div *ngIf="selection.bucket_quota">
+  <legend i18n>Bucket quota</legend>
+  <cd-table-key-value [data]="bucket_quota">
+  </cd-table-key-value>
+</div>

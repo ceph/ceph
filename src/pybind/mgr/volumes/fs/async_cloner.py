@@ -177,12 +177,20 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
         quota = int(fs_handle.getxattr(src_path, 'ceph.quota.max_bytes').decode('utf-8'))
     except cephfs.NoData:
         pass
+    except cephfs.ObjectNotFound:
+        log.info('set_quota_on_clone(): getxattr failed because source path '
+                 f'"{src_path}" has gone missing')
+        raise
 
     if quota is not None:
         try:
             fs_handle.setxattr(dst_path, 'ceph.quota.max_bytes', str(quota).encode('utf-8'), 0)
         except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid size specified: '{0}'".format(quota))
+        except cephfs.ObjectNotFound:
+            log.info('set_quota_on_clone(): getxattr failed because destination path '
+                     f'"{dst_path}" has gone missing')
+            raise
         except cephfs.Error as e:
              raise VolumeException(-e.args[0], e.args[1])
 
@@ -191,12 +199,20 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
         quota_files = int(fs_handle.getxattr(src_path, 'ceph.quota.max_files').decode('utf-8'))
     except cephfs.NoData:
         pass
+    except cephfs.ObjectNotFound:
+        log.info('set_quota_on_clone(): getxattr failed because source path '
+                 f'"{src_path}" has gone missing')
+        raise
 
     if quota_files is not None:
         try:
             fs_handle.setxattr(dst_path, 'ceph.quota.max_files', str(quota_files).encode('utf-8'), 0)
         except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid file count specified: '{0}'".format(quota_files))
+        except cephfs.ObjectNotFound:
+            log.info('set_quota_on_clone(): getxattr failed because destination path '
+                     f'"{dst_path}" has gone missing')
+            raise
         except cephfs.Error as e:
              raise VolumeException(-e.args[0], e.args[1])
 
@@ -257,7 +273,6 @@ def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvoln
         with open_clone_subvol_pair_in_vol(fs_client, volspec, volname,
                 groupname, subvolname) as (subvol0, subvol1, subvol2):
             subvol1.detach_snapshot(subvol2, index)
-            subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -383,7 +398,7 @@ class Cloner(AsyncJobs):
                         jobs = [j[0] for j in self.jobs[volname]]
                         with lock_timeout_log(self.lock):
                             if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
-                                logging.debug("Cancelling pending job {0}".format(clone_job))
+                                log.debug("Cancelling pending job {0}".format(clone_job))
                                 # clone has not started yet -- cancel right away.
                                 self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
                                 return

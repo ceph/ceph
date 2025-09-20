@@ -2,6 +2,10 @@ overrides:
   ceph:
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
+    - do not have an application enabled
+    - POOL_APP_NOT_ENABLED
+    - application not enabled
+    - or freeform for custom applications
 tasks:
 - exec:
    client.0:

@@ -1,14 +1,14 @@
 tasks:
 - nvmeof:
     installer: host.a
-    gw_image: quay.io/ceph/nvmeof:latest # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    gw_image: quay.io/ceph/nvmeof:devel # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
       pool_name: mypool
       image_name_prefix: myimage
     gateway_config:
       subsystems_count: 3
       namespaces_count: 20
-      cli_image: quay.io/ceph/nvmeof-cli:latest
+      cli_image: quay.io/ceph/nvmeof-cli:devel
 
 - cephadm.wait_for_service:
     service: nvmeof.mypool.mygroup0
@@ -32,7 +32,11 @@ tasks:
     timeout: 30m
     clients:
       client.0:
+        - nvmeof/fio_test.sh
+      client.3:
         - nvmeof/scalability_test.sh nvmeof.a,nvmeof.b
         - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c,nvmeof.d
+        - nvmeof/scalability_test.sh nvmeof.b,nvmeof.c
     env:
-      SCALING_DELAYS: '50'
+      SCALING_DELAYS: '400'
+      RUNTIME: '1200'

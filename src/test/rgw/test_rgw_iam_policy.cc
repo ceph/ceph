@@ -21,18 +21,14 @@
 
 #include <gtest/gtest.h>
 
+#include "rgw_sal_store.h"
+
 #include "include/stringify.h"
-#include "common/async/context_pool.h"
-#include "common/code_environment.h"
 #include "common/ceph_context.h"
-#include "global/global_init.h"
 #include "rgw_auth.h"
-#include "rgw_auth_registry.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
-#include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
 #include "rgw_sal_config.h"
 
 using std::string;
@@ -49,6 +45,7 @@ using rgw::IAM::Effect;
 using rgw::IAM::Environment;
 using rgw::Partition;
 using rgw::IAM::Policy;
+using rgw::IAM::Condition;
 using rgw::IAM::s3All;
 using rgw::IAM::s3objectlambdaAll;
 using rgw::IAM::s3GetAccelerateConfiguration;
@@ -75,8 +72,11 @@ using rgw::IAM::s3GetObjectTagging;
 using rgw::IAM::s3GetObjectVersion;
 using rgw::IAM::s3GetObjectVersionTagging;
 using rgw::IAM::s3GetObjectVersionTorrent;
+using rgw::IAM::s3GetObjectAttributes;
+using rgw::IAM::s3GetObjectVersionAttributes;
 using rgw::IAM::s3GetPublicAccessBlock;
 using rgw::IAM::s3GetReplicationConfiguration;
+using rgw::IAM::s3GetObjectVersionForReplication;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucketMultipartUploads;
@@ -115,6 +115,7 @@ using rgw::IAM::iamListGroupPolicies;
 using rgw::IAM::iamListAttachedGroupPolicies;
 using rgw::IAM::iamSimulateCustomPolicy;
 using rgw::IAM::iamSimulatePrincipalPolicy;
+using rgw::IAM::iamGetAccountSummary;
 using rgw::IAM::snsGetTopicAttributes;
 using rgw::IAM::snsListTopics;
 using rgw::Service;
@@ -156,12 +157,17 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_owner& o) const override {
+  bool is_admin() const override {
     ceph_abort();
     return false;
   }
 
   bool is_owner_of(const rgw_owner& owner) const override {
+    ceph_abort();
+    return false;
+  }
+
+  bool is_root() const override {
     ceph_abort();
     return false;
   }
@@ -203,6 +209,10 @@ public:
 
   uint32_t get_identity_type() const override {
     return TYPE_RGW;
+  }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return std::nullopt;
   }
 };
 
@@ -419,6 +429,8 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetObjectVersionAcl] = 1;
   act2[s3GetObjectTorrent] = 1;
   act2[s3GetObjectVersionTorrent] = 1;
+  act2[s3GetObjectAttributes] = 1;
+  act2[s3GetObjectVersionAttributes] = 1;
   act2[s3GetAccelerateConfiguration] = 1;
   act2[s3GetBucketAcl] = 1;
   act2[s3GetBucketOwnershipControls] = 1;
@@ -442,6 +454,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetBucketPublicAccessBlock] = 1;
   act2[s3GetPublicAccessBlock] = 1;
   act2[s3GetBucketEncryption] = 1;
+  act2[s3GetObjectVersionForReplication] = 1;
 
   EXPECT_EQ(p->statements[2].action, act2);
   EXPECT_EQ(p->statements[2].notaction, None);
@@ -487,6 +500,8 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetObjectVersion] = 1;
   s3allow[s3GetObjectAcl] = 1;
   s3allow[s3GetObjectVersionAcl] = 1;
+  s3allow[s3GetObjectAttributes] = 1;
+  s3allow[s3GetObjectVersionAttributes] = 1;
   s3allow[s3GetObjectTorrent] = 1;
   s3allow[s3GetObjectVersionTorrent] = 1;
   s3allow[s3GetAccelerateConfiguration] = 1;
@@ -512,6 +527,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetBucketPublicAccessBlock] = 1;
   s3allow[s3GetPublicAccessBlock] = 1;
   s3allow[s3GetBucketEncryption] = 1;
+  s3allow[s3GetObjectVersionForReplication] = 1;
 
   ARN arn1(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket");
@@ -831,6 +847,7 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamListAttachedGroupPolicies] = 1;
   act[iamSimulateCustomPolicy] = 1;
   act[iamSimulatePrincipalPolicy] = 1;
+  act[iamGetAccountSummary] = 1;
 
   EXPECT_EQ(act, p->statements[0].action);
 }
@@ -883,6 +900,8 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetObjectVersionAcl] = 1;
   act[s3GetObjectTorrent] = 1;
   act[s3GetObjectVersionTorrent] = 1;
+  act[s3GetObjectAttributes] = 1;
+  act[s3GetObjectVersionAttributes] = 1;
   act[s3GetAccelerateConfiguration] = 1;
   act[s3GetBucketAcl] = 1;
   act[s3GetBucketOwnershipControls] = 1;
@@ -906,6 +925,7 @@ TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
   act[s3GetPublicAccessBlock] = 1;
   act[s3GetBucketPublicAccessBlock] = 1;
   act[s3GetBucketEncryption] = 1;
+  act[s3GetObjectVersionForReplication] = 1;
   // s3:List*
   act[s3ListMultipartUploadParts] = 1;
   act[s3ListBucket] = 1;
@@ -1095,18 +1115,56 @@ TEST_F(IPPolicyTest, asNetworkInvalid) {
   EXPECT_FALSE(rgw::IAM::Condition::as_network("1.2.3.10000"));
 }
 
+class DumbUser : public rgw::sal::StoreUser {
+  using StoreUser::StoreUser;
+  std::unique_ptr<User> clone() {
+    return std::make_unique<DumbUser>(*this);
+  }
+  int read_attrs(const DoutPrefixProvider*, optional_yield) {
+    return -ENOTSUP;
+  }
+  int merge_and_store_attrs(const DoutPrefixProvider*, rgw::sal::Attrs&,
+			    optional_yield) {
+    return -ENOTSUP;
+  }
+  int read_usage(const DoutPrefixProvider*, uint64_t, uint64_t, uint32_t,
+		 bool*, RGWUsageIter&,
+		 std::map<rgw_user_bucket, rgw_usage_log_entry>&) {
+    return -ENOTSUP;
+  }
+  virtual int trim_usage(const DoutPrefixProvider*, uint64_t,
+			 uint64_t, optional_yield) {
+    return -ENOTSUP;
+  }
+  int load_user(const DoutPrefixProvider* dpp, optional_yield y) {
+    return -ENOTSUP;
+  }
+  int store_user(const DoutPrefixProvider*, optional_yield, bool, RGWUserInfo*) {
+    return -ENOTSUP;
+  }
+  int remove_user(const DoutPrefixProvider*, optional_yield) {
+    return -ENOTSUP;
+  }
+  int verify_mfa(const std::string&, bool*, const DoutPrefixProvider*,
+		 optional_yield) {
+    return -ENOTSUP;
+  }
+  int list_groups(const DoutPrefixProvider*, optional_yield,
+		  std::string_view, uint32_t, rgw::sal::GroupList&) {
+    return -ENOTSUP;
+  }
+};
+
 TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
-  rgw::sal::RadosStore store(context_pool);
-  std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
+  std::unique_ptr<rgw::sal::User> user = std::make_unique<DumbUser>(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
   req_state rgw_req_state(cct.get(), penv, &rgw_env, 0);
   rgw_req_state.set_user(user);
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   auto ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.1");
@@ -1114,13 +1172,13 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
   EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   EXPECT_EQ(ip, rgw_req_state.env.end());
 
   rgw_env.set("SOME_VAR", "192.168.1.2");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.2");
@@ -1128,14 +1186,14 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   ASSERT_EQ(cct.get()->_conf.set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.3");
 
   rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.4, 4.3.2.1, 2001:db8:85a3:8d3:1319:8a2e:370:7348");
   rgw_req_state.env.clear();
-  rgw_build_iam_environment(&store, &rgw_req_state);
+  rgw_build_iam_environment(&rgw_req_state);
   ip = rgw_req_state.env.find("aws:SourceIp");
   ASSERT_NE(ip, rgw_req_state.env.end());
   EXPECT_EQ(ip->second, "192.168.1.4");
@@ -1456,31 +1514,13 @@ TEST(MatchPolicy, Action)
   EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
 }
 
-TEST(MatchPolicy, Resource)
-{
-  constexpr auto flag = MATCH_POLICY_RESOURCE;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
-}
-
 TEST(MatchPolicy, ARN)
 {
   constexpr auto flag = MATCH_POLICY_ARN;
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
-  EXPECT_TRUE(match_policy("a:b:c", "A:B:C", flag)); // case insensitive
-  EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
-}
-
-TEST(MatchPolicy, String)
-{
-  constexpr auto flag = MATCH_POLICY_STRING;
-  EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
+  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
 }
 
 Action_t set_range_bits(std::uint64_t start, std::uint64_t end)
@@ -1501,4 +1541,28 @@ TEST(set_cont_bits, iamconsts)
   EXPECT_EQ(snsAllValue, set_range_bits(stsAll+1, snsAll));
   EXPECT_EQ(organizationsAllValue, set_range_bits(snsAll+1, organizationsAll));
   EXPECT_EQ(allValue , set_range_bits(0, allCount));
+}
+
+TEST(Condition, ArnLike)
+{
+  const std::string key = "aws:SourceArn";
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::bucket");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
+  {
+    Condition ArnLike{TokenID::ArnLike, key.data(), key.size(), false};
+    ArnLike.vals.push_back("arn:aws:s3:::b*");
+
+    EXPECT_FALSE(ArnLike.eval({}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::b"}}));
+    EXPECT_TRUE(ArnLike.eval({{key, "arn:aws:s3:::bucket"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::BUCKET"}}));
+    EXPECT_FALSE(ArnLike.eval({{key, "arn:aws:s3:::user"}}));
+  }
 }

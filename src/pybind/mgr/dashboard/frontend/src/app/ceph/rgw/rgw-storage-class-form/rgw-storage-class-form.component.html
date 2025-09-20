@@ -1,0 +1,587 @@
+<div cdsCol
+     [columnNumbers]="{ md: 4 }">
+  <ng-container *cdFormLoading="loading">
+    <form name="storageClassForm"
+          #formDir="ngForm"
+          [formGroup]="storageClassForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+
+        <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+      </div>
+      <div class="form-item">
+        <cds-select
+          label="Type"
+          i18n-label
+          for="storageClassType"
+          formControlName="storageClassType"
+          [helperText]="helpTextLabels.storageClassText"
+          id="storageClassType"
+          [invalid]="storageClassForm.showError('storageClassType', formDir, 'required')"
+          [invalidText]="storageError"
+        >
+          <option value=""
+                  i18n>-- Select Storage Class --</option>
+          <option *ngFor="let opt of storageClassOptions"
+                  [value]="opt.value"
+                  i18n>
+            {{ opt.label }}
+          </option>
+        </cds-select>
+        <ng-template #storageError>
+          @if (storageClassForm.showError('storageClassType', formDir, 'required')) {
+          <span class="invalid-feedback"
+                i18n> This field is required. </span>
+          }
+        </ng-template>
+      </div>
+      <div class="form-item form-item-append"
+           cdsRow>
+        <!-- Storage Class Name -->
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="storage_class"
+            i18n
+            [disabled]="editing"
+            [invalid]="
+              storageClassForm.controls.storage_class.invalid &&
+              storageClassForm.controls.storage_class.dirty
+            "
+            [invalidText]="storageClassError"
+          >
+            Storage Class name
+            <input
+              cdsText
+              type="text"
+              formControlName="storage_class"
+              [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"
+            />
+          </cds-text-label>
+          <ng-template #storageClassError>
+            @if (storageClassForm.showError('storage_class', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n>This field is required.</span>
+            }
+          </ng-template>
+        </div>
+        <!-- Zone Group / Region -->
+        <div cdsCol>
+          <cds-select
+            label="Zone Group / Region"
+            i18n-label
+            formControlName="zonegroup"
+            id="zonegroup"
+            [invalid]="storageClassForm.showError('zonegroup', formDir, 'required')"
+            (change)="onZonegroupChange()"
+            [invalidText]="zonegroupError"
+          >
+            <option
+              *ngFor="let zonegrp of zonegroupNames"
+              [value]="zonegrp.name"
+              [selected]="zonegrp.name === storageClassForm.getValue('zonegroup')"
+              i18n
+            >
+              {{ zonegrp.name }}
+            </option>
+          </cds-select>
+          <ng-template #zonegroupError>
+            @if (storageClassForm.showError('zonegroup', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n>This field is required.</span>
+            }
+          </ng-template>
+        </div>
+      </div>
+      @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      <div>
+        <div class="form-item form-item-append"
+             cdsRow>
+          <div cdsCol>
+            <!-- Target Region -->
+            <cds-text-label
+              labelInputID="region"
+              i18n
+              [invalid]="storageClassForm.showError('region', formDir, 'required')"
+              [invalidText]="regionError"
+              [helperText]="helpTextLabels.targetRegionText"
+              >Target Region
+              <input
+                cdsText
+                type="text"
+                id="region"
+                formControlName="region"
+                placeholder="e.g, us-east-1"
+                i18n-placeholder
+                [invalid]="storageClassForm.showError('region', formDir, 'required')"
+              />
+            </cds-text-label>
+            <ng-template #regionError>
+              @if (storageClassForm.showError('region', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n>This field is required.</span>
+              }
+            </ng-template>
+          </div>
+          <div cdsCol>
+            <!-- Target Endpoint -->
+            <cds-text-label
+              labelInputID="target_endpoint"
+              i18n
+              [invalid]="
+                storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                storageClassForm.showError('target_endpoint', formDir, 'required')
+              "
+              [invalidText]="endpointError"
+              [helperText]="helpTextLabels.targetEndpointText"
+              >Target Endpoint
+              <input
+                cdsText
+                type="text"
+                placeholder="http://ceph-node-00.com:80"
+                i18n-placeholder
+                id="target_endpoint"
+                formControlName="target_endpoint"
+                [invalid]="
+                  storageClassForm.showError('target_endpoint', formDir, 'invalidURL') ||
+                  storageClassForm.showError('target_endpoint', formDir, 'required')
+                "
+                [invalidText]="endpointError"
+              />
+            </cds-text-label>
+            <ng-template #endpointError>
+              @if (storageClassForm.showError('target_endpoint', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              } @else if (storageClassForm.showError('target_endpoint', formDir, 'invalidURL')) {
+              <span class="invalid-feedback"
+                    i18n> Please enter a valid URL.</span>
+              }
+            </ng-template>
+          </div>
+        </div>
+        <!-- Access Key  -->
+        <div class="form-item">
+          <div cdsCol
+               [columnNumbers]="{ md: 12 }"
+               class="d-flex">
+            <cds-password-label
+              labelInputID="access_key"
+              [invalid]="storageClassForm.showError('access_key', formDir, 'required')"
+              [invalidText]="accessError"
+              [helperText]="helpTextLabels.targetAccessKeyText"
+              i18n
+              >Target Access Key
+              <input
+                cdsPassword
+                type="password"
+                id="access_key"
+                formControlName="access_key"
+                [invalid]="storageClassForm.showError('access_key', formDir, 'required')"
+              />
+            </cds-password-label>
+            <cd-copy-2-clipboard-button class="clipboard"></cd-copy-2-clipboard-button>
+            <ng-template #accessError>
+              @if (storageClassForm.showError('access_key', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
+            </ng-template>
+          </div>
+        </div>
+        <!-- Secret Key  -->
+        <div class="form-item">
+          <div cdsCol
+               [columnNumbers]="{ md: 12 }"
+               class="d-flex">
+            <cds-password-label
+              labelInputID="secret_key"
+              [helperText]="helpTextLabels.targetSecretKeyText"
+              [invalid]="storageClassForm.showError('secret_key', formDir, 'required')"
+              [invalidText]="secretError"
+              i18n
+              >Target Secret Key
+              <input
+                cdsPassword
+                type="password"
+                id="secret_key"
+                formControlName="secret_key"
+                [invalid]="storageClassForm.showError('secret_key', formDir, 'required')"
+              />
+            </cds-password-label>
+            <cd-copy-2-clipboard-button class="clipboard"> </cd-copy-2-clipboard-button>
+            <ng-template #secretError>
+              @if (storageClassForm.showError('secret_key', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
+            </ng-template>
+          </div>
+        </div>
+        <!-- Target Path -->
+        <div class="form-item">
+          <cds-text-label
+            labelInputID="target_path"
+            i18n
+            [invalid]="storageClassForm.showError('target_path', formDir, 'required')"
+            [invalidText]="targetError"
+            [helperText]="helpTextLabels.targetPathText"
+            >Target Path
+            <input
+              cdsText
+              type="text"
+              id="target_path"
+              formControlName="target_path"
+              [invalid]="storageClassForm.showError('target_path', formDir, 'required')"
+            />
+          </cds-text-label>
+          <ng-template #targetError>
+            @if (storageClassForm.showError('target_path', formDir, 'required')) {
+            <span class="invalid-feedback"
+                  i18n> This field is required. </span>
+            }
+          </ng-template>
+        </div>
+        <div class="form-item">
+          <cds-checkbox
+            id="allow_read_through"
+            formControlName="allow_read_through"
+            cdOptionalField="Allow Read Through"
+            i18n
+            (change)="onAllowReadThroughChange($event)"
+            >Allow Read Through
+            <cd-help-text>{{ helpTextLabels?.allowReadThroughText }}</cd-help-text>
+          </cds-checkbox>
+        </div>
+        <div class="form-item">
+          <cds-checkbox
+            id="retain_head_object"
+            formControlName="retain_head_object"
+            cdOptionalField="Head Object (Stub File)"
+            i18n
+            >Head Object (Stub File)
+            <cd-help-text>{{ helpTextLabels?.retainHeadObjectText }}</cd-help-text>
+          </cds-checkbox>
+        </div>
+        <div class="form-item form-item-append"
+             cdsRow>
+          <div cdsCol>
+            <cds-number
+              name="read_through_restore_days"
+              formControlName="read_through_restore_days"
+              id="read_through_restore_days"
+              min="1"
+              label="ReadThrough Restore Days"
+              [helperText]="helpTextLabels.readthroughrestoreDaysText"
+              i18n-helperText
+              i18n-label
+              i18n
+              [invalid]="
+                storageClassForm.controls.read_through_restore_days.invalid &&
+                storageClassForm.controls.read_through_restore_days.dirty
+              "
+              [invalidText]="readThroughError"
+            ></cds-number>
+            <ng-template #readThroughError>
+              @if (storageClassForm.showError('read_through_restore_days', formDir, 'pattern')) {
+              <span class="invalid-feedback"
+                    i18n>
+                ReadThrough Restore Days must be positive.
+              </span>
+              }
+            </ng-template>
+          </div>
+          <div cdsCol>
+            <cds-select
+              formControlName="restore_storage_class"
+              label="Restore Storage Class"
+              id="restore_storage_class"
+              [helperText]="helpTextLabels.restoreStorageClassText"
+              i18n-label
+            >
+              <option [value]="''"
+                      i18n>-- Select the glacier restore storage class --</option>
+              <option [ngValue]="standard"
+                      i18n>Standard</option>
+            </cds-select>
+          </div>
+        </div>
+      </div>
+      } @if(isTierMatch(TIER_TYPE.GLACIER)){
+      <div>
+        <legend class="cd-header"
+                i18n>Glacier Configuration</legend>
+        <div class="form-item form-item-append"
+             cdsRow>
+          <div cdsCol>
+            <cds-select
+              formControlName="glacier_restore_tier_type"
+              label="Glacier Restore Tier Type"
+              cdRequiredField="Glacier Restore Tier Type"
+              id="glacier_restore_tier_type"
+              [invalid]="
+                storageClassForm.controls.glacier_restore_tier_type.invalid &&
+                storageClassForm.controls.glacier_restore_tier_type.dirty
+              "
+              [invalidText]="glacierError"
+              [helperText]="helpTextLabels.tiertypeText"
+              i18n-label
+            >
+              <option value="''"
+                      i18n>-- Select the glacier restore tier type --</option>
+              <option [ngValue]="standard"
+                      i18n>Standard</option>
+              <option [ngValue]="expedited"
+                      i18n>Expedited</option>
+            </cds-select>
+            <ng-template #glacierError>
+              @if (storageClassForm.showError('glacier_restore_tier_type', formDir, 'required')) {
+              <span class="invalid-feedback"
+                    i18n> This field is required. </span>
+              }
+            </ng-template>
+          </div>
+          <div cdsCol>
+            <cds-number
+              [id]="'glacier_restore_days'"
+              [formControlName]="'glacier_restore_days'"
+              [label]="'Glacier Restore Days'"
+              [helperText]="helpTextLabels.restoreDaysText"
+              [min]="1"
+              i18n-helperText
+              i18n-label
+              i18n
+              [invalid]="
+                storageClassForm.controls.glacier_restore_days.invalid &&
+                storageClassForm.controls.glacier_restore_days.dirty
+              "
+              [invalidText]="glacierRestoreError"
+            >
+            </cds-number>
+            <ng-template #glacierRestoreError>
+              @if (storageClassForm.showError('glacier_restore_days', formDir, 'pattern')) {
+              <span class="invalid-feedback"
+                    i18n>
+                The entered value must be a positive integer.
+              </span>
+              }
+            </ng-template>
+          </div>
+        </div>
+      </div>
+      }
+      <fieldset>
+        <div>
+          <ng-template #title>
+            <h5 class="cds--accordion__title cd-header">Advanced</h5>
+          </ng-template>
+          <fieldset>
+            <cds-accordion size="lg"
+                           class="form-item">
+              <cds-accordion-item
+                [title]="title"
+                id="advanced-fieldset"
+                (selected)="showAdvanced = !showAdvanced"
+              >
+                @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+                <!-- Multi Part Sync Threshold -->
+                <div class="form-item form-item-append"
+                     cdsRow>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="multipart_sync_threshold"
+                      i18n
+                      [helperText]="helpTextLabels.multipartSyncThresholdText"
+                      cdOptionalField="Multipart Sync Threshold"
+                      >Multipart Sync Threshold
+                      <input
+                        cdsText
+                        type="text"
+                        id="multipart_sync_threshold"
+                        formControlName="multipart_sync_threshold"
+                        cdDimlessBinary
+                      />
+                    </cds-text-label>
+                  </div>
+                  <div cdsCol>
+                    <cds-text-label
+                      labelInputID="multipart_min_part_size"
+                      i18n
+                      [helperText]="helpTextLabels.multipartMinPartText"
+                      cdOptionalField="Multipart Minimum Part Size"
+                      >Multipart Minimum Part Size
+                      <input
+                        cdsText
+                        type="text"
+                        id="multipart_min_part_size"
+                        formControlName="multipart_min_part_size"
+                        cdDimlessBinary
+                      />
+                    </cds-text-label>
+                  </div>
+                </div>
+                <!-- ACLs -->
+                <div>
+                  <legend class="cd-header"
+                          i18n>ACLs Mapping</legend>
+                  <ng-container formArrayName="acls">
+                    @for (acl of acls.controls; let i = $index; track acl) {
+                    <ng-container [formGroupName]="i">
+                      <div class="form-item form-item-append"
+                           cdsRow>
+                        <div cdsCol
+                             [columnNumbers]="{ lg: 7 }">
+                          <cds-select id="type"
+                                      formControlName="type"
+                                      i18n-label
+                                      label="Type">
+                            @for (type of typeOptions; track type.value) {
+                            <option [value]="type.value"
+                                    i18n>
+                              {{ type.label }}
+                            </option>
+                            }
+                          </cds-select>
+                        </div>
+                      </div>
+                      <div cdsRow
+                           class="form-item form-item-append">
+                        <div cdsCol>
+                          <cds-text-label
+                            labelInputID="source_id"
+                            i18n
+                            [helperText]="getAclHelperText(acl.get('type')?.value, 'source')"
+                            [invalid]="
+                              acl.get('source_id')?.invalid && acl.get('source_id')?.touched
+                            "
+                            [invalidText]="
+                            acl.get('source_id')?.errors?.['required'] ? 'This field is required.' :
+                            acl.get('source_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
+                            acl.get('source_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
+                          "
+                          >
+                            {{ getAclLabel('source', acl.get('type')?.value) }}
+                            <input
+                              cdsText
+                              type="text"
+                              formControlName="source_id"
+                              [invalidText]="
+                            acl.get('source_id')?.errors?.['required'] ? 'This field is required.' :
+                            acl.get('source_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
+                            acl.get('source_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
+                          "
+                            />
+                          </cds-text-label>
+                        </div>
+                        <div cdsCol>
+                          <cds-text-label
+                            labelInputID="dest_id"
+                            i18n
+                            [helperText]="getAclHelperText(acl.get('type')?.value, 'destination')"
+                            [invalid]="acl.get('dest_id')?.invalid && acl.get('dest_id')?.touched"
+                            [invalidText]="
+                              acl.get('dest_id')?.errors?.['required'] ? 'This field is required.' :
+                              acl.get('dest_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
+                              acl.get('dest_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
+                            "
+                          >
+                            {{ getAclLabel('destination', acl.get('type')?.value) }}
+                            <input
+                              cdsText
+                              type="text"
+                              formControlName="dest_id"
+                              [invalidText]="
+                              acl.get('dest_id')?.errors?.['required'] ? 'This field is required.' :
+                              acl.get('dest_id')?.errors?.['email'] ? 'Please enter a valid email address.' :
+                              acl.get('dest_id')?.errors?.['invalidUrl'] ? 'Please enter a valid URL.' : ''
+                            "
+                            />
+                          </cds-text-label>
+                        </div>
+
+                        <div
+                          cdsCol
+                          [columnNumbers]="{ lg: 1, md: 1 }"
+                          class="item-action-btn spacing"
+                        >
+                          <cds-icon-button kind="primary"
+                                           size="sm"
+                                           (click)="addAcls(acls, i)">
+                            <svg cdsIcon="add"
+                                 size="32"
+                                 class="cds--btn__icon"></svg>
+                          </cds-icon-button>
+                        </div>
+                        <div cdsCol
+                             [columnNumbers]="{ lg: 1, md: 1 }"
+                             class="item-action-btn">
+                          <cds-icon-button kind="danger"
+                                           size="sm"
+                                           (click)="removeAcl(i)">
+                            <svg cdsIcon="trash-can"
+                                 size="32"
+                                 class="cds--btn__icon"></svg>
+                          </cds-icon-button>
+                        </div>
+                      </div>
+                    </ng-container>
+                    }
+                  </ng-container>
+                </div>
+                }
+                <div class="form-item form-item-append"
+                     cdsRow>
+                  <div cdsCol>
+                    <!-- Placement Target -->
+                    <cds-select
+                      label="Placement Target"
+                      i18n-label
+                      formControlName="placement_target"
+                      [invalid]="
+                        storageClassForm.showError('placement_target', formDir, 'required')
+                      "
+                      [invalidText]="placementError"
+                    >
+                      <option [value]="''"
+                              i18n>--Select--</option>
+                      @for (placementTarget of placementTargets; track placementTarget) {
+                      <option
+                        [value]="placementTarget"
+                        [selected]="
+                          placementTarget === storageClassForm.getValue('placement_target')
+                        "
+                        i18n
+                      >
+                        {{ placementTarget }}
+                      </option>
+                      }
+                    </cds-select>
+                    <ng-template #placementError>
+                      @if (storageClassForm.showError('placement_target', formDir, 'required')) {
+                      <span class="invalid-feedback"
+                            i18n> This field is required. </span>
+                      }
+                    </ng-template>
+                  </div>
+                </div>
+              </cds-accordion-item>
+            </cds-accordion>
+          </fieldset>
+        </div>
+      </fieldset>
+      @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      <cd-alert-panel type="warning"
+                      spacingClass="mb-2">
+        <span i18n>RGW service would be restarted after creating the storage class.</span>
+      </cd-alert-panel>
+      }
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="storageClassForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>

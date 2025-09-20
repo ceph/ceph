@@ -17,6 +17,7 @@
 
 #include <fmt/format.h>
 
+#include "include/types.h" // for version_t
 #include "include/utime.h"
 #include "include/utime_fmt.h"
 #include "msg/msg_fmt.h"
@@ -24,6 +25,13 @@
 #include "common/entity_name.h"
 #include "ostream_temp.h"
 #include "LRUSet.h"
+
+#include <cstdint>
+#include <iostream>
+#include <list>
+#include <map>
+#include <string>
+#include <unordered_set>
 
 namespace ceph {
   class Formatter;
@@ -75,7 +83,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogEntryKey*>& o);
+  static std::list<LogEntryKey> generate_test_instances();
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
     return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
@@ -124,7 +132,7 @@ struct LogEntry {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogEntry*>& o);
+  static std::list<LogEntry> generate_test_instances();
   static clog_type str_to_level(std::string const &str);
   static std::string_view level_to_str(clog_type t) {
     switch (t) {
@@ -153,7 +161,7 @@ struct LogSummary {
   // channel -> [(seq#, entry), ...]
   std::map<std::string,std::list<std::pair<uint64_t,LogEntry>>> tail_by_channel;
   uint64_t seq = 0;
-  ceph::unordered_set<LogEntryKey> keys;
+  std::unordered_set<LogEntryKey> keys;
 
   // ---- quincy+ ----
   LRUSet<LogEntryKey> recent_keys;
@@ -183,7 +191,7 @@ struct LogSummary {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogSummary*>& o);
+  static std::list<LogSummary> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 

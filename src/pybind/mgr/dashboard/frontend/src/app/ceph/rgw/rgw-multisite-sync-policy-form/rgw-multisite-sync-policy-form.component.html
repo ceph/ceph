@@ -86,6 +86,7 @@
         <div class="text-right">
           <cd-form-button-panel (submitActionEvent)="submit()"
                                 [form]="syncPolicyForm"
+                                [disabled]="syncPolicyForm.pending || syncPolicyForm.pristine || syncPolicyForm.invalid"
                                 [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
         </div>
       </div>

@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "LogOperation.h"
+#include "common/debug.h"
+#include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix

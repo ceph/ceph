@@ -3,6 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/operation/SnapshotCreateRequest.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
@@ -12,6 +13,8 @@
 #include "librbd/Utils.h"
 #include "librbd/io/ImageDispatcherInterface.h"
 #include "librbd/mirror/snapshot/SetImageStateRequest.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix

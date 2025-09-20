@@ -12,7 +12,9 @@ describe('Create cluster create osds page', () => {
     cy.login();
     createCluster.navigateTo();
     createCluster.createCluster();
-    cy.get('.nav-link').contains('Create OSDs').click();
+    cy.get('cd-wizard').within(() => {
+      cy.get('button').contains('Create OSDs').click();
+    });
   });
 
   it('should check if title contains Create OSDs', () => {
@@ -28,12 +30,16 @@ describe('Create cluster create osds page', () => {
         // Go to the Review section and Expand the cluster
         // because the drive group spec is only stored
         // in frontend and will be lost when refreshed
-        cy.get('.nav-link').contains('Review').click();
+        cy.get('cd-wizard').within(() => {
+          cy.get('button').contains('Review').click();
+        });
         cy.get('button[aria-label="Next"]').click();
         cy.get('cd-dashboard').should('exist');
         createCluster.navigateTo();
         createCluster.createCluster();
-        cy.get('.nav-link').contains('Create OSDs').click();
+        cy.get('cd-wizard').within(() => {
+          cy.get('button').contains('Create OSDs').click();
+        });
       }
     });
   });

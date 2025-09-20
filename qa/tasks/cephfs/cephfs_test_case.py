@@ -71,6 +71,7 @@ class CephFSTestCase(CephTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 1
     REQUIRE_ONE_CLIENT_REMOTE = False
+    ALLOW_REFERENT_INODES = False
 
     # Whether to create the default filesystem during setUp
     REQUIRE_FILESYSTEM = True
@@ -190,6 +191,10 @@ class CephFSTestCase(CephTestCase):
             for i in range(0, self.CLIENTS_REQUIRED):
                 self.mounts[i].mount_wait()
 
+            # enable referent inodes
+            if self.ALLOW_REFERENT_INODES:
+              self.fs.set_allow_referent_inodes(True)
+
         if self.REQUIRE_BACKUP_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:
                 self.skipTest("backup filesystem requires a primary filesystem as well")
@@ -252,8 +257,8 @@ class CephFSTestCase(CephTestCase):
     def get_session_data(self, client_id):
         return self._session_by_id(client_id)
 
-    def _session_list(self):
-        ls_data = self.fs.mds_asok(['session', 'ls'])
+    def _session_list(self, rank=None, status=None):
+        ls_data = self.fs.rank_asok(['session', 'ls'], rank=rank, status=status)
         ls_data = [s for s in ls_data if s['state'] not in ['stale', 'closed']]
         return ls_data
 
@@ -269,9 +274,9 @@ class CephFSTestCase(CephTestCase):
     def perf_dump(self, rank=None, status=None):
         return self.fs.rank_asok(['perf', 'dump'], rank=rank, status=status)
 
-    def wait_until_evicted(self, client_id, timeout=30):
+    def wait_until_evicted(self, client_id, rank=None, timeout=30):
         def is_client_evicted():
-            ls = self._session_list()
+            ls = self._session_list(rank=rank)
             for s in ls:
                 if s['id'] == client_id:
                     return False

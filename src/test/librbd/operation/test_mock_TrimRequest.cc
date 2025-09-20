@@ -14,7 +14,8 @@
 #include "librbd/operation/TrimRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include <boost/variant.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 namespace librbd {
 namespace {
@@ -67,8 +68,7 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 
 namespace io {
 
-struct DiscardVisitor
-  : public boost::static_visitor<ObjectDispatchSpec::DiscardRequest*> {
+struct DiscardVisitor {
   ObjectDispatchSpec::DiscardRequest*
   operator()(ObjectDispatchSpec::DiscardRequest& discard) const {
     return &discard;
@@ -194,7 +194,7 @@ public:
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
       .WillOnce(Invoke([&mock_image_ctx, offset, length, update_object_map, r]
                        (io::ObjectDispatchSpec* spec) {
-                  auto discard = boost::apply_visitor(io::DiscardVisitor(), spec->request);
+                  auto discard = std::visit(io::DiscardVisitor(), spec->request);
                   ASSERT_TRUE(discard != nullptr);
                   ASSERT_EQ(offset, discard->object_off);
                   ASSERT_EQ(length, discard->object_len);

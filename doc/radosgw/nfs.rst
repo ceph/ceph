@@ -4,26 +4,25 @@ NFS
 
 .. versionadded:: Jewel
 
-.. note:: Only the NFSv4 protocol is supported when using a cephadm or rook based deployment.
+.. note:: Only the NFSv4 protocol is supported when using a cephadm or Rook based deployment.
 
-Ceph Object Gateway namespaces can be exported over the file-based
-NFSv4 protocols, alongside traditional HTTP access
-protocols (S3 and Swift).
+Ceph Object Gateway namespaces can be exported via NFSv4,
+alongside the traditional HTTP access protocols (S3 and Swift).
 
 In particular, the Ceph Object Gateway can now be configured to
 provide file-based access when embedded in the NFS-Ganesha NFS server.
 
-The simplest and preferred way of managing nfs-ganesha clusters and rgw exports
+The simplest and preferred way of managing NFS-Ganesha clusters and RGW exports
 is using ``ceph nfs ...`` commands. See :doc:`/mgr/nfs` for more details.
 
 librgw
 ======
 
-The librgw.so shared library (Unix) provides a loadable interface to
+The ``librgw`` library provides a loadable interface to
 Ceph Object Gateway services, and instantiates a full Ceph Object Gateway
 instance on initialization.
 
-In turn, librgw.so exports rgw_file, a stateful API for file-oriented
+In turn, ``librgw`` exports ``rgw_file``, a stateful API for file-oriented
 access to RGW buckets and objects.  The API is general, but its design
 is strongly influenced by the File System Abstraction Layer (FSAL) API
 of NFS-Ganesha, for which it has been primarily designed.
@@ -34,7 +33,7 @@ Namespace Conventions
 =====================
 
 The implementation conforms to Amazon Web Services (AWS) hierarchical
-namespace conventions which map UNIX-style path names onto S3 buckets
+namespace conventions which map Unix-style path names onto S3 buckets
 and objects.
 
 The top level of the attached namespace consists of S3 buckets,
@@ -103,7 +102,7 @@ following characteristics:
 
     * additional RGW authentication types such as Keystone are not currently supported
 
-Manually configuring an NFS-Ganesha Instance
+Manually Configuring an NFS-Ganesha Instance
 ============================================
 
 Each NFS RGW instance is an NFS-Ganesha server instance *embedding*
@@ -191,8 +190,8 @@ variables in the RGW config section::
 ``ceph_conf`` gives a path to a non-default ceph.conf file to use
 
 
-Other useful NFS-Ganesha configuration:
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Other Useful NFS-Ganesha Configuration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Any EXPORT block which should support NFSv3 should include version 3
 in the NFS_Protocols setting. Additionally, NFSv3 is the last major
@@ -239,45 +238,45 @@ Example::
   
   LOG {
 
-	Components {
-		MEMLEAKS = FATAL;
-		FSAL = FATAL;
-		NFSPROTO = FATAL;
-		NFS_V4 = FATAL;
-		EXPORT = FATAL;
-		FILEHANDLE = FATAL;
-		DISPATCH = FATAL;
-		CACHE_INODE = FATAL;
-		CACHE_INODE_LRU = FATAL;
-		HASHTABLE = FATAL;
-		HASHTABLE_CACHE = FATAL;
-		DUPREQ = FATAL;
-		INIT = DEBUG;
-		MAIN = DEBUG;
-		IDMAPPER = FATAL;
-		NFS_READDIR = FATAL;
-		NFS_V4_LOCK = FATAL;
-		CONFIG = FATAL;
-		CLIENTID = FATAL;
-		SESSIONS = FATAL;
-		PNFS = FATAL;
-		RW_LOCK = FATAL;
-		NLM = FATAL;
-		RPC = FATAL;
-		NFS_CB = FATAL;
-		THREAD = FATAL;
-		NFS_V4_ACL = FATAL;
-		STATE = FATAL;
-		FSAL_UP = FATAL;
-		DBUS = FATAL;
-	}
-	# optional: redirect log output
- #	Facility {
- #		name = FILE;
- #		destination = "/tmp/ganesha-rgw.log";
- #		enable = active;
-	}
- }
+    Components {
+        MEMLEAKS = FATAL;
+        FSAL = FATAL;
+        NFSPROTO = FATAL;
+        NFS_V4 = FATAL;
+        EXPORT = FATAL;
+        FILEHANDLE = FATAL;
+        DISPATCH = FATAL;
+        CACHE_INODE = FATAL;
+        CACHE_INODE_LRU = FATAL;
+        HASHTABLE = FATAL;
+        HASHTABLE_CACHE = FATAL;
+        DUPREQ = FATAL;
+        INIT = DEBUG;
+        MAIN = DEBUG;
+        IDMAPPER = FATAL;
+        NFS_READDIR = FATAL;
+        NFS_V4_LOCK = FATAL;
+        CONFIG = FATAL;
+        CLIENTID = FATAL;
+        SESSIONS = FATAL;
+        PNFS = FATAL;
+        RW_LOCK = FATAL;
+        NLM = FATAL;
+        RPC = FATAL;
+        NFS_CB = FATAL;
+        THREAD = FATAL;
+        NFS_V4_ACL = FATAL;
+        STATE = FATAL;
+        FSAL_UP = FATAL;
+        DBUS = FATAL;
+    }
+  # optional: redirect log output
+  # Facility {
+  #     name = FILE;
+  #     destination = "/tmp/ganesha-rgw.log";
+  #     enable = active;
+  # }
+  }
 
 Running Multiple NFS Gateways
 =============================
@@ -315,7 +314,7 @@ if a Swift container name contains underscores, it is not a valid S3
 bucket name and will be rejected unless ``rgw_relaxed_s3_bucket_names``
 is set to true.
 
-Configuring NFSv4 clients
+Configuring NFSv4 Clients
 =========================
 
 To access the namespace, mount the configured NFS-Ganesha export(s)

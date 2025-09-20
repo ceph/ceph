@@ -15,11 +15,22 @@
 #ifndef PURGE_QUEUE_H_
 #define PURGE_QUEUE_H_
 
-#include "include/compact_set.h"
 #include "common/Finisher.h"
-#include "mds/MDSMap.h"
+#include "common/snap_types.h" // for class SnapContext
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "osdc/Journaler.h"
+#include "include/frag.h"
 
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace ceph { class Formatter; }
+class MDSMap;
 
 /**
  * Descriptor of the work associated with purging a file.  We record
@@ -46,22 +57,8 @@ public:
     return PurgeItem::actions.at(std::string(str));
   }
 
-  void dump(Formatter *f) const
-  {
-    f->dump_int("action", action);
-    f->dump_int("ino", ino);
-    f->dump_int("size", size);
-    f->open_object_section("layout");
-    layout.dump(f);
-    f->close_section();
-    f->open_object_section("SnapContext");
-    snapc.dump(f);
-    f->close_section();
-    f->open_object_section("fragtree");
-    fragtree.dump(f);
-    f->close_section();
-  }
-  static void generate_test_instances(std::list<PurgeItem*>& ls);
+  void dump(Formatter *f) const;
+  static std::list<PurgeItem> generate_test_instances();
 
   std::string_view get_type_str() const;
 

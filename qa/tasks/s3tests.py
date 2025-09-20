@@ -57,6 +57,17 @@ def download(ctx, config):
                     'git', 'reset', '--hard', sha1,
                     ],
                 )
+        if client_config.get('boto3_extensions'):
+            ctx.cluster.only(client).run(
+                    args=['mkdir',
+                          '-p',
+                          '/home/ubuntu/.aws/models/s3/2006-03-01/']
+                    )
+            (remote,) = ctx.cluster.only(client).remotes.keys()
+            remote_file = '/home/ubuntu/.aws/models/s3/2006-03-01/service-2.sdk-extras.json'
+            local_file = '{qadir}/../examples/rgw/boto3/service-2.sdk-extras.json'.format(qadir=ctx.config.get('suite_path'))
+            remote.put_file(local_file, remote_file)
+
     try:
         yield
     finally:
@@ -70,6 +81,17 @@ def download(ctx, config):
                     '{tdir}/s3-tests-{client}'.format(tdir=testdir, client=client),
                     ],
                 )
+            if client_config.get('boto3_extensions'):
+                ctx.cluster.only(client).run(
+                        args=[
+                            'rm', '-rf', '/home/ubuntu/.aws/models/s3/2006-03-01/service-2.sdk-extras.json',
+                            ],
+                        )
+                ctx.cluster.only(client).run(
+                        args=[
+                            'cd', '/home/ubuntu/', run.Raw('&&'), 'rmdir', '-p', '.aws/models/s3/2006-03-01/',
+                            ],
+                        )
 
 
 def _config_user(s3tests_conf, section, user, email):
@@ -229,7 +251,7 @@ def create_users(ctx, config, s3tests_conf):
         for client in config.keys():
             for section, user in users.items():
                 # don't need to delete keystone users
-                if not user in keystone_users:
+                if section in keystone_users:
                     continue
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -259,6 +281,7 @@ def create_users(ctx, config, s3tests_conf):
                             '--cluster', cluster_name,
                             'account', 'rm',
                             '--account-id', account_id,
+                            '--purge-data',
                             ])
 
 
@@ -345,6 +368,10 @@ def configure(ctx, config):
         if lc_debug_interval:
             s3tests_conf['s3 main']['lc_debug_interval'] = lc_debug_interval
 
+        rgw_restore_debug_interval = properties.get('rgw_restore_debug_interval')
+        if rgw_restore_debug_interval:
+            s3tests_conf['s3 main']['rgw_restore_debug_interval'] = rgw_restore_debug_interval
+
         if ctx.rgw_cloudtier is not None:
             log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
             client_rgw_config = ctx.rgw_cloudtier.config.get(client)
@@ -366,6 +393,12 @@ def configure(ctx, config):
                     s3tests_conf['s3 cloud']['target_path'] = cloud_target_path
                 if (cloud_target_storage_class != None):
                     s3tests_conf['s3 cloud']['target_storage_class'] = cloud_target_storage_class
+                cloud_allow_read_through = client_rgw_config.get('cloud_allow_read_through')
+                if (cloud_allow_read_through != None):
+                    s3tests_conf['s3 cloud']['allow_read_through'] = cloud_allow_read_through
+                cloud_read_through_restore_days = client_rgw_config.get('cloud_read_through_restore_days')
+                if (cloud_read_through_restore_days != None):
+                    s3tests_conf['s3 cloud']['read_through_restore_days'] = cloud_read_through_restore_days
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         conf_fp = BytesIO()
@@ -444,8 +477,10 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
-       
+
         attrs += client_config.get('extra_attrs', [])
+        if 'bucket_logging' not in attrs:
+            attrs += ['not bucket_logging']
         if 'unit_test_scan' in client_config and client_config['unit_test_scan']:
             xmlfile_id = datetime.datetime.now().strftime("%Y-%m-%d-%H:%M:%S--") + str(uuid.uuid4())
             xmlpath= f'{testdir}/archive/s3test-{xmlfile_id}.xml'

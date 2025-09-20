@@ -11,14 +11,14 @@
  * foundation.  see file copying.
  */
 
+#include "JournalScanner.h"
 
+#include "common/debug.h"
 #include "include/rados/librados.hpp"
 #include "mds/JournalPointer.h"
 
 #include "mds/events/ESubtreeMap.h"
 #include "mds/PurgeQueue.h"
-
-#include "JournalScanner.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds

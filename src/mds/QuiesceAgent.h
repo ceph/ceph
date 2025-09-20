@@ -10,11 +10,14 @@
  *
  */
 #pragma once
+
 #include "mds/QuiesceDb.h"
-#include <functional>
-#include <optional>
-#include <map>
+#include "common/Thread.h"
+
+#include <algorithm> // for std::max()
+#include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <thread>
 
 class QuiesceAgent {
@@ -30,7 +33,7 @@ class QuiesceAgent {
         : quiesce_control(quiesce_control)
         , stop_agent_thread(false)
         , agent_thread(this) {
-      agent_thread.create("quiesce.agt");
+      agent_thread.create("mds-q-agt");
     };
 
     virtual ~QuiesceAgent() {

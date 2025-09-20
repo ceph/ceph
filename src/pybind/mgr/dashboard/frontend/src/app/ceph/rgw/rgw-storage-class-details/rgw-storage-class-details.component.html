@@ -1,0 +1,202 @@
+<ng-container *ngIf="!!selection">
+  <cds-tabs type="contained"
+            theme="light">
+    <cds-tab heading="Details">
+      <table
+        class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md"
+        data-testid="rgw-storage-details"
+      >
+        <tbody>
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Target Path
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ targetPathText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.target_path }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Access key
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ targetAccessKeyText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>
+              <div cdsCol
+                   [columnNumbers]="{ md: 4 }"
+                   class="d-flex">
+                <input
+                  cdsPassword
+                  type="password"
+                  readonly
+                  id="access_key"
+                  [value]="selection?.access_key"
+                />
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="access_key"></button>
+                <cd-copy-2-clipboard-button source="access_key"> </cd-copy-2-clipboard-button>
+              </div>
+            </td>
+          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Host Style
+              <cd-helper class="text-pre-wrap">
+                <span>{{ hostStyleText }}</span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.host_style }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Head Object (Stub File)
+              <cd-helper class="text-pre-wrap">
+                <span> {{ retainHeadObjectText }}</span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.retain_head_object ? 'Enabled' : 'Disabled' }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Allow Read Through
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ allowReadThroughText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.allow_read_through ? 'Enabled' : 'Disabled' }}</td>
+          </tr>
+          } @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) &&
+          (selection?.allow_read_through)) {
+          <tr>
+            <td class="bold"
+                i18n>
+              Read through Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ readthroughrestoreDaysText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>
+              {{ selection?.read_through_restore_days }}
+              {{ selection?.read_through_restore_days === 1 ? 'Day' : 'Days' }}
+            </td>
+          </tr>
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Glacier Restore Days
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ glacierRestoreDayText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>  {{ selection?.glacier_restore_days }}
+              {{ selection?.glacier_restore_days === 1 ? 'Day' : 'Days' }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Glacier Restore Tier Type
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ glacierRestoreTiertypeText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.glacier_restore_tier_type }}</td>
+          </tr>
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          <tr>
+            <td class="bold"
+                i18n>
+              Restore Storage Class
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ restoreStorageClassText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.restore_storage_class }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Multipart Minimum Part Size
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ multipartMinPartText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.multipart_min_part_size | dimlessBinary }}</td>
+          </tr>
+          <tr>
+            <td class="bold"
+                i18n>
+              Multipart Sync Threshold
+              <cd-helper class="text-pre-wrap">
+                <span>
+                  {{ multipartSyncThreholdText }}
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
+          </tr>
+          } @if(selection?.acl_mappings?.length > 0) {
+          <tr>
+            <td class="bold w-25"
+                i18n>ACLs</td>
+            <td>
+              <ng-container *ngFor="let type of groupedACLs | keyvalue">
+                <div class="mb-2">
+                  <div class="cds--label">{{ type.key }}:</div>
+                  <div *ngFor="let item of type.value"
+                       [cdsStack]="'horizontal'"
+                       class="mt-1">
+                    <cds-tag size="sm"
+                             class="tags-background-gray">
+                      {{ item.source_id }} : {{ item.dest_id }}
+                    </cds-tag>
+                  </div>
+                </div>
+              </ng-container>
+            </td>
+          </tr>
+         }
+          <tr>
+            <td class="bold">
+              Placement Target
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Placement Target defines the destination and rules for moving objects between
+                  storage tiers.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.placement_target }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </cds-tab>
+  </cds-tabs>
+</ng-container>

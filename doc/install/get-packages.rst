@@ -86,7 +86,7 @@ APT
 
 To install the ``release.asc`` key, execute the following::
 
-	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo tee /etc/apt/trusted.gpg.d/ceph.asc
 
 
 RPM
@@ -120,7 +120,7 @@ For RPMs::
 
   https://download.ceph.com/rpm-{version}
 
-The major releases of Ceph are summarized at: `Releases`_
+The major releases of Ceph are summarized at: :ref:`Releases <ceph-releases-index>`
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
@@ -387,7 +387,6 @@ line to get the short codename.
 
 
 
-.. _Releases: https://docs.ceph.com/en/latest/releases/
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
 .. _the shaman page: https://shaman.ceph.com
 .. _Ceph Mirrors: ../mirrors

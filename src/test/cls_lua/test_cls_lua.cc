@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <lua.hpp>
+#include "include/encoding.h"
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 #include "gtest/gtest.h"
@@ -1100,7 +1101,10 @@ TEST_F(ClsLua, Json) {
 
   inbl.append(json_test_script);
 
-  int ret = ioctx.exec(oid, "lua", "eval_json", inbl, outbl);
+  librados::ObjectWriteOperation wop;
+  int rval;
+  wop.exec("lua", "eval_json", inbl, &outbl, &rval);
+  int ret = ioctx.operate(oid, &wop);
   ASSERT_EQ(ret, 0);
 
   std::string out(outbl.c_str(), outbl.length());

@@ -98,7 +98,7 @@ int RGWSI_Cls::MFA::create_mfa(const DoutPrefixProvider *dpp, const rgw_user& us
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::create(&op, config);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
     return r;
@@ -122,7 +122,7 @@ int RGWSI_Cls::MFA::remove_mfa(const DoutPrefixProvider *dpp,
   librados::ObjectWriteOperation op;
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::remove(&op, id);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
     return r;
@@ -206,7 +206,7 @@ int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, co
   }
   prepare_mfa_write(&op, objv_tracker, mtime);
   rados::cls::otp::OTP::set(&op, entries);
-  r = obj.operate(dpp, &op, y);
+  r = obj.operate(dpp, std::move(op), y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
     return r;
@@ -244,13 +244,13 @@ int RGWSI_Cls::MFA::list_mfa(const DoutPrefixProvider *dpp, const string& oid, l
   return 0;
 }
 
-void RGWSI_Cls::TimeLog::prepare_entry(cls_log_entry& entry,
+void RGWSI_Cls::TimeLog::prepare_entry(cls::log::entry& entry,
                                        const real_time& ut,
                                        const string& section,
                                        const string& key,
                                        bufferlist& bl)
 {
-  cls_log_add_prepare_entry(entry, utime_t(ut), section, key, bl);
+  cls_log_add_prepare_entry(entry, ut, section, key, bl);
 }
 
 int RGWSI_Cls::TimeLog::init_obj(const DoutPrefixProvider *dpp, const string& oid, rgw_rados_ref& obj)
@@ -274,15 +274,14 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   }
 
   librados::ObjectWriteOperation op;
-  utime_t t(ut);
-  cls_log_add(op, t, section, key, bl);
+  cls_log_add(op, ut, section, key, bl);
 
-  return obj.operate(dpp, &op, y);
+  return obj.operate(dpp, std::move(op), y);
 }
 
-int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp, 
+int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
                             const string& oid,
-                            std::list<cls_log_entry>& entries,
+                            std::vector<cls::log::entry>& entries,
                             librados::AioCompletion *completion,
                             bool monotonic_inc,
                             optional_yield y)
@@ -298,7 +297,7 @@ int RGWSI_Cls::TimeLog::add(const DoutPrefixProvider *dpp,
   cls_log_add(op, entries, monotonic_inc);
 
   if (!completion) {
-    r = obj.operate(dpp, &op, y);
+    r = obj.operate(dpp, std::move(op), y);
   } else {
     r = obj.aio_operate(completion, &op);
   }
@@ -309,7 +308,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
                              const string& oid,
                              const real_time& start_time,
                              const real_time& end_time,
-                             int max_entries, std::list<cls_log_entry>& entries,
+                             int max_entries, std::vector<cls::log::entry>& entries,
                              const string& marker,
                              string *out_marker,
                              bool *truncated,
@@ -324,15 +323,12 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
 
   librados::ObjectReadOperation op;
 
-  utime_t st(start_time);
-  utime_t et(end_time);
-
-  cls_log_list(op, st, et, marker, max_entries, entries,
+  cls_log_list(op, start_time, end_time, marker, max_entries, entries,
 	       out_marker, truncated);
 
   bufferlist obl;
 
-  int ret = obj.operate(dpp, &op, &obl, y);
+  int ret = obj.operate(dpp, std::move(op), &obl, y);
   if (ret < 0)
     return ret;
 
@@ -341,7 +337,7 @@ int RGWSI_Cls::TimeLog::list(const DoutPrefixProvider *dpp,
 
 int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp, 
                              const string& oid,
-                             cls_log_header *header,
+                             cls::log::header *header,
                              optional_yield y)
 {
   rgw_rados_ref obj;
@@ -357,7 +353,7 @@ int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp,
 
   bufferlist obl;
 
-  int ret = obj.operate(dpp, &op, &obl, y);
+  int ret = obj.operate(dpp, std::move(op), &obl, y);
   if (ret < 0)
     return ret;
 
@@ -367,7 +363,7 @@ int RGWSI_Cls::TimeLog::info(const DoutPrefixProvider *dpp,
 int RGWSI_Cls::TimeLog::info_async(const DoutPrefixProvider *dpp,
                                    rgw_rados_ref& obj,
                                    const string& oid,
-                                   cls_log_header *header,
+                                   cls::log::header *header,
                                    librados::AioCompletion *completion)
 {
   int r = init_obj(dpp, oid, obj);
@@ -402,14 +398,11 @@ int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  utime_t st(start_time);
-  utime_t et(end_time);
-
   librados::ObjectWriteOperation op;
-  cls_log_trim(op, st, et, from_marker, to_marker);
+  cls_log_trim(op, start_time, end_time, from_marker, to_marker);
 
   if (!completion) {
-    r = obj.operate(dpp, &op, y);
+    r = obj.operate(dpp, std::move(op), y);
   } else {
     r = obj.aio_operate(completion, &op);
   }

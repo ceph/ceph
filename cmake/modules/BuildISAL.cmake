@@ -17,6 +17,10 @@ function(build_isal)
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
+  if(CMAKE_C_COMPILER_ID MATCHES "Clang" AND HAVE_ARMV8_SIMD)
+    list(APPEND configure_cmd CFLAGS=-no-integrated-as)
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(isal_ext
     SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/isa-l"

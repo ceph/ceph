@@ -29,6 +29,9 @@ namespace cls_lua_client {
     bufferlist inbl;
     encode(op, inbl);
 
-    return ioctx.exec(oid, "lua", "eval_bufferlist", inbl, output);
+    librados::ObjectWriteOperation wop;
+    int rval;
+    wop.exec("lua", "eval_bufferlist", inbl, &output, &rval);
+    return ioctx.operate(oid, &wop);
   }
 }

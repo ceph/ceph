@@ -17,10 +17,14 @@ struct seastar_test_suite_t : public ::testing::Test {
     seastar_env.run([func=std::forward<Func>(func), name]() mutable {
       crimson::get_logger(ceph_subsys_test).info(
         "{} started...", name);
+      auto start_time = seastar::lowres_clock::now();
       return std::invoke(std::move(func)
-      ).finally([name] {
+      ).finally([name, start_time] {
+        std::chrono::duration<double> duration_d =
+          seastar::lowres_clock::now() - start_time;
+        auto seconds = duration_d.count();
         crimson::get_logger(ceph_subsys_test).info(
-          "{} finished", name);
+          "{} finished, duration={:.2f}s", name, seconds);
       });
     });
   }

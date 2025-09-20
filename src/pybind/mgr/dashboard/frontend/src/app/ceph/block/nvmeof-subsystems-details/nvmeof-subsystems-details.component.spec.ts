@@ -3,7 +3,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-
+import { Permissions } from '~/app/shared/models/permissions';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details.component';
 
@@ -27,8 +27,11 @@ describe('NvmeofSubsystemsDetailsComponent', () => {
       subtype: 'NVMe',
       nqn: 'nqn.2001-07.com.ceph:1720603703820',
       namespace_count: 1,
-      max_namespaces: 256
+      max_namespaces: 4096
     };
+    component.permissions = new Permissions({
+      grafana: ['read']
+    });
     component.ngOnChanges();
     fixture.detectChanges();
   });

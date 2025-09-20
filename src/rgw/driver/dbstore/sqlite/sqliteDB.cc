@@ -1569,6 +1569,9 @@ int SQLUpdateBucket::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *para
   SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_name, sdb);
   SQL_BIND_TEXT(dpp, *stmt, index, params->op.bucket.info.bucket.name.c_str(), sdb);
 
+  SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_attrs, sdb);
+  SQL_ENCODE_BLOB_PARAM(dpp, *stmt, index, params->op.bucket.bucket_attrs, sdb);
+
   SQL_BIND_INDEX(dpp, *stmt, index, p_params.op.bucket.bucket_ver, sdb);
   SQL_BIND_INT(dpp, *stmt, index, params->op.bucket.bucket_version.ver, sdb);
 

@@ -23,6 +23,8 @@
 #include <errno.h>
 #include <sys/uio.h>
 
+#include <iostream> // for std::cout
+
 #include "include/buffer.h"
 #include "include/buffer_raw.h"
 #include "include/compat.h"
@@ -479,15 +481,44 @@ TEST(BufferPtr, cmp) {
   EXPECT_LE(1, af.cmp(acc));
 }
 
+TEST(BufferPtr, is_zero_fast) {
+  // there is no easy way to create `raw_zeros` instances outside
+  // of bufferlist, thus use list::append_zero() to instantiate
+  buffer::list zeroed_bl;
+  zeroed_bl.append_zero2(42);
+  {
+    const auto& zeroed_bptr = zeroed_bl.front();
+    EXPECT_TRUE(zeroed_bptr.is_zero());
+    EXPECT_TRUE(zeroed_bptr.is_zero_fast());
+  }
+  {
+    buffer::ptr sub_zeroed_bptr(zeroed_bl.front(), 0, 42/2);
+    EXPECT_TRUE(sub_zeroed_bptr.is_zero());
+    EXPECT_TRUE(sub_zeroed_bptr.is_zero_fast());
+  }
+  {
+    buffer::ptr zeroed_empty_bptr(zeroed_bl.front(), 0, 0);
+    EXPECT_TRUE(zeroed_empty_bptr.is_zero());
+    EXPECT_TRUE(zeroed_empty_bptr.is_zero_fast());
+  }
+}
+
 TEST(BufferPtr, is_zero) {
   char str[2] = { '\0', 'X' };
   {
     const bufferptr ptr(buffer::create_static(2, str));
     EXPECT_FALSE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
   }
   {
     const bufferptr ptr(buffer::create_static(1, str));
     EXPECT_TRUE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
+  }
+  {
+    const bufferptr ptr(buffer::create_static(0, str));
+    EXPECT_TRUE(ptr.is_zero());
+    EXPECT_FALSE(ptr.is_zero_fast());
   }
 }
 
@@ -1620,7 +1651,7 @@ TEST(BufferList, contents_equal) {
 }
 
 TEST(BufferList, is_aligned) {
-  const int SIMD_ALIGN = 32;
+  const int SIMD_ALIGN = 64;
   {
     bufferlist bl;
     EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
@@ -1648,7 +1679,7 @@ TEST(BufferList, is_aligned) {
 }
 
 TEST(BufferList, is_n_align_sized) {
-  const int SIMD_ALIGN = 32;
+  const int SIMD_ALIGN = 64;
   {
     bufferlist bl;
     EXPECT_TRUE(bl.is_n_align_sized(SIMD_ALIGN));
@@ -1792,7 +1823,7 @@ TEST(BufferList, page_aligned_appender) {
 }
 
 TEST(BufferList, rebuild_aligned_size_and_memory) {
-  const unsigned SIMD_ALIGN = 32;
+  const unsigned SIMD_ALIGN = 64;
   const unsigned BUFFER_SIZE = 67;
 
   bufferlist bl;
@@ -3018,7 +3049,7 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_FALSE(bl.is_provided_buffer(buff));
 }
 
-TEST(BufferList, DISABLED_DanglingLastP) {
+TEST(BufferList, DanglingLastP) {
   bufferlist bl;
   {
     // previously we're using the unsharable buffer type to distinguish

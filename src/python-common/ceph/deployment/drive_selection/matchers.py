@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 
-from typing import Tuple, Optional, Any, Union, Iterator
+# TODO: remove noqa and update to python3/mypy style type annotations
+from typing import Tuple, Optional, Any, Union, Iterator  # noqa: F401
 
-from ceph.deployment.inventory import Device
+from ceph.deployment.inventory import Device  # noqa: F401
 
 import re
 import logging

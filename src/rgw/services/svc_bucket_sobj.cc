@@ -526,8 +526,7 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(const string& key,
      */
   }
 
-  return svc.mdlog->complete_entry(dpp, y, "bucket.instance",
-                                   key, objv_tracker);
+  return 0;
 }
 
 int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,
@@ -556,7 +555,7 @@ int RGWSI_Bucket_SObj::read_bucket_stats(const rgw_bucket& bucket,
                                          const DoutPrefixProvider *dpp)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_info(bucket, &bucket_info, nullptr, nullptr, boost::none, y, dpp);
+  int ret = read_bucket_info(bucket, &bucket_info, &ent->modification_time, nullptr, boost::none, y, dpp);
   if (ret < 0) {
     return ret;
   }

@@ -18,7 +18,7 @@ RecordScanner::scan_valid_records(
 {
   LOG_PREFIX(RecordScanner::scan_valid_records);
   initialize_cursor(cursor);
-  DEBUG("starting at {}, budget={}", cursor, budget);
+  DEBUG("starting at {}, budget=0x{:x}", cursor, budget);
   auto retref = std::make_unique<size_t>(0);
   auto &budget_used = *retref;
   return crimson::repeat(
@@ -91,7 +91,7 @@ RecordScanner::scan_valid_records(
 	}
       }().safe_then([=, &budget_used, &cursor] {
 	if (cursor.is_complete() || budget_used >= budget) {
-	  DEBUG("finish at {}, budget_used={}, budget={}",
+	  DEBUG("finish at {}, budget_used=0x{:x}, budget=0x{:x}",
                 cursor, budget_used, budget);
 	  return seastar::stop_iteration::yes;
 	} else {
@@ -112,13 +112,13 @@ RecordScanner::read_validate_record_metadata(
   paddr_t start = cursor.seq.offset;
   auto block_size = cursor.get_block_size();
   if (get_segment_off(cursor.seq.offset) + block_size > get_segment_end_offset(cursor.seq.offset)) {
-    DEBUG("failed -- record group header block {}~4096 > segment_size {}",
-      start, get_segment_end_offset(cursor.seq.offset));
+    DEBUG("failed -- record group header block {}~0x{:x} > segment_size 0x{:x}",
+      start, block_size, get_segment_end_offset(cursor.seq.offset));
     return read_validate_record_metadata_ret(
       read_validate_record_metadata_ertr::ready_future_marker{},
       std::nullopt);
   }
-  TRACE("reading record group header block {}~4096", start);
+  TRACE("reading record group header block {}~0x{:x}", start, block_size);
   return read(start, block_size
   ).safe_then([this, FNAME, nonce, block_size, &cursor](bufferptr bptr)
               -> read_validate_record_metadata_ret {
@@ -159,7 +159,7 @@ RecordScanner::read_validate_record_metadata(
 
     paddr_t rest_start = cursor.seq.offset.add_offset(block_size);
     auto rest_len = header.mdlength - block_size;
-    TRACE("reading record group header rest {}~{}", rest_start, rest_len);
+    TRACE("reading record group header rest {}~0x{:x}", rest_start, rest_len);
     return read(rest_start, rest_len
     ).safe_then([header=std::move(header), bl=std::move(bl)
                 ](auto&& bptail) mutable {
@@ -189,7 +189,7 @@ RecordScanner::read_validate_data_ret RecordScanner::read_validate_data(
 {
   LOG_PREFIX(RecordScanner::read_validate_data);
   auto data_addr = record_base.add_offset(header.mdlength);
-  TRACE("reading record group data blocks {}~{}", data_addr, header.dlength);
+  TRACE("reading record group data blocks {}~0x{:x}", data_addr, header.dlength);
   return read(
     data_addr,
     header.dlength
@@ -220,7 +220,7 @@ RecordScanner::consume_next_records(
       total_length
     }
   };
-  DEBUG("processing {} at {}, budget_used={}",
+  DEBUG("processing {} at {}, budget_used=0x{:x}",
         next.header, locator, budget_used);
   return handler(
     locator,

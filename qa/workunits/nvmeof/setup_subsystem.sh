@@ -26,13 +26,20 @@ list_subsystems () {
     done
 }
 
+list_namespaces () { 
+    for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
+        subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
+        sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --server-port $NVMEOF_SRPORT --format plain namespace list --subsystem $subsystem_nqn        
+    done
+}
+
+echo "[nvmeof] Starting subsystem setup..."
+
 # add all subsystems
 for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
     sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --server-port $NVMEOF_SRPORT subsystem add --subsystem $subsystem_nqn --no-group-append
 done
-
-list_subsystems
 
 # add all gateway listeners 
 for i in "${!gateway_ips[@]}"
@@ -64,12 +71,6 @@ for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
 done
 
 list_subsystems
-
-# list namespaces
-for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
-    subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
-    sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --server-port $NVMEOF_SRPORT --format plain namespace list --subsystem $subsystem_nqn        
-done
 
 
 echo "[nvmeof] Subsystem setup done"

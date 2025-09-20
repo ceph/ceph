@@ -90,9 +90,8 @@ class ReplicaReservations {
    */
   reservation_nonce_t& m_last_request_sent_nonce;
 
-  /// access to the performance counters container relevant to this scrub
-  /// parameters
-  PerfCounters& m_perf_set;
+  /// the performance counters relevant to this scrub
+  const ScrubCounterSet& m_perf_indices;
 
   /// used only for the 'duration of the reservation process' perf counter.
   /// discarded once the success or failure are recorded
@@ -102,7 +101,7 @@ class ReplicaReservations {
   ReplicaReservations(
       ScrubMachineListener& scrubber,
       reservation_nonce_t& nonce,
-      PerfCounters& pc);
+      const ScrubCounterSet& pc);
 
   ~ReplicaReservations();
 
@@ -157,12 +156,12 @@ class ReplicaReservations {
   // note: 'public', as accessed via the 'standard' dout_prefix() macro
   std::ostream& gen_prefix(std::ostream& out, std::string fn) const;
 
+  /// The number of requests that have been sent (and not rejected) so far.
+  size_t active_requests_cnt() const;
+
  private:
   /// send 'release' messages to all replicas we have managed to reserve
   void release_all();
-
-  /// The number of requests that have been sent (and not rejected) so far.
-  size_t active_requests_cnt() const;
 
   /**
    * Send a reservation request to the next replica.

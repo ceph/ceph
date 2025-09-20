@@ -15,7 +15,10 @@
 #ifndef CEPH_MMDSBEACON_H
 #define CEPH_MMDSBEACON_H
 
+#include <map>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "msg/Message.h"
 #include "messages/PaxosServiceMessage.h"
@@ -48,6 +51,7 @@ enum mds_metric_t {
   MDS_HEALTH_CLIENTS_LAGGY,
   MDS_HEALTH_CLIENTS_LAGGY_MANY,
   MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH,
+  MDS_HEALTH_ESTIMATED_REPLAY_TIME,
   MDS_HEALTH_DUMMY, // not a real health warning, for testing
 };
 
@@ -69,6 +73,7 @@ inline const char *mds_metric_name(mds_metric_t m)
   case MDS_HEALTH_CLIENTS_LAGGY: return "MDS_CLIENTS_LAGGY";
   case MDS_HEALTH_CLIENTS_LAGGY_MANY: return "MDS_CLIENTS_LAGGY_MANY";
   case MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH: return "MDS_CLIENTS_BROKEN_ROOTSQUASH";
+  case MDS_HEALTH_ESTIMATED_REPLAY_TIME: return "MDS_ESTIMATED_REPLAY_TIME";
   case MDS_HEALTH_DUMMY: return "MDS_DUMMY";
   default:
     return "???";
@@ -107,6 +112,8 @@ inline const char *mds_metric_summary(mds_metric_t m)
     return "%num% client(s) laggy due to laggy OSDs";  
   case MDS_HEALTH_CLIENTS_BROKEN_ROOTSQUASH:
     return "%num% MDS report clients with broken root_squash implementation";
+  case MDS_HEALTH_ESTIMATED_REPLAY_TIME:
+    return "%num% estimated journal replay time";
   default:
     return "???";
   }
@@ -166,12 +173,14 @@ struct MDSHealthMetric
     f->close_section();
   }
 
-  static void generate_test_instances(std::list<MDSHealthMetric*>& ls) {
-    ls.push_back(new MDSHealthMetric());
-    ls.back()->type = MDS_HEALTH_CACHE_OVERSIZED;
-    ls.push_back(new MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN, "MDS is behind on trimming"));
-    ls.back()->metadata["mds"] = "a";
-    ls.back()->metadata["num"] = "1";
+  static std::list<MDSHealthMetric> generate_test_instances() {
+    std::list<MDSHealthMetric> ls;
+    ls.push_back(MDSHealthMetric());
+    ls.back().type = MDS_HEALTH_CACHE_OVERSIZED;
+    ls.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN, "MDS is behind on trimming"));
+    ls.back().metadata["mds"] = "a";
+    ls.back().metadata["num"] = "1";
+    return ls;
   }
 
   bool operator==(MDSHealthMetric const &other) const
@@ -216,11 +225,13 @@ struct MDSHealth
     f->close_section();
   }
 
-  static void generate_test_instances(std::list<MDSHealth*>& ls) {
-    ls.push_back(new MDSHealth);
-    ls.push_back(new MDSHealth);
-    ls.back()->metrics.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN,
+  static std::list<MDSHealth> generate_test_instances() {
+    std::list<MDSHealth> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().metrics.push_back(MDSHealthMetric(MDS_HEALTH_TRIM, HEALTH_WARN,
              "MDS is behind on trimming"));
+    return ls;
   }
 
   bool operator==(MDSHealth const &other) const

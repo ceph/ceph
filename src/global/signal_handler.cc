@@ -12,20 +12,24 @@
  *
  */
 
+#include "signal_handler.h"
+
 #include <sys/utsname.h>
 
 #include "include/compat.h"
 #include "pthread.h"
 
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/BackTrace.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "common/safe_io.h"
 #include "common/version.h"
 
 #include "include/uuid.h"
 #include "global/pidfile.h"
-#include "global/signal_handler.h"
+#include "log/Log.h"
 
 #include <poll.h>
 #include <signal.h>
@@ -307,7 +311,7 @@ static void handle_oneshot_fatal_signal(int signum)
 
   char buf[1024];
   char pthread_name[16] = {0}; //limited by 16B include terminating null byte.
-  int r = ceph_pthread_getname(pthread_self(), pthread_name, sizeof(pthread_name));
+  int r = ceph_pthread_getname(pthread_name, sizeof(pthread_name));
   (void)r;
 #if defined(__sun)
   char message[SIG2STR_MAX];

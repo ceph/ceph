@@ -12,8 +12,19 @@
  *
  */
 
+#include "include/ceph_assert.h"
+
+#include <sstream>
+
 #include "include/compat.h"
+#include "include/str_list.h"
+#include "include/types.h" // for operator<<(std::list)
+#include "common/BackTrace.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
+#include "log/Log.h"
+
+#include <stdarg.h>
 
 using std::ostringstream;
 
@@ -33,6 +44,12 @@ namespace ceph {
   {
     ceph_assert(!g_assert_context);
     g_assert_context = cct;
+    const auto supressions = get_str_list(
+      g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+    if (!supressions.empty()) {
+      lderr(g_assert_context) << "WARNING: supressions for ceph_assert present: "
+			      << supressions << dendl;
+    }
   }
 
   [[gnu::cold]] void __ceph_assert_fail(const char *assertion,
@@ -44,8 +61,7 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     ostringstream tss;
     tss << ceph_clock_now();
@@ -62,6 +78,7 @@ namespace ceph {
     oss << ClibBackTrace(1);
     dout_emergency(oss.str());
 
+    bool should_abort = true;
     if (g_assert_context) {
       lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
@@ -70,9 +87,22 @@ namespace ceph {
       if (!g_assert_context->_conf->fatal_signal_handlers) {
 	g_assert_context->_log->dump_recent();
       }
-    }
 
-    abort();
+      // bypass the abort?
+      const auto supressions = get_str_list(
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+      should_abort = std::none_of(
+	std::begin(supressions), std::end(supressions),
+	[file, line](const auto& supression) {
+	  return supression == fmt::format("{}:{}", file, line);
+        });
+    }
+    if (should_abort) {
+      abort();
+    } else {
+      dout_emergency("WARNING: ceph_assert() does NOT abort() due "
+		     "to ceph_assert_supresssions");
+    }
   }
 
   [[gnu::cold]] void __ceph_assert_fail(const assert_data &ctx)
@@ -122,11 +152,10 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: FAILED ceph_assert(%s)\n",
 	     file, func, (unsigned long long)pthread_self(), tss.str().c_str(),
@@ -144,6 +173,7 @@ namespace ceph {
     oss << *bt;
     dout_emergency(oss.str());
 
+    bool should_abort = true;
     if (g_assert_context) {
       lderr(g_assert_context) << g_assert_msg << std::endl;
       *_dout << oss.str() << dendl;
@@ -152,9 +182,22 @@ namespace ceph {
       if (!g_assert_context->_conf->fatal_signal_handlers) {
 	g_assert_context->_log->dump_recent();
       }
-    }
 
-    abort();
+      // bypass the abort?
+      const auto supressions = get_str_list(
+	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
+      should_abort = std::none_of(
+	std::begin(supressions), std::end(supressions),
+	[file, line](const auto& supression) {
+	  return supression == fmt::format("{}:{}", file, line);
+        });
+    }
+    if (should_abort) {
+      abort();
+    } else {
+      dout_emergency("WARNING: ceph_assertf() does NOT abort() due to"
+		     "to ceph_assert_supresssions");
+    }
   }
 
   [[gnu::cold]] void __ceph_abort(const char *file, int line,
@@ -168,10 +211,9 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     snprintf(g_assert_msg, sizeof(g_assert_msg),
              "%s: In function '%s' thread %llx time %s\n"
 	     "%s: %d: ceph_abort_msg(\"%s\")\n", file, func,
@@ -210,11 +252,10 @@ namespace ceph {
     g_assert_line = line;
     g_assert_func = func;
     g_assert_thread = (unsigned long long)pthread_self();
-    ceph_pthread_getname(pthread_self(), g_assert_thread_name,
-		       sizeof(g_assert_thread_name));
+    ceph_pthread_getname(g_assert_thread_name, sizeof(g_assert_thread_name));
 
     BufAppender ba(g_assert_msg, sizeof(g_assert_msg));
-    BackTrace *bt = new ClibBackTrace(1);
+    auto bt = std::make_unique<ClibBackTrace>(1);
     ba.printf("%s: In function '%s' thread %llx time %s\n"
 	      "%s: %d: abort()\n",
 	      file, func, (unsigned long long)pthread_self(), tss.str().c_str(),

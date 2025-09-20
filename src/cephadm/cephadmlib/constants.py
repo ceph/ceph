@@ -3,11 +3,11 @@
 # Default container images -----------------------------------------------------
 DEFAULT_IMAGE = 'quay.ceph.io/ceph-ci/ceph:main'
 DEFAULT_IMAGE_IS_MAIN = True
-DEFAULT_IMAGE_RELEASE = 'squid'
+DEFAULT_IMAGE_RELEASE = 'tentacle'
 DEFAULT_REGISTRY = 'quay.io'  # normalize unqualified digests to this
 # ------------------------------------------------------------------------------
 
-LATEST_STABLE_RELEASE = 'squid'
+LATEST_STABLE_RELEASE = 'tentacle'
 DATA_DIR = '/var/lib/ceph'
 LOG_DIR = '/var/log/ceph'
 LOCK_DIR = '/run/cephadm'
@@ -36,3 +36,4 @@ QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
 NO_DEPRECATED = False
 UID_NOBODY = 65534
 GID_NOGROUP = 65534
+DAEMON_FAILED_ERROR = 17

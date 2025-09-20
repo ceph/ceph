@@ -12,8 +12,9 @@
  */
 
 #include "DaemonServer.h"
-#include <boost/algorithm/string.hpp>
-#include "mgr/Mgr.h"
+#include "DaemonState.h"
+#include "Mgr.h"
+#include "MgrSession.h"
 
 #include "include/stringify.h"
 #include "include/str_list.h"
@@ -25,7 +26,9 @@
 #include "mgr/OSDPerfMetricCollector.h"
 #include "mgr/MDSPerfMetricCollector.h"
 #include "mgr/MgrOpRequest.h"
+#include "mon/MonClient.h"
 #include "mon/MonCommand.h"
+#include "msg/Messenger.h"
 
 #include "messages/MMgrOpen.h"
 #include "messages/MMgrUpdate.h"
@@ -36,11 +39,23 @@
 #include "messages/MCommandReply.h"
 #include "messages/MMgrCommand.h"
 #include "messages/MMgrCommandReply.h"
+#include "messages/MMgrReport.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
 #include "common/pick_address.h"
+#include "common/TextTable.h"
+#include "crush/CrushWrapper.h"
+
+#include <boost/algorithm/string.hpp>
+
+#include <iomanip>
+
+#include <list>
+#include <map>
+#include <string>
+#include <vector>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -48,6 +63,7 @@
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
 using namespace TOPNSPC::common;
+using namespace std::literals;
 
 using std::list;
 using std::ostream;
@@ -80,7 +96,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
 					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
-      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
+      osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messages",
 				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
 				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
@@ -334,7 +350,7 @@ bool DaemonServer::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
+Dispatcher::dispatch_result_t DaemonServer::ms_dispatch2(const ref_t<Message>& m)
 {
   // Note that we do *not* take ::lock here, in order to avoid
   // serializing all message handling.  It's up to each handler
@@ -797,7 +813,7 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
   if (m->metric_report_message) {
     const MetricReportMessage &message = *m->metric_report_message;
-    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+    std::visit(HandlePayloadVisitor(this), message.payload);
   }
 
   return true;
@@ -806,14 +822,14 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 
 void DaemonServer::_generate_command_map(
   cmdmap_t& cmdmap,
-  map<string,string> &param_str_map)
+  std::map<string,string> &param_str_map)
 {
   for (auto p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
     if (p->first == "prefix")
       continue;
     if (p->first == "caps") {
-      vector<string> cv;
+      std::vector<string> cv;
       if (cmd_getval(cmdmap, "caps", cv) &&
 	  cv.size() % 2 == 0) {
 	for (unsigned i = 0; i < cv.size(); i += 2) {
@@ -847,7 +863,7 @@ bool DaemonServer::_allowed_command(
   const string &module,
   const string &prefix,
   const cmdmap_t& cmdmap,
-  const map<string,string>& param_str_map,
+  const std::map<string,string>& param_str_map,
   const MonCommand *this_cmd) {
 
   if (s->entity_name.is_mon()) {
@@ -994,7 +1010,7 @@ void DaemonServer::log_access_denied(
 }
 
 void DaemonServer::_check_offlines_pgs(
-  const set<int>& osds,
+  const std::set<int>& osds,
   const OSDMap& osdmap,
   const PGMap& pgmap,
   offline_pg_report *report)
@@ -1004,7 +1020,7 @@ void DaemonServer::_check_offlines_pgs(
   report->osds = osds;
 
   for (const auto& q : pgmap.pg_stat) {
-    set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+    std::set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
     bool found = false;
     if (q.second.state == 0) {
       report->unknown.insert(q.first);
@@ -1066,7 +1082,7 @@ void DaemonServer::_check_offlines_pgs(
 }
 
 void DaemonServer::_maximize_ok_to_stop_set(
-  const set<int>& orig_osds,
+  const std::set<int>& orig_osds,
   unsigned max,
   const OSDMap& osdmap,
   const PGMap& pgmap,
@@ -1084,9 +1100,9 @@ void DaemonServer::_maximize_ok_to_stop_set(
 
   // semi-arbitrarily start with the first osd in the set
   offline_pg_report report;
-  set<int> osds = orig_osds;
+  std::set<int> osds = orig_osds;
   int parent = *osds.begin();
-  set<int> children;
+  std::set<int> children;
 
   while (true) {
     // identify the next parent
@@ -1152,7 +1168,7 @@ bool DaemonServer::_handle_command(
     session->inst.name = m->get_source();
   }
 
-  map<string,string> param_str_map;
+  std::map<string,string> param_str_map;
   std::stringstream ss;
   int r = 0;
 
@@ -1367,7 +1383,7 @@ bool DaemonServer::_handle_command(
     }
     for (auto& con : p->second) {
       assert(HAVE_FEATURE(con->get_features(), SERVER_OCTOPUS));
-      vector<spg_t> pgs = { spgid };
+      std::vector<spg_t> pgs = { spgid };
       con->send_message(new MOSDScrub2(monc->get_fsid(),
 				       epoch,
 				       pgs,
@@ -1383,10 +1399,10 @@ bool DaemonServer::_handle_command(
 	      prefix == "osd repair") {
     string whostr;
     cmd_getval(cmdctx->cmdmap, "who", whostr);
-    vector<string> pvec;
+    std::vector<string> pvec;
     get_str_vec(prefix, pvec);
 
-    set<int> osds;
+    std::set<int> osds;
     if (whostr == "*" || whostr == "all" || whostr == "any") {
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	  for (int i = 0; i < osdmap.get_max_osd(); i++)
@@ -1412,9 +1428,9 @@ bool DaemonServer::_handle_command(
 	return true;
       }
     }
-    set<int> sent_osds, failed_osds;
+    std::set<int> sent_osds, failed_osds;
     for (auto osd : osds) {
-      vector<spg_t> spgs;
+      std::vector<spg_t> spgs;
       epoch_t epoch;
       cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
 	  epoch = osdmap.get_epoch();
@@ -1460,7 +1476,7 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "osd pool scrub" ||
              prefix == "osd pool deep-scrub" ||
              prefix == "osd pool repair") {
-    vector<string> pool_names;
+    std::vector<string> pool_names;
     cmd_getval(cmdctx->cmdmap, "who", pool_names);
     if (pool_names.empty()) {
       ss << "must specify one or more pool names";
@@ -1468,8 +1484,8 @@ bool DaemonServer::_handle_command(
       return true;
     }
     epoch_t epoch;
-    map<int32_t, vector<pg_t>> pgs_by_primary; // legacy
-    map<int32_t, vector<spg_t>> spgs_by_primary;
+    std::map<int32_t, std::vector<pg_t>> pgs_by_primary; // legacy
+    std::map<int32_t, std::vector<spg_t>> spgs_by_primary;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
       epoch = osdmap.get_epoch();
       for (auto& pool_name : pool_names) {
@@ -1524,8 +1540,8 @@ bool DaemonServer::_handle_command(
       prefix == "osd test-reweight-by-pg" ||
       prefix == "osd test-reweight-by-utilization";
     int64_t oload = cmd_getval_or<int64_t>(cmdctx->cmdmap, "oload", 120);
-    set<int64_t> pools;
-    vector<string> poolnames;
+    std::set<int64_t> pools;
+    std::vector<string> poolnames;
     cmd_getval(cmdctx->cmdmap, "pools", poolnames);
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	for (const auto& poolname : poolnames) {
@@ -1677,10 +1693,10 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "osd safe-to-destroy" ||
 	     prefix == "osd destroy" ||
 	     prefix == "osd purge") {
-    set<int> osds;
+    std::set<int> osds;
     int r = 0;
     if (prefix == "osd safe-to-destroy") {
-      vector<string> ids;
+      std::vector<string> ids;
       cmd_getval(cmdctx->cmdmap, "ids", ids);
       cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 				  r = osdmap.parse_osd_id_list(ids, &osds, &ss);
@@ -1702,7 +1718,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(r, ss);
       return true;
     }
-    set<int> active_osds, missing_stats, stored_pgs, safe_to_destroy;
+    std::set<int> active_osds, missing_stats, stored_pgs, safe_to_destroy;
     int affected_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
 	if (pg_map.num_pg_unknown > 0) {
@@ -1837,9 +1853,9 @@ bool DaemonServer::_handle_command(
     monc->start_mon_command({cmd}, {}, nullptr, &on_finish->outs, on_finish);
     return true;
   } else if (prefix == "osd ok-to-stop") {
-    vector<string> ids;
+    std::vector<string> ids;
     cmd_getval(cmdctx->cmdmap, "ids", ids);
-    set<int> osds;
+    std::set<int> osds;
     int64_t max = 1;
     cmd_getval(cmdctx->cmdmap, "max", max);
     int r;
@@ -1889,11 +1905,11 @@ bool DaemonServer::_handle_command(
              prefix == "osd pool force-backfill" ||
              prefix == "osd pool cancel-force-recovery" ||
              prefix == "osd pool cancel-force-backfill") {
-    vector<string> vs;
+    std::vector<string> vs;
     get_str_vec(prefix, vs);
     auto& granularity = vs.front();
     auto& forceop = vs.back();
-    vector<pg_t> pgs;
+    std::vector<pg_t> pgs;
 
     // figure out actual op just once
     int actual_op = 0;
@@ -1907,10 +1923,10 @@ bool DaemonServer::_handle_command(
       actual_op = OFR_RECOVERY | OFR_CANCEL;
     }
 
-    set<pg_t> candidates; // deduped
+    std::set<pg_t> candidates; // deduped
     if (granularity == "pg") {
       // covnert pg names to pgs, discard any invalid ones while at it
-      vector<string> pgids;
+      std::vector<string> pgids;
       cmd_getval(cmdctx->cmdmap, "pgid", pgids);
       for (auto& i : pgids) {
         pg_t pgid;
@@ -1923,7 +1939,7 @@ bool DaemonServer::_handle_command(
       }
     } else {
       // per pool
-      vector<string> pool_names;
+      std::vector<string> pool_names;
       cmd_getval(cmdctx->cmdmap, "who", pool_names);
       if (pool_names.empty()) {
         ss << "must specify one or more pool names";
@@ -2018,7 +2034,7 @@ bool DaemonServer::_handle_command(
     // message per distinct OSD
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	// group pgs to process by osd
-	map<int, vector<spg_t>> osdpgs;
+	std::map<int, std::vector<spg_t>> osdpgs;
 	for (auto& pgid : pgs) {
 	  int primary;
 	  spg_t spg;
@@ -2264,7 +2280,7 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(r, ss);
     return true;
   } else if (prefix == "device ls") {
-    set<string> devids;
+    std::set<string> devids;
     TextTable tbl;
     if (f) {
       f->open_array_section("devices");
@@ -2363,7 +2379,7 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "device ls-by-host") {
     string host;
     cmd_getval(cmdctx->cmdmap, "host", host);
-    set<string> devids;
+    std::set<string> devids;
     daemon_state.list_devids_by_server(host, &devids);
     if (f) {
       f->open_array_section("devices");
@@ -2452,7 +2468,7 @@ bool DaemonServer::_handle_command(
       r = -EINVAL;
       cmdctx->reply(r, ss);
     } else {
-      map<string,string> meta;
+      std::map<string,string> meta;
       daemon_state.with_device_create(
 	devid,
 	[from, to, &meta] (DeviceState& dev) {
@@ -2478,7 +2494,7 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "device rm-life-expectancy") {
     string devid;
     cmd_getval(cmdctx->cmdmap, "devid", devid);
-    map<string,string> meta;
+    std::map<string,string> meta;
     if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
 	  dev.rm_life_expectancy();
 	  meta = dev.metadata;
@@ -2733,7 +2749,7 @@ void DaemonServer::send_report()
 	});
     });
 
-  map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
+  std::map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
   for (auto service : {"osd", "mon"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
@@ -2774,9 +2790,9 @@ void DaemonServer::adjust_pgs()
   double max_misplaced = g_conf().get_val<double>("target_max_misplaced_ratio");
   bool aggro = g_conf().get_val<bool>("mgr_debug_aggressive_pg_num_changes");
 
-  map<string,unsigned> pg_num_to_set;
-  map<string,unsigned> pgp_num_to_set;
-  set<pg_t> upmaps_to_clear;
+  std::map<string,unsigned> pg_num_to_set;
+  std::map<string,unsigned> pgp_num_to_set;
+  std::set<pg_t> upmaps_to_clear;
   cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
       unsigned creating_or_unknown = 0;
       for (auto& i : pg_map.num_pg_by_state) {
@@ -2846,7 +2862,7 @@ void DaemonServer::adjust_pgs()
 		       << dendl;
 	      ok = false;
 	    }
-	    vector<int32_t> source_acting;
+	    std::vector<int32_t> source_acting;
             for (auto &merge_participant : {merge_source, merge_target}) {
               bool is_merge_source = merge_participant == merge_source;
               if (osdmap.have_pg_upmaps(merge_participant)) {
@@ -3138,7 +3154,7 @@ void DaemonServer::got_service_map()
 void DaemonServer::got_mgr_map()
 {
   std::lock_guard l(lock);
-  set<std::string> have;
+  std::set<std::string> have;
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
@@ -3168,15 +3184,12 @@ void DaemonServer::got_mgr_map()
   daemon_state.cull("mgr", have);
 }
 
-const char** DaemonServer::get_tracked_conf_keys() const
+std::vector<std::string> DaemonServer::get_tracked_keys() const noexcept
 {
-  static const char *KEYS[] = {
-    "mgr_stats_threshold",
-    "mgr_stats_period",
-    nullptr
+  return {
+    "mgr_stats_threshold"s,
+    "mgr_stats_period"s
   };
-
-  return KEYS;
 }
 
 void DaemonServer::handle_conf_change(const ConfigProxy& conf,
@@ -3274,8 +3287,8 @@ bool DaemonServer::asok_command(
 even those get stuck. Please enable \"mgr_enable_op_tracker\", and the tracker \
 will start to track new ops received afterwards.";
 
-    set<string> filters;
-    vector<string> filter_str;
+    std::set<string> filters;
+    std::vector<string> filter_str;
     if (cmd_getval(cmdmap, "filterstr", filter_str)) {
         copy(filter_str.begin(), filter_str.end(),
            inserter(filters, filters.end()));

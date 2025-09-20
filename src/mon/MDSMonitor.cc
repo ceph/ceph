@@ -12,6 +12,8 @@
  * 
  */
 
+#include "MDSMonitor.h"
+
 #include <regex>
 #include <sstream>
 #include <queue>
@@ -19,7 +21,6 @@
 #include <boost/range/adaptors.hpp>
 #include <boost/utility.hpp>
 
-#include "MDSMonitor.h"
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
@@ -39,7 +40,9 @@
 #include "include/ceph_assert.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "mds/cephfs_features.h"
 #include "mds/mdstypes.h"
+#include "mds/cephfs_features.h" // for CEPHFS_FEATURE_*
 #include "Session.h"
 
 using namespace TOPNSPC::common;
@@ -84,7 +87,7 @@ namespace TOPNSPC::common {
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
 			   string_view k, mds_gid_t &val)
 {
-  return cmd_getval(cmdmap, k, (int64_t&)val);
+  return cmd_getval(cmdmap, k, reinterpret_cast<int64_t&>(val));
 }
 
 template<> bool cmd_getval(const cmdmap_t& cmdmap,
@@ -758,6 +761,14 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
     if (state == MDSMap::STATE_DNE) {
       dout(1) << __func__ << ": DNE from " << info << dendl;
+
+      /* send a beacon reply so MDSDaemon::suicide() finishes the
+         Beacon::send_and_wait() call */
+      auto beacon = make_message<MMDSBeacon>(mon.monmap->fsid,
+          m->get_global_id(), m->get_name(), get_fsmap().get_epoch(),
+          m->get_state(), m->get_seq(), CEPH_FEATURES_SUPPORTED_DEFAULT);
+      mon.send_reply(op, beacon.detach());
+
       goto evict;
     }
 
@@ -1540,9 +1551,15 @@ out:
   }
 }
 
-bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
+bool MDSMonitor::has_health_warnings(const vector<mds_metric_t>& warnings, const mds_gid_t& gid)
 {
-  for (auto& [gid, health] : pending_daemon_health) {
+  for (auto& [_gid, health] : pending_daemon_health) {
+    if (gid != MDS_GID_NONE) {
+      if (gid != mds_gid_t(_gid)) {
+	continue;
+      }
+    }
+
     for (auto& metric : health.metrics) {
       // metric.type here is the type of health warning. We are only
       // looking for types of health warnings passed to this func member
@@ -1554,6 +1571,17 @@ bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
     }
   }
 
+  return false;
+}
+
+bool MDSMonitor::has_health_warnings(const vector<mds_metric_t>& warnings,
+				     const std::vector<mds_gid_t>& gids)
+{
+  for (auto& gid : gids) {
+    if (has_health_warnings(warnings, gid)) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -1623,7 +1651,7 @@ int MDSMonitor::filesystem_command(
     }
 
     if (!confirm &&
-        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, gid)) {
       ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }

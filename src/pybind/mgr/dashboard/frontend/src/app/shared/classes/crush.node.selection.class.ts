@@ -3,6 +3,7 @@ import { AbstractControl } from '@angular/forms';
 import _ from 'lodash';
 
 import { CrushNode } from '../models/crush-node';
+import { CrushFailureDomains } from '../models/erasure-code-profile';
 
 export class CrushNodeSelectionClass {
   private nodes: CrushNode[] = [];
@@ -207,19 +208,26 @@ export class CrushNodeSelectionClass {
   }
 
   private updateDevices(failureDomain: string = this.controls.failure.value) {
-    const subNodes = _.flatten(
-      this.failureDomains[failureDomain].map((node) =>
-        CrushNodeSelectionClass.getSubNodes(node, this.idTree)
-      )
-    );
-    this.allDevices = subNodes.filter((n) => n.device_class).map((n) => n.device_class);
-    this.devices = _.uniq(this.allDevices).sort();
-    const device =
-      this.devices.length === 1
-        ? this.devices[0]
-        : this.getIncludedCustomValue(this.controls.device, this.devices);
-    if (this.autoDeviceUpdate) this.silentSet(this.controls.device, device);
-    this.onDeviceChange(device);
+    if (failureDomain === CrushFailureDomains.Host) {
+      this.allDevices = this.failureDomains[failureDomain]
+        .filter((fD) => fD.type)
+        .map((fD) => fD.type);
+      this.onDeviceChange('');
+    } else {
+      const subNodes = _.flatten(
+        this.failureDomains[failureDomain].map((node) =>
+          CrushNodeSelectionClass.getSubNodes(node, this.idTree)
+        )
+      );
+      this.allDevices = subNodes.filter((n) => n.device_class).map((n) => n.device_class);
+      this.devices = _.uniq(this.allDevices).sort();
+      const device =
+        this.devices.length === 1
+          ? this.devices[0]
+          : this.getIncludedCustomValue(this.controls.device, this.devices);
+      if (this.autoDeviceUpdate) this.silentSet(this.controls.device, device);
+      this.onDeviceChange(device);
+    }
   }
 
   private onDeviceChange(deviceType: string = this.controls.device.value) {

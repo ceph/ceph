@@ -8,8 +8,8 @@
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include <string>
+#include <variant>
 #include <vector>
-#include <boost/variant.hpp>
 
 struct Context;
 
@@ -85,10 +85,10 @@ struct UnknownPayload {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<HeartbeatPayload,
-                       LockAcquiredPayload,
-                       LockReleasedPayload,
-                       UnknownPayload> Payload;
+typedef std::variant<HeartbeatPayload,
+		     LockAcquiredPayload,
+		     LockReleasedPayload,
+		     UnknownPayload> Payload;
 
 struct NotifyMessage {
   NotifyMessage(const Payload &payload = UnknownPayload()) : payload(payload) {
@@ -100,7 +100,7 @@ struct NotifyMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<NotifyMessage *> &o);
+  static std::list<NotifyMessage> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(NotifyMessage);

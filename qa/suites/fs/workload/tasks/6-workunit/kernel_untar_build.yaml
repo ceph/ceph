@@ -5,6 +5,7 @@ overrides:
         - "mds.dir_split"
 tasks:
 - workunit:
+    timeout: 5h
     clients:
       all:
         - kernel_untar_build.sh

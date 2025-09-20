@@ -3,7 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (c) 2020 Huawei Technologies Co., Ltd.
+ * Copyright (c) 2025 Huawei Technologies Co., Ltd.
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -16,10 +16,6 @@
 
 #include <openssl/bio.h>
 #include <openssl/conf.h>
-#include <openssl/engine.h>
-#include <mutex>
-#include <vector>
-#include <algorithm>
 
 #include "common/debug.h"
 #include "global/global_context.h"
@@ -27,8 +23,8 @@
 #include "include/scope_guard.h"
 
 using std::string;
+using std::string_view;
 using std::ostream;
-using std::vector;
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
@@ -40,42 +36,15 @@ static ostream &_prefix(std::ostream *_dout)
 {
   return *_dout << "OpenSSLOptsHandler: ";
 }
+
 // -----------------------------------------------------------------------------
 
-string construct_engine_conf(const string &opts)
-{
-  const string conf_header = "openssl_conf=openssl_def\n[openssl_def]\n";
-  const string engine_header = "engines=engine_section\n[engine_section]\n";
-
-  string engine_id, engine_statement, engine_detail;
-  const string id_prefix = "engine";
-  const string suffix = "_section";
-  const char delimiter = '\n';
-
-  int index = 1;
-  vector<string> confs = get_str_vec(opts, ":");
-  for (auto conf : confs) {
-    // Construct engine section statement like "engine1=engine1_section"
-    engine_id = id_prefix + std::to_string(index++);
-    engine_statement += engine_id + "=" + engine_id + suffix + delimiter;
-
-    // Adapt to OpenSSL parser
-    // Replace ',' with '\n' and add section in front
-    std::replace(conf.begin(), conf.end(), ',', delimiter);
-    engine_detail += "[" + engine_id + suffix + "]" + delimiter;
-    engine_detail += conf + delimiter;
-  }
-
-  return conf_header + engine_header + engine_statement + engine_detail;
-}
-
-string get_openssl_error()
+static string get_openssl_error()
 {
   BIO *bio = BIO_new(BIO_s_mem());
   if (bio == nullptr) {
     return "failed to create BIO for more error printing";
   }
-  ERR_print_errors(bio);
   char* buf;
   size_t len = BIO_get_mem_data(bio, &buf);
   string ret(buf, len);
@@ -83,44 +52,38 @@ string get_openssl_error()
   return ret;
 }
 
-void log_error(const string &err)
+static void log_error(const string_view &err)
 {
-  derr << "Intended OpenSSL engine acceleration failed.\n"
-       << "set by openssl_engine_opts = "
-       << g_ceph_context->_conf->openssl_engine_opts
+  derr << "Intended OpenSSL acceleration failed.\n"
+       << "set by openssl_conf = "
+       << g_ceph_context->_conf.get_val<std::string>("openssl_conf")
        << "\ndetail error information:\n" << err << dendl;
 }
 
-void load_module(const string &engine_conf)
+static void load_openssl_modules(const string &openssl_conf)
 {
-  BIO *mem = BIO_new_mem_buf(engine_conf.c_str(), engine_conf.size());
-  if (mem == nullptr) {
-    log_error("failed to new BIO memory");
+  BIO *bio = BIO_new_file(openssl_conf.c_str(), "r");
+  if (bio == nullptr) {
+    log_error("failed to open openssl conf");
     return;
   }
-  auto sg_mem = make_scope_guard([&mem] { BIO_free(mem); });
+
+  auto sg_bio = make_scope_guard([bio] { BIO_free(bio); });
 
   CONF *conf = NCONF_new(nullptr);
   if (conf == nullptr) {
     log_error("failed to new OpenSSL CONF");
     return;
   }
-  auto sg_conf = make_scope_guard([&conf] { NCONF_free(conf); });
 
-  if (NCONF_load_bio(conf, mem, nullptr) <= 0) {
+  auto sg_conf = make_scope_guard([conf] { NCONF_free(conf); });
+
+  if (NCONF_load_bio(conf, bio, nullptr) <= 0) {
     log_error("failed to load CONF from BIO:\n" + get_openssl_error());
     return;
   }
 
   OPENSSL_load_builtin_modules();
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-  ENGINE_load_builtin_engines();
-#pragma clang diagnostic pop
-#pragma GCC diagnostic pop
 
   if (CONF_modules_load(
           conf, nullptr,
@@ -129,18 +92,18 @@ void load_module(const string &engine_conf)
   }
 }
 
-void init_engine()
+static void init_openssl()
 {
-  string opts = g_ceph_context->_conf->openssl_engine_opts;
-  if (opts.empty()) {
+  string openssl_conf = g_ceph_context->_conf.get_val<std::string>("openssl_conf");
+  if (openssl_conf.empty()) {
     return;
   }
-  string engine_conf = construct_engine_conf(opts);
-  load_module(engine_conf);
+
+  load_openssl_modules(openssl_conf);
 }
 
-void ceph::crypto::init_openssl_engine_once()
+void ceph::crypto::init_openssl_once()
 {
   static std::once_flag flag;
-  std::call_once(flag, init_engine);
+  std::call_once(flag, init_openssl);
 }

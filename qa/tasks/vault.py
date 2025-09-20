@@ -173,8 +173,8 @@ def send_req(ctx, cconfig, client, path, body, method='POST'):
     headers = {'X-Vault-Token': token}
     req.request(method, path, headers=headers, body=body)
     resp = req.getresponse()
-    log.info(resp.read())
     if not (resp.status >= 200 and resp.status < 300):
+        log.info(resp.read())
         raise Exception("Request to Vault server failed with status %d" % resp.status)
     return resp
 
@@ -198,6 +198,7 @@ def create_secrets(ctx, config):
         exportable = secret.get("exportable", flavor == "old")
 
         if engine == 'kv':
+            path = urljoin('data/', path)
             try:
                 data = {
                     "data": {
@@ -216,8 +217,21 @@ def create_secrets(ctx, config):
         ctx.vault.keys[cclient].append({ 'Path': path });
 
     log.info("secrets created")
+
+    list_url = prefix
+    if engine == 'kv':
+        list_url = urljoin(prefix, 'metadata')
+
+    resp = send_req(ctx, cconfig, cclient, list_url, b'', 'LIST')
+    keys_created = json.loads(resp.read())['data']['keys']
+    assert len(keys_created) == len(ctx.vault.keys[cclient])
+
     yield
 
+    # fetch another listing and verify that no additional keys are left over
+    resp = send_req(ctx, cconfig, cclient, list_url, b'', 'LIST')
+    keys_after = json.loads(resp.read())['data']['keys']
+    assert keys_created == keys_after
 
 @contextlib.contextmanager
 def task(ctx, config):

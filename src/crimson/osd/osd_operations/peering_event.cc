@@ -138,8 +138,8 @@ PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
 
 ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
 {
-  return get_osd_priv(&get_local_connection()
-         ).peering_request_conn_pipeline;
+  return get_osd_priv(&get_connection()
+  ).peering_request_conn_pipeline;
 }
 
 PerShardPipeline &RemotePeeringEvent::get_pershard_pipeline(
@@ -166,7 +166,8 @@ void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
       ctx.send_notify(q.from.osd, {q.query.from, q.query.to,
 				   q.query.epoch_sent,
 				   map_epoch, empty,
-				   PastIntervals{}});
+				   PastIntervals{},
+				   PG_FEATURE_CRIMSON_ALL});
     }
   }
 }

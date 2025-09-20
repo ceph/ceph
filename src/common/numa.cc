@@ -4,6 +4,9 @@
 #include "numa.h"
 
 #include <cstring>
+#include <dirent.h> // for opendir()
+#include <fcntl.h> // for open()
+#include <unistd.h> // for close(), getpid()
 #include <errno.h>
 #include <iostream>
 

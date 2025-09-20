@@ -517,7 +517,7 @@ class DBOp {
        *
        * - RGWObjState. Below are omitted from that struct
        *    as they seem in-memory variables
-       *    * is_atomic, has_atts, exists, prefetch_data, keep_tail, 
+       *    * is_atomic, has_atts, exists, prefetch_data, 
        * - RGWObjManifest
        *
        * Extra field added "IsMultipart" to flag multipart uploads,
@@ -868,14 +868,14 @@ class UpdateBucketOp: virtual public DBOp {
       Zonegroup = {}, HasInstanceObj = {}, Quota = {}, RequesterPays = {}, HasWebsite = {}, \
       WebsiteConf = {}, SwiftVersioning = {}, SwiftVerLocation = {}, MdsearchConfig = {}, \
       NewBucketInstanceID = {}, ObjectLock = {}, SyncPolicyInfoGroups = {}, \
-      BucketVersion = {}, Mtime = {} WHERE BucketName = {}";
+      BucketAttrs = {}, BucketVersion = {}, Mtime = {} WHERE BucketName = {}";
     // Updates Attrs, OwnerID, Mtime, Version
     static constexpr std::string_view AttrsQuery =
       "UPDATE '{}' SET OwnerID = {}, BucketAttrs = {}, Mtime = {}, BucketVersion = {} \
       WHERE BucketName = {}";
     // Updates OwnerID, CreationTime, Mtime, Version
     static constexpr std::string_view OwnerQuery =
-      "UPDATE '{}' SET OwnerID = {}, CreationTime = {}, Mtime = {}, BucketVersion = {} WHERE BucketName = {}";
+      "UPDATE '{}' SET OwnerID = {}, CreationTime = {}, BucketAttrs = {}, Mtime = {}, BucketVersion = {} WHERE BucketName = {}";
 
   public:
     virtual ~UpdateBucketOp() {}
@@ -893,6 +893,7 @@ class UpdateBucketOp: virtual public DBOp {
             params.op.bucket.swift_ver_location, params.op.bucket.mdsearch_config,
             params.op.bucket.new_bucket_instance_id, params.op.bucket.obj_lock,
             params.op.bucket.sync_policy_info_groups,
+            params.op.bucket.bucket_attrs,
             params.op.bucket.bucket_ver, params.op.bucket.mtime,
             params.op.bucket.bucket_name);
       }
@@ -905,6 +906,7 @@ class UpdateBucketOp: virtual public DBOp {
       if (params.op.query_str == "owner") {
         return fmt::format(OwnerQuery, params.bucket_table,
             params.op.user.user_id, params.op.bucket.creation_time,
+            params.op.bucket.bucket_attrs,
             params.op.bucket.mtime,
             params.op.bucket.bucket_ver, params.op.bucket.bucket_name);
       }
@@ -1827,8 +1829,8 @@ class DB {
           bool high_precision_time;
           uint32_t mod_zone_id;
           uint64_t mod_pg_ver;
-          const char *if_match;
-          const char *if_nomatch;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
 
           ConditionParams() :
             mod_ptr(NULL), unmod_ptr(NULL), high_precision_time(false), mod_zone_id(0), mod_pg_ver(0),
@@ -1870,8 +1872,8 @@ class DB {
           rgw_user owner;
           RGWObjCategory category;
           int flags;
-          const char *if_match;
-          const char *if_nomatch;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
           std::optional<uint64_t> olh_epoch;
           ceph::real_time delete_at;
           bool canceled;
@@ -1913,7 +1915,11 @@ class DB {
           std::list<rgw_obj_index_key> *remove_objs;
           ceph::real_time expiration_time;
           ceph::real_time unmod_since;
+          ceph::real_time last_mod_time_match;
           ceph::real_time mtime; /* for setting delete marker mtime */
+          std::optional<uint64_t> size_match;
+          const char *if_match{nullptr};
+          const char *if_nomatch{nullptr};
           bool high_precision_time;
           rgw_zone_set *zones_trace;
           bool abortmp;

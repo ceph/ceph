@@ -5,6 +5,7 @@ import { environment } from '~/environments/environment';
 export class AppConstants {
   public static readonly organization = 'ceph';
   public static readonly projectName = 'Ceph Dashboard';
+  public static readonly defaultUser = 'dashboard';
   public static readonly license = 'Free software (LGPL 2.1).';
   public static readonly copyright = 'Copyright(c) ' + environment.year + ' Ceph contributors.';
   public static readonly cephLogo = 'assets/Ceph_Logo.svg';
@@ -120,6 +121,7 @@ export class ActionLabelsI18n {
   SET: string;
   SUBMIT: string;
   SHOW: string;
+  TIERING: string;
   TRASH: string;
   UNPROTECT: string;
   UNSET: string;
@@ -206,6 +208,7 @@ export class ActionLabelsI18n {
     this.ROLLBACK = $localize`Rollback`;
     this.SCRUB = $localize`Scrub`;
     this.SHOW = $localize`Show`;
+    this.TIERING = $localize`Tiering`;
     this.TRASH = $localize`Move to Trash`;
     this.UNPROTECT = $localize`Unprotect`;
     this.CHANGE = $localize`Change`;
@@ -368,3 +371,6 @@ export const SSL_CIPHERS = [
   'POLY1305',
   'DHE'
 ];
+
+export const USER = 'user';
+export const VERSION_PREFIX = 'ceph version';

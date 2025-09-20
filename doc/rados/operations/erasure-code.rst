@@ -4,7 +4,7 @@
  Erasure code
 ==============
 
-By default, Ceph `pools <../pools>`_ are created with the type "replicated". In
+By default, Ceph :ref:`rados_pools` are created with the type "replicated". In
 replicated-type pools, every object is copied to multiple disks. This
 multiple copying is the method of data protection known as "replication".
 
@@ -64,7 +64,7 @@ profile can be displayed with this command:
 
    k=2
    m=2
-   plugin=jerasure
+   plugin=isa
    crush-failure-domain=host
    technique=reed_sol_van
 
@@ -85,6 +85,18 @@ with a different (and presumably more carefully considered) profile. When the
 new pool is created, all objects from the wrongly configured pool must be moved
 to the newly created pool. There is no way to alter the profile of a pool after
 the pool has been created.
+
+However, you can change the *crush-failure-domain* without creating a new pool,
+by changing the CRUSH rule of the pool using
+``ceph osd pool set <pool-name> crush_rule <rule-name>``
+as shown in :ref:`device_classes`
+(you should ensure that the new CRUSH rule is identical to the old rule
+in every way except the failure domain!).
+Once you do that, ``ceph osd pool ls detail`` will still show as ``erasure``
+profile the profile that you used for initial creation (which refers to the
+old *crush-failure-domain*), but the CRUSH rule in effect will be the new
+one, as the *crush-failure-domain* in the profile is only used during
+initial creation of the pool.
 
 The most important parameters of the profile are *K*, *M*, and
 *crush-failure-domain* because they define the storage overhead and
@@ -157,8 +169,8 @@ no two *chunks* are stored in the same rack.
                                  +------+
 
  
-More information can be found in the `erasure-code profiles
-<../erasure-code-profile>`_ documentation.
+More information can be found in the :ref:`erasure-code-profiles`
+documentation.
 
 
 Erasure Coding with Overwrites
@@ -192,27 +204,114 @@ erasure-coded pool as the ``--data-pool`` during image creation:
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
 For CephFS, an erasure-coded pool can be set as the default data pool during
-file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
+file system creation or via :ref:`file-layouts`.
+
+.. _rados_ops_erasure_coding_optimizations:
+
+Erasure Coding Optimizations
+----------------------------
+
+Since Tentacle, an erasure-coded pool may have optimizations enabled
+with a per-pool setting. This improves performance for smaller I/Os and
+eliminates padding which can save capacity:
+
+.. prompt:: bash $
+
+    ceph osd pool set ec_pool allow_ec_optimizations true
+
+The optimizations will make an erasure code pool more suitable for use
+with RBD or CephFS. For RGW workloads that have large objects that are read and
+written sequentially there will be little benefit from these optimizations; but
+RGW workloads with lots of very small objects or small random access reads will
+see performance and capacity benefits.
+
+This flag may be enabled for existing pools, and can be configured
+to default for new pools using the central configuration option
+:confval:`osd_pool_default_flag_ec_optimizations`. Once the flag has been
+enabled for a pool it cannot be disabled because it changes how new data is
+stored.
+
+The flag cannot be set unless all the Monitors and OSDs have been
+upgraded to Tentacle or later. Optimizations can be enabled and used without
+upgrading gateways and clients.
+
+Optimizations are currently only supported with the Jerasure and ISA-L plugins
+when using the ``reed_sol_van`` technique (these are the old and current
+defaults and are the most widely used plugins and technique). Attempting to
+set the flag for a pool using an unsupported combination of plugin and
+technique is blocked with an error message.
+
+The default stripe unit is 4K which works well for standard EC pools.
+For the majority of I/O workloads it is recommended to increase the stripe
+unit to at least 16K when using optimizations. Performance testing
+shows that 16K is the best choice for general purpose I/O workloads. Increasing
+this value will significantly improve small read performance but will slightly
+reduce the performance of small sequential writes. For I/O workloads that are
+predominately reads, larger values up to 256KB will further improve read
+performance but will further reduce the performance of small sequential writes.
+Values larger than 256KB are unlikely to have any performance benefit. The
+stripe unit is a pool create-time option that can be set in the erasure code
+profile or by setting the central configuration option
+:confval:`osd_pool_erasure_code_stripe_unit`. The stripe unit cannot be changed
+after the pool has been created, so if enabling optimizations for an existing
+pool you will not get the full benefit of the optimizations.
+
+Without optimizations enabled, the choice of ``k+m`` in the erasure code profile
+affects performance. The higher the values of ``k`` and ``m`` the lower the
+performance will be. With optimizations enabled there is only a very slight
+reduction in performance as ``k`` increases so this makes using a higher value
+of ``k`` more viable. Increasing ``m`` still impacts write performance,
+especially for small writes, so for block and file workloads a value of ``m``
+no larger than 3 is recommended.
 
 Erasure-coded pool overhead
 ---------------------------
 
 The overhead factor (space amplification) of an erasure-coded pool
 is `(k+m) / k`.  For a 4,2 profile, the overhead is
-thus 1.5, which means that 1.5 GiB of underlying storage are used to store
-1 GiB of user data.  Contrast with default three-way replication, with
+thus 1.5, which means that 1.5 GiB of underlying storage is used to store
+1 GiB of user data.  Contrast with default replication with ``size-3``, with
 which the overhead factor is 3.0.  Do not mistake erasure coding for a free
 lunch: there is a significant performance tradeoff, especially when using HDDs
 and when performing cluster recovery or backfill.
 
 Below is a table showing the overhead factors for various values of `k` and `m`.
-As `m` increases above 2, the incremental capacity overhead gain quickly
+As `k` increases above 4, the incremental capacity overhead gain quickly
 experiences diminishing returns but the performance impact grows proportionally.
-We recommend that you do not choose a profile with `k` > 4 or `m` > 2 until
-and unless you fully understand the ramifications, including the number of
-failure domains your cluster topology must contain.  If  you choose `m=1`,
-expect data unavailability during maintenance and data loss if component
-failures overlap.
+We recommend that you do not choose a profile with `k` > 4 or `m` > 2 unless
+and until you fully understand the ramifications, including the number of
+failure domains your cluster topology presents.  If  you choose `m=1`,
+expect data unavailability during maintenance and data loss when component
+failures overlap.  Profiles with `m=1` are thus strongly discouraged for
+production data.
+
+Deployments that must remain active and avoid data loss when larger numbers
+of overlapping component failure must be survived may favor a value of `m` > 2.
+Note that such profiles result in lower space efficiency and lessened performance, especially
+during backfill and recovery.
+
+If you are certain that you wish to use erasure coding for one or more pools but
+are not certain which profile to use, select `k=4` and `m=2`.  You will realize
+double the usable space compared to replication with `size=3` with relatively
+tolerable write and recovery performance impact.
+
+.. note:: Most erasure-coded pool deployments require at least `k+m` CRUSH failure
+	  domains, which in most cases means `rack`s or `hosts`.  There are
+	  operational advantages to planning EC profiles and cluster topology
+	  so that there are at least `k+m+1` failure domains. In most cases
+	  a value of `k` > 8 is discouragd.
+
+.. note:: CephFS and RGW deployments with a significant proportion
+          of very small user files/objects may wish to plan carefully as
+          erasure-coded data pools can result in considerable additional space
+          ampliificaton.  Both CephFS and RGW support multiple data pools
+          with different media, performance, and data protection strategies,
+          which can enable efficient and effective deployments.  An RGW
+	  deployment might for example provision a modest complement of
+	  TLC SSDs used by replicated index and default bucket data pools,
+	  and a larger complement of erasure-coded QLC SSDs or HDDs to which
+	  larger and colder objects are directed via storage class, placement
+	  target, or Lua scripting.
 
 .. list-table:: Erasure coding overhead
    :widths: 4 4 4 4 4 4 4 4 4 4 4 4
@@ -224,7 +323,7 @@ failures overlap.
      - m=2
      - m=3
      - m=4
-     - m=4
+     - m=5
      - m=6
      - m=7
      - m=8
@@ -363,10 +462,30 @@ failures overlap.
      - 1.82
      - 1.91
      - 2.00
-
-
-
-
+   * - k=12
+     - 1.08
+     - 1.17
+     - 1.25
+     - 1.33
+     - 1.42
+     - 1.50
+     - 1.58
+     - 1.67
+     - 1.75
+     - 1.83
+     - 1.92
+   * - k=20
+     - 1.05
+     - 1.10
+     - 1.15
+     - 1.20
+     - 1.25
+     - 1.30
+     - 1.35
+     - 1.40
+     - 1.45
+     - 1.50
+     - 1.55
 
 
 
@@ -374,7 +493,7 @@ failures overlap.
 Erasure-coded pools and cache tiering
 -------------------------------------
 
-.. note:: Cache tiering is deprecated in Reef.
+.. note:: Cache tiering was deprecated in Reef.  We strongly advise not deploying new cache tiers, and working to remove them from existing deployments.
 
 Erasure-coded pools require more resources than replicated pools and
 lack some of the functionality supported by replicated pools (for example, omap).

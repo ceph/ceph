@@ -1,11 +1,14 @@
 
 import logging
 import json
+import errno
 
 from teuthology.task import Task
 from teuthology import misc
 
 from tasks import ceph_manager
+from tasks.cephfs.filesystem import MDSCluster
+from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +64,9 @@ class CheckCounter(Task):
         mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=self.ctx, logger=log.getChild('ceph_manager'))
         active_mgr = json.loads(mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))["active_name"]
 
+        mds_cluster = MDSCluster(self.ctx)
+        status = mds_cluster.status()
+
         for daemon_type, counters in targets.items():
             # List of 'a', 'b', 'c'...
             daemon_ids = list(misc.all_roles_of_type(self.ctx.cluster, daemon_type))
@@ -80,13 +86,31 @@ class CheckCounter(Task):
                 else:
                     log.debug("Getting stats from {0}".format(daemon_id))
 
-                manager = self.ctx.managers[cluster_name]
-                proc = manager.admin_socket(daemon_type, daemon_id, ["perf", "dump"])
-                response_data = proc.stdout.getvalue().strip()
+                if daemon_type == 'mds':
+                    mds_info = status.get_mds(daemon_id)
+                    if not mds_info:
+                        continue
+                    mds = f"mds.{mds_info['gid']}"
+                    if mds_info['state'] != "up:active":
+                        log.debug(f"skipping {mds}")
+                        continue
+                    log.debug(f"Getting stats from {mds}")
+                    try:
+                        proc = mon_manager.raw_cluster_cmd("tell", mds, "perf", "dump",
+                                                           "--format=json-pretty")
+                        response_data = proc.strip()
+                    except CommandFailedError as e:
+                        if e.exitstatus == errno.ENOENT:
+                            log.debug(f"Failed to do 'perf dump' on {mds}")
+                        continue
+                else:
+                    manager = self.ctx.managers[cluster_name]
+                    proc = manager.admin_socket(daemon_type, daemon_id, ["perf", "dump"])
+                    response_data = proc.stdout.getvalue().strip()
                 if response_data:
                     perf_dump = json.loads(response_data)
                 else:
-                    log.warning("No admin socket response from {0}, skipping".format(daemon_id))
+                    log.warning("No response from {0}, skipping".format(daemon_id))
                     continue
 
                 minval = ''

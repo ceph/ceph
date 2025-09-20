@@ -45,6 +45,6 @@ struct RGWOIDCProviderInfo
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<RGWOIDCProviderInfo*>& l);
+  static std::list<RGWOIDCProviderInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWOIDCProviderInfo)

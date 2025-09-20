@@ -24,6 +24,9 @@ overrides:
 tasks:
 - cephadm.deploy_samba_ad_dc:
     role: host.d
+- pexec:
+    all:
+      - sudo setsebool -P virt_sandbox_use_netlink 1 || true
 - cephadm:
 
 - cephadm.shell:

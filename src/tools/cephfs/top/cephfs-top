@@ -148,7 +148,7 @@ def wrap(s, sl):
     """return a '+' suffixed wrapped string"""
     if len(s) < sl:
         return s
-    return f'{s[0:sl-1]}+'
+    return f'{s[0:sl - 1]}+'
 
 
 class FSTopBase(object):
@@ -341,7 +341,6 @@ class FSTop(FSTopBase):
         except Exception as e:
             raise FSTopException(f'Error in fs ls: {e}')
         fs_map = json.loads(buf.decode('utf-8'))
-        global fs_list
         fs_list.clear()
         for filesystem in fs_map:
             fs = filesystem['name']
@@ -360,12 +359,6 @@ class FSTop(FSTopBase):
             # requested it will raise an exception
             pass
 
-        # Check the window size before creating the pad. For large windows,
-        # PAD_WIDTH = window width.
-        h, w = self.stdscr.getmaxyx()
-        if (w > DEFAULT_PAD_WIDTH):
-            self.PAD_WIDTH = w
-        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
         self.run_all_display()
 
     def display_fs_menu(self, stdscr, selected_row_idx):
@@ -469,7 +462,7 @@ class FSTop(FSTopBase):
         key = 0
         endwhile = False
         while not endwhile:
-            global current_states, fs_list
+            global fs_list
             fs_list = self.get_fs_names()
 
             if key == curses.KEY_UP and curr_row1 > 0:
@@ -875,7 +868,6 @@ class FSTop(FSTopBase):
                 xp += len(self.items(item)) + ITEMS_PAD_LEN
 
     def create_clients(self, stats_json, fs_name):
-        global metrics_dict, current_states
         counters = [m.upper() for m in stats_json[GLOBAL_COUNTERS_KEY]]
         self.tablehead_y += 2
         res = stats_json[GLOBAL_METRICS_KEY].get(fs_name, {})
@@ -914,7 +906,6 @@ class FSTop(FSTopBase):
         if not stats_json['version'] == FS_TOP_SUPPORTED_VER:
             self.header.addstr(0, 0, 'perf stats version mismatch!', curses.A_BOLD)
             return False
-        global fs_list
         for fs_name in fs_list:
             client_metadata = stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
             client_cnt = len(client_metadata)
@@ -964,8 +955,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
@@ -979,7 +975,7 @@ class FSTop(FSTopBase):
 
         curses.halfdelay(1)
         cmd = self.stdscr.getch()
-        global fs_list, current_states
+        global fs_list
         while not self.exit_ev.is_set():
             fs_list = self.get_fs_names()
             fs = current_states["last_fs"]
@@ -1098,8 +1094,13 @@ class FSTop(FSTopBase):
         top, left = 0, 0  # where to place pad
         vscrollOffset, hscrollOffset = 0, 0  # scroll offsets
 
-        # calculate the initial viewport height and width
+        # Check the window size before creating the pad. For large windows, PAD_WIDTH=window width.
         windowsize = self.stdscr.getmaxyx()
+        if (windowsize[1] > DEFAULT_PAD_WIDTH):
+            self.PAD_WIDTH = windowsize[1]
+        self.fstop_pad = curses.newpad(self.PAD_HEIGHT, self.PAD_WIDTH)
+
+        # calculate the initial viewport height and width
         self.viewportHeight, self.viewportWidth = windowsize[0] - 1, windowsize[1] - 1
 
         # create header subpad
@@ -1119,7 +1120,7 @@ class FSTop(FSTopBase):
                     self.exit_ev.set()
 
             # header display
-            global fs_list, current_states
+            global fs_list
             fs_list = self.get_fs_names()
             current_states["last_fs"] = fs_list
             stats_json = self.perf_stats_query()

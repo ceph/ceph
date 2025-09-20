@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "gtest/gtest.h"
+#include <memory>
 #include "mon/ElectionLogic.h"
 #include "mon/ConnectionTracker.h"
 #include "common/dout.h"
@@ -42,7 +43,11 @@ int main(int argc, char **argv) {
 
 class Owner;
 struct Election {
-  map<int, Owner*> electors;
+  // Owner instances need to be shared between the electors map and messages that
+  // capture them in lambdas. Using shared_ptr ensures Owner objects remain valid
+  // even after being removed from the electors map, preventing dangling references
+  // in captured lambdas.
+  map<int, std::shared_ptr<Owner>> electors;
   map<int, set<int> > blocked_messages;
   int count;
   ElectionLogic::election_strategy election_strategy;
@@ -58,7 +63,7 @@ struct Election {
   int last_leader = -1;
   
   Election(int c, ElectionLogic::election_strategy es, int pingi=1, double tracker_halflife=5);
-  ~Election();
+  ~Election() = default;
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
   const set<int>& get_disallowed_leaders() const { return disallowed_leaders; }
@@ -202,10 +207,9 @@ struct Owner : public ElectionOwner, RankProvider {
     return tiebreaker_mon_rank == rank;
   }
   bool is_current_member(int r) const { return quorum.count(r) != 0; }
-  void receive_propose(int from, epoch_t e, ConnectionTracker *oct) {
+  void receive_propose(int from, epoch_t e, std::shared_ptr<ConnectionTracker> oct) {
     if (rank_deleted) return;
-    logic.receive_propose(from, e, oct);
-    delete oct;
+    logic.receive_propose(from, e, oct.get());
   }
   void receive_ack(int from, epoch_t e) {
     if (rank_deleted) return;
@@ -278,7 +282,7 @@ struct Owner : public ElectionOwner, RankProvider {
     for (int i = 0; i < parent->get_paxos_size(); ++i) {
       if (i == rank)
 	continue;
-      Owner *o = parent->electors[i];
+      auto o = parent->electors.at(i);
       parent->queue_stable_or_timeout(rank, i,
 				      [o, r=rank, bl] { o->receive_ping(r, bl); },
 				      [o, r=rank] { o->receive_ping_timeout(r); }
@@ -311,16 +315,7 @@ Election::Election(int c, ElectionLogic::election_strategy es, int pingi,
   pending_election_messages(0), timesteps_run(0), last_quorum_change(0), last_quorum_formed(-1)
 {
   for (int i = 0; i < count; ++i) {
-    electors[i] = new Owner(i, election_strategy, tracker_halflife, this);
-  }
-}
-
-Election::~Election()
-{
-  {
-    for (auto i : electors) {
-      delete i.second;
-    }
+    electors[i] = std::make_shared<Owner>(i, election_strategy, tracker_halflife, this);
   }
 }
 
@@ -344,8 +339,7 @@ void Election::queue_election_message(int from, int to, function<void(bool)> m)
   } else {
     bufferlist bl;
     electors[from]->encode_scores(bl);
-    Owner *o = electors[to];
-    messages.push_back([this,m,o,bl] {
+    messages.push_back([this,m,o=electors.at(to),bl] {
 	--this->pending_election_messages;
 	o->receive_scores(bl);
 	m(false);
@@ -372,8 +366,7 @@ void Election::queue_stable_or_timeout(int from, int to,
 
 void Election::defer_to(int from, int to, epoch_t e)
 {
-  Owner *o = electors[to];
-  queue_election_message(from, to, [o, from, e](bool blocked) {
+  queue_election_message(from, to, [o=electors.at(to), from, e](bool blocked) {
     if (!blocked) {
       o->receive_ack(from, e);
     }
@@ -382,24 +375,22 @@ void Election::defer_to(int from, int to, epoch_t e)
 
 void Election::propose_to(int from, int to, epoch_t e, bufferlist& cbl)
 {
-  Owner *o = electors[to];
-  ConnectionTracker *oct = NULL;
+  // use shared_ptr, because std::function requires that the callable is copy
+  // constructible.
+  std::shared_ptr<ConnectionTracker> oct;
   if (cbl.length()) {
-    oct = new ConnectionTracker(cbl, g_ceph_context);
+    oct = std::make_shared<ConnectionTracker>(cbl, g_ceph_context);
   }
-  queue_election_message(from, to, [o, from, e, oct](bool blocked) {
-      if (blocked) {
-	delete oct;
-      } else {
-	o->receive_propose(from, e, oct);
+  queue_election_message(from, to, [o=electors.at(to), from, e, oct=std::move(oct)](bool blocked) mutable {
+      if (!blocked) {
+	o->receive_propose(from, e, std::move(oct));
       }
     });
 }
 
 void Election::claim_victory(int from, int to, epoch_t e, const set<int>& members)
 {
-  Owner *o = electors[to];
-  queue_election_message(from, to, [o, from, e, members](bool blocked) {
+  queue_election_message(from, to, [o=electors.at(to), from, e, members](bool blocked) {
     if (!blocked) {
       o->receive_victory_claim(from, e, members);
     }
@@ -408,8 +399,7 @@ void Election::claim_victory(int from, int to, epoch_t e, const set<int>& member
 
 void Election::accept_victory(int from, int to, epoch_t e)
 {
-  Owner *o = electors[to];
-  queue_election_message(from, to, [o, from, e](bool blocked) {
+  queue_election_message(from, to, [o=electors.at(to), from, e](bool blocked) {
     if (!blocked) {
       o->receive_victory_ack(from, e);
     }
@@ -440,7 +430,7 @@ int Election::run_timesteps(int max)
     for (auto& m : current_m) {
       m();
     }
-    for (auto o : electors) {
+    for (auto& o : electors) {
       o.second->notify_timestep();
     }
   }
@@ -455,7 +445,7 @@ void Election::start_one(int who)
 }
 
 void Election::start_all() {
-  for (auto e : electors) {
+  for (auto& e : electors) {
     e.second->logic.start();
   }
 }
@@ -463,7 +453,7 @@ void Election::start_all() {
 bool Election::election_stable() const
 {
   // see if anybody has a timer running
-  for (auto i : electors) {
+  for (auto& i : electors) {
     if (i.second->timer_steps != -1) {
       ldout(g_ceph_context, 30) << "rank " << i.first << " has timer value " << i.second->timer_steps << dendl;
       return false;
@@ -552,7 +542,7 @@ void Election::remove_elector(int rank)
     }
     ei->second->notify_rank_removed(rank);
     if (ei->first > rank) {
-      electors[ei->first - 1] = ei->second;
+      electors[ei->first - 1] = std::move(ei->second);
       electors.erase(ei++);
       continue;
     }
@@ -770,7 +760,7 @@ void netsplit_with_disallowed_tiebreaker_converges(ElectionLogic::election_strat
   };
   // hmm, we don't have timeouts to call elections automatically yet
   auto call_elections = [&] {
-    for (auto i : election.electors) {
+    for (auto& i : election.electors) {
       i.second->trigger_new_election();
     }
   };
@@ -854,7 +844,7 @@ void handles_singly_connected_peon(ElectionLogic::election_strategy strategy)
 
   election.block_bidirectional_messages(0, 1);
   election.unblock_bidirectional_messages(0, 4);
-  for (auto i : election.electors) {
+  for (auto& i : election.electors) {
     i.second->trigger_new_election();
   }
   election.run_timesteps(15);

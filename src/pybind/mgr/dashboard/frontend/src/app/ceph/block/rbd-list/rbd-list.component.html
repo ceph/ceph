@@ -30,7 +30,7 @@
 <ng-template #parentTpl
              let-value="data.value">
   <span *ngIf="value">{{ value.pool_name }}<span
-          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}@{{ value.snap_name }}</span>
+          *ngIf="value.pool_namespace">/{{ value.pool_namespace }}</span>/{{ value.image_name }}&#64;{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
 </ng-template>
 
@@ -55,7 +55,7 @@
 <ng-template #ScheduleTpl
              let-value="data.value"
              let-row="data.row">
-  <span *ngIf="value.length === 3"
+  <span *ngIf="value?.length === 3"
         class="badge badge-info">{{ value[2] | cdDate  }}</span>
 </ng-template>
 
@@ -90,10 +90,9 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
-
   <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
-  <span [ngClass]="column?.customTemplateConfig?.valueClass">
+    <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
   <span *ngIf="row.cdExecuting"
@@ -102,10 +101,12 @@
         'text-muted italic'">
     ({{ row.cdExecuting }})
   </span>
-  <i *ngIf="row.source && row.source === 'REMOVING'"
-     i18n-title
-     title="RBD in status 'Removing'"
-     class="{{ icons.warning }} warn"></i>
+  <svg  *ngIf="row.source && row.source === 'REMOVING'"
+        i18n-title
+        title="RBD in status 'Removing'"
+        [cdsIcon]="icons.warning"
+        [size]="icons.size16"
+        class="cds-warning-color"></svg>
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>
@@ -132,7 +133,6 @@
                   decimals="2">
   </cd-usage-bar>
   </ng-template>
-
 </ng-template>
 
 <ng-template #usageTooltip>

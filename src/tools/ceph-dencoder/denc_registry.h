@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 #include <string>
 #include <string_view>
 
@@ -29,6 +30,7 @@ struct Dencoder {
   virtual int num_generated() = 0;
   virtual std::string select_generated(unsigned n) = 0;
   virtual bool is_deterministic() = 0;
+  virtual void set_stray_okay() = 0;
   unsigned get_struct_v(bufferlist bl, uint64_t seek) const {
     auto p = bl.cbegin(seek);
     uint8_t struct_v = 0;
@@ -40,25 +42,33 @@ struct Dencoder {
 
 template<class T>
 class DencoderBase : public Dencoder {
+  using deleter_type = std::function<void(T*)>;
+  using ptr_type = std::unique_ptr<T, deleter_type>;
 protected:
-  T* m_object;
-  std::list<T*> m_list;
+  enum class do_delete {
+    no,
+    yes,
+  };
+  static ptr_type make_ptr(T* ptr, do_delete del) {
+    auto deleter = (del == do_delete::yes ?
+		    deleter_type{std::default_delete<T>{}} :
+		    deleter_type{[](T*) {}});
+    return ptr_type{ptr, deleter};
+  }
+  ptr_type m_object = make_ptr(nullptr, do_delete::yes);
+  std::list<T> m_list;
   bool stray_okay;
   bool nondeterministic;
-
 public:
-  template<typename... Args>
-  DencoderBase(bool stray_okay, bool nondeterministic, Args&&... args)
-    : m_object(new T(std::forward<Args>(args)...)),
-      stray_okay(stray_okay),
+  DencoderBase(bool stray_okay, bool nondeterministic)
+    : stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
-  ~DencoderBase() override {
-    delete m_object;
-  }
+  ~DencoderBase() override {}
 
   std::string decode(bufferlist bl, uint64_t seek) override {
     auto p = bl.cbegin();
     p.seek(seek);
+    m_object = make_ptr(new T, do_delete::yes);
     try {
       using ceph::decode;
       decode(*m_object, p);
@@ -77,10 +87,11 @@ public:
   void encode(bufferlist& out, uint64_t features) override = 0;
 
   void dump(ceph::Formatter *f) override {
+    assert(m_object);
     m_object->dump(f);
   }
   void generate() override {
-    T::generate_test_instances(m_list);
+    m_list = T::generate_test_instances();
   }
   int num_generated() override {
     return m_list.size();
@@ -91,12 +102,16 @@ public:
       i = m_list.size();
     if ((i == 0) || (i > m_list.size()))
       return "invalid id for generated object";
-    m_object = *(std::next(m_list.begin(), i-1));
+    m_object = make_ptr(std::addressof(*std::next(m_list.begin(), i-1)), do_delete::no);
     return {};
   }
 
   bool is_deterministic() override {
     return !nondeterministic;
+  }
+
+  void set_stray_okay() {
+    stray_okay = true;
   }
 };
 
@@ -107,6 +122,7 @@ public:
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   void encode(bufferlist& out, uint64_t features) override {
     out.clear();
+    assert(this->m_object);
     using ceph::encode;
     encode(*this->m_object, out);
   }
@@ -114,19 +130,21 @@ public:
 
 template<class T>
 class DencoderImplNoFeature : public DencoderImplNoFeatureNoCopy<T> {
+  using do_delete = typename DencoderBase<T>::do_delete;
+
 public:
   DencoderImplNoFeature(bool stray_ok, bool nondeterministic)
     : DencoderImplNoFeatureNoCopy<T>(stray_ok, nondeterministic) {}
   void copy() override {
+    assert(this->m_object);
     T *n = new T;
     *n = *this->m_object;
-    delete this->m_object;
-    this->m_object = n;
+    this->m_object = this->make_ptr(n, do_delete::yes);
   }
   void copy_ctor() override {
+    assert(this->m_object);
     T *n = new T(*this->m_object);
-    delete this->m_object;
-    this->m_object = n;
+    this->m_object = this->make_ptr(n, do_delete::yes);
   }
 };
 
@@ -136,6 +154,7 @@ public:
   DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   void encode(bufferlist& out, uint64_t features) override {
+    assert(this->m_object);
     out.clear();
     using ceph::encode;
     encode(*(this->m_object), out, features);
@@ -144,19 +163,21 @@ public:
 
 template<class T>
 class DencoderImplFeatureful : public DencoderImplFeaturefulNoCopy<T> {
+  using do_delete = typename DencoderBase<T>::do_delete;
+
 public:
   DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
     : DencoderImplFeaturefulNoCopy<T>(stray_ok, nondeterministic) {}
   void copy() override {
-    T *n = new T;
+    assert(this->m_object);
+    T* n = new T;
     *n = *this->m_object;
-    delete this->m_object;
-    this->m_object = n;
+    this->m_object = this->make_ptr(n, do_delete::yes);
   }
   void copy_ctor() override {
+    assert(this->m_object);
     T *n = new T(*this->m_object);
-    delete this->m_object;
-    this->m_object = n;
+    this->m_object = this->make_ptr(n, do_delete::yes);
   }
 };
 
@@ -203,7 +224,7 @@ public:
     m_object->dump(f);
   }
   void generate() override {
-    //T::generate_test_instances(m_list);
+    //m_list = T::generate_test_instances();
   }
   int num_generated() override {
     return m_list.size();
@@ -219,6 +240,8 @@ public:
   }
   bool is_deterministic() override {
     return true;
+  }
+  void set_stray_okay() override {
   }
 
   //void print(ostream& out) {

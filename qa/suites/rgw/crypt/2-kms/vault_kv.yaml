@@ -13,11 +13,11 @@ overrides:
 tasks:
 - vault:
     client.0:
-      install_url: https://releases.hashicorp.com/vault/1.2.2/vault_1.2.2_linux_amd64.zip
-      install_sha256: 7725b35d9ca8be3668abe63481f0731ca4730509419b4eb29fa0b0baa4798458
+      install_url: https://releases.hashicorp.com/vault/1.19.0/vault_1.19.0_linux_amd64.zip
+      install_sha256: 9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
       root_token: test_root_token
       engine: kv
-      prefix: /v1/kv/data/
+      prefix: /v1/kv/
       secrets:
         - path: my-key-1
           secret: a2V5MS5GcWVxKzhzTGNLaGtzQkg5NGVpb1FKcFpGb2c=

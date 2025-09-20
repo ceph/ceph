@@ -231,8 +231,15 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
       << " (" << std::dec << o.onode.size << ")"
       << " expected_object_size " << o.onode.expected_object_size
       << " expected_write_size " << o.onode.expected_write_size
-      << " in " << o.onode.extent_map_shards.size() << " shards"
-      << ", " << o.extent_map.spanning_blob_map.size()
+      << " in " << o.onode.extent_map_shards.size() << " shards";
+  if (o.onode.extent_map_shards.size() > 0) {
+    out << ":" << std::hex;
+    for (auto& s : o.onode.extent_map_shards) {
+      out << " 0x" << s.offset;
+    }
+    out << std::dec;
+  }
+  out << ", " << o.extent_map.spanning_blob_map.size()
       << " spanning blobs";
   const BlueStore::ExtentMap& map = o.extent_map;
   std::set<BlueStore::Blob*> visited;

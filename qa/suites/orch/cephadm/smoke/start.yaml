@@ -8,6 +8,7 @@ overrides:
       - CEPHADM_STRAY_DAEMON
       - CEPHADM_FAILED_DAEMON
       - CEPHADM_AGENT_DOWN
+      - PG_DEGRADED
     log-only-match:
       - CEPHADM_
 tasks:
@@ -25,4 +26,4 @@ tasks:
       - ceph orch host ls
       - ceph orch device ls
       - ceph orch ls --format yaml
-      - ceph orch ls | grep '^osd '
+      - ceph orch ls | grep 'osd'

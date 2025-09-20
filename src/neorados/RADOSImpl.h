@@ -14,12 +14,12 @@
 #ifndef CEPH_NEORADOS_RADOSIMPL_H
 #define CEPH_NEORADOS_RADOSIMPL_H
 
-#include <functional>
+#include <atomic>
 #include <memory>
-#include <string>
 
-#include <boost/asio/io_context.hpp>
 #include <boost/intrusive_ptr.hpp>
+
+#include "common/async/service.h"
 
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
@@ -32,6 +32,8 @@
 
 #include "osdc/Objecter.h"
 
+namespace boost::asio { class io_context; }
+
 namespace neorados {
 
 class RADOS;
@@ -40,15 +42,14 @@ namespace detail {
 
 class NeoClient;
 
-class RADOS : public Dispatcher
-{
+class RADOS : public Dispatcher {
   friend ::neorados::RADOS;
   friend NeoClient;
 
   boost::asio::io_context& ioctx;
   boost::intrusive_ptr<CephContext> cct;
 
-  ceph::mutex lock = ceph::make_mutex("RADOS_unleashed::_::RADOSImpl");
+  ceph::mutex lock = ceph::make_mutex("neorados::detail::RADOSImpl");
   int instance_id = -1;
 
   std::unique_ptr<Messenger> messenger;
@@ -57,6 +58,7 @@ class RADOS : public Dispatcher
   MgrClient mgrclient;
 
   std::unique_ptr<Objecter> objecter;
+  std::atomic<bool> finished = false;
 
 public:
 
@@ -70,9 +72,10 @@ public:
   mon_feature_t get_required_monitor_features() const {
     return monclient.with_monmap(std::mem_fn(&MonMap::get_required_features));
   }
+  void shutdown();
 };
 
-class Client {
+class Client : public std::enable_shared_from_this<Client> {
 public:
   Client(boost::asio::io_context& ioctx,
          boost::intrusive_ptr<CephContext> cct,
@@ -97,19 +100,38 @@ public:
   virtual int get_instance_id() const = 0;
 };
 
-class NeoClient : public Client {
+class NeoClient : public Client,
+		  public ceph::async::service_list_base_hook {
 public:
+
   NeoClient(std::unique_ptr<RADOS>&& rados)
     : Client(rados->ioctx, rados->cct, rados->monclient,
-             rados->objecter.get()),
+	     rados->objecter.get()),
+      svc(boost::asio::use_service<ceph::async::service<NeoClient>>(
+	  boost::asio::query(ioctx.get_executor(),
+			     boost::asio::execution::context))),
       rados(std::move(rados)) {
+    svc.add(*this);
+  }
+
+  ~NeoClient() {
+    svc.remove(*this);
   }
 
   int get_instance_id() const override {
     return rados->instance_id;
   }
 
+  void service_shutdown() {
+    // In case the last owner of a reference is an op we're about to
+    // cancel. (This can happen if the `RADOS` object
+    auto service_ref = shared_from_this();
+    rados->shutdown();
+  }
+
 private:
+  friend ceph::async::service<RADOS>;
+  async::service<NeoClient>& svc;
   std::unique_ptr<RADOS> rados;
 };
 

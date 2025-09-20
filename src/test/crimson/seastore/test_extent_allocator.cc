@@ -38,7 +38,7 @@ struct allocator_test_t :
       allocator.reset(new AvlAllocator(false));
       return seastar::now();
     } 
-    ceph_assert(0 == "no support");
+    ceph_abort("no support");
   }
   seastar::future<> tear_down_fut() final {
     if (allocator) {

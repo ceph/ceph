@@ -3,6 +3,17 @@
 #include "common/perf_counters.h"
 #include "common/ceph_context.h"
 #include "common/intrusive_lru.h"
+#include "include/utime.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <functional>
+#include <memory>
+#include <string>
 
 namespace ceph::perf_counters {
 

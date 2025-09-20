@@ -20,7 +20,7 @@
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's
-#include "common/admin_finisher.h"
+#include "common/admin_finisher.h" // for asok_finisher
 #include "include/ceph_assert.h" 
 #include "include/common_fwd.h"
 
@@ -49,6 +49,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <vector>
 
 //#define DEBUG_RECOVERY_OIDS   // track std::set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
@@ -78,6 +79,7 @@ namespace Scrub {
   void put_with_id(PG *pg, uint64_t id);
   typedef TrackedIntPtr<PG> PGRef;
 #else
+#include <boost/intrusive_ptr.hpp>
   typedef boost::intrusive_ptr<PG> PGRef;
 #endif
 
@@ -250,6 +252,20 @@ public:
     return !waiting_for_unreadable_object.empty();
   }
 
+  bool get_is_nonprimary_shard(const pg_shard_t &shard) const final
+  {
+    return get_pgbackend()->get_is_nonprimary_shard(shard.shard);
+  }
+
+  bool get_is_hinfo_required() const final
+  {
+    return get_pgbackend()->get_is_hinfo_required();
+  }
+
+  bool get_is_ec_optimized() const final {
+    return get_pgbackend()->get_is_ec_optimized();
+  }
+
   static void set_last_scrub_stamp(
     utime_t t, pg_history_t &history, pg_stat_t &stats) {
     stats.last_scrub_stamp = t;
@@ -262,7 +278,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change();
   }
 
   static void set_last_deep_scrub_stamp(
@@ -278,7 +294,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change();
   }
 
   static void add_objects_scrubbed_count(
@@ -355,6 +371,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return recovery_state.get_acting_recovery_backfill();
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return recovery_state.get_acting_recovery_backfill_shard_id_set();
   }
   bool is_acting(pg_shard_t osd) const {
     return recovery_state.is_acting(osd);
@@ -511,7 +530,7 @@ public:
    * - pg stat scrub timestamps
    * - etc
    */
-  void on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready);
+  void on_scrub_schedule_input_change();
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -604,7 +623,7 @@ public:
   void queue_snap_retrim(snapid_t snap);
 
   void on_backfill_reserved() override;
-  void on_backfill_canceled() override;
+  void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
 
@@ -867,8 +886,8 @@ protected:
   std::set<int> probe_targets;
 
 protected:
-  BackfillInterval backfill_info;
-  std::map<pg_shard_t, BackfillInterval> peer_backfill_info;
+  PrimaryBackfillInterval backfill_info;
+  std::map<pg_shard_t, ReplicaBackfillInterval> peer_backfill_info;
   bool backfill_reserving;
 
   // The primary's num_bytes and local num_bytes for this pg, only valid
@@ -1127,6 +1146,11 @@ protected:
     void trim(const pg_log_entry_t &entry) override {
       pg->get_pgbackend()->trim(entry, t);
     }
+    void partial_write(pg_info_t *info, eversion_t previous_version,
+                       const pg_log_entry_t &entry
+      ) override {
+      pg->get_pgbackend()->partial_write(info, previous_version, entry);
+    }
   };
 
   void update_object_snap_mapping(
@@ -1241,6 +1265,7 @@ protected:
 
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
+  bool is_degraded() const { return recovery_state.is_degraded(); }
 protected:
   bool delete_needs_sleep = false;
 
@@ -1264,7 +1289,6 @@ protected:
   bool is_backfill_unfound() const { return recovery_state.is_backfill_unfound(); }
   bool is_incomplete() const { return recovery_state.is_incomplete(); }
   bool is_clean() const { return recovery_state.is_clean(); }
-  bool is_degraded() const { return recovery_state.is_degraded(); }
   bool is_undersized() const { return recovery_state.is_undersized(); }
   bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); } // Primary only
   bool is_remapped() const { return recovery_state.is_remapped(); }
@@ -1389,9 +1413,31 @@ public:
    recovery_state.force_object_missing(peer, oid, version);
  }
 
- uint64_t logical_to_ondisk_size(uint64_t logical_size) const final
- {
-   return get_pgbackend()->be_get_ondisk_size(logical_size);
+ uint64_t logical_to_ondisk_size(uint64_t logical_size,
+                                 shard_id_t shard_id) const final {
+   return get_pgbackend()->be_get_ondisk_size(logical_size, shard_id_t(shard_id));
+ }
+
+ bool ec_can_decode(const shard_id_set &available_shards) const final {
+   return get_pgbackend()->ec_can_decode(available_shards);
+ }
+
+ shard_id_map<bufferlist> ec_encode_acting_set(
+     const bufferlist &in_bl) const final {
+   return get_pgbackend()->ec_encode_acting_set(in_bl);
+ }
+
+ shard_id_map<bufferlist> ec_decode_acting_set(
+     const shard_id_map<bufferlist> &shard_map, int chunk_size) const final {
+   return get_pgbackend()->ec_decode_acting_set(shard_map, chunk_size);
+ }
+
+ bool get_ec_supports_crc_encode_decode() const final {
+   return get_pgbackend()->get_ec_supports_crc_encode_decode();
+ }
+
+ ECUtil::stripe_info_t get_ec_sinfo() const final {
+   return get_pgbackend()->ec_get_sinfo();
  }
 };
 

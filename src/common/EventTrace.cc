@@ -19,6 +19,8 @@
 #include "common/TracepointProvider.h"
 #include "messages/MOSDOpReply.h"
 
+#include <sstream>
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE

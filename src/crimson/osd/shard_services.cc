@@ -23,10 +23,12 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
+#include <boost/iterator/counting_iterator.hpp>
 
 SET_SUBSYS(osd);
 
 using std::vector;
+using namespace std::string_literals;
 
 namespace crimson::osd {
 
@@ -53,6 +55,8 @@ PerShardState::PerShardState(
 
 seastar::future<> PerShardState::dump_ops_in_flight(Formatter *f) const
 {
+  LOG_PREFIX(PerShardState::dump_ops_in_flight);
+  DEBUG("");
   registry.for_each_op([f](const auto &op) {
     op.dump(f);
   });
@@ -92,7 +96,7 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
   auto &pgs = pg_map.get_pgs();
   return seastar::parallel_for_each(
     pgs.begin(), pgs.end(),
-    [=, &shard_services](auto& pg) {
+    [&shard_services, epoch](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
 	pg.second,
 	shard_services,
@@ -327,15 +331,13 @@ seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
   }
 }
 
-const char** OSDSingletonState::get_tracked_conf_keys() const
+std::vector<std::string> OSDSingletonState::get_tracked_keys() const noexcept
 {
-  static const char* KEYS[] = {
-    "osd_max_backfills",
-    "osd_min_recovery_priority",
-    "osd_max_trimming_pgs",
-    nullptr
+  return {
+    "osd_max_backfills"s,
+    "osd_min_recovery_priority"s,
+    "osd_max_trimming_pgs"s
   };
-  return KEYS;
 }
 
 void OSDSingletonState::handle_conf_change(
@@ -547,7 +549,7 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
     DEBUG("removing old osdmap epoch {}", superblock.get_oldest_map());
     meta_coll->remove_map(t, superblock.get_oldest_map());
     meta_coll->remove_inc_map(t, superblock.get_oldest_map());
-    superblock.maps.erase(superblock.get_oldest_map());
+    superblock.erase_oldest_maps();
   }
 
   // we should not trim past osdmaps.cached_key_lower_bound()
@@ -739,6 +741,19 @@ ShardServices::wait_for_pg(
   return local_state.pg_map.wait_for_pg(std::move(trigger), pgid).first;
 }
 
+ShardServices::wait_for_pg_ret
+ShardServices::create_split_pg(
+    PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
+    spg_t pgid)
+{
+  auto [fut, existed] = local_state.pg_map.wait_for_pg(
+      std::move(trigger), pgid);
+  if (!existed) {
+    local_state.pg_map.set_creating(pgid);
+  }
+  return std::move(fut);
+}
+
 seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
 
 {
@@ -757,7 +772,7 @@ seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
     });
   }).handle_exception([FNAME, pgid](auto ep) {
     INFO("pg {} saw exception on load {}", pgid, ep);
-    ceph_abort("Could not load pg" == 0);
+    ceph_abort_msg("Could not load pg");
     return seastar::make_exception_future<Ref<PG>>(ep);
   });
 }
@@ -783,6 +798,11 @@ seastar::future<> ShardServices::dispatch_context_transaction(
   co_return;
 }
 
+Ref<PG> ShardServices::get_pg(spg_t pgid)
+{
+  return local_state.get_pg(pgid);
+}
+
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
@@ -802,15 +822,19 @@ seastar::future<> ShardServices::dispatch_context_messages(
 
 seastar::future<> ShardServices::dispatch_context(
   crimson::os::CollectionRef col,
-  PeeringCtx &&ctx)
+  PeeringCtx &&pctx)
 {
-  ceph_assert(col || ctx.transaction.empty());
-  return seastar::when_all_succeed(
-    dispatch_context_messages(
-      BufferedRecoveryMessages{ctx}),
-    col ? dispatch_context_transaction(col, ctx) : seastar::now()
-  ).then_unpack([] {
-    return seastar::now();
+  return seastar::do_with(
+    std::move(pctx),
+    [this, col](auto &ctx) {
+    ceph_assert(col || ctx.transaction.empty());
+    return seastar::when_all_succeed(
+      dispatch_context_messages(
+       BufferedRecoveryMessages{ctx}),
+      col ? dispatch_context_transaction(col, ctx) : seastar::now()
+    ).then_unpack([] {
+      return seastar::now();
+    });
   });
 }
 

@@ -12,7 +12,7 @@ ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # see http://tracker.ceph.com/issues/25209
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
-ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
+ifeq (,$(findstring WITH_CRIMSON,$(CEPH_EXTRA_CMAKE_ARGS)))
   export CEPH_OSD_BASENAME = ceph-osd
 else
   export CEPH_OSD_BASENAME = crimson-osd
@@ -47,6 +47,13 @@ endif
 ifneq (,$(filter with_system_libs,$(DEB_BUILD_OPTIONS)))
   extraopts += -DWITH_SYSTEM_BOOST=ON
   extraopts += -DWITH_SYSTEM_PMDK=ON
+endif
+ifeq ($(SCCACHE), true)
+extraopts += -DWITH_SCCACHE=ON
+endif
+
+ifeq ($(DWZ), false)
+override_dh_dwz:
 endif
 
 # for python3-${pkg} packages
@@ -121,6 +128,8 @@ override_dh_strip:
 	dh_strip -plibradosstriper1 --dbg-package=libradosstriper1-dbg
 	dh_strip -plibrbd1 --dbg-package=librbd1-dbg
 	dh_strip -plibcephfs2 --dbg-package=libcephfs2-dbg
+	dh_strip -plibcephfs-proxy2 --dbg-package=libcephfs-proxy2-dbg
+	dh_strip -plibcephfs-daemon --dbg-package=libcephfs-daemon-dbg
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg

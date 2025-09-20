@@ -81,16 +81,20 @@ void decode_json_obj(BucketHashType& t, JSONObj *obj)
 // bucket_index_normal_layout
 void encode(const bucket_index_normal_layout& l, bufferlist& bl, uint64_t f)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(l.num_shards, bl);
   encode(l.hash_type, bl);
+  encode(l.min_num_shards, bl);
   ENCODE_FINISH(bl);
 }
 void decode(bucket_index_normal_layout& l, bufferlist::const_iterator& bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(l.num_shards, bl);
   decode(l.hash_type, bl);
+  if (struct_v >= 2) {
+    decode(l.min_num_shards, bl);
+  }
   DECODE_FINISH(bl);
 }
 void encode_json_impl(const char *name, const bucket_index_normal_layout& l, ceph::Formatter *f)
@@ -98,12 +102,16 @@ void encode_json_impl(const char *name, const bucket_index_normal_layout& l, cep
   f->open_object_section(name);
   encode_json("num_shards", l.num_shards, f);
   encode_json("hash_type", l.hash_type, f);
+  encode_json("min_num_shards", l.min_num_shards, f);
   f->close_section();
 }
 void decode_json_obj(bucket_index_normal_layout& l, JSONObj *obj)
 {
   JSONDecoder::decode_json("num_shards", l.num_shards, obj);
   JSONDecoder::decode_json("hash_type", l.hash_type, obj);
+
+  // if not set in json, set to default value of 1
+  JSONDecoder::decode_json("min_num_shards", l.min_num_shards, obj, 1);
 }
 
 // bucket_index_layout
@@ -179,6 +187,7 @@ std::string_view to_string(const BucketLogType& t)
 {
   switch (t) {
   case BucketLogType::InIndex: return "InIndex";
+  case BucketLogType::Deleted: return "Deleted";
   default: return "Unknown";
   }
 }
@@ -186,6 +195,10 @@ bool parse(std::string_view str, BucketLogType& t)
 {
   if (boost::iequals(str, "InIndex")) {
     t = BucketLogType::InIndex;
+    return true;
+  }
+  if (boost::iequals(str, "Deleted")) {
+    t = BucketLogType::Deleted;
     return true;
   }
   return false;
@@ -238,6 +251,8 @@ void encode(const bucket_log_layout& l, bufferlist& bl, uint64_t f)
   case BucketLogType::InIndex:
     encode(l.in_index, bl);
     break;
+  case BucketLogType::Deleted:
+    break;
   }
   ENCODE_FINISH(bl);
 }
@@ -248,6 +263,8 @@ void decode(bucket_log_layout& l, bufferlist::const_iterator& bl)
   switch (l.type) {
   case BucketLogType::InIndex:
     decode(l.in_index, bl);
+    break;
+  case BucketLogType::Deleted:
     break;
   }
   DECODE_FINISH(bl);
@@ -264,7 +281,9 @@ void encode_json_impl(const char *name, const bucket_log_layout& l, ceph::Format
 void decode_json_obj(bucket_log_layout& l, JSONObj *obj)
 {
   JSONDecoder::decode_json("type", l.type, obj);
-  JSONDecoder::decode_json("in_index", l.in_index, obj);
+  if (l.type == BucketLogType::InIndex) {
+    JSONDecoder::decode_json("in_index", l.in_index, obj);
+  }
 }
 
 // bucket_log_layout_generation
@@ -376,9 +395,9 @@ void encode_json_impl(const char *name, const BucketLayout& l, ceph::Formatter *
   for (const auto& log : l.logs) {
     encode_json("log", log, f);
   }
+  f->close_section(); // logs[]
   utime_t jt(l.judge_reshard_lock_time);
   encode_json("judge_reshard_lock_time", jt, f);
-  f->close_section(); // logs[]
   f->close_section();
 }
 void decode_json_obj(BucketLayout& l, JSONObj *obj)

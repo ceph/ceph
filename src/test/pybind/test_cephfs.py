@@ -569,6 +569,93 @@ def test_fchmod(testdir):
     cephfs.close(fd)
     cephfs.unlink(b'/file-fchmod')
 
+def test_chown(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+
+    uid = 1012
+    gid = 1012
+    cephfs.chown('file1', uid, gid)
+    st = cephfs.stat(b'/file1')
+    assert_equal(st.st_uid, uid)
+    assert_equal(st.st_gid, gid)
+
+def test_chown_change_uid_but_not_gid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+
+    st1 = cephfs.stat(b'/file1')
+
+    uid = 1012
+    cephfs.chown('file1', uid, -1)
+    st2 = cephfs.stat(b'/file1')
+    assert_equal(st2.st_uid, uid)
+
+    # ensure that gid is unchaged.
+    assert_equal(st1.st_gid, st2.st_gid)
+
+def test_chown_change_gid_but_not_uid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+
+    st1 = cephfs.stat(b'/file1')
+
+    gid = 1012
+    cephfs.chown('file1', -1, gid)
+    st2 = cephfs.stat(b'/file1')
+    assert_equal(st2.st_gid, gid)
+
+    # ensure that uid is unchaged.
+    assert_equal(st1.st_uid, st2.st_uid)
+
+def test_lchown(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+    cephfs.symlink('file1', 'slink1')
+
+    uid = 1012
+    gid = 1012
+    cephfs.lchown('slink1', uid, gid)
+    st = cephfs.lstat(b'/slink1')
+    assert_equal(st.st_uid, uid)
+    assert_equal(st.st_gid, gid)
+
+def test_lchown_change_uid_but_not_gid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+    cephfs.symlink('file1', 'slink1')
+
+    st1 = cephfs.lstat(b'slink1')
+
+    uid = 1012
+    cephfs.lchown('slink1', uid, -1)
+    st2 = cephfs.lstat(b'/slink1')
+    assert_equal(st2.st_uid, uid)
+
+    # ensure that gid is unchaged.
+    assert_equal(st1.st_gid, st2.st_gid)
+
+def test_lchown_change_gid_but_not_uid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+    cephfs.symlink('file1', 'slink1')
+
+    st1 = cephfs.lstat(b'slink1')
+
+    gid = 1012
+    cephfs.lchown('slink1', -1, gid)
+    st2 = cephfs.lstat(b'/slink1')
+    assert_equal(st2.st_gid, gid)
+
+    # ensure that uid is unchaged.
+    assert_equal(st1.st_uid, st2.st_uid)
+
 def test_fchown(testdir):
     fd = cephfs.open(b'/file-fchown', 'w', 0o655)
     uid = os.getuid()
@@ -585,6 +672,38 @@ def test_fchown(testdir):
     assert_equal(st["gid"], 9999)
     cephfs.close(fd)
     cephfs.unlink(b'/file-fchown')
+
+def test_fchown_change_uid_but_not_gid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+
+    st1 = cephfs.stat(b'/file1')
+
+    uid = 1012
+    cephfs.fchown(fd, uid, -1)
+    st2 = cephfs.stat(b'/file1')
+    assert_equal(st2.st_uid, uid)
+
+    # ensure that uid is unchanged.
+    assert_equal(st1.st_gid, st2.st_gid)
+
+    cephfs.close(fd)
+
+def test_fchown_change_gid_but_not_uid(testdir):
+    fd = cephfs.open('file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+
+    st1 = cephfs.stat(b'/file1')
+
+    gid = 1012
+    cephfs.chown('file1', -1, gid)
+    st2 = cephfs.stat(b'/file1')
+    assert_equal(st2.st_gid, gid)
+
+    # ensure that gid is unchanged.
+    assert_equal(st1.st_uid, st2.st_uid)
+
+    cephfs.close(fd)
 
 def test_truncate(testdir):
     fd = cephfs.open(b'/file-truncate', 'w', 0o755)
@@ -610,10 +729,10 @@ def test_ftruncate(testdir):
 def test_fallocate(testdir):
     fd = cephfs.open(b'/file-fallocate', 'w', 0o755)
     assert_raises(TypeError, cephfs.fallocate, b'/file-fallocate', 0, 10)
-    cephfs.fallocate(fd, 0, 10)
+    assert_raises(libcephfs.OperationNotSupported, cephfs.fallocate, fd, 0, 10)
     stat = cephfs.fsync(fd, 0)
     st = cephfs.fstat(fd)
-    assert_equal(st.st_size, 10)
+    assert_equal(st.st_size, 0)
     cephfs.close(fd)
     cephfs.unlink(b'/file-fallocate')
 

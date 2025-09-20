@@ -281,9 +281,7 @@ namespace rgw {
       ldpp_dout(s, 2) << "verifying op permissions" << dendl;
       ret = op->verify_permission(null_yield);
       if (ret < 0) {
-	if (s->system_request) {
-	  ldpp_dout(op, 2) << "overriding permissions due to system operation" << dendl;
-	} else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+	if (s->auth.identity->is_admin()) {
 	  ldpp_dout(op, 2) << "overriding permissions due to admin operation" << dendl;
 	} else {
 	  abort_req(s, op, ret);
@@ -316,7 +314,7 @@ namespace rgw {
               << e.what() << dendl;
     }
     if (should_log) {
-      rgw_log_op(nullptr /* !rest */, s, op, env.olog);
+      rgw_log_op(nullptr /* !rest */, s, op, env.olog.get());
     }
 
     int http_ret = s->err.http_ret;
@@ -418,9 +416,7 @@ namespace rgw {
     ldpp_dout(s, 2) << "verifying op permissions" << dendl;
     ret = op->verify_permission(null_yield);
     if (ret < 0) {
-      if (s->system_request) {
-	ldpp_dout(op, 2) << "overriding permissions due to system operation" << dendl;
-      } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+      if (s->auth.identity->is_admin()) {
 	ldpp_dout(op, 2) << "overriding permissions due to admin operation" << dendl;
       } else {
 	abort_req(s, op, ret);
@@ -549,6 +545,7 @@ namespace rgw {
     }
 
     main.init_lua();
+    main.init_dedup();
 
     return 0;
   } /* RGWLib::init() */

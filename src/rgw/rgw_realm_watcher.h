@@ -3,13 +3,9 @@
 
 #pragma once
 
-#include "include/rados/librados.hpp"
-#include "include/ceph_assert.h"
-#include "common/Timer.h"
-#include "common/Cond.h"
-
-class RGWRados;
-class RGWRealm;
+#include <map>
+#include "include/buffer.h"
+#include "include/encoding.h"
 
 enum class RGWRealmNotify {
   Reload,
@@ -21,7 +17,7 @@ WRITE_RAW_ENCODER(RGWRealmNotify);
  * RGWRealmWatcher establishes a watch on the current RGWRealm's control object,
  * and forwards notifications to registered observers.
  */
-class RGWRealmWatcher : public librados::WatchCtx2 {
+class RGWRealmWatcher {
  public:
   /**
    * Watcher is an interface that allows the RGWRealmWatcher to pass
@@ -35,32 +31,11 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
                                bufferlist::const_iterator& p) = 0;
   };
 
-  RGWRealmWatcher(const DoutPrefixProvider *dpp, CephContext* cct, const RGWRealm& realm);
-  ~RGWRealmWatcher() override;
+  virtual ~RGWRealmWatcher();
 
   /// register a watcher for the given notification type
   void add_watcher(RGWRealmNotify type, Watcher& watcher);
 
-  /// respond to realm notifications by calling the appropriate watcher
-  void handle_notify(uint64_t notify_id, uint64_t cookie,
-                     uint64_t notifier_id, bufferlist& bl) override;
-
-  /// reestablish the watch if it gets disconnected
-  void handle_error(uint64_t cookie, int err) override;
-
- private:
-  CephContext *const cct;
-
-  /// keep a separate Rados client whose lifetime is independent of RGWRados
-  /// so that we don't miss notifications during realm reconfiguration
-  librados::Rados rados;
-  librados::IoCtx pool_ctx;
-  uint64_t watch_handle = 0;
-  std::string watch_oid;
-
-  int watch_start(const DoutPrefixProvider *dpp, const RGWRealm& realm);
-  int watch_restart();
-  void watch_stop();
-
+ protected:
   std::map<RGWRealmNotify, Watcher&> watchers;
 };

@@ -13,13 +13,12 @@
 #include <boost/asio/strand.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/ssl/context.hpp>
+#include <boost/asio/ssl/stream.hpp>
 #include <boost/beast/version.hpp>
-#include <boost/beast/core/tcp_stream.hpp>
 #include <boost/beast/http/empty_body.hpp>
 #include <boost/beast/http/message.hpp>
 #include <boost/beast/http/string_body.hpp>
 #include <boost/beast/http/write.hpp>
-#include <boost/beast/ssl/ssl_stream.hpp>
 #include <functional>
 #include <memory>
 #include <string>
@@ -97,7 +96,7 @@ public:
         completion(r, std::move(response));
       }
 
-      void operator()(boost::beast::tcp_stream& stream) override {
+      void operator()(boost::asio::ip::tcp::socket& stream) override {
         preprocess_request();
 
         boost::beast::http::async_write(
@@ -110,7 +109,7 @@ public:
       }
 
       void operator()(
-          boost::beast::ssl_stream<boost::beast::tcp_stream>& stream) override {
+	  boost::asio::ssl::stream<boost::asio::ip::tcp::socket>& stream) override {
         preprocess_request();
 
         boost::beast::http::async_write(
@@ -152,9 +151,9 @@ private:
     virtual bool need_eof() const = 0;
     virtual bool header_only() const = 0;
     virtual void complete(int r, Response&&) = 0;
-    virtual void operator()(boost::beast::tcp_stream& stream) = 0;
+    virtual void operator()(boost::asio::ip::tcp::socket& stream) = 0;
     virtual void operator()(
-        boost::beast::ssl_stream<boost::beast::tcp_stream>& stream) = 0;
+        boost::asio::ssl::stream<boost::asio::ip::tcp::socket>& stream) = 0;
   };
 
   template <typename D> struct HttpSession;

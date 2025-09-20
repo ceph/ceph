@@ -24,6 +24,9 @@
 #include "common/config_proxy.h"
 #include "gtest/gtest.h"
 
+// FIXME: Clay is not yet supported in new EC.
+IGNORE_DEPRECATED
+
 using namespace std;
 
 TEST(ErasureCodeClay, sanity_check_k)
@@ -584,6 +587,8 @@ TEST(ErasureCodeClay, create_rule)
     EXPECT_EQ("unknown type WORSE", ss.str());
   }
 }
+
+END_IGNORE_DEPRECATED
 
 /* 
  * Local Variables:

@@ -23,6 +23,20 @@ local g = import 'grafonnet/grafana.libsonnet';
         'dashboard'
       )
     )
+    .addLinks([
+      $.addLinkSchema(
+        asDropdown=true,
+        icon='external link',
+        includeVars=true,
+        keepTime=true,
+        tags=[],
+        targetBlank=false,
+        title='Browse Dashboards',
+        tooltip='',
+        type='dashboards',
+        url=''
+      ),
+    ])
     .addTemplate(
       g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
     )
@@ -513,74 +527,85 @@ local g = import 'grafonnet/grafana.libsonnet';
         ]
       ),
 
-      $.simpleGraphPanel(
-        {},
-        'Top $topk Client IOPS by Pool',
-        'This chart shows the sum of read and write IOPS from all clients by pool',
-        'short',
-        'IOPS',
-        0,
-        |||
-          topk($topk,
-            round(
-              (
-                rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) +
-                  rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])
-              ), 1
-            ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s})
-        ||| % $.matchers(),
-        '{{name}} ',
-        0,
-        9,
-        12,
-        8
+      $.timeSeriesPanel(
+        title='Top $topk Client IOPS by Pool',
+        datasource='$datasource',
+        gridPosition={ x: 0, y: 9, w: 12, h: 8 },
+        unit='short',
+        axisLabel='IOPS',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
       )
-      .addTarget(
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            topk($topk,
+              round(
+                (
+                  rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) +
+                  rate(ceph_pool_wr{%(matchers)s}[$__rate_interval])
+                ), 1
+              ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s}
+            )
+          ||| % $.matchers(),
+          '{{name}}'
+        ),
         $.addTargetSchema(
           |||
             topk($topk,
               rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) +
-                on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s}
+              on(pool_id) group_left(instance,name) ceph_pool_metadata{%(matchers)s}
             )
           ||| % $.matchers(),
           '{{name}} - write'
-        )
-      ),
-      $.simpleGraphPanel(
-        {},
-        'Top $topk Client Bandwidth by Pool',
-        'The chart shows the sum of read and write bytes from all clients, by pool',
-        'Bps',
-        'Throughput',
-        0,
-        |||
-          topk($topk,
-            (
-              rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+        ),
+      ]),
+      $.timeSeriesPanel(
+        title='Top $topk Client Bandwidth by Pool',
+        datasource='$datasource',
+        gridPosition={ x: 12, y: 9, w: 12, h: 8 },
+        unit='Bps',
+        axisLabel='Throughput',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
+      )
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            topk($topk,
+              (
+                rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
                 rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval])
-            ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s}
-          )
-        ||| % $.matchers(),
-        '{{name}}',
-        12,
-        9,
-        12,
-        8
-      ),
-      $.simpleGraphPanel(
-        {},
-        'Pool Capacity Usage (RAW)',
-        'Historical view of capacity usage, to help identify growth and trends in pool consumption',
-        'bytes',
-        'Capacity Used',
-        0,
-        'ceph_pool_bytes_used{%(matchers)s} * on(pool_id) group_right ceph_pool_metadata{%(matchers)s}' % $.matchers(),
-        '{{name}}',
-        0,
-        17,
-        24,
-        7
-      ),
+              ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{%(matchers)s}
+            )
+          ||| % $.matchers(),
+          '{{name}}'
+        ),
+      ]),
+      $.timeSeriesPanel(
+        title='Pool Capacity Usage (RAW)',
+        datasource='$datasource',
+        gridPosition={ x: 0, y: 17, w: 24, h: 7 },
+        unit='bytes',
+        axisLabel='Capacity Used',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
+      )
+      .addTargets([
+        $.addTargetSchema(
+          'ceph_pool_bytes_used{%(matchers)s} * on(pool_id) group_right ceph_pool_metadata{%(matchers)s}' % $.matchers(),
+          '{{name}}'
+        ),
+      ]),
     ]),
   'pool-detail.json':
     $.dashboardSchema(
@@ -613,6 +638,20 @@ local g = import 'grafonnet/grafana.libsonnet';
         'dashboard'
       )
     )
+    .addLinks([
+      $.addLinkSchema(
+        asDropdown=true,
+        icon='external link',
+        includeVars=true,
+        keepTime=true,
+        tags=[],
+        targetBlank=false,
+        title='Browse Dashboards',
+        tooltip='',
+        type='dashboards',
+        url=''
+      ),
+    ])
     .addTemplate(
       g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
     )
@@ -670,106 +709,111 @@ local g = import 'grafonnet/grafana.libsonnet';
         5,
         7
       ),
-      $.simpleGraphPanel(
-        {
-          read_op_per_sec:
-            '#3F6833',
-          write_op_per_sec: '#E5AC0E',
-        },
-        '$pool_name Object Ingress/Egress',
-        '',
-        'ops',
-        'Objects out(-) / in(+) ',
-        null,
-        |||
-          deriv(ceph_pool_objects{%(matchers)s}[1m]) *
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
-        ||| % $.matchers(),
-        'Objects per second',
-        12,
-        0,
-        12,
-        7
-      ),
-      $.simpleGraphPanel(
-        {
-          read_op_per_sec: '#3F6833',
-          write_op_per_sec: '#E5AC0E',
-        },
-        '$pool_name Client IOPS',
-        '',
-        'iops',
-        'Read (-) / Write (+)',
-        null,
-        |||
-          rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) *
-            on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
-        ||| % $.matchers(),
-        'reads',
-        0,
-        7,
-        12,
-        7
+      $.timeSeriesPanel(
+        title='$pool_name Object Ingress/Egress',
+        datasource='$datasource',
+        gridPosition={ x: 12, y: 0, w: 12, h: 7 },
+        unit='ops',
+        axisLabel='Objects out(-) / in(+)',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
       )
-      .addSeriesOverride({ alias: 'reads', transform: 'negative-Y' })
-      .addTarget(
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            deriv(ceph_pool_objects{%(matchers)s}[1m]) *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
+          ||| % $.matchers(),
+          'Objects per second'
+        ),
+      ]),
+      $.timeSeriesPanel(
+        title='$pool_name Client IOPS',
+        datasource='$datasource',
+        gridPosition={ x: 0, y: 7, w: 12, h: 7 },
+        unit='iops',
+        axisLabel='Read (-) / Write (+)',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
+      )
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            rate(ceph_pool_rd{%(matchers)s}[$__rate_interval]) *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
+          ||| % $.matchers(),
+          'reads'
+        ),
         $.addTargetSchema(
           |||
             rate(ceph_pool_wr{%(matchers)s}[$__rate_interval]) *
               on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'writes'
-        )
-      ),
-      $.simpleGraphPanel(
-        {
-          read_op_per_sec: '#3F6833',
-          write_op_per_sec: '#E5AC0E',
-        },
-        '$pool_name Client Throughput',
-        '',
-        'Bps',
-        'Read (-) / Write (+)',
-        null,
-        |||
-          rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
-            on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
-        ||| % $.matchers(),
-        'reads',
-        12,
-        7,
-        12,
-        7
+        ),
+      ])
+      .addSeriesOverride({
+        alias: 'reads',
+        transform: 'negative-Y',
+      }),
+      $.timeSeriesPanel(
+        title='$pool_name Client Throughput',
+        datasource='$datasource',
+        gridPosition={ x: 12, y: 7, w: 12, h: 7 },
+        unit='Bps',
+        axisLabel='Read (-) / Write (+)',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
       )
-      .addSeriesOverride({ alias: 'reads', transform: 'negative-Y' })
-      .addTarget(
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            rate(ceph_pool_rd_bytes{%(matchers)s}[$__rate_interval]) +
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
+          ||| % $.matchers(),
+          'reads'
+        ),
         $.addTargetSchema(
           |||
             rate(ceph_pool_wr_bytes{%(matchers)s}[$__rate_interval]) +
-              on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
           ||| % $.matchers(),
           'writes'
-        )
-      ),
-      $.simpleGraphPanel(
-        {
-          read_op_per_sec: '#3F6833',
-          write_op_per_sec: '#E5AC0E',
-        },
-        '$pool_name Objects',
-        '',
-        'short',
-        'Objects',
-        null,
-        |||
-          ceph_pool_objects{%(matchers)s} *
-            on(pool_id) group_left(instance,name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
-        ||| % $.matchers(),
-        'Number of Objects',
-        0,
-        14,
-        12,
-        7
-      ),
+        ),
+      ])
+      .addSeriesOverride({
+        alias: 'reads',
+        transform: 'negative-Y',
+      }),
+      $.timeSeriesPanel(
+        title='$pool_name Objects',
+        datasource='$datasource',
+        gridPosition={ x: 0, y: 14, w: 12, h: 7 },
+        unit='short',
+        axisLabel='Objects',
+        drawStyle='line',
+        fillOpacity=8,
+        tooltip={ mode: 'multi', sort: 'none' },
+        colorMode='palette-classic',
+        spanNulls=true,
+      )
+      .addTargets([
+        $.addTargetSchema(
+          |||
+            ceph_pool_objects{%(matchers)s} *
+              on(pool_id) group_left(instance, name) ceph_pool_metadata{name=~"$pool_name", %(matchers)s}
+          ||| % $.matchers(),
+          'Number of Objects'
+        ),
+      ]),
     ]),
 }

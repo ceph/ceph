@@ -5,6 +5,9 @@
 #define CEPH_CLS_QUEUE_TYPES_H
 
 #include <errno.h>
+
+#include "common/Formatter.h"
+#include "include/encoding.h"
 #include "include/types.h"
 
 //Size of head leaving out urgent data
@@ -39,11 +42,13 @@ struct cls_queue_entry
     f->dump_string("marker", marker);
     f->dump_unsigned("data_len", data.length());
   }
-  static void generate_test_instances(std::list<cls_queue_entry*>& o) {
-    o.push_back(new cls_queue_entry);
-    o.push_back(new cls_queue_entry);
-    o.back()->data.append(std::string_view("data"));
-    o.back()->marker = "marker";
+  static std::list<cls_queue_entry> generate_test_instances() {
+    std::list<cls_queue_entry> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().data.append(std::string_view("data"));
+    o.back().marker = "marker";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_entry)
@@ -95,11 +100,13 @@ struct cls_queue_marker
     f->dump_unsigned("offset", offset);
     f->dump_unsigned("gen", gen);
   }
-  static void generate_test_instances(std::list<cls_queue_marker*>& o) {
-    o.push_back(new cls_queue_marker);
-    o.push_back(new cls_queue_marker);
-    o.back()->offset = 1024;
-    o.back()->gen = 0;
+  static std::list<cls_queue_marker> generate_test_instances() {
+    std::list<cls_queue_marker> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().offset = 1024;
+    o.back().gen = 0;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_marker)
@@ -144,16 +151,18 @@ struct cls_queue_head
     f->dump_unsigned("tail_offset", tail.offset);
     f->dump_unsigned("tail_gen", tail.gen);
   }
-  static void generate_test_instances(std::list<cls_queue_head*>& o) {
-    o.push_back(new cls_queue_head);
-    o.push_back(new cls_queue_head);
-    o.back()->max_head_size = 1024;
-    o.back()->front.offset = 1024;
-    o.back()->front.gen = 0;
-    o.back()->tail.offset = 1024;
-    o.back()->tail.gen = 0;
-    o.back()->queue_size = 1024;
-    o.back()->max_urgent_data_size = 0;
+  static std::list<cls_queue_head> generate_test_instances() {
+    std::list<cls_queue_head> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().max_head_size = 1024;
+    o.back().front.offset = 1024;
+    o.back().front.gen = 0;
+    o.back().tail.offset = 1024;
+    o.back().tail.gen = 0;
+    o.back().queue_size = 1024;
+    o.back().max_urgent_data_size = 0;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_head)

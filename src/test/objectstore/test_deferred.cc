@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <iostream>
 #include <memory>
@@ -44,10 +45,11 @@ void create_deferred_and_terminate() {
   coll_t cid;
   ghobject_t hoid;
   ObjectStore::CollectionHandle ch;
-  ceph_assert(::mkdir("bluestore.test_temp_dir", 0777) == 0);
+  std::string const db_store_dir = "bluestore.test_temp_dir_" + std::to_string(time(NULL));
+  ceph_assert(::mkdir(db_store_dir.c_str(), 0777) == 0);
   store = ObjectStore::create(g_ceph_context,
                               "bluestore",
-                              "bluestore.test_temp_dir",
+                              db_store_dir.c_str(),
                               "store_test_temp_journal");
   ceph_assert(store->mkfs() == 0);
   ceph_assert(store->mount() == 0);

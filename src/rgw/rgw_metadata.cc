@@ -97,14 +97,16 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("status", status, obj);
 }
 
-void RGWMetadataLogData::generate_test_instances(std::list<RGWMetadataLogData *>& l) {
-  l.push_back(new RGWMetadataLogData{});
-  l.push_back(new RGWMetadataLogData);
-  l.back()->read_version = obj_version();
-  l.back()->read_version.tag = "read_tag";
-  l.back()->write_version = obj_version();
-  l.back()->write_version.tag = "write_tag";
-  l.back()->status = MDLOG_STATUS_WRITE;
+std::list<RGWMetadataLogData> RGWMetadataLogData::generate_test_instances() {
+  std::list<RGWMetadataLogData> l;
+  l.emplace_back();
+  l.emplace_back();
+  l.back().read_version = obj_version();
+  l.back().read_version.tag = "read_tag";
+  l.back().write_version = obj_version();
+  l.back().write_version.tag = "write_tag";
+  l.back().status = MDLOG_STATUS_WRITE;
+  return l;
 }
 
 class RGWMetadataTopHandler : public RGWMetadataHandler {
@@ -459,13 +461,14 @@ string RGWMetadataManager::get_marker(void *handle)
   return h->handler->get_marker(h->handle);
 }
 
-void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
+void RGWMetadataManager::dump_log_entry(cls::log::entry& entry, Formatter *f)
 {
   f->open_object_section("entry");
   f->dump_string("id", entry.id);
   f->dump_string("section", entry.section);
   f->dump_string("name", entry.name);
-  entry.timestamp.gmtime_nsec(f->dump_stream("timestamp"));
+  utime_t ts(entry.timestamp);
+  ts.gmtime_nsec(f->dump_stream("timestamp"));
 
   try {
     RGWMetadataLogData log_data;

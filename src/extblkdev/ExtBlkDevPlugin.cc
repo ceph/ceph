@@ -247,7 +247,7 @@ namespace ceph {
 	}
       }
       if (rc == 0) {
-	dout(1) << __func__ << " using plugin " << plg_name << ", " <<  "volume " << ebd_impl->get_devname()
+	dout(1) << __func__ << " using plugin " << plg_name << ", volume " << ebd_impl->get_devname()
 		      << " maps to " << logdevname << dendl;
       } else {
 	dout(10) << __func__ << " no plugin volume maps to " << logdevname << dendl;

@@ -35,3 +35,23 @@ extern "C" int jerasure_init(int count, int *words)
   }
   return 0;
 }
+
+void jerasure_finish()
+{
+  // jerasure based codings generate matrices using Galois field operations via
+  // the Jerasure library. The underlying acceleration functions for different
+  // word sizes are cached in global static variables and initialized lazily.
+  // These cached functions must be explicitly freed after erasure coding
+  // operations complete to prevent memory leaks.
+  // Note:
+  // - Operations for word sizes > 32 bits are not yet implemented
+  // - Jerasure only supports word sizes that are power of 2.
+  static const int words[] = {4, 8, 16, 32};
+  for (auto w : words) {
+    gf_t* gf = galois_get_field_ptr(w);
+    if (gf) {
+      gf_free(gf, 0);
+      free(gf);
+    }
+  }
+}

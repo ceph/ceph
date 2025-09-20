@@ -19,6 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
+#include "include/types.h" // for client_t
 #include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
@@ -27,10 +28,10 @@
 #include "messages/MOSDOpReply.h"
 #include "common/admin_finisher.h"
 #include "common/Checksummer.h"
+#include "common/intrusive_timer.h"
 #include "common/sharedptr_registry.hpp"
 #include "common/shared_cache.hpp"
 #include "ReplicatedBackend.h"
-#include "ECBackend.h"
 #include "PGTransaction.h"
 #include "cls/cas/cls_cas_ops.h"
 
@@ -349,6 +350,19 @@ public:
 			     eversion_t v,
 			     Context *on_complete) override;
 
+  void pg_lock() override {
+    lock();
+  }
+  void pg_unlock() override {
+    unlock();
+  }
+  void pg_add_ref() override {
+    intrusive_ptr_add_ref(this);
+  }
+  void pg_dec_ref() override {
+    intrusive_ptr_release(this);
+  }
+
   template<class T> class BlessedGenContext;
   template<class T> class UnlockedBlessedGenContext;
   class BlessedContext;
@@ -378,6 +392,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const override {
+    return PG::get_acting_recovery_backfill_shard_id_set();
   }
   const std::set<pg_shard_t> &get_acting_shards() const override {
     return recovery_state.get_actingset();
@@ -439,6 +456,9 @@ public:
   const pg_pool_t &get_pool() const override {
     return pool.info;
   }
+  eversion_t get_pg_committed_to() const override {
+    return recovery_state.get_pg_committed_to();
+  }
 
   ObjectContextRef get_obc(
     const hobject_t &hoid,
@@ -497,12 +517,12 @@ public:
     const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
-    const eversion_t &min_last_complete_ondisk,
+    const eversion_t &pg_committed_to,
     bool transaction_applied,
     ObjectStore::Transaction &t,
     bool async = false) override {
     if (is_primary()) {
-      ceph_assert(trim_to <= recovery_state.get_last_update_ondisk());
+      ceph_assert(trim_to <= pg_committed_to);
     }
     if (hset_history) {
       recovery_state.update_hset(*hset_history);
@@ -519,7 +539,7 @@ public:
       replica_clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
-      std::move(logv), trim_to, roll_forward_to, min_last_complete_ondisk,
+      std::move(logv), trim_to, roll_forward_to, pg_committed_to,
       t, transaction_applied, async);
   }
 
@@ -552,6 +572,10 @@ public:
     recovery_state.update_last_complete_ondisk(lcod);
   }
 
+  void update_pct(eversion_t pct) override {
+    recovery_state.update_pct(pct);
+  }
+
   void update_stats(
     const pg_stat_t &stat) override {
     recovery_state.update_stats(
@@ -564,6 +588,8 @@ public:
   void schedule_recovery_work(
     GenContext<ThreadPool::TPHandle&> *c,
     uint64_t cost) override;
+
+  common::intrusive_timer &get_pg_timer() override;
 
   pg_shard_t whoami_shard() const override {
     return pg_whoami;
@@ -580,9 +606,19 @@ public:
   uint64_t min_upacting_features() const override {
     return recovery_state.get_min_upacting_features();
   }
+  pg_feature_vec_t get_pg_acting_features() const override {
+    return recovery_state.get_pg_acting_features();
+  }
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(peer, m, from_epoch);
+  }
+  void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
   }
   void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {
@@ -595,6 +631,12 @@ public:
   void send_message_osd_cluster(
     Message *m, const ConnectionRef& con) override {
     osd->send_message_osd_cluster(m, con);
+  }
+  void start_mon_command(
+    const std::vector<std::string>& cmd, const bufferlist& inbl,
+    bufferlist *outbl, std::string *outs,
+    Context *onfinish) override {
+    osd->monc->start_mon_command(cmd, inbl, outbl, outs, onfinish);
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {
@@ -1107,7 +1149,7 @@ protected:
     }
     {
       f->open_array_section("peer_backfill_info");
-      for (std::map<pg_shard_t, BackfillInterval>::const_iterator pbi =
+      for (std::map<pg_shard_t, ReplicaBackfillInterval>::const_iterator pbi =
 	     peer_backfill_info.begin();
           pbi != peer_backfill_info.end(); ++pbi) {
         f->dump_stream("osd") << pbi->first;
@@ -1296,14 +1338,20 @@ protected:
    * @bi.begin first item should be >= this value
    * @bi [out] resulting std::map of objects to eversion_t's
    */
-  void scan_range(
-    int min, int max, BackfillInterval *bi,
+  void scan_range_replica(
+    int min, int max, ReplicaBackfillInterval *bi,
     ThreadPool::TPHandle &handle
+    );
+
+  void scan_range_primary(
+    int min, int max, PrimaryBackfillInterval *bi,
+    ThreadPool::TPHandle &handle,
+    const std::set<pg_shard_t> &backfill_targets
     );
 
   /// Update a hash range to reflect changes since the last scan
   void update_range(
-    BackfillInterval *bi,        ///< [in,out] interval to update
+    PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
@@ -1494,7 +1542,8 @@ public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
 	       const PGPool &_pool,
 	       const std::map<std::string,std::string>& ec_profile,
-	       spg_t p);
+	       spg_t p,
+               ECExtentCache::LRU &ec_extent_cache_lru);
   ~PrimaryLogPG() override;
 
   void do_command(
@@ -1851,6 +1900,9 @@ public:
       !recovery_state.get_missing_loc().readable_with_acting(
 	oid, get_actingset());
   }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    return recovery_state.is_missing_any_head_or_clone_of(hoid);
+  }
   void maybe_kick_recovery(const hobject_t &soid);
   void wait_for_unreadable_object(const hobject_t& oid, OpRequestRef op);
   void finish_unreadable_object(const hobject_t oid);
@@ -1967,6 +2019,7 @@ public:
 
 private:
   DynamicPerfStats m_dynamic_perf_stats;
+
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
@@ -1994,6 +2047,5 @@ inline ostream& operator<<(ostream& out,
 
 void intrusive_ptr_add_ref(PrimaryLogPG::RepGather *repop);
 void intrusive_ptr_release(PrimaryLogPG::RepGather *repop);
-
 
 #endif

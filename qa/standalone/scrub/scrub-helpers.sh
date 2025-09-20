@@ -231,8 +231,13 @@ function standard_scrub_cluster() {
 
     local OSDS=${args['osds_num']:-"3"}
     local pg_num=${args['pgs_in_pool']:-"8"}
+
     local poolname="${args['pool_name']:-test}"
     args['pool_name']=$poolname
+
+    local pool_default_size=${args['pool_default_size']:-3}
+    args['pool_default_size']=$pool_default_size
+
     local extra_pars=${args['extras']}
     local debug_msg=${args['msg']:-"dbg"}
 
@@ -240,8 +245,8 @@ function standard_scrub_cluster() {
     local saved_echo_flag=${-//[^x]/}
     set +x
 
-    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
+    run_mon $dir a --osd_pool_default_size=$pool_default_size || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
 
     local ceph_osd_args="--osd_deep_scrub_randomize_ratio=0 \
             --osd_scrub_interval_randomize_ratio=0 \
@@ -249,9 +254,12 @@ function standard_scrub_cluster() {
             --osd_pool_default_pg_autoscale_mode=off \
             --osd_pg_stat_report_interval_max_seconds=1 \
             --osd_pg_stat_report_interval_max_epochs=1 \
+            --osd_stats_update_period_not_scrubbing=3 \
+            --osd_stats_update_period_scrubbing=1 \
             --osd_scrub_retry_after_noscrub=5 \
             --osd_scrub_retry_pg_state=5 \
             --osd_scrub_retry_delay=3 \
+            --osd_pool_default_size=$pool_default_size \
             $extra_pars"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -259,14 +267,18 @@ function standard_scrub_cluster() {
       run_osd $dir $osd $(echo $ceph_osd_args) || return 1
     done
 
-    create_pool $poolname $pg_num $pg_num
-    wait_for_clean || return 1
+    if [[ "$poolname" != "nopool" ]]; then
+        create_pool $poolname $pg_num $pg_num --autoscale_mode=off || return 1
+        wait_for_clean || return 1
+    fi
 
     # update the in/out 'args' with the ID of the new pool
     sleep 1
-    name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
-    echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
-    args['pool_id']="${name_n_id##* }"
+    if [[ "$poolname" != "nopool" ]]; then
+        name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
+        echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
+        args['pool_id']="${name_n_id##* }"
+    fi
     args['osd_args']=$ceph_osd_args
     if [[ -n "$saved_echo_flag" ]]; then set -x; fi
 }
@@ -297,18 +309,223 @@ function standard_scrub_wpq_cluster() {
 }
 
 
+# Parse the output of a 'pg dump pgs_brief' command and build a set of dictionaries:
+# - pg_primary_dict: a dictionary of pgid -> acting_primary
+# - pg_acting_dict: a dictionary of pgid -> acting set
+# - pg_pool_dict: a dictionary of pgid -> pool
+# If the input file is '-', the function will fetch the dump directly from the ceph cluster.
+function build_pg_dicts {
+  local dir=$1
+  local -n pg_primary_dict=$2
+  local -n pg_acting_dict=$3
+  local -n pg_pool_dict=$4
+  local infile=$5
+
+  local extr_dbg=0 # note: 3 and above leave some temp files around
+
+  #turn off '-x' (but remember previous state)
+  local saved_echo_flag=${-//[^x]/}
+  set +x
+
+  # This jq filter extracts all required fields, creating a tab-separated output.
+  local jq_filter='.pg_stats[] | [.pgid, (.acting | @sh), .acting_primary, (.pgid | split(".")[0])] | @tsv'
+
+  # if the infile name is '-', fetch the dump directly from the ceph cluster
+  if [[ $infile == "-" ]]; then
+    local json_data
+    json_data=$(ceph pg dump pgs_brief -f=json)
+    local -r ceph_cmd_rc=$?
+    if [[ $ceph_cmd_rc -ne 0 ]]; then
+      echo "Error: 'ceph pg dump' command failed with return code $ceph_cmd_rc"
+    fi
+    (( extr_dbg >= 3 )) && echo "$json_data" > /tmp/e2
+
+    while IFS=$'\t' read -r pgid acting acting_primary pool; do
+      [[ -z "$pgid" ]] && continue
+      (( extr_dbg >= 1 )) && echo "PG: $pgid  acting: $acting  primary: $acting_primary  pool: $pool"
+      pg_primary_dict["$pgid"]=$acting_primary
+      pg_acting_dict["$pgid"]=$acting
+      pg_pool_dict["$pgid"]=$pool
+    done < <(echo "$json_data" | jq -r "$jq_filter")
+
+  else
+    # Process directly from file
+    while IFS=$'\t' read -r pgid acting acting_primary pool; do
+      [[ -z "$pgid" ]] && continue
+      (( extr_dbg >= 1 )) && echo "PG: $pgid  acting: $acting  primary: $acting_primary  pool: $pool"
+      pg_primary_dict["$pgid"]=$acting_primary
+      pg_acting_dict["$pgid"]=$acting
+      pg_pool_dict["$pgid"]=$pool
+    done < <(jq -r "$jq_filter" "$infile")
+  fi
+
+  if [[ -n "$saved_echo_flag" ]]; then set -x; fi
+}
+
+
+# a function that counts the number of common active-set elements between two PGs
+# 1 - the first PG
+# 2 - the second PG
+# 3 - the dictionary of active sets
+function count_common_active {
+  local pg1=$1
+  local pg2=$2
+  local -n pg_acting_dict=$3
+
+  local -a a1=(${pg_acting_dict[$pg1]})
+  local -a a2=(${pg_acting_dict[$pg2]})
+
+  local -i cnt=0
+  for i in "${a1[@]}"; do
+    for j in "${a2[@]}"; do
+      if [[ $i -eq $j ]]; then
+        cnt=$((cnt+1))
+      fi
+    done
+  done
+
+  printf '%d' "$cnt"
+}
+
+
+# given a PG, find another one with a disjoint active set
+# - but allow a possible common Primary
+# 1 - the PG
+# 2 - the dictionary of active sets
+# 3 - [out] - the PG with a disjoint active set
+function find_disjoint_but_primary {
+  local pg=$1
+  local -n ac_dict=$2
+  local -n p_dict=$3
+  local -n res=$4
+
+  for cand in "${!ac_dict[@]}"; do
+    if [[ "$cand" != "$pg" ]]; then
+      local -i common=$(count_common_active "$pg" "$cand" ac_dict)
+      if [[ $common -eq 0 || ( $common -eq 1 && "${p_dict[$pg]}" == "${p_dict[$cand]}" )]]; then
+        res=$cand
+        return
+      fi
+    fi
+  done
+}
+
+
 # A debug flag is set for the PG specified, causing the 'pg query' command to display
 # an additional 'scrub sessions counter' field.
 #
 # $1: PG id
 #
 function set_query_debug() {
-    local pgid=$1
-    local prim_osd=`ceph pg dump pgs_brief | \
-      awk -v pg="^$pgid" -n -e '$0 ~ pg { print(gensub(/[^0-9]*([0-9]+).*/,"\\\\1","g",$5)); }' `
+  local pgid=$1
+  local prim_osd=`ceph pg dump pgs_brief | \
+    awk -v pg="^$pgid" -n -e '$0 ~ pg { print(gensub(/[^0-9]*([0-9]+).*/,"\\\\1","g",$5)); }' `
+  echo "Setting scrub debug data. Primary for $pgid is $prim_osd"
+  CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.$prim_osd) \
+        scrubdebug $pgid set sessions
+}
 
-    echo "Setting scrub debug data. Primary for $pgid is $prim_osd"
-    CEPH_ARGS='' ceph --format=json daemon $(get_asok_path osd.$prim_osd) \
-          scrubdebug $pgid set sessions
+
+# For a set of objects named <basename><i>, where i is a number from 1 to obj_num,
+# query the cluster for their PGs, primary OSDs and acting sets.
+# The results are stored in the following dictionaries:
+# - obj_pgid_dict: object name -> pgid
+# - obj_prim_dict: object name -> primary OSD
+# - obj_acting_dict: object name -> acting set
+function objs_to_prim_dict_fast()
+{
+  local dir=$1
+  local poolname=$2
+  local basename=$3
+  local obj_num=$4
+  local -n obj_pgid_dict=$5
+  local -n obj_prim_dict=$6
+  local -n obj_acting_dict=$7
+  #turn off '-x' (but remember previous state)
+  local saved_echo_flag=${-//[^x]/}
+  set +x
+  local extr_dbg=0
+
+  # Read the Python output and populate the dictionaries
+  while IFS=$'\t' read -r obj pgid primary acting; do
+    (( extr_dbg >= 3 )) && printf "Processing object: %s, PGID: %s, Primary: %s, Acting: %s\n" \
+                                "$obj" "$pgid" "$primary" "$acting"
+    if [[ -n "$obj" && -n "$pgid" ]]; then
+      obj_pgid_dict["$obj"]=$pgid
+      obj_prim_dict["$obj"]=$primary
+      obj_acting_dict["$obj"]=$acting
+    fi
+  done < <(python3 << EOF
+import subprocess
+import json
+import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+def get_object_mapping(obj_name, pool_name):
+    """Get PG mapping for a single object."""
+    try:
+        cmd = ['ceph', '--format=json', 'osd', 'map', pool_name, obj_name]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, text=True, stderr=subprocess.DEVNULL)
+        if result.returncode == 0:
+            data = json.loads(result.stdout)
+            pgid = data.get('pgid', '')
+            primary = data.get('acting_primary', '')
+            acting = ' '.join(map(str, data.get('acting', [])))
+            return obj_name, pgid, primary, acting
+        else:
+            return obj_name, '', '', ''
+    except Exception:
+        return obj_name, '', '', ''
+
+# Parameters from bash variables
+pool_name = "$poolname"
+base_name = "$basename"
+obj_count = $obj_num
+
+# Generate object names
+objects = [f"{base_name}{i}" for i in range(1, obj_count + 1)]
+
+# Use ThreadPoolExecutor for parallel execution
+max_workers = min(16, len(objects))
+
+with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    future_to_obj = {
+        executor.submit(get_object_mapping, obj, pool_name): obj 
+        for obj in objects
+    }
+
+    for future in as_completed(future_to_obj):
+        obj_name, pgid, primary, acting = future.result()
+        if pgid:
+            print(f"{obj_name}\t{pgid}\t{primary}\t{acting}")
+EOF
+)
+
+  if [[ $saved_echo_flag ]]; then
+    set -x
+  fi
+}
+
+# a version of 'objs_to_prim_dict_fast' that does not use Python.
+function objs_to_prim_dict()
+{
+  {
+    local dir=$1
+    local poolname=$2
+    local basename=$3
+    local obj_num=$4
+    local -n obj_pgid_dict=$5
+    local -n obj_prim_dict=$6
+    local -n obj_acting_dict=$7
+
+    for i in $(seq 1 $obj_num ); do
+        local obj="${basename}${i}"
+        IFS=$'\t' read -r pgid primary_osd acting <<<$(ceph --format=json osd map $poolname $obj |\
+          jq -r '"\(.pgid)\t\(.acting_primary)\t\(.acting | join(" "))"')
+        obj_pgid_dict["$obj"]=$pgid
+        obj_prim_dict["$obj"]=$primary_osd
+        obj_acting_dict["$obj"]=$acting
+    done
+  } 2> /dev/null
 }
 

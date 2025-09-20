@@ -35,7 +35,20 @@
    "graphTooltip": 0,
    "hideControls": false,
    "id": null,
-   "links": [ ],
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
    "panels": [
       {
          "aliasColors": { },
@@ -417,7 +430,7 @@
             "multi": false,
             "name": "image",
             "options": [ ],
-            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\", , pool=\"$pool\"}, image)",
+            "query": "label_values(ceph_rbd_read_ops{cluster=~\"$cluster\",  pool=\"$pool\"}, image)",
             "refresh": 1,
             "regex": "",
             "sort": 0,

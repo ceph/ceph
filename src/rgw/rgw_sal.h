@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
@@ -26,6 +27,7 @@
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
 #include "include/random.h"
+#include "include/function2.hpp"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -56,6 +58,11 @@ using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 namespace rgw {
   class Aio;
   namespace IAM { struct Policy; }
+}
+
+namespace rgw::restore {
+  class Restore;
+  struct RestoreEntry;
 }
 
 class RGWGetDataCB {
@@ -153,13 +160,19 @@ enum AttrsMod {
 static constexpr uint32_t FLAG_LOG_OP = 0x0001;
 static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 
-enum RGWRestoreStatus : uint8_t {
+// if cannot do all elements of op, do as much as possible (e.g.,
+// delete object where head object is missing)
+static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
+static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
+
+enum class RGWRestoreStatus : uint8_t {
   None  = 0,
   RestoreAlreadyInProgress = 1,
   CloudRestored = 2,
   RestoreFailed = 3
 };
 
+std::string_view rgw_restore_status_dump(rgw::sal::RGWRestoreStatus status);
 
 enum class RGWRestoreType : uint8_t {
   None = 0,
@@ -167,6 +180,7 @@ enum class RGWRestoreType : uint8_t {
   Permanent = 2
 };
 
+std::string_view rgw_restore_type_dump(rgw::sal::RGWRestoreType type);
 
 // a simple streaming data processing abstraction
 /**
@@ -249,9 +263,6 @@ struct TopicList {
   /// The next marker to resume listing, or empty
   std::string next_marker;
 };
-
-/** A list of key-value attributes */
-  using Attrs = std::map<std::string, ceph::buffer::list>;
 
 /**
  * @brief Base singleton representing a Store or Filter
@@ -464,6 +475,10 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
+    /** Get a @a Restore object. Used to manage/run restore objects */
+    virtual std::unique_ptr<Restore> get_restore(void) = 0;
+    /** Reset the temporarily restored objects which are expired */
+    virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
@@ -553,6 +568,8 @@ class Driver {
                                          const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
+    /** Get access to the tier restore management thread */
+    virtual rgw::restore::Restore* get_rgwrestore(void) = 0;   
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() = 0;
 
@@ -672,6 +689,9 @@ class Driver {
     /** Check to see if this placement rule is valid */
     virtual bool valid_placement(const rgw_placement_rule& rule) = 0;
 
+    /** Shut down background tasks, to be called while Asio is running. */
+    virtual void shutdown(void) { };
+
     /** Clean up a driver for termination */
     virtual void finalize(void) = 0;
 
@@ -680,7 +700,7 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
-};
+}; // class Driver
 
 
 /// \brief Ref-counted callback object for User/Bucket read_stats_async().
@@ -874,7 +894,7 @@ class Bucket {
       std::string zonegroup_id;
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
-      const RGWZonePlacementInfo* zone_placement;
+      const RGWZonePlacementInfo* zone_placement = nullptr;
       RGWAccessControlPolicy policy;
       Attrs attrs;
       bool obj_lock_enabled = false;
@@ -883,6 +903,8 @@ class Bucket {
       std::optional<std::string> swift_ver_location;
       std::optional<RGWQuotaInfo> quota;
       std::optional<ceph::real_time> creation_time;
+      std::optional<rgw::BucketIndexType> index_type;
+      std::optional<uint32_t> index_shards;
     };
 
     /// Create this bucket in the backing store.
@@ -893,7 +915,7 @@ class Bucket {
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp,
+    virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -911,7 +933,10 @@ class Bucket {
                                     uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
     /** Get the owner of this bucket */
@@ -935,11 +960,13 @@ class Bucket {
     /** Remove objects from the bucket index of this bucket.  May be removed from API */
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
     /** Check the state of the bucket index, and get stats from it.  May be removed from API */
-    virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
+    virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                            std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                            std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) = 0;
     /** Rebuild the bucket index.  May be removed from API */
-    virtual int rebuild_index(const DoutPrefixProvider *dpp) = 0;
+    virtual int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Set a timeout on the check_index() call.  May be removed from API */
-    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
 
@@ -1002,6 +1029,33 @@ class Bucket {
     /** Remove the bucket notification config with (optionally) @a objv_tracker */
     virtual int remove_topics(RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
+
+    /** Read the name of the pending bucket logging object name */
+    virtual int get_logging_object_name(std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) = 0;
+    /** Update the name of the pending bucket logging object name */
+    virtual int set_logging_object_name(const std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        bool new_obj,
+        RGWObjVersionTracker* objv_tracker) = 0;
+    /** Remove the object holding the name of the pending bucket logging object */
+    virtual int remove_logging_object_name(const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) = 0;
+    /** Move the pending bucket logging object into the bucket
+     if "last_committed" is not null, it will be set to the name of the last committed object
+     * */
+    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) = 0;
+    //** Remove the pending bucket logging object */
+    virtual int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write a record to the pending bucket logging object */
+    virtual int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
 
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
@@ -1107,7 +1161,10 @@ class Object {
         std::list<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
+        ceph::real_time last_mod_time_match;
         ceph::real_time mtime;
+        std::optional<uint64_t> size_match;
+        const char *if_match{nullptr};
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};
@@ -1151,12 +1208,15 @@ class Object {
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
+
+    /** return logging subsystem */
+    virtual unsigned get_subsys() { return ceph_subsys_rgw; };
     /** Get the ACL for this object */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this object */
     virtual int set_acl(const RGWAccessControlPolicy& acl) = 0;
     /** Mark further operations on this object as being atomic */
-    virtual void set_atomic() = 0;
+    virtual void set_atomic(bool atomic) = 0;
     /** Check if this object is atomic */
     virtual bool is_atomic() = 0;
     /** Pre-fetch data when reading */
@@ -1167,9 +1227,12 @@ class Object {
     virtual void set_compressed() = 0;
     /** Check if this object is compressed */
     virtual bool is_compressed() = 0;
+    /** True if this object is a delete marker (newest version is deleted) */
+    virtual bool is_delete_marker() = 0;
     /** Check if object is synced */
     virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) = 0;
+                                   optional_yield y,
+                                   const ceph::real_time& obj_mtime) = 0;
     /** Invalidate cached info about this object, except atomic, prefetch, and
      * compressed */
     virtual void invalidate() = 0;
@@ -1187,7 +1250,8 @@ class Object {
     /** Get attributes for this object */
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
     /** Modify attributes for this object. */
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) = 0;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+                                 uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
     /** Delete attributes for this object */
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) = 0;
     /** Check to see if this object has expired */
@@ -1216,20 +1280,37 @@ class Object {
 			   optional_yield y) = 0;
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   real_time& mtime,
-			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
+   	 		   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-			   uint32_t flags) = 0;
+			   optional_yield y) = 0;
     /** Check to see if two placement rules match */
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) = 0;
     /** Dump driver-specific object layout info in JSON */
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) = 0;
+
+  /* A transfer data type describing metadata specific to one part of a
+   * completed multipart upload object, following the GetObjectAttributes
+   * response syntax for Object::Parts here:
+   * https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html */
+    class Part
+    {
+    public:
+      int part_number;
+      uint32_t part_size;
+      rgw::cksum::Cksum cksum;
+    }; /* Part */
+
+    /* callback function/object used by list_parts */
+    using list_parts_each_t =
+      const fu2::unique_function<int(const Part&) const>;
+  
+    /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+    virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t&& each_func,
+			   optional_yield y) = 0;
 
     /** Get the cached attributes for this object */
     virtual Attrs& get_attrs(void) = 0;
@@ -1269,8 +1350,6 @@ class Object {
     virtual void set_hash_source(std::string s) = 0;
     /** Build an Object Identifier string for this object */
     virtual std::string get_oid(void) const = 0;
-    /** True if this object is a delete marker (newest version is deleted) */
-    virtual bool get_delete_marker(void) = 0;
     /** True if this object is stored in the extra data pool */
     virtual bool get_in_extra_data(void) = 0;
     /** True if this object exists in the store */
@@ -1400,7 +1479,11 @@ public:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+
   rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
+
+  // only a few (currently CRC) checksums are not composite
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_COMPOSITE};
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
@@ -1429,7 +1512,7 @@ public:
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
   /** List all the parts of this upload, filling the parts cache */
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
-			 int num_parts, int marker,
+			 int max_parts, int marker,
 			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) = 0;
   /** Abort this upload */
@@ -1496,7 +1579,7 @@ public:
   /** Try to take the lock for the given amount of time. */
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) = 0;
   /** Unlock the lock */
-  virtual int unlock()  = 0;
+  virtual int unlock(const DoutPrefixProvider *dpp, optional_yield y)  = 0;
 
   /** Print the Serializer to @a out */
   virtual void print(std::ostream& out) const = 0;
@@ -1593,6 +1676,50 @@ public:
 						       const std::string& cookie) = 0;
 };
 
+/** @brief Abstraction of a serializer for Restore
+ */
+class RestoreSerializer : public Serializer {
+public:
+  RestoreSerializer() {}
+  virtual ~RestoreSerializer() = default;
+};
+
+/**
+ * @brief Abstraction for restore processing
+ *
+ * The Restore class is designed to manage the restoration of objects
+ * from cloud tier storage back into the Ceph cluster. This is particularly used
+ * for objects stored in cold storage solutions like AWS Glacier or Tape-based systems,
+ * where retrieval operations are asynchronous and can take a significant amount of time.
+ */
+class Restore {
+
+public:
+  Restore() = default;
+  virtual ~Restore() = default;
+  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		  int n_objs, std::vector<std::string>& obj_names) = 0;  
+  /** Add list of restore entries */
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) = 0;
+  /** List all known entries given a marker */
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
+		   bool* truncated) = 0;
+
+  /** Trim restore entries upto the marker */
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, const std::string_view& marker) = 0;
+
+  /** Get a serializer for restore processing */
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+		  				const std::string& lock_name,
+						const std::string& oid,
+						const std::string& cookie) = 0;
+};
+  
 /**
  * @brief Abstraction for a Notification event
  *
@@ -1661,10 +1788,16 @@ public:
 
   /** Get the type of this tier */
   virtual const std::string& get_tier_type() = 0;
+  /** Is the type of this tier cloud-s3/cloud-s3-glacier */
+  virtual bool is_tier_type_s3() = 0;
   /** Get the storage class of this tier */
   virtual const std::string& get_storage_class() = 0;
   /** Should we retain the head object when transitioning */
   virtual bool retain_head_object() = 0;
+  /** Is read_through allowed */
+  virtual bool allow_read_through() = 0;
+  /** Get read_through restore_days */
+  virtual uint64_t get_read_through_restore_days() = 0;
   /** Get the placement rule associated with this tier */
 };
 
@@ -1733,8 +1866,6 @@ class Zone {
     virtual bool is_writeable() = 0;
     /** Get the URL for the endpoint for redirecting to this zone */
     virtual bool get_redirect_endpoint(std::string* endpoint) = 0;
-    /** Check to see if the given API is supported in this zone */
-    virtual bool has_zonegroup_api(const std::string& api) const = 0;
     /** Get the current period ID for this zone */
     virtual const std::string& get_current_period_id() = 0;
     /** Get thes system access key for this zone */
@@ -1807,31 +1938,40 @@ public:
 				      const rgw::SiteConfig& site_config,
 				      bool use_gc_thread,
 				      bool use_lc_thread,
+				      bool use_restore_thread,
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
-				      bool run_notification_thread, optional_yield y,
+				      bool run_notification_thread,
+				      bool background_tasks,
+				      optional_yield y,
+              rgw::sal::ConfigStore* cfgstore,
 				      bool use_cache = true,
-				      bool use_gc = true) {
+				      bool use_gc = true,
+                                      bool admin = false) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
 						   site_config,
 						   use_gc_thread,
 						   use_lc_thread,
+						   use_restore_thread,
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
-                                                   run_notification_thread,
-						   use_cache, use_gc, y);
+               run_notification_thread,
+						   use_cache, use_gc,
+						   background_tasks, y, cfgstore, admin);
     return driver;
   }
   /** Get a stripped down driver by service name */
   static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
 					  CephContext* cct, const Config& cfg,
 					  boost::asio::io_context& io_context,
-					  const rgw::SiteConfig& site_config) {
+					  const rgw::SiteConfig& site_config,
+            rgw::sal::ConfigStore* cfgstore) {
     rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg,
 							 io_context,
-							 site_config);
+							 site_config,
+               cfgstore);
     return driver;
   }
   /** Initialize a new full Driver */
@@ -1842,18 +1982,21 @@ public:
 						const rgw::SiteConfig& site_config,
 						bool use_gc_thread,
 						bool use_lc_thread,
+						bool use_restore_thread,
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
-                                                bool run_notification_thread,
+            bool run_notification_thread,
 						bool use_metadata_cache,
-						bool use_gc, optional_yield y);
+						bool use_gc, bool background_tasks,
+						optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
 						    const Config& cfg,
 						    boost::asio::io_context& io_context,
-						    const rgw::SiteConfig& site_config);
+						    const rgw::SiteConfig& site_config,
+                rgw::sal::ConfigStore* cfgstore);
   /** Close a Driver when it's no longer needed */
   static void close_storage(rgw::sal::Driver* driver);
 
@@ -1866,5 +2009,10 @@ public:
       -> std::unique_ptr<rgw::sal::ConfigStore>;
 
 };
+
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+#endif
 
 /** @} */

@@ -5,10 +5,13 @@
 #define CEPH_MGRCAP_H
 
 #include <iosfwd>
+#include <map>
+#include <string>
 
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/entity_name.h"
+#include "msg/msg_types.h" // for struct entity_addr_t
 
 static const __u8 MGR_CAP_R     = (1 << 1);      // read
 static const __u8 MGR_CAP_W     = (1 << 2);      // write
@@ -192,7 +195,7 @@ struct MgrCap {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<MgrCap*>& ls);
+  static std::list<MgrCap> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(MgrCap)
 

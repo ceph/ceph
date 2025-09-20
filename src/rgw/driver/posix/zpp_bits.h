@@ -1,10 +1,3 @@
-/*
-MIT License
-
-Copyright (c) 2021 Eyal Z
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-*/
 #ifndef ZPP_BITS_H
 #define ZPP_BITS_H
 
@@ -2687,8 +2680,12 @@ private:
     {
         using type = std::remove_cvref_t<decltype(container)>;
         using value_type = typename type::value_type;
-        constexpr auto is_const = std::is_const_v<
-            std::remove_reference_t<decltype(container[0])>>;
+        constexpr auto is_const =
+            std::is_const_v<std::remove_reference_t<value_type>> ||
+            requires {
+                requires std::is_const_v<
+                    std::remove_reference_t<decltype(container[0])>>;
+            };
 
         if constexpr (!std::is_void_v<SizeType> &&
                       (requires(type container) { container.resize(1); } ||
@@ -2827,9 +2824,7 @@ private:
             if constexpr (requires { typename type::mapped_type; }) {
                 using value_type = std::pair<typename type::key_type,
                                              typename type::mapped_type>;
-                std::aligned_storage_t<sizeof(value_type),
-                                       alignof(value_type)>
-                    storage;
+                alignas(value_type) std::byte storage[sizeof(value_type)];
 
                 auto object = access::placement_new<value_type>(
                     std::addressof(storage));
@@ -2843,9 +2838,7 @@ private:
             } else {
                 using value_type = typename type::value_type;
 
-                std::aligned_storage_t<sizeof(value_type),
-                                       alignof(value_type)>
-                    storage;
+                alignas(value_type) std::byte storage[sizeof(value_type)];
 
                 auto object = access::placement_new<value_type>(
                     std::addressof(storage));
@@ -2903,8 +2896,7 @@ private:
                 return result;
             }
         } else {
-            std::aligned_storage_t<sizeof(value_type), alignof(value_type)>
-                storage;
+            alignas(value_type) std::byte storage[sizeof(value_type)];
 
             auto object =
                 access::placement_new<value_type>(std::addressof(storage));
@@ -2947,9 +2939,7 @@ private:
                 }
                 return serialize_one(*std::get_if<element_type>(&variant));
             } else {
-                std::aligned_storage_t<sizeof(element_type),
-                                       alignof(element_type)>
-                    storage;
+                alignas(element_type) std::byte storage[sizeof(element_type)];
 
                 auto object = access::placement_new<element_type>(
                     std::addressof(storage));
@@ -2996,8 +2986,7 @@ private:
                     return self.serialize_one(
                         *std::get_if<Types>(&variant));
                 } else {
-                    std::aligned_storage_t<sizeof(Types), alignof(Types)>
-                        storage;
+                    alignas(Types) std::byte storage[sizeof(Types)];
 
                     auto object = access::placement_new<Types>(
                         std::addressof(storage));
@@ -3008,6 +2997,7 @@ private:
                         return result;
                     }
                     variant = std::move(*object);
+                    return errc{};
                 }
             }...};
 
@@ -3307,7 +3297,7 @@ struct known_dynamic_id_variant
     ZPP_BITS_INLINE constexpr static auto serialize(auto & serializer,
                                                     auto & self)
     {
-        return serializer.template serialize_one(self.variant, self.id);
+        return serializer.serialize_one(self.variant, self.id);
     }
 
     Variant & variant;
@@ -3448,7 +3438,8 @@ struct [[nodiscard]] value_or_errc
     }
 
     constexpr explicit value_or_errc(error_type error) :
-        m_error(std::forward<decltype(error)>(error))
+        m_error(std::forward<decltype(error)>(error)),
+        m_failure(true)
     {
     }
 
@@ -5029,9 +5020,7 @@ struct pb
                 serialize use();
             };
 
-            std::aligned_storage_t<sizeof(value_type),
-                                   alignof(value_type)>
-                storage;
+            alignas(value_type) std::byte storage[sizeof(value_type)];
 
             auto object =
                 access::placement_new<value_type>(std::addressof(storage));
@@ -5111,9 +5100,7 @@ struct pb
                     return errc{};
                 }
             } else {
-                std::aligned_storage_t<sizeof(value_type),
-                                       alignof(value_type)>
-                    storage;
+                alignas(value_type) std::byte storage[sizeof(value_type)];
 
                 auto object = access::placement_new<value_type>(
                     std::addressof(storage));
@@ -5382,47 +5369,47 @@ constexpr auto sha256()
     };
     auto align = [](auto v, auto a) { return (v + (a - 1)) / a * a; };
 
-    auto h0 = big_endian{0x6a09e667u};
-    auto h1 = big_endian{0xbb67ae85u};
-    auto h2 = big_endian{0x3c6ef372u};
-    auto h3 = big_endian{0xa54ff53au};
-    auto h4 = big_endian{0x510e527fu};
-    auto h5 = big_endian{0x9b05688cu};
-    auto h6 = big_endian{0x1f83d9abu};
-    auto h7 = big_endian{0x5be0cd19u};
+    auto h0 = big_endian{std::uint32_t{0x6a09e667u}};
+    auto h1 = big_endian{std::uint32_t{0xbb67ae85u}};
+    auto h2 = big_endian{std::uint32_t{0x3c6ef372u}};
+    auto h3 = big_endian{std::uint32_t{0xa54ff53au}};
+    auto h4 = big_endian{std::uint32_t{0x510e527fu}};
+    auto h5 = big_endian{std::uint32_t{0x9b05688cu}};
+    auto h6 = big_endian{std::uint32_t{0x1f83d9abu}};
+    auto h7 = big_endian{std::uint32_t{0x5be0cd19u}};
 
-    std::array k{big_endian{0x428a2f98u}, big_endian{0x71374491u},
-                 big_endian{0xb5c0fbcfu}, big_endian{0xe9b5dba5u},
-                 big_endian{0x3956c25bu}, big_endian{0x59f111f1u},
-                 big_endian{0x923f82a4u}, big_endian{0xab1c5ed5u},
-                 big_endian{0xd807aa98u}, big_endian{0x12835b01u},
-                 big_endian{0x243185beu}, big_endian{0x550c7dc3u},
-                 big_endian{0x72be5d74u}, big_endian{0x80deb1feu},
-                 big_endian{0x9bdc06a7u}, big_endian{0xc19bf174u},
-                 big_endian{0xe49b69c1u}, big_endian{0xefbe4786u},
-                 big_endian{0x0fc19dc6u}, big_endian{0x240ca1ccu},
-                 big_endian{0x2de92c6fu}, big_endian{0x4a7484aau},
-                 big_endian{0x5cb0a9dcu}, big_endian{0x76f988dau},
-                 big_endian{0x983e5152u}, big_endian{0xa831c66du},
-                 big_endian{0xb00327c8u}, big_endian{0xbf597fc7u},
-                 big_endian{0xc6e00bf3u}, big_endian{0xd5a79147u},
-                 big_endian{0x06ca6351u}, big_endian{0x14292967u},
-                 big_endian{0x27b70a85u}, big_endian{0x2e1b2138u},
-                 big_endian{0x4d2c6dfcu}, big_endian{0x53380d13u},
-                 big_endian{0x650a7354u}, big_endian{0x766a0abbu},
-                 big_endian{0x81c2c92eu}, big_endian{0x92722c85u},
-                 big_endian{0xa2bfe8a1u}, big_endian{0xa81a664bu},
-                 big_endian{0xc24b8b70u}, big_endian{0xc76c51a3u},
-                 big_endian{0xd192e819u}, big_endian{0xd6990624u},
-                 big_endian{0xf40e3585u}, big_endian{0x106aa070u},
-                 big_endian{0x19a4c116u}, big_endian{0x1e376c08u},
-                 big_endian{0x2748774cu}, big_endian{0x34b0bcb5u},
-                 big_endian{0x391c0cb3u}, big_endian{0x4ed8aa4au},
-                 big_endian{0x5b9cca4fu}, big_endian{0x682e6ff3u},
-                 big_endian{0x748f82eeu}, big_endian{0x78a5636fu},
-                 big_endian{0x84c87814u}, big_endian{0x8cc70208u},
-                 big_endian{0x90befffau}, big_endian{0xa4506cebu},
-                 big_endian{0xbef9a3f7u}, big_endian{0xc67178f2u}};
+    std::array k{big_endian{std::uint32_t{0x428a2f98u}}, big_endian{std::uint32_t{0x71374491u}},
+                 big_endian{std::uint32_t{0xb5c0fbcfu}}, big_endian{std::uint32_t{0xe9b5dba5u}},
+                 big_endian{std::uint32_t{0x3956c25bu}}, big_endian{std::uint32_t{0x59f111f1u}},
+                 big_endian{std::uint32_t{0x923f82a4u}}, big_endian{std::uint32_t{0xab1c5ed5u}},
+                 big_endian{std::uint32_t{0xd807aa98u}}, big_endian{std::uint32_t{0x12835b01u}},
+                 big_endian{std::uint32_t{0x243185beu}}, big_endian{std::uint32_t{0x550c7dc3u}},
+                 big_endian{std::uint32_t{0x72be5d74u}}, big_endian{std::uint32_t{0x80deb1feu}},
+                 big_endian{std::uint32_t{0x9bdc06a7u}}, big_endian{std::uint32_t{0xc19bf174u}},
+                 big_endian{std::uint32_t{0xe49b69c1u}}, big_endian{std::uint32_t{0xefbe4786u}},
+                 big_endian{std::uint32_t{0x0fc19dc6u}}, big_endian{std::uint32_t{0x240ca1ccu}},
+                 big_endian{std::uint32_t{0x2de92c6fu}}, big_endian{std::uint32_t{0x4a7484aau}},
+                 big_endian{std::uint32_t{0x5cb0a9dcu}}, big_endian{std::uint32_t{0x76f988dau}},
+                 big_endian{std::uint32_t{0x983e5152u}}, big_endian{std::uint32_t{0xa831c66du}},
+                 big_endian{std::uint32_t{0xb00327c8u}}, big_endian{std::uint32_t{0xbf597fc7u}},
+                 big_endian{std::uint32_t{0xc6e00bf3u}}, big_endian{std::uint32_t{0xd5a79147u}},
+                 big_endian{std::uint32_t{0x06ca6351u}}, big_endian{std::uint32_t{0x14292967u}},
+                 big_endian{std::uint32_t{0x27b70a85u}}, big_endian{std::uint32_t{0x2e1b2138u}},
+                 big_endian{std::uint32_t{0x4d2c6dfcu}}, big_endian{std::uint32_t{0x53380d13u}},
+                 big_endian{std::uint32_t{0x650a7354u}}, big_endian{std::uint32_t{0x766a0abbu}},
+                 big_endian{std::uint32_t{0x81c2c92eu}}, big_endian{std::uint32_t{0x92722c85u}},
+                 big_endian{std::uint32_t{0xa2bfe8a1u}}, big_endian{std::uint32_t{0xa81a664bu}},
+                 big_endian{std::uint32_t{0xc24b8b70u}}, big_endian{std::uint32_t{0xc76c51a3u}},
+                 big_endian{std::uint32_t{0xd192e819u}}, big_endian{std::uint32_t{0xd6990624u}},
+                 big_endian{std::uint32_t{0xf40e3585u}}, big_endian{std::uint32_t{0x106aa070u}},
+                 big_endian{std::uint32_t{0x19a4c116u}}, big_endian{std::uint32_t{0x1e376c08u}},
+                 big_endian{std::uint32_t{0x2748774cu}}, big_endian{std::uint32_t{0x34b0bcb5u}},
+                 big_endian{std::uint32_t{0x391c0cb3u}}, big_endian{std::uint32_t{0x4ed8aa4au}},
+                 big_endian{std::uint32_t{0x5b9cca4fu}}, big_endian{std::uint32_t{0x682e6ff3u}},
+                 big_endian{std::uint32_t{0x748f82eeu}}, big_endian{std::uint32_t{0x78a5636fu}},
+                 big_endian{std::uint32_t{0x84c87814u}}, big_endian{std::uint32_t{0x8cc70208u}},
+                 big_endian{std::uint32_t{0x90befffau}}, big_endian{std::uint32_t{0xa4506cebu}},
+                 big_endian{std::uint32_t{0xbef9a3f7u}}, big_endian{std::uint32_t{0xc67178f2u}}};
 
     constexpr auto original_message = to_bytes<Object>();
     constexpr auto chunk_size = 512 / CHAR_BIT;

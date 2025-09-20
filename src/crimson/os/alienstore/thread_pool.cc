@@ -7,6 +7,7 @@
 #include <pthread.h>
 
 #include "include/ceph_assert.h"
+#include "include/intarith.h" // for round_up_to()
 #include "crimson/common/config_proxy.h"
 
 using crimson::common::local_conf;
@@ -27,7 +28,7 @@ ThreadPool::ThreadPool(size_t n_threads,
         pin(*cpus);
       }
       block_sighup();
-      (void) pthread_setname_np(pthread_self(), "alien-store-tp");
+      (void) ceph_pthread_setname("alien-store-tp");
       loop(queue_max_wait, i);
     });
   }

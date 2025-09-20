@@ -39,7 +39,7 @@ The following instructions will use the default vSphere web client and esxcli.
         
           esxcli nvme adapter list
 
-    #. Discover NVMe-oF subsystems:
+    #. Optional: Discover NVMe-oF subsystems:
     
        .. prompt:: bash #
         
@@ -48,8 +48,10 @@ The following instructions will use the default vSphere web client and esxcli.
     #. Connect to NVME-oF gateway subsystem:
     
        .. prompt:: bash #
-        
-          esxcli nvme connect -a NVME_TCP_ADAPTER -i GATEWAY_IP -p 4420 -s SUBSYSTEM_NQN
+          
+          esxcli nvme fabrics discover -a NVME_TCP_ADAPTER -i GATEWAY_IP -p 8009 -c
+
+         - This command discovers the NVMe-oF gateways in the gateway group and then connects to the gateways providing multipath access 
 
     #. List the NVMe/TCP controllers:
     

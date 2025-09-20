@@ -12,10 +12,11 @@
  *
  */
 
+#include "dns_resolve.h"
+
 #include <arpa/inet.h>
 
 #include "include/scope_guard.h"
-#include "dns_resolve.h"
 #include "common/debug.h"
 
 #define dout_subsys ceph_subsys_
@@ -211,19 +212,19 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, const string& hostname,
 int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string& hostname, 
     entity_addr_t *addr) {
 
-  u_char nsbuf[NS_PACKETSZ];
+  auto nsbuf = std::make_unique<std::array<u_char, NS_MAXMSG>>();
   int len;
   int family = cct->_conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
   int type = cct->_conf->ms_bind_ipv6 ? ns_t_aaaa : ns_t_a;
 
 #ifdef HAVE_RES_NQUERY
-  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
+  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, type, nsbuf->data(), nsbuf->size());
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
     std::lock_guard l(lock);
 # endif
-    len = resolv_h->res_query(hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
+    len = resolv_h->res_query(hostname.c_str(), ns_c_in, type, nsbuf->data(), nsbuf->size());
   }
 #endif
   if (len < 0) {
@@ -236,7 +237,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
   }
 
   ns_msg handle;
-  ns_initparse(nsbuf, len, &handle);
+  ns_initparse(nsbuf->data(), len, &handle);
 
   if (ns_msg_count(handle, ns_s_an) == 0) {
     ldout(cct, 20) << "no address found for hostname " << hostname << dendl;
@@ -284,7 +285,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
     });
 #endif
 
-  u_char nsbuf[NS_PACKETSZ];
+  auto nsbuf = std::make_unique<std::array<u_char, NS_MAXMSG>>();
   int num_hosts;
 
   string proto_str = srv_protocol_to_str(trans_protocol);
@@ -293,15 +294,15 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
   int len;
 
 #ifdef HAVE_RES_NQUERY
-  len = resolv_h->res_nsearch(res, query_str.c_str(), ns_c_in, ns_t_srv, nsbuf,
-      sizeof(nsbuf));
+  len = resolv_h->res_nsearch(res, query_str.c_str(), ns_c_in, ns_t_srv, nsbuf->data(),
+      nsbuf->size());
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
     std::lock_guard l(lock);
 # endif
-    len = resolv_h->res_search(query_str.c_str(), ns_c_in, ns_t_srv, nsbuf,
-        sizeof(nsbuf));
+    len = resolv_h->res_search(query_str.c_str(), ns_c_in, ns_t_srv, nsbuf->data(),
+        nsbuf->size());
   }
 #endif
   if (len < 0) {
@@ -315,7 +316,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 
   ns_msg handle;
 
-  ns_initparse(nsbuf, len, &handle);
+  ns_initparse(nsbuf->data(), len, &handle);
 
   num_hosts = ns_msg_count (handle, ns_s_an);
   if (num_hosts == 0) {

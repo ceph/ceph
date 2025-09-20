@@ -46,6 +46,7 @@
 #include "include/ceph_hash.h"
 #include "include/spinlock.h"
 #include "common/ceph_argparse.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cycles.h"
 #include "common/Cond.h"
 #include "common/ceph_mutex.h"

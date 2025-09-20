@@ -12,10 +12,9 @@
  *
  */
 
-
-#include <mutex>
-#include <algorithm>
 #include "Filer.h"
+
+#include <algorithm>
 #include "osd/OSDMap.h"
 #include "Striper.h"
 

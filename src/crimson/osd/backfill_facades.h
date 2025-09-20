@@ -28,12 +28,16 @@ struct PeeringFacade final : BackfillState::PeeringFacade {
     return peering_state.get_peer_info(peer).last_backfill;
   }
 
-  const eversion_t& get_last_update() const override {
-    return peering_state.get_info().last_update;
+  eversion_t get_pg_committed_to() const override {
+    return peering_state.get_pg_committed_to();
   }
 
   const eversion_t& get_log_tail() const override {
     return peering_state.get_info().log_tail;
+  }
+
+  const PGLog& get_pg_log() const override {
+    return peering_state.get_pg_log();
   }
 
   void scan_log_after(eversion_t v, scan_log_func_t f) const override {
@@ -58,6 +62,11 @@ struct PeeringFacade final : BackfillState::PeeringFacade {
     const std::vector<pg_shard_t> &peers) override {
     return peering_state.prepare_backfill_for_missing(soid, v, peers);
   }
+
+  const pg_pool_t& get_pool() const override {
+    return peering_state.get_pgpool().info;
+  }
+
   PeeringFacade(PeeringState& peering_state)
     : peering_state(peering_state) {
   }
@@ -73,7 +82,14 @@ struct PGFacade final : BackfillState::PGFacade {
     return pg.projected_last_update;
   }
 
+  const PGLog::IndexedLog& get_projected_log() const override {
+    return pg.projected_log;
+  }
+
   PGFacade(PG& pg) : pg(pg) {}
+  std::ostream &print(std::ostream &out) const override {
+    return out << pg;
+  }
 };
 
 } // namespace crimson::osd

@@ -7,6 +7,8 @@
 
 #include "common/Formatter.h"
 
+#include <sstream>
+
 using ceph::bufferlist;
 using ceph::Formatter;
 
@@ -56,13 +58,15 @@ void ServiceMap::Daemon::dump(Formatter *f) const
   f->close_section();
 }
 
-void ServiceMap::Daemon::generate_test_instances(std::list<Daemon*>& ls)
+auto ServiceMap::Daemon::generate_test_instances() -> std::list<Daemon>
 {
-  ls.push_back(new Daemon);
-  ls.push_back(new Daemon);
-  ls.back()->gid = 222;
-  ls.back()->metadata["this"] = "that";
-  ls.back()->task_status["task1"] = "running";
+  std::list<Daemon> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().gid = 222;
+  ls.back().metadata["this"] = "that";
+  ls.back().task_status["task1"] = "running";
+  return ls;
 }
 
 // Service
@@ -192,12 +196,14 @@ void ServiceMap::Service::dump(Formatter *f) const
   f->close_section();
 }
 
-void ServiceMap::Service::generate_test_instances(std::list<Service*>& ls)
+auto ServiceMap::Service::generate_test_instances() -> std::list<Service>
 {
-  ls.push_back(new Service);
-  ls.push_back(new Service);
-  ls.back()->daemons["one"].gid = 1;
-  ls.back()->daemons["two"].gid = 2;
+  std::list<Service> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().daemons["one"].gid = 1;
+  ls.back().daemons["two"].gid = 2;
+  return ls;
 }
 
 // ServiceMap
@@ -231,12 +237,14 @@ void ServiceMap::dump(Formatter *f) const
   f->close_section();
 }
 
-void ServiceMap::generate_test_instances(std::list<ServiceMap*>& ls)
+std::list<ServiceMap> ServiceMap::generate_test_instances()
 {
-  ls.push_back(new ServiceMap);
-  ls.push_back(new ServiceMap);
-  ls.back()->epoch = 123;
-  ls.back()->services["rgw"].daemons["one"].gid = 123;
-  ls.back()->services["rgw"].daemons["two"].gid = 344;
-  ls.back()->services["iscsi"].daemons["foo"].gid = 3222;
+  std::list<ServiceMap> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().epoch = 123;
+  ls.back().services["rgw"].daemons["one"].gid = 123;
+  ls.back().services["rgw"].daemons["two"].gid = 344;
+  ls.back().services["iscsi"].daemons["foo"].gid = 3222;
+  return ls;
 }

@@ -103,3 +103,71 @@ Primaries are updated with an offline optimizer that is built into the
 To see some details about what the tool is doing, you can pass
 ``--debug-osd 10`` to ``osdmaptool``. To see even more details, pass
 ``--debug-osd 20`` to ``osdmaptool``.
+
+Troubleshooting
+===============
+
+Removing pg-upmap-primary mappings
+------------------------------------
+
+For scenarios where you need to manually remove ``pg-upmap-primary`` mappings, Ceph provides the following
+developer-level commands. These commands should be used with caution, as they directly modify
+primary PG mappings and can impact read performance (this excludes any data movement).
+
+.. note::
+
+  Users affected by `#66867 <https://tracker.ceph.com/issues/66867>`_ or `#61948 <https://tracker.ceph.com/issues/61948>`_
+  may find these commands useful when dealing with unexpected ``pg-upmap-primary`` behavior.
+
+To remove a specific ``pg-upmap-primary`` mapping, use:
+
+.. prompt:: bash $
+
+   ceph osd rm-pg-upmap-primary <pgid>
+
+If you need to clear **all** ``pg-upmap-primary`` mappings in your cluster, you may use:
+
+.. prompt:: bash $
+
+   ceph osd rm-pg-upmap-primary-all
+
+Unable to Use Kernel Client
+---------------------------
+
+If you are unable to use the kernel client to map RBD images or mount a filesystem while
+``pg-upmap-primary`` mappings are in your cluster, this is because ``pg-upmap-primary``
+is not yet supported by the kernel client (as of 2025-09-08).
+
+Follow these steps to confirm this scenario:
+
+1. Confirm that your cluster contains ``pg-upmap-primary`` mappings:
+
+.. prompt:: bash $
+
+   ceph osd dump | grep "pg_upmap_primary"
+
+2. Check for this error message in the kernel log:
+
+.. code-block:: console
+
+   $ dmesg | tail
+   
+   [73393.901029] libceph: mon2 (1)10.64.24.186:6789 feature set mismatch, my 2f018fb87aa4aafe < server's 2f018fb8faa4aafe, missing 80000000
+   [73393.901037] libceph: mon2 (1)10.64.24.186:6789 missing required protocol features
+
+Those details confirm that the cluster is using features that the kernel client doesn't support.
+Until the kernel client supports ``pg-upmap-primary``, you must remove the mappings to successfully
+perform mounts. You may do so with the following commands:
+
+1. If using the balancer module, change the mode back to one that does not use ``pg-upmap-primary``.
+   This prevents additional mappings from being made:
+
+.. prompt:: bash $
+
+   ceph balancer mode upmap
+
+2. Remove all ``pg-upmap-primary`` mappings:
+
+.. prompt:: bash $
+
+   ceph osd rm-pg-upmap-primary-all

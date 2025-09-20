@@ -8,6 +8,7 @@
 #include "osdc/Objecter.h"
 
 #include "pg_scrubber.h"
+#include "common/debug.h"
 
 using namespace ::std::chrono;
 using namespace ::std::chrono_literals;
@@ -37,7 +38,6 @@ OsdScrub::OsdScrub(
     , m_resource_bookkeeper{[this](std::string msg) { log_fwd(msg); }, conf}
     , m_queue{cct, m_osd_svc}
     , m_log_prefix{fmt::format("osd.{} osd-scrub:", m_osd_svc.get_nodeid())}
-    , m_load_tracker{cct, conf, m_osd_svc.get_nodeid()}
 {
   create_scrub_perf_counters();
 }
@@ -65,9 +65,8 @@ void OsdScrub::dump_scrubs(ceph::Formatter* f) const
 void OsdScrub::dump_scrub_reservations(ceph::Formatter* f) const
 {
   m_resource_bookkeeper.dump_scrub_reservations(f);
-  f->open_array_section("remote_scrub_reservations");
+  Formatter::ObjectSection rmt_section{*f, "remote_scrub_reservations"sv};
   m_osd_svc.get_scrub_reserver().dump(f);
-  f->close_section();
 }
 
 void OsdScrub::log_fwd(std::string_view text)
@@ -189,7 +188,8 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 {
   Scrub::OSDRestrictions env_conditions;
 
-  // some environmental conditions prevent all but high priority scrubs
+  // some "environmental conditions" prevent all but specific types
+  // (urgency levels) of scrubs
 
   if (!m_resource_bookkeeper.can_inc_scrubs()) {
     // our local OSD is already running too many scrubs
@@ -198,29 +198,19 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 
   } else if (scrub_random_backoff()) {
     // dice-roll says we should not scrub now
-    dout(15) << "Lost in dice. Only high priority scrubs allowed." << dendl;
+    dout(15) << "Lost on the dice. Regular scheduled scrubs are not permitted."
+	     << dendl;
     env_conditions.random_backoff_active = true;
-
-  } else if (is_recovery_active && !conf->osd_scrub_during_recovery) {
-    if (conf->osd_repair_during_recovery) {
-      dout(15)
-	  << "will only schedule explicitly requested repair due to active "
-	     "recovery"
-	  << dendl;
-      env_conditions.allow_requested_repair_only = true;
-
-    } else {
-      dout(15) << "recovery in progress. Operator-initiated scrubs only."
-	       << dendl;
-      env_conditions.recovery_in_progress = true;
-    }
-  } else {
-
-    // regular, i.e. non-high-priority scrubs are allowed
-    env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
-    env_conditions.cpu_overloaded =
-	!m_load_tracker.scrub_load_below_threshold();
   }
+
+  if (is_recovery_active && !conf->osd_scrub_during_recovery) {
+    dout(15) << "recovery in progress. Operator-initiated scrubs only."
+	     << dendl;
+    env_conditions.recovery_in_progress = true;
+  }
+
+  env_conditions.restricted_time = !scrub_time_permit(scrub_clock_now);
+  env_conditions.cpu_overloaded = !scrub_load_below_threshold();
 
   return env_conditions;
 }
@@ -268,98 +258,55 @@ void OsdScrub::on_config_change()
 		    "updating scrub schedule on {}",
 		    (locked_pg->pg())->get_pgid())
 	     << dendl;
-    locked_pg->pg()->on_scrub_schedule_input_change(
-	Scrub::delay_ready_t::no_delay);
+    locked_pg->pg()->on_scrub_schedule_input_change();
   }
 }
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // CPU load tracking and related
 
-OsdScrub::LoadTracker::LoadTracker(
-    CephContext* cct,
-    const ceph::common::ConfigProxy& config,
-    int node_id)
-    : cct{cct}
-    , conf{config}
-    , log_prefix{fmt::format("osd.{} scrub-queue::load-tracker::", node_id)}
+std::optional<double> OsdScrub::update_load_average()
 {
-  // initialize the daily loadavg with current 15min loadavg
-  if (double loadavgs[3]; getloadavg(loadavgs, 3) == 3) {
-    daily_loadavg = loadavgs[2];
-  } else {
-    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
-    daily_loadavg = 1.0;
-  }
-}
-
-///\todo replace with Knuth's algo (to reduce the numerical error)
-std::optional<double> OsdScrub::LoadTracker::update_load_average()
-{
-  auto hb_interval = conf->osd_heartbeat_interval;
-  int n_samples = std::chrono::duration_cast<seconds>(24h).count();
-  if (hb_interval > 1) {
-    n_samples = std::max(n_samples / hb_interval, 1L);
-  }
+  // cache the number of CPUs
+  loadavg_cpu_count = std::max(sysconf(_SC_NPROCESSORS_ONLN), 1L);
 
   double loadavg;
-  if (getloadavg(&loadavg, 1) == 1) {
-    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavg) / n_samples;
-    return 100 * loadavg;
+  if (getloadavg(&loadavg, 1) != 1) {
+    return std::nullopt;
   }
-
-  return std::nullopt;	// getloadavg() failed
+  return loadavg;
 }
 
-bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
+
+bool OsdScrub::scrub_load_below_threshold() const
 {
-  double loadavgs[3];
-  if (getloadavg(loadavgs, 3) != 3) {
-    dout(10) << "couldn't read loadavgs" << dendl;
-    return false;
+  // fetch an up-to-date load average.
+  // For the number of CPUs - rely on the last known value, fetched in the
+  // 'heartbeat' thread.
+  double loadavg;
+  if (getloadavg(&loadavg, 1) != 1) {
+    loadavg = 0;
   }
 
-  // allow scrub if below configured threshold
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
+  const double loadavg_per_cpu = loadavg / loadavg_cpu_count;
   if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
     dout(20) << fmt::format(
-		    "loadavg per cpu {:.3f} < max {:.3f} = yes",
-		    loadavg_per_cpu, conf->osd_scrub_load_threshold)
+		    "loadavg per cpu {:.3f} < max {:.3f} (#CPUs:{}) = yes",
+		    loadavg_per_cpu, conf->osd_scrub_load_threshold,
+		    loadavg_cpu_count)
 	     << dendl;
     return true;
   }
 
-  // allow scrub if below daily avg and currently decreasing
-  if (loadavgs[0] < daily_loadavg && loadavgs[0] < loadavgs[2]) {
-    dout(20) << fmt::format(
-		    "loadavg {:.3f} < daily_loadavg {:.3f} and < 15m avg "
-		    "{:.3f} = yes",
-		    loadavgs[0], daily_loadavg, loadavgs[2])
-	     << dendl;
-    return true;
-  }
-
-  dout(10) << fmt::format(
-		  "loadavg {:.3f} >= max {:.3f} and ( >= daily_loadavg {:.3f} "
-		  "or >= 15m avg {:.3f} ) = no",
-		  loadavgs[0], conf->osd_scrub_load_threshold, daily_loadavg,
-		  loadavgs[2])
+  dout(5) << fmt::format(
+		  "loadavg {:.3f} >= max {:.3f} (#CPUs:{}) = no",
+		  loadavg_per_cpu, conf->osd_scrub_load_threshold,
+		  loadavg_cpu_count)
 	   << dendl;
   return false;
 }
 
-std::ostream& OsdScrub::LoadTracker::gen_prefix(
-    std::ostream& out,
-    std::string_view fn) const
-{
-  return out << log_prefix << fn << ": ";
-}
-
-std::optional<double> OsdScrub::update_load_average()
-{
-  return m_load_tracker.update_load_average();
-}
 
 // ////////////////////////////////////////////////////////////////////////// //
 
@@ -401,13 +348,13 @@ bool OsdScrub::scrub_time_permit(utime_t now) const
 
 
 std::chrono::milliseconds OsdScrub::scrub_sleep_time(
-    utime_t t,
-    bool high_priority_scrub) const
+    utime_t t_now,
+    bool scrub_respects_ext_sleep) const
 {
   const milliseconds regular_sleep_period =
       milliseconds{int64_t(std::max(0.0, 1'000 * conf->osd_scrub_sleep))};
 
-  if (high_priority_scrub || scrub_time_permit(t)) {
+  if (!scrub_respects_ext_sleep || scrub_time_permit(t_now)) {
     return regular_sleep_period;
   }
 

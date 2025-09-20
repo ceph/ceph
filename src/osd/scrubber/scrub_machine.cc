@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "scrub_machine.h"
+
 #include <chrono>
 #include <typeinfo>
 
@@ -10,7 +12,7 @@
 #include "osd/OpRequest.h"
 
 #include "ScrubStore.h"
-#include "scrub_machine.h"
+#include "common/debug.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
@@ -87,23 +89,37 @@ std::ostream& ScrubMachine::gen_prefix(std::ostream& out) const
 
 ceph::timespan ScrubMachine::get_time_scrubbing() const
 {
-  // note: the state_cast does not work in the Session ctor
-  auto session = state_cast<const Session*>();
-  if (!session) {
-    dout(20) << fmt::format("{}: not in session", __func__) << dendl;
+  if (!m_session_started_at) {
+    dout(30) << fmt::format("{}: no session_start time", __func__) << dendl;
     return ceph::timespan{};
   }
 
-  if (session && session->m_session_started_at != ScrubTimePoint{}) {
-    dout(20) << fmt::format(
-		    "{}: session_started_at: {} d:{}", __func__,
-		    session->m_session_started_at,
-		    ScrubClock::now() - session->m_session_started_at)
+  const auto dur = ScrubClock::now() - *m_session_started_at;
+  dout(20) << fmt::format(
+		    "{}: session_started_at: {} duration:{}ms", __func__,
+		    *m_session_started_at,
+		    ceil<milliseconds>(dur).count())
 	     << dendl;
-    return ScrubClock::now() - session->m_session_started_at;
+  return dur;
+}
+
+std::optional<pg_scrubbing_status_t> ScrubMachine::get_reservation_status()
+    const
+{
+  const auto resv_state = state_cast<const ReservingReplicas*>();
+  if (!resv_state) {
+    return std::nullopt;
   }
-  dout(30) << fmt::format("{}: no session_start time", __func__) << dendl;
-  return ceph::timespan{};
+  const auto session = state_cast<const Session*>();
+  dout(30) << fmt::format(
+		  "{}: we are reserving {:p}-{:p}", __func__, (void*)session,
+		  (void*)resv_state)
+	   << dendl;
+  if (!session || !session->m_reservations) {
+    dout(20) << fmt::format("{}: no reservations data", __func__) << dendl;
+    return std::nullopt;
+  }
+  return session->get_reservation_status();
 }
 
 // ////////////// the actual actions
@@ -175,14 +191,19 @@ Session::Session(my_context ctx)
   dout(10) << "-- state -->> PrimaryActive/Session" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  m_perf_set = &scrbr->get_counters_set();
-  m_perf_set->inc(scrbcnt_started);
+  machine.m_session_started_at = ScrubClock::now();
+
+  m_perf_set = scrbr->get_labeled_counters();
+  m_osd_counters = scrbr->get_osd_perf_counters();
+  m_counters_idx = &scrbr->get_unlabeled_counters();
+  m_osd_counters->inc(m_counters_idx->started_cnt);
 }
 
 Session::~Session()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   m_reservations.reset();
+  machine.m_session_started_at.reset();
 
   // note the interaction between clearing the 'queued' flag and two
   // other states: the snap-mapper and the scrubber internal state.
@@ -203,6 +224,21 @@ sc::result Session::react(const IntervalChanged&)
   return transit<NotActive>();
 }
 
+std::optional<pg_scrubbing_status_t> Session::get_reservation_status() const
+{
+  if (!m_reservations) {
+    return std::nullopt;
+  }
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  const auto req = m_reservations->get_last_sent();
+  pg_scrubbing_status_t s;
+  s.m_osd_to_respond = req ? req->osd : 0;
+  s.m_ordinal_of_requested_replica = m_reservations->active_requests_cnt();
+  s.m_num_to_reserve = scrbr->get_pg()->get_actingset().size() - 1;
+  s.m_duration_seconds = ceil<seconds>(machine.get_time_scrubbing()).count();
+  return s;
+}
+
 
 // ----------------------- ReservingReplicas ---------------------------------
 
@@ -217,7 +253,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
   // initiate the reservation process
   session.m_reservations.emplace(
       *scrbr, context<PrimaryActive>().last_request_sent_nonce,
-      *session.m_perf_set);
+      *session.m_counters_idx);
 
   if (!session.m_reservations->get_last_sent()) {
     // no replicas to reserve
@@ -281,9 +317,9 @@ ActiveScrubbing::ActiveScrubbing(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   auto& session = context<Session>();
 
-  session.m_perf_set->inc(scrbcnt_active_started);
+  session.m_osd_counters->inc(session.m_counters_idx->active_started_cnt);
   scrbr->get_clog()->debug()
-      << fmt::format("{} {} starts", pg_id, scrbr->get_op_mode_text());
+      << fmt::format("{} {} starts", pg_id.pgid, scrbr->get_op_mode_text());
 
   scrbr->on_init();
 }
@@ -299,14 +335,15 @@ ActiveScrubbing::~ActiveScrubbing()
 
   // if the begin-time stamp was not set 'off' (as done if the scrubbing
   // completed successfully), we use it now to set the 'failed scrub' duration.
-  if (session.m_session_started_at != ScrubTimePoint{}) {
+  if (machine.m_session_started_at) {
     // delay the next invocation of the scrubber on this target
     scrbr->on_mid_scrub_abort(
 	session.m_abort_reason.value_or(Scrub::delay_cause_t::aborted));
 
-    auto logged_duration = ScrubClock::now() - session.m_session_started_at;
-    session.m_perf_set->tinc(scrbcnt_failed_elapsed, logged_duration);
-    session.m_perf_set->inc(scrbcnt_failed);
+    auto logged_duration = ScrubClock::now() - *machine.m_session_started_at;
+    session.m_osd_counters->tinc(session.m_counters_idx->failed_elapsed,
+                                 logged_duration);
+    session.m_osd_counters->inc(session.m_counters_idx->failed_cnt);
   }
 }
 
@@ -680,13 +717,14 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
   dout(10) << "WaitDigestUpdate::react(const ScrubFinished&)" << dendl;
   auto& session = context<Session>();
 
-  session.m_perf_set->inc(scrbcnt_successful);
+  session.m_osd_counters->inc(session.m_counters_idx->successful_cnt);
 
   // set the 'scrub duration'
   auto duration = machine.get_time_scrubbing();
-  session.m_perf_set->tinc(scrbcnt_successful_elapsed, duration);
-  scrbr->set_scrub_duration(duration_cast<milliseconds>(duration));
-  session.m_session_started_at = ScrubTimePoint{};
+  scrbr->set_scrub_duration(ceil<milliseconds>(duration));
+  machine.m_session_started_at.reset();
+  session.m_osd_counters->tinc(
+      session.m_counters_idx->successful_elapsed, duration);
 
   scrbr->scrub_finish();
   return transit<PrimaryIdle>();

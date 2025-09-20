@@ -1,10 +1,8 @@
 import { APP_BASE_HREF } from '@angular/common';
-import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+import { HTTP_INTERCEPTORS, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserModule } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-
-import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -16,21 +14,16 @@ import { SharedModule } from './shared/shared.module';
 
 @NgModule({
   declarations: [AppComponent],
+  exports: [SharedModule],
+  bootstrap: [AppComponent],
   imports: [
-    HttpClientModule,
     BrowserModule,
     BrowserAnimationsModule,
-    ToastrModule.forRoot({
-      positionClass: 'toast-top-right',
-      preventDuplicates: true,
-      enableHtml: true
-    }),
     AppRoutingModule,
     CoreModule,
     SharedModule,
     CephModule
   ],
-  exports: [SharedModule],
   providers: [
     {
       provide: ErrorHandler,
@@ -44,8 +37,8 @@ import { SharedModule } from './shared/shared.module';
     {
       provide: APP_BASE_HREF,
       useValue: '/' + (window.location.pathname.split('/', 1)[1] || '')
-    }
-  ],
-  bootstrap: [AppComponent]
+    },
+    provideHttpClient(withInterceptorsFromDi())
+  ]
 })
 export class AppModule {}

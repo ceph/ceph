@@ -914,6 +914,11 @@ test_namespace() {
 
     rbd group create rbd/test1/group1
     rbd group image add rbd/test1/group1 rbd/test1/image1
+    rbd group image add --group-pool rbd --group-namespace test1 --group group1 \
+        --image-pool rbd --image-namespace test1 --image image2
+    rbd group image rm --group-pool rbd --group-namespace test1 --group group1 \
+        --image-pool rbd --image-namespace test1 --image image1
+    rbd group image rm rbd/test1/group1 rbd/test1/image2
     rbd group rm rbd/test1/group1
 
     rbd trash move rbd/test1/image1
@@ -1156,6 +1161,12 @@ test_trash_purge_schedule() {
     expect_fail rbd trash purge schedule ls
     test "$(rbd trash purge schedule ls -R --format json)" = "[]"
 
+    # check that remove fails when pool exists but no schedules are in place
+    expect_fail rbd trash purge schedule remove dummy
+    expect_fail rbd trash purge schedule remove 1d dummy
+    expect_fail rbd trash purge schedule remove -p rbd dummy
+    expect_fail rbd trash purge schedule remove -p rbd 1d dummy
+
     rbd trash purge schedule add -p rbd 1d 01:30
 
     rbd trash purge schedule ls -p rbd | grep 'every 1d starting at 01:30'
@@ -1254,9 +1265,13 @@ test_trash_purge_schedule() {
     # Negative tests
     rbd trash purge schedule add 2m
     expect_fail rbd trash purge schedule add -p rbd dummy
+    expect_fail rbd trash purge schedule add -p rbd 1d dummy
     expect_fail rbd trash purge schedule add dummy
+    expect_fail rbd trash purge schedule add 1d dummy
     expect_fail rbd trash purge schedule remove -p rbd dummy
+    expect_fail rbd trash purge schedule remove -p rbd 1d dummy
     expect_fail rbd trash purge schedule remove dummy
+    expect_fail rbd trash purge schedule remove 1d dummy
     rbd trash purge schedule ls -p rbd | grep 'every 1d starting at 01:30'
     rbd trash purge schedule ls | grep 'every 2m'
     rbd trash purge schedule remove -p rbd 1d 01:30
@@ -1331,6 +1346,12 @@ test_mirror_snapshot_schedule() {
     test "$(rbd mirror image status rbd2/ns1/test1 |
         grep -c mirror.primary)" = '1'
 
+    # check that remove fails when image exists but no schedules are in place
+    expect_fail rbd mirror snapshot schedule remove dummy
+    expect_fail rbd mirror snapshot schedule remove 1h dummy
+    expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 dummy
+    expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 1h dummy
+
     rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 1m
     expect_fail rbd mirror snapshot schedule ls
     rbd mirror snapshot schedule ls -R | grep 'rbd2 *ns1 *test1 *every 1m'
@@ -1396,9 +1417,13 @@ test_mirror_snapshot_schedule() {
 
     # Negative tests
     expect_fail rbd mirror snapshot schedule add dummy
+    expect_fail rbd mirror snapshot schedule add 1h dummy
     expect_fail rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 dummy
+    expect_fail rbd mirror snapshot schedule add -p rbd2/ns1 --image test1 1h dummy
     expect_fail rbd mirror snapshot schedule remove dummy
+    expect_fail rbd mirror snapshot schedule remove 1h dummy
     expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 dummy
+    expect_fail rbd mirror snapshot schedule remove -p rbd2/ns1 --image test1 1h dummy
     test "$(rbd mirror snapshot schedule ls)" = 'every 1h starting at 00:15:00'
     test "$(rbd mirror snapshot schedule ls -p rbd2/ns1 --image test1)" = 'every 1m'
 

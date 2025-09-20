@@ -7,6 +7,8 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sharded.hh>
 
+#include "crimson/common/log.h"
+
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/pg_map.h"
@@ -119,7 +121,7 @@ public:
   FORWARD(set_booting, set_booting, get_shard_services().local_state.osd_state)
   FORWARD(set_stopping, set_stopping, get_shard_services().local_state.osd_state)
   FORWARD(set_active, set_active, get_shard_services().local_state.osd_state)
-  FORWARD(when_active, when_active, get_shard_services().local_state.osd_state)
+  FORWARD_CONST(when_active, when_active, get_shard_services().local_state.osd_state)
   FORWARD_CONST(get_osd_state_string, to_string, get_shard_services().local_state.osd_state)
 
   FORWARD(got_map, got_map, get_shard_services().local_state.osdmap_gate)
@@ -256,18 +258,40 @@ public:
     auto &opref = *op;
     return opref.template with_blocking_event<
       PGMap::PGCreationBlockingEvent
-    >([&target_shard_services, &opref](auto &&trigger) {
-      return target_shard_services.wait_for_pg(
-        std::move(trigger), opref.get_pgid());
-    }).safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
-      logger.debug("{}: have_pg", opref);
-      return opref.with_pg(target_shard_services, pgref);
-    }).handle_error(
-      crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
-        logger.debug("{}: pg creation canceled, dropping", opref);
-        return seastar::now();
-      })
-    ).then([op=std::move(op)] {});
+    >([&target_shard_services, &opref, &logger](auto &&trigger) mutable {
+      auto pg = target_shard_services.get_pg(opref.get_pgid());
+      auto fut = ShardServices::wait_for_pg_ertr::make_ready_future<Ref<PG>>(pg);
+      if (!pg) {
+	if (opref.requires_pg()) {
+	  auto osdmap = target_shard_services.get_map();
+	  if (!osdmap->is_up_acting_osd_shard(
+		opref.get_pgid(), target_shard_services.local_state.whoami)) {
+	    logger.debug(
+	      "pg {} for {} is no longer here, discarding",
+	      opref.get_pgid(), opref);
+	    opref.get_handle().exit();
+	    auto _fut = seastar::now();
+	    if (osdmap->get_epoch() > opref.get_epoch_sent_at()) {
+	      _fut = target_shard_services.send_incremental_map(
+		std::ref(opref.get_foreign_connection()),
+		opref.get_epoch_sent_at() + 1);
+	    }
+	    return _fut;
+	  }
+	}
+	fut = target_shard_services.wait_for_pg(
+	  std::move(trigger), opref.get_pgid());
+      }
+      return fut.safe_then([&logger, &target_shard_services, &opref](Ref<PG> pgref) {
+	logger.debug("{}: have_pg", opref);
+	return opref.with_pg(target_shard_services, pgref);
+      }).handle_error(
+	crimson::ct_error::ecanceled::handle([&logger, &opref](auto) {
+	  logger.debug("{}: pg creation canceled, dropping", opref);
+	  return seastar::now();
+	})
+      );
+    }).then([op=std::move(op)] {});
   }
 
   seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
@@ -279,17 +303,16 @@ public:
    * invoke_method_on_each_shard_seq
    *
    * Invokes shard_services method on each shard sequentially.
+   * Following sharded<Service>::invoke_on_all but invoke_on_all_seq
+   * is used to support errorated return types.
    */
   template <typename F, typename... Args>
   seastar::future<> invoke_on_each_shard_seq(
     F &&f) const {
-    return sharded_map_seq(
-      shard_services,
-      [f=std::forward<F>(f)](const ShardServices &shard_services) mutable {
-	return std::invoke(
-	  f,
-	  shard_services);
-      });
+    return invoke_on_all_seq(
+      [this, f=std::forward<F>(f)]() mutable {
+      return std::invoke(f, shard_services.local());
+    });
   }
 
   /**
@@ -408,6 +431,48 @@ public:
       });
     });
     return std::make_pair(id, std::move(fut));
+  }
+
+  template <typename T, typename... Args>
+  auto start_pg_operation_active(Args&&... args) {
+    LOG_PREFIX(PGShardManager::start_pg_operation_active);
+    auto op = get_local_state().registry.create_operation<T>(
+      std::forward<Args>(args)...);
+    SUBDEBUG(osd, "{} starting", *op);
+
+    auto &opref = *op;
+    if constexpr (T::is_trackable) {
+      op->template track_event<typename T::StartEvent>();
+    }
+
+    auto core = get_pg_to_shard_mapping().get_pg_mapping(opref.get_pgid());
+    if (core == NULL_CORE) {
+      // PG target has been removed, there *must* have been an interval change
+      SUBDEBUG(
+	osd,
+	"{} no core mapping for pg {} found, must be from a prior interval",
+	opref, opref.get_pgid());
+      return seastar::now();
+    }
+
+    return this->template with_remote_shard_state_and_op<T>(
+      core, std::move(op),
+      [FNAME](ShardServices &target_shard_services,
+		    typename T::IRef op) {
+        auto &opref = *op;
+	auto pg = target_shard_services.get_pg(
+	  opref.get_pgid());
+	if (!pg) {
+	  SUBDEBUG(
+	    osd,
+	    "{} pg {} not present, must be from prior interval",
+	    opref, opref.get_pgid());
+	  return seastar::now();
+	}
+	return op->with_pg(
+	  target_shard_services, pg
+	).finally([op] {});
+      });
   }
 
 #undef FORWARD

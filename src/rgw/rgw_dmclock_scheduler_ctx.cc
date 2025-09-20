@@ -13,6 +13,8 @@
  */
 #include "rgw_dmclock_scheduler_ctx.h"
 
+using namespace std::literals;
+
 namespace rgw::dmclock {
 
 ClientConfig::ClientConfig(CephContext *cct)
@@ -25,25 +27,23 @@ ClientInfo* ClientConfig::operator()(client_id client)
   return &clients[static_cast<size_t>(client)];
 }
 
-const char** ClientConfig::get_tracked_conf_keys() const
+std::vector<std::string> ClientConfig::get_tracked_keys() const noexcept
 {
-  static const char* keys[] = {
-    "rgw_dmclock_admin_res",
-    "rgw_dmclock_admin_wgt",
-    "rgw_dmclock_admin_lim",
-    "rgw_dmclock_auth_res",
-    "rgw_dmclock_auth_wgt",
-    "rgw_dmclock_auth_lim",
-    "rgw_dmclock_data_res",
-    "rgw_dmclock_data_wgt",
-    "rgw_dmclock_data_lim",
-    "rgw_dmclock_metadata_res",
-    "rgw_dmclock_metadata_wgt",
-    "rgw_dmclock_metadata_lim",
-    "rgw_max_concurrent_requests",
-    nullptr
+  return {
+    "rgw_dmclock_admin_res"s,
+    "rgw_dmclock_admin_wgt"s,
+    "rgw_dmclock_admin_lim"s,
+    "rgw_dmclock_auth_res"s,
+    "rgw_dmclock_auth_wgt"s,
+    "rgw_dmclock_auth_lim"s,
+    "rgw_dmclock_data_res"s,
+    "rgw_dmclock_data_wgt"s,
+    "rgw_dmclock_data_lim"s,
+    "rgw_dmclock_metadata_res"s,
+    "rgw_dmclock_metadata_wgt"s,
+    "rgw_dmclock_metadata_lim"s,
+    "rgw_max_concurrent_requests"s
   };
-  return keys;
 }
 
 void ClientConfig::update(const ConfigProxy& conf)

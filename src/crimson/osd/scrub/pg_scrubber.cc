@@ -145,7 +145,6 @@ chunk_validation_policy_t PGScrubber::get_policy() const
 {
   return chunk_validation_policy_t{
     pg.get_primary(),
-    std::nullopt /* stripe_info, populate when EC is implemented */,
     crimson::common::local_conf().get_val<Option::size_t>(
       "osd_max_object_size"),
     crimson::common::local_conf().get_val<std::string>(
@@ -278,6 +277,12 @@ void PGScrubber::emit_scrub_result(
   DEBUGDPP("", pg);
   pg.peering_state.update_stats(
     [this, FNAME, deep, &in_stats](auto &history, auto &pg_stats) {
+      // Handle invalid stats, in case of split/merge
+      if (pg_stats.stats_invalid) {
+        pg_stats.stats.sum = in_stats;
+        pg_stats.stats_invalid = false;
+        DEBUGDPP(" repaired invalid stats! ", pg);
+      }
       foreach_scrub_maintained_stat(
 	[deep, &pg_stats, &in_stats](
 	  const auto &name, auto statptr, bool skip_for_shallow) {

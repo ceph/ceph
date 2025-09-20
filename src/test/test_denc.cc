@@ -15,6 +15,8 @@
  */
 
 #include <stdio.h>
+
+#include <iostream> // for std::cout
 #include <numeric>
 
 #include "global/global_init.h"
@@ -23,6 +25,10 @@
 #include "gtest/gtest.h"
 
 #include "include/denc.h"
+
+#include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
+#include <boost/optional.hpp>
 
 using namespace std;
 

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Permissions } from '~/app/shared/models/permissions';
 import { Router } from '@angular/router';
 
@@ -10,7 +10,7 @@ import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
@@ -26,6 +26,7 @@ import { map, switchMap } from 'rxjs/operators';
 import { HealthService } from '~/app/shared/api/health.service';
 import { CephfsAuthModalComponent } from '~/app/ceph/cephfs/cephfs-auth-modal/cephfs-auth-modal.component';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 const BASE_URL = 'cephfs/fs';
 
@@ -36,6 +37,9 @@ const BASE_URL = 'cephfs/fs';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class CephfsListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('deleteTpl', { static: true })
+  deleteTpl: TemplateRef<any>;
+
   columns: CdTableColumn[];
   filesystems: any = [];
   selection = new CdTableSelection();
@@ -172,10 +176,12 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
 
   removeVolumeModal() {
     const volName = this.selection.first().mdsmap['fs_name'];
-    this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: 'File System',
       itemNames: [volName],
       actionDescription: 'remove',
+      bodyTemplate: this.deleteTpl,
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
           task: new FinishedTask('cephfs/remove', { volumeName: volName }),

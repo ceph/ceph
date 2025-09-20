@@ -46,7 +46,7 @@ int add(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_add(op, resource, exclusive, limit);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int remove(const DoutPrefixProvider* dpp,
@@ -63,7 +63,7 @@ int remove(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_rm(op, name);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int list(const DoutPrefixProvider* dpp,
@@ -89,7 +89,7 @@ int list(const DoutPrefixProvider* dpp,
   ::cls_user_account_resource_list(op, marker, path_prefix, max_items,
                                    entries, &truncated, &next_marker, &ret);
 
-  r = ref.operate(dpp, &op, nullptr, y);
+  r = ref.operate(dpp, std::move(op), nullptr, y);
   if (r == -ENOENT) {
     next_marker.clear();
     return 0;
@@ -124,12 +124,14 @@ void resource_metadata::dump(ceph::Formatter* f) const
   encode_json("group_id", group_id, f);
 }
 
-void resource_metadata::generate_test_instances(std::list<resource_metadata*>& o)
+std::list<resource_metadata> resource_metadata::generate_test_instances()
 {
-  o.push_back(new resource_metadata);
-  auto m = new resource_metadata;
-  m->group_id = "id";
-  o.push_back(m);
+  std::list<resource_metadata> o;
+  o.emplace_back();
+  resource_metadata m;
+  m.group_id = "id";
+  o.push_back(std::move(m));
+  return o;
 }
 
 } // namespace rgwrados::groups

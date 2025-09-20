@@ -24,7 +24,6 @@
 #include <variant>
 #include <fmt/format.h>
 
-#include "common/dout.h"
 #include "common/Formatter.h"
 
 // strong typedef to std::string
@@ -133,7 +132,7 @@ struct rgw_user {
   friend auto operator<=>(const rgw_user&, const rgw_user&) = default;
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_user*>& o);
+  static std::list<rgw_user> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_user)
 

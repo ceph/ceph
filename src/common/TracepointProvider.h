@@ -62,8 +62,8 @@ public:
   }
 
 protected:
-  const char** get_tracked_conf_keys() const override {
-    return m_config_keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{m_config_key};
   }
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override;
@@ -71,7 +71,7 @@ protected:
 private:
   CephContext *m_cct;
   std::string m_library;
-  mutable const char* m_config_keys[2];
+  std::string m_config_key;
 
   ceph::mutex m_lock = ceph::make_mutex("TracepointProvider::m_lock");
   void* m_handle = nullptr;

@@ -1,5 +1,5 @@
 #
-# there are two sections
+# There are two sections
 #
 # releases: ... for named releases
 # development: ... for dev releases
@@ -11,16 +11,32 @@
 #
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
+# Note that in order for the Gantt chart to properly reflect the latest version
+#      of a major release, the versions within a `releases` list MUST be
+#      in descending order.
+
 releases:
   squid:
     target_eol: 2026-09-19
     releases:
+      - version: 19.2.3
+        released: 2025-07-28
+      - version: 19.2.2
+        released: 2025-04-10
+      - version: 19.2.1
+        released: 2025-02-06
       - version: 19.2.0
         released: 2024-09-26
 
   reef:
     target_eol: 2025-08-01
     releases:
+      - version: 18.2.7
+        released: 2025-05-08
+      - version: 18.2.6
+        released: 2025-04-21
+      - version: 18.2.5
+        released: 2025-04-10
       - version: 18.2.4
         released: 2024-07-24
       - version: 18.2.2
@@ -32,7 +48,12 @@ releases:
 
   quincy:
     target_eol: 2024-06-01
+    actual_eol: 2025-01-13
     releases:
+      - version: 17.2.9
+        released: 2025-05-27
+      - version: 17.2.8
+        released: 2024-11-25
       - version: 17.2.7
         released: 2023-10-30
       - version: 17.2.6

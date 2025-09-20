@@ -1,7 +1,7 @@
 from __future__ import print_function
 from assertions import assert_equal as eq, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
-                   ObjectNotFound, ObjectBusy, NotConnected,
+                   ObjectNotFound, ObjectBusy, NotConnected, InvalidArgumentError,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
                    LIBRADOS_CMPXATTR_OP_EQ, LIBRADOS_CMPXATTR_OP_GT, LIBRADOS_CMPXATTR_OP_LT, OSError,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog, MAX_ERRNO, NoData, ExtendMismatch)
@@ -207,7 +207,7 @@ class TestRados(object):
 
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
-        assert re.match('[0-9a-f\-]{36}', fsid, re.I)
+        assert re.match(r'[0-9a-f\-]{36}', fsid, re.I)
 
     def test_blocklist_add(self):
         self.rados.blocklist_add("1.2.3.4/123", 1)
@@ -514,6 +514,11 @@ class TestIoctx(object):
             write_op.zero(2, 2)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'12\x00\x005')
+
+            write_op.write_full(b'12345')
+            write_op.zero(0, 2)
+            self.ioctx.operate_write_op(write_op, "write_ops")
+            eq(self.ioctx.read('write_ops'), b'\x00\x00345')
 
             write_op.write_full(b'12345')
             write_op.truncate(2)
@@ -1052,23 +1057,75 @@ class TestIoctx(object):
     def test_lock(self):
         self.ioctx.lock_exclusive("foo", "lock", "locker", "desc_lock",
                                   10000, 0)
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "")
+        eq(lockers_info["exclusive"], True)
+        eq(len(lockers_info["lockers"]), 1)
         assert_raises(ObjectExists,
                       self.ioctx.lock_exclusive,
                       "foo", "lock", "locker", "desc_lock", 10000, 0)
         self.ioctx.unlock("foo", "lock", "locker")
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker")
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "")
+        eq(lockers_info["exclusive"], True)
+        eq(len(lockers_info["lockers"]), 0)
 
         self.ioctx.lock_shared("foo", "lock", "locker1", "tag", "desc_lock",
                                10000, 0)
         self.ioctx.lock_shared("foo", "lock", "locker2", "tag", "desc_lock",
                                10000, 0)
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 2)
         assert_raises(ObjectBusy,
                       self.ioctx.lock_exclusive,
                       "foo", "lock", "locker3", "desc_lock", 10000, 0)
         self.ioctx.unlock("foo", "lock", "locker1")
         self.ioctx.unlock("foo", "lock", "locker2")
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 0)
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker1")
         assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker2")
+        self.ioctx.lock_shared("foo", "lock", "locker3", "tag", "desc_lock",
+                               10000, 0)
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 1)
+        lock_client = lockers_info["lockers"][0][0]
+        assert_raises(ObjectNotFound,
+                      self.ioctx.break_lock, "bar", "lock",
+                      lock_client, "locker3")
+        assert_raises(ObjectNotFound,
+                      self.ioctx.break_lock, "foo", "wrong",
+                      lock_client, "locker3")
+        assert_raises(InvalidArgumentError,
+                      self.ioctx.break_lock, "foo", "lock",
+                      "wrong_client", "locker3")
+        assert_raises(ObjectNotFound,
+                      self.ioctx.break_lock, "foo", "lock",
+                      lock_client, "wrong cookie")
+        self.ioctx.lock_shared("foo", "lock", "locker4", "tag", "desc_lock",
+                               10000, 0)
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 2)
+        self.ioctx.break_lock("foo", "lock", lock_client, "locker3")
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 1)
+        assert_raises(ObjectNotFound, self.ioctx.unlock, "foo", "lock", "locker3")
+        self.ioctx.unlock("foo", "lock", "locker4")
+        lockers_info = self.ioctx.list_lockers("foo", "lock")
+        eq(lockers_info["tag"], "tag")
+        eq(lockers_info["exclusive"], False)
+        eq(len(lockers_info["lockers"]), 0)
 
     def test_execute(self):
         self.ioctx.write("foo", b"") # ensure object exists

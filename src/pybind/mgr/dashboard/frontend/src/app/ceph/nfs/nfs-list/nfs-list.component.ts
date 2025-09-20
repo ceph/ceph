@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
@@ -7,7 +7,7 @@ import { Subscription } from 'rxjs';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -25,6 +25,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
 import { SUPPORTED_FSAL } from '../models/nfs.fsal';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 
 export enum RgwExportType {
   BUCKET = 'bucket',
@@ -48,6 +49,15 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   @ViewChild('table', { static: true })
   table: TableComponent;
 
+  @ViewChild('protocolTpl', { static: true })
+  protocolTpl: TemplateRef<any>;
+
+  @ViewChild('transportTpl', { static: true })
+  transportTpl: TemplateRef<any>;
+
+  @Input() clusterId: string;
+  modalRef: NgbModalRef;
+
   columns: CdTableColumn[];
   permission: Permission;
   selection = new CdTableSelection();
@@ -57,8 +67,6 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
   tableActions: CdTableAction[];
   isDefaultCluster = false;
   fsal: SUPPORTED_FSAL;
-
-  modalRef: NgbModalRef;
 
   builders = {
     'nfs/create': (metadata: any) => {
@@ -134,7 +142,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         name: this.fsal === SUPPORTED_FSAL.CEPH ? $localize`Path` : $localize`Bucket`,
         prop: 'path',
         flexGrow: 2,
-        cellTemplate: this.pathTmpl
+        cellTemplate: this.pathTmpl,
+        cellTransformation: CellTemplate.path
       },
       {
         name: $localize`Pseudo`,
@@ -156,11 +165,23 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         name: $localize`Access Type`,
         prop: 'access_type',
         flexGrow: 2
+      },
+      {
+        name: $localize`NFS Protocol`,
+        prop: 'protocols',
+        flexGrow: 2,
+        cellTemplate: this.protocolTpl
+      },
+      {
+        name: $localize`Transports`,
+        prop: 'transports',
+        flexGrow: 2,
+        cellTemplate: this.transportTpl
       }
     ];
 
     this.taskListService.init(
-      () => this.nfsService.list(),
+      () => this.nfsService.list(this.clusterId),
       (resp) => this.prepareResponse(resp),
       (exports) => (this.exports = exports),
       () => this.onFetchError(),
@@ -211,7 +232,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const cluster_id = this.selection.first().cluster_id;
     const export_id = this.selection.first().export_id;
 
-    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+    this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.high,
       itemDescription: $localize`NFS export`,
       itemNames: [`${cluster_id}:${export_id}`],
       submitActionObservable: () =>

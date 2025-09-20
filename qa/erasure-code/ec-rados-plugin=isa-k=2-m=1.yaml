@@ -7,7 +7,7 @@ tasks:
     min_size: 2
     write_append_excl: false
     erasure_code_profile:
-      name: isaprofile
+      name: isa21profile
       plugin: isa
       k: 2
       m: 1

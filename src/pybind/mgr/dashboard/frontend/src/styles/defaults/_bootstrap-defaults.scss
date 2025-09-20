@@ -1,4 +1,5 @@
 // Color system
+@use '@carbon/colors';
 
 $white: #fff !default;
 $gray-100: #f8f9fa !default;
@@ -139,6 +140,9 @@ $nav-tabs-margin-bottom: 1rem !default;
 $tooltip-color: $white !default;
 $tooltip-bg: $body-color !default;
 $tooltip-opacity: 1 !default;
+
+// Side panel
+$side-panel-overlay-bg: rgba(colors.$gray-100, 50%) !default;
 
 // Misc
 

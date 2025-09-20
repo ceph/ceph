@@ -529,23 +529,25 @@ void MonCap::dump(Formatter *f) const
   f->dump_string("text", text);
 }
 
-void MonCap::generate_test_instances(list<MonCap*>& ls)
+list<MonCap> MonCap::generate_test_instances()
 {
-  ls.push_back(new MonCap);
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow *");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow rwx");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow service foo x");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow command bar x");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow service foo r, allow command bar x");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow command bar with k1=v1 x");
-  ls.push_back(new MonCap);
-  ls.back()->parse("allow command bar with k1=v1 k2=v2 x");
+  list<MonCap> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().parse("allow *");
+  ls.emplace_back();
+  ls.back().parse("allow rwx");
+  ls.emplace_back();
+  ls.back().parse("allow service foo x");
+  ls.emplace_back();
+  ls.back().parse("allow command bar x");
+  ls.emplace_back();
+  ls.back().parse("allow service foo r, allow command bar x");
+  ls.emplace_back();
+  ls.back().parse("allow command bar with k1=v1 x");
+  ls.emplace_back();
+  ls.back().parse("allow command bar with k1=v1 k2=v2 x");
+  return ls;
 }
 
 // grammar

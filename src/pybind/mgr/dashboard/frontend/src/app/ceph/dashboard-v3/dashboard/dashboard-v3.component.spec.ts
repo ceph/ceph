@@ -23,6 +23,7 @@ import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { AlertClass } from '~/app/shared/enum/health-icon.enum';
+import { HealthSnapshotMap } from '~/app/shared/models/health.interface';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -40,26 +41,61 @@ export class SummaryServiceMock {
 describe('Dashbord Component', () => {
   let component: DashboardV3Component;
   let fixture: ComponentFixture<DashboardV3Component>;
-  let healthService: HealthService;
   let orchestratorService: OrchestratorService;
-  let getHealthSpy: jasmine.Spy;
+  let getHealthStatusSpy: jasmine.Spy;
   let getAlertsSpy: jasmine.Spy;
   let fakeFeatureTogglesService: jasmine.Spy;
 
-  const healthPayload: Record<string, any> = {
-    health: { status: 'HEALTH_OK' },
-    mon_status: { monmap: { mons: [] }, quorum: [] },
-    osd_map: { osds: [] },
-    mgr_map: { standbys: [] },
-    hosts: 0,
-    rgw: 0,
-    fs_map: { filesystems: [], standbys: [] },
-    iscsi_daemons: 1,
-    client_perf: {},
-    scrub_status: 'Inactive',
-    pools: [],
-    df: { stats: {} },
-    pg_info: { object_stats: { num_objects: 1 } }
+  const healthStatusPayload: HealthSnapshotMap = {
+    fsid: '7d0cc9da-ca8d-4539-a953-ab062139c26a',
+    health: {
+      status: 'HEALTH_WARN',
+      checks: {
+        DASHBOARD_DEBUG: {
+          severity: 'HEALTH_WARN',
+          summary: {
+            message: 'Dashboard debug mode is enabled',
+            count: 0
+          },
+          muted: false
+        }
+      },
+      mutes: []
+    },
+    monmap: {
+      num_mons: 3
+    },
+    osdmap: {
+      in: 3,
+      up: 3,
+      num_osds: 3
+    },
+    pgmap: {
+      pgs_by_state: [
+        {
+          state_name: 'active+clean',
+          count: 497
+        }
+      ],
+      num_pools: 14,
+      bytes_used: 3236978688,
+      bytes_total: 325343772672,
+      num_pgs: 497
+    },
+    mgrmap: {
+      num_active: 1,
+      num_standbys: 0
+    },
+    fsmap: {
+      num_standbys: 2,
+      num_active: 1
+    },
+    num_rgw_gateways: 3,
+    num_iscsi_gateways: {
+      up: 0,
+      down: 0
+    },
+    num_hosts: 1
   };
 
   const alertsPayload: AlertmanagerAlert[] = [
@@ -83,7 +119,8 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['ceph2'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     },
     {
       labels: {
@@ -105,7 +142,8 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['default'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     },
     {
       labels: {
@@ -127,11 +165,10 @@ describe('Dashbord Component', () => {
         inhibitedBy: null
       },
       receivers: ['ceph'],
-      fingerprint: 'fingerprint'
+      fingerprint: 'fingerprint',
+      alert_count: 1
     }
   ];
-
-  const configValueData: any = 'e90a0d58-658e-4148-8f61-e896c86f0696';
 
   const orchName: any = 'Cephadm';
 
@@ -159,16 +196,15 @@ describe('Dashbord Component', () => {
     );
     fixture = TestBed.createComponent(DashboardV3Component);
     component = fixture.componentInstance;
-    healthService = TestBed.inject(HealthService);
     orchestratorService = TestBed.inject(OrchestratorService);
-    getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
-    getHealthSpy.and.returnValue(of(healthPayload));
+    getHealthStatusSpy = spyOn(TestBed.inject(HealthService), 'getHealthSnapshot');
+    getHealthStatusSpy.and.returnValue(of(healthStatusPayload));
     getAlertsSpy = spyOn(TestBed.inject(PrometheusService), 'getAlerts');
     getAlertsSpy.and.returnValue(of(alertsPayload));
     component.prometheusAlertService.alerts = alertsPayload;
     component.isAlertmanagerConfigured = true;
     let prometheusAlertService = TestBed.inject(PrometheusAlertService);
-    spyOn(prometheusAlertService, 'getAlerts').and.callFake(() => of([]));
+    spyOn(prometheusAlertService, 'getGroupedAlerts').and.callFake(() => of([]));
     prometheusAlertService.activeCriticalAlerts = 2;
     prometheusAlertService.activeWarningAlerts = 1;
   });
@@ -184,45 +220,50 @@ describe('Dashbord Component', () => {
   });
 
   it('should get corresponding data into detailsCardData', () => {
-    spyOn(healthService, 'getClusterFsid').and.returnValue(of(configValueData));
     spyOn(orchestratorService, 'getName').and.returnValue(of(orchName));
     component.ngOnInit();
-    expect(component.detailsCardData.fsid).toBe('e90a0d58-658e-4148-8f61-e896c86f0696');
+    expect(component.detailsCardData.fsid).toBe(healthStatusPayload['fsid']);
     expect(component.detailsCardData.orchestrator).toBe('Cephadm');
     expect(component.detailsCardData.cephVersion).toBe('17.0.0-12222-gcd0cd7cb quincy (dev)');
   });
 
   it('should check if the respective icon is shown for each status', () => {
-    const payload = _.cloneDeep(healthPayload);
+    const payload = _.cloneDeep(healthStatusPayload);
 
     // HEALTH_WARN
     payload.health['status'] = 'HEALTH_WARN';
-    payload.health['checks'] = [
-      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
-    ];
+    payload.health['checks'] = {
+      FAKE_CHECK: {
+        severity: 'HEALTH_WARN',
+        summary: { message: 'fake warning', count: 1 },
+        muted: false
+      }
+    };
 
-    getHealthSpy.and.returnValue(of(payload));
+    getHealthStatusSpy.and.returnValue(of(payload));
     fixture.detectChanges();
     const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"] i'));
     expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
 
     // HEALTH_ERR
     payload.health['status'] = 'HEALTH_ERR';
-    payload.health['checks'] = [
-      { severity: 'HEALTH_ERR', type: 'ERR', summary: { message: 'fake error' } }
-    ];
+    payload.health['checks'] = {
+      FAKE_CHECK: {
+        severity: 'HEALTH_ERR',
+        summary: { message: 'fake error', count: 1 },
+        muted: false
+      }
+    };
 
-    getHealthSpy.and.returnValue(of(payload));
+    getHealthStatusSpy.and.returnValue(of(payload));
     fixture.detectChanges();
     expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
 
     // HEALTH_OK
     payload.health['status'] = 'HEALTH_OK';
-    payload.health['checks'] = [
-      { severity: 'HEALTH_OK', type: 'OK', summary: { message: 'fake success' } }
-    ];
+    payload.health['checks'] = {};
 
-    getHealthSpy.and.returnValue(of(payload));
+    getHealthStatusSpy.and.returnValue(of(payload));
     fixture.detectChanges();
     expect(clusterStatusCard.nativeElement.title).toEqual(`${payload.health.status}`);
   });
@@ -273,21 +314,29 @@ describe('Dashbord Component', () => {
   });
 
   it('should render "Status" card text that is not clickable', () => {
-    fixture.detectChanges();
+    const payload = _.cloneDeep(healthStatusPayload);
+    payload.health['status'] = 'HEALTH_OK';
+    payload.health['checks'] = null;
 
+    getHealthStatusSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
     const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));
     const clickableContent = clusterStatusCard.query(By.css('.lead.text-primary'));
     expect(clickableContent).toBeNull();
   });
 
   it('should render "Status" card text that is clickable (popover)', () => {
-    const payload = _.cloneDeep(healthPayload);
+    const payload = _.cloneDeep(healthStatusPayload);
     payload.health['status'] = 'HEALTH_WARN';
-    payload.health['checks'] = [
-      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
-    ];
+    payload.health['checks'] = {
+      FAKE_CHECK: {
+        severity: 'HEALTH_WARN',
+        summary: { message: 'fake warning', count: 1 },
+        muted: false
+      }
+    };
 
-    getHealthSpy.and.returnValue(of(payload));
+    getHealthStatusSpy.and.returnValue(of(payload));
     fixture.detectChanges();
 
     const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));

@@ -23,6 +23,7 @@
 #include <sstream>
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "crush/CrushWrapper.h"
 
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
@@ -919,11 +920,32 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (pending_map.stretch_mode_enabled) {
+        err = -EINVAL;
+        ss << "Stretch mode is enabled, so you cannot change the election strategy; please disable stretch mode first!";
+        ceph_assert(pending_map.strategy == MonMap::CONNECTIVITY);
+        goto reply_no_propose;
+    }
     if (strat == "classic") {
+      if (pending_map.strategy == MonMap::CLASSIC) {
+        err = 0;
+        ss << "You are already in classic election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CLASSIC;
     } else if (strat == "disallow") {
+      if (pending_map.strategy == MonMap::DISALLOW) {
+          err = 0;
+          ss << "You are already in disallow election strategy";
+          goto reply_no_propose;
+      }
       strategy = MonMap::DISALLOW;
     } else if (strat == "connectivity") {
+      if (pending_map.strategy == MonMap::CONNECTIVITY) {
+        err = 0;
+        ss << "You are already in connectivity election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CONNECTIVITY;
     } else {
       err = -EINVAL;
@@ -1186,6 +1208,42 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 					     pools, new_crush_rule);
       ceph_assert(okay == true);
     }
+    request_proposal(mon.osdmon());
+  } else if (prefix == "mon disable_stretch_mode") {
+    if (!mon.osdmon()->is_writeable()) {
+      dout(10) << __func__
+        << ":  waiting for osdmon writeable for stretch mode" << dendl;
+      mon.osdmon()->wait_for_writeable(op, new Monitor::C_RetryMessage(&mon, op));
+      return false;  /* do not propose, yet */
+    }
+    bool sure = false;
+    bool okay = false;
+    int errcode = 0;
+    if (!pending_map.stretch_mode_enabled) {
+      ss << "stretch mode is already disabled";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
+      ss << " This command will disable stretch mode, "
+      "which means all your pools will be reverted back "
+      "to the default size, min_size and crush_rule. "
+      "Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    string crush_rule = cmd_getval_or<string>(cmdmap, "crush_rule", string{});
+    mon.osdmon()->try_disable_stretch_mode(ss, &okay, &errcode, crush_rule);
+    if (!okay) {
+      err = errcode;
+      goto reply_no_propose;
+    }
+    pending_map.stretch_mode_enabled = false;
+    pending_map.tiebreaker_mon = "";
+    pending_map.disallowed_leaders.clear();
+    pending_map.stretch_marked_down_mons.clear();
+    pending_map.last_changed = ceph_clock_now();
     request_proposal(mon.osdmon());
   } else {
     ss << "unknown command " << prefix;

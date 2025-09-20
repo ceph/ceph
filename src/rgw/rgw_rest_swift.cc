@@ -361,6 +361,7 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& ent)
   if (need_stats) {
     s->formatter->dump_int("count", ent.count);
     s->formatter->dump_int("bytes", ent.size);
+    dump_time(s, "last_modified", ent.modification_time);
   }
 
   s->formatter->close_section();
@@ -447,7 +448,6 @@ int RGWListBucket_ObjStore_SWIFT::get_params(optional_yield y)
 }
 
 static void dump_container_metadata(req_state *,
-                                    const rgw::sal::Bucket*,
                                     const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
@@ -458,7 +458,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
+  dump_container_metadata(s, stats, quota.bucket_quota,
                           s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
@@ -558,7 +558,6 @@ next:
 } // RGWListBucket_ObjStore_SWIFT::send_response
 
 static void dump_container_metadata(req_state *s,
-                                    const rgw::sal::Bucket* bucket,
                                     const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
@@ -683,7 +682,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket.get(), stats, quota.bucket_quota,
+    dump_container_metadata(s, stats, quota.bucket_quota,
                             s->bucket->get_info().website_conf);
   }
 
@@ -812,9 +811,6 @@ static int get_swift_versioning_settings(
 
 int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
-  bool has_policy;
-  uint32_t policy_rw_mask = 0;
-
   int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
@@ -977,7 +973,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Object> slo_seg = bucket->get_object(rgw_obj_key(obj_name));
 
   /* no prefetch */
-  slo_seg->set_atomic();
+  slo_seg->set_atomic(true);
 
   bool compressed;
   RGWCompressionInfo cs_info;
@@ -1031,6 +1027,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   supplied_etag = s->info.env->get("HTTP_ETAG");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     ldpp_dout(this, 5) << "content type wasn't provided, trying to guess" << dendl;
@@ -2640,7 +2638,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
+      dump_container_metadata(s, stats, quota.bucket_quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {
@@ -2708,7 +2706,7 @@ bool RGWSwiftWebsiteHandler::is_web_dir() const
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(std::move(subdir_name)));
 
   /* First, get attrset of the object we'll try to retrieve. */
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   if (obj->load_obj_state(s, s->yield, false)) {
@@ -2736,7 +2734,7 @@ bool RGWSwiftWebsiteHandler::is_index_present(const std::string& index) const
 {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(index));
 
-  obj->set_atomic();
+  obj->set_atomic(true);
   obj->set_prefetch_data();
 
   if (obj->load_obj_state(s, s->yield, false)) {
@@ -2948,7 +2946,10 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
       && s->user->get_id().id == RGW_USER_ANON_ID) {
     s->bucket_tenant = s->account_name;
   } else {
-    s->bucket_tenant = s->auth.identity->get_tenant();
+    /* tenant must be taken from request. Can't use auth.identity->get_tenant(),
+       because there are cases when users from different tenant may be granted
+       access via ACL to this bucket */
+    s->bucket_tenant = s->user->get_tenant();
   }
   s->bucket_name = t->url_bucket;
 

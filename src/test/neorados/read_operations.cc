@@ -15,9 +15,11 @@
 #include <initializer_list>
 #include <memory>
 #include <string_view>
+#include <unordered_set>
 #include <utility>
 
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <boost/container/flat_map.hpp>
 
@@ -27,6 +29,7 @@
 #include <xxHash/xxhash.h>
 
 #include "include/neorados/RADOS.hpp"
+#include "include/rbd/features.h" // for RBD_FEATURES_ALL
 
 #include "osd/error_code.h"
 
@@ -744,5 +747,13 @@ CORO_TEST_F(NeoRadosReadOps, CmpExt, ReadOpTest) {
     EXPECT_EQ(-1, unmatch);
     EXPECT_EQ(0, bl.length());
   }
+  co_return;
+}
+
+CORO_TEST_F(NeoRadosReadOps, Cancel, ReadOpTest) {
+  using namespace boost::asio::experimental::awaitable_operators;
+  auto bl = filled_buffer_list(0x33, 4 * 1 << 20);
+  co_await execute(oid, WriteOp{}.write_full(std::move(bl)));
+  co_await (execute(oid, ReadOp{}.read(0, 0, &bl)) || wait_for(1us));
   co_return;
 }

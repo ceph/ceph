@@ -782,14 +782,14 @@ void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
 }
 
 int execute(
-    rgw::sal::Driver* driver,
     RGWREST* rest,
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
     const std::string& script)
 {
-  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
+                         s->cct->_conf->rgw_lua_max_runtime_per_state, s);
   auto L = lguard.get();
   if (!L) {
     ldpp_dout(s, 1) << "Failed to create state for Lua request context" << dendl;

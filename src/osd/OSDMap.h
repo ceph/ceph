@@ -29,16 +29,20 @@
 #include <set>
 #include <map>
 #include <memory>
+#include <random>
 
-#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
 #include "include/common_fwd.h"
+#include "include/fs_types.h" // for struct file_layout_t
 #include "include/types.h"
 #include "common/ceph_releases.h"
 #include "osd_types.h"
 
-//#include "include/ceph_features.h"
 #include "crush/CrushWrapper.h"
+
+#ifdef WITH_CRIMSON
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#endif
 
 // forward declaration
 class CrushWrapper;
@@ -80,7 +84,7 @@ struct osd_info_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static void generate_test_instances(std::list<osd_info_t*>& o);
+  static std::list<osd_info_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(osd_info_t)
 
@@ -101,7 +105,7 @@ struct osd_xinfo_t {
   void dump(ceph::Formatter *f) const;
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
-  static void generate_test_instances(std::list<osd_xinfo_t*>& o);
+  static std::list<osd_xinfo_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
@@ -342,11 +346,13 @@ struct PGTempMap {
       f->close_section();
     }
   }
-  static void generate_test_instances(std::list<PGTempMap*>& o) {
-    o.push_back(new PGTempMap);
-    o.push_back(new PGTempMap);
-    o.back()->set(pg_t(1, 2), { 3, 4 });
-    o.back()->set(pg_t(2, 3), { 4, 5 });
+  static std::list<PGTempMap> generate_test_instances() {
+    std::list<PGTempMap> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().set(pg_t(1, 2), { 3, 4 });
+    o.back().set(pg_t(2, 3), { 4, 5 });
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(PGTempMap)
@@ -449,7 +455,7 @@ public:
     void decode_classic(ceph::buffer::list::const_iterator &p);
     void decode(ceph::buffer::list::const_iterator &bl);
     void dump(ceph::Formatter *f) const;
-    static void generate_test_instances(std::list<Incremental*>& o);
+    static std::list<Incremental> generate_test_instances();
 
     explicit Incremental(epoch_t e=0) :
       encode_features(0),
@@ -571,7 +577,8 @@ private:
     CEPH_FEATUREMASK_SERVER_MIMIC |
     CEPH_FEATUREMASK_SERVER_NAUTILUS |
     CEPH_FEATUREMASK_SERVER_OCTOPUS |
-    CEPH_FEATUREMASK_SERVER_REEF;
+    CEPH_FEATUREMASK_SERVER_REEF |
+    CEPH_FEATUREMASK_SERVER_TENTACLE;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -585,6 +592,7 @@ private:
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
+  // Optimized EC pools re-order pg_temp, see pgtemp_primaryfirst
   std::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
   std::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
   std::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
@@ -702,6 +710,12 @@ public:
   /// return feature mask subset that is relevant to OSDMap encoding
   static uint64_t get_significant_features(uint64_t features) {
     return SIGNIFICANT_FEATURES & features;
+  }
+
+  template<uint64_t feature>
+    requires ((SIGNIFICANT_FEATURES & feature) == feature)
+  static constexpr bool have_significant_feature(uint64_t x) {
+    return (x & feature) == feature;
   }
 
   uint64_t get_encoding_features() const;
@@ -881,7 +895,7 @@ public:
   }
 
   bool exists(int osd) const {
-    //assert(osd >= 0);
+    //ceph_assert(osd >= 0);
     return osd >= 0 && osd < max_osd && (osd_state[osd] & CEPH_OSD_EXISTS);
   }
 
@@ -1326,16 +1340,16 @@ public:
     return false;
   }
   bool get_primary_shard(const pg_t& pgid, int *primary, spg_t *out) const {
-    auto i = get_pools().find(pgid.pool());
-    if (i == get_pools().end()) {
+    auto poolit = get_pools().find(pgid.pool());
+    if (poolit == get_pools().end()) {
       return false;
     }
     std::vector<int> acting;
     pg_to_acting_osds(pgid, &acting, primary);
-    if (i->second.is_erasure()) {
+    if (poolit->second.is_erasure()) {
       for (uint8_t i = 0; i < acting.size(); ++i) {
 	if (acting[i] == *primary) {
-	  *out = spg_t(pgid, shard_id_t(i));
+	  *out = spg_t(pgid, pgtemp_undo_primaryfirst(poolit->second, pgid, shard_id_t(i)));
 	  return true;
 	}
       }
@@ -1345,6 +1359,21 @@ public:
     }
     return false;
   }
+
+  bool has_pgtemp(const pg_t pg) const {
+    return (pg_temp->find(pg) != pg_temp->end());
+  }
+  const std::vector<int> pgtemp_primaryfirst(const pg_pool_t& pool,
+			   const std::vector<int>& pg_temp) const;
+  const std::vector<int> pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+			   const pg_t pg,
+			   const std::vector<int>& acting) const;
+  const shard_id_t pgtemp_primaryfirst(const pg_pool_t& pool,
+				       const pg_t pg,
+				       const shard_id_t shard) const;
+  shard_id_t pgtemp_undo_primaryfirst(const pg_pool_t& pool,
+					    const pg_t pg,
+					    const shard_id_t shard) const;
 
   bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
     auto p = removed_snaps_queue.find(pool);
@@ -1492,7 +1521,10 @@ public:
     OSDMap& tmp_osd_map,
     const std::optional<rb_policy>& rbp = std::nullopt) const;
 
-  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid);
+  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid); // per pool
+  void rm_all_upmap_prims(
+    CephContext *cct,
+    OSDMap::Incremental *pending_inc); // total
 
   int calc_desired_primary_distribution(
     CephContext *cct,
@@ -1819,7 +1851,7 @@ public:
   void dump_osds(ceph::Formatter *f) const;
   void dump_pool(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
   void dump_read_balance_score(CephContext *cct, int64_t pid, const pg_pool_t &pdata, ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<OSDMap*>& o);
+  static std::list<OSDMap> generate_test_instances();
   bool check_new_blocklist_entries() const { return new_blocklist_entries; }
 
   void check_health(CephContext *cct, health_check_map_t *checks) const;
@@ -1835,7 +1867,10 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-#ifdef WITH_SEASTAR
+#define HAVE_SIGNIFICANT_FEATURE(x, name) \
+(OSDMap::have_significant_feature<CEPH_FEATUREMASK_##name>(x))
+
+#ifdef WITH_CRIMSON
 #include "crimson/common/local_shared_foreign_ptr.h"
 using LocalOSDMapRef = boost::local_shared_ptr<const OSDMap>;
 using OSDMapRef = crimson::local_shared_foreign_ptr<LocalOSDMapRef>;

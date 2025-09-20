@@ -26,32 +26,46 @@ using namespace std;
 
 class ErasureCodeTest : public ErasureCode {
 public:
-  map<int, bufferlist> encode_chunks_encoded;
+  shard_id_map<bufferlist> encode_chunks_encoded;
   unsigned int k;
   unsigned int m;
   unsigned int chunk_size;
 
   ErasureCodeTest(unsigned int _k, unsigned int _m, unsigned int _chunk_size) :
-    k(_k), m(_m), chunk_size(_chunk_size) {}
+  encode_chunks_encoded(_k + _m), k(_k), m(_m), chunk_size(_chunk_size) {}
   ~ErasureCodeTest() override {}
 
   int init(ErasureCodeProfile &profile, ostream *ss) override {
     return 0;
   }
 
+  uint64_t get_supported_optimizations() const override { return 0; }
   unsigned int get_chunk_count() const override { return k + m; }
   unsigned int get_data_chunk_count() const override { return k; }
   unsigned int get_chunk_size(unsigned int object_size) const override {
     return chunk_size;
   }
+  size_t get_minimum_granularity() override { return 1; }
+  [[deprecated]]
   int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) override {
-    encode_chunks_encoded = *encoded;
+    ceph_abort_msg("Only new API is tested");
+    //encode_chunks_encoded = *encoded;
     return 0;
   }
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
+    return 0;
+  }
+  [[deprecated]]
   int decode_chunks(const set<int> &want_to_read,
                     const map<int, bufferlist> &chunks,
                     map<int, bufferlist> *decoded) override {
+    ceph_abort_msg("ErasureCode::decode_chunks not implemented");
+  }
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
     ceph_abort_msg("ErasureCode::decode_chunks not implemented");
   }
 
@@ -59,6 +73,7 @@ public:
 		  CrushWrapper &crush,
 		  ostream *ss) const override { return 0; }
 };
+static_assert(!std::is_abstract<ErasureCodeTest>());
 
 /*
  *  If we have a buffer of 5 bytes (X below) and a chunk size of 3
@@ -100,9 +115,8 @@ TEST(ErasureCodeTest, encode_memory_align)
   unsigned chunk_size = ErasureCode::SIMD_ALIGN * 7;
   ErasureCodeTest erasure_code(k, m, chunk_size);
 
-  set<int> want_to_encode;
-  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++)
-    want_to_encode.insert(i);
+  shard_id_set  want_to_encode;
+  want_to_encode.insert_range(shard_id_t(0), erasure_code.get_chunk_count());
   string data(chunk_size + chunk_size / 2, 'X'); // uses 1.5 chunks out of 3
   // make sure nothing is memory aligned
   bufferptr ptr(buffer::create_aligned(data.length() + 1, ErasureCode::SIMD_ALIGN));
@@ -111,15 +125,15 @@ TEST(ErasureCodeTest, encode_memory_align)
   ptr.set_length(data.length());
   bufferlist in;
   in.append(ptr);
-  map<int, bufferlist> encoded;
+  shard_id_map<bufferlist> encoded(k+m);
 
   ASSERT_FALSE(in.is_aligned(ErasureCode::SIMD_ALIGN));
   ASSERT_EQ(0, erasure_code.encode(want_to_encode, in, &encoded));
-  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++)
+  for (shard_id_t i; i < erasure_code.get_chunk_count(); ++i)
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
   for (unsigned i = 0; i < chunk_size / 2; i++)
-    ASSERT_EQ(encoded[1][i], 'X');
-  ASSERT_NE(encoded[1][chunk_size / 2], 'X');
+    ASSERT_EQ(encoded[shard_id_t(1)][i], 'X');
+  ASSERT_NE(encoded[shard_id_t(1)][chunk_size / 2], 'X');
 }
 
 TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
@@ -129,8 +143,8 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
   unsigned chunk_size = ErasureCode::SIMD_ALIGN * 7;
   ErasureCodeTest erasure_code(k, m, chunk_size);
 
-  set<int> want_to_encode;
-  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++)
+  shard_id_set  want_to_encode;
+  for (shard_id_t i; i < erasure_code.get_chunk_count(); ++i)
     want_to_encode.insert(i);
   string data(chunk_size, 'X');
   // create a non contiguous bufferlist where the frist and the second
@@ -144,7 +158,7 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
     bufferptr ptr(buffer::create_aligned(data.length() + 1, ErasureCode::SIMD_ALIGN));
     in.append(ptr);
   }
-  map<int, bufferlist> encoded;
+  shard_id_map<bufferlist> encoded(k + m);
 
   ASSERT_FALSE(in.is_contiguous());
   ASSERT_TRUE(in.front().is_aligned(ErasureCode::SIMD_ALIGN));
@@ -152,7 +166,7 @@ TEST(ErasureCodeTest, encode_misaligned_non_contiguous)
   ASSERT_TRUE(in.back().is_aligned(ErasureCode::SIMD_ALIGN));
   ASSERT_FALSE(in.back().is_n_align_sized(chunk_size));
   ASSERT_EQ(0, erasure_code.encode(want_to_encode, in, &encoded));
-  for (unsigned int i = 0; i < erasure_code.get_chunk_count(); i++) {
+  for (shard_id_t i; i < erasure_code.get_chunk_count(); ++i) {
     ASSERT_TRUE(encoded[i].is_aligned(ErasureCode::SIMD_ALIGN));
     ASSERT_TRUE(encoded[i].is_n_align_sized(chunk_size));
   }

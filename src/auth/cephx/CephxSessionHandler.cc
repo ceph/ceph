@@ -16,7 +16,6 @@
 #include "CephxProtocol.h"
 
 #include <errno.h>
-#include <sstream>
 
 #include "common/config.h"
 #include "include/ceph_features.h"
@@ -25,7 +24,7 @@
 #define dout_subsys ceph_subsys_auth
 
 namespace {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
   crimson::common::ConfigProxy& conf(CephContext*) {
     return crimson::common::local_conf();
   }

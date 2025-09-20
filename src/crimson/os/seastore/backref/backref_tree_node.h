@@ -5,6 +5,10 @@
 
 #include "crimson/os/seastore/btree/fixed_kv_node.h"
 
+namespace crimson::os::seastore {
+class LogicalChildNode;
+}
+
 namespace crimson::os::seastore::backref {
 
 using backref_node_meta_t = fixed_kv_node_meta_t<paddr_t>;
@@ -40,42 +44,6 @@ constexpr size_t LEAF_NODE_CAPACITY = 193;
 
 using BackrefNode = FixedKVNode<paddr_t>;
 
-struct backref_map_val_t {
-  extent_len_t len = 0;	///< length of extents
-  laddr_t laddr = L_ADDR_MIN; ///< logical address of extents
-  extent_types_t type = extent_types_t::ROOT;
-
-  backref_map_val_t() = default;
-  backref_map_val_t(
-    extent_len_t len,
-    laddr_t laddr,
-    extent_types_t type)
-    : len(len), laddr(laddr), type(type) {}
-
-  bool operator==(const backref_map_val_t& rhs) const noexcept {
-    return len == rhs.len && laddr == rhs.laddr;
-  }
-};
-
-std::ostream& operator<<(std::ostream &out, const backref_map_val_t& val);
-
-struct __attribute__((packed)) backref_map_val_le_t {
-  extent_len_le_t len = init_extent_len_le(0);
-  laddr_le_t laddr = laddr_le_t(L_ADDR_MIN);
-  extent_types_le_t type = 0;
-
-  backref_map_val_le_t() = default;
-  backref_map_val_le_t(const backref_map_val_le_t &) = default;
-  explicit backref_map_val_le_t(const backref_map_val_t &val)
-    : len(init_extent_len_le(val.len)),
-      laddr(val.laddr),
-      type(extent_types_le_t(val.type)) {}
-
-  operator backref_map_val_t() const {
-    return backref_map_val_t{len, laddr, (extent_types_t)type};
-  }
-};
-
 class BackrefInternalNode
   : public FixedKVInternalNode<
       INTERNAL_NODE_CAPACITY,
@@ -86,6 +54,8 @@ class BackrefInternalNode
     check_capacity(BACKREF_NODE_SIZE),
     "INTERNAL_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
+  static constexpr uint32_t CHILD_VEC_UNIT = 0;
   template <typename... T>
   BackrefInternalNode(T&&... t) :
     FixedKVInternalNode(std::forward<T>(t)...) {}
@@ -104,12 +74,13 @@ class BackrefLeafNode
       paddr_t, paddr_le_t,
       backref_map_val_t, backref_map_val_le_t,
       BACKREF_NODE_SIZE,
-      BackrefLeafNode,
-      false> {
+      BackrefInternalNode,
+      BackrefLeafNode> {
   static_assert(
     check_capacity(BACKREF_NODE_SIZE),
     "LEAF_NODE_CAPACITY doesn't fit in BACKREF_NODE_SIZE");
 public:
+  using key_type = paddr_t;
   template <typename... T>
   BackrefLeafNode(T&&... t) :
     FixedKVLeafNode(std::forward<T>(t)...) {}
@@ -123,8 +94,7 @@ public:
   const_iterator insert(
     const_iterator iter,
     paddr_t key,
-    backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    backref_map_val_t val) final {
     journal_insert(
       iter,
       key,
@@ -135,8 +105,7 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val,
-    LogicalCachedExtent*) final {
+    backref_map_val_t val) final {
     return journal_update(
       iter,
       val,
@@ -149,6 +118,46 @@ public:
       maybe_get_delta_buffer());
   }
 
+  void do_on_rewrite(Transaction &t, CachedExtent &extent) final {}
+  void do_on_replace_prior() final {}
+  void do_prepare_commit() final {}
+
+
+  void on_split(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void on_merge(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void on_balance(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right,
+    uint32_t pivot_idx,
+    BackrefLeafNode &replacement_left,
+    BackrefLeafNode &replacement_right) final {}
+
+  void adjust_copy_src_dest_on_split(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void adjust_copy_src_dest_on_merge(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right) final {}
+
+  void adjust_copy_src_dest_on_balance(
+    Transaction &t,
+    BackrefLeafNode &left,
+    BackrefLeafNode &right,
+    uint32_t pivot_idx,
+    BackrefLeafNode &replacement_left,
+    BackrefLeafNode &replacement_right) final {}
   // backref leaf nodes don't have to resolve relative addresses
   void resolve_relative_addrs(paddr_t base) final {}
 

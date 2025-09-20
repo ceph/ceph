@@ -1,5 +1,3 @@
-
-
 .. _mgr-module-dev:
 
 ceph-mgr module developer's guide
@@ -8,14 +6,14 @@ ceph-mgr module developer's guide
 .. warning::
 
     This is developer documentation, describing Ceph internals that
-    are only relevant to people writing ceph-mgr modules.
+    are relevant only to people writing ceph-mgr modules.
 
 Creating a module
 -----------------
 
-In pybind/mgr/, create a python module.  Within your module, create a class
+In ``pybind/mgr/``, create a python module. Within your module, create a class
 that inherits from ``MgrModule``.  For ceph-mgr to detect your module, your
-directory must contain a file called `module.py`.
+directory must contain a file named ``module.py``.
 
 The most important methods to override are:
 
@@ -36,11 +34,13 @@ creating these modules.
 Installing a module
 -------------------
 
-Once your module is present in the location set by the
-``mgr module path`` configuration setting, you can enable it
-via the ``ceph mgr module enable`` command::
+Once your module is present in the location set by the ``mgr module path``
+configuration setting, you can enable it via the ``ceph mgr module enable``
+command:
 
-  ceph mgr module enable mymodule
+.. prompt:: bash #
+
+   ceph mgr module enable mymodule
 
 Note that the MgrModule interface is not stable, so any modules maintained
 outside of the Ceph tree are liable to break when run against any newer
@@ -57,11 +57,14 @@ import the ``logging`` package and get a logger instance with the
 
 Each module has a ``log_level`` option that specifies the current Python
 logging level of the module.
-To change or query the logging level of the module use the following Ceph
-commands::
 
-  ceph config get mgr mgr/<module_name>/log_level
-  ceph config set mgr mgr/<module_name>/log_level <info|debug|critical|error|warning|>
+To change or query the logging level of the module use the following Ceph
+commands:
+
+.. prompt:: bash #
+
+   ceph config get mgr mgr/<module_name>/log_level
+   ceph config set mgr mgr/<module_name>/log_level <info|debug|critical|error|warning|>
 
 The logging level used upon the module's start is determined by the current
 logging level of the mgr daemon, unless if the ``log_level`` option was
@@ -74,29 +77,35 @@ level is mapped to the module python logging level as follows:
 * <= +inf is DEBUG
 
 We can unset the module log level and fallback to the mgr daemon logging level
-by running the following command::
+by running the following command:
 
-  ceph config set mgr mgr/<module_name>/log_level ''
+.. prompt:: bash #
+
+   ceph config set mgr mgr/<module_name>/log_level ''
 
 By default, modules' logging messages are processed by the Ceph logging layer
-where they will be recorded in the mgr daemon's log file.
-But it's also possible to send a module's logging message to it's own file.
+where they will be recorded in the mgr daemon's log file.  But it's also
+possible to send a module's logging message to its own file.
 
-The module's log file will be located in the same directory as the mgr daemon's
+The module's log file is located in the same directory as the Manager daemon's
 log file with the following name pattern::
 
    <mgr_daemon_log_file_name>.<module_name>.log
 
-To enable the file logging on a module use the following command::
+To enable the file logging on a module, use the following command:
+
+.. prompt:: bash #
 
    ceph config set mgr mgr/<module_name>/log_to_file true
 
-When the module's file logging is enabled, module's logging messages stop
-being written to the mgr daemon's log file and are only written to the
+When the module's file logging is enabled, the module's logging messages stop
+being written to the Manager daemon's log file and are written only to the
 module's log file.
 
 It's also possible to check the status and disable the file logging with the
-following commands::
+following commands:
+
+.. prompt:: bash #
 
    ceph config get mgr mgr/<module_name>/log_to_file
    ceph config set mgr mgr/<module_name>/log_to_file false
@@ -108,9 +117,10 @@ following commands::
 Exposing commands
 -----------------
 
-There are two approaches for exposing a command. The first method involves using
-the ``@CLICommand`` decorator to decorate the methods needed to handle a command.
-The second method uses a ``COMMANDS`` attribute defined for the module class.
+There are two approaches for exposing a command. The first method involves
+using the ``@CLICommand`` decorator to decorate the methods needed to handle a
+command. The second method uses a ``COMMANDS`` attribute defined for the
+module class.
 
 
 The CLICommand approach
@@ -390,6 +400,7 @@ be automatically processed. Example:
 
 .. _`Rule of Silence`: http://www.linfo.org/rule_of_silence.html
 
+.. _mgr module dev configuration options:
 
 Configuration options
 ---------------------
@@ -402,43 +413,100 @@ Modules can load and store configuration options using the
    certificates). If you want to persist module-internal data or
    binary configuration data consider using the `KV store`_.
 
-You must declare your available configuration options in the
-``MODULE_OPTIONS`` class attribute, like this:
+Configuration options must be declared in the ``MODULE_OPTIONS`` class attribute:
 
 .. code-block:: python
 
     MODULE_OPTIONS = [
-        Option(name="my_option")
+        Option(name="check_interval",
+               level=OptionLevel.ADVANCED,
+               default=60,
+               type="secs",
+               desc="The interval in seconds to check the inbox",
+               long_desc="The interval in seconds to check the inbox. Set to 0 to disable the check",
+               min=0,
+               runtime=True)
     ]
 
-If you try to use set_module_option or get_module_option on options not declared
-in ``MODULE_OPTIONS``, an exception will be raised.
+The example above demonstrates most supported properties, though typically only
+a subset is needed. The following properties are supported:
+
+**name**
+    The option's name. This is the only required property.
+
+**type** (optional, default: ``str``)
+    The option's data type. Supported types:
+
+    * ``uint`` - unsigned 64-bit integer
+    * ``int`` - signed 64-bit integer
+    * ``str`` - string
+    * ``float`` - double-precision floating point
+    * ``bool`` - boolean
+    * ``addr`` - Ceph messenger address for peer communication
+    * ``addrvec`` - comma-separated list of Ceph messenger addresses
+    * ``uuid`` - UUID as defined by `RFC 4122 <https://www.ietf.org/rfc/rfc4122.txt>`_
+    * ``size`` - size value (stored as uint64_t)
+    * ``secs`` - timespan in format ``"<number><unit>..."``, e.g., ``"3h 2m 1s"`` or ``"3weeks"``
+
+      Supported units: ``s``, ``sec``, ``second(s)``, ``m``, ``min``, ``minute(s)``,
+      ``h``, ``hr``, ``hour(s)``, ``d``, ``day(s)``, ``w``, ``wk``, ``week(s)``,
+      ``mo``, ``month(s)``, ``y``, ``yr``, ``year(s)``
+
+    * ``millisecs`` - timespan in milliseconds
+
+**desc**
+    Short description (can be a sentence fragment).
+
+**long_desc**
+    Detailed description using complete sentences or paragraphs.
+
+**default**
+    Default value for the option.
+
+**min** / **max**
+    Minimum and maximum allowed values.
+
+**enum_allowed**
+    For ``str`` type options, a list of allowed string values. Values outside this set are rejected.
+
+**see_also**
+    List of related option names (used in documentation only).
+
+**tags**
+    List of tags for categorizing the option (used in documentation only).
+
+**runtime** (default: ``False``)
+    Whether the option can be updated after module loading.
+
+If you try to use ``set_module_option`` or ``get_module_option`` on options
+not declared in ``MODULE_OPTIONS``, an exception will be raised.
 
 You may choose to provide setter commands in your module to perform
-high level validation.  Users can also modify configuration using
-the normal `ceph config set` command, where the configuration options
-for a mgr module are named like `mgr/<module name>/<option>`.
+high-level validation. Users can also modify configuration using
+the normal ``ceph config set`` command, where the configuration options
+for a Manager module have names of the form ``mgr/<module name>/<option>``.
 
-If a configuration option is different depending on which node the mgr
+If a configuration option is different, depending on which node the Manager 
 is running on, then use *localized* configuration (
 ``get_localized_module_option``, ``set_localized_module_option``).
 This may be necessary for options such as what address to listen on.
 Localized options may also be set externally with ``ceph config set``,
 where they key name is like ``mgr/<module name>/<mgr id>/<option>``
 
-If you need to load and store data (e.g. something larger, binary, or multiline),
-use the KV store instead of configuration options (see next section).
+If you need to load and store data (e.g. something larger, binary, or
+multiline), use the KV store instead of configuration options (see next
+section).
 
 Hints for using config options:
 
-* Reads are fast: ceph-mgr keeps a local in-memory copy, so in many cases
-  you can just do a get_module_option every time you use a option, rather than
+* Reads are fast: ceph-mgr keeps a local in-memory copy, so in many cases you
+  can just do a ``get_module_option`` every time you use a option, rather than
   copying it out into a variable.
 * Writes block until the value is persisted (i.e. round trip to the monitor),
   but reads from another thread will see the new value immediately.
-* If a user has used `config set` from the command line, then the new
-  value will become visible to `get_module_option` immediately, although the
-  mon->mgr update is asynchronous, so `config set` will return a fraction
+* If a user has used ``config set`` from the command line, then the new
+  value will become visible to ``get_module_option`` immediately, although the
+  mon->mgr update is asynchronous, so ``config set`` will return a fraction
   of a second before the new value is visible on the mgr.
 * To delete a config value (i.e. revert to default), just pass ``None`` to
   set_module_option.
@@ -505,8 +573,11 @@ function. This will result in a circular locking exception.
 .. automethod:: MgrModule.list_servers
 .. automethod:: MgrModule.get_metadata
 .. automethod:: MgrModule.get_daemon_status
+.. automethod:: MgrModule.get_unlabeled_perf_schema
+.. automethod:: MgrModule.get_unlabeled_counter
+.. automethod:: MgrModule.get_latest_unlabeled_counter
 .. automethod:: MgrModule.get_perf_schema
-.. automethod:: MgrModule.get_counter
+.. automethod:: MgrModule.get_latest_counter
 .. automethod:: MgrModule.get_mgr_id
 .. automethod:: MgrModule.get_daemon_health_metrics
 
@@ -564,14 +635,31 @@ to the cluster.
 Receiving notifications
 -----------------------
 
-The manager daemon calls the ``notify`` function on all active modules
-when certain important pieces of cluster state are updated, such as the
-cluster maps.
+The manager daemon can call the ``notify`` method on active modules
+when key pieces of cluster state are update such as the cluster maps.
 
-The actual data is not passed into this function, rather it is a cue for
-the module to go and read the relevant structure if it is interested.  Most
-modules ignore most types of notification: to ignore a notification
-simply return from this function without doing anything.
+.. important::
+    Only modules that explicitly declare interest in a given
+    notification type will receive it.
+
+To receive notifications, a module must declare the NOTIFY_TYPES list:
+
+.. code:: python
+
+    NOTIFY_TYPES = [
+        NotifyType.mon_map,
+        NotifyType.osd_map,
+        NotifyType.crush_map,
+        ...
+    ]
+
+The manager will call the module ``notify`` method only for types listed
+in that array. Internally, it checks ``should_notify`` before dispatching
+the notification.
+
+The notification does not include the actual data - it's just a cue to
+tell the module that something has changed. It's up to the module to retrieve 
+fresh data using mgr.get(...) if needed.
 
 .. automethod:: MgrModule.notify
 
@@ -684,7 +772,7 @@ we need to
 Following is a sample session, in which the Ceph version is queried by
 inputting ``print(mgr.version)`` at the prompt. And later
 ``timeit`` module is imported to measure the execution time of
-`mgr.get_mgr_id()`.
+``mgr.get_mgr_id()``.
 
 .. code-block:: console
 

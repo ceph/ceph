@@ -1,5 +1,8 @@
+#include <common/dout.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <deque>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -8,7 +11,9 @@
 
 #include "gtest/gtest.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "include/encoding.h"
 #include "include/err.h"
 #include "include/rados/librados.hpp"
 #include "include/types.h"
@@ -2368,8 +2373,9 @@ TEST(LibRadosAio, PoolEIOFlag) {
   bufferlist bl;
   bl.append("some data");
   std::thread *t = nullptr;
+  std::atomic<bool> missed_eio{false};
   
-  unsigned max = 100;
+  unsigned max = 1000;
   unsigned timeout = max * 10;
   unsigned long i = 1;
   my_lock.lock();
@@ -2384,19 +2390,23 @@ TEST(LibRadosAio, PoolEIOFlag) {
     //cout << "start " << i << " r = " << r << std::endl;
 
     if (i == max / 2) {
-      cout << "setting pool EIO" << std::endl;
-      t = new std::thread(
-	[&] {
-	  bufferlist empty;
-	  ASSERT_EQ(0, test_data.m_cluster.mon_command(
-	    fmt::format(R"({{
-	                "prefix": "osd pool set",
-	                "pool": "{}",
-	                "var": "eio",
-	                "val": "true"
-	                }})", test_data.m_pool_name),
-	    empty, nullptr, nullptr));
-	});
+      t = new std::thread([&] {
+        bufferlist empty;
+        cout << "sending pool EIO time: " << ceph_clock_now() << std::endl;
+        ASSERT_EQ(0, test_data.m_cluster.mon_command(
+          fmt::format(R"({{
+            "prefix": "osd pool set",
+            "pool": "{}",
+            "var": "eio",
+            "val": "true"
+            }})", test_data.m_pool_name),
+       empty, nullptr, nullptr));
+
+        {
+          std::scoped_lock lk(my_lock);
+          missed_eio = (!min_failed && max_success == max);
+        }
+      });
     }
 
     std::this_thread::sleep_for(10ms);
@@ -2417,6 +2427,10 @@ TEST(LibRadosAio, PoolEIOFlag) {
     my_lock.lock();
   }
 
+  if (!missed_eio) {
+    my_lock.unlock();
+    GTEST_SKIP() << "eio flag missed all ios that already completed";
+  }
   cout << "max_success " << max_success << ", min_failed " << min_failed << std::endl;
   ASSERT_TRUE(max_success + 1 == min_failed);
   my_lock.unlock();
@@ -2466,3 +2480,92 @@ TEST(LibRadosAio, MultiReads) {
     ASSERT_EQ(0, memcmp(buf, bl.c_str(), sizeof(buf)));
   }
 }
+
+// cancellation test fixture for global setup/teardown
+// parameterized to test both IoCtx::aio_cancel() and AioCompletion::cancel()
+class Cancel : public ::testing::TestWithParam<bool> {
+  static constexpr auto pool_prefix = "ceph_test_rados_api_pp";
+  static Rados rados;
+  static std::string pool_name;
+ protected:
+  static IoCtx ioctx;
+ public:
+  static void SetUpTestCase() {
+    pool_name = get_temp_pool_name(pool_prefix);
+    ASSERT_EQ("", create_one_pool_pp(pool_name, rados));
+    ASSERT_EQ(0, rados.ioctx_create(pool_name.c_str(), ioctx));
+  }
+  static void TearDownTestCase() {
+    destroy_one_pool_pp(pool_name, rados);
+  }
+};
+Rados Cancel::rados;
+std::string Cancel::pool_name;
+IoCtx Cancel::ioctx;
+
+TEST_P(Cancel, BeforeSubmit)
+{
+  const bool use_completion = GetParam();
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  if (use_completion) {
+    ASSERT_EQ(0, c->cancel());
+  } else  {
+    ASSERT_EQ(0, ioctx.aio_cancel(c.get()));
+  }
+}
+
+TEST_P(Cancel, BeforeComplete)
+{
+  const bool use_completion = GetParam();
+
+  // cancellation tests are racy, so retry if completion beats the cancellation
+  int ret = 0;
+  int tries = 10;
+  do {
+    auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+    ObjectReadOperation op;
+    op.assert_exists();
+    ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+
+    if (use_completion) {
+      EXPECT_EQ(0, c->cancel());
+    } else  {
+      EXPECT_EQ(0, ioctx.aio_cancel(c.get()));
+    }
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, c->wait_for_complete());
+    }
+    ret = c->get_return_value();
+  } while (ret == -ENOENT && --tries);
+
+  EXPECT_EQ(-ECANCELED, ret);
+}
+
+TEST_P(Cancel, AfterComplete)
+{
+  const bool use_completion = GetParam();
+
+  auto c = std::unique_ptr<AioCompletion>{Rados::aio_create_completion()};
+  ObjectReadOperation op;
+  op.assert_exists();
+  ioctx.aio_operate("nonexistent", c.get(), &op, nullptr);
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, c->wait_for_complete());
+  }
+  if (use_completion) {
+    EXPECT_EQ(0, c->cancel());
+  } else {
+    EXPECT_EQ(0, ioctx.aio_cancel(c.get()));
+  }
+  EXPECT_EQ(-ENOENT, c->get_return_value());
+}
+
+std::string cancel_test_name(const testing::TestParamInfo<Cancel::ParamType>& info)
+{
+  return info.param ? "cancel" : "aio_cancel";
+}
+
+INSTANTIATE_TEST_SUITE_P(LibRadosAio, Cancel, testing::Bool(), cancel_test_name);

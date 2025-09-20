@@ -10,13 +10,14 @@ describe('Notification page', () => {
     cy.login();
     pools.navigateTo('create');
     pools.create(poolName, 8, ['rbd']);
+    cy.wait(5000);
     pools.edit_pool_pg(poolName, 4, false);
   });
 
   after(() => {
     cy.login();
     pools.navigateTo();
-    pools.delete(poolName, null, null, true, false, true);
+    pools.delete(poolName, null, null, true, false, true, true);
   });
 
   beforeEach(() => {

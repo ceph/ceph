@@ -53,6 +53,8 @@
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
 #include "mgr/MgrClient.h"
+#include <boost/smart_ptr/atomic_shared_ptr.hpp>
+#include <boost/smart_ptr/shared_ptr.hpp>
 
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
@@ -293,6 +295,7 @@ public:
    * updates across the entire cluster.
    */
   void try_engage_stretch_mode();
+  void try_disable_stretch_mode();
   void maybe_go_degraded_stretch_mode();
   void trigger_degraded_stretch_mode(const std::set<std::string>& dead_mons,
 				     const std::set<int>& dead_buckets);
@@ -311,8 +314,6 @@ private:
    * @defgroup Monitor_h_scrub
    * @{
    */
-  version_t scrub_version;            ///< paxos version we are scrubbing
-  std::map<int,ScrubResult> scrub_result;  ///< results so far
 
   /**
    * trigger a cross-mon scrub
@@ -341,11 +342,27 @@ private:
   struct ScrubState {
     std::pair<std::string,std::string> last_key; ///< last scrubbed key
     bool finished;
+    const utime_t start;
 
-    ScrubState() : finished(false) { }
+    ScrubState() : finished(false),
+                   start(ceph_clock_now()) { }
     virtual ~ScrubState() { }
   };
-  std::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
+
+  struct ScrubContext {
+    ScrubState scrub_state;       ///< keeps track of current scrub
+    version_t scrub_version;      ///< paxos version we are scrubbing
+    std::map<int,ScrubResult> scrub_result;  ///< result so far
+    ScrubContext() {
+      scrub_version = 0;
+      scrub_result.clear();
+    }
+    ~ScrubContext() {
+      scrub_version = 0;
+      scrub_result.clear();
+     }
+  };
+  boost::atomic_shared_ptr<ScrubContext> scrub_ctx; ///< keeps track of scrub_context
 
   /**
    * @defgroup Monitor_h_sync Synchronization
@@ -1037,7 +1054,7 @@ private:
   static int check_features(MonitorDBStore *store);
 
   // config observer
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 
@@ -1134,6 +1151,7 @@ private:
 #define CEPH_MON_FEATURE_INCOMPAT_QUINCY CompatSet::Feature(14, "quincy ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_REEF CompatSet::Feature(15, "reef ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_SQUID CompatSet::Feature(16, "squid ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_TENTACLE CompatSet::Feature(17, "tentacle ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

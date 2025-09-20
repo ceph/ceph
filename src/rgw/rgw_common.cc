@@ -22,12 +22,14 @@
 
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
+#include "common/openssl_opts_handler.h"
 #include "common/armor.h"
 #include "common/errno.h"
 #include "common/Clock.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
+#include "include/timegm.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_policy.h"
@@ -63,6 +65,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_DIGEST, {400, "InvalidDigest" }},
     { ERR_BAD_DIGEST, {400, "BadDigest" }},
     { ERR_INVALID_LOCATION_CONSTRAINT, {400, "InvalidLocationConstraint" }},
+    { ERR_ILLEGAL_LOCATION_CONSTRAINT_EXCEPTION, {400, "IllegalLocationConstraintException" }},
     { ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION, {400, "ZonegroupDefaultPlacementMisconfiguration" }},
     { ERR_INVALID_BUCKET_NAME, {400, "InvalidBucketName" }},
     { ERR_INVALID_OBJECT_NAME, {400, "InvalidObjectName" }},
@@ -110,6 +113,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
+    { ERR_BUCKET_EXISTS, {409, "BucketAlreadyExists" }},
     { ERR_USER_EXIST, {409, "UserAlreadyExists" }},
     { ERR_EMAIL_EXIST, {409, "EmailExists" }},
     { ERR_KEY_EXIST, {409, "KeyExists"}},
@@ -137,7 +141,13 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
+    { ERR_RESTORE_ALREADY_IN_PROGRESS, {409, "RestoreAlreadyInProgress"}},
     { ECANCELED, {409, "ConcurrentModification"}},
+    { EDQUOT, {507, "InsufficientCapacity"}},
+    { ENOSPC, {507, "InsufficientCapacity"}},
+    { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
+    { ERR_INVALID_BUCKET_ACL, {400, "InvalidBucketAclWithObjectOwnership"}},
+    { ERR_NO_SUCH_OWNERSHIP_CONTROLS, {404, "OwnershipControlsNotFoundError"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -222,6 +232,16 @@ static string get_abs_path(const string& request_uri) {
   beg_pos = request_uri.find('/', beg_pos);
   if (beg_pos == string::npos) return request_uri;
   return request_uri.substr(beg_pos, len - beg_pos);
+}
+
+static std::string to_expected_bucket_owner(const rgw_owner &o)
+{
+  struct visitor
+  {
+    std::string operator()(const rgw_account_id &a) { return a; }
+    std::string operator()(const rgw_user &u) { return u.id; }
+  };
+  return std::visit(visitor{}, o);
 }
 
 req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
@@ -322,6 +342,9 @@ void set_req_state_err(struct rgw_err& err,	/* out */
     err_no = -err_no;
 
   err.ret = -err_no;
+  if (!err.err_code.empty()) { // request already set the error
+    return;
+  }
 
   if (prot_flags & RGW_REST_SWIFT) {
     if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
@@ -1098,6 +1121,7 @@ struct perm_state_from_req_state : public perm_state_base {
 		      _s->env,
 		      _s->auth.identity.get(),
 		      _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
+		      _s->bucket_object_ownership,
 		      _s->perm_mask,
 		      _s->defer_to_bucket_acls,
 		      _s->bucket_access_conf),
@@ -1126,12 +1150,12 @@ struct perm_state_from_req_state : public perm_state_base {
 };
 
 Effect eval_or_pass(const DoutPrefixProvider* dpp,
-		    const boost::optional<Policy>& policy,
-		    const rgw::IAM::Environment& env,
-		    boost::optional<const rgw::auth::Identity&> id,
-		    const uint64_t op,
-		    const ARN& resource,
-				boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
+                    const boost::optional<Policy>& policy,
+                    const rgw::IAM::Environment& env,
+                    boost::optional<const rgw::auth::Identity&> id,
+                    const uint64_t op,
+                    const ARN& resource,
+                    boost::optional<rgw::IAM::PolicyPrincipal&> princ_type=boost::none) {
   if (!policy)
     return Effect::Pass;
   else
@@ -1314,14 +1338,14 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   return verify_user_permission_no_policy(dpp, &ps, s->user_acl, perm);
 }
 
-bool verify_requester_payer_permission(struct perm_state_base *s)
+bool verify_requester_payer_permission(const perm_state_base *s)
 {
   if (!s->bucket_info.requester_pays)
     return true;
 
   if (s->identity->is_owner_of(s->bucket_info.owner))
     return true;
-  
+
   if (s->identity->is_anonymous()) {
     return false;
   }
@@ -1335,7 +1359,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
+                              const perm_state_base * const s,
                               const rgw::ARN& arn,
                               bool account_root,
                               const RGWAccessControlPolicy& user_acl,
@@ -1343,7 +1367,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
-                              const uint64_t op)
+                              const uint64_t op, bool* granted_by_acl)
 {
   if (!verify_requester_payer_permission(s))
     return false;
@@ -1352,6 +1376,15 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
 		       << " resource: " << arn << dendl;
   }
+
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = s->bucket_access_conf && s->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !s->identity->is_owner_of(s->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
+
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, arn,
       bucket_policy, identity_policies, session_policies);
@@ -1363,7 +1396,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   }
 
   const auto perm = op_to_perm(op);
-  return verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm);
+  return verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm, granted_by_acl);
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
@@ -1377,6 +1410,12 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+  auto expected = s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+
+  if (expected && expected != to_expected_bucket_owner(s->bucket->get_owner())) {
+    ldpp_dout(dpp, 4) << "ERROR: The expected-source-bucket-owner does not match bucket owner." << dendl;
+    return false;
+  }
 
   if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
@@ -1386,41 +1425,50 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {}, {},
-                                      user_policies, session_policies, op)
+                                      user_policies, session_policies, op,
+                                      &s->granted_by_acl)
           && verify_bucket_permission(dpp, &ps, arn, false, user_acl,
-                                      bucket_acl, bucket_policy, {}, {}, op);
+                                      bucket_acl, bucket_policy, {}, {}, op,
+                                      &s->granted_by_acl);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {},
                                       bucket_policy, user_policies,
-                                      session_policies, op);
+                                      session_policies, op, &s->granted_by_acl);
     }
   }
   constexpr bool account_root = false;
   return verify_bucket_permission(dpp, &ps, arn, account_root,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
-                                  session_policies, op);
+                                  session_policies, op, &s->granted_by_acl);
 }
 
-bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
+bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
+                                        const perm_state_base * const ps,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
-					const int perm)
+					const int perm, bool* granted_by_acl)
 {
-  if ((perm & (int)s->perm_mask) != perm)
+  if ((perm & (int)ps->perm_mask) != perm)
     return false;
 
-  if (bucket_acl.verify_permission(dpp, *s->identity, perm, perm,
-                                   s->get_referer(),
-                                   s->bucket_access_conf &&
-                                   s->bucket_access_conf->ignore_public_acls())) {
+  if (bucket_acl.verify_permission(dpp, *ps->identity, perm, perm,
+                                   ps->get_referer(),
+                                   ps->bucket_access_conf &&
+                                   ps->bucket_access_conf->ignore_public_acls())) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
+    if (granted_by_acl) {
+      *granted_by_acl = true;
+    }
     return true;
   }
-  if (user_acl.verify_permission(dpp, *s->identity, perm, perm)) {
+  if (user_acl.verify_permission(dpp, *ps->identity, perm, perm)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
+    if (granted_by_acl) {
+      *granted_by_acl = true;
+    }
     return true;
   }
   return false;
@@ -1436,7 +1484,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             &ps,
                                             user_acl,
                                             bucket_acl,
-                                            perm);
+                                            perm, &s->granted_by_acl);
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s, const int perm)
@@ -1450,7 +1498,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             &ps,
                                             s->user_acl,
                                             s->bucket_acl,
-                                            perm);
+                                            perm, &s->granted_by_acl);
 }
 
 bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s,
@@ -1472,17 +1520,18 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state* s, uint6
 
 
 static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
-                                                  struct perm_state_base * const s,
+                                                  struct perm_state_base * const ps,
 						  const RGWAccessControlPolicy& user_acl,
 						  const RGWAccessControlPolicy& bucket_acl,
 						  const uint8_t deferred_check,
-						  const int perm)
+						  const int perm, bool* granted_by_acl = nullptr)
 {
-  return (s->defer_to_bucket_acls == deferred_check \
-	  && verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm));
+  return (ps->defer_to_bucket_acls == deferred_check \
+	  && verify_bucket_permission_no_policy(dpp, ps, user_acl, bucket_acl, perm,
+                                                granted_by_acl));
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
+bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const ps,
 			      const rgw_obj& obj, bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
@@ -1490,13 +1539,21 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
                               const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
-                              const uint64_t op)
+                              const uint64_t op, bool* granted_by_acl)
 {
-  if (!verify_requester_payer_permission(s))
+  if (!verify_requester_payer_permission(ps))
     return false;
 
+  // If RestrictPublicBuckets is enabled and the bucket policy allows public access,
+  // deny the request if the requester is not in the bucket owner account
+  const bool restrict_public_buckets = ps->bucket_access_conf && ps->bucket_access_conf->restrict_public_buckets();
+  if (restrict_public_buckets && bucket_policy && rgw::IAM::is_public(*bucket_policy) && !ps->identity->is_owner_of(ps->bucket_info.owner)) {
+    ldpp_dout(dpp, 10) << __func__ << ": public policies are blocked by the RestrictPublicBuckets block public access setting" << dendl;
+    return false;
+  }
+
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->identity, account_root, op, ARN(obj),
+      dpp, ps->env, *ps->identity, account_root, op, ARN(obj),
       bucket_policy, identity_policies, session_policies);
   if (effect == Effect::Deny) {
     return false;
@@ -1506,8 +1563,8 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   }
 
   const auto perm = op_to_perm(op);
-  return verify_object_permission_no_policy(dpp, s, user_acl, bucket_acl,
-                                            object_acl, perm);
+  return verify_object_permission_no_policy(dpp, ps, user_acl, bucket_acl,
+                                            object_acl, perm, granted_by_acl);
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
@@ -1521,6 +1578,12 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+  auto expected = s->info.env->get("HTTP_X_AMZ_EXPECTED_BUCKET_OWNER");
+
+  if (expected && expected != to_expected_bucket_owner(s->bucket->get_owner())) {
+    ldpp_dout(dpp, 4) << "ERROR: The expected-source-bucket-owner does not match bucket owner." << dendl;
+    return false;
+  }
 
   if (ps.identity->get_account()) {
     const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
@@ -1533,50 +1596,56 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {}, {},
-                                      identity_policies, session_policies, op)
+                                      identity_policies, session_policies, op,
+                                      &s->granted_by_acl)
           && verify_object_permission(dpp, &ps, obj, false,
                                       user_acl, bucket_acl, object_acl,
-                                      bucket_policy, {}, {}, op);
+                                      bucket_policy, {}, {}, op, &s->granted_by_acl);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {},
                                       bucket_policy, identity_policies,
-                                      session_policies, op);
+                                      session_policies, op, &s->granted_by_acl);
     }
   }
   constexpr bool account_root = false;
   return verify_object_permission(dpp, &ps, obj, account_root,
                                   user_acl, bucket_acl,
                                   object_acl, bucket_policy,
-                                  identity_policies, session_policies, op);
+                                  identity_policies, session_policies, op,
+                                  &s->granted_by_acl);
 }
 
 bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
-                                        struct perm_state_base * const s,
+                                        struct perm_state_base * const ps,
 					const RGWAccessControlPolicy& user_acl,
 					const RGWAccessControlPolicy& bucket_acl,
 					const RGWAccessControlPolicy& object_acl,
-					const int perm)
+					const int perm, bool *granted_by_acl)
 {
-  if (check_deferred_bucket_only_acl(dpp, s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
-      check_deferred_bucket_only_acl(dpp, s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL)) {
+  if (check_deferred_bucket_only_acl(dpp, ps, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm, granted_by_acl) ||
+      check_deferred_bucket_only_acl(dpp, ps, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, RGW_PERM_FULL_CONTROL, granted_by_acl)) {
     return true;
   }
 
-  bool ret = object_acl.verify_permission(dpp, *s->identity, s->perm_mask, perm,
-					  nullptr, /* http referrer */
-					  s->bucket_access_conf &&
-					  s->bucket_access_conf->ignore_public_acls());
-  if (ret) {
+  // object ACLs don't apply for BucketOwnerEnforced
+  if (ps->bucket_object_ownership != rgw::s3::ObjectOwnership::BucketOwnerEnforced &&
+      object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
+                                   nullptr, /* http referrer */
+                                   ps->bucket_access_conf &&
+                                   ps->bucket_access_conf->ignore_public_acls())) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
+    if (granted_by_acl) {
+      *granted_by_acl = true;
+    }
     return true;
   }
 
-  if (!s->cct->_conf->rgw_enforce_swift_acls)
-    return ret;
+  if (!ps->cct->_conf->rgw_enforce_swift_acls)
+    return false;
 
-  if ((perm & (int)s->perm_mask) != perm)
+  if ((perm & (int)ps->perm_mask) != perm)
     return false;
 
   int swift_perm = 0;
@@ -1590,13 +1659,19 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  if (bucket_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm,
-                                   s->get_referer())) {
+  if (bucket_acl.verify_permission(dpp, *ps->identity, swift_perm, swift_perm,
+                                   ps->get_referer())) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
+    if (granted_by_acl) {
+      *granted_by_acl = true;
+    }
     return true;
   }
-  if (user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm)) {
+  if (user_acl.verify_permission(dpp, *ps->identity, swift_perm, swift_perm)) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
+    if (granted_by_acl) {
+      *granted_by_acl = true;
+    }
     return true;
   }
   return false;
@@ -1614,7 +1689,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             s->user_acl,
                                             s->bucket_acl,
                                             s->object_acl,
-                                            perm);
+                                            perm, &s->granted_by_acl);
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op)
@@ -1724,7 +1799,7 @@ std::string url_decode(const std::string_view& src_str, bool in_query)
       }
     }
   }
-
+ 
   return dest_str;
 }
 
@@ -1999,13 +2074,15 @@ void RGWUserCaps::dump(Formatter *f) const
   dump(f, "caps");
 }
 
-void RGWUserCaps::generate_test_instances(list<RGWUserCaps*>& o)
+list<RGWUserCaps> RGWUserCaps::generate_test_instances()
 {
-  o.push_back(new RGWUserCaps);
-  RGWUserCaps *caps = new RGWUserCaps;
-  caps->add_cap("read");
-  caps->add_cap("write");
-  o.push_back(caps);
+  list<RGWUserCaps> o;
+  o.emplace_back();
+  RGWUserCaps caps;
+  caps.add_cap("read");
+  caps.add_cap("write");
+  o.push_back(std::move(caps));
+  return o;
 }
 
 void RGWUserCaps::dump(Formatter *f, const char *name) const
@@ -2092,7 +2169,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "amz-cache",
                                     "oidc-provider",
                                     "user-info-without-keys",
-				                            "ratelimit"};
+                                    "ratelimit",
+                                    "accounts"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
@@ -2136,14 +2214,16 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
   pool = old_obj.get_explicit_data_pool();
 }
 
-void rgw_raw_obj::generate_test_instances(std::list<rgw_raw_obj*>& o)
+std::list<rgw_raw_obj> rgw_raw_obj::generate_test_instances()
 {
-  rgw_raw_obj *r = new rgw_raw_obj;
-  r->oid = "foo";
-  r->loc = "bar";
-  r->pool.name = "baz";
-  r->pool.ns = "ns";
-  o.push_back(r);
+  std::list<rgw_raw_obj> o;
+  rgw_raw_obj r;
+  r.oid = "foo";
+  r.loc = "bar";
+  r.pool.name = "baz";
+  r.pool.ns = "ns";
+  o.push_back(std::move(r));
+  return o;
 }
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},
@@ -2161,17 +2241,13 @@ int rgw_parse_op_type_list(const string& str, uint32_t *perm)
 bool match_policy(const std::string& pattern, const std::string& input,
                   uint32_t flag)
 {
-  const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
+  const uint32_t flag2 = (flag & MATCH_POLICY_ACTION) ?
       MATCH_CASE_INSENSITIVE : 0;
-  const bool colonblocks = !(flag & (MATCH_POLICY_RESOURCE |
-				     MATCH_POLICY_STRING));
 
-  const auto npos = std::string_view::npos;
   std::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
   while (true) {
-    auto cur_pos_input = colonblocks ? input.find(":", last_pos_input) : npos;
-    auto cur_pos_pattern =
-      colonblocks ? pattern.find(":", last_pos_pattern) : npos;
+    auto cur_pos_input = input.find(":", last_pos_input);
+    auto cur_pos_pattern = pattern.find(":", last_pos_pattern);
 
     auto substr_input = input.substr(last_pos_input, cur_pos_input);
     auto substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);
@@ -2179,9 +2255,9 @@ bool match_policy(const std::string& pattern, const std::string& input,
     if (!match_wildcards(substr_pattern, substr_input, flag2))
       return false;
 
-    if (cur_pos_pattern == npos)
-      return cur_pos_input == npos;
-    if (cur_pos_input == npos)
+    if (cur_pos_pattern == pattern.npos)
+      return cur_pos_input == input.npos;
+    if (cur_pos_input == input.npos)
       return false;
 
     last_pos_pattern = cur_pos_pattern + 1;
@@ -2445,15 +2521,17 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f)
   val.dump(f, name);
 }
 
-void RGWBucketEnt::generate_test_instances(list<RGWBucketEnt*>& o)
+list<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
 {
-  RGWBucketEnt *e = new RGWBucketEnt;
-  init_bucket(&e->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  e->size = 1024;
-  e->size_rounded = 4096;
-  e->count = 1;
-  o.push_back(e);
-  o.push_back(new RGWBucketEnt);
+  list<RGWBucketEnt> o;
+  RGWBucketEnt e;
+  init_bucket(&e.bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  e.size = 1024;
+  e.size_rounded = 4096;
+  e.count = 1;
+  o.push_back(std::move(e));
+  o.emplace_back();
+  return o;
 }
 
 void RGWBucketEnt::dump(Formatter *f) const
@@ -2467,13 +2545,14 @@ void RGWBucketEnt::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule.to_str(), f);
 }
 
-void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
+list<rgw_obj> rgw_obj::generate_test_instances()
 {
+  list<rgw_obj> o;
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  rgw_obj *obj = new rgw_obj(b, "object");
-  o.push_back(obj);
-  o.push_back(new rgw_obj);
+  o.push_back(rgw_obj(b, "object"));
+  o.emplace_back();
+  return o;
 }
 
 void rgw_bucket_placement::dump(Formatter *f) const
@@ -2482,8 +2561,9 @@ void rgw_bucket_placement::dump(Formatter *f) const
   encode_json("placement_rule", placement_rule, f);
 }
 
-void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
+list<RGWBucketInfo> RGWBucketInfo::generate_test_instances()
 {
+  list<RGWBucketInfo> o;
   // Since things without a log will have one synthesized on decode,
   // ensure the things we attempt to encode will have one added so we
   // round-trip properly.
@@ -2498,15 +2578,16 @@ void RGWBucketInfo::generate_test_instances(list<RGWBucketInfo*>& o)
   };
 
 
-  RGWBucketInfo *i = new RGWBucketInfo;
-  init_bucket(&i->bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
-  i->owner = "owner";
-  i->flags = BUCKET_SUSPENDED;
-  gen_layout(i->layout);
-  o.push_back(i);
-  i = new RGWBucketInfo;
-  gen_layout(i->layout);
-  o.push_back(i);
+  RGWBucketInfo i;
+  init_bucket(&i.bucket, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
+  i.owner = "owner";
+  i.flags = BUCKET_SUSPENDED;
+  gen_layout(i.layout);
+  o.push_back(std::move(i));
+  i = RGWBucketInfo{};
+  gen_layout(i.layout);
+  o.push_back(std::move(i));
+  return o;
 }
 
 void RGWBucketInfo::dump(Formatter *f) const
@@ -2535,6 +2616,9 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
+  }
+  if (obj_lock_enabled()) {
+    encode_json("obj_lock", obj_lock, f);
   }
 }
 
@@ -2573,24 +2657,29 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
+
   rgw_sync_policy_info sp;
   JSONDecoder::decode_json("sync_policy", sp, obj);
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
   }
+  if (obj_lock_enabled()) {
+    JSONDecoder::decode_json("obj_lock", obj_lock, obj);
+  }
 }
 
-void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
+list<RGWUserInfo> RGWUserInfo::generate_test_instances()
 {
-  RGWUserInfo *i = new RGWUserInfo;
-  i->user_id = "user_id";
-  i->display_name =  "display_name";
-  i->user_email = "user@email";
-  i->account_id = "RGW12345678901234567";
-  i->path = "/";
-  i->create_date = ceph::real_time{std::chrono::hours(1)};
-  i->tags.emplace("key", "value");
-  i->group_ids.insert("group");
+  list<RGWUserInfo> o;
+  RGWUserInfo i;
+  i.user_id = "user_id";
+  i.display_name =  "display_name";
+  i.user_email = "user@email";
+  i.account_id = "RGW12345678901234567";
+  i.path = "/";
+  i.create_date = ceph::real_time{std::chrono::hours(1)};
+  i.tags.emplace("key", "value");
+  i.group_ids.insert("group");
   RGWAccessKey k1, k2;
   k1.id = "id1";
   k1.key = "key1";
@@ -2599,12 +2688,13 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
   RGWSubUser u;
   u.name = "id2";
   u.perm_mask = 0x1;
-  i->access_keys[k1.id] = k1;
-  i->swift_keys[k2.id] = k2;
-  i->subusers[u.name] = u;
-  o.push_back(i);
+  i.access_keys[k1.id] = k1;
+  i.swift_keys[k2.id] = k2;
+  i.subusers[u.name] = u;
+  o.push_back(std::move(i));
 
-  o.push_back(new RGWUserInfo);
+  o.emplace_back();
+  return o;
 }
 
 static void user_info_dump_subuser(const char *name, const RGWSubUser& subuser, Formatter *f, void *parent)
@@ -2889,13 +2979,15 @@ void RGWUserInfo::decode_json(JSONObj *obj)
 }
 
 
-void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
+list<RGWSubUser> RGWSubUser::generate_test_instances()
 {
-  RGWSubUser *u = new RGWSubUser;
-  u->name = "name";
-  u->perm_mask = 0xf;
-  o.push_back(u);
-  o.push_back(new RGWSubUser);
+  list<RGWSubUser> o;
+  RGWSubUser u;
+  u.name = "name";
+  u.perm_mask = 0xf;
+  o.push_back(std::move(u));
+  o.emplace_back();
+  return o;
 }
 
 void RGWSubUser::dump(Formatter *f) const
@@ -2942,14 +3034,16 @@ void RGWSubUser::decode_json(JSONObj *obj)
   perm_mask = str_to_perm(perm_str);
 }
 
-void RGWAccessKey::generate_test_instances(list<RGWAccessKey*>& o)
+list<RGWAccessKey> RGWAccessKey::generate_test_instances()
 {
-  RGWAccessKey *k = new RGWAccessKey;
-  k->id = "id";
-  k->key = "key";
-  k->subuser = "subuser";
-  o.push_back(k);
-  o.push_back(new RGWAccessKey);
+  list<RGWAccessKey> o;
+  RGWAccessKey k;
+  k.id = "id";
+  k.key = "key";
+  k.subuser = "subuser";
+  o.push_back(std::move(k));
+  o.emplace_back();
+  return o;
 }
 
 void RGWAccessKey::dump(Formatter *f) const
@@ -2994,7 +3088,9 @@ void RGWAccessKey::decode_json(JSONObj *obj) {
       subuser = user.substr(pos + 1);
     }
   }
-  JSONDecoder::decode_json("active", active, obj);
+  if (bool tmp = false; JSONDecoder::decode_json("active", tmp, obj)) {
+    active = tmp; // update only if "active" is present
+  }
   JSONDecoder::decode_json("create_date", create_date, obj);
 }
 
@@ -3047,20 +3143,22 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("max_access_keys", max_access_keys, obj);
 }
 
-void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
+std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
 {
-  o.push_back(new RGWAccountInfo);
-  auto p = new RGWAccountInfo;
-  p->id = "account1";
-  p->tenant = "tenant1";
-  p->name = "name1";
-  p->email = "email@example.com";
-  p->max_users = 10;
-  p->max_roles = 10;
-  p->max_groups = 10;
-  p->max_buckets = 10;
-  p->max_access_keys = 10;
-  o.push_back(p);
+  std::list<RGWAccountInfo> o;
+  o.emplace_back();
+  auto p = RGWAccountInfo{};
+  p.id = "account1";
+  p.tenant = "tenant1";
+  p.name = "name1";
+  p.email = "email@example.com";
+  p.max_users = 10;
+  p.max_roles = 10;
+  p.max_groups = 10;
+  p.max_buckets = 10;
+  p.max_access_keys = 10;
+  o.push_back(std::move(p));
+  return o;
 }
 
 void RGWGroupInfo::dump(Formatter * const f) const
@@ -3081,16 +3179,18 @@ void RGWGroupInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("account_id", account_id, obj);
 }
 
-void RGWGroupInfo::generate_test_instances(std::list<RGWGroupInfo*>& o)
+std::list<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
 {
-  o.push_back(new RGWGroupInfo);
-  auto p = new RGWGroupInfo;
-  p->id = "id";
-  p->tenant = "tenant";
-  p->name = "name";
-  p->path = "/path/";
-  p->account_id = "account";
-  o.push_back(p);
+  std::list<RGWGroupInfo> o;
+  o.emplace_back();
+  auto p = RGWGroupInfo{};
+  p.id = "id";
+  p.tenant = "tenant";
+  p.name = "name";
+  p.path = "/path/";
+  p.account_id = "account";
+  o.push_back(std::move(p));
+  return o;
 }
 
 void RGWStorageStats::dump(Formatter *f) const
@@ -3181,10 +3281,14 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
   // Load the config from the files, but not the mon
   global_pre_init(defaults, args, module_type, code_env, flags);
 
+  // Init and load specific openssl algorithm
+  ceph::crypto::init_openssl_once();
+
   // Get the store backend
   const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
 
   if ((config_store == "dbstore") ||
+      (config_store == "posix") || 
       (config_store == "motr") || 
       (config_store == "daos")) {
     // These stores don't use the mon
@@ -3204,3 +3308,14 @@ void RGWObjVersionTracker::generate_new_write_ver(CephContext *cct)
   append_rand_alpha(cct, write_version.tag, write_version.tag, TAG_LEN);
 }
 
+boost::optional<rgw::IAM::Policy>
+get_iam_policy_from_attr(CephContext* cct,
+                         const std::map<std::string, bufferlist>& attrs,
+                         const std::string& tenant)
+{
+  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
+    return Policy(cct, &tenant, i->second.to_str(), false);
+  } else {
+    return boost::none;
+  }
+}

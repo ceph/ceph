@@ -1,35 +1,22 @@
-@use './src/styles/vendor/variables' as vv;
+@use '@carbon/type';
 
-.bg-info {
-  background-color: vv.$primary !important;
-}
+::ng-deep {
+  .cds--cc--chart-wrapper {
+    text {
+      @include type.type-style('heading-01');
 
-.bg-warning {
-  background-color: vv.$warning !important;
-}
-
-.bg-danger {
-  background-color: vv.$danger !important;
-}
-
-.bg-freespace {
-  background-color: vv.$gray-400 !important;
-}
-
-.progress {
-  height: 20px;
-  margin-bottom: 0;
-  position: relative;
-
-  div.progress-bar {
-    position: static;
+      font-family: inherit;
+      font-weight: normal;
+    }
   }
 
-  span {
-    color: vv.$white;
-    display: block;
-    font-weight: normal;
-    position: absolute;
-    width: 100%;
+  .meter-tooltip {
+    @include type.type-style('helper-text-01');
+
+    padding-top: 0.25rem;
+
+    div {
+      padding-bottom: 0.25rem;
+    }
   }
 }

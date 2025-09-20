@@ -760,30 +760,48 @@ groups:
         annotations:
           description: "Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to {{ $labels.nqn }}"
           summary: "{{ $labels.nqn }} subsystem has reached its maximum number of namespaces on cluster {{ $labels.cluster }}"
-        expr: "(count by(nqn, cluster) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit"
+        expr: "(count by(nqn, cluster, instance) (ceph_nvmeof_subsystem_namespace_metadata)) >= on(nqn, instance) group_right(cluster) ceph_nvmeof_subsystem_namespace_limit"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFMultipleNamespacesOfRBDImage"
+        annotations:
+          description: "Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups."
+          summary: "RBD image {{ $labels.pool_name }}/{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespace "
+        expr: "count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1"
         for: "1m"
         labels:
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFTooManyGateways"
         annotations:
-          description: "You may create many gateways, but 4 is the tested limit"
+          description: "You may create many gateways, but 32 is the tested limit"
           summary: "Max supported gateways exceeded on cluster {{ $labels.cluster }}"
-        expr: "count(ceph_nvmeof_gateway_info) by (cluster) > 4.00"
+        expr: "count(ceph_nvmeof_gateway_info) by (cluster) > 32.00"
         for: "1m"
         labels:
           severity: "warning"
           type: "ceph_default"
       - alert: "NVMeoFMaxGatewayGroupSize"
         annotations:
-          description: "You may create many gateways in a gateway group, but 4 is the tested limit"
+          description: "You may create many gateways in a gateway group, but 8 is the tested limit"
           summary: "Max gateways within a gateway group ({{ $labels.group }}) exceeded on cluster {{ $labels.cluster }}"
-        expr: "count(ceph_nvmeof_gateway_info) by (cluster,group) > 4.00"
+        expr: "count(ceph_nvmeof_gateway_info) by (cluster,group) > 8.00"
         for: "1m"
         labels:
           severity: "warning"
           type: "ceph_default"
-      - alert: "NVMeoFSingleGatewayGroup"
+      - alert: "NVMeoFMaxGatewayGroups"
+        annotations:
+          description: "You may create many gateway groups, but 4 is the tested limit"
+          summary: "Max gateway groups exceeded on cluster {{ $labels.cluster }}"
+        expr: "count(count by (group, cluster) (ceph_nvmeof_gateway_info)) by (cluster) > 4.00"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFSingleGateway"
         annotations:
           description: "Although a single member gateway group is valid, it should only be used for test purposes"
           summary: "The gateway group {{ $labels.group }} consists of a single gateway - HA is not possible on cluster {{ $labels.cluster }}"
@@ -812,9 +830,18 @@ groups:
           type: "ceph_default"
       - alert: "NVMeoFTooManySubsystems"
         annotations:
-          description: "Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported"
-          summary: "The number of subsystems defined to the gateway exceeds supported values on cluster {{ $labels.cluster }}"
-        expr: "count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,\"gateway_host\",\"$1\",\"instance\",\"(.*):.*\")) > 16.00"
+          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 128 subsystems. Current count: {{ $value }}."
+          summary: "The number of subsystems defined to the NVMeoF gateway reached or exceeded the supported values on cluster {{ $labels.cluster }}"
+        expr: "count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 128.00"
+        for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFTooManyNamespaces"
+        annotations:
+          description: "NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of 2048 namespaces. Current count: {{ $value }}."
+          summary: "The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values on cluster {{ $labels.cluster }}"
+        expr: "sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,\"gateway_host\",\"$1\",\"instance\",\"(.*?)(?::.*)?\")) >= 2048.00"
         for: "1m"
         labels:
           severity: "warning"
@@ -830,10 +857,28 @@ groups:
           type: "ceph_default"
       - alert: "NVMeoFHighClientCount"
         annotations:
-          description: "The supported limit for clients connecting to a subsystem is 32"
+          description: "The supported limit for clients connecting to a subsystem is 128"
           summary: "The number of clients connected to {{ $labels.nqn }} is too high on cluster {{ $labels.cluster }}"
-        expr: "ceph_nvmeof_subsystem_host_count > 32.00"
+        expr: "ceph_nvmeof_subsystem_host_count > 128.00"
         for: "1m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFMissingListener"
+        annotations:
+          description: "For every subsystem, each gateway should have a listener to balance traffic between gateways."
+          summary: "No listener added for {{ $labels.instance }} NVMe-oF Gateway to {{ $labels.nqn }} subsystem"
+        expr: "ceph_nvmeof_subsystem_listener_count == 0 and on(nqn) sum(ceph_nvmeof_subsystem_listener_count) by (nqn) > 0"
+        for: "10m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFZeroListenerSubsystem"
+        annotations:
+          description: "NVMeoF gateway configuration incomplete; one of the subsystems have zero listeners."
+          summary: "No listeners added to {{ $labels.nqn }} subsystem"
+        expr: "sum(ceph_nvmeof_subsystem_listener_count) by (nqn) == 0"
+        for: "10m"
         labels:
           severity: "warning"
           type: "ceph_default"
@@ -880,6 +925,15 @@ groups:
           summary: "The average write latency over the last 5 mins has reached 20 ms or more on {{ $labels.gateway }}"
         expr: "label_replace((avg by(instance) ((rate(ceph_nvmeof_bdev_write_seconds_total[5m]) / rate(ceph_nvmeof_bdev_writes_completed_total[5m])))),\"gateway\",\"$1\",\"instance\",\"(.*):.*\") > 0.02"
         for: "5m"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
+      - alert: "NVMeoFHostKeepAliveTimeout"
+        annotations:
+          description: "Host was disconnected due to host keep alive timeout"
+          summary: "Host ({{ $labels.host_nqn }}) was disconnected {{ $value }} times from subsystem ({{ $labels.nqn }}) in last 24 hours"
+        expr: "ceil(changes(ceph_nvmeof_host_keepalive_timeout[24h:]) / 2) > 0"
+        for: "1m"
         labels:
           severity: "warning"
           type: "ceph_default"

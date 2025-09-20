@@ -5,7 +5,7 @@ import { forkJoin, Observable } from 'rxjs';
 
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RbdService } from '~/app/shared/api/rbd.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -123,7 +123,7 @@ export class RbdNamespaceListComponent implements OnInit {
   deleteModal() {
     const pool = this.selection.first().pool;
     const namespace = this.selection.first().namespace;
-    const modalRef = this.cdsModalService.show(CriticalConfirmationModalComponent, {
+    const modalRef = this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: 'Namespace',
       itemNames: [`${pool}/${namespace}`],
       submitAction: () =>

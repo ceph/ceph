@@ -16,11 +16,16 @@
 #define CEPH_LOGCLIENT_H
 
 #include <atomic>
+#include <deque>
+#include <map>
+#include <string>
+
 #include "common/LogEntry.h"
 #include "common/ceph_mutex.h"
 #include "common/ostream_temp.h"
 #include "common/ref.h"
 #include "include/health.h"
+#include "include/uuid.h"
 
 class LogClient;
 class MLog;

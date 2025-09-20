@@ -14,8 +14,11 @@
 #include <string>
 
 #include "common/ceph_argparse.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "common/strtol.h"
 
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/str_list.h"
 #include "mon/MonMap.h"
@@ -358,7 +361,7 @@ int main(int argc, const char **argv)
     monmap.strategy = static_cast<MonMap::election_strategy>(
 		  g_conf().get_val<uint64_t>("mon_election_default_strategy"));
     if (min_mon_release == ceph_release_t::unknown) {
-      min_mon_release = ceph_release_t::quincy;
+      min_mon_release = ceph_release_t::tentacle;
     }
     // TODO: why do we not use build_initial in our normal path here!?!?!
     modified = true;
@@ -373,6 +376,10 @@ int main(int argc, const char **argv)
     int r = monmap.build_initial(g_ceph_context, true, cerr);
     if (r < 0)
       return r;
+  }
+
+  if (handle_features(features, monmap)) {
+    modified = true;
   }
 
   if (min_mon_release != ceph_release_t::unknown) {
@@ -457,10 +464,6 @@ int main(int argc, const char **argv)
       helpful_exit();
     }
     monmap.remove(p);
-  }
-
-  if (handle_features(features, monmap)) {
-    modified = true;
   }
 
   if (!print && !modified && !show_features) {

@@ -4,7 +4,10 @@
 
 #include "common/ceph_mutex.h"
 
-#include <thread>
+#ifdef CEPH_DEBUG_MUTEX
+#include <thread> // for std::this_thread::get_id()
+#endif
+
 #include <string>
 
 namespace ceph {

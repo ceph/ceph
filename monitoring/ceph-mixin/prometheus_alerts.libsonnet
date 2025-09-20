@@ -848,11 +848,21 @@
         {
           alert: 'NVMeoFSubsystemNamespaceLimit',
           'for': '1m',
-          expr: '(count by(nqn, cluster) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit',
+          expr: '(count by(nqn, cluster, instance) (ceph_nvmeof_subsystem_namespace_metadata)) >= on(nqn, instance) group_right(cluster) ceph_nvmeof_subsystem_namespace_limit',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: '{{ $labels.nqn }} subsystem has reached its maximum number of namespaces%(cluster)s' % $.MultiClusterSummary(),
             description: 'Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to {{ $labels.nqn }}',
+          },
+        },
+        {
+          alert: 'NVMeoFMultipleNamespacesOfRBDImage',
+          'for': '1m',
+          expr: 'count by(pool_name, rbd_name) (count by(bdev_name, pool_name, rbd_name) (ceph_nvmeof_bdev_metadata and on (bdev_name) ceph_nvmeof_subsystem_namespace_metadata)) > 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'RBD image {{ $labels.pool_name }}/{{ $labels.rbd_name }} cannot be reused for multiple NVMeoF namespace ',
+            description: 'Each NVMeoF namespace must have a unique RBD pool and image, across all different gateway groups.',
           },
         },
         {
@@ -876,7 +886,17 @@
           },
         },
         {
-          alert: 'NVMeoFSingleGatewayGroup',
+          alert: 'NVMeoFMaxGatewayGroups',
+          'for': '1m',
+          expr: 'count(count by (group, cluster) (ceph_nvmeof_gateway_info)) by (cluster) > %.2f' % [$._config.NVMeoFMaxGatewayGroups],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Max gateway groups exceeded%(cluster)s' % $.MultiClusterSummary(),
+            description: 'You may create many gateway groups, but %(NVMeoFMaxGatewayGroups)d is the tested limit' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFSingleGateway',
           'for': '5m',
           expr: 'count(ceph_nvmeof_gateway_info) by(cluster,group) == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
@@ -908,11 +928,21 @@
         {
           alert: 'NVMeoFTooManySubsystems',
           'for': '1m',
-          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
+          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*?)(?::.*)?")) >= %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The number of subsystems defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
-            description: 'Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported',
+            summary: 'The number of subsystems defined to the NVMeoF gateway reached or exceeded the supported values%(cluster)s' % $.MultiClusterSummary(),
+            description: 'NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of %(NVMeoFMaxSubsystemsPerGateway)d subsystems. Current count: {{ $value }}.' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFTooManyNamespaces',
+          'for': '1m',
+          expr: 'sum by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_namespace_count,"gateway_host","$1","instance","(.*?)(?::.*)?")) >= %.2f' % [$._config.NVMeoFMaxNamespaces],
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'The number of namespaces defined to the NVMeoF gateway reached or exceeded supported values%(cluster)s' % $.MultiClusterSummary(),
+            description: 'NVMeoF gateway {{ $labels.gateway_host }} has reached or exceeded the supported maximum of %(NVMeoFMaxNamespaces)d namespaces. Current count: {{ $value }}.' % $._config,
           },
         },
         {
@@ -933,6 +963,26 @@
           annotations: {
             summary: 'The number of clients connected to {{ $labels.nqn }} is too high%(cluster)s' % $.MultiClusterSummary(),
             description: 'The supported limit for clients connecting to a subsystem is %(NVMeoFHighClientCount)d' % $._config,
+          },
+        },
+        {
+          alert: 'NVMeoFMissingListener',
+          'for': '10m',
+          expr: 'ceph_nvmeof_subsystem_listener_count == 0 and on(nqn) sum(ceph_nvmeof_subsystem_listener_count) by (nqn) > 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'No listener added for {{ $labels.instance }} NVMe-oF Gateway to {{ $labels.nqn }} subsystem',
+            description: 'For every subsystem, each gateway should have a listener to balance traffic between gateways.',
+          },
+        },
+        {
+          alert: 'NVMeoFZeroListenerSubsystem',
+          'for': '10m',
+          expr: 'sum(ceph_nvmeof_subsystem_listener_count) by (nqn) == 0',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'No listeners added to {{ $labels.nqn }} subsystem',
+            description: 'NVMeoF gateway configuration incomplete; one of the subsystems have zero listeners.',
           },
         },
         {
@@ -983,6 +1033,16 @@
           annotations: {
             summary: 'The average write latency over the last 5 mins has reached %(NVMeoFHighClientWriteLatency)d ms or more on {{ $labels.gateway }}' % $._config,
             description: 'High latencies may indicate a constraint within the cluster e.g. CPU, network. Please investigate',
+          },
+        },
+        {
+          alert: 'NVMeoFHostKeepAliveTimeout',
+          'for': '1m',
+          expr: 'ceil(changes(ceph_nvmeof_host_keepalive_timeout[%(NVMeoFHostKeepAliveTimeoutTrackDurationHours)dh:]) / 2) > 0' % $._config,
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Host ({{ $labels.host_nqn }}) was disconnected {{ $value }} times from subsystem ({{ $labels.nqn }}) in last %(NVMeoFHostKeepAliveTimeoutTrackDurationHours)d hours' % $._config,
+            description: 'Host was disconnected due to host keep alive timeout',
           },
         },
       ],

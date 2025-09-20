@@ -35,6 +35,11 @@
 #define LARGEST_VECTOR_WORDSIZE 16
 #define talloc(type, num) (type *) malloc(sizeof(type)*(num))
 
+/* The new EC API work for Clay requires significant testing. We ignore all
+ * deprecated function use in this file until that refactor is done.
+ */
+IGNORE_DEPRECATED
+
 using namespace std;
 using namespace ceph;
 static ostream& _prefix(std::ostream* _dout)
@@ -95,6 +100,12 @@ unsigned int ErasureCodeClay::get_chunk_size(unsigned int stripe_width) const
   return round_up_to(stripe_width, alignment) / k;
 }
 
+size_t ErasureCodeClay::get_minimum_granularity()
+{
+  return mds.erasure_code->get_minimum_granularity();
+}
+
+[[deprecated]]
 int ErasureCodeClay::minimum_to_decode(const set<int> &want_to_read,
 				       const set<int> &available,
 				       map<int, vector<pair<int, int>>> *minimum)
@@ -106,6 +117,7 @@ int ErasureCodeClay::minimum_to_decode(const set<int> &want_to_read,
   }
 }
 
+[[deprecated]]
 int ErasureCodeClay::decode(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded, int chunk_size)
@@ -155,6 +167,46 @@ int ErasureCodeClay::encode_chunks(const set<int> &want_to_encode,
   }
   return res;
 }
+
+#if 0 \
+/* This code was partially tested, so keeping code, but we need more
+ * refactoring and testing before it is ready for production.
+ */
+int ErasureCodeClay::encode_chunks(const std::map<int, bufferptr> &in, 
+                                   std::map<int, bufferptr> &out)
+{
+  map<int, bufferlist> chunks;
+  set<int> parity_chunks;
+  unsigned int size = 0;
+  auto& nonconst_in = const_cast<std::map<int, bufferptr>&>(in);
+
+  for (auto &&[shard, ptr] : nonconst_in) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[shard].append(nonconst_in[shard]);
+  }
+
+  for (auto &&[shard, ptr] : out) {
+    if (size == 0) size = ptr.length();
+    else ceph_assert(size == ptr.length());
+    chunks[shard+nu].append(out[shard]);
+    parity_chunks.insert(shard+nu);
+  }
+
+  for (int i = k; i < k + nu; i++) {
+    bufferptr buf(buffer::create_aligned(size, SIMD_ALIGN));
+    buf.zero();
+    chunks[i].push_back(std::move(buf));
+  }
+
+  int res = decode_layered(parity_chunks, &chunks);
+  for (int i = k ; i < k + nu; i++) {
+    // need to clean some of the intermediate chunks here!!
+    chunks[i].clear();
+  }
+  return res;
+}
+#endif
 
 int ErasureCodeClay::decode_chunks(const set<int> &want_to_read,
 				   const map<int, bufferlist> &chunks,
@@ -261,9 +313,9 @@ int ErasureCodeClay::parse(ErasureCodeProfile &profile,
       }
     }
   }
-  if ((d < k) || (d > k + m - 1)) {
+  if ((d < k + 1) || (d > k + m - 1)) {
     *ss << "value of d " << d
-        << " must be within [ " << k << "," << k+m-1 << "]" << std::endl;
+        << " must be within [" << k + 1 << "," << k + m - 1 << "]" << std::endl;
     err = -EINVAL;
     return err;
   }
@@ -895,3 +947,5 @@ void ErasureCodeClay::get_plane_vector(int z, int* z_vec)
     z = (z - z_vec[t-1-i]) / q;
   }
 }
+
+END_IGNORE_DEPRECATED

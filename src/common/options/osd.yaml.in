@@ -58,7 +58,10 @@ options:
     in recovery and 1 shard of another recovering PG.
   fmt_desc: The maximum number of backfills allowed to or from a single OSD.
     Note that this is applied separately for read and write operations.
+    This setting is automatically reset when the mClock scheduler is used.
   default: 1
+  see_also:
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -95,6 +98,7 @@ options:
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op.
     Increasing this value will slow down recovery operation while
     client operations will be less impacted.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -105,6 +109,7 @@ options:
   desc: Time in seconds to sleep before next recovery or backfill op for HDDs
   fmt_desc: Time in seconds to sleep before next recovery or backfill op
     for HDDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0.1
   flags:
   - runtime
@@ -115,6 +120,7 @@ options:
   desc: Time in seconds to sleep before next recovery or backfill op for SSDs
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op
     for SSDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_recovery_sleep
@@ -128,9 +134,55 @@ options:
     on HDD and journal is on SSD
   fmt_desc: Time in seconds to sleep before the next recovery or backfill op
     when OSD data is on HDD and OSD journal / WAL+DB is on SSD.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0.025
   see_also:
   - osd_recovery_sleep
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op when PGs are degraded.
+    This setting overrides _ssd, _hdd, and _hybrid if non-zero.
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op when PGs
+    are degraded. Increasing this value will slow down recovery ops while client
+    ops will be less impacted.
+  default: 0
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_hdd
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op for HDDs
+    when PGs is degraded.
+  fmt_desc: Time in seconds to sleep before next recovery or backfill op
+    for HDDs when PGs are degraded.
+  default: 0.1
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_ssd
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op for SSDs
+    when PGs are degraded.
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op
+    for SSDs when PGs are degraded.
+  default: 0
+  see_also:
+  - osd_recovery_sleep_degraded
+  flags:
+  - runtime
+- name: osd_recovery_sleep_degraded_hybrid
+  type: float
+  level: advanced
+  desc: Time in seconds to sleep before next recovery or backfill op when PGs
+    are degraded and data is on HDD and journal is on SSD
+  fmt_desc: Time in seconds to sleep before the next recovery or backfill op when
+    PGs are degraded and OSD data is on HDD and OSD journal / WAL+DB is on SSD.
+  default: 0.025
+  see_also:
+  - osd_recovery_sleep_degraded
   flags:
   - runtime
 - name: osd_snap_trim_sleep
@@ -141,6 +193,7 @@ options:
   fmt_desc: Time in seconds to sleep before next snap trim op.
     Increasing this value will slow down snap trimming.
     This option overrides backend specific variants.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -149,6 +202,7 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next snap trim for HDDs
+  note: This setting is ignored when the mClock scheduler is used.
   default: 5
   flags:
   - runtime
@@ -158,6 +212,7 @@ options:
   desc: Time in seconds to sleep before next snap trim for SSDs
   fmt_desc: Time in seconds to sleep before next snap trim op
     for SSD OSDs (including NVMe).
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -168,6 +223,7 @@ options:
     is on SSD
   fmt_desc: Time in seconds to sleep before next snap trim op
     when OSD data is on an HDD and the OSD journal or WAL+DB is on an SSD.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 2
   flags:
   - runtime
@@ -199,12 +255,6 @@ options:
   level: advanced
   desc: Asserts that no clone-objects were added to a snap after we start trimming it
   default: false
-- name: osd_repair_during_recovery
-  type: bool
-  level: advanced
-  desc: Allow requested repairing when PGs on the OSD are undergoing recovery
-  default: false
-  with_legacy: true
 - name: osd_scrub_begin_hour
   type: int
   level: advanced
@@ -275,25 +325,25 @@ options:
   desc: Allow scrubbing when system load divided by number of CPUs is below this value
   fmt_desc: The normalized maximum load. Ceph will not initiate periodic (regular)
     scrubs when the system load (as defined by ``getloadavg() / number of online CPUs``)
-    is higher than this number.
-    Default is ``0.5``.
-  default: 0.5
+    is higher than this number. The default is set high enough to allow periodic scrubbing
+    under most load conditions.
+  default: 10.0
   with_legacy: true
-# if load is low
 - name: osd_scrub_min_interval
   type: float
   level: advanced
-  desc: The desired interval between scrubs of a specific PG.
+  desc: The desired interval between scrubs of a specific PG. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The desired interval in seconds between scrubs of a specific PG.
   default: 1_day
   see_also:
   - osd_scrub_max_interval
   with_legacy: true
-# regardless of load
 - name: osd_scrub_max_interval
   type: float
   level: advanced
-  desc: Scrub each PG no less often than this interval
+  desc: Scrub each PG no less often than this interval. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
@@ -334,7 +384,7 @@ options:
   default: 5
   see_also:
   - osd_scrub_chunk_max
-  with_legacy: true
+  with_legacy: false
 - name: osd_scrub_chunk_max
   type: int
   level: advanced
@@ -345,7 +395,7 @@ options:
   default: 15
   see_also:
   - osd_scrub_chunk_min
-  with_legacy: true
+  with_legacy: false
 - name: osd_shallow_scrub_chunk_min
   type: int
   level: advanced
@@ -357,7 +407,7 @@ options:
   see_also:
   - osd_shallow_scrub_chunk_max
   - osd_scrub_chunk_min
-  with_legacy: true
+  with_legacy: false
 - name: osd_shallow_scrub_chunk_max
   type: int
   level: advanced
@@ -368,7 +418,7 @@ options:
   see_also:
   - osd_shallow_scrub_chunk_min
   - osd_scrub_chunk_max
-  with_legacy: true
+  with_legacy: false
 # sleep between [deep]scrub ops
 - name: osd_scrub_sleep
   type: float
@@ -377,7 +427,7 @@ options:
   fmt_desc: Sleep time in seconds before scrubbing the next group of objects (the next chunk).
     Increasing this value will slow down the overall rate of scrubbing, reducing scrub
     impact on client operations.
-    This setting is ignored when the mClock scheduler is used.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
@@ -392,7 +442,7 @@ options:
     This configuration value is used for scrubbing out of scrubbing hours.
     Increasing this value will slow down the overall rate of scrubbing, reducing scrub
     impact on client operations.
-    This setting is ignored when the mClock scheduler is used.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -407,15 +457,17 @@ options:
   desc: Automatically repair damaged objects detected during scrub
   fmt_desc: Setting this to ``true`` will enable automatic PG repair when errors
     are found by scrubs or deep-scrubs.  However, if more than
-    ``osd_scrub_auto_repair_num_errors`` errors are found a repair is NOT performed.
+    ``osd_scrub_auto_repair_num_errors`` damaged objects are found
+    a repair is NOT performed.
   default: false
   with_legacy: true
 # only auto-repair when number of errors is below this threshold
 - name: osd_scrub_auto_repair_num_errors
   type: uint
   level: advanced
-  desc: Maximum number of detected errors to automatically repair
-  fmt_desc: Auto repair will not occur if more than this many errors are found.
+  desc: Maximum number of damaged objects to automatically repair
+  fmt_desc: Scrub will not perform automatic repair if more than this many
+    damaged objects are found.
   default: 5
   see_also:
   - osd_scrub_auto_repair
@@ -431,24 +483,25 @@ options:
 - name: osd_deep_scrub_interval
   type: float
   level: advanced
-  desc: Deep scrub each PG (i.e., verify data checksums) at least this often
+  desc: Deep scrub each PG (i.e., verify data checksums) at least this often. Note that this option
+    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
   fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
   with_legacy: true
 - name: osd_deep_scrub_interval_cv
   type: float
   level: advanced
-  desc: determining the amount of variation in the deep scrub interval
-  long_desc: deep scrub intervals are varied by a random amount to prevent
+  desc: Determines the amount of variation in the deep scrub interval
+  long_desc: Deep scrub intervals are varied by a random amount to prevent
     stampedes. This parameter determines the amount of variation.
-    Technically - osd_deep_scrub_interval_cv is the coefficient of variation for
+    Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
     the deep scrub interval.
   fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
     ratio. On average, the next deep scrub for a PG is scheduled osd_deep_scrub_interval
     after the last deep scrub . The actual time is randomized to a normal distribution
     with a standard deviation of osd_deep_scrub_interval * osd_deep_scrub_interval_cv
     (clamped to within 2 standard deviations).
-    The default value guarantees that 95% of the deep scrubs will be scheduled in the range
+    The default value guarantees that 95% of deep scrubs will be scheduled in the range
     [0.8 * osd_deep_scrub_interval, 1.2 * osd_deep_scrub_interval].
   min: 0
   max: 0.4
@@ -618,14 +671,14 @@ options:
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
+    user version cas cmpomap queue 2pc_queue fifo sem_set
   with_legacy: true
 # list of object classes with default execute perm (allow all: *)
 - name: osd_class_default_list
   type: str
   level: advanced
   default: cephfs hello journal lock log numops otp rbd refcount rgw rgw_gc timeindex
-    user version cas cmpomap queue 2pc_queue fifo
+    user version cas cmpomap queue 2pc_queue fifo sem_set
   with_legacy: true
 - name: osd_agent_max_ops
   type: int
@@ -1032,6 +1085,7 @@ options:
     of 0 specifies the lowest possible reservation. Any value greater than
     0 and up to 1.0 specifies the minimum IO proportion to reserve for each
     client in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for each client (default).
   default: 0
@@ -1039,15 +1093,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_wgt
   type: uint
   level: advanced
   desc: IO share for each client (default) over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each client (default) over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_client_lim
   type: float
   level: advanced
@@ -1057,6 +1114,7 @@ options:
     than 0 and up to 1.0 specifies the upper IO limit over reservation
     that each client receives in terms of a fraction of the OSD's
     maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for each client (default) over reservation.
   default: 0
@@ -1064,6 +1122,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_res
   type: float
   level: advanced
@@ -1072,6 +1131,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background recovery operations in terms of a fraction of
     the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background recovery (default).
   default: 0
@@ -1079,15 +1139,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_wgt
   type: uint
   level: advanced
   desc: IO share for each background recovery over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background recovery over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_recovery_lim
   type: float
   level: advanced
@@ -1097,6 +1160,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background recovery operation receives in
     terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background recovery over reservation.
   default: 0
@@ -1104,6 +1168,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_res
   type: float
   level: advanced
@@ -1112,6 +1177,7 @@ options:
     greater than 0 and up to 1.0 specifies the minimum IO proportion to
     reserve for background best_effort operations in terms of a fraction
     of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO proportion reserved for background best_effort (default).
   default: 0
@@ -1119,15 +1185,18 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_wgt
   type: uint
   level: advanced
   desc: IO share for each background best_effort over reservation
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO share for each background best_effort over reservation.
   default: 1
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_background_best_effort_lim
   type: float
   level: advanced
@@ -1137,6 +1206,7 @@ options:
     OSD. Any value greater than 0 and up to 1.0 specifies the upper IO
     limit over reservation that background best_effort operation receives
     in terms of a fraction of the OSD's maximum IOPS capacity.
+    Ignored unless osd_mclock_profile is set to 'custom'.
   long_desc: Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: IO limit for background best_effort over reservation.
   default: 0
@@ -1144,6 +1214,7 @@ options:
   max: 1.0
   see_also:
   - osd_op_queue
+  - osd_mclock_profile
 - name: osd_mclock_scheduler_anticipation_timeout
   type: float
   level: advanced
@@ -1283,12 +1354,33 @@ options:
   level: basic
   desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for rotational media)
-  long_desc: This option specifies the threshold IOPS capacity for an OSD under
-    which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+  long_desc: This option specifies the high threshold IOPS capacity for an OSD
+    below which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for rotational media)
+    ignore OSD bench results for an OSD (for rotational media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_hdd``.
   default: 500
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_low_threshold_hdd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) below which to ignore
+    the OSD bench results for an OSD (for rotational media)
+  long_desc: This option specifies the low threshold IOPS capacity of an OSD
+    above which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
+    ignore OSD bench results for an OSD (for rotational media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_hdd``.
+  default: 50
+  see_also:
+  - osd_mclock_max_capacity_iops_hdd
   flags:
   - runtime
 - name: osd_mclock_iops_capacity_threshold_ssd
@@ -1296,12 +1388,33 @@ options:
   level: basic
   desc: The threshold IOPs capacity (at 4KiB block size) beyond which to ignore
     the OSD bench results for an OSD (for solid state media)
-  long_desc: This option specifies the threshold IOPS capacity for an OSD under
-    which the OSD bench results can be considered for QoS calculations. Only
-    considered for osd_op_queue = mclock_scheduler
+  long_desc: This option specifies the high threshold IOPS capacity for an OSD
+    below which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
   fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for solid state media)
+    ignore OSD bench results for an OSD (for solid state media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_ssd``.
   default: 80000
+  see_also:
+  - osd_mclock_max_capacity_iops_ssd
+  flags:
+  - runtime
+- name: osd_mclock_iops_capacity_low_threshold_ssd
+  type: float
+  level: basic
+  desc: The threshold IOPs capacity (at 4KiB block size) below which to ignore
+    the OSD bench results for an OSD (for solid state media)
+  long_desc: This option specifies the low threshold IOPS capacity for an OSD
+    above which the OSD bench results can be considered for QoS calculations.
+    Only considered when osd_op_queue = mclock_scheduler
+  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
+    ignore OSD bench results for an OSD (for solid state media) and fall back to
+    the last valid or default IOPS capacity defined by
+    ``osd_mclock_max_capacity_iops_ssd``.
+  default: 1000
+  see_also:
+  - osd_mclock_max_capacity_iops_ssd
   flags:
   - runtime
 # Set to true for testing.  Users should NOT set this.
@@ -1336,10 +1449,12 @@ options:
     is ``0``, which means that the ``hdd`` or ``ssd`` values
     (below) are used, depending on the type of the primary
     device backing the OSD.
+    This setting is automatically reset when the mClock scheduler is used.
   default: 0
   see_also:
   - osd_recovery_max_active_hdd
   - osd_recovery_max_active_ssd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1350,10 +1465,12 @@ options:
     devices)
   fmt_desc: The number of active recovery requests per OSD at one time, if the
     primary device is rotational.
+  note: This setting is automatically reset when the mClock scheduler is used.
   default: 3
   see_also:
   - osd_recovery_max_active
   - osd_recovery_max_active_ssd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1364,10 +1481,12 @@ options:
     solid state devices)
   fmt_desc: The number of active recovery requests per OSD at one time, if the
     primary device is non-rotational (i.e., an SSD).
+  note: This setting is automatically reset when the mClock scheduler is used.
   default: 10
   see_also:
   - osd_recovery_max_active
   - osd_recovery_max_active_hdd
+  - osd_mclock_override_recovery_settings
   flags:
   - runtime
   with_legacy: true
@@ -1462,13 +1581,15 @@ options:
     overrides _ssd, _hdd, and _hybrid if non-zero.
   fmt_desc: Time in seconds to sleep before the next removal transaction. This
     throttles the PG deletion process.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 0
   flags:
   - runtime
 - name: osd_delete_sleep_hdd
   type: float
   level: advanced
-  desc: Time in seconds to sleep before next removal transaction for HDDs
+  desc: Time in seconds to sleep before next removal transaction for HDDs.
+  note: This setting is ignored when the mClock scheduler is used.
   default: 5
   flags:
   - runtime
@@ -1476,6 +1597,7 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for SSDs
+  note: This setting is ignored when the mClock scheduler is used.
   default: 1
   flags:
   - runtime
@@ -1484,6 +1606,7 @@ options:
   level: advanced
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
     and OSD journal or WAL+DB is on SSD
+  note: This setting is ignored when the mClock scheduler is used.
   default: 1
   flags:
   - runtime

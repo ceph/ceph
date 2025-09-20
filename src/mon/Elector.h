@@ -39,6 +39,10 @@ class Elector : public ElectionOwner, RankProvider {
    * @defgroup Elector_h_class Elector
    * @{
    */
+
+  private:
+    std::set<int> pending_pings;  // Monitors waiting for quorum features to be established
+
   ElectionLogic logic;
   // connectivity validation and scoring
   ConnectionTracker peer_tracker;
@@ -375,6 +379,9 @@ class Elector : public ElectionOwner, RankProvider {
   * https://tracker.ceph.com/issues/58049
   */
   bool peer_tracker_is_clean();
+
+  std::set<std::pair<unsigned, unsigned>> get_netsplit_peer_tracker(std::set<unsigned> &mons_down);
+
   /**
    * Forget everything about our peers. :(
    */
@@ -406,6 +413,11 @@ class Elector : public ElectionOwner, RankProvider {
     disallowed_leaders = dl;
     return true;
   }
+  /**
+   * process all pending pings when quorum is established
+   *
+   */
+  void process_pending_pings();
   void dump_connection_scores(Formatter *f) {
     f->open_object_section("connection scores");
     peer_tracker.dump(f);

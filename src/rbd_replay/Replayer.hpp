@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <mutex>
+#include <shared_mutex>
 #include <thread>
 #include <condition_variable>
 #include "rbd_replay/ActionTypes.h"

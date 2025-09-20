@@ -8,6 +8,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_zone.h"
 #include "rgw_sal.h"
+#include "rgw_sal_config.h"
 #include "rgw_sal_rados.h"
 
 #include "services/svc_zone.h"
@@ -164,7 +165,7 @@ class RGWPeriodPusher::CRThread : public DoutPrefixProvider {
 
 
 RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-				 optional_yield y)
+				 rgw::sal::ConfigStore* cfgstore, optional_yield y)
   : cct(driver->ctx()), driver(driver)
 {
   rgw::sal::Zone* zone = driver->get_zone();
@@ -174,8 +175,7 @@ RGWPeriodPusher::RGWPeriodPusher(const DoutPrefixProvider *dpp, rgw::sal::Driver
 
   // always send out the current period on startup
   RGWPeriod period;
-  // XXX dang
-  int r = period.init(dpp, cct, static_cast<rgw::sal::RadosStore* >(driver)->svc()->sysobj, realm_id, y);
+  auto r = cfgstore->read_period(dpp, y, zone->get_current_period_id(), std::nullopt, period);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to load period for realm " << realm_id << dendl;
     return;

@@ -16,8 +16,7 @@
 #define CEPH_ASYNC_BIND_HANDLER_H
 
 #include <tuple>
-#include <boost/asio/associated_allocator.hpp>
-#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/associator.hpp>
 
 namespace ceph::async {
 
@@ -52,25 +51,25 @@ struct CompletionHandler {
   void operator()() && {
     std::apply(std::move(handler), std::move(args));
   }
-
-  using allocator_type = boost::asio::associated_allocator_t<Handler>;
-  allocator_type get_allocator() const noexcept {
-    return boost::asio::get_associated_allocator(handler);
-  }
 };
 
 } // namespace ceph::async
 
 namespace boost::asio {
 
-// specialize boost::asio::associated_executor<> for CompletionHandler
-template <typename Handler, typename Tuple, typename Executor>
-struct associated_executor<ceph::async::CompletionHandler<Handler, Tuple>, Executor> {
-  using type = boost::asio::associated_executor_t<Handler, Executor>;
-
-  static type get(const ceph::async::CompletionHandler<Handler, Tuple>& handler,
-                  const Executor& ex = Executor()) noexcept {
-    return boost::asio::get_associated_executor(handler.handler, ex);
+// forward the handler's associated executor, allocator, cancellation slot, etc
+template <template <typename, typename> class Associator,
+          typename Handler, typename Tuple, typename DefaultCandidate>
+struct associator<Associator,
+    ceph::async::CompletionHandler<Handler, Tuple>, DefaultCandidate>
+  : Associator<Handler, DefaultCandidate>
+{
+  static auto get(const ceph::async::CompletionHandler<Handler, Tuple>& h) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler);
+  }
+  static auto get(const ceph::async::CompletionHandler<Handler, Tuple>& h,
+                  const DefaultCandidate& c) noexcept {
+    return Associator<Handler, DefaultCandidate>::get(h.handler, c);
   }
 };
 

@@ -6,3 +6,6 @@ mgrmodules:
 tasks:
   - sequential:
       - mgrmodules
+      - exec:
+          mon.a:
+            - ceph tell mgr status

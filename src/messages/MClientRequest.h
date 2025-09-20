@@ -33,10 +33,16 @@
  *  
  */
 
+#include <list>
+#include <map>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
+#include "common/Formatter.h"
 #include "include/ceph_features.h"
 #include "mds/cephfs_features.h"
 #include "messages/MMDSOp.h"
@@ -65,11 +71,13 @@ struct SnapPayload {
       f->dump_string(i.first.c_str(), i.second);
     }
   }
-  static void generate_test_instances(std::list<SnapPayload *> &o) {
-    o.push_back(new SnapPayload);
-    o.push_back(new SnapPayload);
-    o.back()->metadata["key1"] = "val1";
-    o.back()->metadata["key2"] = "val2";
+  static std::list<SnapPayload> generate_test_instances() {
+    std::list<SnapPayload> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().metadata["key1"] = "val1";
+    o.back().metadata["key2"] = "val2";
+    return o;
   }
 };
 
@@ -120,11 +128,13 @@ public:
       f->dump_unsigned("dname_len", item.dname_len);
     }
 
-    static void generate_test_instances(std::list<Release*>& ls) {
-      ls.push_back(new Release);
-      ls.push_back(new Release);
-      ls.back()->item.dname_len = 4;
-      ls.back()->dname = "test";
+    static std::list<Release> generate_test_instances() {
+      std::list<Release> ls;
+      ls.emplace_back();
+      ls.emplace_back();
+      ls.back().item.dname_len = 4;
+      ls.back().dname = "test";
+      return ls;
     }
   };
   mutable std::vector<Release> releases; /* XXX HACK! */

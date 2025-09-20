@@ -3,6 +3,10 @@ overrides:
     log-ignorelist:
     - \(PG_AVAILABILITY\)
     - \(POOL_APP_NOT_ENABLED\)
+    - do not have an application enabled
+    - POOL_APP_NOT_ENABLED
+    - application not enabled
+    - or freeform for custom applications
     conf:
       osd:
         osd_class_load_list: "*"

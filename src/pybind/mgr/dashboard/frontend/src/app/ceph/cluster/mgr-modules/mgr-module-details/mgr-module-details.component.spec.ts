@@ -4,6 +4,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleDetailsComponent } from './mgr-module-details.component';
+import { ToastrModule } from 'ngx-toastr';
 
 describe('MgrModuleDetailsComponent', () => {
   let component: MgrModuleDetailsComponent;
@@ -11,7 +12,7 @@ describe('MgrModuleDetailsComponent', () => {
 
   configureTestBed({
     declarations: [MgrModuleDetailsComponent],
-    imports: [HttpClientTestingModule, SharedModule]
+    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()]
   });
 
   beforeEach(() => {

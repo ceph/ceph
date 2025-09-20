@@ -133,6 +133,22 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_time_avg(l_osd_op_before_dequeue_op_lat, "op_before_dequeue_op_lat",
     "Latency of IO before calling dequeue_op(already dequeued and get PG lock)"); // client io before dequeue_op latency
 
+
+  osd_plb.add_u64_counter(
+    l_osd_replica_read, "replica_read", "Count of replica reads received");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_redirect_missing,
+    "replica_read_redirect_missing",
+    "Count of replica reads redirected to primary due to missing object");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_redirect_conflict,
+    "replica_read_redirect_conflict",
+    "Count of replica reads redirected to primary due to unstable write");
+  osd_plb.add_u64_counter(
+    l_osd_replica_read_served,
+    "replica_read_served",
+    "Count of replica reads served");
+
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");
   osd_plb.add_u64_counter(
@@ -230,6 +246,12 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64(
     l_osd_hb_to, "heartbeat_to_peers", "Heartbeat (ping) peers we send to");
   osd_plb.add_u64_counter(l_osd_map, "map_messages", "OSD map messages");
+  osd_plb.add_u64_counter(
+    l_osd_full_map_received, "full_map_received",
+    "number of full OSD map recieved via MOSDMap");
+  osd_plb.add_u64_counter(
+    l_osd_inc_map_received, "inc_map_received",
+    "number of incremental OSD map recieved via MOSDMap");
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");
   osd_plb.add_u64_counter(
     l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates");
@@ -319,6 +341,9 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_pg_biginfo, "osd_pg_biginfo", "PG updated its biginfo attr");
 
+  // back to "interesting" counters
+  osd_plb.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
+
   /// scrub's replicas reservation time/#replicas histogram
   PerfHistogramCommon::axis_config_d rsrv_hist_x_axis_config{
       "number of replicas",
@@ -340,7 +365,122 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
   l_osd_watch_timeouts, "watch_timeouts",
   "Number of watches that timed out or were blocklisted",
-  NULL, PerfCountersBuilder::PRIO_USEFUL);
+  nullptr, PerfCountersBuilder::PRIO_USEFUL);
+
+  // scrub I/O (no EC vs. replicated differentiation)
+  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_cnt, "scrub_omapgetheader_cnt", "scrub omap get header calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_omapgetheader_bytes, "scrub_omapgetheader_bytes", "scrub omap get header bytes read");
+  osd_plb.add_u64_counter(l_osd_scrub_omapget_cnt, "scrub_omapget_cnt", "scrub omap get calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_omapget_bytes, "scrub_omapget_bytes", "scrub omap get bytes read");
+  // scrub I/O performed for replicated pools
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_getattr_cnt, "scrub_replicated_getattr_cnt", "scrub replicated pool getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_stats_cnt, "scrub_replicated_stats_cnt", "scrub replicated pool stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_cnt, "scrub_replicated_read_cnt", "scrub replicated pool read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_rppool_read_bytes, "scrub_replicated_read_bytes", "scrub replicated pool read bytes read");
+  // scrub I/O performed for EC pools
+  osd_plb.add_u64_counter(l_osd_scrub_ec_getattr_cnt, "scrub_ec_getattr_cnt", "scrub EC getattr calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_stats_cnt, "scrub_ec_stats_cnt", "scrub EC stats calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_read_cnt, "scrub_ec_read_cnt", "scrub EC read calls count");
+  osd_plb.add_u64_counter(l_osd_scrub_ec_read_bytes, "scrub_ec_read_bytes", "scrub EC read bytes read");
+
+  // scrub - replicated pools
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_started,
+      "num_scrubs_started_replicated",
+      "replicated scrubs attempted count");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_active_started,
+      "num_scrubs_past_reservation_replicated",
+      "replicated scrubs count");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_successful,
+      "successful_scrubs_replicated",
+      "successful replicated scrubs count");
+  osd_plb.add_time_avg(
+      l_osd_scrub_rppool_successful_elapsed,
+      "successful_scrubs_replicated_elapsed",
+      "time to complete a successful replicated scrub");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_failed, "failed_scrubs_replicated",
+      "failed replicated scrubs count");
+  osd_plb.add_time_avg(
+      l_osd_scrub_rppool_failed_elapsed,
+      "failed_scrubs_replicated_elapsed",
+      "time to scrub failure replicated");
+
+  // the replica reservation process - replicated pool
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_reserv_success,
+      "scrub_replicated_scrub_reservations_completed",
+      "successfully completed reservation processes");
+  osd_plb.add_time_avg(
+      l_osd_scrub_rppool_reserv_successful_elapsed,
+      "scrub_replicated_successful_reservations_elapsed",
+      "time to scrub reservation completion");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_reserv_aborted,
+      "scrub_replicated_reservation_process_aborted",
+      "scrub replicated pool reservation was aborted");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_reserv_rejected,
+      "scrub_replicated_reservation_process_failure",
+      "scrub replicated pool reservation failed due to replica denial");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_reserv_skipped,
+      "scrub_replicated_reservation_process_skipped",
+      "scrub replicated pool reservation skipped for high priority scrub");
+  osd_plb.add_time_avg(
+      l_osd_scrub_rppool_reserv_failed_elapsed,
+      "scrub_replicated_failed_reservations_elapsed",
+      "scrub replicated pool time for scrub reservation to fail");
+  osd_plb.add_u64(
+      l_osd_scrub_rppool_reserv_secondaries_num,
+      "scrub_replicated_replicas_in_reservation",
+      "scrub replicated pool number of replicas to reserve");
+
+  // scrub - EC
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_started, "num_scrubs_started_ec",
+      "EC scrubs attempted count");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_active_started, "num_scrubs_past_reservation_ec",
+      "EC scrubs count");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_successful, "successful_scrubs_ec",
+      "successful EC scrubs count");
+  osd_plb.add_time_avg(
+      l_osd_scrub_ec_successful_elapsed, "successful_scrubs_ec_elapsed",
+      "time to complete a successful EC scrub");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_failed, "failed_scrubs_ec", "failed scrubs count EC");
+  osd_plb.add_time_avg(
+      l_osd_scrub_ec_failed_elapsed, "failed_scrubs_ec_elapsed",
+      "time to scrub failure ec");
+
+  // the secondaries reservation process - EC
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_reserv_success, "scrub_ec_reservations_completed",
+      "successfully completed reservation processes EC");
+  osd_plb.add_time_avg(
+      l_osd_scrub_ec_reserv_successful_elapsed,
+      "scrub_ec_successful_reservations_elapsed",
+      "time to EC scrub reservation completion");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_reserv_aborted, "scrub_ec_reservation_process_aborted",
+      "scrub reservation was aborted EC");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_reserv_rejected, "scrub_ec_reservation_process_failure",
+      "scrub reservation failed due to replica denial EC");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_reserv_skipped, "scrub_ec_reservation_process_skipped",
+      "scrub reservation skipped for high priority scrub EC");
+  osd_plb.add_time_avg(
+      l_osd_scrub_ec_reserv_failed_elapsed,
+      "scrub_ec_failed_reservations_elapsed",
+      "time for scrub reservation to fail EC");
+  osd_plb.add_u64(
+      l_osd_scrub_ec_reserv_secondaries_num, "scrub_ec_replicas_in_reservation",
+      "number of replicas to reserve EC");
 
   return osd_plb.create_perf_counters();
 }
@@ -393,27 +533,12 @@ PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
 
   scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
 
-  scrub_perf.add_u64_counter(scrbcnt_started, "num_scrubs_started", "scrubs attempted count");
-  scrub_perf.add_u64_counter(scrbcnt_active_started, "num_scrubs_past_reservation", "scrubs count");
-  scrub_perf.add_u64_counter(scrbcnt_failed, "failed_scrubs", "failed scrubs count");
-  scrub_perf.add_u64_counter(scrbcnt_successful, "successful_scrubs", "successful scrubs count");
-  scrub_perf.add_time_avg(scrbcnt_failed_elapsed, "failed_scrubs_elapsed", "time to scrub failure");
-  scrub_perf.add_time_avg(scrbcnt_successful_elapsed, "successful_scrubs_elapsed", "time to scrub completion");
-
   scrub_perf.add_u64_counter(scrbcnt_preempted, "preemptions", "preemptions on scrubs");
   scrub_perf.add_u64_counter(scrbcnt_chunks_selected, "chunk_selected", "chunk selection during scrubs");
   scrub_perf.add_u64_counter(scrbcnt_chunks_busy, "chunk_busy", "chunk busy during scrubs");
   scrub_perf.add_u64_counter(scrbcnt_blocked, "locked_object", "waiting on locked object events");
   scrub_perf.add_u64_counter(scrbcnt_write_blocked, "write_blocked_by_scrub", "write blocked by scrub");
 
-  // the replica reservation process
-  scrub_perf.add_u64_counter(scrbcnt_resrv_success, "scrub_reservations_completed", "successfully completed reservation processes");
-  scrub_perf.add_time_avg(scrbcnt_resrv_successful_elapsed, "successful_reservations_elapsed", "time to scrub reservation completion");
-  scrub_perf.add_u64_counter(scrbcnt_resrv_aborted, "reservation_process_aborted", "scrub reservation was aborted");
-  scrub_perf.add_u64_counter(scrbcnt_resrv_rejected, "reservation_process_failure", "scrub reservation failed due to replica denial");
-  scrub_perf.add_u64_counter(scrbcnt_resrv_skipped, "reservation_process_skipped", "scrub reservation skipped for high priority scrub");
-  scrub_perf.add_time_avg(scrbcnt_resrv_failed_elapsed, "failed_reservations_elapsed", "time for scrub reservation to fail");
-  scrub_perf.add_u64(scrbcnt_resrv_replicas_num, "replicas_in_reservation", "number of replicas in reservation");
 
   return scrub_perf.create_perf_counters();
 }

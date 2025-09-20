@@ -7,6 +7,7 @@
 #include "osd_types.h"
 #include "OpRequest.h"
 #include "object_state.h"
+#include "Watch.h" // for WatchRef
 
 /*
   * keep tabs on object modifications that are in flight.

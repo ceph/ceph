@@ -9,7 +9,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include <seastar/core/fstream.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/net/dns.hh>
@@ -39,7 +39,7 @@ using std::vector;
 using ceph::DNSResolver;
 using ceph::Formatter;
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 namespace {
   seastar::logger& logger()
   {
@@ -120,16 +120,18 @@ void mon_info_t::dump(ceph::Formatter *f) const
   encode_json("crush_location", crush_loc, f);
 }
 
-void mon_info_t::generate_test_instances(list<mon_info_t*>& ls)
+list<mon_info_t> mon_info_t::generate_test_instances()
 {
-  ls.push_back(new mon_info_t);
-  ls.push_back(new mon_info_t);
-  ls.back()->name = "noname";
-  ls.back()->public_addrs.parse("v1:1.2.3.4:567/890");
-  ls.back()->priority = 1;
-  ls.back()->weight = 1.0;
-  ls.back()->crush_loc.emplace("root", "default");
-  ls.back()->crush_loc.emplace("host", "foo");
+  list<mon_info_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().name = "noname";
+  ls.back().public_addrs.parse("v1:1.2.3.4:567/890");
+  ls.back().priority = 1;
+  ls.back().weight = 1.0;
+  ls.back().crush_loc.emplace("root", "default");
+  ls.back().crush_loc.emplace("host", "foo");
+  return ls;
 }
 namespace {
   struct rank_cmp {
@@ -196,7 +198,12 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   if (!HAVE_FEATURE(con_features, MONENC) ||
       !HAVE_FEATURE(con_features, SERVER_NAUTILUS)) {
     for (auto& [name, info] : mon_info) {
-      legacy_mon_addr[name] = info.public_addrs.legacy_addr();
+      // see note in mon_info_t::encode()
+      auto addr = info.public_addrs.legacy_addr();
+      if (addr == entity_addr_t()) {
+        addr = info.public_addrs.as_legacy_addr();
+      }
+      legacy_mon_addr[name] = addr;
     }
   }
 
@@ -318,26 +325,27 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void MonMap::generate_test_instances(list<MonMap*>& o)
+list<MonMap> MonMap::generate_test_instances()
 {
-  o.push_back(new MonMap);
-  o.push_back(new MonMap);
-  o.back()->epoch = 1;
-  o.back()->last_changed = utime_t(123, 456);
-  o.back()->created = utime_t(789, 101112);
-  o.back()->add("one", entity_addrvec_t());
+  list<MonMap> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().epoch = 1;
+  o.back().last_changed = utime_t(123, 456);
+  o.back().created = utime_t(789, 101112);
+  o.back().add("one", entity_addrvec_t());
 
-  MonMap *m = new MonMap;
+  MonMap m;
   {
-    m->epoch = 1;
-    m->last_changed = utime_t(123, 456);
+    m.epoch = 1;
+    m.last_changed = utime_t(123, 456);
 
     entity_addrvec_t empty_addr_one = entity_addrvec_t(entity_addr_t());
     empty_addr_one.v[0].set_nonce(1);
-    m->add("empty_addr_one", empty_addr_one);
+    m.add("empty_addr_one", empty_addr_one);
     entity_addrvec_t empty_addr_two = entity_addrvec_t(entity_addr_t());
     empty_addr_two.v[0].set_nonce(2);
-    m->add("empty_addr_two", empty_addr_two);
+    m.add("empty_addr_two", empty_addr_two);
 
     const char *local_pub_addr_s = "127.0.1.2";
 
@@ -345,11 +353,12 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
     entity_addrvec_t local_pub_addr;
     local_pub_addr.parse(local_pub_addr_s, &end_p);
 
-    m->add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
+    m.add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
 
-    m->add("empty_addr_zero", entity_addrvec_t());
+    m.add("empty_addr_zero", entity_addrvec_t());
   }
-  o.push_back(m);
+  o.push_back(std::move(m));
+  return o;
 }
 
 // read from/write to a file
@@ -431,10 +440,10 @@ void MonMap::dump(Formatter *f) const
   f->dump_unsigned("min_mon_release", to_integer<unsigned>(min_mon_release));
   f->dump_string("min_mon_release_name", to_string(min_mon_release));
   f->dump_int ("election_strategy", strategy);
-  f->dump_stream("disallowed_leaders: ") << disallowed_leaders;
+  f->dump_stream("disallowed_leaders") << disallowed_leaders;
   f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
-  f->dump_stream("removed_ranks: ") << removed_ranks;
+  f->dump_stream("removed_ranks") << removed_ranks;
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
@@ -762,7 +771,7 @@ void MonMap::check_health(health_check_map_t *checks) const
   }
 }
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 
 seastar::future<> MonMap::read_monmap(const std::string& monmap)
 {
@@ -899,7 +908,7 @@ seastar::future<> MonMap::build_initial(const crimson::common::ConfigProxy& conf
   }
 }
 
-#else  // WITH_SEASTAR
+#else  // WITH_CRIMSON
 
 int MonMap::init_with_monmap(const std::string& monmap, std::ostream& errout)
 {
@@ -1025,4 +1034,4 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   calc_legacy_ranks();
   return 0;
 }
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON

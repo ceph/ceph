@@ -99,7 +99,7 @@ std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
-  return out << laddr_offset.get_aligned_laddr()
+  return out << laddr_offset.get_laddr()
 	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
@@ -127,12 +127,12 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << device_id_printer_t{id}
         << ",0x"
         << std::hex << s.get_device_off() << std::dec;
-  } else if (rhs.get_addr_type() == paddr_types_t::SEGMENT) {
+  } else if (rhs.is_absolute_segmented()) {
     auto &s = rhs.as_seg_paddr();
     out << s.get_segment_id()
         << ",0x"
         << std::hex << s.get_segment_off() << std::dec;
-  } else if (rhs.get_addr_type() == paddr_types_t::RANDOM_BLOCK) {
+  } else if (rhs.is_absolute_random_block()) {
     auto &s = rhs.as_blk_paddr();
     out << device_id_printer_t{s.get_device_id()}
         << ",0x"
@@ -246,6 +246,8 @@ std::ostream &operator<<(std::ostream &out, extent_types_t t)
     return out << "LADDR_LEAF";
   case extent_types_t::ONODE_BLOCK_STAGED:
     return out << "ONODE_BLOCK_STAGED";
+  case extent_types_t::ROOT_META:
+    return out << "ROOT_META";
   case extent_types_t::OMAP_INNER:
     return out << "OMAP_INNER";
   case extent_types_t::OMAP_LEAF:
@@ -285,8 +287,6 @@ std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen)
     return out << "GEN_INL";
   } else if (gen.gen == OOL_GENERATION) {
     return out << "GEN_OOL";
-  } else if (gen.gen > REWRITE_GENERATIONS) {
-    return out << "GEN_INVALID(" << (unsigned)gen.gen << ")!";
   } else {
     return out << "GEN(" << (unsigned)gen.gen << ")";
   }
@@ -349,11 +349,11 @@ std::ostream &operator<<(std::ostream &out, const delta_info_t &delta)
 	     << "type: " << delta.type
 	     << ", paddr: " << delta.paddr
 	     << ", laddr: " << delta.laddr
-	     << ", prev_crc: " << delta.prev_crc
-	     << ", final_crc: " << delta.final_crc
-	     << ", length: " << delta.length
+	     << ", prev_crc: 0x" << std::hex << delta.prev_crc
+	     << ", final_crc: 0x" << delta.final_crc
+	     << ", length: 0x" << delta.length << std::dec
 	     << ", pversion: " << delta.pversion
-	     << ", ext_seq: " << delta.ext_seq
+	     << ", ext_seq: " << segment_seq_printer_t{delta.ext_seq}
 	     << ", seg_type: " << delta.seg_type
 	     << ")";
 }
@@ -371,7 +371,7 @@ std::ostream &operator<<(std::ostream &out, const extent_info_t &info)
   return out << "extent_info_t("
 	     << "type: " << info.type
 	     << ", addr: " << info.addr
-	     << ", len: " << info.len
+	     << ", len: 0x" << std::hex << info.len << std::dec
 	     << ")";
 }
 
@@ -385,7 +385,7 @@ std::ostream &operator<<(std::ostream &out, const segment_header_t &header)
              << " " << rewrite_gen_printer_t{header.generation}
              << ", dirty_tail=" << header.dirty_tail
              << ", alloc_tail=" << header.alloc_tail
-             << ", segment_nonce=" << header.segment_nonce
+             << ", segment_nonce=0x" << std::hex << header.segment_nonce << std::dec
 	     << ", modify_time=" << mod_time_point_printer_t{header.modify_time}
              << ")";
 }
@@ -396,7 +396,7 @@ std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail)
              << tail.physical_segment_id
              << " " << tail.type
              << " " << segment_seq_printer_t{tail.segment_seq}
-             << ", segment_nonce=" << tail.segment_nonce
+             << ", segment_nonce=0x" << std::hex << tail.segment_nonce << std::dec
              << ", modify_time=" << mod_time_point_printer_t{tail.modify_time}
              << ", num_extents=" << tail.num_extents
              << ")";
@@ -462,8 +462,8 @@ std::ostream &operator<<(std::ostream& out, const record_size_t& rsize)
 {
   return out << "record_size_t("
              << "record_type=" << rsize.record_type
-             << "raw_md=" << rsize.get_raw_mdlength()
-             << ", data=" << rsize.dlength
+             << "raw_md=0x" << std::hex << rsize.get_raw_mdlength()
+             << ", data=0x" << rsize.dlength << std::dec
              << ")";
 }
 
@@ -507,11 +507,11 @@ std::ostream& operator<<(std::ostream& out, const record_group_header_t& h)
 {
   return out << "record_group_header_t("
              << "num_records=" << h.records
-             << ", mdlength=" << h.mdlength
-             << ", dlength=" << h.dlength
-             << ", nonce=" << h.segment_nonce
+             << ", mdlength=0x" << std::hex << h.mdlength
+             << ", dlength=0x" << h.dlength
+             << ", segment_nonce=0x" << h.segment_nonce << std::dec
              << ", committed_to=" << h.committed_to
-             << ", data_crc=" << h.data_crc
+             << ", data_crc=0x" << std::hex << h.data_crc << std::dec
              << ")";
 }
 
@@ -554,9 +554,9 @@ std::ostream& operator<<(std::ostream& out, const record_group_size_t& size)
 {
   return out << "record_group_size_t("
              << "record_type=" << size.record_type
-             << "raw_md=" << size.get_raw_mdlength()
-             << ", data=" << size.dlength
-             << ", block_size=" << size.block_size
+             << "raw_md=0x" << std::hex << size.get_raw_mdlength()
+             << ", data=0x" << size.dlength
+             << ", block_size=0x" << size.block_size << std::dec
              << ", fullness=" << size.get_fullness()
              << ")";
 }
@@ -911,7 +911,7 @@ std::ostream& operator<<(std::ostream& out, const write_result_t& w)
 {
   return out << "write_result_t("
              << "start=" << w.start_seq
-             << ", length=" << w.length
+             << ", length=0x" << std::hex << w.length << std::dec
              << ")";
 }
 
@@ -1040,42 +1040,6 @@ std::ostream& operator<<(std::ostream& out, const dirty_io_stats_printer_t& p)
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const extent_access_stats_printer_t& p)
-{
-  constexpr const char* dfmt = "{:.2f}";
-  double est_total_access = static_cast<double>(p.stats.get_estimated_total_access());
-  out << "(~";
-  if (est_total_access > 1000000) {
-    out << fmt::format(dfmt, est_total_access/1000000)
-        << "M, ";
-  } else {
-    out << fmt::format(dfmt, est_total_access/1000)
-        << "K, ";
-  }
-  double trans_hit = static_cast<double>(p.stats.get_trans_hit());
-  double cache_hit = static_cast<double>(p.stats.get_cache_hit());
-  double est_cache_access = static_cast<double>(p.stats.get_estimated_cache_access());
-  double load_absent = static_cast<double>(p.stats.load_absent);
-  out << "trans-hit=~"
-      << fmt::format(dfmt, trans_hit/est_total_access*100)
-      << "%(p"
-      << fmt::format(dfmt, p.stats.trans_pending/trans_hit)
-      << ",d"
-      << fmt::format(dfmt, p.stats.trans_dirty/trans_hit)
-      << ",l"
-      << fmt::format(dfmt, p.stats.trans_lru/trans_hit)
-      << "), cache-hit=~"
-      << fmt::format(dfmt, cache_hit/est_cache_access*100)
-      << "%(d"
-      << fmt::format(dfmt, p.stats.cache_dirty/cache_hit)
-      << ",l"
-      << fmt::format(dfmt, p.stats.cache_lru/cache_hit)
-      <<"), load-present/absent="
-      << fmt::format(dfmt, p.stats.load_present/load_absent)
-      << ")";
-  return out;
-}
-
 std::ostream& operator<<(std::ostream& out, const cache_access_stats_printer_t& p)
 {
   constexpr const char* dfmt = "{:.2f}";
@@ -1088,30 +1052,42 @@ std::ostream& operator<<(std::ostream& out, const cache_access_stats_printer_t& 
     out << fmt::format(dfmt, total_access/1000)
         << "K, ";
   }
-  double trans_hit = static_cast<double>(p.stats.s.get_trans_hit());
-  double cache_hit = static_cast<double>(p.stats.s.get_cache_hit());
+  double trans_hit = static_cast<double>(p.stats.get_trans_hit());
+  double cache_hit = static_cast<double>(p.stats.get_cache_hit());
   double cache_access = static_cast<double>(p.stats.get_cache_access());
-  double load_absent = static_cast<double>(p.stats.s.load_absent);
+  double load_absent = static_cast<double>(p.stats.load_absent);
   out << "trans-hit="
       << fmt::format(dfmt, trans_hit/total_access*100)
-      << "%(p"
-      << fmt::format(dfmt, p.stats.s.trans_pending/trans_hit)
-      << ",d"
-      << fmt::format(dfmt, p.stats.s.trans_dirty/trans_hit)
-      << ",l"
-      << fmt::format(dfmt, p.stats.s.trans_lru/trans_hit)
+      << "%(pend"
+      << fmt::format(dfmt, p.stats.trans_pending/trans_hit)
+      << ",dirt"
+      << fmt::format(dfmt, p.stats.trans_dirty/trans_hit)
+      << ",lru"
+      << fmt::format(dfmt, p.stats.trans_lru/trans_hit)
       << "), cache-hit="
       << fmt::format(dfmt, cache_hit/cache_access*100)
-      << "%(d"
-      << fmt::format(dfmt, p.stats.s.cache_dirty/cache_hit)
-      << ",l"
-      << fmt::format(dfmt, p.stats.s.cache_lru/cache_hit)
-      <<"), load/absent="
-      << fmt::format(dfmt, load_absent/p.stats.cache_absent*100)
-      << "%, load-present/absent="
-      << fmt::format(dfmt, p.stats.s.load_present/load_absent)
+      << "%(dirt"
+      << fmt::format(dfmt, p.stats.cache_dirty/cache_hit)
+      << ",lru"
+      << fmt::format(dfmt, p.stats.cache_lru/cache_hit)
+      <<"), load-present/absent="
+      << fmt::format(dfmt, p.stats.load_present/load_absent)
       << ")";
   return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const omap_type_t& t)
+{
+  switch(t) {
+  case omap_type_t::XATTR:
+    return out << "XATTR";
+  case omap_type_t::OMAP:
+    return out << "OMAP";
+  case omap_type_t::LOG:
+    return out << "LOG";
+  default:
+    return out << "INVALID_OMAP_TYPE!";
+  }
 }
 
 } // namespace crimson::os::seastore

@@ -11,17 +11,18 @@ depsToolsetDir="$DEPS_DIR/mingw"
 lz4SrcDir="${depsSrcDir}/lz4"
 lz4Dir="${depsToolsetDir}/lz4"
 lz4Tag="v1.9.2"
-sslTag="OpenSSL_1_1_1c"
+sslTag="openssl-3.0.16"
 sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://download.ceph.com/qa/boost_1_85_0.tar.bz2"
-boostSha256Sum="7009fe1faa1697476bdc7027703a2badb84e849b7b0baad5086b087b971f8617"
-boostSrcDir="${depsSrcDir}/boost_1_85_0"
+boostUrl="https://download.ceph.com/qa/boost_1_87_0.tar.bz2"
+boostSha256Sum="af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89"
+boostSrcDir="${depsSrcDir}/boost_1_87_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
+zlibTag="v1.3.1"
 backtraceDir="${depsToolsetDir}/libbacktrace"
 backtraceSrcDir="${depsSrcDir}/libbacktrace"
 snappySrcDir="${depsSrcDir}/snappy"
@@ -39,6 +40,11 @@ dokanUrl="https://github.com/dokan-dev/dokany"
 dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
+
+libicuUrl="https://github.com/unicode-org/icu"
+libicuTag="release-76-1"
+libicuSrcDir="${depsSrcDir}/icu"
+libicuLibDir="${depsToolsetDir}/libicu"
 
 mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz"
 mingwLlvmSha256Sum="bc367753dea829d219be32e2e64e2d15d03158ce8e700ae5210ca3d78e6a07ea"
@@ -120,7 +126,7 @@ source "$SCRIPT_DIR/mingw_conf.sh"
 echo "Building zlib."
 cd $depsSrcDir
 if [[ ! -d $zlibSrcDir ]]; then
-    git clone --depth 1 https://github.com/madler/zlib
+    git clone --branch $zlibTag --depth 1 https://github.com/madler/zlib
 fi
 cd $zlibSrcDir
 # Apparently the configure script is broken...
@@ -223,6 +229,20 @@ patch -N boost/thread/pthread/thread_data.hpp <<EOL
  #else
            std::size_t page_size = ::sysconf( _SC_PAGESIZE);
  #endif
+EOL
+
+patch -N libs/stacktrace/src/from_exception.cpp <<EOL
+--- libs/stacktrace/src/from_exception.cpp        2019-10-11 15:26:15.678703586 +0300
++++ libs/stacktrace/src/from_exception.cpp.new    2019-10-11 15:26:07.321463698 +0300
+@@ -4,7 +4,7 @@
+ // accompanying file LICENSE_1_0.txt or copy at
+ // http://www.boost.org/LICENSE_1_0.txt)
+
+-#if defined(_MSC_VER)
++#if defined(__MINGW32__) || defined(_MSC_VER)
+
+ #include <boost/stacktrace/safe_dump_to.hpp>
+ #include <windows.h>
 EOL
 
 ./bootstrap.sh
@@ -355,6 +375,28 @@ $MINGW_DLLTOOL -d $dokanSrcDir/dokan/dokan.def \
 # dokan.h is defined in both ./dokan and ./sys while both are using
 # sys/public.h without the "sys" prefix.
 cp $dokanSrcDir/sys/public.h $dokanSrcDir/dokan
+
+echo "Building libicu."
+cd $depsSrcDir
+if [[ ! -d $libicuSrcDir ]]; then
+    git clone --branch $libicuTag --depth 1 $libicuUrl
+    cd $libicuSrcDir
+fi
+mkdir -p $libicuSrcDir/build-windows
+mkdir -p $libicuSrcDir/build-linux
+
+cd $libicuSrcDir/build-linux
+../icu4c/source/configure
+_make
+
+cd $libicuSrcDir/build-windows
+../icu4c/source/configure \
+    --enable-static \
+    --host=${MINGW_BASE} \
+    --with-cross-build=$PWD/../build-linux \
+    --prefix=$libicuLibDir
+_make
+_make install
 
 echo "Finished building Ceph dependencies."
 touch $depsToolsetDir/completed

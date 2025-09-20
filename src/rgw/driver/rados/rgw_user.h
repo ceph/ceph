@@ -19,11 +19,11 @@
 
 #define RGW_USER_ANON_ID "anonymous"
 
-#define SECRET_KEY_LEN 40
-#define PUBLIC_ID_LEN 20
-#define RAND_SUBUSER_LEN 5
+constexpr auto SECRET_KEY_LEN=40;
+constexpr auto PUBLIC_ID_LEN=20;
+constexpr auto RAND_SUBUSER_LEN=5;
 
-#define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
+constexpr auto XMLNS_AWS_S3 = "http://s3.amazonaws.com/doc/2006-03-01/";
 
 class RGWUserCtl;
 class RGWBucketCtl;
@@ -60,10 +60,12 @@ struct RGWUID
   void dump(Formatter *f) const {
     f->dump_string("user_id", id);
   }
-  static void generate_test_instances(std::list<RGWUID*>& o) {
-    o.push_back(new RGWUID);
-    o.push_back(new RGWUID);
-    o.back()->id = "test:tester";
+  static std::list<RGWUID> generate_test_instances() {
+    std::list<RGWUID> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().id = "test:tester";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)

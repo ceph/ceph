@@ -2,12 +2,15 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
-import { of as observableOf } from 'rxjs';
-import { catchError, mapTo } from 'rxjs/operators';
+import { BehaviorSubject, of as observableOf } from 'rxjs';
+import { catchError, map, mapTo } from 'rxjs/operators';
+import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
+import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { ApiClient } from '~/app/shared/api/api-client';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
+import { KmipConfig, VaultConfig } from '../models/rgw-encryption-config-keys';
 
 @cdEncode
 @Injectable({
@@ -15,9 +18,63 @@ import { cdEncode } from '~/app/shared/decorators/cd-encode';
 })
 export class RgwBucketService extends ApiClient {
   private url = 'api/rgw/bucket';
+  private bucketsSubject = new BehaviorSubject<Bucket[]>([]);
+  private totalNumObjectsSubject = new BehaviorSubject<number>(0);
+  private totalUsedCapacitySubject = new BehaviorSubject<number>(0);
+  private averageObjectSizeSubject = new BehaviorSubject<number>(0);
+  buckets$ = this.bucketsSubject.asObservable();
+  totalNumObjects$ = this.totalNumObjectsSubject.asObservable();
+  totalUsedCapacity$ = this.totalUsedCapacitySubject.asObservable();
+  averageObjectSize$ = this.averageObjectSizeSubject.asObservable();
 
   constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
     super();
+  }
+
+  fetchAndTransformBuckets() {
+    return this.list(true).pipe(
+      map((buckets: Bucket[]) => {
+        let totalNumObjects = 0;
+        let totalUsedCapacity = 0;
+        let averageObjectSize = 0;
+        const transformedBuckets = buckets.map((bucket) => this.transformBucket(bucket));
+        transformedBuckets.forEach((bucket) => {
+          totalNumObjects += bucket?.num_objects || 0;
+          totalUsedCapacity += bucket?.bucket_size || 0;
+        });
+        averageObjectSize = this.calculateAverageObjectSize(totalNumObjects, totalUsedCapacity);
+        this.bucketsSubject.next(transformedBuckets);
+        this.totalNumObjectsSubject.next(totalNumObjects);
+        this.totalUsedCapacitySubject.next(totalUsedCapacity);
+        this.averageObjectSizeSubject.next(averageObjectSize);
+      })
+    );
+  }
+
+  transformBucket(bucket: Bucket) {
+    const maxBucketSize = bucket?.bucket_quota?.max_size ?? 0;
+    const maxBucketObjects = bucket?.bucket_quota?.max_objects ?? 0;
+    const bucket_size = bucket['usage']?.['rgw.main']?.['size_actual'] || 0;
+    const num_objects = bucket['usage']?.['rgw.main']?.['num_objects'] || 0;
+    return {
+      ...bucket,
+      bucket_size,
+      num_objects,
+      size_usage: this.calculateSizeUsage(bucket_size, maxBucketSize),
+      object_usage: this.calculateObjectUsage(num_objects, maxBucketObjects)
+    };
+  }
+
+  calculateSizeUsage(bucket_size: number, maxBucketSize: number) {
+    return maxBucketSize > 0 ? bucket_size / maxBucketSize : undefined;
+  }
+
+  calculateObjectUsage(num_objects: number, maxBucketObjects: number) {
+    return maxBucketObjects > 0 ? num_objects / maxBucketObjects : undefined;
+  }
+
+  calculateAverageObjectSize(totalNumObjects: number, totalUsedCapacity: number) {
+    return totalNumObjects > 0 ? totalUsedCapacity / totalNumObjects : 0;
   }
 
   /**
@@ -135,9 +192,8 @@ export class RgwBucketService extends ApiClient {
     });
   }
 
-  delete(bucket: string, purgeObjects = true) {
+  delete(bucket: string) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.append('purge_objects', purgeObjects ? 'true' : 'false');
       return this.http.delete(`${this.url}/${bucket}`, { params: params });
     });
   }
@@ -167,36 +223,12 @@ export class RgwBucketService extends ApiClient {
     return bucketData['lock_retention_period_days'] || 0;
   }
 
-  setEncryptionConfig(
-    encryption_type: string,
-    kms_provider: string,
-    auth_method: string,
-    secret_engine: string,
-    secret_path: string,
-    namespace: string,
-    address: string,
-    token: string,
-    owner: string,
-    ssl_cert: string,
-    client_cert: string,
-    client_key: string
-  ) {
+  setEncryptionConfig(config: VaultConfig | KmipConfig) {
+    const reqBody = {
+      ...config
+    };
     return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        encryption_type: encryption_type,
-        kms_provider: kms_provider,
-        auth_method: auth_method,
-        secret_engine: secret_engine,
-        secret_path: secret_path,
-        namespace: namespace,
-        address: address,
-        token: token,
-        owner: owner,
-        ssl_cert: ssl_cert,
-        client_cert: client_cert,
-        client_key: client_key
-      });
-      return this.http.put(`${this.url}/setEncryptionConfig`, null, { params: params });
+      return this.http.put(`${this.url}/setEncryptionConfig`, reqBody, { params: params });
     });
   }
 
@@ -215,6 +247,68 @@ export class RgwBucketService extends ApiClient {
   getEncryptionConfig() {
     return this.rgwDaemonService.request((params: HttpParams) => {
       return this.http.get(`${this.url}/getEncryptionConfig`, { params: params });
+    });
+  }
+
+  setLifecycle(bucket_name: string, lifecycle: string, owner: string, tenant: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        lifecycle: lifecycle,
+        owner: owner,
+        tenant: tenant
+      });
+      return this.http.put(`${this.url}/lifecycle`, null, { params: params });
+    });
+  }
+
+  getLifecycle(bucket_name: string, owner: string, tenant: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        owner: owner,
+        tenant: tenant
+      });
+      return this.http.get(`${this.url}/lifecycle`, { params: params });
+    });
+  }
+  updateBucketRateLimit(bid: string, bucketRateLimitArgs: RgwRateLimitConfig) {
+    return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs);
+  }
+  getBucketRateLimit(uid: string) {
+    return this.http.get(`${this.url}/${uid}/ratelimit`);
+  }
+  getGlobalBucketRateLimit() {
+    return this.http.get(`${this.url}/ratelimit`);
+  }
+
+  listNotification(bucket_name: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name
+      });
+      return this.http.get(`${this.url}/notification`, { params: params });
+    });
+  }
+
+  setNotification(bucket_name: string, notification: string, owner: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        notification: notification,
+        owner: owner
+      });
+      return this.http.put(`${this.url}/notification`, null, { params: params });
+    });
+  }
+
+  deleteNotification(bucket_name: string, notification_id: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        bucket_name: bucket_name,
+        notification_id: notification_id
+      });
+      return this.http.delete(`${this.url}/notification`, { params });
     });
   }
 }

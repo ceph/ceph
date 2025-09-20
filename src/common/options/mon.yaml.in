@@ -80,6 +80,14 @@ options:
   default: 10
   services:
   - mon
+- name: mon_nvmeofgw_skip_failovers_interval
+  type: secs
+  level: advanced
+  desc: Period in seconds in which no failovers are performed in GW's pool-group
+    this is equal to max GW redeploy interval
+  default: 16
+  services:
+  - mon
 - name: mon_nvmeofgw_set_group_id_retry
   type: uint
   level: advanced
@@ -89,6 +97,25 @@ options:
     receives a monitor group ID assignment before the gateway is fully up during
     initialization, a retry is required.
   default: 1000
+- name: mon_nvmeofgw_beacons_till_ack
+  type: uint
+  level: advanced
+  default: 15
+  desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
+  services:
+  - mon
+- name: mon_nvmeofgw_delete_grace
+  type: secs
+  level: advanced
+  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed 
+  default: 15_min
+  services:
+  - mon
+- name: mon_nvmeofgw_wrong_map_ignore_sec
+  type: uint
+  level: advanced
+  desc: Period in seconds from MonClient startup to ignore wrong maps from Monitor
+  default: 15
   services:
   - mon
 - name: mon_mgr_inactive_grace
@@ -1375,3 +1402,31 @@ options:
   default: 2
   services:
   - mon
+- name: enable_availability_tracking
+  type: bool
+  level: advanced
+  desc: Calculate and store availablity score for each pool in the 
+    cluster at regular intervals
+  default: true
+  services :
+  - mon
+  flags:
+  - runtime
+- name: nvmeof_mon_client_connect_panic
+  type: secs
+  level: advanced
+  desc: The duration, expressed in seconds, after which the nvmeof gateway
+    should trigger a panic if it does not receive the initial map from the monitor
+  default: 30
+  services:
+  - mon
+- name: pool_availability_update_interval
+  type: float
+  level: advanced
+  desc: Update data availability score at this interval. By default the interval 
+    is same as paxos_propose_interval configuration.  
+  default: 1
+  services :
+  - mon
+  flags:
+  - runtime

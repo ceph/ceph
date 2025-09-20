@@ -33,9 +33,11 @@ void ObjectPosition::dump(Formatter *f) const {
   f->dump_unsigned("entry_tid", entry_tid);
 }
 
-void ObjectPosition::generate_test_instances(std::list<ObjectPosition *> &o) {
-  o.push_back(new ObjectPosition());
-  o.push_back(new ObjectPosition(1, 2, 3));
+std::list<ObjectPosition> ObjectPosition::generate_test_instances() {
+  std::list<ObjectPosition> o;
+  o.emplace_back();
+  o.push_back(ObjectPosition(1, 2, 3));
+  return o;
 }
 
 void ObjectSetPosition::encode(bufferlist& bl) const {
@@ -60,10 +62,11 @@ void ObjectSetPosition::dump(Formatter *f) const {
   f->close_section();
 }
 
-void ObjectSetPosition::generate_test_instances(
-    std::list<ObjectSetPosition *> &o) {
-  o.push_back(new ObjectSetPosition());
-  o.push_back(new ObjectSetPosition({{0, 1, 120}, {121, 2, 121}}));
+std::list<ObjectSetPosition> ObjectSetPosition::generate_test_instances() {
+  std::list<ObjectSetPosition> o;
+  o.emplace_back();
+  o.push_back(ObjectSetPosition({{0, 1, 120}, {121, 2, 121}}));
+  return o;
 }
 
 void Client::encode(bufferlist& bl) const {
@@ -101,13 +104,15 @@ void Client::dump(Formatter *f) const {
   f->dump_string("state", stringify(state));
 }
 
-void Client::generate_test_instances(std::list<Client *> &o) {
+std::list<Client> Client::generate_test_instances() {
+  std::list<Client> o;
   bufferlist data;
   data.append(std::string(128, '1'));
 
-  o.push_back(new Client());
-  o.push_back(new Client("id", data));
-  o.push_back(new Client("id", data, {{{1, 2, 120}, {2, 3, 121}}}));
+  o.push_back(Client());
+  o.push_back(Client("id", data));
+  o.push_back(Client("id", data, {{{1, 2, 120}, {2, 3, 121}}}));
+  return o;
 }
 
 void Tag::encode(bufferlist& bl) const {
@@ -135,12 +140,14 @@ void Tag::dump(Formatter *f) const {
   f->dump_string("data", data_ss.str());
 }
 
-void Tag::generate_test_instances(std::list<Tag *> &o) {
-  o.push_back(new Tag());
+std::list<Tag> Tag::generate_test_instances() {
+  std::list<Tag> o;
+  o.emplace_back();
 
   bufferlist data;
   data.append(std::string(128, '1'));
-  o.push_back(new Tag(123, 234, data));
+  o.push_back(Tag(123, 234, data));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &os, const ClientState &state) {

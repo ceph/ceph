@@ -22,6 +22,17 @@
 #include "include/spinlock.h"
 #include "msg/async/Event.h"
 #include "msg/msg_types.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
+
+#include <atomic>
+#include <condition_variable>
+#include <memory>
+#include <mutex>
 #include <string>
 
 class Worker;
@@ -352,7 +363,7 @@ class NetworkStack {
     static constexpr int TASK_COMM_LEN = 16;
     char tp_name[TASK_COMM_LEN];
     sprintf(tp_name, "msgr-worker-%u", id);
-    ceph_pthread_setname(pthread_self(), tp_name);
+    ceph_pthread_setname(tp_name);
   }
 
  protected:

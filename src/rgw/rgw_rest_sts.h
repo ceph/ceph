@@ -53,6 +53,8 @@ class WebTokenEngine : public rgw::auth::Engine {
   std::tuple<boost::optional<WebTokenEngine::token_t>, boost::optional<WebTokenEngine::principal_tags_t>>
   get_from_jwt(const DoutPrefixProvider* dpp, const std::string& token, const req_state* const s, optional_yield y) const;
 
+ bool validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const;
+
   void validate_signature (const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string& algorithm, const std::string& iss, const std::vector<std::string>& thumbprints, optional_yield y) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp,
@@ -62,6 +64,14 @@ class WebTokenEngine : public rgw::auth::Engine {
   template <typename T>
   void recurse_and_insert(const string& key, const jwt::claim& c, T& t) const;
   WebTokenEngine::token_t get_token_claims(const jwt::decoded_jwt& decoded) const;
+
+  int create_connection(const DoutPrefixProvider* dpp, const std::string& hostname, int port) const;
+  std::string connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, const std::string& hostname, int port = 443) const;
+  std::string get_top_level_domain_from_host(const DoutPrefixProvider* dpp, const std::string& hostname) const;
+  std::string extract_last_certificate(const DoutPrefixProvider* dpp, const std::string& pem_chain) const;
+  bool verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
+      const std::vector<std::string>& thumbprints) const;
+  void shutdown_ssl(const DoutPrefixProvider* dpp, SSL* ssl, SSL_CTX* ctx) const;
 
 public:
   WebTokenEngine(CephContext* const cct,
@@ -193,6 +203,15 @@ public:
   int get_params();
   const char* name() const override { return "get_session_token"; }
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }
+};
+
+class RGWSTSGetCallerIdentity : public RGWREST_STS {
+public:
+  RGWSTSGetCallerIdentity() = default;
+  void execute(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  const char* name() const override { return "get_caller_identity"; }
+  RGWOpType get_type() override { return RGW_STS_GET_CALLER_IDENTITY; }
 };
 
 class RGW_Auth_STS {

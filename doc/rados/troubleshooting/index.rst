@@ -1,3 +1,5 @@
+.. _rados_troubleshooting:
+
 =================
  Troubleshooting
 =================

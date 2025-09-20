@@ -94,7 +94,7 @@ class CmdParam(object):
         self.goodchars = goodchars
         self.positional = positional != 'false'
 
-        assert who == None
+        assert who is None
 
     def help(self):
         advanced = []

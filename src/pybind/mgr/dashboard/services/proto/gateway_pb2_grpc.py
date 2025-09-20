@@ -22,11 +22,16 @@ class GatewayStub(object):
         self.create_subsystem = channel.unary_unary(
                 '/Gateway/create_subsystem',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.create_subsystem_req.SerializeToString,
-                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.subsys_status.FromString,
                 )
         self.delete_subsystem = channel.unary_unary(
                 '/Gateway/delete_subsystem',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.delete_subsystem_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.change_subsystem_key = channel.unary_unary(
+                '/Gateway/change_subsystem_key',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
         self.list_namespaces = channel.unary_unary(
@@ -54,9 +59,34 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_load_balancing_group_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.namespace_change_visibility = channel.unary_unary(
+                '/Gateway/namespace_change_visibility',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.namespace_set_rbd_trash_image = channel.unary_unary(
+                '/Gateway/namespace_set_rbd_trash_image',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.namespace_set_auto_resize = channel.unary_unary(
+                '/Gateway/namespace_set_auto_resize',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
         self.namespace_delete = channel.unary_unary(
                 '/Gateway/namespace_delete',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.namespace_add_host = channel.unary_unary(
+                '/Gateway/namespace_add_host',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_add_host_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.namespace_delete_host = channel.unary_unary(
+                '/Gateway/namespace_delete_host',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
         self.add_host = channel.unary_unary(
@@ -67,6 +97,11 @@ class GatewayStub(object):
         self.remove_host = channel.unary_unary(
                 '/Gateway/remove_host',
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+                )
+        self.change_host_key = channel.unary_unary(
+                '/Gateway/change_host_key',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_host_key_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
         self.list_hosts = channel.unary_unary(
@@ -139,6 +174,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_log_level_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
                 )
+        self.show_gateway_listeners_info = channel.unary_unary(
+                '/Gateway/show_gateway_listeners_info',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.FromString,
+                )
 
 
 class GatewayServicer(object):
@@ -160,6 +200,13 @@ class GatewayServicer(object):
 
     def delete_subsystem(self, request, context):
         """Deletes a subsystem
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def change_subsystem_key(self, request, context):
+        """Changes subsystem key
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -200,8 +247,43 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def namespace_change_visibility(self, request, context):
+        """Changes namespace's visibility
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_set_rbd_trash_image(self, request, context):
+        """Set namespace's RBD trash image flag
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_set_auto_resize(self, request, context):
+        """Set namespace's auto resize flag
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
     def namespace_delete(self, request, context):
         """Deletes a namespace
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_add_host(self, request, context):
+        """Adds a host to a namespace
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def namespace_delete_host(self, request, context):
+        """Deletes a host from a namespace
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -216,6 +298,13 @@ class GatewayServicer(object):
 
     def remove_host(self, request, context):
         """Removes a host from a subsystem
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def change_host_key(self, request, context):
+        """Changes a host inband authentication keys
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -319,6 +408,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def show_gateway_listeners_info(self, request, context):
+        """Show gateway listeners info
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -330,11 +426,16 @@ def add_GatewayServicer_to_server(servicer, server):
             'create_subsystem': grpc.unary_unary_rpc_method_handler(
                     servicer.create_subsystem,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.create_subsystem_req.FromString,
-                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.subsys_status.SerializeToString,
             ),
             'delete_subsystem': grpc.unary_unary_rpc_method_handler(
                     servicer.delete_subsystem,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.delete_subsystem_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'change_subsystem_key': grpc.unary_unary_rpc_method_handler(
+                    servicer.change_subsystem_key,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'list_namespaces': grpc.unary_unary_rpc_method_handler(
@@ -362,9 +463,34 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_load_balancing_group_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
+            'namespace_change_visibility': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_change_visibility,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_set_rbd_trash_image': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_set_rbd_trash_image,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_set_auto_resize': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_set_auto_resize,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
             'namespace_delete': grpc.unary_unary_rpc_method_handler(
                     servicer.namespace_delete,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_add_host': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_add_host,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_add_host_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'namespace_delete_host': grpc.unary_unary_rpc_method_handler(
+                    servicer.namespace_delete_host,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'add_host': grpc.unary_unary_rpc_method_handler(
@@ -375,6 +501,11 @@ def add_GatewayServicer_to_server(servicer, server):
             'remove_host': grpc.unary_unary_rpc_method_handler(
                     servicer.remove_host,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
+            ),
+            'change_host_key': grpc.unary_unary_rpc_method_handler(
+                    servicer.change_host_key,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.change_host_key_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
             'list_hosts': grpc.unary_unary_rpc_method_handler(
@@ -447,6 +578,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_log_level_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.SerializeToString,
             ),
+            'show_gateway_listeners_info': grpc.unary_unary_rpc_method_handler(
+                    servicer.show_gateway_listeners_info,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.SerializeToString,
+            ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
             'Gateway', rpc_method_handlers)
@@ -487,7 +623,7 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/create_subsystem',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.create_subsystem_req.SerializeToString,
-            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.subsys_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
@@ -504,6 +640,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/delete_subsystem',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.delete_subsystem_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def change_subsystem_key(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/change_subsystem_key',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.change_subsystem_key_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -594,6 +747,57 @@ class Gateway(object):
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
 
     @staticmethod
+    def namespace_change_visibility(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_change_visibility',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_change_visibility_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_set_rbd_trash_image(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_set_rbd_trash_image',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_rbd_trash_image_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_set_auto_resize(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_set_auto_resize',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_set_auto_resize_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
     def namespace_delete(request,
             target,
             options=(),
@@ -606,6 +810,40 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_delete',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_add_host(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_add_host',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_add_host_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def namespace_delete_host(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/namespace_delete_host',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.namespace_delete_host_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -640,6 +878,23 @@ class Gateway(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/Gateway/remove_host',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.remove_host_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def change_host_key(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/change_host_key',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.change_host_key_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
@@ -879,5 +1134,22 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/set_gateway_log_level',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.set_gateway_log_level_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.req_status.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def show_gateway_listeners_info(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/show_gateway_listeners_info',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

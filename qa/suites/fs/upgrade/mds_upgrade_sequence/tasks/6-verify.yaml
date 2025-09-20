@@ -2,4 +2,5 @@ tasks:
 - cephadm.shell:
     host.a:
       - ceph fs dump
+      - ceph osd require-osd-release tentacle # after the upgrade, this should be bumped up
 - fs.post_upgrade_checks:

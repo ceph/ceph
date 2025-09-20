@@ -328,15 +328,15 @@ bool ARN::match(const ARN& candidate) const {
     return false;
   }
 
-  if (!match_policy(region, candidate.region, MATCH_POLICY_ARN)) {
+  if (!match_wildcards(region, candidate.region, MATCH_CASE_INSENSITIVE)) {
     return false;
   }
 
-  if (!match_policy(account, candidate.account, MATCH_POLICY_ARN)) {
+  if (!match_wildcards(account, candidate.account, MATCH_CASE_INSENSITIVE)) {
     return false;
   }
 
-  if (!match_policy(resource, candidate.resource, MATCH_POLICY_RESOURCE)) {
+  if (!match_wildcards(resource, candidate.resource, 0)) {
     return false;
   }
 

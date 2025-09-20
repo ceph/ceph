@@ -13,6 +13,7 @@ export class ProgressComponent {
   @Input() status: string;
   @Input() description: string;
   @Input() subLabel: string;
+  @Input() subDescription: string;
   @Input() completedItems: string;
   @Input() actionName: string;
   @Input() helperText: string;

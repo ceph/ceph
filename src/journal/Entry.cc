@@ -5,7 +5,8 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
-#include <strstream>
+
+#include <sstream>
 
 #define dout_subsys ceph_subsys_journaler
 #undef dout_prefix
@@ -135,12 +136,16 @@ bool Entry::is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed)
   return true;
 }
 
-void Entry::generate_test_instances(std::list<Entry *> &o) {
-  o.push_back(new Entry(1, 123, bufferlist()));
+std::list<Entry> Entry::generate_test_instances() {
+  std::list<Entry> o;
+
+  o.push_back(Entry(1, 123, bufferlist()));
 
   bufferlist bl;
   bl.append("data");
-  o.push_back(new Entry(2, 123, bl));
+  o.push_back(Entry(2, 123, bl));
+
+  return o;
 }
 
 bool Entry::operator==(const Entry& rhs) const {

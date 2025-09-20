@@ -5,7 +5,9 @@
 #include "test/librados_test_stub/TestMemRadosClient.h"
 #include "common/Clock.h"
 #include "include/err.h"
+#include "include/types.h" // for operator<<(std::vector)
 #include <functional>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/algorithm/string/predicate.hpp>
 #include <errno.h>
 #include <include/compat.h>

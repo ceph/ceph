@@ -1,8 +1,11 @@
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 
 import _ from 'lodash';
-import { IndividualConfig, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject, Subject } from 'rxjs';
+import {
+  ToastContent,
+  NotificationType as CarbonNotificationType
+} from 'carbon-components-angular';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
@@ -14,23 +17,39 @@ import { TaskMessageService } from './task-message.service';
   providedIn: 'root'
 })
 export class NotificationService {
+  private readonly NOTIFICATION_TYPE_MAP: Record<NotificationType, CarbonNotificationType> = {
+    [NotificationType.error]: 'error',
+    [NotificationType.info]: 'info',
+    [NotificationType.success]: 'success',
+    [NotificationType.warning]: 'warning'
+  };
+
   private hideToasties = false;
 
-  // Data observable
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  data$ = this.dataSource.asObservable();
-
-  // Sidebar observable
+  private panelStateSource = new BehaviorSubject<{ isOpen: boolean; useNewPanel: boolean }>({
+    isOpen: false,
+    useNewPanel: true
+  });
+  private muteStateSource = new BehaviorSubject<boolean>(false);
+  private activeToastsSource = new BehaviorSubject<ToastContent[]>([]);
   sidebarSubject = new Subject();
+
+  data$ = this.dataSource.asObservable();
+  panelState$ = this.panelStateSource.asObservable();
+  muteState$ = this.muteStateSource.asObservable();
+  activeToasts$ = this.activeToastsSource.asObservable();
 
   private queued: CdNotificationConfig[] = [];
   private queuedTimeoutId: number;
+  private activeToasts: ToastContent[] = [];
   KEY = 'cdNotifications';
+  MUTE_KEY = 'cdNotificationsMuted';
 
   constructor(
-    public toastr: ToastrService,
     private taskMessageService: TaskMessageService,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    private ngZone: NgZone
   ) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
@@ -45,6 +64,11 @@ export class NotificationService {
     }
 
     this.dataSource.next(notifications);
+
+    // Load mute state from localStorage
+    const isMuted = localStorage.getItem(this.MUTE_KEY) === 'true';
+    this.hideToasties = isMuted;
+    this.muteStateSource.next(isMuted);
   }
 
   /**
@@ -93,7 +117,7 @@ export class NotificationService {
     type: NotificationType,
     title: string,
     message?: string,
-    options?: any | IndividualConfig,
+    options?: ToastContent,
     application?: string
   ): number;
   show(config: CdNotificationConfig | (() => CdNotificationConfig)): number;
@@ -101,7 +125,7 @@ export class NotificationService {
     arg: NotificationType | CdNotificationConfig | (() => CdNotificationConfig),
     title?: string,
     message?: string,
-    options?: any | IndividualConfig,
+    options?: ToastContent,
     application?: string
   ): number {
     return window.setTimeout(() => {
@@ -171,20 +195,51 @@ export class NotificationService {
     if (this.hideToasties) {
       return;
     }
-    this.toastr[['error', 'info', 'success'][notification.type]](
-      (notification.message ? notification.message + '<br>' : '') +
-        this.renderTimeAndApplicationHtml(notification),
-      notification.title,
-      notification.options
-    );
+
+    // Map notification types to Carbon types
+    const carbonType = this.NOTIFICATION_TYPE_MAP[notification.type] || 'info';
+    const lowContrast = notification.options?.lowContrast || false;
+
+    const toast: ToastContent = {
+      title: notification.title,
+      subtitle: notification.message || '',
+      caption: this.renderTimeAndApplicationHtml(notification),
+      type: carbonType,
+      lowContrast: lowContrast,
+      showClose: true,
+      duration: notification.options?.timeOut || 5000
+    };
+
+    // Add new toast to the beginning of the array
+    this.activeToasts.unshift(toast);
+    this.activeToastsSource.next(this.activeToasts);
+
+    // Handle duration-based auto-dismissal
+    if (toast.duration && toast.duration > 0) {
+      this.ngZone.runOutsideAngular(() => {
+        setTimeout(() => {
+          this.ngZone.run(() => {
+            this.removeToast(toast);
+          });
+        }, toast.duration);
+      });
+    }
+  }
+
+  /**
+   * Remove a toast
+   */
+  removeToast(toast: ToastContent) {
+    this.activeToasts = this.activeToasts.filter((t) => !_.isEqual(t, toast));
+    this.activeToastsSource.next(this.activeToasts);
   }
 
   renderTimeAndApplicationHtml(notification: CdNotification): string {
-    return `<small class="date">${this.cdDatePipe.transform(
-      notification.timestamp
-    )}</small><i class="float-end custom-icon ${notification.applicationClass}" title="${
-      notification.application
-    }"></i>`;
+    let html = `<div class="toast-caption-container">
+      <small class="date">${this.cdDatePipe.transform(notification.timestamp)}</small>`;
+
+    html += '</div>';
+    return html;
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
@@ -229,9 +284,24 @@ export class NotificationService {
    */
   suspendToasties(suspend: boolean) {
     this.hideToasties = suspend;
+    this.muteStateSource.next(suspend);
+    localStorage.setItem(this.MUTE_KEY, suspend.toString());
   }
 
-  toggleSidebar(forceClose = false) {
-    this.sidebarSubject.next(forceClose);
+  /**
+   * Toggle the sidebar/panel visibility
+   * @param isOpen whether to open or close the panel
+   * @param useNewPanel which panel type to use
+   */
+  toggleSidebar(isOpen: boolean, useNewPanel: boolean = true) {
+    this.panelStateSource.next({
+      isOpen: isOpen,
+      useNewPanel: useNewPanel
+    });
+  }
+
+  clearAllToasts() {
+    this.activeToasts = [];
+    this.activeToastsSource.next(this.activeToasts);
   }
 }

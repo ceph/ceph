@@ -1,9 +1,14 @@
 #ifndef __CEPH_SNAP_TYPES_H
 #define __CEPH_SNAP_TYPES_H
 
-#include "include/types.h"
+#include "include/object.h" // for struct snapid_t
 #include "include/utime.h"
-#include "include/fs_types.h"
+#include "include/fs_types.h" // for struct inodeno_t
+
+#include <fmt/core.h> // for FMT_VERSION
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
 
 namespace ceph {
 class Formatter;
@@ -36,7 +41,7 @@ struct SnapRealmInfo {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapRealmInfo*>& o);
+  static std::list<SnapRealmInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
@@ -66,7 +71,7 @@ struct SnapRealmInfoNew {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapRealmInfoNew*>& o);
+  static std::list<SnapRealmInfoNew> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfoNew)
 
@@ -85,24 +90,14 @@ struct SnapContext {
   }
   bool empty() const { return seq == 0; }
 
-  void encode(ceph::buffer::list& bl) const {
-    using ceph::encode;
-    encode(seq, bl);
-    encode(snaps, bl);
-  }
-  void decode(ceph::buffer::list::const_iterator& bl) {
-    using ceph::decode;
-    decode(seq, bl);
-    decode(snaps, bl);
-  }
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapContext*>& o);
+  static std::list<SnapContext> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapContext)
 
-inline std::ostream& operator<<(std::ostream& out, const SnapContext& snapc) {
-  return out << snapc.seq << "=" << snapc.snaps;
-}
+std::ostream& operator<<(std::ostream& out, const SnapContext& snapc);
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<SnapContext> : fmt::ostream_formatter {};

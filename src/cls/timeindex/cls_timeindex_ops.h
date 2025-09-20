@@ -64,13 +64,15 @@ struct cls_timeindex_list_op {
     f->dump_int("max_entries", max_entries);
   }
 
-  static void generate_test_instances(std::list<cls_timeindex_list_op*>& o) {
-    o.push_back(new cls_timeindex_list_op);
-    o.push_back(new cls_timeindex_list_op);
-    o.back()->from_time = utime_t(1, 2);
-    o.back()->marker = "marker";
-    o.back()->to_time = utime_t(3, 4);
-    o.back()->max_entries = 5;
+  static std::list<cls_timeindex_list_op> generate_test_instances() {
+    std::list<cls_timeindex_list_op> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().from_time = utime_t(1, 2);
+    o.back().marker = "marker";
+    o.back().to_time = utime_t(3, 4);
+    o.back().max_entries = 5;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_timeindex_list_op)
@@ -104,15 +106,17 @@ struct cls_timeindex_list_ret {
     f->dump_bool("truncated", truncated);
   }
 
-  static void generate_test_instances(std::list<cls_timeindex_list_ret*>& o) {
-    o.push_back(new cls_timeindex_list_ret);
-    o.push_back(new cls_timeindex_list_ret);
-    o.back()->entries.push_back(cls_timeindex_entry());
-    o.back()->entries.back().key_ts = utime_t(1, 2);
-    o.back()->entries.back().key_ext = "key_ext";
-    o.back()->entries.back().value.append("value");
-    o.back()->marker = "marker";
-    o.back()->truncated = true;
+  static std::list<cls_timeindex_list_ret> generate_test_instances() {
+    std::list<cls_timeindex_list_ret> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().entries.push_back(cls_timeindex_entry());
+    o.back().entries.back().key_ts = utime_t(1, 2);
+    o.back().entries.back().key_ext = "key_ext";
+    o.back().entries.back().value.append("value");
+    o.back().marker = "marker";
+    o.back().truncated = true;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_timeindex_list_ret)

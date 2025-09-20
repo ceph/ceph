@@ -11,13 +11,22 @@
  * Foundation.  See file COPYING.
  *
  */
+
+#include "common/admin_socket.h"
+
 #include <poll.h>
+#include <signal.h>
 #include <sys/un.h>
+
+#ifndef WIN32
+#include <sys/wait.h>
+#endif
+
+#include <iomanip>
 #include <optional>
 
 #include <stdlib.h>
 
-#include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -26,7 +35,7 @@
 #include "common/version.h"
 #include "common/ceph_mutex.h"
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "common/Cond.h"
 #endif
 
@@ -40,6 +49,10 @@
 #include "include/compat.h"
 #include "include/sock_compat.h"
 #include "fmt/format.h"
+
+#ifdef _WIN32
+#include "include/util.h" // for get_windows_version()
+#endif
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -429,7 +442,7 @@ void AdminSocket::do_tell_queue()
 	auto reply = new MCommandReply(r, err);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
         // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
@@ -445,7 +458,7 @@ void AdminSocket::do_tell_queue()
 	auto reply = new MMonCommandAck(m->cmd, r, err, 0);
 	reply->set_tid(m->get_tid());
 	reply->set_data(outbl);
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
         // TODO: crimson: handle asok commmand from alien thread
 #else
 	m->get_connection()->send_message(reply);
@@ -460,7 +473,7 @@ int AdminSocket::execute_command(
   std::ostream& errss,
   bufferlist *outbl)
 {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
    // TODO: crimson: blocking execute_command() in alien thread
   return -ENOSYS;
 #else

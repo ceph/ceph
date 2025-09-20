@@ -1,7 +1,7 @@
 import pytest
 from ceph_volume.devices import raw
-from mock.mock import patch, MagicMock
-from ceph_volume import objectstore
+from unittest.mock import patch, MagicMock
+from ceph_volume.objectstore.raw import Raw
 
 class TestRaw(object):
 
@@ -27,7 +27,7 @@ class TestPrepare(object):
     def _setup(self, **kw):
         args = kw.get('args', [])
         self.p = raw.prepare.Prepare([])
-        self.p.objectstore = objectstore.rawbluestore.RawBlueStore(args=args)
+        self.p.objectstore = Raw(args=args)
         for k, v in kw.items():
             setattr(self.p.objectstore, k, v)
 
@@ -105,8 +105,8 @@ class TestPrepare(object):
         m_luks_format.assert_called_with(self.p.objectstore.dmcrypt_key, '/dev/wal-foo')
         assert self.p.objectstore.__dict__['wal_device_path'] == '/dev/mapper/ceph-789-foo-wal-dmcrypt'
 
-    @patch('ceph_volume.objectstore.rawbluestore.rollback_osd')
-    @patch('ceph_volume.objectstore.rawbluestore.RawBlueStore.prepare')
+    @patch('ceph_volume.objectstore.raw.rollback_osd')
+    @patch('ceph_volume.objectstore.raw.Raw.prepare')
     @patch('ceph_volume.util.arg_validators.ValidRawDevice.__call__')
     def test_safe_prepare_exception_raised(self, m_valid_device, m_prepare, m_rollback_osd, m_create_key):
         m_valid_device.return_value = '/dev/foo'

@@ -1,8 +1,5 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { BlockUI, NgBlockUI } from 'ng-block-ui';
-import { timer as observableTimer } from 'rxjs';
-
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -14,7 +11,6 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { NotificationService } from '~/app/shared/services/notification.service';
 
 @Component({
   selector: 'cd-mgr-module-list',
@@ -24,8 +20,6 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 export class MgrModuleListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @BlockUI()
-  blockUI: NgBlockUI;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -35,8 +29,7 @@ export class MgrModuleListComponent extends ListWithDetails {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService
+    private mgrModuleService: MgrModuleService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().configOpt;
@@ -147,52 +140,13 @@ export class MgrModuleListComponent extends ListWithDetails {
   }
 
   /**
-   * Update the Ceph Mgr module state to enabled or disabled.
+   * Update the selected Ceph Mgr module state to enabled or disabled.
    */
   updateModuleState() {
     if (!this.selection.hasSelection) {
       return;
     }
-
-    let $obs;
-    const fnWaitUntilReconnected = () => {
-      observableTimer(2000).subscribe(() => {
-        // Trigger an API request to check if the connection is
-        // re-established.
-        this.mgrModuleService.list().subscribe(
-          () => {
-            // Resume showing the notification toasties.
-            this.notificationService.suspendToasties(false);
-            // Unblock the whole UI.
-            this.blockUI.stop();
-            // Reload the data table content.
-            this.table.refreshBtn();
-          },
-          () => {
-            fnWaitUntilReconnected();
-          }
-        );
-      });
-    };
-
-    // Note, the Ceph Mgr is always restarted when a module
-    // is enabled/disabled.
-    const module = this.selection.first();
-    if (module.enabled) {
-      $obs = this.mgrModuleService.disable(module.name);
-    } else {
-      $obs = this.mgrModuleService.enable(module.name);
-    }
-    $obs.subscribe(
-      () => undefined,
-      () => {
-        // Suspend showing the notification toasties.
-        this.notificationService.suspendToasties(true);
-        // Block the whole UI to prevent user interactions until
-        // the connection to the backend is reestablished
-        this.blockUI.start($localize`Reconnecting, please wait ...`);
-        fnWaitUntilReconnected();
-      }
-    );
+    const selected = this.selection.first();
+    this.mgrModuleService.updateModuleState(selected.name, selected.enabled, this.table);
   }
 }

@@ -24,9 +24,10 @@ from ceph.deployment.service_spec import (
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
 from orchestrator import OrchestratorError, HostSpec, OrchestratorEvent, service_to_daemon_types
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
+from mgr_util import parse_combined_pem_file
 
 from .utils import resolve_ip, SpecialHostLabels
-from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec
+from .migrations import queue_migrate_nfs_spec, queue_migrate_rgw_spec, queue_migrate_rgw_ssl_spec
 
 if TYPE_CHECKING:
     from .module import CephadmOrchestrator
@@ -38,8 +39,6 @@ HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
 NODE_PROXY_CACHE_PREFIX = 'node_proxy'
-CERT_STORE_CERT_PREFIX = 'cert_store.cert.'
-CERT_STORE_KEY_PREFIX = 'cert_store.key.'
 
 
 class HostCacheStatus(enum.Enum):
@@ -52,18 +51,18 @@ class OrchSecretNotFound(OrchestratorError):
     def __init__(
         self,
         message: Optional[str] = '',
-        entity: Optional[str] = '',
+        consumer: Optional[str] = '',
         service_name: Optional[str] = '',
         hostname: Optional[str] = ''
     ):
         if not message:
-            message = f'No secret found for entity {entity}'
+            message = f'No secret found for consumer {consumer}'
             if service_name:
                 message += f' with service name {service_name}'
             if hostname:
                 message += f' with hostname {hostname}'
         super().__init__(message)
-        self.entity = entity
+        self.consumer = consumer
         self.service_name = service_name
         self.hostname = hostname
 
@@ -187,11 +186,12 @@ class Inventory:
 
     def add_label(self, host: str, label: str) -> None:
         host = self._get_stored_name(host)
-
+        labels = label.split(',') if ',' in label else [label]
         if 'labels' not in self._inventory[host]:
             self._inventory[host]['labels'] = list()
-        if label not in self._inventory[host]['labels']:
-            self._inventory[host]['labels'].append(label)
+        for label in labels:
+            if label not in self._inventory[host]['labels']:
+                self._inventory[host]['labels'].append(label)
         self.save()
 
     def rm_label(self, host: str, label: str) -> None:
@@ -272,6 +272,20 @@ class SpecStore():
                                self.spec_created[name],
                                self.spec_deleted.get(name, None))
 
+    def get_by_service_type(self, service_type: str) -> List[SpecDescription]:
+        matching_specs: List[SpecDescription] = []
+        for name, spec in self._specs.items():
+            if spec.service_type == service_type:
+                matching_specs.append(
+                    SpecDescription(
+                        spec,
+                        self._rank_maps.get(name),
+                        self.spec_created[name],
+                        self.spec_deleted.get(name, None)
+                    )
+                )
+        return matching_specs
+
     @property
     def active_specs(self) -> Mapping[str, ServiceSpec]:
         return {k: v for k, v in self._specs.items() if k not in self.spec_deleted}
@@ -294,6 +308,12 @@ class SpecStore():
                         and j['spec'].get('service_type') == 'rgw'
                 ):
                     queue_migrate_rgw_spec(self.mgr, j)
+
+                if (
+                        (self.mgr.migration_current or 0) < 8
+                        and j['spec'].get('service_type') == 'rgw'
+                ):
+                    queue_migrate_rgw_ssl_spec(self.mgr, j)
 
                 spec = ServiceSpec.from_json(j['spec'])
                 created = str_to_datetime(cast(str, j['created']))
@@ -348,7 +368,6 @@ class SpecStore():
         if update_create:
             self.spec_created[name] = datetime_now()
         self._save(name)
-        self._save_certs_and_keys(spec)
 
     def save_rank_map(self,
                       name: str,
@@ -387,21 +406,30 @@ class SpecStore():
                 else:
                     cert_str = rgw_cert
                 assert isinstance(cert_str, str)
-                self.mgr.cert_key_store.save_cert(
-                    'rgw_frontend_ssl_cert',
-                    cert_str,
-                    service_name=rgw_spec.service_name(),
-                    user_made=True)
+                cert, key = parse_combined_pem_file(cert_str)
+                if cert and key:
+                    self.mgr.cert_mgr.save_cert(
+                        'rgw_ssl_cert',
+                        cert,
+                        service_name=rgw_spec.service_name(),
+                        user_made=True)
+                    self.mgr.cert_mgr.save_key(
+                        'rgw_ssl_key',
+                        key,
+                        service_name=rgw_spec.service_name(),
+                        user_made=True)
+                else:
+                    logger.error(f'Cannot parse the rgw certificate {cert_str}.')
         elif spec.service_type == 'iscsi':
             iscsi_spec = cast(IscsiServiceSpec, spec)
             if iscsi_spec.ssl_cert:
-                self.mgr.cert_key_store.save_cert(
+                self.mgr.cert_mgr.save_cert(
                     'iscsi_ssl_cert',
                     iscsi_spec.ssl_cert,
                     service_name=iscsi_spec.service_name(),
                     user_made=True)
             if iscsi_spec.ssl_key:
-                self.mgr.cert_key_store.save_key(
+                self.mgr.cert_mgr.save_key(
                     'iscsi_ssl_key',
                     iscsi_spec.ssl_key,
                     service_name=iscsi_spec.service_name(),
@@ -409,13 +437,13 @@ class SpecStore():
         elif spec.service_type == 'ingress':
             ingress_spec = cast(IngressSpec, spec)
             if ingress_spec.ssl_cert:
-                self.mgr.cert_key_store.save_cert(
+                self.mgr.cert_mgr.save_cert(
                     'ingress_ssl_cert',
                     ingress_spec.ssl_cert,
                     service_name=ingress_spec.service_name(),
                     user_made=True)
             if ingress_spec.ssl_key:
-                self.mgr.cert_key_store.save_key(
+                self.mgr.cert_mgr.save_key(
                     'ingress_ssl_key',
                     ingress_spec.ssl_key,
                     service_name=ingress_spec.service_name(),
@@ -429,7 +457,7 @@ class SpecStore():
             ]:
                 cert = getattr(nvmeof_spec, cert_attr, None)
                 if cert:
-                    self.mgr.cert_key_store.save_cert(
+                    self.mgr.cert_mgr.save_cert(
                         f'nvmeof_{cert_attr}',
                         cert,
                         service_name=nvmeof_spec.service_name(),
@@ -437,10 +465,11 @@ class SpecStore():
             for key_attr in [
                 'server_key',
                 'client_key',
+                'encryption_key',
             ]:
                 key = getattr(nvmeof_spec, key_attr, None)
                 if key:
-                    self.mgr.cert_key_store.save_key(
+                    self.mgr.cert_mgr.save_key(
                         f'nvmeof_{key_attr}',
                         key,
                         service_name=nvmeof_spec.service_name(),
@@ -462,7 +491,6 @@ class SpecStore():
         # type: (str) -> bool
         found = service_name in self._specs
         if found:
-            self._rm_certs_and_keys(self._specs[service_name])
             del self._specs[service_name]
             if service_name in self._rank_maps:
                 del self._rank_maps[service_name]
@@ -476,19 +504,20 @@ class SpecStore():
 
     def _rm_certs_and_keys(self, spec: ServiceSpec) -> None:
         if spec.service_type == 'rgw':
-            self.mgr.cert_key_store.rm_cert('rgw_frontend_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('rgw_frontend_ssl_cert', service_name=spec.service_name())
         if spec.service_type == 'iscsi':
-            self.mgr.cert_key_store.rm_cert('iscsi_ssl_cert', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_key('iscsi_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('iscsi_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('iscsi_ssl_key', service_name=spec.service_name())
         if spec.service_type == 'ingress':
-            self.mgr.cert_key_store.rm_cert('ingress_ssl_cert', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_key('ingress_ssl_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('ingress_ssl_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('ingress_ssl_key', service_name=spec.service_name())
         if spec.service_type == 'nvmeof':
-            self.mgr.cert_key_store.rm_cert('nvmeof_server_cert', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_cert('nvmeof_client_cert', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_cert('nvmeof_root_ca_cert', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_key('nvmeof_server_key', service_name=spec.service_name())
-            self.mgr.cert_key_store.rm_key('nvmeof_client_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('nvmeof_server_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('nvmeof_client_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_cert('nvmeof_root_ca_cert', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('nvmeof_server_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('nvmeof_client_key', service_name=spec.service_name())
+            self.mgr.cert_mgr.rm_key('nvmeof_encryption_key', service_name=spec.service_name())
 
     def get_created(self, spec: ServiceSpec) -> Optional[datetime.datetime]:
         return self.spec_created.get(spec.service_name())
@@ -518,6 +547,13 @@ class SpecStore():
             self._save(name)
         else:
             self.mgr.log.warning(f'Attempted to mark unknown service "{name}" as having been configured')
+
+    def get_specs_by_type(self, service_type: str) -> Mapping[str, ServiceSpec]:
+        return {
+            service_name: spec
+            for service_name, spec in self._specs.items()
+            if service_type == spec.service_type
+        }
 
 
 class ClientKeyringSpec(object):
@@ -637,6 +673,9 @@ class TunedProfileStore():
             logger.error(
                 f'Attempted to set setting "{setting}" for nonexistent os tuning profile "{profile}"')
 
+    def add_settings(self, profile: str, settings: dict) -> None:
+        self.process_settings(profile, settings, action='add')
+
     def rm_setting(self, profile: str, setting: str) -> None:
         if profile in self.profiles:
             if setting in self.profiles[profile].settings:
@@ -649,6 +688,39 @@ class TunedProfileStore():
         else:
             logger.error(
                 f'Attempted to remove setting "{setting}" from nonexistent os tuning profile "{profile}"')
+
+    def rm_settings(self, profile: str, settings: List[str]) -> None:
+        self.process_settings(profile, settings, action='remove')
+
+    def process_settings(self, profile: str, settings: Union[dict, list], action: str) -> None:
+        """
+        Process settings by either adding or removing them based on the action specified.
+        """
+        if profile not in self.profiles:
+            logger.error(f'Attempted to {action} settings for nonexistent os tuning profile "{profile}"')
+            return
+        profile_settings = self.profiles[profile].settings
+        if action == 'remove' and isinstance(settings, list):
+            invalid_settings = [s for s in settings if '=' in s or s not in profile_settings]
+            if invalid_settings:
+                raise OrchestratorError(
+                    f"Invalid settings: {', '.join(invalid_settings)}. "
+                    "Ensure settings are specified without '=' and exist in the profile. Correct format: key1,key2"
+                )
+        if action == 'add' and isinstance(settings, dict):
+            for setting, value in settings.items():
+                self.profiles[profile].settings[setting] = value
+        elif action == 'remove' and isinstance(settings, list):
+            for setting in settings:
+                self.profiles[profile].settings.pop(setting, '')
+        else:
+            logger.error(
+                f'Invalid action "{action}" for settings modification for tuned profile '
+                f'"{profile}". Valid actions are "add" and "remove"'
+            )
+            return
+        self.profiles[profile]._last_updated = datetime_to_str(datetime_now())
+        self.save()
 
     def add_profile(self, spec: TunedProfileSpec) -> None:
         spec._last_updated = datetime_to_str(datetime_now())
@@ -1299,10 +1371,15 @@ class HostCache():
 
     def get_daemons_by_type(self, service_type: str, host: str = '') -> List[orchestrator.DaemonDescription]:
         assert service_type not in ['keepalived', 'haproxy']
-
         daemons = self.daemons[host].values() if host else self._get_daemons()
-
         return [d for d in daemons if d.daemon_type in service_to_daemon_types(service_type)]
+
+    def get_daemons_by_types(self, daemon_types: List[str]) -> List[str]:
+        daemon_names = []
+        for daemon_type in daemon_types:
+            for dd in self.get_daemons_by_type(daemon_type):
+                daemon_names.append(dd.name())
+        return daemon_names
 
     def get_daemon_types(self, hostname: str) -> Set[str]:
         """Provide a list of the types of daemons on the host"""
@@ -1449,7 +1526,7 @@ class HostCache():
         ):
             return True
         created = self.mgr.spec_store.get_created(spec)
-        if not created or created > self.last_device_change[host]:
+        if not created or created > self.osdspec_last_applied[host][spec.service_name()]:
             return True
         return self.osdspec_last_applied[host][spec.service_name()] < self.last_device_change[host]
 
@@ -1533,6 +1610,14 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+    def get_host_network_ips(self, host: str) -> List[str]:
+        return [
+            ip
+            for net_details in self.networks.get(host, {}).values()
+            for ips in net_details.values()
+            for ip in ips
+        ]
 
 
 class NodeProxyCache:
@@ -1646,9 +1731,9 @@ class NodeProxyCache:
                 else:
                     state = 'ok'
                 _result[host]['status'][component] = state
-        _result[host]['sn'] = data['sn']
-        _result[host]['host'] = data['host']
-        _result[host]['status']['firmwares'] = data['firmwares']
+            _result[host]['sn'] = data['sn']
+            _result[host]['host'] = data['host']
+            _result[host]['status']['firmwares'] = data['firmwares']
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
@@ -1823,282 +1908,6 @@ class AgentCache():
         self.agent_timestamp[daemon_spec.host] = datetime_now()
         self.agent_counter[daemon_spec.host] = 1
         self.save_agent(daemon_spec.host)
-
-
-class Cert():
-    def __init__(self, cert: str = '', user_made: bool = False) -> None:
-        self.cert = cert
-        self.user_made = user_made
-
-    def __bool__(self) -> bool:
-        return bool(self.cert)
-
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, Cert):
-            return self.cert == other.cert and self.user_made == other.user_made
-        return NotImplemented
-
-    def to_json(self) -> Dict[str, Union[str, bool]]:
-        return {
-            'cert': self.cert,
-            'user_made': self.user_made
-        }
-
-    @classmethod
-    def from_json(cls, data: Dict[str, Union[str, bool]]) -> 'Cert':
-        if 'cert' not in data:
-            return cls()
-        cert = data['cert']
-        if not isinstance(cert, str):
-            raise OrchestratorError('Tried to make Cert object with non-string cert')
-        if any(k not in ['cert', 'user_made'] for k in data.keys()):
-            raise OrchestratorError(f'Got unknown field for Cert object. Fields: {data.keys()}')
-        user_made: Union[str, bool] = data.get('user_made', False)
-        if not isinstance(user_made, bool):
-            if isinstance(user_made, str):
-                if user_made.lower() == 'true':
-                    user_made = True
-                elif user_made.lower() == 'false':
-                    user_made = False
-            try:
-                user_made = bool(user_made)
-            except Exception:
-                raise OrchestratorError(f'Expected user_made field in Cert object to be bool but got {type(user_made)}')
-        return cls(cert=cert, user_made=user_made)
-
-
-class PrivKey():
-    def __init__(self, key: str = '', user_made: bool = False) -> None:
-        self.key = key
-        self.user_made = user_made
-
-    def __bool__(self) -> bool:
-        return bool(self.key)
-
-    def __eq__(self, other: Any) -> bool:
-        if isinstance(other, PrivKey):
-            return self.key == other.key and self.user_made == other.user_made
-        return NotImplemented
-
-    def to_json(self) -> Dict[str, Union[str, bool]]:
-        return {
-            'key': self.key,
-            'user_made': self.user_made
-        }
-
-    @classmethod
-    def from_json(cls, data: Dict[str, str]) -> 'PrivKey':
-        if 'key' not in data:
-            return cls()
-        key = data['key']
-        if not isinstance(key, str):
-            raise OrchestratorError('Tried to make PrivKey object with non-string key')
-        if any(k not in ['key', 'user_made'] for k in data.keys()):
-            raise OrchestratorError(f'Got unknown field for PrivKey object. Fields: {data.keys()}')
-        user_made: Union[str, bool] = data.get('user_made', False)
-        if not isinstance(user_made, bool):
-            if isinstance(user_made, str):
-                if user_made.lower() == 'true':
-                    user_made = True
-                elif user_made.lower() == 'false':
-                    user_made = False
-            try:
-                user_made = bool(user_made)
-            except Exception:
-                raise OrchestratorError(f'Expected user_made field in PrivKey object to be bool but got {type(user_made)}')
-        return cls(key=key, user_made=user_made)
-
-
-class CertKeyStore():
-    service_name_cert = [
-        'rgw_frontend_ssl_cert',
-        'iscsi_ssl_cert',
-        'ingress_ssl_cert',
-        'nvmeof_server_cert',
-        'nvmeof_client_cert',
-        'nvmeof_root_ca_cert',
-    ]
-
-    host_cert = [
-        'grafana_cert',
-    ]
-
-    host_key = [
-        'grafana_key',
-    ]
-
-    service_name_key = [
-        'iscsi_ssl_key',
-        'ingress_ssl_key',
-        'nvmeof_server_key',
-        'nvmeof_client_key',
-    ]
-
-    known_certs: Dict[str, Any] = {}
-    known_keys: Dict[str, Any] = {}
-
-    def __init__(self, mgr: 'CephadmOrchestrator') -> None:
-        self.mgr: CephadmOrchestrator = mgr
-        self._init_known_cert_key_dicts()
-
-    def _init_known_cert_key_dicts(self) -> None:
-        # In an effort to try and track all the certs we manage in cephadm
-        # we're being explicit here and listing them out.
-        self.known_certs = {
-            'rgw_frontend_ssl_cert': {},  # service-name -> cert
-            'iscsi_ssl_cert': {},  # service-name -> cert
-            'ingress_ssl_cert': {},  # service-name -> cert
-            'nvmeof_server_cert': {},  # service-name -> cert
-            'nvmeof_client_cert': {},  # service-name -> cert
-            'nvmeof_root_ca_cert': {},  # service-name -> cert
-            'mgmt_gw_cert': Cert(),  # cert
-            'oauth2_proxy_cert': Cert(),  # cert
-            'cephadm_root_ca_cert': Cert(),  # cert
-            'grafana_cert': {},  # host -> cert
-        }
-        # Similar to certs but for priv keys. Entries in known_certs
-        # that don't have a key here are probably certs in PEM format
-        # so there is no need to store a separate key
-        self.known_keys = {
-            'mgmt_gw_key': PrivKey(),  # cert
-            'oauth2_proxy_key': PrivKey(),  # cert
-            'cephadm_root_ca_key': PrivKey(),  # cert
-            'grafana_key': {},  # host -> key
-            'iscsi_ssl_key': {},  # service-name -> key
-            'ingress_ssl_key': {},  # service-name -> key
-            'nvmeof_server_key': {},  # service-name -> key
-            'nvmeof_client_key': {},  # service-name -> key
-        }
-
-    def get_cert(self, entity: str, service_name: str = '', host: str = '') -> str:
-        self._validate_cert_entity(entity, service_name, host)
-
-        cert = Cert()
-        if entity in self.service_name_cert or entity in self.host_cert:
-            var = service_name if entity in self.service_name_cert else host
-            if var not in self.known_certs[entity]:
-                return ''
-            cert = self.known_certs[entity][var]
-        else:
-            cert = self.known_certs[entity]
-        if not cert or not isinstance(cert, Cert):
-            return ''
-        return cert.cert
-
-    def save_cert(self, entity: str, cert: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
-        self._validate_cert_entity(entity, service_name, host)
-
-        cert_obj = Cert(cert, user_made)
-
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.service_name_cert or entity in self.host_cert:
-            var = service_name if entity in self.service_name_cert else host
-            j = {}
-            self.known_certs[entity][var] = cert_obj
-            for service_name in self.known_certs[entity].keys():
-                j[var] = Cert.to_json(self.known_certs[entity][var])
-        else:
-            self.known_certs[entity] = cert_obj
-            j = Cert.to_json(cert_obj)
-        self.mgr.set_store(CERT_STORE_CERT_PREFIX + entity, json.dumps(j))
-
-    def rm_cert(self, entity: str, service_name: str = '', host: str = '') -> None:
-        self.save_cert(entity, cert='', service_name=service_name, host=host)
-
-    def _validate_cert_entity(self, entity: str, service_name: str = '', host: str = '') -> None:
-        if entity not in self.known_certs.keys():
-            raise OrchestratorError(f'Attempted to access cert for unknown entity {entity}')
-
-        if entity in self.host_cert and not host:
-            raise OrchestratorError(f'Need host to access cert for entity {entity}')
-
-        if entity in self.service_name_cert and not service_name:
-            raise OrchestratorError(f'Need service name to access cert for entity {entity}')
-
-    def cert_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict[str, Any] = {}
-        for k, v in self.known_certs.items():
-            if k in self.service_name_cert or k in self.host_cert:
-                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
-                ls[k] = tmp if tmp else False
-            else:
-                ls[k] = bool(v)
-        return ls
-
-    def get_key(self, entity: str, service_name: str = '', host: str = '') -> str:
-        self._validate_key_entity(entity, host)
-
-        key = PrivKey()
-        if entity in self.host_key or entity in self.service_name_key:
-            var = service_name if entity in self.service_name_key else host
-            if var not in self.known_keys[entity]:
-                return ''
-            key = self.known_keys[entity][var]
-        else:
-            key = self.known_keys[entity]
-        if not key or not isinstance(key, PrivKey):
-            return ''
-        return key.key
-
-    def save_key(self, entity: str, key: str, service_name: str = '', host: str = '', user_made: bool = False) -> None:
-        self._validate_key_entity(entity, host)
-
-        pkey = PrivKey(key, user_made)
-
-        j: Union[str, Dict[Any, Any], None] = None
-        if entity in self.host_key or entity in self.service_name_key:
-            var = service_name if entity in self.service_name_key else host
-            j = {}
-            self.known_keys[entity][var] = pkey
-            for k in self.known_keys[entity]:
-                j[k] = PrivKey.to_json(self.known_keys[entity][k])
-        else:
-            self.known_keys[entity] = pkey
-            j = PrivKey.to_json(pkey)
-        self.mgr.set_store(CERT_STORE_KEY_PREFIX + entity, json.dumps(j))
-
-    def rm_key(self, entity: str, service_name: str = '', host: str = '') -> None:
-        self.save_key(entity, key='', service_name=service_name, host=host)
-
-    def _validate_key_entity(self, entity: str, host: str = '') -> None:
-        if entity not in self.known_keys.keys():
-            raise OrchestratorError(f'Attempted to access priv key for unknown entity {entity}')
-
-        if entity in self.host_key and not host:
-            raise OrchestratorError(f'Need host to access priv key for entity {entity}')
-
-    def key_ls(self) -> Dict[str, Union[bool, Dict[str, bool]]]:
-        ls: Dict[str, Any] = {}
-        for k, v in self.known_keys.items():
-            if k in self.host_key or k in self.service_name_key:
-                tmp: Dict[str, Any] = {key: True for key in v if v[key]}
-                ls[k] = tmp if tmp else False
-            else:
-                ls[k] = bool(v)
-        return ls
-
-    def load(self) -> None:
-        for k, v in self.mgr.get_store_prefix(CERT_STORE_CERT_PREFIX).items():
-            entity = k[len(CERT_STORE_CERT_PREFIX):]
-            self.known_certs[entity] = json.loads(v)
-            if entity in self.service_name_cert or entity in self.host_cert:
-                for k in self.known_certs[entity]:
-                    cert_obj = Cert.from_json(self.known_certs[entity][k])
-                    self.known_certs[entity][k] = cert_obj
-            else:
-                cert_obj = Cert.from_json(self.known_certs[entity])
-                self.known_certs[entity] = cert_obj
-
-        for k, v in self.mgr.get_store_prefix(CERT_STORE_KEY_PREFIX).items():
-            entity = k[len(CERT_STORE_KEY_PREFIX):]
-            self.known_keys[entity] = json.loads(v)
-            if entity in self.host_key or entity in self.service_name_key:
-                for k in self.known_keys[entity]:
-                    priv_key_obj = PrivKey.from_json(self.known_keys[entity][k])
-                    self.known_keys[entity][k] = priv_key_obj
-            else:
-                priv_key_obj = PrivKey.from_json(self.known_keys[entity])
-                self.known_keys[entity] = priv_key_obj
 
 
 class EventStore():

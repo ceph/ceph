@@ -7,7 +7,8 @@ from ceph.deployment.service_spec import (
     HostPlacementSpec,
     RGWSpec,
     IngressSpec,
-    IscsiServiceSpec
+    IscsiServiceSpec,
+    GrafanaSpec
 )
 from ceph.utils import datetime_to_str, datetime_now
 from cephadm import CephadmOrchestrator
@@ -17,6 +18,58 @@ from cephadm.tests.fixtures import _run_cephadm, wait, with_host, receive_agent_
 from cephadm.serve import CephadmServe
 from orchestrator import DaemonDescription
 from tests import mock
+
+COMBINED_CERT_KEY = """
+-----BEGIN CERTIFICATE-----
+MIIDZTCCAk2gAwIBAgIUcf+7lpo2INwTIulhXOb78i4PL7gwDQYJKoZIhvcNAQEL
+BQAwQjELMAkGA1UEBhMCWFgxFTATBgNVBAcMDERlZmF1bHQgQ2l0eTEcMBoGA1UE
+CgwTRGVmYXVsdCBDb21wYW55IEx0ZDAeFw0yNTAxMjgxNDE0MzlaFw0yNTA1MDgx
+NDE0MzlaMEIxCzAJBgNVBAYTAlhYMRUwEwYDVQQHDAxEZWZhdWx0IENpdHkxHDAa
+BgNVBAoME0RlZmF1bHQgQ29tcGFueSBMdGQwggEiMA0GCSqGSIb3DQEBAQUAA4IB
+DwAwggEKAoIBAQC5xpfgFsX7I19HGW2YE6vz0TNni2dM1ItQoP0WaX55bNEwLsj9
+hHTZ7vgTH6ZkaNp0U73Mq+0tM8UPRrNFBKhy5cE/D+l7aV5KUr4mgPK6Tgrgk0iS
+83nymladgSKRjN75HH8SMg2lLVoivfrAAMh58JA2zFUFZaZQnD1eL/+waht9qpCd
+ilsY3MVKuElZ3ndxSaTuISLhPS8GO7jkCbCThfkrnk5IeCd5trN8ho55Ev5U5Axg
+bUgHlJxzUr9wLTzKW0x9D5qbLTvaC9VsUN+SdQW01pTs4MLPuKsnjLGaG91sEbZl
+n4Ub7bXvNey9z0heGE/NJX+Q5EkkhFV5TLvZAgMBAAGjUzBRMB0GA1UdDgQWBBSz
+OgD/EZsfAuDpt4wv1qVMcNlbajAfBgNVHSMEGDAWgBSzOgD/EZsfAuDpt4wv1qVM
+cNlbajAPBgNVHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBJ/PMFQFn2
+6PeHEneLnxQqggg2FulM6tYc+XHuRCUW9koNBHVn5/CTw6MZ6oxRwVtY4w9GHZSk
+TvL6xAwk5exIwYJFdLe5XMNXtIy6Hz9BVVLRkL9u/yDXh0Bsi5vVwF14rL7956K4
+XQQXdUCuT5GF3u+2g+nnbYz1N00XG8YMiT0a8ZKrVUFi3l12muULzrw5YsBWenGC
+DdVBRQEsl2ZJYN+/01TO9fScbv9ANQFUJpvtVCQjTWj4WOIhnhm8dHXD3ppMdccT
+y7jEpinQvVQxfGIshLMi4rtK5sMpS4Qx5gzyU4ccHSDgdSrIC7zjNY9YdS0X7+je
+QTkccglYXmZ6
+-----END CERTIFICATE-----
+-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC5xpfgFsX7I19H
+GW2YE6vz0TNni2dM1ItQoP0WaX55bNEwLsj9hHTZ7vgTH6ZkaNp0U73Mq+0tM8UP
+RrNFBKhy5cE/D+l7aV5KUr4mgPK6Tgrgk0iS83nymladgSKRjN75HH8SMg2lLVoi
+vfrAAMh58JA2zFUFZaZQnD1eL/+waht9qpCdilsY3MVKuElZ3ndxSaTuISLhPS8G
+O7jkCbCThfkrnk5IeCd5trN8ho55Ev5U5AxgbUgHlJxzUr9wLTzKW0x9D5qbLTva
+C9VsUN+SdQW01pTs4MLPuKsnjLGaG91sEbZln4Ub7bXvNey9z0heGE/NJX+Q5Ekk
+hFV5TLvZAgMBAAECggEACCGMWi871/X3YJn9mdiISSjsLcS7OEwTgOt/fyd7vhCD
+7IoY0j6lwqXazzN3ksgRONAzNOTPyyH5XZyD207DmT4XHVbFGFmQbILsmtDSTuTq
+IK1WLSBhjHJW4irHerKGcrNdmHC101MYH0lxHATRU8PW/Ay7c1cqVoCZRnHvFgLQ
+YZHxhskDnMTaXX0lw+CCq7ajUg2Su2u7tC7LiG/n4cjBNTblB7vmyAiFo1xoYqam
+GuwtkLGZW1RxvCi13HGIKAU9VnwKOyzhJp9ZBcx1Xshiaqazwhpf8PhP8mT2kLFg
+ti5NVxadbD78VGMC5bfH6lZdm4/MLlaqMejb6QXCRQKBgQDcd72c4FJpXpXWMR6g
+ROw60tn6qjSpH0YJ96bf19UGgNcYVUCiZrgG7ENx6SabjUJwqxi3qCxneD+J7caL
+Befd2Can4vf6U3o3DV/a86Dz6Qd4n7n6MU39aOg2jsCriknfOUkWfnGgvMaPzduU
+O1rFF0xpezIQkU3HjaN4aLGSswKBgQDXt3/EsRIk8xYQvcUTaWAQdaxtRewS9Tc2
+m6MdU6der8C6fTydggUBdkURawFehdpNmKiymBJJFniCs/EuGmKKHjupW04Kmwin
+isaA+tSwLQ01tL1G7xhydb85sbfBXzel4fztmk2OB+IpB4rvTFlP8t2z/bQQumjN
+WPLUwz7NQwKBgFZ4AD5PHQOGvW3Mxh5F6gEIQcY2i4Dpaybtot2YYUyzq6k3hqor
+b3IHqEw9DY9kz/IwqPkfVIsgdos6XuyX3GD+Lesa8feUVhLRhA70DuSbOPruapre
+S6BgTPNY+ehNzLtoVGomHZrVb2tnaf+xZ+B1Str0Hqaw1ri1rK/FICBRAoGBALbn
+T95mhQvvUPZA8ajT4DAUlm7QqqooYPhcXqGvHGqcer2lEpA6fiQPM+Dg6fhLZh4F
+IoTLjDWMaAHqsMR2erbBi7S9Rh6X9W6ZrFYQV+ZJTLoM1bAfaosia1Fv7m53Xae5
+Rcvw2XFkHc7MJnFgOxoewvyqUNMeO15h3QOpyMYhAoGABm6bQcIdmv3e+GVoraXA
+lsmM4/lRi/HmRHGtQ7kjKvT09YBQ3/qm04QwvwQtik7ws7t8VODQSgZC6re0TU7Y
+RPw+RGrt0nnmMUP2jJ6SKPCXmw55tW7FcvBJeAM4komEUoLrnKfwkaRy8SKSt8a0
+HlBxebJND7cfu20WpwErmhU=
+-----END PRIVATE KEY-----
+"""
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
@@ -338,6 +391,7 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
                                                                                 'rgw_thread_pool_size=512'],
                                                     'rgw_frontend_port': '5000',
                                                     'rgw_frontend_type': 'beast',
+                                                    'rgw_exit_timeout_secs': 120,
                                                 }}
         else:
             # in a real environment, we still expect the spec to be there,
@@ -348,8 +402,53 @@ def test_migrate_rgw_spec(cephadm_module: CephadmOrchestrator, rgw_spec_store_en
             assert 'rgw.foo' not in cephadm_module.spec_store.all_specs
 
 
+@mock.patch('cephadm.migrations.get_cert_issuer_info')
+def test_migrate_grafana_cephadm_signed(mock_get_cert_issuer_info, cephadm_module: CephadmOrchestrator):
+    mock_get_cert_issuer_info.return_value = ('Ceph', 'MockCephCN')
+
+    cephadm_module.set_store('host1/grafana_crt', 'grafana_cert1')
+    cephadm_module.set_store('host1/grafana_key', 'grafana_key1')
+    cephadm_module.set_store('host2/grafana_crt', 'grafana_cert2')
+    cephadm_module.set_store('host2/grafana_key', 'grafana_key2')
+    cephadm_module.cache.daemons = {'host1': {'grafana.host1': DaemonDescription('grafana', 'host1', 'host1')},
+                                    'host2': {'grafana.host2': DaemonDescription('grafana', 'host2', 'host2')}}
+
+    cephadm_module.migration.migrate_6_7()
+
+    assert cephadm_module.cert_mgr.get_cert('cephadm-signed_grafana_cert', host='host1')
+    assert cephadm_module.cert_mgr.get_cert('cephadm-signed_grafana_cert', host='host2')
+    assert cephadm_module.cert_mgr.get_key('cephadm-signed_grafana_key', host='host1')
+    assert cephadm_module.cert_mgr.get_key('cephadm-signed_grafana_key', host='host2')
+
+
+@mock.patch('cephadm.migrations.get_cert_issuer_info')
+def test_migrate_grafana_custom_certs(mock_get_cert_issuer_info, cephadm_module: CephadmOrchestrator):
+    from datetime import datetime, timezone
+
+    grafana_spec = GrafanaSpec(service_id='grafana', ssl=True)
+    cephadm_module.spec_store._specs = {
+        'grafana': grafana_spec,
+    }
+    cephadm_module.spec_store.spec_created['grafana'] = datetime.now(timezone.utc)
+
+    cephadm_module.set_store('host1/grafana_crt', 'grafana_cert1')
+    cephadm_module.set_store('host1/grafana_key', 'grafana_key1')
+    cephadm_module.set_store('host2/grafana_crt', 'grafana_cert2')
+    cephadm_module.set_store('host2/grafana_key', 'grafana_key2')
+    cephadm_module.cache.daemons = {'host1': {'grafana.host1': DaemonDescription('grafana', 'host1', 'host1')},
+                                    'host2': {'grafana.host2': DaemonDescription('grafana', 'host2', 'host2')}}
+
+    mock_get_cert_issuer_info.return_value = ('CustomOrg', 'MockCustomOrg')  # Force grafana certs to be custom
+    cephadm_module.migration.migrate_6_7()
+
+    assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host1')
+    assert cephadm_module.cert_mgr.get_cert('grafana_ssl_cert', host='host2')
+    assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host1')
+    assert cephadm_module.cert_mgr.get_key('grafana_ssl_key', host='host2')
+
+
 def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
-    rgw_spec = RGWSpec(service_id='foo', rgw_frontend_ssl_certificate='rgw_cert', ssl=True)
+    rgw_spec = RGWSpec(service_id='foo', rgw_frontend_ssl_certificate=COMBINED_CERT_KEY, ssl=True)
     iscsi_spec = IscsiServiceSpec(service_id='foo', pool='foo', ssl_cert='iscsi_cert', ssl_key='iscsi_key')
     ingress_spec = IngressSpec(service_id='rgw.foo', ssl_cert='ingress_cert', ssl_key='ingress_key', ssl=True)
     cephadm_module.spec_store._specs = {
@@ -363,22 +462,10 @@ def test_migrate_cert_store(cephadm_module: CephadmOrchestrator):
     cephadm_module.set_store('service_discovery/root/cert', 'service_discovery_cert')
     cephadm_module.set_store('service_discovery/root/key', 'service_discovery_key')
 
-    cephadm_module.set_store('host1/grafana_crt', 'grafana_cert1')
-    cephadm_module.set_store('host1/grafana_key', 'grafana_key1')
-    cephadm_module.set_store('host2/grafana_crt', 'grafana_cert2')
-    cephadm_module.set_store('host2/grafana_key', 'grafana_key2')
-    cephadm_module.cache.daemons = {'host1': {'grafana.host1': DaemonDescription('grafana', 'host1', 'host1')},
-                                    'host2': {'grafana.host2': DaemonDescription('grafana', 'host2', 'host2')}}
-
     cephadm_module.migration.migrate_6_7()
 
-    assert cephadm_module.cert_key_store.get_cert('rgw_frontend_ssl_cert', service_name='rgw.foo')
-    assert cephadm_module.cert_key_store.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
-    assert cephadm_module.cert_key_store.get_key('iscsi_ssl_key', service_name='iscsi.foo')
-    assert cephadm_module.cert_key_store.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
-    assert cephadm_module.cert_key_store.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')
-
-    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host1')
-    assert cephadm_module.cert_key_store.get_cert('grafana_cert', host='host2')
-    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host1')
-    assert cephadm_module.cert_key_store.get_key('grafana_key', host='host2')
+    assert cephadm_module.cert_mgr.get_cert('rgw_ssl_cert', service_name='rgw.foo')
+    assert cephadm_module.cert_mgr.get_cert('iscsi_ssl_cert', service_name='iscsi.foo')
+    assert cephadm_module.cert_mgr.get_key('iscsi_ssl_key', service_name='iscsi.foo')
+    assert cephadm_module.cert_mgr.get_cert('ingress_ssl_cert', service_name='ingress.rgw.foo')
+    assert cephadm_module.cert_mgr.get_key('ingress_ssl_key', service_name='ingress.rgw.foo')

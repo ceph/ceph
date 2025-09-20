@@ -21,7 +21,7 @@
 #include "rgw_cr_rados.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
-#include "driver/rados/rgw_zone.h"
+#include "rgw/rgw_zone.h"
 #include "rgw_sal_config.h"
 
 #include "gtest/gtest.h"
@@ -350,7 +350,8 @@ int main(int argc, const char **argv)
 			      false,
 			      false,
 			      false,
-			      true, null_yield, 
+			      false,
+			       true, true, null_yield, cfgstore.get(), 
 			      false));
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;

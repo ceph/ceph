@@ -88,7 +88,7 @@ public:
 };
 
 class RGWOp_MDLog_List : public RGWRESTOp {
-  std::list<cls_log_entry> entries;
+  std::vector<cls::log::entry> entries;
   std::string last_marker;
   bool truncated;
 public:
@@ -209,6 +209,7 @@ class RGWOp_DATALog_List : public RGWRESTOp {
   std::string last_marker;
   bool truncated;
   bool extra_info;
+  ceph::real_time last_update;
 public:
   RGWOp_DATALog_List() : truncated(false), extra_info(false) {}
   ~RGWOp_DATALog_List() override {}

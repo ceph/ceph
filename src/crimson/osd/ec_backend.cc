@@ -2,6 +2,8 @@
 
 #include "crimson/osd/shard_services.h"
 
+namespace crimson::osd {
+
 ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
                      crimson::osd::ShardServices& shard_services,
@@ -26,12 +28,14 @@ ECBackend::_read(const hobject_t& hoid,
 ECBackend::rep_op_fut_t
 ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
                               const hobject_t& hoid,
+			      crimson::osd::ObjectContextRef&& new_clone,
                               ceph::os::Transaction&& txn,
                               osd_op_params_t&& osd_op_p,
                               epoch_t min_epoch, epoch_t max_epoch,
 			      std::vector<pg_log_entry_t>&& log_entries)
 {
   // todo
-  return make_ready_future<rep_op_ret_t>(seastar::now(),
-	  seastar::make_ready_future<crimson::osd::acked_peers_t>());
+  return make_ready_future<rep_op_ret_t>(seastar::now(), seastar::now());
+}
+
 }

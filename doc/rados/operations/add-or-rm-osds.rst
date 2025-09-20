@@ -17,8 +17,8 @@ It's a good idea to check the capacity of your cluster so that you know when it
 approaches its capacity limits. If your cluster has reached its ``near full``
 ratio, then you should add OSDs to expand your cluster's capacity.
 
-.. warning:: Do not add an OSD after your cluster has reached its ``full
-   ratio``. OSD failures that occur after the cluster reaches its ``near full
+.. warning:: Do not let your cluster reach its ``full ratio`` before adding an
+   OSD. OSD failures that occur after the cluster reaches its ``near full
    ratio`` might cause the cluster to exceed its ``full ratio``.
 
 
@@ -29,8 +29,7 @@ If you are also adding a new host when adding a new OSD, see `Hardware
 Recommendations`_ for details on minimum recommendations for OSD hardware. To
 add an OSD host to your cluster, begin by making sure that an appropriate 
 version of Linux has been installed on the host machine and that all initial
-preparations for your storage drives have been carried out. For details, see
-`Filesystem Recommendations`_.
+preparations for your storage drives have been carried out.
 
 Next, add your OSD host to a rack in your cluster, connect the host to the
 network, and ensure that the host has network connectivity. For details, see
@@ -38,7 +37,6 @@ network, and ensure that the host has network connectivity. For details, see
 
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
-.. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
 .. _Network Configuration Reference: ../../configuration/network-config-ref
 
 Installing the Required Software

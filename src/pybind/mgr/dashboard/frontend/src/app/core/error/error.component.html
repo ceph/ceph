@@ -6,9 +6,8 @@
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <div *ngIf="header && message; else elseBlock">
-        <i [ngClass]="icon"
-           class="mx-auto d-block"></i>
-
+        <svg [cdsIcon]="icon"
+             class="cds-info-color cds-icon--size-10"></svg>
         <div class="mt-4 text-center">
           <h3><b>{{ header }}</b></h3>
           <h4 class="mt-3"
@@ -59,9 +58,19 @@
 </ng-template>
 
 <ng-template #dashboardButton>
-  <div class="mt-4 text-center">
+  <div class="mt-4 text-center"
+       *ngIf="!module_name; else enableButton">
     <button class="btn btn-primary"
             [routerLink]="'/dashboard'"
             i18n>Go To Dashboard</button>
+  </div>
+</ng-template>
+
+<ng-template #enableButton>
+  <div class="mt-4 text-center"
+       *ngIf="module_name && !(buttonName && buttonRoute)">
+    <button class="btn btn-primary"
+            (click)="enableModule()"
+            i18n>Enable {{ module_name | upperFirst }} module</button>
   </div>
 </ng-template>

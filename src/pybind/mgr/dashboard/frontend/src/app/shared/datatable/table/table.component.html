@@ -1,6 +1,17 @@
 <cds-table-container [cdsLayer]="layer"
                      [cdsTheme]="theme"
                      class="content-theme">
+  <cds-table-header *ngIf="headerTitle">
+    <h4 cdsTableHeaderTitle
+        i18n>
+      {{headerTitle}}
+    </h4>
+    <p cdsTableHeaderDescription
+       i18n
+       *ngIf="headerDescription">
+      {{headerDescription}}
+    </p>
+  </cds-table-header>
   <cds-table-toolbar #toolbar
                      *ngIf="toolHeader"
                      (cancel)="onBatchActionsCancel()"
@@ -38,9 +49,8 @@
       <!-- column filters -->
       <ng-container *ngIf="columnFilters.length !== 0">
         <div class="d-inline-flex position-relative">
-          <svg cdsIcon="filter"
-               size="16"
-               class="align-self-center mb-2"></svg>
+        <svg [cdsIcon]="icons.filter"
+             [size]="icons.size16"></svg>
         </div>
         <cds-select (valueChange)="onSelectFilter($event)"
                     display="inline"
@@ -74,8 +84,8 @@
               class="toolbar-action"
               placement="bottom"
               *ngIf="fetchData?.observers?.length > 0">
-        <svg cdsIcon="renew"
-             size="16"
+        <svg [cdsIcon]="icons.refresh"
+             [size]="icons.size16"
              [ngClass]="{ 'cds--toolbar-action__icon': true, 'reload': loadingIndicator }"></svg>
       </cds-icon-button>
       <!-- end refresh button -->
@@ -86,8 +96,8 @@
               placement="bottom"
               [flip]="true"
               [offset]="{ x: 3, y: 0 }">
-        <svg cdsIcon="data-table"
-             size="16"
+        <svg [cdsIcon]="icons.dataTable"
+             [size]="icons.size16"
              class="cds--toolbar-action__icon"></svg>
       </button>
       <ng-template #showHideColumnsRef>
@@ -121,8 +131,8 @@
         <span class="me-2">{{ filter.column.name }}: {{ filter.value.formatted }}</span>
         <button class="cds--tag__close-icon"
                 (click)="onChangeFilter(filter)">
-          <svg cdsIcon="close"
-               size="16"></svg>
+          <svg [cdsIcon]="icons.destroy"
+               [size]="icons.size16"></svg>
         </button>
       </cds-tag>
     </ng-container>
@@ -218,11 +228,20 @@
 
 <ng-template #rowDetailTpl
              let-row="data">
-  <div *ngIf="row[identifier] === expanded?.[identifier]"
-       (mouseenter)="onRowDetailHover($event)"
-       data-testid="datatable-row-detail">
+  @if (row[identifier] === expanded?.[identifier] && !scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail">
     <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
   </div>
+  } @else if (row[identifier] === expanded?.[identifier] && scrollable) {
+  <div
+    (mouseenter)="onRowDetailHover($event)"
+    data-testid="datatable-row-detail"
+    class="scrollable-expanded-row">
+    <ng-template [ngTemplateOutlet]="rowDetail.template"></ng-template>
+  </div>
+  }
 </ng-template>
 
 <ng-template #defaultValueTpl
@@ -369,23 +388,20 @@
 
 <ng-template #pathTpl
              let-value="data.value">
-  <span data-toggle="tooltip"
-        [title]="value"
-        class="font-monospace">{{ value | path }}
-    <cd-copy-2-clipboard-button *ngIf="value"
-                                [source]="value"
-                                [byId]="false"
-                                [showIconOnly]="true">
-    </cd-copy-2-clipboard-button>
-  </span>
+  <cd-copy-2-clipboard-button *ngIf="value"
+                              [source]="value"
+                              [byId]="false"
+                              size="lg"
+                              text="{{ value | path }}">
+  </cd-copy-2-clipboard-button>
 </ng-template>
 
 <ng-template #copyTpl
              let-value="data.value">
-  <span class="font-monospace">{{value}}</span>
   <cd-copy-2-clipboard-button *ngIf="value"
                               [source]="value"
                               [byId]="false"
-                              [showIconOnly]="true">
+                              [size]="lg"
+                              [text]="value">
   </cd-copy-2-clipboard-button>
 </ng-template>

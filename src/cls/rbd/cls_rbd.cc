@@ -29,10 +29,12 @@
 
 #include <algorithm>
 #include <errno.h>
+#include <iomanip>
 #include <sstream>
 
 #include "include/uuid.h"
 #include "common/bit_vector.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "objclass/objclass.h"
 #include "osd/osd_types.h"
@@ -5071,7 +5073,8 @@ int image_status_set(cls_method_context_t hctx, const string &global_image_id,
   if (r < 0) {
     return 0;
   }
-  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
+  if (mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_ENABLED &&
+      mirror_image.state != cls::rbd::MIRROR_IMAGE_STATE_CREATING) {
     return 0;
   }
 
@@ -5875,6 +5878,7 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
     break;
   case cls::rbd::MIRROR_MODE_IMAGE:
   case cls::rbd::MIRROR_MODE_POOL:
+  case cls::rbd::MIRROR_MODE_INIT_ONLY:
     enabled = true;
     break;
   default:
@@ -5935,8 +5939,6 @@ int mirror_remote_namespace_get(cls_method_context_t hctx, bufferlist *in,
   std::string mirror_ns_decode;
   int r = read_key(hctx, mirror::REMOTE_NAMESPACE, &mirror_ns_decode);
   if (r < 0) {
-    CLS_ERR("error getting mirror remote namespace: %s",
-            cpp_strerror(r).c_str());
     return r;
   }
 
@@ -5958,7 +5960,8 @@ int mirror_remote_namespace_set(cls_method_context_t hctx, bufferlist *in,
   int r = read_key(hctx, mirror::MODE, &mirror_mode);
   if (r < 0 && r != -ENOENT) {
     return r;
-  } else if (r == 0 && mirror_mode != cls::rbd::MIRROR_MODE_DISABLED) {
+  } else if (r == 0 && (mirror_mode != cls::rbd::MIRROR_MODE_DISABLED &&
+                        mirror_mode != cls::rbd::MIRROR_MODE_INIT_ONLY)) {
     CLS_ERR("cannot set mirror remote namespace while mirroring enabled");
     return -EINVAL;
   }

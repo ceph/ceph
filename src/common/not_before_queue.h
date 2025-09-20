@@ -7,6 +7,9 @@
 
 #include "include/utime.h"
 
+#include <numeric> // for std::accumulate()
+#include <optional>
+
 /**
  * not_before_queue_t
  *
@@ -128,12 +131,20 @@ class not_before_queue_t {
 
     template <typename U>
     bool operator()(const U &lhs, const container_t &rhs) const {
-      return lhs < project_removal_class(rhs.v);
+      if constexpr (std::is_integral_v<U>) {
+	return std::cmp_less(lhs, project_removal_class(rhs.v));
+      } else {
+	return lhs < project_removal_class(rhs.v);
+      }
     }
 
     template <typename U>
     bool operator()(const container_t &lhs, const U &rhs) const {
-      return project_removal_class(lhs.v) < rhs;
+      if constexpr (std::is_integral_v<U>) {
+	return std::cmp_less(project_removal_class(lhs.v), rhs);
+      } else {
+	return project_removal_class(lhs.v) < rhs;
+      }
     }
   };
   struct removal_registry_disposer_t {
@@ -207,11 +218,21 @@ public:
   /**
    * advance_time
    *
-   * Advances the eligibility cutoff, argument must be non-decreasing in
-   * successive calls.
+   * Advances the eligibility cutoff.
+   * Argument should be non-decreasing in successive calls.
+   *
+   * As for the scrub queue the cutoff is a time value, and as we have
+   * encountered rare cases of clock resets (even the monotonic clock
+   * can be slightly adjusted backwards on some kernels), "backward"
+   * updates will be tolerated - ignored and not assert.
+   *
+   * \retval: true if the cutoff was advanced. False if we
+   *          had to ignore the update.
    */
-  void advance_time(T next_time) {
-    assert(next_time >= current_time);
+  bool advance_time(T next_time) {
+    if (next_time < current_time) {
+      return false;
+    }
     current_time = next_time;
     while (true) {
       if (ineligible_queue.empty()) {
@@ -230,6 +251,7 @@ public:
       ineligible_queue.erase(typename ineligible_queue_t::const_iterator(iter));
       eligible_queue.insert(item);
     }
+    return true;
   }
 
   /**

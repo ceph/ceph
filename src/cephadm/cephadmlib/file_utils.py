@@ -5,6 +5,7 @@ import datetime
 import logging
 import os
 import tempfile
+import json
 
 from contextlib import contextmanager
 from pathlib import Path
@@ -52,8 +53,9 @@ def write_new(
     os.rename(tempname, destination)
 
 
-def populate_files(config_dir, config_files, uid, gid):
-    # type: (str, Dict, int, int) -> None
+def populate_files(
+    config_dir: Union[str, Path], config_files: Dict, uid: int, gid: int
+) -> None:
     """create config files for different services"""
     for fname in config_files:
         config_file = os.path.join(config_dir, fname)
@@ -71,8 +73,7 @@ def touch(
         os.chown(file_path, uid, gid)
 
 
-def write_tmp(s, uid, gid):
-    # type: (str, int, int) -> IO[str]
+def write_tmp(s: str, uid: int, gid: int) -> IO[str]:
     tmp_f = tempfile.NamedTemporaryFile(mode='w', prefix='ceph-tmp')
     os.fchown(tmp_f.fileno(), uid, gid)
     tmp_f.write(s)
@@ -97,8 +98,7 @@ def recursive_chown(path: str, uid: int, gid: int) -> None:
             os.chown(os.path.join(dirpath, filename), uid, gid)
 
 
-def read_file(path_list, file_name=''):
-    # type: (List[str], str) -> str
+def read_file(path_list: List[str], file_name: str = '') -> str:
     """Returns the content of the first file found within the `path_list`
 
     :param path_list: list of file paths to search
@@ -123,14 +123,12 @@ def read_file(path_list, file_name=''):
     return 'Unknown'
 
 
-def pathify(p):
-    # type: (str) -> str
+def pathify(p: str) -> str:
     p = os.path.expanduser(p)
     return os.path.abspath(p)
 
 
-def get_file_timestamp(fn):
-    # type: (str) -> Optional[str]
+def get_file_timestamp(fn: str) -> Optional[str]:
     try:
         mt = os.path.getmtime(fn)
         return datetime.datetime.fromtimestamp(
@@ -160,3 +158,26 @@ def unlink_file(
     except Exception:
         if not ignore_errors:
             raise
+
+
+def update_meta_file(file_path: str, update_key_val: dict) -> None:
+    """Update key in the file with provided value"""
+    try:
+        with open(file_path, 'r') as fh:
+            data = json.load(fh)
+        file_stat = os.stat(file_path)
+    except FileNotFoundError:
+        raise
+    except Exception:
+        logger.exception(f'Failed to update {file_path}')
+        raise
+    data.update(
+        {key: value for key, value in update_key_val.items() if key in data}
+    )
+
+    with write_new(
+        file_path,
+        owner=(file_stat.st_uid, file_stat.st_gid),
+        perms=(file_stat.st_mode & 0o777),
+    ) as fh:
+        fh.write(json.dumps(data, indent=4) + '\n')

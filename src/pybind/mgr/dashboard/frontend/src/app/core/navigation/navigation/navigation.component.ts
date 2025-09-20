@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -14,6 +14,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
@@ -37,6 +38,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     autoHide: false
   };
   displayedSubMenu = {};
+  @ViewChild('sidenavContainer') sidenavContainer: ElementRef;
   private subs = new Subscription();
 
   clustersMap: Map<string, any> = new Map<string, any>();
@@ -49,6 +51,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   currentClusterName: string;
 
   constructor(
+    public notificationService: NotificationService,
     private authStorageService: AuthStorageService,
     private multiClusterService: MultiClusterService,
     private router: Router,
@@ -136,6 +139,22 @@ export class NavigationComponent implements OnInit, OnDestroy {
     return undefined;
   }
 
+  onMenuClick(event: MouseEvent) {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    const menuElement: Element = target.closest('cds-sidenav-menu');
+
+    if (menuElement) {
+      const clientViewBounding = menuElement.getBoundingClientRect();
+      const isOutOfView =
+        clientViewBounding.top < 0 || clientViewBounding.bottom > window.innerHeight;
+
+      if (isOutOfView) {
+        menuElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  }
+
   toggleSubMenu(menu: string) {
     this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
@@ -189,7 +208,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
       }
     );
   }
-
+  toggleSidebar() {
+    this.notificationService.toggleSidebar(true, true);
+  }
   trackByFn(item: any) {
     return item;
   }

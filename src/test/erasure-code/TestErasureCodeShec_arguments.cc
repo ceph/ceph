@@ -39,9 +39,10 @@ unsigned int count_num = 0;
 unsigned int unexpected_count = 0;
 unsigned int value_count = 0;
 
-map<set<int>,set<set<int> > > shec_table;
+map<shard_id_set,set<shard_id_set>> shec_table;
 
-constexpr int getint(std::initializer_list<int> is) {
+template<size_t N>
+constexpr int getint(const std::array<int, N>& is) {
   int a = 0;
   for (const auto i : is) {
     a |= 1 << i;
@@ -50,8 +51,8 @@ constexpr int getint(std::initializer_list<int> is) {
 }
 
 void create_table_shec432() {
-  set<int> table_key,vec_avails;
-  set<set<int> > table_value;
+  shard_id_set table_key, vec_avails;
+  set<shard_id_set> table_value;
 
   for (int want_count = 0; want_count < 7; ++want_count) {
     for (unsigned want = 1; want < (1<<7); ++want) {
@@ -63,7 +64,7 @@ void create_table_shec432() {
       {
         for (int i = 0; i < 7; ++i) {
           if (want & (1 << i)) {
-            table_key.insert(i);
+            table_key.insert(shard_id_t(i));
           }
         }
       }
@@ -74,8 +75,8 @@ void create_table_shec432() {
         }
         if (std::popcount(avails) == 2 &&
             std::popcount(want) == 1) {
-	  if (std::cmp_equal(want | avails, getint({0,1,5})) ||
-	      std::cmp_equal(want | avails, getint({2,3,6}))) {
+	  if (std::cmp_equal(want | avails, getint(std::to_array({0,1,5}))) ||
+	      std::cmp_equal(want | avails, getint(std::to_array({2,3,6})))) {
             vec.push_back(avails);
           }
         }
@@ -86,14 +87,14 @@ void create_table_shec432() {
           continue;
         }
         if (std::popcount(avails) == 4) {
-	  auto a = to_array<std::initializer_list<int>>({
+	  auto a = std::to_array<std::array<int, 4>>({
 	      {0,1,2,3}, {0,1,2,4}, {0,1,2,6}, {0,1,3,4}, {0,1,3,6}, {0,1,4,6},
 	      {0,2,3,4}, {0,2,3,5}, {0,2,4,5}, {0,2,4,6}, {0,2,5,6}, {0,3,4,5},
 	      {0,3,4,6}, {0,3,5,6}, {0,4,5,6}, {1,2,3,4}, {1,2,3,5}, {1,2,4,5},
 	      {1,2,4,6}, {1,2,5,6}, {1,3,4,5}, {1,3,4,6}, {1,3,5,6}, {1,4,5,6},
 	      {2,3,4,5}, {2,4,5,6}, {3,4,5,6}});
-          if (ranges::any_of(a, std::bind_front(cmp_equal<uint, int>, avails),
-			     getint)) {
+          if (ranges::any_of(a, [avails] (int n) { return cmp_equal(avails, n); },
+			     getint<4>)) {
 	    vec.push_back(avails);
 	  }
 	}
@@ -110,7 +111,7 @@ void create_table_shec432() {
         vec_avails.clear();
         for (int j = 0; j < 7; ++j) {
           if (vec[i] & (1 << j)) {
-            vec_avails.insert(j);
+            vec_avails.insert(shard_id_t(j));
           }
         }
         table_value.insert(vec_avails);
@@ -120,17 +121,17 @@ void create_table_shec432() {
   }
 }
 
-bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
-  set<set<int> > tmp;
-  set<int> settmp;
+bool search_table_shec432(shard_id_set want_to_read, shard_id_set available_chunks) {
+  set<shard_id_set > tmp;
+  shard_id_set settmp;
   bool found;
 
   tmp = shec_table.find(want_to_read)->second;
-  for (set<set<int> >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
+  for (set<shard_id_set >::iterator itr = tmp.begin();itr != tmp.end(); ++itr) {
     found = true;
     value_count = 0;
     settmp = *itr;
-    for (set<int>::iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
+    for (shard_id_set::const_iterator setitr = settmp.begin();setitr != settmp.end(); ++setitr) {
       if (!available_chunks.count(*setitr)) {
         found = false;
       }
@@ -143,6 +144,7 @@ bool search_table_shec432(set<int> want_to_read, set<int> available_chunks) {
   return false;
 }
 
+IGNORE_DEPRECATED
 TEST(ParameterTest, combination_all)
 {
   const unsigned int kObjectSize = 128;
@@ -345,6 +347,7 @@ TEST(ParameterTest, combination_all)
   delete shec;
   delete profile;
 }
+END_IGNORE_DEPRECATED
 
 int main(int argc, char **argv)
 {

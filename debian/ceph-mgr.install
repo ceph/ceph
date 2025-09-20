@@ -1,4 +1,4 @@
-lib/systemd/system/ceph-mgr*
+{usr/,}lib/systemd/system/ceph-mgr*
 usr/bin/ceph-mgr
 usr/share/ceph/mgr/mgr_module.*
 usr/share/ceph/mgr/mgr_util.*

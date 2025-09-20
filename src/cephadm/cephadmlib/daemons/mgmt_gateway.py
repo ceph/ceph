@@ -11,7 +11,7 @@ from ..context_getters import fetch_configs
 from ..daemon_form import register as register_daemon_form
 from ..daemon_identity import DaemonIdentity
 from ..deployment_utils import to_deployment_container
-from ceph.cephadm.images import DEFAULT_NGINX_IMAGE
+from ceph.cephadm.images import DefaultImages
 from ..data_utils import dict_get, is_fsid
 from ..file_utils import populate_files, makedirs, recursive_chown
 from ..exceptions import Error
@@ -32,7 +32,7 @@ class MgmtGateway(ContainerDaemonForm):
         'nginx_internal.key',
     ]
 
-    default_image = DEFAULT_NGINX_IMAGE
+    default_image = DefaultImages.NGINX.image_ref
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -44,7 +44,7 @@ class MgmtGateway(ContainerDaemonForm):
         fsid: str,
         daemon_id: str,
         config_json: Dict,
-        image: str = DEFAULT_NGINX_IMAGE,
+        image: str = DefaultImages.NGINX.image_ref,
     ):
         self.ctx = ctx
         self.fsid = fsid

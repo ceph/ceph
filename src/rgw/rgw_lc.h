@@ -68,7 +68,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  //  static void generate_test_instances(list<ACLOwner*>& o);
+  //  static list<ACLOwner> generate_test_instances();
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -295,7 +295,7 @@ public:
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(prefix, bl);
     if (struct_v >= 2) {
       decode(obj_tags, bl);
@@ -542,7 +542,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWLifecycleConfiguration*>& o);
+  static std::list<RGWLifecycleConfiguration> generate_test_instances();
 
   void add_rule(const LCRule& rule);
 
@@ -566,6 +566,7 @@ class RGWLC : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
   std::unique_ptr<rgw::sal::Lifecycle> sal_lc;
+  std::unique_ptr<rgw::sal::Restore> sal_restore;
   int max_objs{0};
   std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
@@ -657,13 +658,14 @@ public:
                         rgw::sal::Bucket* bucket,
                         const rgw::sal::Attrs& bucket_attrs,
                         RGWLifecycleConfiguration *config);
+  // remove a bucket from the lc list, and optionally update the bucket
+  // instance metadata to remove RGW_ATTR_LC
   int remove_bucket_config(const DoutPrefixProvider* dpp, optional_yield y,
-                           rgw::sal::Bucket* bucket,
-                           const rgw::sal::Attrs& bucket_attrs,
-			   bool merge_attrs = true);
+                           rgw::sal::Bucket* bucket, bool update_attrs);
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
+  rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
   unsigned get_subsys() const;
   std::ostream& gen_prefix(std::ostream& out) const;
 

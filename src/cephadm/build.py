@@ -301,13 +301,16 @@ def _ignore_cephadmlib(
 def _compile(dest, tempdir):
     """Compile the zipapp."""
     log.info("Byte-compiling py to pyc")
-    compileall.compile_dir(
+    ok = compileall.compile_dir(
         tempdir,
         maxlevels=16,
         legacy=True,
         quiet=1,
         workers=0,
     )
+    if not ok:
+        log.error("compileall.compile_dir failed (see output for details)")
+        raise ValueError("byte-compile failed")
     # TODO we could explicitly pass a python version here
     log.info("Constructing the zipapp file")
     try:
@@ -434,6 +437,47 @@ def _install_rpm_deps(tempdir, config):
     return dinfo
 
 
+def _gather_rpm_package_dirs(paths):
+    # = The easy way =
+    # the top_level.txt file can be used to determine where the python packages
+    # actually are. We need all of those and the meta-data dir (parent of
+    # top_level.txt) to be included in our zipapp
+    top_level = None
+    for path in paths:
+        if path.endswith('top_level.txt'):
+            top_level = pathlib.Path(path)
+    if top_level:
+        meta_dir = top_level.parent
+        pkg_dirs = [
+            top_level.parent.parent / p
+            for p in top_level.read_text().splitlines()
+        ]
+        return meta_dir, pkg_dirs
+    # = The hard way =
+    # loop through the directories to find the .dist-info dir (containing the
+    # mandatory METADATA file, according to the spec) and once we know the
+    # location of dist info we find the sibling paths from the rpm listing
+    dist_info = None
+    ppaths = []
+    for path in paths:
+        ppath = pathlib.Path(path)
+        ppaths.append(ppath)
+        if ppath.name == 'METADATA' and ppath.parent.name.endswith('.dist-info'):
+            dist_info = ppath.parent
+            break
+    if not dist_info:
+        raise ValueError('no .dist-info METADATA found')
+    if not dist_info.parent.name == 'site-packages':
+        raise ValueError(
+            'unexpected parent directory (not site-packages):'
+            f' {dist_info.parent.name}'
+        )
+    siblings = [
+        p for p in ppaths if p.parent == dist_info.parent and p != dist_info
+    ]
+    return dist_info, siblings
+
+
 def _deps_from_rpm(tempdir, config, dinfo, pkg):
     # first, figure out what rpm provides a particular python lib
     dist = f'python3.{sys.version_info.minor}dist({pkg})'.lower()
@@ -469,20 +513,7 @@ def _deps_from_rpm(tempdir, config, dinfo, pkg):
         ['rpm', '-ql', rpmname], check=True, stdout=subprocess.PIPE
     )
     paths = [l.decode('utf8') for l in res.stdout.splitlines()]
-    # the top_level.txt file can be used to determine where the python packages
-    # actually are. We need all of those and the meta-data dir (parent of
-    # top_level.txt) to be included in our zipapp
-    top_level = None
-    for path in paths:
-        if path.endswith('top_level.txt'):
-            top_level = pathlib.Path(path)
-    if not top_level:
-        raise ValueError('top_level not found')
-    meta_dir = top_level.parent
-    pkg_dirs = [
-        top_level.parent.parent / p
-        for p in top_level.read_text().splitlines()
-    ]
+    meta_dir, pkg_dirs = _gather_rpm_package_dirs(paths)
     meta_dest = tempdir / meta_dir.name
     log.info(f"Copying {meta_dir} to {meta_dest}")
     # copy the meta data directory

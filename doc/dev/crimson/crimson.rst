@@ -2,11 +2,17 @@
 crimson
 =======
 
-Crimson is the code name of ``crimson-osd``, which is the next
-generation ``ceph-osd``. It improves performance when using fast network
-and storage devices, employing state-of-the-art technologies including
-DPDK and SPDK. BlueStore continues to support HDDs and slower SSDs.
-Crimson aims to be backward compatible with the classic ``ceph-osd``.
+Crimson is the code name of ``crimson-osd``, which is the next generation ``ceph-osd``.
+It is designed to deliver enhanced performance on fast network and storage devices by leveraging modern technologies such as DPDK and SPDK.
+
+Crimson is intended to be a drop-in replacement for the classic Object Storage Daemon (OSD),
+aiming to allow seamless migration from existing ``ceph-osd`` deployments (through backfilling).
+
+The second phase of the project introduces :ref:`seastore`, a complete redesign of the object storage backend built around Crimson's native architecture.
+Seastore is optimized for high-performance storage devices like NVMe and may not be suitable for traditional HDDs.
+Crimson will continue to support BlueStore ensuring compatibility with HDDs and slower SSDs.
+
+See `ceph.io/en/news/crimson <https://ceph.io/en/news/crimson/>`_
 
 .. highlight:: console
 
@@ -15,123 +21,82 @@ Building Crimson
 
 Crimson is not enabled by default. Enable it at build time by running::
 
-  $ WITH_SEASTAR=true ./install-deps.sh
-  $ ./do_cmake.sh -DWITH_SEASTAR=ON
+  $ WITH_CRIMSON=true ./install-deps.sh
+  $ ./do_cmake.sh -DWITH_CRIMSON=ON
 
 Please note, `ASan`_ is enabled by default if Crimson is built from a source
 cloned using ``git``.
 
 .. _ASan: https://github.com/google/sanitizers/wiki/AddressSanitizer
 
-Testing crimson with cephadm
-===============================
+Deploying Crimson with cephadm
+==============================
 
-The Ceph CI/CD pipeline builds containers with
-``crimson-osd`` substituted for ``ceph-osd``.
+.. note::
+   Cephadm SeaStore support is in `early stages <https://tracker.ceph.com/issues/71946>`_.
+
+The Ceph CI/CD pipeline builds containers with ``crimson-osd`` replacing the standard ``ceph-osd``.
 
 Once a branch at commit <sha1> has been built and is available in
-``shaman``, you can deploy it using the cephadm instructions outlined
+Shaman / Quay, you can deploy it using the cephadm instructions outlined
 in :ref:`cephadm` with the following adaptations.
 
-First, while performing the initial bootstrap, use the ``--image`` flag to
-use a Crimson build:
+The latest `main` branch is built `daily <https://shaman.ceph.com/builds/ceph/main>`_
+and the images are available in `quay <https://quay.ceph.io/repository/ceph-ci/ceph?tab=tags>`_
+(filter ``crimson-release``).
+We recommend using one of the latest available builds, as Crimson evolves rapidly.
+
+Use the ``--image`` flag to specify a Crimson build:
 
 .. prompt:: bash #
 
-   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1>-crimson --allow-mismatched-release bootstrap ...
+   cephadm --image quay.ceph.io/ceph-ci/ceph:<sha1>-crimson-release --allow-mismatched-release bootstrap ...
 
-You'll likely need to supply the ``--allow-mismatched-release`` flag to
-use a non-release branch.
 
-Configure Crimson with Bluestore
-================================
+.. note::
+   Crimson builds are available in two variants: ``crimson-debug`` and ``crimson-release``.
+   For testing purposes the `release` variant should be used.
+   The `debug` variant is intended primarily for development.
 
-As Bluestore is not a Crimson native `object store backend`_,
-deploying Crimson with Bluestore as the back end requires setting
-one of the two following configuration options:
+You'll likely need to include the ``--allow-mismatched-release`` flag to use a non-release branch.
+
+Crimson CPU allocation
+======================
 
 .. note::
 
-   #. These two options, along with ``crimson_alien_op_num_threads``,
-      can't be changed after deployment.
+   #. Allocation options **cannot** be changed after deployment.
    #. `vstart.sh`_ sets these options using the ``--crimson-smp`` flag.
 
+The ``crimson_cpu_num`` parameter defines the number of CPUs used to serve Seastar reactors.
+Each reactor is expected to run on a dedicated CPU core.
 
-1) ``crimson_seastar_num_threads``
+This parameter **does not have a default value**.
+Users must configure it at the OSD level based on system resources and cluster requirements **before** deploying the OSDs.
 
-   In order to allow easier cluster deployments, this option can be used
-   instead of setting the CPU mask manually for each OSD.
+We recommend setting a value for ``crimson_cpu_num`` that is less than the host's
+number of CPU cores (``nproc``) divided by the **number of OSDs on that host**.
 
-   It's recommended to let the **number of OSDs on each host** multiplied by
-   ``crimson_seastar_num_threads`` to be less than the node's number of CPU
-   cores (``nproc``).
+For example, for deploying a node with eight CPU cores per OSD:
 
-   For example, for deploying two nodes with eight CPU cores and two OSDs each:
+.. code-block:: bash #
 
-   .. code-block:: yaml
+   ceph config set osd crimson_cpu_num 8
 
-      conf:
-        # Global to all OSDs
-        osd:
-          crimson seastar num threads: 3
-
-   .. note::
-
-      #. For optimal performance ``crimson_seastar_cpu_cores`` should be set instead.
-
-2) ``crimson_seastar_cpu_cores`` and ``crimson_alien_thread_cpu_cores``.
-
-   Explicitly set the CPU core allocation for each ``crimson-osd``
-   and for the BlueStore back end. It's recommended for each set to be mutually exclusive.
-
-   For example, for deploying two nodes with eight CPU cores and two OSDs each:
-
-   .. code-block:: yaml
-
-      conf:
-        # Both nodes
-        osd:
-          crimson alien thread cpu cores: 6-7
-
-        # First node
-        osd.0:
-          crimson seastar cpu cores: 0-2
-        osd.1:
-          crimson seastar cpu cores: 3-5
-
-        # Second node
-        osd.2:
-          crimson seastar cpu cores: 0-2
-        osd.3:
-          crimson seastar cpu cores: 3-5
-
-   For a single node with eight node and three OSDs:
-
-   .. code-block:: yaml
-
-        conf:
-          osd:
-            crimson alien thread cpu cores: 6-7
-          osd.0:
-            crimson seastar cpu cores: 0-1
-          osd.1:
-            crimson seastar cpu cores: 2-3
-          osd.2:
-            crimson seastar cpu cores: 4-5
+Note that ``crimson_cpu_num`` does **not** pin threads to specific CPU cores.
+To explicitly assign CPU cores to Crimson OSDs, use the ``crimson_cpu_set`` parameter.
+This enables CPU pinning, which *may* improve performance.
+However, using this option requires manually setting the CPU set for each OSD,
+and is generally less recommended due to its complexity.
 
 Running Crimson
 ===============
 
 .. note::
-   Crimson is in a tech preview stage. 
-   As you might expect, Crimson does not yet have as extensive a feature set as does ceph-osd. 
-   Malfunctions including crashes and data loss are to be expected. 
+   Crimson is in a tech preview stage and is **not suitable for production use**.
 
-Enabling Crimson
-================
-
-After building Crimson and starting your cluster, but prior to deploying OSDs, you'll need to
-`Configure Crimson with Bluestore`_ and enable Crimson to
+After starting your cluster, prior to deploying OSDs, you'll need to configure the
+`Crimson CPU allocation`_ and enable Crimson to
 direct the default pools to be created as Crimson pools.  You can proceed by running the following after you have a running cluster:
 
 .. note::
@@ -151,6 +116,46 @@ not allow ``crimson-osd`` to boot without that flag.
 The last causes pools to be created by default with the ``crimson`` flag.
 Crimson pools are restricted to operations supported by Crimson.
 ``Crimson-osd`` won't instantiate PGs from non-Crimson pools.
+
+Object Store Backends
+=====================
+
+``crimson-osd`` supports two categories of object store backends: **native** and **non-native**.
+
+Native Backends
+---------------
+
+Native backends perform I/O operations using the **Seastar reactor**. These are tightly integrated with the Seastar framework and follow its design principles:
+
+.. describe:: seastore
+
+   SeaStore is the primary native object store for Crimson OSD. It is built with the Seastar framework and adheres to its asynchronous, shard-based architecture.
+
+.. describe:: cyanstore
+
+   CyanStore is inspired by ``memstore`` from the classic OSD, offering a lightweight, in-memory object store model.
+   CyanStore **does not store data** and should be used only for measuring OSD overhead, without the cost of actually storing data.
+
+Non-Native Backends
+------------------
+
+Non-native backends operate through a **thread pool proxy**, which interfaces with object stores running in **alien threads**—worker threads not managed by Seastar.
+These backends allow Crimson to interact with legacy or external object store implementations:
+
+.. describe:: bluestore
+
+   The default object store used by the classic ``ceph-osd``. It provides robust, production-grade storage capabilities.
+
+   The ``crimson_bluestore_num_threads`` option needs to be set according to the cpu set available.
+   This defines the number of threads dedicated to serving the BlueStore ObjectStore on each OSD.
+
+   If ``crimson_cpu_num`` is used from `Crimson CPU allocation`_,
+   The counterpart ``crimson_bluestore_cpu_set`` should also be used accordingly to
+   allow the two sets to be mutually exclusive.
+
+.. describe:: memstore
+
+   An in-memory object store backend, primarily used for testing and development purposes.
 
 vstart.sh
 =========
@@ -225,34 +230,6 @@ Another SeaStore example::
 Stop this ``vstart`` cluster by running::
 
   $ ../src/stop.sh --crimson
-
-Object Store Backend
-====================
-
-At the moment, ``crimson-osd`` offers both native and alienized object store
-backends. The native object store backends perform IO using the SeaStar reactor.
-They are:
-
-.. describe:: cyanstore
-
-   CyanStore is modeled after memstore in the classic OSD.
-
-.. describe:: seastore
-
-   Seastore is still under active development.
-
-The alienized object store backends are backed by a thread pool, which
-is a proxy of the alienstore adaptor running in Seastar. The proxy issues
-requests to object stores running in alien threads, i.e., worker threads not
-managed by the Seastar framework. They are:
-
-.. describe:: memstore
-
-   The memory backend object store
-
-.. describe:: bluestore
-
-   The object store used by the classic ``ceph-osd``
 
 daemonize
 ---------

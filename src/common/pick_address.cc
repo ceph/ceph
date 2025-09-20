@@ -15,6 +15,7 @@
 #include "common/pick_address.h"
 
 #include <bitset>
+#include <ifaddrs.h> // for struct ifaddrs
 #include <netdb.h>
 #include <netinet/in.h>
 #ifdef _WIN32
@@ -33,13 +34,14 @@
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 #include "common/config.h"
 #include "common/config_obs.h"
 #endif
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/numa.h"
+#include "common/safe_io.h"
 
 #ifndef HAVE_IN_ADDR_T
 typedef uint32_t in_addr_t;
@@ -135,7 +137,7 @@ bool matches_with_net(CephContext *cct,
 
 int grade_with_numa_node(const ifaddrs& ifa, int numa_node)
 {
-#if defined(WITH_SEASTAR) || defined(_WIN32)
+#if defined(WITH_CRIMSON) || defined(_WIN32)
   return 0;
 #else
   if (numa_node < 0) {
@@ -196,17 +198,14 @@ const struct sockaddr *find_ip_in_subnet_list(
   return best_addr;
 }
 
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
 // observe this change
 struct Observer : public md_config_obs_t {
-  const char *keys[2];
-  explicit Observer(const char *c) {
-    keys[0] = c;
-    keys[1] = NULL;
-  }
+  const std::string key;
+  explicit Observer(const char *c) : key(c) {}
 
-  const char** get_tracked_conf_keys() const override {
-    return (const char **)keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{key};
   }
   void handle_conf_change(const ConfigProxy& conf,
 			  const std::set <std::string> &changed) override {
@@ -299,7 +298,7 @@ void pick_addresses(CephContext *cct, int needs)
     }
   }
 }
-#endif	// !WITH_SEASTAR
+#endif	// !WITH_CRIMSON
 
 static std::optional<entity_addr_t> get_one_address(
   CephContext *cct,
@@ -640,17 +639,24 @@ int get_iface_numa_node(
 bool is_addr_in_subnet(
   CephContext *cct,
   const std::string &networks,
-  const std::string &addr)
+  const entity_addr_t &addr)
 {
   const auto nets = get_str_list(networks);
   ceph_assert(!nets.empty());
-
   unsigned ipv = CEPH_PICK_ADDRESS_IPV4;
-  struct sockaddr_in public_addr;
-  public_addr.sin_family = AF_INET;
+  struct sockaddr_in6 public_addr6;
+  struct sockaddr_in public_addr4;
 
-  if(inet_pton(AF_INET, addr.c_str(), &public_addr.sin_addr) != 1) {
-    lderr(cct) << "unable to convert chosen address to string: " << addr << dendl;
+  if (addr.is_ipv4() &&
+      inet_pton(AF_INET, addr.ip_only_to_str().c_str(), &public_addr4.sin_addr) == 1) {
+    public_addr4.sin_family = AF_INET;
+  } else if (addr.is_ipv6() &&
+      inet_pton(AF_INET6, addr.ip_only_to_str().c_str(), &public_addr6.sin6_addr) == 1) {
+    public_addr6.sin6_family = AF_INET6;
+    ipv = CEPH_PICK_ADDRESS_IPV6;
+  } else {
+    std::string_view addr_type = addr.is_ipv4() ? "IPv4" : "IPv6";
+    lderr(cct) << "IP address " << addr << " is not parseable as " << addr_type << dendl;
     return false;
   }
 
@@ -658,10 +664,16 @@ bool is_addr_in_subnet(
     struct ifaddrs ifa;
     memset(&ifa, 0, sizeof(ifa));
     ifa.ifa_next = nullptr;
-    ifa.ifa_addr = (struct sockaddr*)&public_addr;
+    if (addr.is_ipv4()) {
+      ifa.ifa_addr = (struct sockaddr*)&public_addr4;
+    } else if (addr.is_ipv6()) {
+      ifa.ifa_addr = (struct sockaddr*)&public_addr6;
+    }
+
     if(matches_with_net(cct, ifa, net, ipv)) {
       return true;
     }
   }
+  lderr(cct) << "address " << addr << " is not in networks '" << networks << "'" << dendl;
   return false;
 }

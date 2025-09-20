@@ -15,8 +15,8 @@
                  for="name"
                  i18n>Name</label>
           <div class="cd-col-form-input">
-            <input id="name"
-                   name="name"
+            <input data-testid="pool-name"
+                   id="name"
                    type="text"
                    class="form-control"
                    placeholder="Name..."
@@ -46,9 +46,9 @@
                  i18n>Pool type</label>
           <div class="cd-col-form-input">
             <select class="form-select"
+                    data-testid="pool-type-select"
                     id="poolType"
-                    formControlName="poolType"
-                    name="poolType">
+                    formControlName="poolType">
               <option ngValue=""
                       i18n>-- Select a pool type --</option>
               <option *ngFor="let poolType of data.poolTypes"
@@ -71,7 +71,6 @@
             <div class="cd-col-form-input">
               <select class="form-select"
                       id="pgAutoscaleMode"
-                      name="pgAutoscaleMode"
                       formControlName="pgAutoscaleMode">
                 <option *ngFor="let mode of pgAutoscaleModes"
                         [value]="mode">
@@ -90,7 +89,7 @@
             <div class="cd-col-form-input">
               <input class="form-control"
                      id="pgNum"
-                     name="pgNum"
+                     data-testid="pgNum"
                      formControlName="pgNum"
                      min="1"
                      type="number"
@@ -129,7 +128,6 @@
                      id="size"
                      [max]="getMaxSize()"
                      [min]="getMinSize()"
-                     name="size"
                      type="number"
                      formControlName="size">
               <span class="invalid-feedback"
@@ -180,7 +178,6 @@
           </label>
           <div class="cd-col-form-input">
             <cd-select-badges id="applications"
-                              name="applications"
                               [customBadges]="true"
                               [customBadgeValidators]="data.applications.validators"
                               [messages]="data.applications.messages"
@@ -189,11 +186,12 @@
                               [selectionLimit]="4"
                               (selection)="appSelection()">
             </cd-select-badges>
-            <i *ngIf="data.applications.selected <= 0"
-               i18n-title
-               title="Pools should be associated with an application tag"
-               class="{{icons.warning}} icon-warning-color">
-            </i>
+            <svg  *ngIf="data.applications.selected <= 0"
+                  [cdsIcon]="icons.warning"
+                  [size]="icons.size20"
+                  title="Pools should be associated with an application tag"
+                  class="cds-warning-color"
+                  i18n-title></svg>
             <span class="invalid-feedback"
                   *ngIf="!isApplicationsSelected && data.applications.selected <= 0"
                   i18n>Application selection is required!</span>
@@ -206,7 +204,7 @@
             <div class="custom-control custom-checkbox">
               <input class="custom-control-input"
                      id="rbdMirroring"
-                     name="rbdMirroring"
+                     data-testid="rbd-mirroring-check"
                      type="checkbox"
                      formControlName="rbdMirroring">
               <label class="custom-control-label"
@@ -220,9 +218,7 @@
         </div>
         <!-- CRUSH -->
         <div *ngIf="isErasure || isReplicated">
-
           <legend i18n>CRUSH</legend>
-
           <!-- Erasure Profile select -->
           <div class="form-group row"
                *ngIf="isErasure">
@@ -233,7 +229,6 @@
               <div class="input-group mb-1">
                 <select class="form-select"
                         id="erasureProfile"
-                        name="erasureProfile"
                         formControlName="erasureProfile"
                         (change)="erasureProfileChange()">
                   <option *ngIf="!ecProfiles"
@@ -255,15 +250,17 @@
                         id="ecp-info-button"
                         type="button"
                         (click)="data.erasureInfo = !data.erasureInfo">
-                  <i [ngClass]="[icons.questionCircle]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.questionCircle"
+                       [size]="icons.size20"
+                       class="cds-info-color "></svg>
                 </button>
                 <button class="btn btn-light"
                         type="button"
                         *ngIf="!editing"
                         (click)="addErasureCodeProfile()">
-                  <i [ngClass]="[icons.add]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.add"
+                       [size]="icons.size20"
+                       class="cds-info-color "></svg>
                 </button>
                 <button class="btn btn-light"
                         type="button"
@@ -273,8 +270,9 @@
                         triggers="manual"
                         #ecpDeletionBtn="ngbTooltip"
                         (click)="deleteErasureCodeProfile()">
-                  <i [ngClass]="[icons.trash]"
-                     aria-hidden="true"></i>
+                  <svg [cdsIcon]="icons.trash"
+                       [size]="icons.size16"
+                       class="cds-info-color"></svg>
                 </button>
               </div>
               <span class="form-text text-muted"
@@ -347,8 +345,7 @@
                 <div class="input-group">
                   <select class="form-select"
                           id="crushRule"
-                          formControlName="crushRule"
-                          name="crushSet">
+                          formControlName="crushRule">
                     <option [ngValue]="null"
                             i18n>-- Select a crush rule --</option>
                     <option *ngFor="let rule of current.rules"
@@ -365,15 +362,17 @@
                           specify how CRUSH places data replicas."
                           i18n-ngbTooltip
                           (click)="data.crushInfo = !data.crushInfo">
-                    <i [ngClass]="[icons.questionCircle]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.questionCircle"
+                         [size]="icons.size20"
+                         class="cds-info-color"></svg>
                   </button>
                   <button class="btn btn-light"
                           type="button"
                           *ngIf="isReplicated && !editing"
                           (click)="addCrushRule()">
-                    <i [ngClass]="[icons.add]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.add"
+                         [size]="icons.size16"
+                         class="cds-info-color"></svg>
                   </button>
                   <button class="btn btn-light"
                           *ngIf="isReplicated && !editing"
@@ -383,8 +382,9 @@
                           triggers="manual"
                           #crushDeletionBtn="ngbTooltip"
                           (click)="deleteCrushRule()">
-                    <i [ngClass]="[icons.trash]"
-                       aria-hidden="true"></i>
+                    <svg [cdsIcon]="icons.trash"
+                         [size]="icons.size16"
+                         class="cds-info-color"></svg>
                   </button>
                 </div>
 
@@ -462,7 +462,6 @@
             <div class="cd-col-form-input">
               <select class="form-select"
                       id="mode"
-                      name="mode"
                       formControlName="mode">
                 <option *ngFor="let mode of info.compression_modes"
                         [value]="mode">
@@ -482,7 +481,6 @@
               <div class="cd-col-form-input">
                 <select class="form-select"
                         id="algorithm"
-                        name="algorithm"
                         formControlName="algorithm">
                   <option *ngIf="!info.compression_algorithms"
                           ngValue=""
@@ -508,16 +506,23 @@
                 <ng-container i18n>Minimum blob size</ng-container>
               </label>
               <div class="cd-col-form-input">
-                <input id="minBlobSize"
-                       name="minBlobSize"
-                       formControlName="minBlobSize"
-                       type="text"
-                       min="0"
-                       class="form-control"
-                       i18n-placeholder
-                       placeholder="e.g., 128KiB"
-                       defaultUnit="KiB"
-                       cdDimlessBinary>
+                <div class="input-group mb-1">
+                  <input id="minBlobSize"
+                         formControlName="minBlobSize"
+                         type="text"
+                         min="0"
+                         class="form-control"
+                         i18n-placeholder
+                         placeholder="e.g., 128">
+                  <select id="minUnit"
+                          class="form-input form-select"
+                          formControlName="minBlobSizeUnit">
+                    <option *ngFor="let u of blobUnits"
+                            [value]="u">
+                      {{ u }}
+                    </option>
+                  </select>
+                </div>
                 <cd-help-text>
                   <span i18n>Chunks smaller than Minimum blob size are never compressed</span>
                 </cd-help-text>
@@ -540,15 +545,21 @@
                 <ng-container i18n>Maximum blob size</ng-container>
               </label>
               <div class="cd-col-form-input">
-                <input id="maxBlobSize"
-                       type="text"
-                       min="0"
-                       formControlName="maxBlobSize"
-                       class="form-control"
-                       i18n-placeholder
-                       placeholder="e.g., 512KiB"
-                       defaultUnit="KiB"
-                       cdDimlessBinary>
+                <div class="input-group mb-1">
+                  <input id="maxBlobSize"
+                         type="text"
+                         min="0"
+                         formControlName="maxBlobSize"
+                         class="form-control">
+                  <select id="minUnit"
+                          class="form-input form-select"
+                          formControlName="maxBlobSizeUnit">
+                    <option *ngFor="let u of blobUnits"
+                            [value]="u">
+                        {{ u }}
+                    </option>
+                  </select>
+                </div>
                 <cd-help-text>
                   <span i18n>Chunks larger than `Maximum Blob Size` are broken into smaller blobs of size mentioned before being compressed.</span>
                 </cd-help-text>
@@ -572,7 +583,6 @@
               </label>
               <div class="cd-col-form-input">
                 <input id="ratio"
-                       name="ratio"
                        formControlName="ratio"
                        type="number"
                        min="0"
@@ -602,15 +612,20 @@
               <ng-container i18n>Max bytes</ng-container>
             </label>
             <div class="cd-col-form-input">
-              <input class="form-control"
-                     id="max_bytes"
-                     name="max_bytes"
-                     type="text"
-                     formControlName="max_bytes"
-                     i18n-placeholder
-                     placeholder="e.g., 10GiB"
-                     defaultUnit="GiB"
-                     cdDimlessBinary>
+              <div class="input-group mb-1">
+                <input class="form-control"
+                       id="max_bytes"
+                       type="text"
+                       formControlName="max_bytes">
+                <select id="unit"
+                        class="form-input form-select"
+                        formControlName="maxBytesUnit">
+                  <option *ngFor="let u of maxBytesUnits"
+                          [value]="u">
+                    {{ u }}
+                  </option>
+                </select>
+              </div>
               <cd-help-text>
                 <span i18n>Leave it blank or specify 0 to disable this quota.</span>
                 <br>
@@ -632,7 +647,6 @@
               <input class="form-control"
                      id="max_objects"
                      min="0"
-                     name="max_objects"
                      type="number"
                      formControlName="max_objects">
               <cd-help-text>

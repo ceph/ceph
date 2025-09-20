@@ -75,6 +75,8 @@ Main Scrubber interfaces:
 #include <string_view>
 #include <vector>
 
+#include "common/config_proxy.h"
+#include "common/config_cacher.h"
 #include "osd/PG.h"
 #include "osd/scrubber_common.h"
 
@@ -82,6 +84,7 @@ Main Scrubber interfaces:
 #include "osd_scrub_sched.h"
 #include "scrub_backend.h"
 #include "scrub_machine_lstnr.h"
+#include "scrub_machine_if.h"
 #include "scrub_reservations.h"
 
 namespace Scrub {
@@ -130,6 +133,57 @@ class MapsCollectionStatus {
 };
 
 
+// links to the two sets of I/O performance counters used by PgScrubber
+// (one to be used when in a replicated pool, and one for EC))
+static inline constexpr ScrubCounterSet io_counters_replicated{
+  .getattr_cnt = l_osd_scrub_rppool_getattr_cnt,
+  .stats_cnt = l_osd_scrub_rppool_stats_cnt,
+  .read_cnt = l_osd_scrub_rppool_read_cnt,
+  .read_bytes = l_osd_scrub_rppool_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_rppool_started,
+  .active_started_cnt = l_osd_scrub_rppool_active_started,
+  .successful_cnt = l_osd_scrub_rppool_successful,
+  .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
+  .failed_cnt = l_osd_scrub_rppool_failed,
+  .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_rppool_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_rppool_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_rppool_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_rppool_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_rppool_reserv_secondaries_num
+};
+
+static inline constexpr ScrubCounterSet io_counters_ec{
+  .getattr_cnt = l_osd_scrub_ec_getattr_cnt,
+  .stats_cnt = l_osd_scrub_ec_stats_cnt,
+  .read_cnt = l_osd_scrub_ec_read_cnt,
+  .read_bytes = l_osd_scrub_ec_read_bytes,
+  .omapgetheader_cnt = l_osd_scrub_omapgetheader_cnt,
+  .omapgetheader_bytes = l_osd_scrub_omapgetheader_bytes,
+  .omapget_cnt = l_osd_scrub_omapget_cnt,
+  .omapget_bytes = l_osd_scrub_omapget_bytes,
+  .started_cnt = l_osd_scrub_ec_started,
+  .active_started_cnt = l_osd_scrub_ec_active_started,
+  .successful_cnt = l_osd_scrub_ec_successful,
+  .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
+  .failed_cnt = l_osd_scrub_ec_failed,
+  .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  // replica-reservation-related:
+  .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
+  .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
+  .rsv_aborted_cnt = l_osd_scrub_ec_reserv_aborted,
+  .rsv_rejected_cnt = l_osd_scrub_ec_reserv_rejected,
+  .rsv_skipped_cnt = l_osd_scrub_ec_reserv_skipped,
+  .rsv_failed_elapsed = l_osd_scrub_ec_reserv_failed_elapsed,
+  .rsv_secondaries_num = l_osd_scrub_ec_reserv_secondaries_num
+};
 }  // namespace Scrub
 
 
@@ -272,7 +326,7 @@ class PgScrubber : public ScrubPgIF,
 
   // managing scrub op registration
 
-  void update_scrub_job(Scrub::delay_ready_t delay_ready) final;
+  void update_scrub_job() final;
 
   void rm_from_osd_scrubbing() final;
 
@@ -388,7 +442,9 @@ class PgScrubber : public ScrubPgIF,
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
   PG* get_pg() const final { return m_pg; }
-  PerfCounters& get_counters_set() const final;
+  PerfCounters* get_osd_perf_counters() const final;
+  const Scrub::ScrubCounterSet& get_unlabeled_counters() const final;
+  PerfCounters* get_labeled_counters() const final;
 
   /// delay next retry of this PG after a replica reservation failure
   void flag_reservations_failure();
@@ -691,7 +747,7 @@ class PgScrubber : public ScrubPgIF,
 			    hobject_t end,
 			    bool deep);
 
-  std::unique_ptr<Scrub::ScrubMachine> m_fsm;
+  std::unique_ptr<Scrub::ScrubFsmIf> m_fsm;
   /// the FSM state, as a string for logging
   const char* m_fsm_state_name{nullptr};
   const spg_t m_pg_id;	///< a local copy of m_pg->pg_id
@@ -700,8 +756,6 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_interval_start{0};	///< interval's 'from' of when scrubbing was
 				///< first scheduled
-
-  void repair_oinfo_oid(ScrubMap& smap);
 
   /*
    * the exact epoch when the scrubbing actually started (started here - cleared
@@ -895,6 +949,24 @@ class PgScrubber : public ScrubPgIF,
   // scrub state.
   ceph::coarse_real_clock::time_point m_last_stat_upd{};
 
+  // ------------------ cached (frequently used) configuration values
+
+  /// initial (& max) number of objects to scrub in one pass - deep scrub
+  md_config_cacher_t<int64_t> osd_scrub_chunk_max;
+  /// initial (& max) number of objects to scrub in one pass - shallow
+  md_config_cacher_t<int64_t> osd_shallow_scrub_chunk_max;
+
+  /// chunk size won't be reduced (when preempted) below this
+  /// value (deep scrub)
+  md_config_cacher_t<int64_t> osd_scrub_chunk_min;
+  /// chunk size won't be reduced below this value (shallow scrub)
+  md_config_cacher_t<int64_t> osd_shallow_scrub_chunk_min;
+
+  /// stats update (publish_stats_to_osd()) interval while scrubbing
+  md_config_cacher_t<int64_t> osd_stats_update_period_scrubbing;
+  /// stats update interval while not scrubbing
+  md_config_cacher_t<int64_t> osd_stats_update_period_not_scrubbing;
+
   // ------------ members used if we are a replica
 
   epoch_t m_replica_min_epoch;	///< the min epoch needed to handle this message
@@ -987,10 +1059,12 @@ class PgScrubber : public ScrubPgIF,
     }
 
    private:
-    PG* m_pg;
     mutable ceph::mutex m_preemption_lock = ceph::make_mutex("preemption_lock");
     bool m_preemptable{false};
     bool m_preempted{false};
+
+    /// the number of preemptions allowed before we start blocking
+    md_config_cacher_t<uint64_t> osd_scrub_max_preemptions;
     int m_left;
     size_t m_size_divisor{1};
     bool are_preemptions_left() const { return m_left > 0; }

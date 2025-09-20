@@ -3,8 +3,10 @@
 
 #include <vector>
 #include <cstring>
+#include <iostream> // for std::cout
 #include <random>
 
+#include "include/intarith.h" // for cbits()
 #include "include/types.h"
 #include "include/buffer.h"
 

@@ -53,6 +53,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
+#include "msg/Messenger.h"
 #include "common/Graylog.h"
 #include "common/Journald.h"
 #include "common/errno.h"
@@ -66,6 +67,7 @@
 #define dout_subsys ceph_subsys_mon
 
 using namespace TOPNSPC::common;
+using namespace std::literals;
 
 using std::cerr;
 using std::cout;
@@ -464,7 +466,7 @@ void LogMonitor::log_external_backlog()
     } else {
       // pre-quincy, we assumed that anything through summary.version was
       // logged externally.
-      assert(r == -ENOENT);
+      ceph_assert(r == -ENOENT);
       external_log_to = summary.version;
       dout(10) << __func__ << " initialized external_log_to = " << external_log_to
 	       << " (summary v " << summary.version << ")" << dendl;
@@ -711,11 +713,9 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
     goto done;
   }
 
-  return false;
-
- done:
-  mon.no_reply(op);
-  return true;
+  done:
+    mon.no_reply(op);
+    return (!num_new);
 }
 
 struct LogMonitor::C_Log : public C_MonOp {
@@ -1272,6 +1272,19 @@ void LogMonitor::update_log_channels()
   log_external_close_fds();
 }
 
+std::vector<std::string> LogMonitor::get_tracked_keys() const noexcept
+{
+  return {
+    "mon_cluster_log_to_syslog"s,
+    "mon_cluster_log_to_syslog_facility"s,
+    "mon_cluster_log_file"s,
+    "mon_cluster_log_level"s,
+    "mon_cluster_log_to_graylog"s,
+    "mon_cluster_log_to_graylog_host"s,
+    "mon_cluster_log_to_graylog_port"s,
+    "mon_cluster_log_to_journald"s,
+    "mon_cluster_log_to_file"s
+  };}
 
 void LogMonitor::handle_conf_change(const ConfigProxy& conf,
                                     const std::set<std::string> &changed)

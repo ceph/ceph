@@ -188,7 +188,8 @@ int load_account_and_policies(const DoutPrefixProvider* dpp,
 
 static auto transform_old_authinfo(const RGWUserInfo& user,
                                    std::optional<RGWAccountInfo> account,
-                                   std::vector<IAM::Policy> policies)
+                                   std::vector<IAM::Policy> policies,
+                                   sal::Driver* driver)
   -> std::unique_ptr<rgw::auth::Identity>
 {
   /* This class is not intended for public use. Should be removed altogether
@@ -198,21 +199,24 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
     /* For this particular case it's OK to use rgw_user structure to convey
      * the identity info as this was the policy for doing that before the
      * new auth. */
+    sal::Driver* driver;
     const rgw_user id;
     const std::string display_name;
     const std::string path;
-    const bool is_admin;
+    const bool user_is_admin;
     const uint32_t type;
     const std::optional<RGWAccountInfo> account;
     const std::vector<IAM::Policy> policies;
   public:
     DummyIdentityApplier(const RGWUserInfo& user,
                          std::optional<RGWAccountInfo> account,
-                         std::vector<IAM::Policy> policies)
-      : id(user.user_id),
+                         std::vector<IAM::Policy> policies,
+                         sal::Driver* driver)
+      : driver(driver),
+        id(user.user_id),
         display_name(user.display_name),
         path(user.path),
-        is_admin(user.admin),
+        user_is_admin(user.admin || user.system),
         type(user.type),
         account(std::move(account)),
         policies(std::move(policies))
@@ -234,12 +238,19 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_owner& o) const override {
-      return is_admin;
+    bool is_admin() const override {
+      return user_is_admin;
     }
 
     bool is_owner_of(const rgw_owner& o) const override {
       return match_owner(o, id, account);
+    }
+
+    bool is_root() const override {
+      if (account)
+        return get_identity_type() == TYPE_ROOT;
+
+      return get_perm_mask() == RGW_PERM_FULL_CONTROL;
     }
 
     bool is_identity(const Principal& p) const override {
@@ -269,6 +280,10 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return type;
     }
 
+    std::optional<rgw::ARN> get_caller_identity() const override {
+      return std::nullopt;
+    }
+
     string get_acct_name() const override {
       return {};
     }
@@ -291,12 +306,12 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
-          << ", is_admin=" << is_admin << ")";
+          << ", is_admin=" << user_is_admin << ")";
     }
 
-    void load_acct_info(const DoutPrefixProvider* dpp,
-                        RGWUserInfo& user_info) const override {
+    auto load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> override {
       // noop, this user info was passed in on construction
+      return driver->get_user(id);
     }
 
     void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {
@@ -307,13 +322,14 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
   };
 
   return std::make_unique<DummyIdentityApplier>(
-      user, std::move(account), std::move(policies));
+      user, std::move(account), std::move(policies), driver);
 }
 
 auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             optional_yield y,
                             sal::Driver* driver,
-                            sal::User* user)
+                            sal::User* user,
+                            std::vector<IAM::Policy>* policies_)
   -> tl::expected<std::unique_ptr<Identity>, int>
 {
   const RGWUserInfo& info = user->get_info();
@@ -328,7 +344,10 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
     return tl::unexpected(r);
   }
 
-  return transform_old_authinfo(info, std::move(account), std::move(policies));
+  if (policies_) { // return policies to caller if requested
+    *policies_ = policies;
+  }
+  return transform_old_authinfo(info, std::move(account), std::move(policies), driver);
 }
 
 } /* namespace auth */
@@ -353,13 +372,6 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
 }
 
 
-static inline const std::string make_spec_item(const std::string& tenant,
-                                               const std::string& id)
-{
-  return tenant + ":" + id;
-}
-
-
 static inline std::pair<bool, rgw::auth::Engine::result_t>
 strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
                          const rgw::auth::Strategy::Control policy,
@@ -377,7 +389,7 @@ strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
 
     case Control::FALLBACK:
       /* Don't try next. */
-      return std::make_pair(false, std::move(engine_result));
+      return std::make_pair(false, std::move(strategy_result));
 
     default:
       /* Huh, memory corruption? */
@@ -523,7 +535,7 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       /* Account used by a given RGWOp is decoupled from identity employed
        * in the authorization phase (RGWOp::verify_permissions). */
-      applier->load_acct_info(dpp, s->user->get_info());
+      s->user = applier->load_acct_info(dpp);
       s->perm_mask = applier->get_perm_mask();
 
       /* This is the single place where we pass req_state as a pointer
@@ -542,18 +554,18 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       return 0;
     } catch (const int err) {
-      ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
+      ldpp_dout(dpp, 5) << "applier threw err=" << err << dendl;
       return err;
     } catch (const std::exception& e) {
-      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+      ldpp_dout(dpp, 5) << "applier threw unexpected err: " << e.what()
                         << dendl;
       return -EPERM;
     }
   } catch (const int err) {
-    ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
+    ldpp_dout(dpp, 5) << "auth engine threw err=" << err << dendl;
     return err;
   } catch (const std::exception& e) {
-    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+    ldpp_dout(dpp, 5) << "auth engine threw unexpected err: " << e.what()
                       << dendl;
   }
 
@@ -631,49 +643,51 @@ void rgw::auth::WebIdentityApplier::create_account(const DoutPrefixProvider* dpp
   user_info = user->get_info();
 }
 
-void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const {
+auto rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> {
   rgw_user federated_user;
   federated_user.id = this->sub;
   federated_user.tenant = role_tenant;
   federated_user.ns = "oidc";
 
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(federated_user);
   if (account) {
     // we don't need shadow users for account roles because bucket ownership,
     // quota, and stats are tracked by the account instead of the user
-    user_info.user_id = std::move(federated_user);
+    RGWUserInfo& user_info = user->get_info();
     user_info.display_name = user_name;
     user_info.type = TYPE_WEB;
-    return;
+    // the user_info.user_id is initialized by driver->get_user(...)
+    return user;
   }
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(federated_user);
 
   //Check in oidc namespace
   if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
-    user_info = user->get_info();
-    return;
+    // the user_info in user is initialized by user->load_user(...)
+    return user;
   }
 
   user->clear_ns();
   //Check for old users which wouldn't have been created in oidc namespace
   if (user->load_user(dpp, null_yield) >= 0) {
     /* Succeeded. */
-    user_info = user->get_info();
-    return;
+    // the user_info in user is initialized by user->load_user(...)
+    return user;
   }
 
   //Check if user_id.buckets already exists, may have been from the time, when shadow users didnt exist
-  RGWStorageStats stats;
-  ceph::real_time last_synced;
-  ceph::real_time last_updated;
-  int ret = driver->load_stats(dpp, null_yield, federated_user, stats,
-                               last_synced, last_updated);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: reading stats for the user returned error " << ret << dendl;
-    return;
+  federated_user.ns = "";
+  constexpr bool need_stats = false;
+  const std::string marker; // empty
+  constexpr uint32_t max_items = 1;
+  rgw::sal::BucketList buckets;
+  auto ret = driver->list_buckets(dpp, federated_user, federated_user.tenant, marker, marker,
+                             max_items, need_stats, buckets, null_yield);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: list buckets for the user returned error " << ret << dendl;
+    return user;
   }
-  if (ret == -ENOENT) { /* in case of ENOENT, which means user doesnt have buckets */
+  if (buckets.buckets.empty()) { /* no buckets */
     //In this case user will be created in oidc namespace
     ldpp_dout(dpp, 5) << "NOTICE: incoming user has no buckets " << federated_user << dendl;
     federated_user.ns = "oidc";
@@ -684,13 +698,22 @@ void rgw::auth::WebIdentityApplier::load_acct_info(const DoutPrefixProvider* dpp
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map oidc federated user " << federated_user << dendl;
-  create_account(dpp, federated_user, this->user_name, user_info);
+  create_account(dpp, federated_user, this->user_name, user->get_info());
+  return user;
 }
 
 void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
   s->info.args.append("sub", this->sub);
-  s->info.args.append("aud", this->aud);
+  //this is needed for AssumeRoleWithWebIdentityResponse
+  //but if aud is not present in the token, client id can be used
+  //from AWS docs - "The intended audience (also known as client ID) of the web identity token."
+  //https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+  if (this->aud.empty() && !this->client_id.empty()) {
+    s->info.args.append("aud", this->client_id);
+  } else {
+    s->info.args.append("aud", this->aud);
+  }
   s->info.args.append("provider_id", this->iss);
   s->info.args.append("client_id", this->client_id);
 
@@ -764,6 +787,7 @@ bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
+const std::string rgw::auth::RemoteApplier::AuthInfo::NO_KEYSTONE_USER;
 
 /* rgw::auth::RemoteAuthApplier */
 ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
@@ -806,7 +830,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::RemoteApplier::is_admin() const
 {
   return info.is_admin;
 }
@@ -827,6 +851,11 @@ bool rgw::auth::RemoteApplier::is_owner_of(const rgw_owner& o) const
   }
 
   return info.acct_user == *uid;
+}
+
+bool rgw::auth::RemoteApplier::is_root() const
+{
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
 }
 
 bool rgw::auth::RemoteApplier::is_identity(const Principal& p) const {
@@ -877,12 +906,10 @@ void rgw::auth::ImplicitTenants::recompute_value(const ConfigProxy& c)
   saved = v;
 }
 
-const char **rgw::auth::ImplicitTenants::get_tracked_conf_keys() const
+std::vector<std::string> rgw::auth::ImplicitTenants::get_tracked_keys()
+    const noexcept
 {
-  static const char *keys[] = {
-    "rgw_keystone_implicit_tenants",
-  nullptr };
-  return keys;
+  return {"rgw_keystone_implicit_tenants"s};
 }
 
 void rgw::auth::ImplicitTenants::handle_conf_change(const ConfigProxy& c,
@@ -933,10 +960,11 @@ void rgw::auth::RemoteApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+  entry.user = info.keystone_user;
 }
 
 /* TODO(rzarzynski): we need to handle display_name changes. */
-void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const      /* out */
+auto rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User>     /* out */
 {
   /* It's supposed that RGWRemoteAuthApplier tries to load account info
    * that belongs to the authenticated identity. Another policy may be
@@ -975,9 +1003,9 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
       (void) load_account_and_policies(dpp, null_yield, driver, user->get_info(),
                                        user->get_attrs(), account, policies);
 
-      user_info = std::move(user->get_info());
       owner_acct_user = std::move(tenanted_uid);
-      return;
+      // the user_info in user is initialized by user->load_user(...)
+      return user;
     }
   }
 
@@ -990,22 +1018,32 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     (void) load_account_and_policies(dpp, null_yield, driver, user->get_info(),
                                      user->get_attrs(), account, policies);
 
-    user_info = std::move(user->get_info());
     owner_acct_user = acct_user;
-    return;
+    // the user_info in user is initialized by user->load_user(...)
+    return user;
   }
 
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
-  create_account(dpp, acct_user, implicit_tenant, user_info);
+  create_account(dpp, acct_user, implicit_tenant, user->get_info());
 
-  /* Succeeded if we are here (create_account() hasn't throwed). */
+  /* Succeeded if we are here (create_account() hasn't thrown). */
+  return user;
 }
 
 void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = info.acct_user.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
+}
+
+std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 
+{
+  return rgw::ARN(owner_acct_user.id, "user", owner_acct_user.tenant, true);
 }
 
 /* rgw::auth::LocalApplier */
@@ -1042,7 +1080,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return mask;
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
+bool rgw::auth::LocalApplier::is_admin() const
 {
   return user_info.admin || user_info.system;
 }
@@ -1050,6 +1088,14 @@ bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
 bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
   return match_owner(o, user_info.user_id, account);
+}
+
+bool rgw::auth::LocalApplier::is_root() const
+{
+  if (account)
+    return get_identity_type() == TYPE_ROOT;
+
+  return get_perm_mask() == RGW_PERM_FULL_CONTROL;
 }
 
 bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
@@ -1098,15 +1144,19 @@ uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
   }
 }
 
-void rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
+auto rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> /* out */
 {
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
-  user_info = this->user_info;
+  return std::unique_ptr<rgw::sal::User>(user.release());
 }
 
 void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = user_info.type == TYPE_ROOT ? user_info.account_id : user_info.user_id.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
@@ -1119,6 +1169,22 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
   if (account) {
     entry.account_id = account->id;
   }
+}
+
+rgw::auth::LocalApplier::LocalApplier(CephContext* const cct,
+                                      std::unique_ptr<rgw::sal::User> user,
+                                      std::optional<RGWAccountInfo> account,
+                                      std::vector<IAM::Policy> policies,
+                                      std::string subuser,
+                                      const std::optional<uint32_t>& perm_mask,
+                                      const std::string access_key_id)
+  : user_info(user->get_info()),
+    user(std::move(user)),
+    account(std::move(account)),
+    policies(std::move(policies)),
+    subuser(std::move(subuser)),
+    perm_mask(perm_mask.value_or(RGW_PERM_INVALID)),
+    access_key_id(access_key_id) {
 }
 
 ACLOwner rgw::auth::RoleApplier::get_aclowner() const
@@ -1183,10 +1249,11 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
   return false;
 }
 
-void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const /* out */
+auto rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp) const -> std::unique_ptr<rgw::sal::User> /* out */
 {
   /* Load the user id */
-  user_info.user_id = this->token_attrs.user_id;
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(this->token_attrs.user_id);
+  return user;
 }
 
 void rgw::auth::RoleApplier::write_ops_log_entry(rgw_log_entry& entry) const
@@ -1267,11 +1334,13 @@ rgw::auth::AnonymousEngine::authenticate(const DoutPrefixProvider* dpp, const re
   } else {
     RGWUserInfo user_info;
     rgw_get_anon_user(user_info);
-
+    std::unique_ptr<rgw::sal::User> user = s->user->clone();
+    user->get_info() = user_info;
     auto apl = \
-      apl_factory->create_apl_local(cct, s, user_info, std::nullopt, {},
+      apl_factory->create_apl_local(cct, s, std::move(user), std::nullopt, {},
                                     rgw::auth::LocalApplier::NO_SUBUSER,
-                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY);
+                                    std::nullopt, rgw::auth::LocalApplier::NO_ACCESS_KEY,
+                                    false /* is_impersonating */);
     return result_t::grant(std::move(apl));
   }
 }

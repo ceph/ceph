@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_pubsub_push.h"
+#include <shared_mutex> // for std::shared_lock
 #include <string>
 #include <sstream>
 #include <algorithm>
@@ -60,6 +61,7 @@ bool get_bool(const RGWHTTPArgs& args, const std::string& name, bool default_val
 
 static std::unique_ptr<RGWHTTPManager> s_http_manager;
 static std::shared_mutex s_http_manager_mutex;
+static std::atomic<unsigned> s_http_manager_inflight(0);
 
 class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
@@ -98,8 +100,17 @@ public:
       ldout(cct, 1) << "ERROR: send failed. http endpoint manager not running" << dendl;
       return -ESRCH;
     }
+    const auto max_inflight = cct->_conf->rgw_http_notif_max_inflight;
+    if (max_inflight != 0 &&
+        s_http_manager_inflight >= max_inflight) {
+      ldout(cct, 1) << "ERROR: send failed. http endpoint manager busy. in-flight requests: " <<
+        s_http_manager_inflight << " >= " << max_inflight << dendl;
+      return -EBUSY;
+    }
     bufferlist read_bl;
     RGWPostHTTPData request(cct, "POST", endpoint, &read_bl, verify_ssl);
+    request.set_req_connect_timeout(cct->_conf->rgw_http_notif_connection_timeout);
+    request.set_req_timeout(cct->_conf->rgw_http_notif_message_timeout);
     const auto post_data = json_format_pubsub_event(event);
     if (cloudevents) {
       // following: https://github.com/cloudevents/spec/blob/v1.0.1/http-protocol-binding.md
@@ -115,11 +126,13 @@ public:
     request.set_post_data(post_data);
     request.set_send_length(post_data.length());
     request.append_header("Content-Type", "application/json");
+    ++s_http_manager_inflight;
     if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
     auto rc = s_http_manager->add_request(&request);
     if (rc == 0) {
       rc = request.wait(dpp, y);
     }
+    --s_http_manager_inflight;
     if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     // TODO: use read_bl to process return code and handle according to ack level
     return rc;
@@ -281,7 +294,7 @@ public:
            conn_id, _endpoint, get_bool(args, "use-ssl", false),
            get_bool(args, "verify-ssl", true), args.get_optional("ca-location"),
            args.get_optional("mechanism"), args.get_optional("user-name"),
-           args.get_optional("password"))) {
+           args.get_optional("password"), args.get_optional("kafka-brokers"))) {
      throw configuration_error("Kafka: failed to create connection to: " +
                                _endpoint);
    }
@@ -434,4 +447,3 @@ void RGWPubSubEndpoint::shutdown_all() {
 #endif
   shutdown_http_manager();
 }
-

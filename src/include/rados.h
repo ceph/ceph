@@ -208,7 +208,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_QUINCY     17
 #define CEPH_RELEASE_REEF       18
 #define CEPH_RELEASE_SQUID      19
-#define CEPH_RELEASE_MAX        20  /* highest + 1 */
+#define CEPH_RELEASE_TENTACLE   20
+#define CEPH_RELEASE_MAX        21  /* highest + 1 */
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -564,6 +565,7 @@ enum {
 	CEPH_OSD_ALLOC_HINT_FLAG_LONGLIVED = 128,
 	CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE = 256,
 	CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE = 512,
+	CEPH_OSD_ALLOC_HINT_FLAG_LOG = 1024,
 };
 
 const char *ceph_osd_alloc_hint_flag_name(int f);

@@ -1,7 +1,7 @@
 import os
 import pytest
 from ceph_volume.devices.simple import activate
-from mock.mock import patch
+from unittest.mock import patch
 
 
 class TestActivate(object):

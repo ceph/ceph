@@ -1,7 +1,28 @@
 import ipaddress
 import socket
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Any
 from urllib.parse import urlparse
+from ceph.deployment.hostspec import SpecValidationError
+from numbers import Number
+
+
+def parse_combined_pem_file(pem_data: str) -> Tuple[Optional[str], Optional[str]]:
+
+    # Extract the certificate
+    cert_start = "-----BEGIN CERTIFICATE-----"
+    cert_end = "-----END CERTIFICATE-----"
+    cert = None
+    if cert_start in pem_data and cert_end in pem_data:
+        cert = pem_data[pem_data.index(cert_start):pem_data.index(cert_end) + len(cert_end)]
+
+    # Extract the private key
+    key_start = "-----BEGIN PRIVATE KEY-----"
+    key_end = "-----END PRIVATE KEY-----"
+    private_key = None
+    if key_start in pem_data and key_end in pem_data:
+        private_key = pem_data[pem_data.index(key_start):pem_data.index(key_end) + len(key_end)]
+
+    return cert, private_key
 
 
 def unwrap_ipv6(address):
@@ -100,3 +121,50 @@ def valid_addr(addr: str) -> Tuple[bool, str]:
     if addr[0].isalpha() and '.' in addr:
         return _dns_lookup(addr, port)
     return _ip_lookup(addr, port)
+
+
+def verify_numeric(field: Any, field_name: str) -> None:
+    if field is not None:
+        if not isinstance(field, Number) or isinstance(field, bool):
+            raise SpecValidationError(f"{field_name} must be a number")
+
+
+def verify_non_negative_int(field: Any, field_name: str) -> None:
+    verify_numeric(field, field_name)
+    if field is not None:
+        if not isinstance(field, int) or isinstance(field, bool):
+            raise SpecValidationError(f"{field_name} must be an integer")
+        if field < 0:
+            raise SpecValidationError(f"{field_name} can't be negative")
+
+
+def verify_positive_int(field: Any, field_name: str) -> None:
+    verify_non_negative_int(field, field_name)
+    if field is not None and field <= 0:
+        raise SpecValidationError(f"{field_name} must be greater than zero")
+
+
+def verify_non_negative_number(field: Any, field_name: str) -> None:
+    verify_numeric(field, field_name)
+    if field is not None:
+        if field < 0.0:
+            raise SpecValidationError(f"{field_name} can't be negative")
+
+
+def verify_boolean(field: Any, field_name: str) -> None:
+    if field is not None:
+        if not isinstance(field, bool):
+            raise SpecValidationError(f"{field_name} must be a boolean")
+
+
+def verify_enum(field: Any, field_name: str, allowed: list) -> None:
+    if field:
+        allowed_lower = []
+        if not isinstance(field, str):
+            raise SpecValidationError(f"{field_name} must be a string")
+        for val in allowed:
+            assert isinstance(val, str)
+            allowed_lower.append(val.lower())
+        if field.lower() not in allowed_lower:
+            raise SpecValidationError(
+                           f'Invalid {field_name}. Valid values are: {", ".join(allowed)}')

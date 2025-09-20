@@ -13,7 +13,7 @@ Synopsis
 |               [--log-dir LOG_DIR] [--logrotate-dir LOGROTATE_DIR]
 |               [--unit-dir UNIT_DIR] [--verbose] [--timeout TIMEOUT]
 |               [--retry RETRY] [--no-container-init]
-|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install}
+|               {version,pull,inspect-image,ls,list-networks,adopt,rm-daemon,rm-cluster,run,shell,enter,ceph-volume,unit,logs,bootstrap,deploy,check-host,prepare-host,add-repo,rm-repo,install,list-images,update-osd-service}
 |               ...
 
 
@@ -104,6 +104,9 @@ Synopsis
 |                                [--registry-password REGISTRY_PASSWORD]
 |                                [--registry-json REGISTRY_JSON] [--fsid FSID]
 
+| **cephadm** **list-images**
+
+| **cephadm** **update-osd-service** [-h] [--fsid FSID] --osd-ids OSD_IDS --service-name SERVICE_NAME
 
 
 Description
@@ -247,7 +250,7 @@ Arguments:
 * [--allow-overwrite]             allow overwrite of existing --output-* config/keyring/ssh files
 * [--allow-fqdn-hostname]         allow hostname that is fully-qualified (contains ".")
 * [--skip-prepare-host]           Do not prepare host
-* [--orphan-initial-daemons]      Do not create initial mon, mgr, and crash service specs
+* [--orphan-initial-daemons]      Set mon and mgr service to unmanaged and do not create the crash service
 * [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
 * [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
 * [--registry-url REGISTRY_URL]   url of custom registry to login to. e.g. docker.io, quay.io
@@ -435,6 +438,23 @@ Can also use a JSON file containing the login info formatted as::
        "password":"REGISTRY_PASSWORD"
       }
 
+For multiple registry logins, refer to the format below::
+
+    {
+      "registry_credentials": [
+        {
+          "url": "REGISTRY_URL1",
+          "username": "REGISTRY_USERNAME1",
+          "password": "REGISTRY_PASSWORD1"
+        },
+        {
+          "url": "REGISTRY_URL2",
+          "username": "REGISTRY_USERNAME2",
+          "password": "REGISTRY_PASSWORD2"
+        }
+      ]
+    }
+
 and turn it in with command::
 
       cephadm registry-login --registry-json [JSON FILE]
@@ -525,6 +545,24 @@ Arguments:
 
 * [--fsid FSID]           cluster FSID
 * [--name NAME, -n NAME]  daemon name (type.id)
+
+
+list-images
+-----------
+
+List the default container images for all services in ini format. The output can be modified with custom images and passed to --config flag during bootstrap.
+
+
+update-osd-service
+------------------
+
+Update the OSD service for specific OSDs
+
+Arguments:
+
+* [--fsid FSID]                 cluster FSID
+* --osd-ids OSD_IDS             Comma-separated OSD IDs
+* --service-name SERVICE_NAME   OSD service name
 
 
 Availability

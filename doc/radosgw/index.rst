@@ -52,10 +52,10 @@ Cluster with one API and then retrieve that data with the other API.
    User Accounts <account>
    S3 API <s3>
    IAM API <iam>
-   Data caching and CDN <rgw-cache.rst>
+   Data Caching and CDN <rgw-cache.rst>
    Swift API <swift>
    Admin Ops API <adminops>
-   Python binding <api>
+   Python Binding <api>
    Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
@@ -67,8 +67,8 @@ Cluster with one API and then retrieve that data with the other API.
    LDAP Authentication <ldap-auth>
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
-   Dynamic bucket index resharding <dynamicresharding>
-   Multi factor authentication <mfa>
+   Dynamic Bucket Index Resharding <dynamicresharding>
+   Multi-factor Authentication <mfa>
    Sync Modules <sync-modules>
    Bucket Notifications <notifications>
    Data Layout in RADOS <layout>
@@ -79,7 +79,7 @@ Cluster with one API and then retrieve that data with the other API.
    Role <role>
    Orphan List and Associated Tooling <orphans>
    OpenID Connect Provider <oidc>
-   troubleshooting
+   Troubleshooting <troubleshooting>
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
    QAT Acceleration for Encryption and Compression <qat-accel>
@@ -87,5 +87,8 @@ Cluster with one API and then retrieve that data with the other API.
    Lua Scripting <lua-scripting>
    D3N Data Cache <d3n_datacache>
    Cloud Transition <cloud-transition>
+   Cloud Restore <cloud-restore>
    Metrics <metrics>
    UADK Acceleration for Compression <uadk-accel>
+   Bucket Logging <bucket_logging>
+   Full Object Deduplication <s3_objects_dedup>

@@ -29,10 +29,12 @@ void LogEntryKey::dump(Formatter *f) const
   f->dump_unsigned("seq", seq);
 }
 
-void LogEntryKey::generate_test_instances(list<LogEntryKey*>& o)
+list<LogEntryKey> LogEntryKey::generate_test_instances()
 {
-  o.push_back(new LogEntryKey);
-  o.push_back(new LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
+  list<LogEntryKey> o;
+  o.emplace_back();
+  o.push_back(LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
+  return o;
 }
 
 clog_type LogEntry::str_to_level(std::string const &str)
@@ -269,9 +271,11 @@ void LogEntry::dump(Formatter *f) const
   f->dump_string("message", msg);
 }
 
-void LogEntry::generate_test_instances(list<LogEntry*>& o)
+list<LogEntry> LogEntry::generate_test_instances()
 {
-  o.push_back(new LogEntry);
+  list<LogEntry> o;
+  o.emplace_back();
+  return o;
 }
 
 
@@ -352,8 +356,10 @@ void LogSummary::dump(Formatter *f) const
   f->close_section();
 }
 
-void LogSummary::generate_test_instances(list<LogSummary*>& o)
+list<LogSummary> LogSummary::generate_test_instances()
 {
-  o.push_back(new LogSummary);
+  list<LogSummary> o;
+  o.emplace_back();
   // more!
+  return o;
 }

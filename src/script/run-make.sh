@@ -29,6 +29,7 @@ function clean_up_after_myself() {
 
 function detect_ceph_dev_pkgs() {
     local boost_root=/opt/ceph
+    local cmake_opts=""
     if test -f $boost_root/include/boost/config.hpp; then
         cmake_opts+=" -DWITH_SYSTEM_BOOST=ON -DBOOST_ROOT=$boost_root"
     else
@@ -51,11 +52,31 @@ function prepare() {
     local which_pkg="which"
     if command -v apt-get > /dev/null 2>&1 ; then
         which_pkg="debianutils"
+
+        if in_jenkins; then
+            wrap_sudo
+            # require clang-19. uninstall previous versions to work around package conflicts
+            local v=19
+            local remove_from=13
+            local remove_to=$(($v-1))
+            ci_debug "Removing clang package versions from $remove_from-$remove_to"
+            for i in $(seq $remove_from $remove_to); do
+                $DRY_RUN $SUDO apt-get purge --auto-remove clang-$i lldb-$i lld-$i clangd-$i python3-lldb-$i -y || true
+            done
+
+            if ! type clang-$v > /dev/null 2>&1 ; then
+                ci_debug "Getting clang-$v"
+                wget https://download.ceph.com/qa/llvm.sh
+                chmod +x llvm.sh
+                $DRY_RUN $SUDO ./llvm.sh $v
+                rm llvm.sh
+            fi
+        fi
     fi
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg lvm2"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
@@ -107,8 +128,8 @@ EOM
     cmake_opts+=" -DWITH_GRAFANA=ON"
     cmake_opts+=" -DWITH_SPDK=ON"
     cmake_opts+=" -DWITH_RBD_MIRROR=ON"
-    if [ $WITH_SEASTAR ]; then
-        cmake_opts+=" -DWITH_SEASTAR=ON"
+    if [ $WITH_CRIMSON ]; then
+        cmake_opts+=" -DWITH_CRIMSON=ON"
     fi
     if [ $WITH_RBD_RWL ]; then
         cmake_opts+=" -DWITH_RBD_RWL=ON"

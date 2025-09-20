@@ -13,6 +13,9 @@ Prerequisites
 
 Supported platforms
 -------------------
+.. note::
+
+  Please see the `OS recommendations`_ regarding client package support.
 
 Windows Server 2019 and Windows Server 2016 are supported. Previous Windows
 Server versions, including Windows client versions such as Windows 10, might
@@ -86,3 +89,4 @@ Further reading
 .. _General CephFS Prerequisites: ../../cephfs/mount-prerequisites
 .. _Client Authentication: ../../cephfs/client-auth
 .. _Windows testing: ../dev/tests-windows
+.. _OS recommendations: ../../start/os-recommendations

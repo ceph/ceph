@@ -833,7 +833,7 @@ class TestDF(TestCephFSShell):
     def test_df_for_invalid_directory(self):
         dir_abspath = path.join(self.mount_a.mountpoint, 'non-existent-dir')
         self.negtest_cephfs_shell_cmd(cmd='df ' + dir_abspath,
-                                      errmsg='error in stat')
+                                      errmsg='statfs failed')
 
     def test_df_for_valid_file(self):
         s = 'df test' * 14145016
@@ -979,6 +979,13 @@ class TestXattr(TestCephFSShell):
         self.negtest_cephfs_shell_cmd(
             cmd=['getxattr', self.dir_name, input_val[0]])
         self.negtest_cephfs_shell_cmd(cmd=['listxattr', self.dir_name])
+
+    def test_remove_xattr(self):
+        self.test_set()
+        self.get_cephfs_shell_cmd_output(
+            ['removexattr', self.dir_name, 'user.key'])
+        self.negtest_cephfs_shell_cmd(
+            cmd=['getxattr', self.dir_name, 'user.key'])
 
 
 class TestLS(TestCephFSShell):

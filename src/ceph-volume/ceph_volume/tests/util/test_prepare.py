@@ -5,8 +5,8 @@ from ceph_volume.util import prepare
 from ceph_volume.util.prepare import system
 from ceph_volume import conf
 from ceph_volume.tests.conftest import Factory
-from ceph_volume import objectstore
-from mock.mock import patch
+from ceph_volume.objectstore.baseobjectstore import BaseObjectStore
+from unittest.mock import patch
 
 
 class TestOSDIDAvailable(object):
@@ -118,13 +118,14 @@ class TestFormatDevice(object):
         assert expected == fake_run.calls[0]['args'][0]
 
 
-class TestOsdMkfsBluestore(object):
+class TestOsdMkfs(object):
     def setup_method(self):
         conf.cluster = 'ceph'
 
-    def test_keyring_is_added(self, fake_call, monkeypatch):
+    def test_keyring_is_added(self, fake_call, monkeypatch, factory):
+        args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
-        o = objectstore.baseobjectstore.BaseObjectStore([])
+        o = BaseObjectStore(args)
         o.osd_id = '1'
         o.osd_fsid = 'asdf'
         o.osd_mkfs()
@@ -133,34 +134,33 @@ class TestOsdMkfsBluestore(object):
     def test_keyring_is_not_added(self, fake_call, monkeypatch, factory):
         args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
-        o = objectstore.bluestore.BlueStore([])
-        o.args = args
+        o = BaseObjectStore(args)
         o.osd_id = '1'
         o.osd_fsid = 'asdf'
         o.osd_mkfs()
         assert '--keyfile' not in fake_call.calls[0]['args'][0]
 
-    def test_wal_is_added(self, fake_call, monkeypatch, objectstore_bluestore, factory):
-        args = factory(dmcrypt=False)
+    def test_wal_is_added(self, fake_call, monkeypatch, objectstore, factory):
+        args = factory(objecstore='bluestore',
+                       osd_id='1',
+                       osd_fid='asdf',
+                       wal_device_path='/dev/smm1',
+                       cephx_secret='foo',
+                       dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
-        bs = objectstore_bluestore(objecstore='bluestore',
-                        osd_id='1',
-                        osd_fid='asdf',
-                        wal_device_path='/dev/smm1',
-                        cephx_secret='foo',
-                        dmcrypt=False)
-        bs.args = args
-        bs.osd_mkfs()
+        o = BaseObjectStore(args)
+        o.wal_device_path = '/dev/smm1'
+        o.osd_mkfs()
         assert '--bluestore-block-wal-path' in fake_call.calls[2]['args'][0]
         assert '/dev/smm1' in fake_call.calls[2]['args'][0]
 
     def test_db_is_added(self, fake_call, monkeypatch, factory):
         args = factory(dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
-        bs = objectstore.bluestore.BlueStore([])
-        bs.args = args
-        bs.db_device_path = '/dev/smm2'
-        bs.osd_mkfs()
+        o = BaseObjectStore(args)
+        o.args = args
+        o.db_device_path = '/dev/smm2'
+        o.osd_mkfs()
         assert '--bluestore-block-db-path' in fake_call.calls[2]['args'][0]
         assert '/dev/smm2' in fake_call.calls[2]['args'][0]
 
@@ -288,28 +288,29 @@ class TestNormalizeFlags(object):
         assert ','.join(result) == 'auto,discard,exec,rw'
 
 @patch('ceph_volume.util.prepare.create_key', return_value='fake-secret')
-class TestMkfsBluestore(object):
+class TestMkfs(object):
 
-    def test_non_zero_exit_status(self, m_create_key, stub_call, monkeypatch, objectstore_bluestore):
+    def test_non_zero_exit_status(self, m_create_key, stub_call, monkeypatch, objectstore):
         conf.cluster = 'ceph'
         monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
         stub_call(([], [], 1))
-        bs = objectstore_bluestore(osd_id='1',
-                                   osd_fsid='asdf-1234',
-                                   cephx_secret='keyring')
+        o = objectstore(osd_id='1',
+                         osd_fsid='asdf-1234',
+                         cephx_secret='keyring')
         with pytest.raises(RuntimeError) as error:
-            bs.osd_mkfs()
+            o.osd_mkfs()
         assert "Command failed with exit code 1" in str(error.value)
 
-    def test_non_zero_exit_formats_command_correctly(self, m_create_key, stub_call, monkeypatch, objectstore_bluestore):
+    def test_non_zero_exit_formats_command_correctly(self, m_create_key, stub_call, monkeypatch, objectstore):
         conf.cluster = 'ceph'
         monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
         stub_call(([], [], 1))
-        bs = objectstore_bluestore(osd_id='1',
-                                   osd_fsid='asdf-1234',
-                                   cephx_secret='keyring')
+        o = objectstore(osd_id='1',
+                        objectstore='bluestore',
+                        osd_fsid='asdf-1234',
+                        cephx_secret='keyring')
         with pytest.raises(RuntimeError) as error:
-            bs.osd_mkfs()
+            o.osd_mkfs()
         expected = ' '.join([
             'ceph-osd',
             '--cluster',

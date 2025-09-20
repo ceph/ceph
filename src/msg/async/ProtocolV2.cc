@@ -12,6 +12,7 @@
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthSessionHandler.h" // for struct DecryptionError
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -251,11 +252,11 @@ void ProtocolV2::reset_recv_state() {
     // `write_event()` unlocks it just before calling `write_message()`.
     // `submit_to()` here is NOT blocking.
     connection->center->submit_to(connection->center->get_id(), [this] {
-      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto and compression handlers"
-                    << dendl;
       // Possibly unnecessary. See the comment in `deactivate_existing`.
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
+      ldout(cct, 5) << "reset_recv_state (warped) reseting crypto and compression handlers"
+                    << dendl;
       reset_security();
       reset_compression();
     }, /* always_async = */true);
@@ -764,6 +765,40 @@ void ProtocolV2::write_event() {
 
 bool ProtocolV2::is_queued() {
   return !out_queue.empty() || connection->is_queued();
+}
+
+void ProtocolV2::dump(Formatter *f) {
+  f->open_object_section("v2");
+  f->dump_string("state", get_state_name(state));
+  if (auth_meta) {
+    f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
+  }
+  f->dump_bool("rev1", HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1));
+  f->dump_unsigned("connect_seq", connect_seq);
+  f->dump_unsigned("peer_global_seq", peer_global_seq);
+
+  f->open_object_section("crypto");
+  f->dump_string(
+      "rx", session_stream_handlers.rx
+                ? session_stream_handlers.rx->cipher_name()
+                : "PLAIN");
+  f->dump_string(
+      "tx", session_stream_handlers.tx
+                ? session_stream_handlers.tx->cipher_name()
+                : "PLAIN");
+  f->close_section();  // crypto
+
+  f->open_object_section("compression");
+  f->dump_string(
+      "rx", session_compression_handlers.rx
+                ? session_compression_handlers.rx->compressor_name()
+                : "UNCOMPRESSED");
+  f->dump_string(
+      "tx", session_compression_handlers.tx
+                ? session_compression_handlers.tx->compressor_name()
+                : "UNCOMPRESSED");
+  f->close_section();  // compression
+  f->close_section();  // v2
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
@@ -2226,7 +2261,9 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
   std::vector<uint32_t> allowed_methods;
   std::vector<uint32_t> allowed_modes;
   messenger->auth_server->get_supported_auth_methods(
-    connection->get_peer_type(), &allowed_methods, &allowed_modes);
+    connection->get_peer_type(), &allowed_methods);
+  messenger->auth_server->get_supported_con_modes(
+    connection->get_peer_type(), auth_meta->auth_method, &allowed_modes);
   ldout(cct, 1) << __func__ << " auth_method " << auth_meta->auth_method
 		<< " r " << cpp_strerror(r)
 		<< ", allowed_methods " << allowed_methods

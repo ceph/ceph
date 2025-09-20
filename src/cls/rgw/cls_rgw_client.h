@@ -16,143 +16,6 @@
 #include "common/ceph_mutex.h"
 
 
-// Forward declaration
-class BucketIndexAioManager;
-/*
- * Bucket index AIO request argument, this is used to pass a argument
- * to callback.
- */
-struct BucketIndexAioArg : public RefCountedObject {
-  BucketIndexAioArg(int _id, BucketIndexAioManager* _manager) :
-    id(_id), manager(_manager) {}
-  int id;
-  BucketIndexAioManager* manager;
-};
-
-/*
- * This class manages AIO completions. This class is not completely
- * thread-safe, methods like *get_next_request_id* is not thread-safe
- * and is expected to be called from within one thread.
- */
-class BucketIndexAioManager {
-public:
-
-  // allows us to reaccess the shard id and shard's oid during and
-  // after the asynchronous call is made
-  struct RequestObj {
-    int shard_id;
-    std::string oid;
-
-    RequestObj(int _shard_id, const std::string& _oid) :
-      shard_id(_shard_id), oid(_oid)
-    {/* empty */}
-  };
-
-
-private:
-  // NB: the following 4 maps use the request_id as the key; this
-  // is not the same as the shard_id!
-  std::map<int, librados::AioCompletion*> pendings;
-  std::map<int, librados::AioCompletion*> completions;
-  std::map<int, const RequestObj> pending_objs;
-  std::map<int, const RequestObj> completion_objs;
-
-  int next = 0;
-  ceph::mutex lock = ceph::make_mutex("BucketIndexAioManager::lock");
-  ceph::condition_variable cond;
-  /*
-   * Callback implementation for AIO request.
-   */
-  static void bucket_index_op_completion_cb(void* cb, void* arg) {
-    BucketIndexAioArg* cb_arg = (BucketIndexAioArg*) arg;
-    cb_arg->manager->do_completion(cb_arg->id);
-    cb_arg->put();
-  }
-
-  /*
-   * Get next request ID. This method is not thread-safe.
-   *
-   * Return next request ID.
-   */
-  int get_next_request_id() { return next++; }
-
-  /*
-   * Add a new pending AIO completion instance.
-   *
-   * @param id         - the request ID.
-   * @param completion - the AIO completion instance.
-   * @param oid        - the object id associated with the object, if it is NULL, we don't
-   *                     track the object id per callback.
-   */
-  void add_pending(int request_id, librados::AioCompletion* completion, const int shard_id, const std::string& oid) {
-    pendings[request_id] = completion;
-    pending_objs.emplace(request_id, RequestObj(shard_id, oid));
-  }
-
-public:
-  /*
-   * Create a new instance.
-   */
-  BucketIndexAioManager() = default;
-
-  /*
-   * Do completion for the given AIO request.
-   */
-  void do_completion(int request_id);
-
-  /*
-   * Wait for AIO completions.
-   *
-   * valid_ret_code  - valid AIO return code.
-   * num_completions - number of completions.
-   * ret_code        - return code of failed AIO.
-   * objs            - a std::list of objects that has been finished the AIO.
-   *
-   * Return false if there is no pending AIO, true otherwise.
-   */
-  bool wait_for_completions(int valid_ret_code,
-			    int *num_completions = nullptr,
-			    int *ret_code = nullptr,
-			    std::map<int, std::string> *completed_objs = nullptr,
-			    std::map<int, std::string> *retry_objs = nullptr);
-
-  /**
-   * Do aio read operation.
-   */
-  bool aio_operate(librados::IoCtx& io_ctx, const int shard_id, const std::string& oid, librados::ObjectReadOperation *op) {
-    std::lock_guard l{lock};
-    const int request_id = get_next_request_id();
-    BucketIndexAioArg *arg = new BucketIndexAioArg(request_id, this);
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
-    int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
-    if (r >= 0) {
-      add_pending(arg->id, c, shard_id, oid);
-    } else {
-      arg->put();
-      c->release();
-    }
-    return r;
-  }
-
-  /**
-   * Do aio write operation.
-   */
-  bool aio_operate(librados::IoCtx& io_ctx, const int shard_id, const std::string& oid, librados::ObjectWriteOperation *op) {
-    std::lock_guard l{lock};
-    const int request_id = get_next_request_id();
-    BucketIndexAioArg *arg = new BucketIndexAioArg(request_id, this);
-    librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, bucket_index_op_completion_cb);
-    int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);
-    if (r >= 0) {
-      add_pending(arg->id, c, shard_id, oid);
-    } else {
-      arg->put();
-      c->release();
-    }
-    return r;
-  }
-};
-
 class RGWGetDirHeader_CB : public boost::intrusive_ref_counter<RGWGetDirHeader_CB> {
 public:
   virtual ~RGWGetDirHeader_CB() {}
@@ -266,98 +129,8 @@ public:
 void cls_rgw_bucket_init_index(librados::ObjectWriteOperation& o);
 void cls_rgw_bucket_init_index2(librados::ObjectWriteOperation& o);
 
-class CLSRGWConcurrentIO {
-protected:
-  librados::IoCtx& io_ctx;
-
-  // map of shard # to oid; the shards that are remaining to be processed
-  std::map<int, std::string>& objs_container;
-  // iterator to work through objs_container
-  std::map<int, std::string>::iterator iter;
-
-  uint32_t max_aio;
-  BucketIndexAioManager manager;
-
-  virtual int issue_op(int shard_id, const std::string& oid) = 0;
-
-  virtual void cleanup() {}
-  virtual int valid_ret_code() { return 0; }
-  // Return true if multiple rounds of OPs might be needed, this happens when
-  // OP needs to be re-send until a certain code is returned.
-  virtual bool need_multiple_rounds() { return false; }
-  // Add a new object to the end of the container.
-  virtual void add_object(int shard, const std::string& oid) {}
-  virtual void reset_container(std::map<int, std::string>& objs) {}
-
-public:
-
-  CLSRGWConcurrentIO(librados::IoCtx& ioc,
-		     std::map<int, std::string>& _objs_container,
-		     uint32_t _max_aio) :
-  io_ctx(ioc), objs_container(_objs_container), max_aio(_max_aio)
-  {}
-
-  virtual ~CLSRGWConcurrentIO() {}
-
-  int operator()();
-}; // class CLSRGWConcurrentIO
-
-
-class CLSRGWIssueBucketIndexInit : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  int valid_ret_code() override { return -EEXIST; }
-  void cleanup() override;
-public:
-  CLSRGWIssueBucketIndexInit(librados::IoCtx& ioc,
-			     std::map<int, std::string>& _bucket_objs,
-			     uint32_t _max_aio) :
-    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
-  virtual ~CLSRGWIssueBucketIndexInit() override {}
-};
-
-
-class CLSRGWIssueBucketIndexInit2 : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  int valid_ret_code() override { return -EEXIST; }
-  void cleanup() override;
-public:
-  CLSRGWIssueBucketIndexInit2(librados::IoCtx& ioc,
-			     std::map<int, std::string>& _bucket_objs,
-			     uint32_t _max_aio) :
-    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio) {}
-  virtual ~CLSRGWIssueBucketIndexInit2() override {}
-};
-
-
-class CLSRGWIssueBucketIndexClean : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  int valid_ret_code() override {
-    return -ENOENT;
-  }
-
-public:
-  CLSRGWIssueBucketIndexClean(librados::IoCtx& ioc,
-			      std::map<int, std::string>& _bucket_objs,
-			      uint32_t _max_aio) :
-  CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio)
-  {}
-  virtual ~CLSRGWIssueBucketIndexClean() override {}
-};
-
-
-class CLSRGWIssueSetTagTimeout : public CLSRGWConcurrentIO {
-  uint64_t tag_timeout;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueSetTagTimeout(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
-                     uint32_t _max_aio, uint64_t _tag_timeout) :
-    CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), tag_timeout(_tag_timeout) {}
-  virtual ~CLSRGWIssueSetTagTimeout() override {}
-};
+void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
+                                    uint64_t timeout);
 
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  bool absolute,
@@ -365,8 +138,7 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats = nullptr);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
-                               const cls_rgw_obj_key& key, const std::string& locator, bool log_op,
-                               uint16_t bilog_op, const rgw_zone_set& zones_trace);
+                               const cls_rgw_obj_key& key, const std::string& locator);
 
 void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                 const rgw_bucket_entry_ver& ver,
@@ -425,54 +197,6 @@ int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const std::string& oid, cons
                            uint64_t start_epoch, uint64_t end_epoch);
 #endif
 
-
-/**
- * Std::list the bucket with the starting object and filter prefix.
- * NOTE: this method do listing requests for each bucket index shards identified by
- *       the keys of the *list_results* std::map, which means the std::map should be populated
- *       by the caller to fill with each bucket index object id.
- *
- * io_ctx        - IO context for rados.
- * start_obj     - marker for the listing.
- * filter_prefix - filter prefix.
- * num_entries   - number of entries to request for each object (note the total
- *                 amount of entries returned depends on the number of shardings).
- * list_results  - the std::list results keyed by bucket index object id.
- * max_aio       - the maximum number of AIO (for throttling).
- *
- * Return 0 on success, a failure code otherwise.
-*/
-
-class CLSRGWIssueBucketList : public CLSRGWConcurrentIO {
-  cls_rgw_obj_key start_obj;
-  std::string filter_prefix;
-  std::string delimiter;
-  uint32_t num_entries;
-  bool list_versions;
-  std::map<int, rgw_cls_list_ret>& result; // request_id -> return value
-
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  void reset_container(std::map<int, std::string>& objs) override;
-
-public:
-  CLSRGWIssueBucketList(librados::IoCtx& io_ctx,
-			const cls_rgw_obj_key& _start_obj,
-                        const std::string& _filter_prefix,
-			const std::string& _delimiter,
-			uint32_t _num_entries,
-                        bool _list_versions,
-                        std::map<int, std::string>& oids, // shard_id -> shard_oid
-			// shard_id -> return value
-                        std::map<int, rgw_cls_list_ret>& list_results,
-                        uint32_t max_aio) :
-  CLSRGWConcurrentIO(io_ctx, oids, max_aio),
-    start_obj(_start_obj), filter_prefix(_filter_prefix), delimiter(_delimiter),
-    num_entries(_num_entries), list_versions(_list_versions),
-    result(list_results)
-  {}
-};
-
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,
@@ -485,133 +209,20 @@ void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
                         const std::string& marker, uint32_t max,
                         cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);
 
-class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
-  std::map<int, cls_rgw_bi_log_list_ret>& result;
-  BucketIndexShardsManager& marker_mgr;
-  uint32_t max;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBILogList(librados::IoCtx& io_ctx, BucketIndexShardsManager& _marker_mgr, uint32_t _max,
-                       std::map<int, std::string>& oids,
-                       std::map<int, cls_rgw_bi_log_list_ret>& bi_log_lists, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
-    marker_mgr(_marker_mgr), max(_max) {}
-  virtual ~CLSRGWIssueBILogList() override {}
-};
-
 void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
                         const std::string& start_marker,
                         const std::string& end_marker);
 
-class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
-  BucketIndexShardsManager& start_marker_mgr;
-  BucketIndexShardsManager& end_marker_mgr;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  // Trim until -ENODATA is returned.
-  int valid_ret_code() override { return -ENODATA; }
-  bool need_multiple_rounds() override { return true; }
-  void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
-  void reset_container(std::map<int, std::string>& objs) override {
-    objs_container.swap(objs);
-    iter = objs_container.begin();
-    objs.clear();
-  }
-public:
-  CLSRGWIssueBILogTrim(librados::IoCtx& io_ctx, BucketIndexShardsManager& _start_marker_mgr,
-      BucketIndexShardsManager& _end_marker_mgr, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio),
-    start_marker_mgr(_start_marker_mgr), end_marker_mgr(_end_marker_mgr) {}
-  virtual ~CLSRGWIssueBILogTrim() override {}
-};
+void cls_rgw_bucket_check_index(librados::ObjectReadOperation& op,
+                                bufferlist& out);
+// decode the response; may throw buffer::error
+void cls_rgw_bucket_check_index_decode(const bufferlist& out,
+                                       rgw_cls_check_index_ret& result);
 
-class CLSRGWIssueReshardLogTrim : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-  // Trim until -ENODATA is returned.
-  int valid_ret_code() override { return -ENODATA; }
-  bool need_multiple_rounds() override { return true; }
-  void add_object(int shard, const std::string& oid) override { objs_container[shard] = oid; }
-  void reset_container(std::map<int, std::string>& objs) override {
-    objs_container.swap(objs);
-    iter = objs_container.begin();
-    objs.clear();
-  }
-public:
-  CLSRGWIssueReshardLogTrim(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-      CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
-};
+void cls_rgw_bucket_rebuild_index(librados::ObjectWriteOperation& op);
 
-/**
- * Check the bucket index.
- *
- * io_ctx          - IO context for rados.
- * bucket_objs_ret - check result for all shards.
- * max_aio         - the maximum number of AIO (for throttling).
- *
- * Return 0 on success, a failure code otherwise.
- */
-class CLSRGWIssueBucketCheck : public CLSRGWConcurrentIO /*<std::map<std::string, rgw_cls_check_index_ret> >*/ {
-  std::map<int, rgw_cls_check_index_ret>& result;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBucketCheck(librados::IoCtx& ioc, std::map<int, std::string>& oids,
-			 std::map<int, rgw_cls_check_index_ret>& bucket_objs_ret,
-			 uint32_t _max_aio) :
-    CLSRGWConcurrentIO(ioc, oids, _max_aio), result(bucket_objs_ret) {}
-  virtual ~CLSRGWIssueBucketCheck() override {}
-};
-
-class CLSRGWIssueBucketRebuild : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueBucketRebuild(librados::IoCtx& io_ctx, std::map<int, std::string>& bucket_objs,
-                           uint32_t max_aio) : CLSRGWConcurrentIO(io_ctx, bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueBucketRebuild() override {}
-};
-
-class CLSRGWIssueGetDirHeader : public CLSRGWConcurrentIO {
-  std::map<int, rgw_cls_list_ret>& result;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueGetDirHeader(librados::IoCtx& io_ctx, std::map<int, std::string>& oids, std::map<int, rgw_cls_list_ret>& dir_headers,
-                          uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(dir_headers) {}
-  virtual ~CLSRGWIssueGetDirHeader() override {}
-};
-
-class CLSRGWIssueSetBucketResharding : public CLSRGWConcurrentIO {
-  cls_rgw_bucket_instance_entry entry;
-protected:
-  int issue_op(int shard_id, const std::string& oid) override;
-public:
-  CLSRGWIssueSetBucketResharding(librados::IoCtx& ioc, std::map<int, std::string>& _bucket_objs,
-                                 const cls_rgw_bucket_instance_entry& _entry,
-                                 uint32_t _max_aio) : CLSRGWConcurrentIO(ioc, _bucket_objs, _max_aio), entry(_entry) {}
-  virtual ~CLSRGWIssueSetBucketResharding() override {}
-};
-
-class CLSRGWIssueResyncBucketBILog : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid);
-public:
-  CLSRGWIssueResyncBucketBILog(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueResyncBucketBILog() override {}
-};
-
-class CLSRGWIssueBucketBILogStop : public CLSRGWConcurrentIO {
-protected:
-  int issue_op(int shard_id, const std::string& oid);
-public:
-  CLSRGWIssueBucketBILogStop(librados::IoCtx& io_ctx, std::map<int, std::string>& _bucket_objs, uint32_t max_aio) :
-    CLSRGWConcurrentIO(io_ctx, _bucket_objs, max_aio) {}
-  virtual ~CLSRGWIssueBucketBILogStop() override {}
-};
+void cls_rgw_bilog_start(librados::ObjectWriteOperation& op);
+void cls_rgw_bilog_stop(librados::ObjectWriteOperation& op);
 
 int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, const std::string& oid,
                                  boost::intrusive_ptr<RGWGetDirHeader_CB> cb);
@@ -685,12 +296,15 @@ int cls_rgw_reshard_get(librados::IoCtx& io_ctx, const std::string& oid, cls_rgw
 // cls_rgw in the T+4 (X) release.
 void cls_rgw_guard_bucket_resharding(librados::ObjectOperation& op, int ret_err);
 
-// these overloads which call io_ctx.operate() should not be called in the rgw.
-// rgw_rados_operate() should be called after the overloads w/o calls to io_ctx.operate()
-#ifndef CLS_CLIENT_HIDE_IOCTX
-int cls_rgw_set_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
-                                  const cls_rgw_bucket_instance_entry& entry);
-int cls_rgw_clear_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid);
-int cls_rgw_get_bucket_resharding(librados::IoCtx& io_ctx, const std::string& oid,
-                                  cls_rgw_bucket_instance_entry *entry);
-#endif
+void cls_rgw_set_bucket_resharding(librados::ObjectWriteOperation& op,
+                                   cls_rgw_reshard_status status);
+void cls_rgw_clear_bucket_resharding(librados::ObjectWriteOperation& op);
+void cls_rgw_get_bucket_resharding(librados::ObjectReadOperation& op,
+                                   bufferlist& out);
+// decode the entry; may throw buffer::error
+void cls_rgw_get_bucket_resharding_decode(const bufferlist& out,
+                                          cls_rgw_bucket_instance_entry& entry);
+
+// Try to remove all reshard log entries from the bucket index. Return success
+// if any entries were removed, and -ENODATA once they're all gone.
+void cls_rgw_bucket_reshard_log_trim(librados::ObjectWriteOperation& op);

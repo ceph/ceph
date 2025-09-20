@@ -12,7 +12,6 @@
 #include <list>
 #include <memory>
 #include <string>
-#include <boost/variant.hpp>
 
 namespace ceph {
 class Formatter;
@@ -500,7 +499,7 @@ struct NotifyMessage {
   void dump(Formatter *f) const;
   NotifyOp get_notify_op() const;
 
-  static void generate_test_instances(std::list<NotifyMessage *> &o);
+  static std::list<NotifyMessage>  generate_test_instances();
 };
 
 struct ResponseMessage {
@@ -513,7 +512,7 @@ struct ResponseMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<ResponseMessage *> &o);
+  static std::list<ResponseMessage> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out,

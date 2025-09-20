@@ -15,7 +15,10 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include <algorithm> // for std::min()
+#include <set>
 #include <sstream>
+#include <string>
 
 #include <netinet/in.h>
 #include "common/fmt_common.h"
@@ -27,6 +30,7 @@
 #include "include/types.h"
 #include "include/blobhash.h"
 #include "include/encoding.h"
+#include "include/msgr.h" // for CEPH_ENTITY_TYPE_*
 
 #define MAX_PORT_NUMBER 65535
 
@@ -107,7 +111,7 @@ public:
     }
   }
 
-  static void generate_test_instances(std::list<entity_name_t*>& o);
+  static std::list<entity_name_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(entity_name_t)
 
@@ -556,7 +560,7 @@ struct entity_addr_t {
   void dump(ceph::Formatter *f) const;
   std::string fmt_print() const; ///< used by the default fmt formatter
 
-  static void generate_test_instances(std::list<entity_addr_t*>& o);
+  static std::list<entity_addr_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addr_t)
 
@@ -681,7 +685,7 @@ struct entity_addrvec_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<entity_addrvec_t*>& ls);
+  static std::list<entity_addrvec_t> generate_test_instances();
 
   bool legacy_equals(const entity_addrvec_t& o) const {
     if (v == o.v) {
@@ -794,7 +798,7 @@ struct entity_inst_t {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<entity_inst_t*>& o);
+  static std::list<entity_inst_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_inst_t)
 

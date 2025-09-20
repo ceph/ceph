@@ -8,7 +8,7 @@
 #include "crimson/os/seastore/journal.h"
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/segment_manager/ephemeral.h"
-#include "crimson/os/seastore/lba_manager/btree/btree_lba_manager.h"
+#include "crimson/os/seastore/lba/btree_lba_manager.h"
 
 #include "test/crimson/seastore/test_block.h"
 
@@ -21,8 +21,7 @@ namespace {
 using namespace crimson;
 using namespace crimson::os;
 using namespace crimson::os::seastore;
-using namespace crimson::os::seastore::lba_manager;
-using namespace crimson::os::seastore::lba_manager::btree;
+using namespace crimson::os::seastore::lba;
 
 struct btree_test_base :
   public seastar_test_suite_t, SegmentProvider, JournalTrimmer {
@@ -112,14 +111,22 @@ struct btree_test_base :
   seastar::future<> submit_transaction(TransactionRef t)
   {
     auto record = cache->prepare_record(*t, JOURNAL_SEQ_NULL, JOURNAL_SEQ_NULL);
-    return journal->submit_record(std::move(record), t->get_handle()).safe_then(
-      [this, t=std::move(t)](auto submit_result) mutable {
-	cache->complete_commit(
-            *t,
+    return seastar::do_with(
+	std::move(t), [this, record=std::move(record)](auto& _t) mutable {
+      auto& t = *_t;
+      return journal->submit_record(
+        std::move(record),
+        t.get_handle(),
+        t.get_src(),
+        [this, &t](auto submit_result) {
+          cache->complete_commit(
+            t,
             submit_result.record_block_base,
             submit_result.write_result.start_seq);
-	complete_commit(*t);
-      }).handle_error(crimson::ct_error::assert_all{});
+          complete_commit(t);
+        }
+      ).handle_error(crimson::ct_error::assert_all{});
+    });
   }
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
@@ -132,7 +139,12 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this, *this);
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();
@@ -149,7 +161,10 @@ struct btree_test_base :
     }).safe_then([this] {
       return seastar::do_with(
 	cache->create_transaction(
-            Transaction::src_t::MUTATE, "test_set_up_fut", false),
+	  Transaction::src_t::MUTATE,
+	  "test_set_up_fut",
+	  CACHE_HINT_TOUCH,
+	  false),
 	[this](auto &ref_t) {
 	  return with_trans_intr(*ref_t, [&](auto &t) {
 	    cache->init();
@@ -210,7 +225,7 @@ struct lba_btree_test : btree_test_base {
   std::map<laddr_t, lba_map_val_t> check;
 
   auto get_op_context(Transaction &t) {
-    return op_context_t<laddr_t>{*cache, t};
+    return op_context_t{*cache, t};
   }
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
@@ -228,7 +243,10 @@ struct lba_btree_test : btree_test_base {
   template <typename F>
   auto lba_btree_update(F &&f) {
     auto tref = cache->create_transaction(
-        Transaction::src_t::MUTATE, "test_btree_update", false);
+      Transaction::src_t::MUTATE,
+      "test_btree_update",
+      CACHE_HINT_TOUCH,
+      false);
     auto &t = *tref;
     with_trans_intr(
       t,
@@ -273,7 +291,10 @@ struct lba_btree_test : btree_test_base {
   template <typename F>
   auto lba_btree_read(F &&f) {
     auto t = cache->create_transaction(
-        Transaction::src_t::READ, "test_btree_read", false);
+      Transaction::src_t::READ,
+      "test_btree_read",
+      CACHE_HINT_TOUCH,
+      false);
     return with_trans_intr(
       *t,
       [this, f=std::forward<F>(f)](auto &t) mutable {
@@ -318,9 +339,13 @@ struct lba_btree_test : btree_test_base {
 	  extents,
 	  [this, addr, len, &t, &btree](auto &extent) {
 	  return btree.insert(
-	    get_op_context(t), addr, get_map_val(len), extent.get()
+	    get_op_context(t), addr, get_map_val(len)
 	  ).si_then([addr, extent](auto p){
 	    auto& [iter, inserted] = p;
+	    iter.get_leaf_node()->insert_child_ptr(
+	      iter.get_leaf_pos(),
+	      extent.get(),
+	      iter.get_leaf_node()->get_size() - 1);
 	    assert(inserted);
 	    extent->set_laddr(addr);
 	  });
@@ -343,7 +368,7 @@ struct lba_btree_test : btree_test_base {
 	EXPECT_TRUE(iter.get_val().len == len);
 	return btree.remove(
 	  get_op_context(t), iter 
-	);
+        ).discard_result();
       });
     });
   }
@@ -421,7 +446,10 @@ struct btree_lba_manager_test : btree_test_base {
   auto create_transaction(bool create_fake_extent=true) {
     auto t = test_transaction_t{
       cache->create_transaction(
-          Transaction::src_t::MUTATE, "test_mutate_lba", false),
+	Transaction::src_t::MUTATE,
+	"test_mutate_lba",
+	CACHE_HINT_TOUCH,
+	false),
       test_lba_mappings
     };
     if (create_fake_extent) {
@@ -437,7 +465,10 @@ struct btree_lba_manager_test : btree_test_base {
   auto create_weak_transaction() {
     auto t = test_transaction_t{
       cache->create_transaction(
-          Transaction::src_t::READ, "test_read_weak", true),
+	Transaction::src_t::READ,
+	"test_read_weak",
+	CACHE_HINT_TOUCH,
+	true),
       test_lba_mappings
     };
     return t;
@@ -448,7 +479,7 @@ struct btree_lba_manager_test : btree_test_base {
       *t.t,
       [this](auto &t) {
 	return seastar::do_with(
-	  std::list<LogicalCachedExtentRef>(),
+	  std::list<LogicalChildNodeRef>(),
 	  std::list<CachedExtentRef>(),
 	  [this, &t](auto &lextents, auto &pextents) {
 	  auto chksum_func = [&lextents, &pextents](auto &extent) {
@@ -462,7 +493,7 @@ struct btree_lba_manager_test : btree_test_base {
 		extent->update_in_extent_chksum_field(crc);
 	      }
 	      assert(extent->calc_crc32c() == extent->get_last_committed_crc());
-	      lextents.emplace_back(extent->template cast<LogicalCachedExtent>());
+	      lextents.emplace_back(extent->template cast<LogicalChildNode>());
 	    } else {
 	      pextents.push_back(extent);
 	    }
@@ -527,23 +558,23 @@ struct btree_lba_manager_test : btree_test_base {
 	    0,
 	    get_paddr());
 	return seastar::do_with(
-	  std::vector<LogicalCachedExtentRef>(
+	  std::vector<LogicalChildNodeRef>(
 	    extents.begin(), extents.end()),
 	  [this, &t, hint](auto &extents) {
 	  return lba_manager->alloc_extents(t, hint, std::move(extents), EXTENT_DEFAULT_REF_COUNT);
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
-      logger().debug("alloc'd: {}", *ret);
-      EXPECT_EQ(len, ret->get_length());
-      auto [b, e] = get_overlap(t, ret->get_key(), len);
+      logger().debug("alloc'd: {}", ret);
+      EXPECT_EQ(len, ret.get_length());
+      auto [b, e] = get_overlap(t, ret.get_key(), len);
       EXPECT_EQ(b, e);
       t.mappings.emplace(
 	std::make_pair(
-	  ret->get_key(),
+	  ret.get_key(),
 	  test_extent_t{
-	    ret->get_val(),
-	    ret->get_length(),
+	    ret.get_val(),
+	    ret.get_length(),
 	    1
 	  }
 	));
@@ -567,14 +598,14 @@ struct btree_lba_manager_test : btree_test_base {
     (void) with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	return lba_manager->decref_extent(
+	return lba_manager->remove_mapping(
 	  t,
 	  target->first
 	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.refcount, target->second.refcount);
-	  if (result.refcount == 0) {
+	  EXPECT_EQ(result.result.refcount, target->second.refcount);
+	  if (result.result.refcount == 0) {
 	    return cache->retire_extent_addr(
-	      t, result.addr.get_paddr(), result.length);
+	      t, result.result.addr.get_paddr(), result.result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});
@@ -582,27 +613,6 @@ struct btree_lba_manager_test : btree_test_base {
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
-  }
-
-  auto incref_mapping(
-    test_transaction_t &t,
-    laddr_t addr) {
-    return incref_mapping(t, t.mappings.find(addr));
-  }
-
-  void incref_mapping(
-    test_transaction_t &t,
-    test_lba_mapping_t::iterator target) {
-    ceph_assert(target->second.refcount > 0);
-    target->second.refcount++;
-    auto refcnt = with_trans_intr(
-      *t.t,
-      [=, this](auto &t) {
-	return lba_manager->incref_extent(
-	  t,
-	  target->first);
-      }).unsafe_get().refcount;
-    EXPECT_EQ(refcnt, target->second.refcount);
   }
 
   std::vector<laddr_t> get_mapped_addresses() {
@@ -646,9 +656,9 @@ struct btree_lba_manager_test : btree_test_base {
 	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret->get_val());
-      EXPECT_EQ(laddr, ret->get_key());
-      EXPECT_EQ(len, ret->get_length());
+      EXPECT_EQ(i.second.addr, ret.get_val());
+      EXPECT_EQ(laddr, ret.get_key());
+      EXPECT_EQ(len, ret.get_length());
 
       auto ret_pin = with_trans_intr(
 	*t.t,
@@ -656,9 +666,9 @@ struct btree_lba_manager_test : btree_test_base {
 	  return lba_manager->get_mapping(
 	    t, laddr);
 	}).unsafe_get();
-      EXPECT_EQ(i.second.addr, ret_pin->get_val());
-      EXPECT_EQ(laddr, ret_pin->get_key());
-      EXPECT_EQ(len, ret_pin->get_length());
+      EXPECT_EQ(i.second.addr, ret_pin.get_val());
+      EXPECT_EQ(laddr, ret_pin.get_key());
+      EXPECT_EQ(len, ret_pin.get_length());
     }
     with_trans_intr(
       *t.t,
@@ -727,10 +737,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
 	  check_mappings(t);
 	  check_mappings();
 	}
-	for (auto &ret : rets) {
-	  incref_mapping(t, ret->get_key());
-	  decref_mapping(t, ret->get_key());
-	}
       }
       logger().debug("submitting transaction");
       submit_test_transaction(std::move(t));
@@ -743,8 +749,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       for (unsigned i = 0; i != addresses.size(); ++i) {
 	if (i % 2 == 0) {
-	  incref_mapping(t, addresses[i]);
-	  decref_mapping(t, addresses[i]);
 	  decref_mapping(t, addresses[i]);
 	}
 	logger().debug("submitting transaction");
@@ -763,8 +767,6 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto addresses = get_mapped_addresses();
       auto t = create_transaction();
       for (unsigned i = 0; i != addresses.size(); ++i) {
-	incref_mapping(t, addresses[i]);
-	decref_mapping(t, addresses[i]);
 	decref_mapping(t, addresses[i]);
       }
       check_mappings(t);

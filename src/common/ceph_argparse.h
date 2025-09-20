@@ -23,11 +23,15 @@
  * stuff to live.
  */
 
+#include <iosfwd>
 #include <string>
 #include <vector>
 
 #include "common/entity_name.h"
 #include "include/encoding.h"
+#include "msg/msg_types.h" // for struct entity_addr_t
+
+class entity_addrvec_t;
 
 /////////////////////// Types ///////////////////////
 class CephInitParameters

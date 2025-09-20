@@ -18,6 +18,7 @@
 #include <rapidjson/writer.h>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include <regex>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -117,6 +118,14 @@ static void concat_url(std::string &url, std::string path) {
     }
     url.append(path);
   }
+}
+
+static bool validate_barbican_key_id(std::string_view key_id) {
+  // Barbican expects UUID4 secret ids.
+  // See barbican: common/utils.py, api/controllers/secrets.py
+  static const std::regex uuid_4_re{
+      R"(^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$)"};
+  return std::regex_match(key_id.data(), uuid_4_re);
 }
 
 /**
@@ -651,8 +660,8 @@ public:
     }
     if (dummy_bl.length() != 0) {
       ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault making a key: "
-	<< dummy_bl
-	<< dendl;
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
     }
     return 0;
   }
@@ -688,25 +697,21 @@ public:
     int res = send_request(dpp, "POST", "", config_path,
                            post_data, y, dummy_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault marking key to delete, ret: "
+        << res << " response: "
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
       return res;
-    }
-    if (dummy_bl.length() != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault marking key to delete: "
-	<< dummy_bl
-	<< dendl;
-      return -EINVAL;
     }
 
     res = send_request(dpp, "DELETE", "", delete_path,
                        string{}, y, dummy_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault deleting key, ret: "
+        << res << " response: "
+        << std::string_view(dummy_bl.c_str(), dummy_bl.length())
+        << dendl;
       return res;
-    }
-    if (dummy_bl.length() != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault deleting key: "
-	<< dummy_bl
-	<< dendl;
-      return -EINVAL;
     }
     return 0;
   }
@@ -923,6 +928,10 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
                                      const std::string& barbican_token,
                                      optional_yield y,
                                      std::string& actual_key) {
+  if (!validate_barbican_key_id(key_id)) {
+    return -EINVAL;
+  }
+
   int res;
 
   CephContext* cct = dpp->get_cct();
@@ -933,6 +942,7 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
   }
   concat_url(secret_url, "/v1/secrets/");
   concat_url(secret_url, std::string(key_id));
+  concat_url(secret_url, "/payload");
 
   bufferlist secret_bl;
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);

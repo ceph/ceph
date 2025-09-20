@@ -311,7 +311,9 @@ class DaosBucket : public StoreBucket {
   virtual int sync_owner_stats(const DoutPrefixProvider* dpp,
                                optional_yield y) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_user,
+                    const std::string& new_owner_name,
                     optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
                        ceph::real_time mtime) override;
@@ -377,8 +379,11 @@ class DaosPlacementTier : public StorePlacementTier {
   virtual ~DaosPlacementTier() = default;
 
   virtual const std::string& get_tier_type() { return tier.tier_type; }
+  virtual bool is_tier_type_s3() { return (tier.is_tier_type_s3()); }
   virtual const std::string& get_storage_class() { return tier.storage_class; }
   virtual bool retain_head_object() { return tier.retain_head_object; }
+  virtual bool allow_read_through() { return tier.allow_read_through; }
+  virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
@@ -484,7 +489,6 @@ class DaosZone : public StoreZone {
   virtual const std::string& get_name() const override;
   virtual bool is_writeable() override;
   virtual bool get_redirect_endpoint(std::string* endpoint) override;
-  virtual bool has_zonegroup_api(const std::string& api) const override;
   virtual const std::string& get_current_period_id() override;
   virtual const RGWAccessKey& get_system_key() {
     return zone_params->system_key;
@@ -626,7 +630,8 @@ class DaosObject : public StoreObject {
                             rgw_obj* target_obj = NULL) override;
   virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y,
-                               const DoutPrefixProvider* dpp) override;
+                               const DoutPrefixProvider* dpp,
+                               uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
   virtual int delete_obj_attrs(const DoutPrefixProvider* dpp,
                                const char* attr_name,
                                optional_yield y) override;
@@ -651,16 +656,13 @@ class DaosObject : public StoreObject {
                                   optional_yield y) override;
   virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
 			   RGWObjTier& tier_config,
-			   real_time& mtime,
 			   uint64_t olh_epoch,
 			   std::optional<uint64_t> days,
+		           bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-			   uint32_t flags) override;
+			   optional_yield y) override;
   virtual bool placement_rules_match(rgw_placement_rule& r1,
                                      rgw_placement_rule& r2) override;
   virtual int dump_obj_layout(const DoutPrefixProvider* dpp, optional_yield y,
@@ -935,6 +937,9 @@ class DaosStore : public StoreDriver {
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+  virtual std::unique_ptr<Restore> get_restore(const int n_objs,
+		 const std::vector<std::string_view>& obj_names) override;
+  virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual std::unique_ptr<Notification> get_notification(
       rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
       rgw::notify::EventType event_type, optional_yield y,
@@ -950,6 +955,7 @@ class DaosStore : public StoreDriver {
       std::string& _req_id,
       optional_yield y) override;
   virtual RGWLC* get_rgwlc(void) override { return NULL; }
+  virtual RGWRestore* get_rgwrestore(void) override { return NULL; }
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override {
     return NULL;
   }

@@ -57,10 +57,12 @@ struct entry_header {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("mtime") << mtime;
   }
-  static void generate_test_instances(std::list<entry_header*>& ls) {
-    ls.push_back(new entry_header);
-    ls.push_back(new entry_header);
-    ls.back()->mtime = ceph::real_clock::now();
+  static std::list<entry_header> generate_test_instances() {
+    std::list<entry_header> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().mtime = ceph::real_clock::now();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(entry_header)

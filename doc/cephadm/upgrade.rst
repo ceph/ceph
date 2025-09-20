@@ -19,7 +19,29 @@ The automated upgrade process follows Ceph best practices.  For example:
 
 .. note:: 
 
-   In case a host of the cluster is offline, the upgrade is paused.
+   If a cluster host is or becomes unavailable the upgrade will be paused
+   until it is restored.
+
+.. note::
+
+   When the PG autoscaler mode for **any** pool is set to ``on``, we recommend
+   disabling the autoscaler for the duration of the upgrade.  This is so that
+   PG splitting or merging in the middle of an upgrade does not unduly delay
+   upgrade progress.  In a very large cluster this could easily increase the
+   time to complete by a day or more, especially if the upgrade happens to
+   change PG autoscaler behavior by e.g. changing the default value
+   of :confval:`mon_target_pg_per_osd`.
+
+   .. prompt:: bash #
+
+     ceph osd pool set noautoscale
+     # Perform the upgrade
+     ceph osd pool unset noautoscale
+   
+   When pausing autoscaler activity in this fashion, the existing values for
+   each pool's mode, ``off``, ``on``, or ``warn``, are expected to remain.
+   If the new release changes the above target value, there may be splitting
+   or merging of PGs when unsetting after the upgrade.
 
 
 Starting the upgrade
@@ -27,14 +49,14 @@ Starting the upgrade
 
 .. note::
    .. note::
-      `Staggered Upgrade`_ of the mons/mgrs may be necessary to have access
-      to this new feature.
+      `Staggered Upgrade`_ of the Monitors and Managers may be necessary to use
+      the below CephFS upgrade feature.
 
-   Cephadm by default reduces `max_mds` to `1`. This can be disruptive for large
+   Cephadm by default reduces ``max_mds`` to ``1``. This can be disruptive for large
    scale CephFS deployments because the cluster cannot quickly reduce active MDS(s)
    to `1` and a single active MDS cannot easily handle the load of all clients
-   even for a short time. Therefore, to upgrade MDS(s) without reducing `max_mds`,
-   the `fail_fs` option can to be set to `true` (default value is `false`) prior
+   even for a short time. Therefore, to upgrade MDS(s) without reducing ``max_mds``,
+   the ``fail_fs`` option can to be set to ``true`` (default value is ``false``) prior
    to initiating the upgrade:
 
    .. prompt:: bash #
@@ -43,12 +65,12 @@ Starting the upgrade
 
    This would:
                #. Fail CephFS filesystems, bringing active MDS daemon(s) to
-                  `up:standby` state.
+                  ``up:standby`` state.
 
                #. Upgrade MDS daemons safely.
 
                #. Bring CephFS filesystems back up, bringing the state of active
-                  MDS daemon(s) from `up:standby` to `up:active`.
+                  MDS daemon(s) from ``up:standby`` to `up:active``.
 
 Before you use cephadm to upgrade Ceph, verify that all hosts are currently online and that your cluster is healthy by running the following command:
 
@@ -145,7 +167,9 @@ The message ``Error ENOENT: Module not found`` appears in response to the comman
 
    Error ENOENT: Module not found
 
-This is possibly caused by invalid JSON in a mgr config-key. See `Redmine tracker Issue #67329 <https://tracker.ceph.com/issues/67329>`_ and `the discussion on the [ceph-users] mailing list <https://www.spinics.net/lists/ceph-users/msg83667.html>`_.
+This is possibly caused by invalid JSON in a mgr config-key.
+See `Redmine tracker Issue #67329 <https://tracker.ceph.com/issues/67329>`_
+and `this discussion on the ceph-users mailing list <https://www.spinics.net/lists/ceph-users/msg83667.html>`_.
 
 UPGRADE_NO_STANDBY_MGR
 ----------------------
@@ -245,8 +269,28 @@ Example: specifying services and using limit:
 .. note::
 
    Cephadm strictly enforces an order to the upgrade of daemons that is still present
-   in staggered upgrade scenarios. The current upgrade ordering is
-   ``mgr -> mon -> crash -> osd -> mds -> rgw -> rbd-mirror -> cephfs-mirror -> iscsi -> nfs``.
+   in staggered upgrade scenarios. The current upgrade ordering is:
+
+   * ``mgr``
+   * ``mon``
+   * ``crash``
+   * ``osd``
+   * ``mds``
+   * ``rgw``
+   * ``rbd-mirror``
+   * ``cephfs-mirror``
+   * ``ceph-exporter``
+   * ``iscsi``
+   * ``nfs``
+   * ``nvmeof``
+   * ``smb``
+   * ``node-exporter``
+   * ``prometheus``
+   * ``alertmanager``
+   * ``grafana``
+   * ``loki``
+   * ``promtail``
+
    If you specify parameters that would upgrade daemons out of order, the upgrade
    command will block and note which daemons will be missed if you proceed.
 
@@ -307,3 +351,19 @@ upgrading:
 
 You should now have all your Manager daemons on the new version and be able to
 specify the limiting parameters for the rest of the upgrade.
+
+
+Updating a non-Ceph image service with custom image
+====================================================
+
+To update a non-Ceph image service, run a command of the following form:
+
+.. prompt:: bash #
+
+  ceph orch update service <service_type> <image>
+
+For example:
+
+.. prompt:: bash #
+
+  ceph orch update service prometheus quay.io/prometheus/prometheus:v2.55.1

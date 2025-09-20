@@ -35,7 +35,20 @@
    "graphTooltip": 0,
    "hideControls": false,
    "id": null,
-   "links": [ ],
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
    "panels": [
       {
          "collapse": false,
@@ -57,23 +70,51 @@
          "type": "row"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Reads(-) / Writes (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "min": 0,
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "none"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 12,
@@ -81,36 +122,25 @@
             "y": 1
          },
          "id": 3,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "/.*Reads/",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "sum(rate(ceph_objecter_op_r{ceph_daemon=~\"($mds_servers).*\", cluster=~\"$cluster\", }[$__rate_interval]))",
@@ -127,60 +157,55 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "MDS Workload - $mds_servers",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "none",
-               "label": "Reads(-) / Writes (+)",
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Client Requests",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "min": 0,
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "none"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 12,
@@ -188,31 +213,20 @@
             "y": 1
          },
          "id": 4,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [ ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "ceph_mds_server_handle_client_request{ceph_daemon=~\"($mds_servers).*\", cluster=~\"$cluster\", }",
@@ -222,41 +236,8 @@
                "refId": "A"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Client Request Load - $mds_servers",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "none",
-               "label": "Client Requests",
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       }
    ],
    "refresh": "30s",

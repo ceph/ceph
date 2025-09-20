@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 
 #include <boost/lexical_cast.hpp>

@@ -7,19 +7,19 @@ RGW Service
 Deploy RGWs
 ===========
 
-Cephadm deploys radosgw as a collection of daemons that manage a
+Cephadm deploys the Object Gateway (RGW) as a collection of daemons that manage a
 single-cluster deployment or a particular *realm* and *zone* in a
 multisite deployment.  (For more information about realms and zones,
 see :ref:`multisite`.)
 
-Note that with cephadm, radosgw daemons are configured via the monitor
+Note that with ``cephadm``, ``radosgw`` daemons are configured via the monitor
 configuration database instead of via a `ceph.conf` or the command line.  If
 that configuration isn't already in place (usually in the
-``client.rgw.<something>`` section), then the radosgw
+``client.rgw.<something>`` section), then the ``radosgw``
 daemons will start up with default settings (e.g., binding to port
 80).
 
-To deploy a set of radosgw daemons, with an arbitrary service name
+To deploy a set of ``radosgw`` daemons, with an arbitrary service name
 *name*, run the following command:
 
 .. prompt:: bash #
@@ -29,8 +29,8 @@ To deploy a set of radosgw daemons, with an arbitrary service name
 Trivial setup
 -------------
 
-For example, to deploy 2 RGW daemons (the default) for a single-cluster RGW deployment
-under the arbitrary service id *foo*:
+For example, to deploy two daemons (the default) for a single-cluster RGW deployment
+with the arbitrary service id ``foo``:
 
 .. prompt:: bash #
 
@@ -58,7 +58,7 @@ See also: :ref:`cephadm_co_location`.
 Specifying Networks
 -------------------
 
-The RGW service can have the network they bind to configured with a yaml service specification.
+The RGW service can have the network they bind to configured with a YAML service specification.
 
 example spec file:
 
@@ -77,8 +77,8 @@ example spec file:
 Passing Frontend Extra Arguments
 --------------------------------
 
-The RGW service specification can be used to pass extra arguments to the rgw frontend by using
-the `rgw_frontend_extra_args` arguments list.
+The RGW service specification can be used to pass extra arguments to the frontend by using
+the ``rgw_frontend_extra_args`` arguments list.
 
 example spec file:
 
@@ -98,23 +98,23 @@ example spec file:
       - "tcp_nodelay=1"
       - "max_header_size=65536"
 
-.. note:: cephadm combines the arguments from the `spec` section and the ones from
-	  the `rgw_frontend_extra_args` into a single space-separated arguments list
-	  which is used to set the value of `rgw_frontends` configuration parameter.
+.. note:: ``cephadm`` combines the arguments from the ``spec`` section with those from
+	  ``rgw_frontend_extra_args`` into a single space-separated arguments list
+	  which is used to set the value of the ``rgw_frontends`` configuration parameter.
 
 Multisite zones
 ---------------
 
-To deploy RGWs serving the multisite *myorg* realm and the *us-east-1* zone on
-*myhost1* and *myhost2*:
+To deploy RGWs serving the multisite ``myorg`` realm and the ``us-east-1`` zone on
+``myhost1`` and ``myhost2``:
 
 .. prompt:: bash #
 
    ceph orch apply rgw east --realm=myorg --zonegroup=us-east-zg-1 --zone=us-east-1 --placement="2 myhost1 myhost2"
 
-Note that in a multisite situation, cephadm only deploys the daemons.  It does not create
-or update the realm or zone configurations.  To create a new realms, zones and zonegroups
-you can use :ref:`mgr-rgw-module` or manually using something like:
+Note that in a multisite situation, ``cephadm`` only deploys the daemons.  It does not create
+or update the realm or zone configurations.  To create a new realm, zone, and zonegroup
+use :ref:`mgr-rgw-module` or issue commands of the following form:
 
 .. prompt:: bash #
 
@@ -140,29 +140,113 @@ See also :ref:`multisite`.
 Setting up HTTPS
 ----------------
 
-In order to enable HTTPS for RGW services, apply a spec file following this scheme:
+RGW services, like other cephadm-managed services, support three ways of configuring
+HTTPS certificates, all managed through the cephadm Certificate Manager (certmgr):
+
+- **cephadm-signed (default):**
+  If ``ssl`` is set to true but no certificate is specified, cephadm generates and
+  signs a certificate for the RGW service automatically.
+
+- **inline:**
+  Users can set the ``certificate_source`` to ``inline`` in the spec and
+  embed the certificate and private key directly in the spec using
+  the ``ssl_cert`` and ``ssl_key`` fields.
+
+- **reference:**
+  Users can register their own certificate and key with certmgr and
+  set the ``certificate_source`` to ``reference`` in the spec.
+
+**Option 1: Inline certificate and key**
 
 .. code-block:: yaml
 
   service_type: rgw
   service_id: myrgw
   spec:
-    rgw_frontend_ssl_certificate: | 
-      -----BEGIN PRIVATE KEY-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END PRIVATE KEY-----
-      -----BEGIN CERTIFICATE-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END CERTIFICATE-----
     ssl: true
+    certificate_source: inline
+    ssl_cert: |
+      -----BEGIN CERTIFICATE-----
+      (PEM cert contents here)
+      -----END CERTIFICATE-----
+    ssl_key: |
+      -----BEGIN PRIVATE KEY-----
+      (PEM key contents here)
+      -----END PRIVATE KEY-----
+
+Apply the spec:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+.. note::
+
+   The older ``rgw_frontend_ssl_certificate`` field is still supported
+   for backward compatibility, but it is deprecated.
+   New deployments should use ``ssl_cert`` / ``ssl_key`` instead.
+
+**Option 2: Reference to a registered certificate/key**
+
+First, register the certificate and key with certmgr:
+
+.. prompt:: bash #
+
+  ceph orch certmgr cert set --cert-name rgw_ssl_cert --service-name rgw.<service_id> -i $PWD/server_cert.pem
+  ceph orch certmgr key set --key-name rgw_ssl_key  --service-name rgw.<service_id> -i $PWD/server_key
+
+Then use ``reference`` source in the RGW spec:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: reference
+
+Apply the spec:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+**Option 3: cephadm-signed (default)**
+
+If ``ssl: true`` is set but no certificate is provided, cephadm
+will automatically generate and sign a certificate for the RGW service.
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: cephadm-signed
+
+This will deploy RGW with a cephadm-signed certificate.
+
+Setting up HTTPS with Wildcard SANs
+-----------------------------------
+
+When using cephadm-signed certificates, wildcard Subject Alternative
+Names (SANs) can be optionally included in the generated certificates.
+For RGW services, this can be enabled by applying a spec file such as:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: foo
+  placement:
+    label: rgw
+    count_per_host: 1
+  spec:
+    ssl: true
+    certificate_source: cephadm-signed
+    rgw_frontend_port: 8080
+    wildcard_enabled: true  # Enables wildcard SANs in the certificate
+    zonegroup_hostnames:
+    - s3.cephlab.com
 
 Then apply this yaml document:
 
@@ -170,8 +254,86 @@ Then apply this yaml document:
 
   ceph orch apply -i myrgw.yaml
 
-Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
-indicated by a ``|`` character preserving newline characters.
+The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
+allowing access to buckets in virtual host mode. By default, this flag is disabled.
+example: wildcard SAN - (``*.s3.cephlab.com``)
+
+Cephadm ``ceph orch`` specs for RGW services now support the following optional configuration:
+
+.. code-block:: yaml
+
+  spec:
+    qat:
+      compression: hw | sw
+
+compression:
+
+``hw``: Enables hardware QAT offload (if QAT hardware and VFs are present on the node)
+
+``sw``: Enables QAT software fallback mode
+
+No other keys are currently supported in the ``qat`` block.
+
+Disabling multisite sync traffic
+--------------------------------
+
+There is an RGW config option called ``rgw_run_sync_thread`` that tells the
+RGW daemon to not transmit multisite replication data. This is useful if you want
+that RGW daemon to be dedicated to I/O rather than multisite sync operations.
+The RGW spec file includes a setting ``disable_multisite_sync_traffic`` that when
+set to "True" will tell cephadm to set ``rgw_run_sync_thread`` to false for all
+RGW daemons deployed for that RGW service. For example
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_zonegroup: myzg
+      disable_multisite_sync_traffic: True
+
+.. note:: This will only stop the RGW daemon(s) from sending replication data.
+    The daemon can still receive replication data unless it has been removed
+    from the zonegroup and zone replication endpoints.
+
+Draining client connections on shutdown
+---------------------------------------
+
+When an RGW daemon is stopped by for any reason, including during the cephadm upgrade process,
+RGW offers a setting to delay shutdown as the RGW daemon attempts to complete ongoing
+client requests. This setting is off by default but activated manually by either passing
+``--stop-timeout=<timeout-in-seconds>`` to the RGW process or by setting the
+``rgw_exit_timeout_secs`` config option for the RGW daemon. This value may be configured in
+the RGW service spec file by specifying the ``rgw_exit_timeout_secs`` parameter in the spec
+file. For example
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_zonegroup: myzg
+      rgw_exit_timeout_secs: 120
+
+would tell the RGW daemons cephadm deploys for the rgw.foo service to wait up to 120
+seconds for current client requests to complete. Note that the RGW daemon will refuse
+new client requests during this time.
+
+.. note:: In cephadm deployments this setting defaults to on and 120 seconds. If you would
+    like to disable this feature you must set ``rgw_exit_timeout_secs`` to 0 in the spec
+
+.. note:: Modifications to this setting in the spec will not be picked up by the RGW daemons
+    in the service until they are redeployed using either the ``ceph orch redeploy <service-name>``
+    or ``ceph orch daemon redeploy <daemon-name>`` commands
+
 
 Service specification
 ---------------------
@@ -227,7 +389,7 @@ Use the command::
 Service specification
 ---------------------
 
-It is a yaml format file with the following properties:
+Service specs are YAML blocks with the following properties:
 
 .. code-block:: yaml
 
@@ -329,12 +491,12 @@ where the properties of this service specification are:
 
 .. _ingress-virtual-ip:
 
-Selecting ethernet interfaces for the virtual IP
+Selecting network interfaces for the virtual IP
 ------------------------------------------------
 
 You cannot simply provide the name of the network interface on which
-to configure the virtual IP because interface names tend to vary
-across hosts (and/or reboots).  Instead, cephadm will select
+to configure the virtual IP because interface names may vary
+across hosts (and/or reboots).  Instead, ``cephadm`` will select
 interfaces based on other existing IP addresses that are already
 configured.
 
@@ -366,8 +528,8 @@ and reference that dummy network in the networks list (see above).
 Useful hints for ingress
 ------------------------
 
-* It is good to have at least 3 RGW daemons.
-* We recommend at least 3 hosts for the ingress service.
+* It is advised to have at least three ``radosgw`` daemons for availability and load balancing.
+* We recommend at least three hosts for the ``ingress`` service.
 
 Further Reading
 ===============

@@ -4,6 +4,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/msgr.h" // for CEPH_ENTITY_TYPE_CLIENT
+#include "include/utime.h"
 #include "gtest/gtest.h"
 
 using namespace ceph::perf_counters;

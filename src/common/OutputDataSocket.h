@@ -20,6 +20,8 @@
 #include "include/common_fwd.h"
 #include "include/buffer.h"
 
+#include <string>
+#include <vector>
 
 class OutputDataSocket : public Thread
 {

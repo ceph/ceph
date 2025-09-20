@@ -1,10 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.22.1)
 
 project(ceph
-  VERSION 19.0.0
+  VERSION 20.0.0
   LANGUAGES CXX C ASM)
 
-foreach(policy CMP0127 CMP0135)
+foreach(policy CMP0127 CMP0135 CMP0175)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
   endif()
@@ -16,12 +16,15 @@ if(NOT CMAKE_BUILD_TYPE)
   if (EXISTS "${CMAKE_SOURCE_DIR}/.git")
     message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
     set(default_build_type "Debug")
-    set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
-        STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
   else()
-    message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
+    message(WARNING "CMAKE_BUILD_TYPE not specified, setting to RelWithDebInfo because .git does NOT exist.")
+    set(default_build_type "RelWithDebInfo")
   endif()
+  set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
+  STRING "BUILD_TYPE is ${default_build_type}, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
 endif()
+message(STATUS "BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
+set(CEPH_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
   set(LINUX ON)
@@ -73,10 +76,8 @@ if(WITH_CCACHE)
   if(CMAKE_C_COMPILER_LAUNCHER OR CMAKE_CXX_COMPILER_LAUNCHER)
     message(WARNING "Compiler launcher already set. stop configuring ccache")
   else()
-    find_program(CCACHE_EXECUTABLE ccache)
-    if(NOT CCACHE_EXECUTABLE)
-      message(FATAL_ERROR "Can't find ccache. Is it installed?")
-    endif()
+    find_program(CCACHE_EXECUTABLE ccache
+      REQUIRED)
     message(STATUS "Building with ccache: ${CCACHE_EXECUTABLE}, CCACHE_DIR=$ENV{CCACHE_DIR}")
     set(CMAKE_C_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
     set(CMAKE_CXX_COMPILER_LAUNCHER ${CCACHE_EXECUTABLE})
@@ -85,10 +86,8 @@ endif(WITH_CCACHE)
 
 option(WITH_SCCACHE "Build with sccache.")
 if(WITH_SCCACHE)
-  find_program(SCCACHE_EXECUTABLE sccache)
-  if(NOT SCCACHE_EXECUTABLE)
-    message(FATAL_ERROR "Can't find sccache. Is it installed?")
-  endif()
+  find_program(SCCACHE_EXECUTABLE sccache
+    REQUIRED)
   if(NOT NINJA_MAX_COMPILE_JOBS)
     if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.19")
       execute_process(
@@ -120,10 +119,8 @@ endif(WITH_SCCACHE)
 option(WITH_MANPAGE "Build man pages." ON)
 if(WITH_MANPAGE)
   find_program(SPHINX_BUILD
-    NAMES sphinx-build sphinx-build-3)
-  if(NOT SPHINX_BUILD)
-    message(FATAL_ERROR "Can't find sphinx-build.")
-  endif(NOT SPHINX_BUILD)
+    NAMES sphinx-build sphinx-build-3
+    REQUIRED)
 endif(WITH_MANPAGE)
 
 include_directories(
@@ -517,6 +514,40 @@ if(WITH_JAEGER)
   set(HAVE_JAEGER TRUE)
 endif()
 
+# Catch2 C++ Unit Test support:
+# This needs to come before any tests using Catch2.
+option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
+option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
+
+if(WITH_CATCH2)
+  # Save pre-existing definitions (if any):
+  set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
+
+    if(WITH_SYSTEM_CATCH2)
+   set(CPM_LOCAL_PACKAGES_ONLY ON)
+  endif()
+
+  include(${CMAKE_MODULE_PATH}/CPM.cmake)
+  CPMAddPackage("gh:catchorg/Catch2@3.8.1")
+
+  # Restore the original CPM settings in case someone else wants to use the module:
+  set(CPM_USE_LOCAL_PACKAGES_ONLY, ${ORIG_CPM_USE_LOCAL_PACKAGES_ONLY})
+
+  message("-- Enabled Catch2 support")
+endif()
+
+if(WIN32)
+    set(WITH_BREAKPAD_DEFAULT OFF)
+else()
+    set(WITH_BREAKPAD_DEFAULT ON)
+endif()
+
+option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
+if(WITH_BREAKPAD)
+  set(HAVE_BREAKPAD ON)
+  message("-- Enabled Google Breakpad crash reporter")
+endif()
+
 #option for RGW
 option(WITH_RADOSGW "RADOS Gateway is enabled" ON)
 option(WITH_RADOSGW_BEAST_OPENSSL "RADOS Gateway's Beast frontend uses OpenSSL" ON)
@@ -527,7 +558,8 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
-option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
+option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
@@ -633,10 +665,8 @@ option(WITH_LTTNG "LTTng tracing is enabled" ON)
 if(${WITH_LTTNG})
   find_package(LTTngUST REQUIRED)
   find_program(LTTNG_GEN_TP
-    lttng-gen-tp)
-  if(NOT LTTNG_GEN_TP)
-    message(FATAL_ERROR "Can't find lttng-gen-tp.")
-  endif()
+    lttng-gen-tp
+    REQUIRED)
 endif(${WITH_LTTNG})
 
 option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
@@ -705,8 +735,7 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 5.14 REQUIRED)
 endif()
 
-option(WITH_SEASTAR "Build seastar components")
-set(HAVE_SEASTAR ${WITH_SEASTAR})
+option(WITH_CRIMSON "Build seastar components")
 
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
@@ -721,12 +750,17 @@ if(WITH_MGR)
   list(APPEND BOOST_COMPONENTS
     python${MGR_PYTHON_VERSION_MAJOR}${MGR_PYTHON_VERSION_MINOR})
 endif()
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   list(APPEND BOOST_COMPONENTS timer)
 endif()
 
 if(WITH_RADOSGW AND WITH_RADOSGW_LUA_PACKAGES)
   list(APPEND BOOST_COMPONENTS filesystem)
+endif()
+
+if(WITH_LIBCEPHFS OR WITH_FUSE)
+  find_package(ICU REQUIRED COMPONENTS uc i18n)
+  list(APPEND BOOST_COMPONENTS locale)
 endif()
 
 set(Boost_USE_MULTITHREADED ON)
@@ -743,7 +777,7 @@ if(WITH_SYSTEM_BOOST)
   if(BOOST_ROOT AND CMAKE_LIBRARY_ARCHITECTURE)
     set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib/${CMAKE_LIBRARY_ARCHITECTURE}")
   endif()
-  find_package(Boost 1.85 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.87 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
   if(NOT ENABLE_SHARED)
     set_property(TARGET Boost::iostreams APPEND PROPERTY
       INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
@@ -757,7 +791,7 @@ else()
   set(BOOST_J ${DEFAULT_BOOST_J} CACHE STRING "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.85
+  build_boost(1.87
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
@@ -766,10 +800,8 @@ include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
 option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
 if(WITH_SYSTEM_NPM)
-  find_program(NPM_EXECUTABLE npm)
-  if(NOT NPM_EXECUTABLE)
-    message(FATAL_ERROR "Can't find npm.")
-  endif()
+  find_program(NPM_EXECUTABLE npm
+    REQUIRED)
 endif()
 set(DASHBOARD_FRONTEND_LANGS "ALL" CACHE STRING
   "List of comma separated ceph-dashboard frontend languages to build. \
@@ -830,3 +862,4 @@ add_tags(ctags
   EXCLUDE_OPTS ${CTAG_EXCLUDES}
   EXCLUDES "*.js" "*.css" ".tox" "python-common/build")
 add_custom_target(tags DEPENDS ctags)
+

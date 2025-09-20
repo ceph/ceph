@@ -44,7 +44,7 @@
 </ng-template>
 
 <ng-template #listTpl
-             let-events="value">
+             let-events="data.value">
   <ul class="list-group list-group-flush"
       *ngIf="events?.length else noEventsAvailable">
     <li class="list-group-item"
@@ -52,19 +52,20 @@
       <b>{{ event.created | relativeDate }} - </b>
       <span class="badge badge-info">{{ event.subject }}</span><br>
       <span *ngIf="event.level === 'INFO'">
-      <i [ngClass]="[icons.infoCircle]"
-         aria-hidden="true"></i>
+        <svg [cdsIcon]="icons.infoCircle"
+             [size]="icons.size16"
+             class="cds-info-color"></svg>
       </span>
       <span *ngIf="event.level === 'ERROR'">
-      <i [ngClass]="[icons.warning]"
-         aria-hidden="true"></i>
+        <svg [cdsIcon]="icons.warning"
+             [size]="icons.size16"
+             class="cds-warning-color"></svg>
       </span>
       {{ event.message }}
     </li>
   </ul>
   <ng-template #noEventsAvailable>
-    <div *ngIf="events?.length === 0"
-         class="list-group-item">
+    <div class="list-group-item">
       <span>No data available</span>
     </div>
   </ng-template>

@@ -12,10 +12,13 @@
 #include "common/Throttle.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include <iomanip>
 #include <list>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
 #include <boost/accumulators/statistics/rolling_sum.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 void register_test_object_map() {
 }

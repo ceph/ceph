@@ -21,16 +21,22 @@ Synopsis
 | **ceph-bluestore-tool** allocmap    --path *osd path*
 | **ceph-bluestore-tool** restore_cfb --path *osd path*
 | **ceph-bluestore-tool** show-label --dev *device* ...
+| **ceph-bluestore-tool** show-label-at --dev *device* --offset *lba* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 | **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 | **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+| **ceph-bluestore-tool** bluefs-stats --path *osd path*
+| **ceph-bluestore-tool** bluefs-files --path *osd path*
 | **ceph-bluestore-tool** reshard --path *osd path* --sharding *new sharding* [ --sharding-ctrl *control string* ]
 | **ceph-bluestore-tool** show-sharding --path *osd path*
 | **ceph-bluestore-tool** trim --path *osd path*
 | **ceph-bluestore-tool** zap-device --dev *dev path*
+| **ceph-bluestore-tool** revert-wal-to-plain --path *osd path*
+| **ceph-bluestore-tool** create-bdev-labels --path *osd path* --dev *device*
+
 
 
 Description
@@ -112,6 +118,13 @@ Commands
    Show device label(s).
    The label may be printed while an OSD is running.
 
+:command:`show-label-at` --dev *device* --offset *lba* [...]
+
+   Show device label at specific disk location. Dedicated DB/WAL volumes have a single label at offset 0.
+   Main device could have valid labels at multiple locations: 0/1GiB/10GiB/100GiB/1000GiB.
+   The labels at some locations might not exist though. 
+   The label may be printed while an OSD is running.
+
 :command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
    Dump all free regions in allocator.
@@ -120,6 +133,14 @@ Commands
 
    Give a [0-1] number that represents quality of fragmentation in allocator.
    0 represents case when all free space is in one chunk. 1 represents worst possible fragmentation.
+
+:command:`bluefs-stats` --path *osd path*
+
+   Shows summary of BlueFS occupied space with split on devices: block/db/wal and roles: wal/log/db.
+
+:command:`bluefs-files` --path *osd path*
+
+   Lists all BlueFS managed files, printing name, size and space used on devices.
 
 :command:`reshard` --path *osd path* --sharding *new sharding* [ --resharding-ctrl *control string* ]
 
@@ -146,6 +167,19 @@ Commands
 :command: `zap-device` --dev *dev path*
 
    Zeros all device label locations. This effectively makes device appear empty.
+
+:command: `revert-wal-to-plain` --path *osd path*
+
+   Changes WAL files from envelope mode to the legacy plain mode.
+   Useful for downgrades, or if you might want to disable this new feature (bluefs_wal_envelope_mode).
+
+:command:`create-bdev-labels` --path *osd path* --dev *device*
+
+   Writes a bdev label to BlueStore devices that originally did not support labeling.
+   Reads metadata (e.g., fsid, ceph version) from --path and writes it to the device at --dev.
+   Only the main device (block) gets full metadata; block.db or block.wal do not.
+   The --dev path must be inside the --path directory, as its name determines the device role.
+   Use --yes-i-really-really-mean-it to recreate corrupted labels.
 
 Options
 =======
@@ -209,6 +243,8 @@ Device labels
 =============
 
 Every BlueStore block device has a block label at the beginning of the device.
+Main device might optionaly have additional labels at different locations
+for the sake of OSD robustness.
 You can dump the contents of the label with::
 
   ceph-bluestore-tool show-label --dev *device*
@@ -217,7 +253,7 @@ The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
 auxiliary devices (db and wal) will only have the minimum required
 fields (OSD UUID, size, device type, birth time).
-The main device contains additional label copies at offsets: 1G, 10G, 100G and 1000G.
+The main device contains additional label copies at offsets: 1GiB, 10GiB, 100GiB and 1000GiB.
 Corrupted labels are fixed as part of repair::
 
   ceph-bluestore-tool repair --dev *device*

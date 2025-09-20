@@ -58,14 +58,16 @@ struct health_check_t {
     }
   }
 
-  static void generate_test_instances(std::list<health_check_t*>& ls) {
-    ls.push_back(new health_check_t);
-    ls.back()->severity = HEALTH_WARN;
-    ls.push_back(new health_check_t);
-    ls.back()->severity = HEALTH_ERR;
-    ls.back()->summary = "summarization";
-    ls.back()->detail = {"one", "two", "three"};
-    ls.back()->count = 42;
+  static std::list<health_check_t> generate_test_instances() {
+    std::list<health_check_t> ls;
+    ls.emplace_back();
+    ls.back().severity = HEALTH_WARN;
+    ls.emplace_back();
+    ls.back().severity = HEALTH_ERR;
+    ls.back().summary = "summarization";
+    ls.back().detail = {"one", "two", "three"};
+    ls.back().count = 42;
+    return ls;
   }
 };
 WRITE_CLASS_DENC(health_check_t)
@@ -98,14 +100,16 @@ struct health_mute_t {
     f->dump_int("count", count);
   }
 
-  static void generate_test_instances(std::list<health_mute_t*>& ls) {
-    ls.push_back(new health_mute_t);
-    ls.push_back(new health_mute_t);
-    ls.back()->code = "OSD_DOWN";
-    ls.back()->ttl = utime_t(1, 2);
-    ls.back()->sticky = true;
-    ls.back()->summary = "foo bar";
-    ls.back()->count = 2;
+  static std::list<health_mute_t> generate_test_instances() {
+    std::list<health_mute_t> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().code = "OSD_DOWN";
+    ls.back().ttl = utime_t(1, 2);
+    ls.back().sticky = true;
+    ls.back().summary = "foo bar";
+    ls.back().count = 2;
+    return ls;
   }
 };
 WRITE_CLASS_DENC(health_mute_t)
@@ -125,20 +129,23 @@ struct health_check_map_t {
     }
   }
 
-  static void generate_test_instances(std::list<health_check_map_t*>& ls) {
-    ls.push_back(new health_check_map_t);
-    ls.push_back(new health_check_map_t);
+  static std::list<health_check_map_t> generate_test_instances() {
+    std::list<health_check_map_t> ls;
+
+    ls.emplace_back();
+    ls.emplace_back();
     {
-      auto& d = ls.back()->add("FOO", HEALTH_WARN, "foo", 2);
+      auto& d = ls.back().add("FOO", HEALTH_WARN, "foo", 2);
       d.detail.push_back("a");
       d.detail.push_back("b");
     }
     {
-      auto& d = ls.back()->add("BAR", HEALTH_ERR, "bar!", 3);
+      auto& d = ls.back().add("BAR", HEALTH_ERR, "bar!", 3);
       d.detail.push_back("c");
       d.detail.push_back("d");
       d.detail.push_back("e");
     }
+    return ls;
   }
 
   void clear() {

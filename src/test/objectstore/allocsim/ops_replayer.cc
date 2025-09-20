@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <functional>
 #include <boost/program_options/value_semantic.hpp>
 #include <cassert>
 #include <cctype>
@@ -13,10 +14,7 @@
 #include <fstream>
 #include <filesystem>
 #include <mutex>
-#include "include/rados/buffer_fwd.h"
-#include "include/rados/librados.hpp"
 #include <atomic>
-#include <fmt/format.h>
 #include <map>
 #include <memory>
 #include <random>
@@ -24,14 +22,36 @@
 #include <iostream>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+
+#include "include/rados/buffer_fwd.h"
+#include "include/rados/librados.hpp"
 
 namespace po = boost::program_options;
 
 
 using namespace std;
 using namespace ceph;
+
+namespace settings {
+
+// Returns a function which restricts a value to a specified range by throwing if it is not in range:
+// (Note: std::clamp() does not throw.)
+auto clamp_or_throw(auto min, auto max)
+{
+ return [=](auto& x) { 
+		if(std::less<>{}(x, min) or std::greater<>{}(x, max)) {
+		 throw std::out_of_range(fmt::format("value expected between {} and {}, but got {}", min, max, x));
+		}
+
+		return x;	
+ 	};
+}
+
+} // namespace settings
 
 // compare shared_ptr<string>
 struct StringPtrCompare
@@ -338,8 +358,8 @@ int main(int argc, char** argv) {
 
   // options
   uint64_t io_depth = 8;
-  uint64_t nparser_threads = 16;
-  uint64_t nworker_threads = 16;
+  int nparser_threads = 16;
+  int nworker_threads = 16;
   string file("input.txt");
   string ceph_conf_path("./ceph.conf");
   string pool("test_pool");
@@ -351,8 +371,8 @@ int main(int argc, char** argv) {
     ("input-files,i", po::value<vector<string>>()->multitoken(), "List of input files (output of op_scraper.py). Multiple files will be merged and sorted by time order")
     ("ceph-conf", po::value<string>(&ceph_conf_path)->default_value("ceph.conf"), "Path to ceph conf")
     ("io-depth", po::value<uint64_t>(&io_depth)->default_value(64), "I/O depth")
-    ("parser-threads", po::value<uint64_t>(&nparser_threads)->default_value(16), "Number of parser threads")
-    ("worker-threads", po::value<uint64_t>(&nworker_threads)->default_value(16), "Number of I/O worker threads")
+    ("parser-threads", po::value<int>(&nparser_threads)->default_value(16)->notifier(settings::clamp_or_throw(1, 256)), "Number of parser threads")
+    ("worker-threads", po::value<int>(&nworker_threads)->default_value(16)->notifier(settings::clamp_or_throw(1, 256)), "Number of I/O worker threads")
     ("pool", po::value<string>(&pool)->default_value("test_pool"), "Pool to use for I/O")
     ("skip-do-ops", po::bool_switch(&skip_do_ops)->default_value(false), "Skip doing operations")
     ;
@@ -394,12 +414,12 @@ int main(int argc, char** argv) {
     }
     uint64_t start_offset = 0;
     uint64_t step_size = file_stat.st_size / nparser_threads;
-    for (int i = 0; i < nparser_threads; i++) {
+    for (int i = 0; std::cmp_less(i, nparser_threads); i++) {
       char* end = mapped_buffer + start_offset + step_size;
       while(*end != '\n') {
           end--;
       }
-      if (i == nparser_threads - 1) {
+      if (std::cmp_equal(i, nparser_threads - 1)) {
           end = mapped_buffer + file_stat.st_size;
       }
       shared_ptr<ParserContext> context = make_shared<ParserContext>();
@@ -460,7 +480,7 @@ int main(int argc, char** argv) {
 
   // process ops
   vector<thread> worker_threads;
-  for (int i = 0; i < nworker_threads; i++) {
+  for (int i = 0; std::cmp_less(i, nworker_threads); i++) {
       worker_threads.push_back(thread(worker_thread_entry, i, nworker_threads, std::ref(ops), max_buffer_size, io_depth, &io));
   }
   for (auto& worker : worker_threads) {

@@ -16,7 +16,7 @@ namespace crimson::os::seastore {
 
 struct onode_layout_t {
   // The expected decode size of object_info_t without oid.
-  static constexpr int MAX_OI_LENGTH = 232;
+  static constexpr int MAX_OI_LENGTH = 236;
   // We might want to move the ss field out of onode_layout_t.
   // The reason is that ss_attr may grow to relative large, as
   // its clone_overlap may grow to a large size, if applications
@@ -26,18 +26,34 @@ struct onode_layout_t {
   // snapshots.
   // TODO: implement flexible-sized onode value to store inline ss_attr
   // effectively.
-  static constexpr int MAX_SS_LENGTH = 1;
+  // The expected decode size of SnapSet when there's no snapshot
+  static constexpr int MAX_SS_LENGTH = 35;
 
   ceph_le32 size{0};
   ceph_le32 oi_size{0};
   ceph_le32 ss_size{0};
   omap_root_le_t omap_root;
+  omap_root_le_t log_root;
   omap_root_le_t xattr_root;
 
   object_data_le_t object_data;
 
-  char oi[MAX_OI_LENGTH];
-  char ss[MAX_SS_LENGTH];
+  char oi[MAX_OI_LENGTH] = {0};
+  char ss[MAX_SS_LENGTH] = {0};
+
+  onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
+    xattr_root(omap_type_t::XATTR) {}
+
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    if (type == omap_type_t::XATTR) {
+      return xattr_root;
+    } else if (type == omap_type_t::OMAP) {
+      return omap_root;
+    } else {
+      assert(type == omap_type_t::LOG);
+      return log_root;
+    }
+  }
 } __attribute__((packed));
 
 class Transaction;
@@ -71,6 +87,7 @@ public:
 
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
+  virtual void update_log_root(Transaction&, omap_root_t&) = 0;
   virtual void update_xattr_root(Transaction&, omap_root_t&) = 0;
   virtual void update_object_data(Transaction&, object_data_t&) = 0;
   virtual void update_object_info(Transaction&, ceph::bufferlist&) = 0;
@@ -88,6 +105,9 @@ public:
   }
   laddr_t get_data_hint() const {
     return get_hint();
+  }
+  const omap_root_le_t& get_root(omap_type_t type) const {
+    return get_layout().get_root(type);
   }
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };

@@ -13,6 +13,7 @@
 #include "rgw_common.h"
 #include "rgw_http_client.h"
 #include "common/ceph_mutex.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "global/global_init.h"
 
 

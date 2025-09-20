@@ -63,7 +63,6 @@
 #include "Objecter.h"
 #include "Filer.h"
 
-#include "common/Timer.h"
 #include "common/Throttle.h"
 #include "include/common_fwd.h"
 
@@ -196,19 +195,23 @@ public:
          << std::dec;
     }
 
-    static void generate_test_instances(std::list<Header*> &ls)
+    static std::list<Header> generate_test_instances()
     {
-      ls.push_back(new Header());
+      std::list<Header> ls;
 
-      ls.push_back(new Header());
-      ls.back()->trimmed_pos = 1;
-      ls.back()->expire_pos = 2;
-      ls.back()->unused_field = 3;
-      ls.back()->write_pos = 4;
-      ls.back()->magic = "magique";
+      ls.push_back(Header());
 
-      ls.push_back(new Header());
-      ls.back()->stream_format = JOURNAL_FORMAT_RESILIENT;
+      ls.push_back(Header());
+      ls.back().trimmed_pos = 1;
+      ls.back().expire_pos = 2;
+      ls.back().unused_field = 3;
+      ls.back().write_pos = 4;
+      ls.back().magic = "magique";
+
+      ls.push_back(Header());
+      ls.back().stream_format = JOURNAL_FORMAT_RESILIENT;
+
+      return ls;
     }
   };
   WRITE_CLASS_ENCODER(Header)

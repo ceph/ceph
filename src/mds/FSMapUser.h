@@ -15,10 +15,17 @@
 #define CEPH_FSMAPCOMPACT_H
 
 #include <map>
+#include <iosfwd>
 #include <string>
 #include <string_view>
 
 #include "mds/mdstypes.h"
+
+#include "include/encoding.h"
+#include "include/cephfs/types.h" // for fs_cluster_id_t
+#include "include/types.h" // for epoch_t
+
+namespace ceph { class Formatter; }
 
 class FSMapUser {
 public:
@@ -48,7 +55,7 @@ public:
   void print(std::ostream& out) const;
   void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
-  static void generate_test_instances(std::list<FSMapUser*>& ls);
+  static std::list<FSMapUser> generate_test_instances();
 
   std::map<fs_cluster_id_t, fs_info_t> filesystems;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;

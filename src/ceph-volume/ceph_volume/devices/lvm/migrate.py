@@ -339,7 +339,11 @@ class Migrate(object):
             secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
             mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
             target_path = encryption_utils.prepare_dmcrypt(
-                key=secret, device=target_path, mapping=target_lv.lv_uuid)
+                key=secret,
+                device=target_path,
+                mapping=target_lv.lv_uuid,
+                format_options=self.args.dmcrypt_format_opts,
+                open_options=self.args.dmcrypt_open_opts)
         try:
             # we need to update lvm tags for all the remaining volumes
             # and clear for ones which to be removed
@@ -511,6 +515,18 @@ class Migrate(object):
             action='store_true',
             help='Skip checking OSD systemd unit',
         )
+        parser.add_argument(
+            '--dmcrypt-format-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksFormat options (use the same syntax as the cryptsetup CLI)",
+        )
+        parser.add_argument(
+            '--dmcrypt-open-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksOpen options (use the same syntax as the cryptsetup CLI)",
+        )
         return parser
 
     def main(self):
@@ -602,6 +618,18 @@ class NewVolume(object):
             action='store_true',
             help='Skip checking OSD systemd unit',
         )
+        parser.add_argument(
+            '--dmcrypt-format-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksFormat options (use the same syntax as the cryptsetup CLI)",
+        )
+        parser.add_argument(
+            '--dmcrypt-open-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksOpen options (use the same syntax as the cryptsetup CLI)",
+        )
         return parser
 
     @decorators.needs_root
@@ -617,7 +645,12 @@ class NewVolume(object):
             secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
             mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
             target_path = encryption_utils.prepare_dmcrypt(
-                key=secret, device=target_path, mapping=target_lv.lv_uuid)
+                key=secret,
+                device=target_path,
+                mapping=target_lv.lv_uuid,
+                format_options=self.args.dmcrypt_format_opts,
+                open_options=self.args.dmcrypt_open_opts
+            )
 
         try:
             tag_tracker.update_tags_when_lv_create(self.create_type)

@@ -29,8 +29,8 @@ private:
   static const uint8_t MASK = static_cast<uint8_t>((1 << _bit_count) - 1);
 
   // must be power of 2
-  BOOST_STATIC_ASSERT((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
-  BOOST_STATIC_ASSERT(_bit_count <= BITS_PER_BYTE);
+  static_assert((_bit_count != 0) && !(_bit_count & (_bit_count - 1)));
+  static_assert(_bit_count <= BITS_PER_BYTE);
 
   template <typename DataIterator>
   class ReferenceImpl {
@@ -219,7 +219,7 @@ public:
 
   bool operator==(const BitVector &b) const;
 
-  static void generate_test_instances(std::list<BitVector *> &o);
+  static std::list<BitVector> generate_test_instances();
 private:
   bufferlist m_data;
   uint64_t m_size;
@@ -616,18 +616,21 @@ typename BitVector<_b>::Reference& BitVector<_b>::Reference::operator=(uint8_t v
 }
 
 template <uint8_t _b>
-void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
-  o.push_back(new BitVector());
+auto BitVector<_b>::generate_test_instances() -> std::list<BitVector> {
+  std::list<BitVector> o;
 
-  BitVector *b = new BitVector();
-  const uint64_t radix = 1 << b->BIT_COUNT;
+  o.emplace_back();
+
+  BitVector b;
+  const uint64_t radix = 1 << b.BIT_COUNT;
   const uint64_t size = 1024;
 
-  b->resize(size, false);
+  b.resize(size, false);
   for (uint64_t i = 0; i < size; ++i) {
-    (*b)[i] = rand() % radix;
+    b[i] = rand() % radix;
   }
-  o.push_back(b);
+  o.push_back(std::move(b));
+  return o;
 }
 
 

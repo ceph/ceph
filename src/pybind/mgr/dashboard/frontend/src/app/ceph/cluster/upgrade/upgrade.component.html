@@ -46,18 +46,24 @@
              i18n-aria-label
              id="clusterStatus">
       <div class="d-flex flex-column justify-content-center align-items-center">
-        <ng-template #healthChecks>
-          <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
-        </ng-template>
         <ng-template #healthWarningAndError>
-        <div class="info-card-content-clickable mt-1"
-             [ngStyle]="healthData.health.status | healthColor"
-             [ngbPopover]="healthChecks"
-             popoverClass="info-card-popover-cluster-status">
+          <cds-toggletip  [ngStyle]="healthData.health.status | healthColor"
+                          [dropShadow]="true"
+                          [autoAlign]="true"
+                          class="info-card-content-clickable mt-1">
+            <div cdsToggletipButton>
             {{ healthData.health.status | healthLabel | uppercase }}
-          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
-             class="fa fa-exclamation-triangle"></i>
-        </div></ng-template>
+            <i  *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+                class="fa fa-exclamation-triangle">
+            </i>
+            </div>
+            <div cdsToggletipContent>
+              <div class="cds--popover-scroll-container">
+                <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
+              </div>
+            </div>
+          </cds-toggletip>
+        </ng-template>
 
       <ng-container *ngIf="!healthData.health?.checks?.length; else healthWarningAndError">
         <div [ngStyle]="healthData.health.status | healthColor">
@@ -77,9 +83,9 @@
         <h5>
           <i class="text-success"
              [ngClass]="[icons.success]"
-             *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon">
+             *ngIf="(healthData.mgr_map | mgrSummary)?.total > 1; else warningIcon">
           </i>
-          {{ (healthData.mgr_map | mgrSummary).total }}
+          {{ (healthData.mgr_map | mgrSummary)?.total }}
         </h5>
       </div>
     </cd-card>
@@ -124,8 +130,7 @@
              [showNavLinks]="false"
              [showFilterTools]="false"
              [showDownloadCopyButton]="false"
-             defaultTab="cluster-logs"
-             [scrollable]="true"></cd-logs>
+             defaultTab="cluster-logs"></cd-logs>
 
 
     <ng-template #upgradeStatusTpl>
@@ -133,12 +138,12 @@
            *ngIf="info$ | async as info; else checkingForUpgradeStatus">
         <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
           <div i18n-ngbTooltip
-               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
+               [ngbTooltip]="(healthData.mgr_map | mgrSummary)?.total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
             <button class="btn btn-accent mt-2"
                     id="upgrade"
                     aria-label="Upgrade now"
                     (click)="upgradeNow(info.versions[info.versions.length - 1])"
-                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    [disabled]="(healthData.mgr_map | mgrSummary)?.total <= 1"
                     i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
           </div>
           <a class="mt-2 link-primary mb-2"
@@ -187,7 +192,7 @@
   <div class="w-50"
        *ngIf="!errorMessage; else upgradeInfoError">
     <span class="text-info justify-content-center align-items-center"
-          i18n>Fetching registry informations
+          i18n>Fetching registry information
       <i [ngClass]="[icons.spin, icons.spinner]"></i>
     </span>
   </div>
@@ -211,7 +216,7 @@
   <span class="text-danger justify-content-center align-items-center"
         i18n>
     <i [ngClass]="[icons.danger]"></i>
-    Failed to fetch registry informations
+    Failed to fetch registry information
   </span>
 </ng-template>
 

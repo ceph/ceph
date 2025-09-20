@@ -23,6 +23,7 @@
 #include <signal.h>
 
 #include <chrono>
+#include <iostream> // for std::cout
 #include <list>
 #include <mutex>
 #include <random>

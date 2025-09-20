@@ -30,12 +30,14 @@ struct cls_2pc_queue_reserve_op {
     f->dump_unsigned("entries", entries);
   }
 
-  static void generate_test_instances(std::list<cls_2pc_queue_reserve_op*>& ls) {
-    ls.push_back(new cls_2pc_queue_reserve_op);
-    ls.back()->size = 0;
-    ls.push_back(new cls_2pc_queue_reserve_op);
-    ls.back()->size = 123;
-    ls.back()->entries = 456;
+  static std::list<cls_2pc_queue_reserve_op> generate_test_instances() {
+    std::list<cls_2pc_queue_reserve_op> ls;
+    ls.emplace_back();
+    ls.back().size = 0;
+    ls.emplace_back();
+    ls.back().size = 123;
+    ls.back().entries = 456;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_reserve_op)
@@ -59,9 +61,11 @@ struct cls_2pc_queue_reserve_ret {
     f->dump_unsigned("id", id);
   }
 
-  static void generate_test_instances(std::list<cls_2pc_queue_reserve_ret*>& ls) {
-    ls.push_back(new cls_2pc_queue_reserve_ret);
-    ls.back()->id = 123;
+  static std::list<cls_2pc_queue_reserve_ret> generate_test_instances() {
+    std::list<cls_2pc_queue_reserve_ret> ls;
+    ls.emplace_back();
+    ls.back().id = 123;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_reserve_ret)
@@ -89,13 +93,15 @@ struct cls_2pc_queue_commit_op {
     encode_json("bl_data_vec", bl_data_vec, f);
   }
 
-  static void generate_test_instances(std::list<cls_2pc_queue_commit_op*>& ls) {
-    ls.push_back(new cls_2pc_queue_commit_op);
-    ls.back()->id = 123;
-    ls.back()->bl_data_vec.push_back(ceph::buffer::list());
-    ls.back()->bl_data_vec.back().append("foo");
-    ls.back()->bl_data_vec.push_back(ceph::buffer::list());
-    ls.back()->bl_data_vec.back().append("bar");
+  static std::list<cls_2pc_queue_commit_op> generate_test_instances() {
+    std::list<cls_2pc_queue_commit_op> ls;
+    ls.emplace_back();
+    ls.back().id = 123;
+    ls.back().bl_data_vec.push_back(ceph::buffer::list());
+    ls.back().bl_data_vec.back().append("foo");
+    ls.back().bl_data_vec.push_back(ceph::buffer::list());
+    ls.back().bl_data_vec.back().append("bar");
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_commit_op)
@@ -117,9 +123,11 @@ struct cls_2pc_queue_abort_op {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("id", id);
   }
-  static void generate_test_instances(std::list<cls_2pc_queue_abort_op*>& ls) {
-    ls.push_back(new cls_2pc_queue_abort_op);
-    ls.back()->id = 1;
+  static std::list<cls_2pc_queue_abort_op> generate_test_instances() {
+    std::list<cls_2pc_queue_abort_op> ls;
+    ls.emplace_back();
+    ls.back().id = 1;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_abort_op)
@@ -142,10 +150,12 @@ struct cls_2pc_queue_expire_op {
   void dump(ceph::Formatter *f) const {
     f->dump_stream("stale_time") << stale_time;
   }
-  static void generate_test_instances(std::list<cls_2pc_queue_expire_op*>& ls) {
-    ls.push_back(new cls_2pc_queue_expire_op);
-    ls.push_back(new cls_2pc_queue_expire_op);
-    ls.back()->stale_time = ceph::coarse_real_time::min();
+  static std::list<cls_2pc_queue_expire_op> generate_test_instances() {
+    std::list<cls_2pc_queue_expire_op> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().stale_time = ceph::coarse_real_time::min();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_expire_op)
@@ -175,11 +185,13 @@ struct cls_2pc_queue_reservations_ret {
     f->close_section();
   }
 
-  static void generate_test_instances(std::list<cls_2pc_queue_reservations_ret*>& ls) {
-    ls.push_back(new cls_2pc_queue_reservations_ret);
-    ls.push_back(new cls_2pc_queue_reservations_ret);
-    ls.back()->reservations[1] = cls_2pc_reservation();
-    ls.back()->reservations[2] = cls_2pc_reservation();
+  static std::list<cls_2pc_queue_reservations_ret> generate_test_instances() {
+    std::list<cls_2pc_queue_reservations_ret> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().reservations[1] = cls_2pc_reservation();
+    ls.back().reservations[2] = cls_2pc_reservation();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_queue_reservations_ret)

@@ -14,7 +14,9 @@ namespace crimson::osd {
 
 class PG;
 
-class RecoverySubRequest final : public PhasedOperationT<RecoverySubRequest> {
+class RecoverySubRequest final :
+    public PhasedOperationT<RecoverySubRequest>,
+    public RemoteOperation {
 public:
   static constexpr OperationTypeCode type =
     OperationTypeCode::background_recovery_sub;
@@ -22,7 +24,7 @@ public:
   RecoverySubRequest(
     crimson::net::ConnectionRef conn,
     Ref<MOSDFastDispatchOp>&& m)
-    : l_conn(conn), m(m) {}
+    : RemoteOperation(std::move(conn)), m(m) {}
 
   void print(std::ostream& out) const final
   {
@@ -39,37 +41,13 @@ public:
   }
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return m->get_min_epoch(); }
+  epoch_t get_epoch_sent_at() const {
+    return m->get_map_epoch();
+  }
 
   ConnectionPipeline &get_connection_pipeline();
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
-
-  crimson::net::Connection &get_local_connection() {
-    assert(l_conn);
-    assert(!r_conn);
-    return *l_conn;
-  };
-
-  crimson::net::Connection &get_foreign_connection() {
-    assert(r_conn);
-    assert(!l_conn);
-    return *r_conn;
-  };
-
-  crimson::net::ConnectionFFRef prepare_remote_submission() {
-    assert(l_conn);
-    assert(!r_conn);
-    auto ret = seastar::make_foreign(std::move(l_conn));
-    l_conn.reset();
-    return ret;
-  }
-
-  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
-    assert(conn);
-    assert(!l_conn);
-    assert(!r_conn);
-    r_conn = make_local_shared_foreign(std::move(conn));
-  }
 
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
@@ -86,9 +64,6 @@ public:
   > tracking_events;
 
 private:
-  crimson::net::ConnectionRef l_conn;
-  crimson::net::ConnectionXcoreRef r_conn;
-
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
   Ref<MOSDFastDispatchOp> m;

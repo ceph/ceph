@@ -10,15 +10,21 @@
  *
  */
 #pragma once
+
+#include <algorithm> // for std::max()
+#include <functional>
+#include <iomanip>
 #include <string>
-#include <map>
 #include <unordered_map>
+#include <unordered_set>
 #include <optional>
-#include <vector>
 #include <ranges>
 
 #include "mds/mdstypes.h"
 #include "common/ceph_time.h"
+#include "include/cephfs/types.h" // for mds_gid_t
+
+class Context;
 
 // NB! The order of the states in the enum is important!
 // There are places in the code that aggregate multiple states

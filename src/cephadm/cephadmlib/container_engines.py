@@ -1,10 +1,11 @@
 # container_engines.py - container engine types and selection funcs
 
 import os
+import logging
 
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Optional, Dict, Any
 
-from .call_wrappers import call_throws, CallVerbosity
+from .call_wrappers import call_throws, call, CallVerbosity
 from .context import CephadmContext
 from .container_engine_base import ContainerEngine
 from .constants import (
@@ -13,7 +14,11 @@ from .constants import (
     MIN_PODMAN_VERSION,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
+from .data_utils import with_units_to_int
 from .exceptions import Error
+
+
+logger = logging.getLogger()
 
 
 class Podman(ContainerEngine):
@@ -189,3 +194,347 @@ def pull_command(
         if os.path.exists('/etc/ceph/podman-auth.json'):
             cmd.append('--authfile=/etc/ceph/podman-auth.json')
     return cmd
+
+
+def _container_mem_usage(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[str, str, int]:
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = call(
+        ctx,
+        [
+            container_path,
+            'stats',
+            '--format',
+            '{{.ID}},{{.MemUsage}}',
+            '--no-stream',
+        ],
+        verbosity=verbosity,
+    )
+    return out, err, code
+
+
+def _parse_mem_usage(code: int, out: str) -> Tuple[int, Dict[str, int]]:
+    # keep track of memory usage we've seen
+    seen_memusage = {}  # type: Dict[str, int]
+    seen_memusage_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, usage) = line.split(',')
+            (used, limit) = usage.split(' / ')
+            try:
+                seen_memusage[cid] = with_units_to_int(used)
+                if not seen_memusage_cid_len:
+                    seen_memusage_cid_len = len(cid)
+            except ValueError:
+                logger.info(
+                    'unable to parse memory usage line\n>{}'.format(line)
+                )
+                pass
+    return seen_memusage_cid_len, seen_memusage
+
+
+def parsed_container_mem_usage(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[int, Dict[str, int]]:
+    """Return memory useage values parsed from the container engine's container status."""
+    out, _, code = _container_mem_usage(
+        ctx, container_path=container_path, verbosity=verbosity
+    )
+    return _parse_mem_usage(code, out)
+
+
+def _container_cpu_perc(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[str, str, int]:
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = call(
+        ctx,
+        [
+            container_path,
+            'stats',
+            '--format',
+            '{{.ID}},{{.CPUPerc}}',
+            '--no-stream',
+        ],
+        verbosity=CallVerbosity.QUIET,
+    )
+    return out, err, code
+
+
+def _parse_cpu_perc(code: int, out: str) -> Tuple[int, Dict[str, str]]:
+    seen_cpuperc = {}
+    seen_cpuperc_cid_len = 0
+    if not code:
+        for line in out.splitlines():
+            (cid, cpuperc) = line.split(',')
+            try:
+                seen_cpuperc[cid] = cpuperc
+                if not seen_cpuperc_cid_len:
+                    seen_cpuperc_cid_len = len(cid)
+            except ValueError:
+                logger.info(
+                    'unable to parse cpu percentage line\n>{}'.format(line)
+                )
+                pass
+    return seen_cpuperc_cid_len, seen_cpuperc
+
+
+def parsed_container_cpu_perc(
+    ctx: CephadmContext,
+    *,
+    container_path: str = '',
+    verbosity: CallVerbosity = CallVerbosity.QUIET,
+) -> Tuple[int, Dict[str, str]]:
+    """Return cpu percentage used values parsed from the container engine's
+    container status.
+    """
+    out, _, code = _container_cpu_perc(
+        ctx, container_path=container_path, verbosity=verbosity
+    )
+    return _parse_cpu_perc(code, out)
+
+
+class ContainerInfo:
+    def __init__(
+        self,
+        container_id: str,
+        image_name: str,
+        image_id: str,
+        start: str,
+        version: str,
+    ) -> None:
+        self.container_id = container_id
+        self.image_name = image_name
+        self.image_id = image_id
+        self.start = start
+        self.version = version
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, ContainerInfo):
+            return NotImplemented
+        return (
+            self.container_id == other.container_id
+            and self.image_name == other.image_name
+            and self.image_id == other.image_id
+            and self.start == other.start
+            and self.version == other.version
+        )
+
+
+def _container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Tuple[str, str, int]:
+    """returns container id, image name, image id, created time, and ceph version if available"""
+    container_path = container_path or ctx.container_engine.path
+    out, err, code = '', '', -1
+    cmd = [
+        container_path,
+        'inspect',
+        '--format',
+        '{{.Id}},{{.Config.Image}},{{.Image}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+        container_name,
+    ]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
+    return out, err, code
+
+
+def _parse_container_stats(
+    out: str, err: str, code: int
+) -> Optional[ContainerInfo]:
+    if code != 0:
+        return None
+    # container_id, image_name, image_id, start, version
+    return ContainerInfo(*list(out.strip().split(',')))
+
+
+def parsed_container_stats(
+    ctx: CephadmContext,
+    container_name: str,
+    *,
+    container_path: str,
+) -> Optional[ContainerInfo]:
+    out, err, code = _container_stats(
+        ctx, container_name, container_path=container_path
+    )
+    return _parse_container_stats(out, err, code)
+
+
+def _container_image_stats(
+    ctx: CephadmContext, image_name: str, *, container_path: str = ''
+) -> Tuple[str, str, int]:
+    """returns image id, created time, and ceph version if available"""
+    container_path = container_path or ctx.container_engine.path
+    cmd = [
+        container_path,
+        'image',
+        'inspect',
+        '--format',
+        '{{.Id}},{{.Created}},{{index .Config.Labels "io.ceph.version"}}',
+        image_name,
+    ]
+    out, err, code = call(ctx, cmd, verbosity=CallVerbosity.QUIET)
+    return out, err, code
+
+
+def _parse_container_image_stats(
+    image_name: str,
+    out: str,
+    err: str,
+    code: int,
+) -> Optional[ContainerInfo]:
+    if code != 0:
+        return None
+    (image_id, start, version) = out.strip().split(',')
+    # keep in mind, the daemon container is not running, so no container id here
+    return ContainerInfo(
+        container_id='',
+        image_name=image_name,
+        image_id=image_id,
+        start=start,
+        version=version,
+    )
+
+
+def parsed_container_image_stats(
+    ctx: CephadmContext, image_name: str, *, container_path: str = ''
+) -> Optional[ContainerInfo]:
+    out, err, code = _container_image_stats(
+        ctx, image_name, container_path=container_path
+    )
+    return _parse_container_image_stats(image_name, out, err, code)
+
+
+def normalize_container_id(i: str) -> str:
+    # docker adds the sha256: prefix, but AFAICS both
+    # docker (18.09.7 in bionic at least) and podman
+    # both always use sha256, so leave off the prefix
+    # for consistency.
+    # ---
+    # (JJM) This is not a good idea and cephadm should move away from stripping
+    # the hash-type prefix. This is there so that docker/OCI can eventually
+    # move hash types if need be. Removing it breaks hash agility!
+    prefix = 'sha256:'
+    if i.startswith(prefix):
+        i = i[len(prefix) :]
+    return i
+
+
+class ImageInfo:
+    def __init__(
+        self,
+        image_id: str,
+        repository: str,
+        digest: str,
+        tag: str,
+        created: str,
+    ) -> None:
+        self.image_id = image_id
+        self.repository = repository
+        self.digest = digest
+        self.tag = tag
+        self.created = created
+
+    @property
+    def name_with_tag(self) -> str:
+        if self.repository and self.tag:
+            return f'{self.repository}:{self.tag}'
+        return ''
+
+    @property
+    def name_with_digest(self) -> str:
+        if self.repository and self.digest:
+            return f'{self.repository}@{self.digest}'
+        return ''
+
+    @property
+    def name(self) -> str:
+        if self.name_with_digest:
+            return self.name_with_digest
+        if self.name_with_tag:
+            return self.name_with_tag
+        return self.image_id
+
+    def __repr__(self) -> str:
+        return (
+            'ImageInfo('
+            f'image_id={self.image_id!r}, '
+            f'repository={self.repository!r}, '
+            f'digest={self.digest!r}, '
+            f'tag={self.tag!r}, '
+            f'created={self.created!r}'
+            ')'
+        )
+
+
+def _container_image_list(
+    ctx: CephadmContext,
+    filters: Optional[List[str]] = None,
+    *,
+    container_path: str = '',
+) -> Tuple[str, str, int]:
+    """get images with stats from the container engine"""
+    container_path = container_path or ctx.container_engine.path
+    args = [container_path, 'images']
+    for filter_value in filters or []:
+        args.append(f'--filter={filter_value}')
+    fmt = '{{.Repository}}@{{.Digest}}|{{.ID}}|{{.Tag}}|{{.CreatedAt}}'
+    args.append(f'--format={fmt}')
+    return call(ctx, args, verbosity=CallVerbosity.QUIET)
+
+
+def _parse_container_image_list(
+    out: str,
+    err: str,
+    code: int,
+) -> List[ImageInfo]:
+    if code != 0:
+        return []
+    images: List[ImageInfo] = []
+    for line in out.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            digest_part, image_id, tag, created_date = line.split('|')
+        except ValueError:
+            raise ValueError('invalid container image value: {line!r}')
+        try:
+            repository, digest = (digest_part or '@').split('@')
+        except ValueError:
+            raise ValueError('invalid digest part: {digest_part!r}')
+        tag = '' if tag == '<none>' else tag
+        repository = '' if repository == '<none>' else repository
+        image_info = ImageInfo(
+            image_id=image_id,
+            repository=repository,
+            digest=digest,
+            tag=tag,
+            created=created_date,
+        )
+        images.append(image_info)
+    return images
+
+
+def parsed_container_image_list(
+    ctx: CephadmContext,
+    filters: Optional[List[str]] = None,
+    *,
+    container_path: str = '',
+) -> List[ImageInfo]:
+    out, err, code = _container_image_list(
+        ctx, filters=filters, container_path=container_path
+    )
+    return _parse_container_image_list(out, err, code)

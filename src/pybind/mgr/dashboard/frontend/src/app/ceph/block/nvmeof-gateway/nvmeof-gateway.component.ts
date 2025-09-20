@@ -1,20 +1,14 @@
-import { Component, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
-import { NvmeofService } from '../../../shared/api/nvmeof.service';
+import { GroupsComboboxItem, NvmeofService } from '../../../shared/api/nvmeof.service';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { Daemon } from '~/app/shared/models/daemon.interface';
-
-type ComboBoxItem = {
-  content: string;
-  serviceName: string;
-  selected?: boolean;
-};
 
 type Gateway = {
   id: string;
@@ -23,20 +17,40 @@ type Gateway = {
   status_desc: string;
 };
 
+enum TABS {
+  'gateways',
+  'overview'
+}
+
+const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
+
 @Component({
   selector: 'cd-nvmeof-gateway',
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
-export class NvmeofGatewayComponent {
+export class NvmeofGatewayComponent implements OnInit {
+  selectedTab: TABS;
+
+  onSelected(tab: TABS) {
+    this.selectedTab = tab;
+  }
+
+  public get Tabs(): typeof TABS {
+    return TABS;
+  }
+
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
 
   gateways: Gateway[] = [];
   gatewayColumns: any;
   selection = new CdTableSelection();
-  gwGroups: ComboBoxItem[] = [];
+  gwGroups: GroupsComboboxItem[] = [];
   groupService: string = null;
+  selectedGatewayGroup: string = null;
+  gwGroupsEmpty: boolean = false;
+  gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
 
   constructor(
     private nvmeofService: NvmeofService,
@@ -45,7 +59,7 @@ export class NvmeofGatewayComponent {
   ) {}
 
   ngOnInit() {
-    this.getGatewayGroups();
+    this.setGatewayGroups();
     this.gatewayColumns = [
       {
         name: $localize`Gateway ID`,
@@ -93,9 +107,10 @@ export class NvmeofGatewayComponent {
   }
 
   // Gateway groups
-  onGroupSelection(selected: ComboBoxItem) {
+  onGroupSelection(selected: GroupsComboboxItem) {
     selected.selected = true;
     this.groupService = selected.serviceName;
+    this.selectedGatewayGroup = selected.content;
     this.getGateways();
   }
 
@@ -104,18 +119,20 @@ export class NvmeofGatewayComponent {
     this.getGateways();
   }
 
-  getGatewayGroups() {
+  setGatewayGroups() {
     this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
-      this.gwGroups = response?.[0]?.length
-        ? response[0].map((group: CephServiceSpec) => {
-            return {
-              content: group?.spec?.group,
-              serviceName: group?.service_name
-            };
-          })
-        : [];
+      if (response?.[0]?.length) {
+        this.gwGroups = this.nvmeofService.formatGwGroupsList(response, true);
+      } else this.gwGroups = [];
       // Select first group if no group is selected
-      if (!this.groupService && this.gwGroups.length) this.onGroupSelection(this.gwGroups[0]);
+      if (!this.groupService && this.gwGroups.length) {
+        this.onGroupSelection(this.gwGroups[0]);
+        this.gwGroupsEmpty = false;
+        this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
+      } else {
+        this.gwGroupsEmpty = true;
+        this.gwGroupPlaceholder = $localize`No groups available`;
+      }
     });
   }
 }

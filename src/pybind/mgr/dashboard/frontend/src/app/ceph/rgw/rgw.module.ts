@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -10,7 +9,7 @@ import {
   NgbTooltipModule,
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
@@ -34,7 +33,6 @@ import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
-import { TreeModule } from '@circlon/angular-tree-component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
@@ -53,7 +51,6 @@ import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-pr
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
-import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
 import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 import { RgwMultisiteSyncPolicyComponent } from './rgw-multisite-sync-policy/rgw-multisite-sync-policy.component';
 import { RgwMultisiteSyncPolicyFormComponent } from './rgw-multisite-sync-policy-form/rgw-multisite-sync-policy-form.component';
@@ -64,6 +61,8 @@ import { RgwMultisiteSyncPolicyDetailsComponent } from './rgw-multisite-sync-pol
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
 import { RgwMultisiteSyncPipeModalComponent } from './rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
 import { RgwMultisiteTabsComponent } from './rgw-multisite-tabs/rgw-multisite-tabs.component';
+import { RgwStorageClassListComponent } from './rgw-storage-class-list/rgw-storage-class-list.component';
+
 import {
   ButtonModule,
   GridModule,
@@ -73,9 +72,49 @@ import {
   ProgressIndicatorModule,
   CodeSnippetModule,
   InputModule,
-  CheckboxModule
+  CheckboxModule,
+  TreeviewModule,
+  RadioModule,
+  SelectModule,
+  NumberModule,
+  TabsModule,
+  AccordionModule,
+  TagModule,
+  TooltipModule,
+  ComboBoxModule,
+  ToggletipModule,
+  IconService,
+  LayoutModule
 } from 'carbon-components-angular';
+import EditIcon from '@carbon/icons/es/edit/16';
+import ScalesIcon from '@carbon/icons/es/scales/20';
+import UserIcon from '@carbon/icons/es/user/16';
+import CubeIcon from '@carbon/icons/es/cube/20';
+import ShareIcon from '@carbon/icons/es/share/16';
+import ViewIcon from '@carbon/icons/es/view/16';
+import PasswordIcon from '@carbon/icons/es/password/16';
+import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import ToolsIcon from '@carbon/icons/es/tools/32';
+import ParentChild from '@carbon/icons/es/parent-child/20';
+import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
+
 import { CephSharedModule } from '../shared/ceph-shared.module';
+import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
+import { RgwUserAccountsFormComponent } from './rgw-user-accounts-form/rgw-user-accounts-form.component';
+import { RgwUserAccountsDetailsComponent } from './rgw-user-accounts-details/rgw-user-accounts-details.component';
+import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
+import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
+import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
+import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
+import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
+import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
+import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
+import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
+import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
 
 @NgModule({
   imports: [
@@ -89,8 +128,8 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RouterModule,
     NgbTooltipModule,
     NgbPopoverModule,
-    NgxPipeFunctionModule,
-    TreeModule,
+    PipesModule,
+    TreeviewModule,
     DataTableModule,
     DashboardV3Module,
     NgbTypeaheadModule,
@@ -103,18 +142,29 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     IconModule,
     NgbProgressbar,
     InputModule,
-    CheckboxModule
+    AccordionModule,
+    CheckboxModule,
+    NumberModule,
+    TabsModule,
+    TagModule,
+    TooltipModule,
+    ComboBoxModule,
+    ToggletipModule,
+    RadioModule,
+    SelectModule,
+    LayoutModule
   ],
   exports: [
-    RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent
+    RgwUserDetailsComponent,
+    RgwStorageClassListComponent
   ],
   declarations: [
+    RgwRateLimitComponent,
     RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
@@ -154,11 +204,42 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
     RgwMultisiteSyncPolicyDetailsComponent,
     RgwMultisiteSyncFlowModalComponent,
     RgwMultisiteSyncPipeModalComponent,
-    RgwMultisiteTabsComponent
+    RgwMultisiteTabsComponent,
+    RgwUserAccountsComponent,
+    RgwUserAccountsFormComponent,
+    RgwUserAccountsDetailsComponent,
+    RgwStorageClassListComponent,
+    RgwStorageClassDetailsComponent,
+    RgwStorageClassFormComponent,
+    RgwBucketTieringFormComponent,
+    RgwBucketLifecycleListComponent,
+    RgwRateLimitDetailsComponent,
+    RgwTopicListComponent,
+    RgwTopicDetailsComponent,
+    RgwTopicFormComponent,
+    RgwBucketNotificationListComponent,
+    RgwNotificationFormComponent
   ],
   providers: [TitleCasePipe]
 })
-export class RgwModule {}
+export class RgwModule {
+  constructor(private iconService: IconService) {
+    this.iconService.registerAll([
+      EditIcon,
+      ScalesIcon,
+      CubeIcon,
+      UserIcon,
+      ShareIcon,
+      ViewIcon,
+      PasswordIcon,
+      ArrowDownIcon,
+      ProgressBarRoundIcon,
+      ToolsIcon,
+      ParentChild,
+      UserAccessLocked
+    ]);
+  }
+}
 
 const routes: Routes = [
   {
@@ -185,6 +266,23 @@ const routes: Routes = [
     ]
   },
   {
+    path: 'accounts',
+    data: { breadcrumbs: 'Accounts' },
+    children: [
+      { path: '', component: RgwUserAccountsComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: RgwUserAccountsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
     path: 'roles',
     data: {
       breadcrumbs: 'Roles',
@@ -193,6 +291,10 @@ const routes: Routes = [
         {
           name: 'Users',
           url: '/rgw/user'
+        },
+        {
+          name: 'Accounts',
+          url: '/rgw/accounts'
         },
         {
           name: 'Roles',
@@ -232,7 +334,7 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.EDIT}/:bid`,
+        path: `${URLVerbs.EDIT}/:bid/:owner`,
         component: RgwBucketFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       }
@@ -285,6 +387,23 @@ const routes: Routes = [
     ]
   },
   {
+    path: 'tiering',
+    data: { breadcrumbs: 'Tiering' },
+    children: [
+      { path: '', component: RgwStorageClassListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
+        component: RgwStorageClassFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
     path: 'nfs',
     canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
     data: {
@@ -298,7 +417,7 @@ const routes: Routes = [
       breadcrumbs: 'NFS'
     },
     children: [
-      { path: '', component: NfsListComponent },
+      { path: '', component: NfsClusterComponent },
       {
         path: URLVerbs.CREATE,
         component: NfsFormComponent,
@@ -315,6 +434,23 @@ const routes: Routes = [
     path: 'configuration',
     data: { breadcrumbs: 'Configuration' },
     children: [{ path: '', component: RgwConfigurationPageComponent }]
+  },
+  {
+    path: 'topic',
+    data: { breadcrumbs: 'Topic' },
+    children: [
+      { path: '', component: RgwTopicListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:name`,
+        component: RgwTopicFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 

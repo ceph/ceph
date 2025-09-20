@@ -81,12 +81,9 @@ protected:
     co_return co_await lookup_pool(pname);
   }
 
-  auto delete_pool(std::string pname) {
-    return rados().delete_pool(pname, asio::use_awaitable);
-  }
-
-  auto delete_pool(std::int64_t pid) {
-    return rados().delete_pool(pid, asio::use_awaitable);
+  auto delete_pool(std::string pname)-> boost::asio::awaitable<void> {
+    co_await rados().delete_pool(pname, asio::use_awaitable);
+    created_pools.erase(pname);
   }
 
 public:
@@ -103,7 +100,8 @@ public:
 
   /// \brief Delete pool used for testing
   boost::asio::awaitable<void> CoTearDown() override {
-    for (const auto& name : created_pools) try {
+    auto pools_to_delete = created_pools;
+    for (const auto& name : pools_to_delete) try {
 	co_await delete_pool(name);
       } catch (const sys::system_error& e) {
 	if (e.code() != osdc_errc::pool_dne) {
@@ -151,7 +149,6 @@ CORO_TEST_F(NeoRadosPools, PoolDelete, NeoRadosPool) {
   co_await delete_pool(pname);
   co_await expect_error_code(lookup_pool(pname),
 			     sys::errc::no_such_file_or_directory);
-  co_await create_pool(pname);
   co_return;
 }
 

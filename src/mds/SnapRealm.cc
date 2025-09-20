@@ -13,9 +13,13 @@
  */
 
 #include "SnapRealm.h"
+#include "CInode.h"
+#include "CDentry.h"
+#include "CDir.h"
 #include "MDCache.h"
 #include "MDSRank.h"
 #include "SnapClient.h"
+#include "common/debug.h"
 
 #include <string_view>
 

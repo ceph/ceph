@@ -55,6 +55,8 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<rgw_zone_id, RGWZone> zone_by_id;
 
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
+  rgw::sal::ConfigStore *cfgstore{nullptr};
+  const rgw::SiteConfig* site{nullptr};
 
   void init(RGWSI_SysObj *_sysobj_svc,
 	    librados::Rados* rados_,
@@ -66,24 +68,14 @@ class RGWSI_Zone : public RGWServiceInstance
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
 
-  int create_default_zg(const DoutPrefixProvider *dpp, optional_yield y);
-  int init_default_zone(const DoutPrefixProvider *dpp, optional_yield y);
-
-  int search_realm_with_zone(const DoutPrefixProvider *dpp,
-                             const rgw_zone_id& zid,
-                             RGWRealm *prealm,
-                             RGWPeriod *pperiod,
-                             RGWZoneGroup *pzonegroup,
-                             bool *pfound,
-                             optional_yield y);
 public:
-  RGWSI_Zone(CephContext *cct);
+  RGWSI_Zone(CephContext *cct, rgw::sal::ConfigStore* cfgstore, const rgw::SiteConfig* _site);
   ~RGWSI_Zone();
 
   const RGWZoneParams& get_zone_params() const;
   const RGWPeriod& get_current_period() const;
   const RGWRealm& get_realm() const;
-  const RGWZoneGroup& get_zonegroup() const;
+  const RGWZoneGroup& get_zonegroup() const { return *zonegroup; };
   int get_zonegroup(const std::string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
 
@@ -96,7 +88,6 @@ public:
   uint32_t get_zone_short_id() const;
 
   const std::string& get_current_period_id() const;
-  bool has_zonegroup_api(const std::string& api) const;
 
   bool zone_is_writeable();
   bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
@@ -143,10 +134,10 @@ public:
   bool is_meta_master() const;
 
   bool need_to_sync() const;
-  bool need_to_log_data() const;
+  bool need_to_log_data() const { return (zone_public_config->log_data && sync_module_exports_data()); };
   bool need_to_log_metadata() const;
   bool can_reshard() const;
-  bool is_syncing_bucket_meta(const rgw_bucket& bucket);
+  bool is_syncing_bucket_meta() const;
 
   int list_zonegroups(const DoutPrefixProvider *dpp, std::list<std::string>& zonegroups);
   int list_regions(const DoutPrefixProvider *dpp, std::list<std::string>& regions);

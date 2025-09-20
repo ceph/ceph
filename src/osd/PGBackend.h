@@ -18,11 +18,16 @@
 #ifndef PGBACKEND_H
 #define PGBACKEND_H
 
-#include "ECCommon.h"
+#include "ECListener.h"
+#include "ECTypes.h"
+#include "ECExtentCache.h"
 #include "osd_types.h"
+#include "pg_features.h"
+#include "common/intrusive_timer.h"
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "os/ObjectStore.h"
+#include "osd/scrubber_common.h"
 #include "common/LogClient.h"
 #include <string>
 #include "PGTransaction.h"
@@ -55,11 +60,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
  public:
   virtual int object_stat(const hobject_t &hoid, struct stat* st) { return -1;};
    CephContext* cct;
- protected:
+ public:
    ObjectStore *store;
    const coll_t coll;
    ObjectStore::CollectionHandle &ch;
- public:
    /**
     * Provides interfaces for PGBackend callbacks
     *
@@ -137,6 +141,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        Context *on_complete) = 0;
 
      /**
+      * pg_lock, pg_unlock, pg_add_ref, pg_dec_ref
+      *
+      * Utilities for locking and manipulating refcounts on
+      * implementation.
+      */
+     virtual void pg_lock() = 0;
+     virtual void pg_unlock() = 0;
+     virtual void pg_add_ref() = 0;
+     virtual void pg_dec_ref() = 0;
+
+     /**
       * Bless a context
       *
       * Wraps a context in whatever outer layers the parent usually
@@ -193,6 +208,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual epoch_t pgb_get_osdmap_epoch() const = 0;
      virtual const pg_info_t &get_info() const = 0;
      virtual const pg_pool_t &get_pool() const = 0;
+     virtual eversion_t get_pg_committed_to() const = 0;
 
      virtual ObjectContextRef get_obc(
        const hobject_t &hoid,
@@ -219,7 +235,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const std::optional<pg_hit_set_history_t> &hset_history,
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
-       const eversion_t &min_last_complete_ondisk,
+       const eversion_t &pg_committed_to,
        bool transaction_applied,
        ObjectStore::Transaction &t,
        bool async = false) = 0;
@@ -240,12 +256,17 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual void update_last_complete_ondisk(
        eversion_t lcod) = 0;
 
+     virtual void update_pct(
+       eversion_t pct) = 0;
+
      virtual void update_stats(
        const pg_stat_t &stat) = 0;
 
      virtual void schedule_recovery_work(
        GenContext<ThreadPool::TPHandle&> *c,
        uint64_t cost) = 0;
+
+     virtual common::intrusive_timer &get_pg_timer() = 0;
 
      virtual pg_shard_t whoami_shard() const = 0;
      int whoami() const {
@@ -259,6 +280,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual pg_shard_t primary_shard() const = 0;
      virtual uint64_t min_peer_features() const = 0;
      virtual uint64_t min_upacting_features() const = 0;
+     virtual pg_feature_vec_t get_pg_acting_features() const = 0;
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 
@@ -270,6 +292,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        MessageRef, Connection *con) = 0;
      virtual void send_message_osd_cluster(
        Message *m, const ConnectionRef& con) = 0;
+     virtual void start_mon_command(
+       const std::vector<std::string>& cmd, const bufferlist& inbl,
+       bufferlist *outbl, std::string *outs,
+       Context *onfinish) = 0;
      virtual ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) = 0;
      virtual entity_name_t get_cluster_msgr_name() = 0;
 
@@ -400,10 +426,26 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
-   virtual int get_ec_data_chunk_count() const { return 0; };
+   virtual unsigned int get_ec_data_chunk_count() const { return 0; };
    virtual int get_ec_stripe_chunk_size() const { return 0; };
-
+   virtual bool get_ec_supports_crc_encode_decode() const = 0;
+   virtual uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const { return size; };
    virtual void dump_recovery_info(ceph::Formatter *f) const = 0;
+   virtual bool get_is_nonprimary_shard(shard_id_t shard) const {
+     return false; // Only EC has nonprimary shards.
+   };
+   virtual bool get_is_hinfo_required() const {
+     return false; // Only EC can have hinfo.
+   }
+   virtual bool get_is_ec_optimized() const {
+     return false; // Only EC can have be ec optimized!
+   }
+   virtual bool ec_can_decode(const shard_id_set &available_shards) const = 0;
+   virtual shard_id_map<bufferlist> ec_encode_acting_set(
+       const bufferlist &in_bl) const = 0;
+   virtual shard_id_map<bufferlist> ec_decode_acting_set(
+       const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
+   virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
 
  private:
    std::set<hobject_t> temp_contents;
@@ -435,8 +477,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const eversion_t &at_version,        ///< [in] version
      PGTransactionUPtr &&t,               ///< [in] trans to execute (move)
      const eversion_t &trim_to,           ///< [in] trim log to here
-     const eversion_t &min_last_complete_ondisk, ///< [in] lower bound on
-                                                 ///  committed version
+     const eversion_t &pg_committed_to,   ///< [in] lower bound on
+                                          ///       committed version
      std::vector<pg_log_entry_t>&& log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      std::optional<pg_hit_set_history_t> &hset_history,
@@ -467,6 +509,11 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      const pg_log_entry_t &entry,
      ObjectStore::Transaction *t);
 
+   void partial_write(
+     pg_info_t *info,
+     eversion_t previous_version,
+     const pg_log_entry_t &entry);
+
    void remove(
      const hobject_t &hoid,
      ObjectStore::Transaction *t);
@@ -480,12 +527,13 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    void rollback_setattrs(
      const hobject_t &hoid,
      std::map<std::string, std::optional<ceph::buffer::list> > &old_attrs,
-     ObjectStore::Transaction *t);
+     ObjectStore::Transaction *t,
+     bool only_oi);
 
    /// Truncate object to rollback append
-   virtual void rollback_append(
+   void rollback_append(
      const hobject_t &hoid,
-     uint64_t old_size,
+     uint64_t old_shard_size,
      ObjectStore::Transaction *t);
 
    /// Unstash object to rollback stash
@@ -510,8 +558,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    /// Clone the extents back into place
    void rollback_extents(
      version_t gen,
-     const std::vector<std::pair<uint64_t, uint64_t> > &extents,
+     const uint64_t offset,
+     uint64_t length,
      const hobject_t &hoid,
+     const uint64_t shard_size,
      ObjectStore::Transaction *t);
  public:
 
@@ -561,19 +611,23 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const std::list<std::pair<ECCommon::ec_align_t,
-		std::pair<ceph::buffer::list*, Context*> > > &to_read,
+     uint64_t object_size,
+     const std::list<std::pair<ec_align_t,
+		std::pair<ceph::buffer::list*, Context*>>> &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
+
    int be_scan_list(
+     const Scrub::ScrubCounterSet& io_counters,
      ScrubMap &map,
      ScrubMapBuilder &pos);
 
-   virtual uint64_t be_get_ondisk_size(
-     uint64_t logical_size) const = 0;
+   virtual uint64_t be_get_ondisk_size(uint64_t logical_size,
+                                       shard_id_t shard_id) const = 0;
 
    virtual int be_deep_scrub(
+     [[maybe_unused]] const Scrub::ScrubCounterSet& io_counters,
      const hobject_t &oid,
      ScrubMap &map,
      ScrubMapBuilder &pos,
@@ -586,7 +640,8 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      coll_t coll,
      ObjectStore::CollectionHandle &ch,
      ObjectStore *store,
-     CephContext *cct);
+     CephContext *cct,
+     ECExtentCache::LRU &ec_extent_cache_lru);
 };
 
 #endif

@@ -15,6 +15,7 @@
 #include "PG.h"
 #include "messages/MOSDRepScrub.h"
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
@@ -43,6 +44,7 @@
 #include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGPCT.h"
 #include "messages/MOSDBackoff.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepOp.h"
@@ -212,6 +214,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p,
     _pool,
     curmap,
+    PG_FEATURE_CLASSIC_ALL,
     this,
     this),
   pool(recovery_state.get_pgpool()),
@@ -512,6 +515,8 @@ void PG::finish_recovery_op(const hobject_t& soid, bool dequeue)
 
 void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 {
+  dout(10) << __func__ << " split_bits " << split_bits << dendl;
+
   recovery_state.split_into(child_pgid, &child->recovery_state, split_bits);
 
   child->update_snap_mapper_bits(split_bits);
@@ -1097,6 +1102,7 @@ void PG::read_state(ObjectStore *store)
 	info,
 	oss,
 	cct->_conf->osd_ignore_stale_divergent_priors,
+	pool.info.allows_ecoptimizations(),
 	cct->_conf->osd_debug_verify_missing_on_start);
 
       if (oss.tellp())
@@ -1276,7 +1282,6 @@ Scrub::schedule_result_t PG::start_scrubbing(
   pg_cond.allow_deep =
       !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
 	pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
-  pg_cond.has_deep_errors = (info.stats.stats.sum.num_deep_scrub_errors > 0);
   pg_cond.can_autorepair =
       (cct->_conf->osd_scrub_auto_repair &&
        get_pgbackend()->auto_repair_supported());
@@ -1294,16 +1299,12 @@ double PG::next_deepscrub_interval() const
   return info.history.last_deep_scrub_stamp + deep_scrub_interval;
 }
 
-void PG::on_scrub_schedule_input_change(Scrub::delay_ready_t delay_ready)
+void PG::on_scrub_schedule_input_change()
 {
   if (is_active() && is_primary() && !is_scrub_queued_or_active()) {
-    dout(10) << fmt::format(
-		    "{}: active/primary. delay_ready={:c}", __func__,
-		    (delay_ready == Scrub::delay_ready_t::delay_ready) ? 't'
-								       : 'f')
-	     << dendl;
+    dout(10) << fmt::format("{}: active/primary", __func__) << dendl;
     ceph_assert(m_scrubber);
-    m_scrubber->update_scrub_job(delay_ready);
+    m_scrubber->update_scrub_job();
   } else {
     dout(10) << fmt::format(
 		    "{}: inactive, non-primary - or already scrubbing",
@@ -1560,8 +1561,12 @@ void PG::on_backfill_reserved()
   queue_recovery();
 }
 
-void PG::on_backfill_canceled()
+void PG::on_backfill_suspended()
 {
+  // Scan replies asked before suspending this backfill should be ignored.
+  // See PrimaryLogPG::do_scan -  case MOSDPGScan::OP_SCAN_DIGEST.
+  // `waiting_on_backfill` will be re-refilled after the suspended backfill
+  // is resumed/restarted.
   if (!waiting_on_backfill.empty()) {
     waiting_on_backfill.clear();
     finish_recovery_op(hobject_t::get_max());
@@ -2091,6 +2096,9 @@ bool PG::can_discard_request(OpRequestRef& op)
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return can_discard_replica_op<
       MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(op);
+  case MSG_OSD_PG_PCT:
+    return can_discard_replica_op<
+      MOSDPGPCT, MSG_OSD_PG_PCT>(op);
 
   case MSG_OSD_PG_SCAN:
     return can_discard_scan(op);
@@ -2199,7 +2207,7 @@ void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at)
   // on_scrub_schedule_input_change() as pool.info contains scrub scheduling
   // parameters.
   if (pool.info.last_change >= range_starts_at) {
-    on_scrub_schedule_input_change(Scrub::delay_ready_t::delay_ready);
+    on_scrub_schedule_input_change();
   }
 }
 

@@ -32,7 +32,7 @@
         mon_warn_on_pool_no_redundancy = false
 	mon_allow_pool_size_one = true
 
-        osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd"
+        osd pool default erasure code profile = "plugin=isa technique=reed_sol_van k=2 m=1 crush-failure-domain=osd"
 
 	osd default data pool replay window = 5
 

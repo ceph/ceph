@@ -1,12 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "hobject.h"
+#include "common/Formatter.h"
+
 #include <charconv>
 #include <fmt/compile.h>
 #include <fmt/core.h>
-
-#include "hobject.h"
-#include "common/Formatter.h"
 
 using std::list;
 using std::ostream;
@@ -194,16 +194,18 @@ void hobject_t::dump(Formatter *f) const
   f->dump_string("namespace", nspace);
 }
 
-void hobject_t::generate_test_instances(list<hobject_t*>& o)
+list<hobject_t> hobject_t::generate_test_instances()
 {
-  o.push_back(new hobject_t);
-  o.push_back(new hobject_t);
-  o.back()->max = true;
-  o.push_back(new hobject_t(object_t("oname"), string(), 1, 234, -1, ""));
-  o.push_back(new hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+  list<hobject_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().max = true;
+  o.push_back(hobject_t(object_t("oname"), string(), 1, 234, -1, ""));
+  o.push_back(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
 	67, 0, "n1"));
-  o.push_back(new hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(hobject_t(object_t("oname3"), string("oname3"),
 	CEPH_SNAPDIR, 910, 1, "n2"));
+  return o;
 }
 
 static void append_out_escaped(const string &in, string *out)
@@ -491,33 +493,35 @@ void ghobject_t::dump(Formatter *f) const
   if (generation != NO_GEN)
     f->dump_int("generation", generation);
   if (shard_id != shard_id_t::NO_SHARD)
-    f->dump_int("shard_id", shard_id);
+    f->dump_int("shard_id", int(shard_id));
   f->dump_int("max", (int)max);
 }
 
-void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
+list<ghobject_t> ghobject_t::generate_test_instances()
 {
-  o.push_back(new ghobject_t);
-  o.push_back(new ghobject_t);
-  o.back()->hobj.max = true;
-  o.push_back(new ghobject_t(hobject_t(object_t("oname"), string(), 1, 234, -1, "")));
+  list<ghobject_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().hobj.max = true;
+  o.push_back(ghobject_t(hobject_t(object_t("oname"), string(), 1, 234, -1, "")));
 
-  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+  o.push_back(ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
         67, 0, "n1"), 1, shard_id_t(0)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+  o.push_back(ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
         67, 0, "n1"), 1, shard_id_t(1)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
+  o.push_back(ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
         67, 0, "n1"), 1, shard_id_t(2)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
         CEPH_SNAPDIR, 910, 1, "n2"), 1, shard_id_t(0)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
         CEPH_SNAPDIR, 910, 1, "n2"), 2, shard_id_t(0)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
         CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(0)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
         CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(1)));
-  o.push_back(new ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
+  o.push_back(ghobject_t(hobject_t(object_t("oname3"), string("oname3"),
         CEPH_SNAPDIR, 910, 1, "n2"), 3, shard_id_t(2)));
+  return o;
 }
 
 ostream& operator<<(ostream& out, const ghobject_t& o)
@@ -548,14 +552,16 @@ bool ghobject_t::parse(const string& s)
   // look for shard# prefix
   const char *start = s.c_str();
   const char *p;
-  int sh = shard_id_t::NO_SHARD;
+  shard_id_t sh = shard_id_t::NO_SHARD;
   for (p = start; *p && isxdigit(*p); ++p) ;
   if (!*p && *p != '#')
     return false;
   if (p > start) {
-    int r = sscanf(s.c_str(), "%x", &sh);
+    unsigned int sh_i;
+    int r = sscanf(s.c_str(), "%x", &sh_i);
     if (r < 1)
       return false;
+    sh = shard_id_t(sh_i);
     start = p + 1;
   } else {
     ++start;

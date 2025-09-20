@@ -20,6 +20,8 @@
 #include "tools/rbd_mirror/Threads.h"
 #include "common/Formatter.h"
 
+#include <atomic>
+
 namespace librbd {
 
 namespace {
@@ -56,7 +58,13 @@ public:
   }
 
   Namespace() {
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
+  }
+
+  ~Namespace() {
+    ceph_assert(s_instance == this);
+    s_instance = nullptr;
   }
 
   void add(const std::string &name) {
@@ -341,28 +349,22 @@ public:
                       Return(r)));
   }
 
-  void expect_mirror_mode_get(librados::MockTestMemIoCtxImpl *io_ctx_impl,
-                              cls::rbd::MirrorMode mirror_mode, int r) {
-    bufferlist out_bl;
-    encode(mirror_mode, out_bl);
-
+  void expect_mirror_mode_get(librados::MockTestMemIoCtxImpl* io_ctx_impl,
+                              std::atomic<bool>* default_namespace_enabled,
+                              int r) {
     EXPECT_CALL(*io_ctx_impl,
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
                      _, _, _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
-                                          *bl = out_bl;
-                                        })),
-          Return(r)));
-  }
-
-  void expect_mirror_mode_get(librados::MockTestMemIoCtxImpl *io_ctx_impl) {
-    EXPECT_CALL(*io_ctx_impl,
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),
-                     _, _, _, _))
-      .WillRepeatedly(DoAll(WithArg<5>(Invoke([](bufferlist *bl) {
-                encode(cls::rbd::MIRROR_MODE_POOL, *bl);
+      .WillRepeatedly(DoAll(WithArg<5>(Invoke(
+             [io_ctx_impl, default_namespace_enabled](bufferlist* bl) {
+                if (io_ctx_impl->get_namespace().empty() &&
+                    *default_namespace_enabled == false) {
+                  encode(cls::rbd::MIRROR_MODE_DISABLED, *bl);
+                } else {
+                  encode(cls::rbd::MIRROR_MODE_POOL, *bl);
+                }
               })),
-          Return(0)));
+          Return(r)));
   }
 
   void expect_mirror_remote_namespace_get(
@@ -586,10 +588,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   peer_spec.mon_host = "123";
   peer_spec.key = "234";
 
-  auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
-                                           false);
-
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -618,7 +616,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   auto mock_remote_pool_poller = new MockRemotePoolPoller();
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
@@ -637,7 +634,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   remote_cct->put();
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
-  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
   expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
@@ -645,12 +641,6 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
 
 TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
-  peer_spec.mon_host = "123";
-  peer_spec.key = "234";
-
-  auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
-                                           false);
 
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
@@ -680,7 +670,6 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   auto mock_remote_pool_poller = new MockRemotePoolPoller();
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
@@ -692,6 +681,86 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
                                  &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
+
+  expect_service_daemon_add_or_update_attribute(
+      mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
+
+  C_SaferCond on_acquire;
+  mock_leader_watcher->listener->post_acquire_handler(&on_acquire);
+  ASSERT_EQ(0, on_acquire.wait());
+
+  expect_service_daemon_remove_attribute(mock_service_daemon,
+                                         SERVICE_DAEMON_LEADER_KEY);
+
+  C_SaferCond on_release;
+  mock_leader_watcher->listener->pre_release_handler(&on_release);
+  ASSERT_EQ(0, on_release.wait());
+
+  expect_leader_watcher_shut_down(*mock_leader_watcher);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
+
+  pool_replayer.shut_down();
+}
+
+TEST_F(TestMockPoolReplayer, DefaultNamespaceEnabled) {
+  PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
+
+  std::atomic<bool> default_namespace_enabled = true;
+  auto mock_default_namespace_replayer = new MockNamespaceReplayer();
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
+                                           false);
+  expect_namespace_replayer_get_remote_namespace(*mock_default_namespace_replayer,
+                                                 "");
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  auto mock_leader_watcher = new MockLeaderWatcher();
+  expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
+  expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
+
+  auto& mock_cluster = get_mock_cluster();
+  auto mock_local_rados_client = mock_cluster.do_create_rados_client(
+    g_ceph_context);
+  auto mock_local_io_ctx = mock_local_rados_client->do_create_ioctx(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_pool_name());
+  auto mock_remote_rados_client = mock_cluster.do_create_rados_client(
+    g_ceph_context);
+
+  expect_clone(mock_local_io_ctx);
+  expect_mirror_mode_get(mock_local_io_ctx, &default_namespace_enabled, 0);
+  expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
+
+  InSequence seq;
+
+  expect_connect(mock_cluster, mock_local_rados_client, "ceph", nullptr);
+  expect_connect(mock_cluster, mock_remote_rados_client, "cluster name",
+                 nullptr);
+  expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
+  expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
+  expect_leader_watcher_init(*mock_leader_watcher, 0);
+
+  MockServiceDaemon mock_service_daemon;
+  std::string instance_id = stringify(mock_local_io_ctx->get_instance_id());
+  expect_service_daemon_add_or_update_instance_id_attribute(
+    mock_service_daemon, instance_id);
+
+  C_SaferCond on_default_namespace_init;
+  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
+  expect_service_daemon_add_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_handle_update_leader(*mock_default_namespace_replayer,
+                                                 "", &on_default_namespace_init);
+
+  MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
+                                 m_local_io_ctx.get_id(), peer_spec, {});
+  pool_replayer.init("siteA");
+
+  ASSERT_EQ(0, on_default_namespace_init.wait());
 
   expect_service_daemon_add_or_update_attribute(
       mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
@@ -711,8 +780,103 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
   mock_leader_watcher->listener->pre_release_handler(&on_release);
   ASSERT_EQ(0, on_release.wait());
 
-  expect_leader_watcher_shut_down(*mock_leader_watcher);
+  expect_service_daemon_remove_namespace(mock_service_daemon, "");
   expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
+  expect_leader_watcher_shut_down(*mock_leader_watcher);
+  expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
+
+  pool_replayer.shut_down();
+}
+
+TEST_F(TestMockPoolReplayer, DefaultNamespaceEnableDisable) {
+  PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
+
+  g_ceph_context->_conf.set_val(
+      "rbd_mirror_pool_replayers_refresh_interval", "1");
+
+  std::atomic<bool> default_namespace_enabled = false;
+  auto mock_default_namespace_replayer = new MockNamespaceReplayer();
+  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
+                                           false);
+  expect_namespace_replayer_get_remote_namespace(*mock_default_namespace_replayer,
+                                                 "");
+
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  auto mock_leader_watcher = new MockLeaderWatcher();
+  expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
+  expect_leader_watcher_list_instances(*mock_leader_watcher);
+  expect_leader_watcher_is_blocklisted(*mock_leader_watcher, false);
+
+  auto& mock_cluster = get_mock_cluster();
+  auto mock_local_rados_client = mock_cluster.do_create_rados_client(
+    g_ceph_context);
+  auto mock_local_io_ctx = mock_local_rados_client->do_create_ioctx(
+    m_local_io_ctx.get_id(), m_local_io_ctx.get_pool_name());
+  auto mock_remote_rados_client = mock_cluster.do_create_rados_client(
+    g_ceph_context);
+
+  expect_clone(mock_local_io_ctx);
+  expect_mirror_mode_get(mock_local_io_ctx, &default_namespace_enabled, 0);
+  expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
+
+  InSequence seq;
+
+  expect_connect(mock_cluster, mock_local_rados_client, "ceph", nullptr);
+  expect_connect(mock_cluster, mock_remote_rados_client, "cluster name",
+                 nullptr);
+  expect_create_ioctx(mock_local_rados_client, mock_local_io_ctx);
+  expect_mirror_uuid_get(mock_local_io_ctx, "uuid", 0);
+  auto mock_remote_pool_poller = new MockRemotePoolPoller();
+  expect_remote_pool_poller_init(*mock_remote_pool_poller,
+                                 {"remote mirror uuid", ""}, 0);
+  expect_leader_watcher_init(*mock_leader_watcher, 0);
+
+  MockServiceDaemon mock_service_daemon;
+  std::string instance_id = stringify(mock_local_io_ctx->get_instance_id());
+  expect_service_daemon_add_or_update_instance_id_attribute(
+    mock_service_daemon, instance_id);
+
+  MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
+                                 &m_pool_meta_cache,
+                                 m_local_io_ctx.get_id(), peer_spec, {});
+  pool_replayer.init("siteA");
+
+  expect_service_daemon_add_or_update_attribute(
+      mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
+
+  C_SaferCond on_acquire;
+  mock_leader_watcher->listener->post_acquire_handler(&on_acquire);
+  ASSERT_EQ(0, on_acquire.wait());
+
+  C_SaferCond on_default_namespace_acquire;
+  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
+  expect_service_daemon_add_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_handle_acquire_leader(
+      *mock_default_namespace_replayer, 0, &on_default_namespace_acquire);
+  expect_namespace_replayer_handle_instances_added(
+      *mock_default_namespace_replayer);
+
+  default_namespace_enabled = true;
+  ASSERT_EQ(0, on_default_namespace_acquire.wait());
+
+  C_SaferCond on_default_namespace_shut_down;
+  expect_service_daemon_remove_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer,
+                                      &on_default_namespace_shut_down);
+
+  default_namespace_enabled = false;
+  ASSERT_EQ(0, on_default_namespace_shut_down.wait());
+
+  expect_service_daemon_remove_attribute(mock_service_daemon,
+                                         SERVICE_DAEMON_LEADER_KEY);
+
+  C_SaferCond on_release;
+  mock_leader_watcher->listener->pre_release_handler(&on_release);
+  ASSERT_EQ(0, on_release.wait());
+
+  expect_leader_watcher_shut_down(*mock_leader_watcher);
   expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
@@ -720,17 +884,18 @@ TEST_F(TestMockPoolReplayer, AcquireReleaseLeader) {
 
 TEST_F(TestMockPoolReplayer, Namespaces) {
   PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
-  peer_spec.mon_host = "123";
-  peer_spec.key = "234";
 
   g_ceph_context->_conf.set_val(
       "rbd_mirror_pool_replayers_refresh_interval", "1");
 
   MockNamespace mock_namespace;
 
+  std::atomic<bool> default_namespace_enabled = true;
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
   expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
+  expect_namespace_replayer_get_remote_namespace(*mock_default_namespace_replayer,
+                                                 "");
 
   auto mock_ns1_namespace_replayer = new MockNamespaceReplayer("ns1");
   expect_namespace_replayer_is_blocklisted(*mock_ns1_namespace_replayer,
@@ -761,7 +926,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
       g_ceph_context);
 
   expect_clone(mock_local_io_ctx);
-  expect_mirror_mode_get(mock_local_io_ctx);
+  expect_mirror_mode_get(mock_local_io_ctx, &default_namespace_enabled, 0);
   expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
 
   InSequence seq;
@@ -774,7 +939,6 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   auto mock_remote_pool_poller = new MockRemotePoolPoller();
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
@@ -782,10 +946,18 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   expect_service_daemon_add_or_update_instance_id_attribute(
     mock_service_daemon, instance_id);
 
+  C_SaferCond on_default_namespace_init;
+  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
+  expect_service_daemon_add_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_handle_update_leader(*mock_default_namespace_replayer,
+                                                 "", &on_default_namespace_init);
+
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
+
+  ASSERT_EQ(0, on_default_namespace_init.wait());
 
   C_SaferCond on_ns1_init;
   expect_namespace_replayer_init(*mock_ns1_namespace_replayer, 0);
@@ -807,9 +979,9 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   mock_leader_watcher->listener->post_acquire_handler(&on_acquire);
   ASSERT_EQ(0, on_acquire.wait());
 
+  C_SaferCond on_ns2_acquire;
   expect_namespace_replayer_init(*mock_ns2_namespace_replayer, 0);
   expect_service_daemon_add_namespace(mock_service_daemon, "ns2");
-  C_SaferCond on_ns2_acquire;
   expect_namespace_replayer_handle_acquire_leader(
       *mock_ns2_namespace_replayer, 0, &on_ns2_acquire);
   expect_namespace_replayer_handle_instances_added(
@@ -822,6 +994,7 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   expect_service_daemon_remove_namespace(mock_service_daemon, "ns2");
   expect_namespace_replayer_shut_down(*mock_ns2_namespace_replayer,
                                       &on_ns2_shut_down);
+
   mock_namespace.remove("ns2");
   ASSERT_EQ(0, on_ns2_shut_down.wait());
 
@@ -836,10 +1009,11 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
   mock_leader_watcher->listener->pre_release_handler(&on_release);
   ASSERT_EQ(0, on_release.wait());
 
+  expect_service_daemon_remove_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
   expect_service_daemon_remove_namespace(mock_service_daemon, "ns1");
   expect_namespace_replayer_shut_down(*mock_ns1_namespace_replayer);
   expect_leader_watcher_shut_down(*mock_leader_watcher);
-  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
   expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
@@ -847,21 +1021,27 @@ TEST_F(TestMockPoolReplayer, Namespaces) {
 
 TEST_F(TestMockPoolReplayer, NamespacesError) {
   PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
-  peer_spec.mon_host = "123";
-  peer_spec.key = "234";
 
   g_ceph_context->_conf.set_val(
       "rbd_mirror_pool_replayers_refresh_interval", "1");
 
   MockNamespace mock_namespace;
 
+  std::atomic<bool> default_namespace_enabled = true;
   auto mock_default_namespace_replayer = new MockNamespaceReplayer();
   expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
                                            false);
+  expect_namespace_replayer_get_remote_namespace(*mock_default_namespace_replayer,
+                                                 "");
+
   auto mock_ns1_namespace_replayer = new MockNamespaceReplayer("ns1");
+
   auto mock_ns2_namespace_replayer = new MockNamespaceReplayer("ns2");
   expect_namespace_replayer_is_blocklisted(*mock_ns2_namespace_replayer,
                                            false);
+  expect_namespace_replayer_get_remote_namespace(*mock_ns2_namespace_replayer,
+                                                 "ns2");
+
   auto mock_ns3_namespace_replayer = new MockNamespaceReplayer("ns3");
 
   MockThreads mock_threads(m_threads);
@@ -881,7 +1061,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
       g_ceph_context);
 
   expect_clone(mock_local_io_ctx);
-  expect_mirror_mode_get(mock_local_io_ctx);
+  expect_mirror_mode_get(mock_local_io_ctx, &default_namespace_enabled, 0);
   expect_mirror_remote_namespace_get(mock_local_io_ctx, "", -ENOENT);
 
   InSequence seq;
@@ -894,7 +1074,6 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   auto mock_remote_pool_poller = new MockRemotePoolPoller();
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockServiceDaemon mock_service_daemon;
@@ -902,10 +1081,18 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   expect_service_daemon_add_or_update_instance_id_attribute(
     mock_service_daemon, instance_id);
 
+  C_SaferCond on_default_namespace_init;
+  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
+  expect_service_daemon_add_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_handle_update_leader(*mock_default_namespace_replayer,
+                                                 "", &on_default_namespace_init);
+
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon, nullptr,
                                  &m_pool_meta_cache,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init("siteA");
+
+  ASSERT_EQ(0, on_default_namespace_init.wait());
 
   // test namespace replayer init fails for non leader
 
@@ -916,48 +1103,40 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
         on_ns1_init.complete(r);
       });
   expect_namespace_replayer_init(*mock_ns1_namespace_replayer, -EINVAL, ctx);
+
   mock_namespace.add("ns1");
   ASSERT_EQ(-EINVAL, on_ns1_init.wait());
 
-  // test acquire leader fails when default namespace replayer fails
-
-  expect_service_daemon_add_or_update_attribute(
-    mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
-  expect_namespace_replayer_handle_acquire_leader(
-    *mock_default_namespace_replayer, -EINVAL);
-
-  C_SaferCond on_acquire1;
-  mock_leader_watcher->listener->post_acquire_handler(&on_acquire1);
-  ASSERT_EQ(-EINVAL, on_acquire1.wait());
-
-  // test acquire leader succeeds when non-default namespace replayer fails
+  // test acquire leader succeeds even when all namespace replayers fail
 
   C_SaferCond on_ns2_init;
   expect_namespace_replayer_init(*mock_ns2_namespace_replayer, 0);
   expect_service_daemon_add_namespace(mock_service_daemon, "ns2");
   expect_namespace_replayer_handle_update_leader(*mock_ns2_namespace_replayer,
                                                  "", &on_ns2_init);
+
   mock_namespace.add("ns2");
   ASSERT_EQ(0, on_ns2_init.wait());
 
   expect_service_daemon_add_or_update_attribute(
       mock_service_daemon, SERVICE_DAEMON_LEADER_KEY, true);
   expect_namespace_replayer_handle_acquire_leader(
-      *mock_default_namespace_replayer, 0);
-
+      *mock_default_namespace_replayer, -EPERM);
   expect_namespace_replayer_handle_acquire_leader(*mock_ns2_namespace_replayer,
                                                   -EINVAL);
   ctx = new LambdaContext(
-      [&mock_namespace](int) {
+      [&mock_namespace, &default_namespace_enabled](int) {
+        default_namespace_enabled = false;
         mock_namespace.remove("ns2");
       });
+  expect_service_daemon_remove_namespace(mock_service_daemon, "");
+  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer, nullptr);
   expect_service_daemon_remove_namespace(mock_service_daemon, "ns2");
   expect_namespace_replayer_shut_down(*mock_ns2_namespace_replayer, ctx);
-  mock_namespace.add("ns2");
 
-  C_SaferCond on_acquire2;
-  mock_leader_watcher->listener->post_acquire_handler(&on_acquire2);
-  ASSERT_EQ(0, on_acquire2.wait());
+  C_SaferCond on_acquire;
+  mock_leader_watcher->listener->post_acquire_handler(&on_acquire);
+  ASSERT_EQ(0, on_acquire.wait());
 
   // test namespace replayer init fails on acquire leader
 
@@ -973,11 +1152,11 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
                                                   -EINVAL);
   expect_service_daemon_remove_namespace(mock_service_daemon, "ns3");
   expect_namespace_replayer_shut_down(*mock_ns3_namespace_replayer, ctx);
+
   mock_namespace.add("ns3");
   ASSERT_EQ(0, on_ns3_shut_down.wait());
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
-  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
   expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();
@@ -985,10 +1164,6 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
 
 TEST_F(TestMockPoolReplayer, RemoveCalloutOnInit) {
   PeerSpec peer_spec{"uuid", "cluster name", "client.name"};
-
-  auto mock_default_namespace_replayer = new MockNamespaceReplayer();
-  expect_namespace_replayer_is_blocklisted(*mock_default_namespace_replayer,
-                                           false);
 
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_get_leader_instance_id(*mock_leader_watcher);
@@ -1045,7 +1220,6 @@ TEST_F(TestMockPoolReplayer, RemoveCalloutOnInit) {
   expect_remote_pool_poller_init(*mock_remote_pool_poller,
                                  {"remote mirror uuid", ""}, 0);
 
-  expect_namespace_replayer_init(*mock_default_namespace_replayer, 0);
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   expect_service_daemon_remove_callout(mock_service_daemon, 123);
@@ -1056,7 +1230,6 @@ TEST_F(TestMockPoolReplayer, RemoveCalloutOnInit) {
   pool_replayer.init("siteA");
 
   expect_leader_watcher_shut_down(*mock_leader_watcher);
-  expect_namespace_replayer_shut_down(*mock_default_namespace_replayer);
   expect_remote_pool_poller_shut_down(*mock_remote_pool_poller, 0);
 
   pool_replayer.shut_down();

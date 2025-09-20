@@ -2,15 +2,22 @@
 <li class="list-group-item">
   <div class="d-flex pl-1 pb-2 pt-2 position-relative">
     <div class="ms-4 me-auto">
+    @if (link && data !== null || total) {
+    <a [routerLink]="link"
+       *ngIf="link && total > 0; else noLinkTitle"
+       [ngPlural]="total"
+       data-testid="title"
+      i18n>
+        {{ total }}
+      <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+      <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+      <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+    </a>
+    } @else {
       <a [routerLink]="link"
-         *ngIf="link && total > 0; else noLinkTitle"
-         [ngPlural]="total"
-        i18n>
-          {{ total }}
-        <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-        <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-        <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+         *ngIf="link; else noLinkTitle">{{title}}
       </a>
+    }
     </div>
     <span class="me-4">
       <ng-container [ngSwitch]="summaryType">
@@ -45,25 +52,28 @@
 </div>
 
 <ng-template #defaultSummary>
-  <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
+  @if (data === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
+    <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
     <span *ngIf="data.success || (data.success === 0 && data.total === 0)">
       {{ data.success }}
     </span>
     <span *ngIf="data.categoryPgAmount?.clean">
       {{ data.categoryPgAmount?.clean }}
     </span>
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <cd-icon
+       type="success">
+    </cd-icon >
   </span>
   <span *ngIf="data.info"
         class="ms-2">
     <span *ngIf="data.info">
       {{ data.info }}
     </span>
-    <i class="text-info"
-       [ngClass]="[icons.danger]">
-    </i>
+    <cd-icon
+       type="infoCircle">
+    </cd-icon >
   </span>
   <span *ngIf="data.warn || data.categoryPgAmount?.warning"
         class="ms-2">
@@ -73,9 +83,9 @@
     <span *ngIf="data.categoryPgAmount?.warning">
       {{ data.categoryPgAmount?.warning }}
     </span>
-    <i class="text-warning"
-       [ngClass]="[icons.warning]">
-    </i>
+    <cd-icon
+       type="warning">
+    </cd-icon >
   </span>
   <span *ngIf="data.error || data.categoryPgAmount?.unknown"
         class="ms-2">
@@ -85,9 +95,9 @@
     <span *ngIf="data.categoryPgAmount?.unknown">
       {{ data.categoryPgAmount?.unknown }}
     </span>
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+    <cd-icon
+       type="danger">
+    </cd-icon >
   </span>
   <span *ngIf="data.categoryPgAmount?.working"
         class="ms-2">
@@ -98,14 +108,18 @@
        [ngClass]="[icons.spinner, icons.spin]">
     </i>
   </span>
+  }
 </ng-template>
 
 <ng-template #osdSummary>
+  @if (data === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
   <span *ngIf="data.up === data.in">
     {{ data.up }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
+    <cd-icon
+       type="success">
+    </cd-icon >
   </span>
   <span *ngIf="data.up !== data.in">
     {{ data.up }}
@@ -146,53 +160,71 @@
       full
     </span>
   </span>
+  }
 </ng-template>
 
 <ng-template #iscsiSummary>
+  @if (data === null || total === null) {
+  <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  } @else {
   <span>
-    {{ data.up }}
-    <i class="text-success"
-       *ngIf="data.up || data.up === 0"
-       [ngClass]="[icons.success]">
-    </i>
+    {{ data?.up }}
+    <cd-icon
+       *ngIf="data?.up || data?.up === 0"
+       type="success">
+    </cd-icon >
   </span>
-  <span *ngIf="data.down"
+  <span *ngIf="data?.down"
         class="ms-2">
-        {{ data.down }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
+        {{ data?.down }}
+    <cd-icon
+       type="danger">
+    </cd-icon >
   </span>
+
+  }
 </ng-template>
 
 <ng-template #simplifiedSummary>
+  @if (data === 0 || data) {
   <span *ngIf="!dropdownTotalError else showErrorNum">
     {{ data }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+    <cd-icon
+      type="success"></cd-icon >
   </span>
+  } @else {
+    <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
+  }
   <ng-template #showErrorNum>
     <span *ngIf="data - dropdownTotalError  > 0">
       {{ data - dropdownTotalError  }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
+    <cd-icon
+      type="success"></cd-icon >
     </span>
     <span>
       {{ dropdownTotalError  }}
-      <i class="text-danger"
-         [ngClass]="[icons.danger]"></i>
+      <cd-icon
+        type="danger"></cd-icon >
     </span>
   </ng-template>
 </ng-template>
 
+<ng-template #loadingTpl>
+  <cds-inline-loading></cds-inline-loading>
+</ng-template>
+
 <ng-template #noLinkTitle>
-  <span *ngIf="total || total === 0"
-        [ngPlural]="total">
-    {{ total }}
-    <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-    <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-    <ng-template ngPluralCase="other">{{ title }}s</ng-template>
-  </span>
+@if (data !== null || total) {
+<span *ngIf="total || total === 0"
+      [ngPlural]="total">
+  {{ total }}
+  <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+  <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+  <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+</span>
+} @else {
+  <span>{{ title }}</span>
+}
 </ng-template>
 
 <ng-template #dropdownTemplate>
@@ -211,17 +243,17 @@
         </div>
         <span [ngClass]="data.value.error ? 'me-2' : 'me-4'">
           {{ data.value.ok }}
-          <i class="text-success"
+          <cd-icon
              *ngIf="data.value.ok"
-             [ngClass]="[icons.success]">
-          </i>
+             type="success">
+          </cd-icon >
         </span>
         <span *ngIf="data.value.error"
               class="me-4 ms-2">
               {{ data.value.error }}
-          <i class="text-danger"
-             [ngClass]="[icons.danger]">
-          </i>
+          <cd-icon
+             type="danger">
+          </cd-icon >
         </span>
       </div>
     </li>

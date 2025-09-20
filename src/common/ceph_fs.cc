@@ -7,7 +7,111 @@
 /*
  * Some non-inline ceph helpers
  */
-#include "include/types.h"
+
+#include "include/ceph_fs.h"
+#include "include/encoding.h"
+
+void encode(const struct ceph_mds_request_head& h, ceph::buffer::list& bl) {
+  using ceph::encode;
+  encode(h.version, bl);
+  encode(h.oldest_client_tid, bl);
+  encode(h.mdsmap_epoch, bl);
+  encode(h.flags, bl);
+
+  // For old MDS daemons
+  __u8 num_retry = __u32(h.ext_num_retry);
+  __u8 num_fwd = __u32(h.ext_num_fwd);
+  encode(num_retry, bl);
+  encode(num_fwd, bl);
+
+  encode(h.num_releases, bl);
+  encode(h.op, bl);
+  encode(h.caller_uid, bl);
+  encode(h.caller_gid, bl);
+  encode(h.ino, bl);
+  bl.append((char*)&h.args, sizeof(h.args));
+
+  if (h.version >= 2) {
+    encode(h.ext_num_retry, bl);
+    encode(h.ext_num_fwd, bl);
+  }
+
+  if (h.version >= 3) {
+    __u32 struct_len = sizeof(struct ceph_mds_request_head);
+    encode(struct_len, bl);
+    encode(h.owner_uid, bl);
+    encode(h.owner_gid, bl);
+
+    /*
+     * Please, add new fields handling here.
+     * You don't need to check h.version as we do it
+     * in decode(), because decode can properly skip
+     * all unsupported fields if h.version >= 3.
+     */
+  }
+}
+
+void decode(struct ceph_mds_request_head& h, ceph::buffer::list::const_iterator& bl) {
+  using ceph::decode;
+  unsigned struct_end = bl.get_off();
+
+  decode(h.version, bl);
+  decode(h.oldest_client_tid, bl);
+  decode(h.mdsmap_epoch, bl);
+  decode(h.flags, bl);
+  decode(h.num_retry, bl);
+  decode(h.num_fwd, bl);
+  decode(h.num_releases, bl);
+  decode(h.op, bl);
+  decode(h.caller_uid, bl);
+  decode(h.caller_gid, bl);
+  decode(h.ino, bl);
+  bl.copy(sizeof(h.args), (char*)&(h.args));
+
+  if (h.version >= 2) {
+    decode(h.ext_num_retry, bl);
+    decode(h.ext_num_fwd, bl);
+  } else {
+    h.ext_num_retry = h.num_retry;
+    h.ext_num_fwd = h.num_fwd;
+  }
+
+  if (h.version >= 3) {
+    decode(h.struct_len, bl);
+    struct_end += h.struct_len;
+
+    decode(h.owner_uid, bl);
+    decode(h.owner_gid, bl);
+  } else {
+    /*
+     * client is old: let's take caller_{u,g}id as owner_{u,g}id
+     * this is how it worked before adding of owner_{u,g}id fields.
+     */
+    h.owner_uid = h.caller_uid;
+    h.owner_gid = h.caller_gid;
+  }
+
+  /* add new fields handling here */
+
+  /*
+   * From version 3 we have struct_len field.
+   * It allows us to properly handle a case
+   * when client send struct ceph_mds_request_head
+   * bigger in size than MDS supports. In this
+   * case we just want to skip all remaining bytes
+   * at the end.
+   *
+   * See also DECODE_FINISH macro. Unfortunately,
+   * we can't start using it right now as it will be
+   * an incompatible protocol change.
+   */
+  if (h.version >= 3) {
+    if (bl.get_off() > struct_end)
+      throw ::ceph::buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__));
+    if (bl.get_off() < struct_end)
+      bl += struct_end - bl.get_off();
+  }
+}
 
 int ceph_flags_to_mode(int flags)
 {
@@ -77,13 +181,8 @@ int ceph_flags_sys2wire(int flags)
        ceph_sys2wire(O_EXCL);
        ceph_sys2wire(O_TRUNC);
 
-       #ifndef _WIN32
        ceph_sys2wire(O_DIRECTORY);
        ceph_sys2wire(O_NOFOLLOW);
-       // In some cases, FILE_FLAG_BACKUP_SEMANTICS may be used instead
-       // of O_DIRECTORY. We may need some workarounds in order to handle
-       // the fact that those flags are not available on Windows.
-       #endif
 
 #undef ceph_sys2wire
 

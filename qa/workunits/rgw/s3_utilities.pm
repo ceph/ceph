@@ -32,6 +32,7 @@ sub get_status {
     if ($status =~ /\d+/ ){
         return 0;
     }
+    warn "ERROR: $service is not running\n";
     return 1;
 }
 

@@ -6,7 +6,18 @@ import pathlib
 import re
 import socket
 
-from typing import List, Dict, Tuple, Optional, Any, NamedTuple
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+)
+
+import ceph.smb.constants
 
 from .. import context_getters
 from .. import daemon_form
@@ -14,7 +25,8 @@ from .. import data_utils
 from .. import deployment_utils
 from .. import file_utils
 from ..call_wrappers import call, CallVerbosity
-from ceph.cephadm.images import DEFAULT_SAMBA_IMAGE
+from ceph.cephadm.images import DefaultImages
+from ..constants import DEFAULT_IMAGE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_engines import Podman
 from ..container_types import (
@@ -38,11 +50,14 @@ logger = logging.getLogger()
 _SCC = '/usr/bin/samba-container'
 _NODES_SUBCMD = [_SCC, 'ctdb-list-nodes']
 _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
+_ETC_SAMBA_TLS = '/etc/samba/tls'
 
 
 class Features(enum.Enum):
     DOMAIN = 'domain'
     CLUSTERED = 'clustered'
+    CEPHFS_PROXY = 'cephfs-proxy'
+    REMOTE_CONTROL = 'remote-control'
 
     @classmethod
     def valid(cls, value: str) -> bool:
@@ -68,6 +83,106 @@ class ClusterPublicIP(NamedTuple):
         return cls(address, destinations)
 
 
+class BindInterface(NamedTuple):
+    network: str
+    address: str
+    iface: str
+
+    def __str__(self) -> str:
+        if self.address and self.iface:
+            info = f'{self.address}@{self.iface}'
+        else:
+            info = f'network:{self.network}'
+        return f'BindInterface<{info}>'
+
+    def conf_interface(self) -> str:
+        if self.iface:
+            return f'"{self.iface};options=dynamic"'
+        if self.address:
+            return self.address
+        if self.network:
+            return self.network
+        raise ValueError('missing bind interface data')
+
+
+class Ports(enum.Enum):
+    SMB = ceph.smb.constants.SMB_PORT
+    SMBMETRICS = ceph.smb.constants.SMBMETRICS_PORT
+    CTDB = ceph.smb.constants.CTDB_PORT
+    REMOTE_CONTROL = ceph.smb.constants.REMOTE_CONTROL_PORT
+
+    def customized(self, service_ports: Dict[str, int]) -> int:
+        """Return a custom port value if it is present in service_ports or the
+        default port value if it is not present.
+        """
+        port = service_ports.get(str(self))
+        if port:
+            return int(port)
+        return int(self.value)
+
+    def __str__(self) -> str:
+        # NOTE: mypy is getting the key type below wrong. using reveal_type:
+        # >>> reveal_type(self.SMB)
+        # > note: Revealed type is "builtins.int"
+        # >>> reveal_type(self)
+        # > note: Revealed type is "cephadmlib.daemons.smb.Ports"
+        # maybe newer versions would not hit this issue?
+        names: Dict[Any, str] = {
+            self.SMB: ceph.smb.constants.SMB,
+            self.SMBMETRICS: ceph.smb.constants.SMBMETRICS,
+            self.CTDB: ceph.smb.constants.CTDB,
+            self.REMOTE_CONTROL: ceph.smb.constants.REMOTE_CONTROL,
+        }
+        return names[self]
+
+
+@dataclasses.dataclass(frozen=True)
+class TLSFiles:
+    cert: str = ''
+    key: str = ''
+    ca_cert: str = ''
+
+    def __bool__(self) -> bool:
+        return bool(self.cert or self.key or self.ca_cert)
+
+    def _interior_path(self, value: str) -> str:
+        if not value:
+            return value
+        return f'{_ETC_SAMBA_TLS}/{value}'
+
+    @property
+    def cert_interior_path(self) -> str:
+        return self._interior_path(self.cert)
+
+    @property
+    def key_interior_path(self) -> str:
+        return self._interior_path(self.key)
+
+    @property
+    def ca_cert_interior_path(self) -> str:
+        return self._interior_path(self.ca_cert)
+
+    @classmethod
+    def match(cls, files: Iterable[str], service: str) -> 'TLSFiles':
+        kwargs: Dict[str, str] = {}
+        for filename in files:
+            if not filename.startswith(f'{service}.'):
+                continue
+            if filename.endswith('.ca.crt'):
+                kwargs['ca_cert'] = filename
+            elif filename.endswith('.crt'):
+                kwargs['cert'] = filename
+            elif filename.endswith('.key'):
+                kwargs['key'] = filename
+        return cls(**kwargs)
+
+
+@dataclasses.dataclass(frozen=True)
+class RemoteControlConfig:
+    port: int
+    tls_files: TLSFiles
+
+
 @dataclasses.dataclass(frozen=True)
 class Config:
     identity: DaemonIdentity
@@ -82,6 +197,7 @@ class Config:
     user_sources: List[str] = dataclasses.field(default_factory=list)
     custom_dns: List[str] = dataclasses.field(default_factory=list)
     smb_port: int = 0
+    ctdb_port: int = 0
     ceph_config_entity: str = 'client.admin'
     vhostname: str = ''
     metrics_image: str = ''
@@ -94,6 +210,9 @@ class Config:
     cluster_public_addrs: List[ClusterPublicIP] = dataclasses.field(
         default_factory=list
     )
+    bind_to: List[BindInterface] = dataclasses.field(default_factory=list)
+    proxy_image: str = ''
+    remote_control: Optional[RemoteControlConfig] = None
 
     def config_uris(self) -> List[str]:
         uris = [self.source_config]
@@ -126,7 +245,10 @@ class ContainerCommon:
         return {}
 
     def envs_list(self) -> List[str]:
-        return []
+        """Wrapper for .envs() that returns a list of `key=value` strings
+        for all env vars.
+        """
+        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         return []
@@ -162,9 +284,6 @@ class SambaContainerCommon(ContainerCommon):
             # samba container specific variant
             environ['NODE_NUMBER'] = environ['RANK']
         return environ
-
-    def envs_list(self) -> List[str]:
-        return [f'{k}={v}' for (k, v) in self.envs().items()]
 
     def args(self) -> List[str]:
         args = []
@@ -204,13 +323,29 @@ class SMBDContainer(SambaContainerCommon):
         args.append('smbd')
         return args
 
+    def _publish(self, host_port: int, container_port: int) -> Iterator[str]:
+        if not self.cfg.bind_to:
+            yield f'--publish={host_port}:{container_port}'
+            return
+        for bind in self.cfg.bind_to:
+            yield f'--publish={bind.address}:{host_port}:{container_port}'
+
     def container_args(self) -> List[str]:
-        cargs = []
-        if self.cfg.smb_port:
-            cargs.append(f'--publish={self.cfg.smb_port}:{self.cfg.smb_port}')
-        if self.cfg.metrics_port:
-            metrics_port = self.cfg.metrics_port
-            cargs.append(f'--publish={metrics_port}:{metrics_port}')
+        cargs: List[str] = []
+        if not self.cfg.clustered:
+            # if we are not clustered we use container networking (vs. host
+            # networking) and need to publish ports via podman/docker.
+            # All published ports happen at the primary container.
+            if self.cfg.smb_port:
+                cargs.extend(
+                    self._publish(self.cfg.smb_port, Ports.SMB.value)
+                )
+            if self.cfg.metrics_port:
+                metrics_port = self.cfg.metrics_port
+                cargs.extend(self._publish(metrics_port, metrics_port))
+            if self.cfg.remote_control:
+                rc_port = self.cfg.remote_control.port
+                cargs.extend(self._publish(rc_port, rc_port))
         cargs.extend(_container_dns_args(self.cfg))
         return cargs
 
@@ -270,6 +405,57 @@ class SMBMetricsContainer(ContainerCommon):
         args = []
         if self.cfg.metrics_port > 0:
             args.append(f'--port={self.cfg.metrics_port}')
+        if self.cfg.bind_to:
+            args.append(f'--address={self.cfg.bind_to[0].address}')
+        return args
+
+
+class RemoteControlContainer(SambaContainerCommon):
+    def name(self) -> str:
+        return 'remotectl'
+
+    def args(self) -> List[str]:
+        args = super().args()
+        assert self.cfg.remote_control, 'remote_control is not configured'
+        args.append('serve')
+        args.append('--grpc')
+        address = self.cfg.bind_to[0].address if self.cfg.bind_to else '*'
+        port = self.cfg.remote_control.port
+        args.append(f'--address={address}:{port}')
+        if not self.cfg.remote_control.tls_files:
+            args.append('--insecure')
+        else:
+            cert_path = self.cfg.remote_control.tls_files.cert_interior_path
+            key_path = self.cfg.remote_control.tls_files.key_interior_path
+            ca_cert = self.cfg.remote_control.tls_files.ca_cert_interior_path
+            assert cert_path
+            assert key_path
+            args.append(f'--tls-cert={cert_path}')
+            args.append(f'--tls-key={key_path}')
+            if ca_cert:
+                args.append(f'--tls-ca-cert={ca_cert}')
+        return args
+
+    def container_args(self) -> List[str]:
+        return super().container_args() + [
+            '--entrypoint=samba-remote-control'
+        ]
+
+
+class CephFSProxyContainer(ContainerCommon):
+    def name(self) -> str:
+        return 'proxy'
+
+    def args(self) -> List[str]:
+        return []
+
+    def container_args(self) -> List[str]:
+        args = super().container_args()
+        # Set the working directory to something that libcephfsd can create
+        # O_TMPFILE style temporary files in (aka. not overlayfs on centos9).
+        # We already need to map in /run so reuse that (for now).
+        args.append('--workdir=/run')
+        args.append('--entrypoint=/usr/sbin/libcephfsd')
         return args
 
 
@@ -368,7 +554,7 @@ class SMB(ContainerDaemonForm):
 
     daemon_type = 'smb'
     daemon_base = '/usr/sbin/smbd'
-    default_image = DEFAULT_SAMBA_IMAGE
+    default_image = DefaultImages.SAMBA.image_ref
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -379,12 +565,11 @@ class SMB(ContainerDaemonForm):
         self._identity = ident
         self._instance_cfg: Optional[Config] = None
         self._files: Dict[str, str] = {}
+        self._tls_files: Dict[str, str] = {}
         self._raw_configs: Dict[str, Any] = context_getters.fetch_configs(ctx)
         self._config_keyring = context_getters.get_config_and_keyring(ctx)
         self._cached_layout: Optional[ContainerLayout] = None
         self._rank_info = context_getters.fetch_rank_info(ctx) or (-1, -1)
-        self.smb_port = 445
-        self.metrics_port = 9922
         self._network_mapper = _NetworkMapper(ctx)
         logger.debug('Created SMB ContainerDaemonForm instance')
 
@@ -424,10 +609,12 @@ class SMB(ContainerDaemonForm):
         ceph_config_entity = configs.get('config_auth_entity', '')
         vhostname = configs.get('virtual_hostname', '')
         metrics_image = configs.get('metrics_image', '')
-        metrics_port = int(configs.get('metrics_port', '0'))
+        service_ports = configs.get('service_ports', {})
+        proxy_image = configs.get('proxy_image', '')
         cluster_meta_uri = configs.get('cluster_meta_uri', '')
         cluster_lock_uri = configs.get('cluster_lock_uri', '')
         cluster_public_addrs = configs.get('cluster_public_addrs', [])
+        bind_networks = configs.get('bind_networks', [])
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -445,37 +632,63 @@ class SMB(ContainerDaemonForm):
             # the cluster/instanced id to the system hostname
             hname = socket.getfqdn()
             vhostname = f'{instance_id}-{hname}'
+        # if the proxy is not to be deployed don't set the image
+        # if the proxy is to be deployed use the supplied image or
+        # the default ceph image
+        if Features.CEPHFS_PROXY.value not in instance_features:
+            proxy_image = ''
+        elif not proxy_image:
+            proxy_image = DEFAULT_IMAGE
         _public_addrs = [
             ClusterPublicIP.convert(v) for v in cluster_public_addrs
         ]
-        if _public_addrs:
+        if _public_addrs or bind_networks:
             # cache the cephadm networks->devices mapping for later
             self._network_mapper.load()
 
+        self._organize_files(files)
+
+        if Features.REMOTE_CONTROL.value in instance_features:
+            remote_control_cfg = RemoteControlConfig(
+                port=Ports.REMOTE_CONTROL.customized(service_ports),
+                tls_files=TLSFiles.match(self._tls_files, 'remote_control'),
+            )
+        else:
+            remote_control_cfg = None
+
         rank, rank_gen = self._rank_info
         self._instance_cfg = Config(
+            # core configuration
             identity=self._identity,
             instance_id=instance_id,
             source_config=source_config,
             join_sources=join_sources,
             user_sources=user_sources,
             custom_dns=custom_dns,
+            # major features
             domain_member=Features.DOMAIN.value in instance_features,
             clustered=Features.CLUSTERED.value in instance_features,
-            smb_port=self.smb_port,
+            # config details
+            smb_port=Ports.SMB.customized(service_ports),
+            ctdb_port=Ports.CTDB.customized(service_ports),
             ceph_config_entity=ceph_config_entity,
             vhostname=vhostname,
             metrics_image=metrics_image,
-            metrics_port=metrics_port,
+            metrics_port=Ports.SMBMETRICS.customized(service_ports),
             rank=rank,
             rank_generation=rank_gen,
             cluster_meta_uri=cluster_meta_uri,
             cluster_lock_uri=cluster_lock_uri,
             cluster_public_addrs=_public_addrs,
+            proxy_image=proxy_image,
+            bind_to=self._network_mapper.bind_interfaces(bind_networks),
+            remote_control=remote_control_cfg,
         )
-        self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
         logger.debug('Configured files: %s', self._files)
+        logger.debug(
+            'Configured TLS/SSL files: %s', list(self._tls_files.keys())
+        )
 
     @property
     def _cfg(self) -> Config:
@@ -524,6 +737,13 @@ class SMB(ContainerDaemonForm):
         metrics_port = self._cfg.metrics_port
         if metrics_image and metrics_port > 0:
             ctrs.append(SMBMetricsContainer(self._cfg, metrics_image))
+
+        if self._cfg.proxy_image:
+            ctrs.append(
+                CephFSProxyContainer(self._cfg, self._cfg.proxy_image)
+            )
+        if self._cfg.remote_control:
+            ctrs.append(RemoteControlContainer(self._cfg))
 
         if self._cfg.clustered:
             init_ctrs += [
@@ -658,6 +878,9 @@ class SMB(ContainerDaemonForm):
         mounts[run_samba] = '/run:z'  # TODO: make this a shared tmpfs
         mounts[config] = '/etc/ceph/ceph.conf:z'
         mounts[keyring] = '/etc/ceph/keyring:z'
+        if self._tls_files:
+            tls_dir = str(data_dir / 'tls')
+            mounts[tls_dir] = f'{_ETC_SAMBA_TLS}:z'
         if self._cfg.clustered:
             ctdb_persistent = str(data_dir / 'ctdb/persistent')
             ctdb_run = str(data_dir / 'ctdb/run')  # TODO: tmpfs too!
@@ -683,21 +906,49 @@ class SMB(ContainerDaemonForm):
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
     ) -> None:
-        if not any(ep.port == self.smb_port for ep in endpoints):
-            endpoints.append(EndPoint('0.0.0.0', self.smb_port))
-        if self.metrics_port > 0:
-            if not any(ep.port == self.metrics_port for ep in endpoints):
-                endpoints.append(EndPoint('0.0.0.0', self.metrics_port))
+        if self._cfg.bind_to:
+            addrs = [b.address for b in self._cfg.bind_to]
+            # filter out any endpoints that don't refer to the specific
+            # IP addresses our service will bind to
+            endpoints[:] = [ep for ep in endpoints if ep.ip in addrs]
+        else:
+            addrs = ['0.0.0.0']
+
+        if not any(ep.port == self._cfg.smb_port for ep in endpoints):
+            for addr in addrs:
+                endpoints.append(EndPoint(addr, self._cfg.smb_port))
+        if self._cfg.clustered and not any(
+            ep.port == self._cfg.ctdb_port for ep in endpoints
+        ):
+            for addr in addrs:
+                endpoints.append(EndPoint(addr, self._cfg.ctdb_port))
+        if self._cfg.metrics_port > 0:
+            if not any(ep.port == self._cfg.metrics_port for ep in endpoints):
+                for addr in addrs:
+                    endpoints.append(EndPoint(addr, self._cfg.metrics_port))
+
+    def _organize_files(self, files: Dict[str, str]) -> None:
+        # this separation is similar to how ceph services are set up
+        # regarding certs and keys
+        for key, value in files.items():
+            if key.endswith(('.crt', '.key')):
+                self._tls_files[key] = value
+            else:
+                self._files[key] = value
 
     def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
         self.validate()
         ddir = pathlib.Path(data_dir)
         etc_samba_ctr = ddir / 'etc-samba-container'
         file_utils.makedirs(etc_samba_ctr, uid, gid, 0o770)
-        file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o770)
+        file_utils.makedirs(ddir / 'lib-samba', uid, gid, 0o755)
         file_utils.makedirs(ddir / 'run', uid, gid, 0o770)
         if self._files:
             file_utils.populate_files(data_dir, self._files, uid, gid)
+        if self._tls_files:
+            tls_dir = ddir / 'tls'
+            file_utils.makedirs(tls_dir, uid, gid, 0o700)
+            file_utils.populate_files(tls_dir, self._tls_files, uid, gid)
         if self._cfg.clustered:
             file_utils.makedirs(ddir / 'ctdb/persistent', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
@@ -705,6 +956,10 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
+            if self._cfg.bind_to:
+                self._write_interfaces_conf_stub(
+                    ddir / 'lib-samba/smb.interfaces.conf'
+                )
 
     def _write_ctdb_stub_config(self, path: pathlib.Path) -> None:
         reclock_cmd = ' '.join(_MUTEX_SUBCMD + [self._cfg.cluster_lock_uri])
@@ -723,6 +978,12 @@ class SMB(ContainerDaemonForm):
         }
         if self._cfg.ctdb_log_level:
             stub_config['ctdb']['log_level'] = self._cfg.ctdb_log_level
+        if self._cfg.ctdb_port != Ports.CTDB.value:
+            stub_config['ctdb']['ctdb_port'] = self._cfg.ctdb_port
+        if self._cfg.bind_to:
+            stub_config['ctdb']['conf_file_includes'] = [
+                '/var/lib/samba/smb.interfaces.conf'
+            ]
         with file_utils.write_new(path) as fh:
             json.dump(stub_config, fh)
 
@@ -738,6 +999,21 @@ class SMB(ContainerDaemonForm):
         with file_utils.write_new(path) as fh:
             for line in _lines:
                 fh.write(f'{line}\n')
+
+    def _write_interfaces_conf_stub(self, path: pathlib.Path) -> None:
+        if self._cfg.cluster_public_addrs:
+            interfaces = [b.conf_interface() for b in self._cfg.bind_to]
+        else:
+            interfaces = [b.address for b in self._cfg.bind_to]
+        _interfaces = ' '.join(interfaces)
+        _lines = [
+            '[global]',
+            'bind interfaces only = yes',
+            f'interfaces = {_interfaces}',
+        ]
+        with file_utils.write_new(path) as fh:
+            for line in _lines:
+                print(line, file=fh)
 
 
 class _NetworkMapper:
@@ -782,3 +1058,31 @@ class _NetworkMapper:
             {'address': a.address, 'interfaces': a.destinations}
             for a in addrs
         ]
+
+    def _host_ips(self) -> Iterable[Tuple[str, str, str]]:
+        for nw_key, nw_value in self._networks.items():
+            for iface, ips in nw_value.items():
+                for ip in ips:
+                    yield ip, iface, nw_key
+
+    def bind_interfaces(self, networks: List[str]) -> List[BindInterface]:
+        import ipaddress
+
+        if not networks:
+            logger.debug('no bind networks given')
+            return []
+
+        _nets = [ipaddress.ip_network(n) for n in networks]
+        logger.info('Bindable networks: %r', _nets)
+        for ip, iface, host_nw in self._host_ips():
+            for _net in _nets:
+                _ip = ipaddress.ip_address(ip)
+                if _ip in _net:
+                    bind = BindInterface(
+                        network=str(_net),
+                        address=ip,
+                        iface=iface,
+                    )
+                    logger.info('In %s found %s', _net, bind)
+                    return [bind]
+        raise ValueError('unable to find any allowed IPs to bind to')

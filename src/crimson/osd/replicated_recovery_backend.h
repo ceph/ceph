@@ -15,6 +15,8 @@
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "os/ObjectStore.h"
 
+namespace crimson::osd {
+
 class ReplicatedRecoveryBackend : public RecoveryBackend {
 public:
   ReplicatedRecoveryBackend(crimson::osd::PG& pg,
@@ -79,8 +81,7 @@ protected:
   interruptible_future<bool> _handle_pull_response(
     pg_shard_t from,
     PushOp& push_op,
-    PullOp* response,
-    ceph::os::Transaction* t);
+    PullOp* response);
   void recalc_subsets(
     ObjectRecoveryInfo& recovery_info,
     crimson::osd::SnapSetContextRef ssc);
@@ -93,21 +94,16 @@ protected:
     bool first,
     bool complete,
     bool clear_omap,
-    interval_set<uint64_t>&& data_zeros,
-    interval_set<uint64_t>&& intervals_included,
-    ceph::bufferlist&& data_included,
-    ceph::bufferlist&& omap_header,
+    interval_set<uint64_t> data_zeros,
+    interval_set<uint64_t> intervals_included,
+    ceph::bufferlist data_included,
+    ceph::bufferlist omap_header,
     const std::map<std::string, bufferlist, std::less<>> &attrs,
-    std::map<std::string, bufferlist>&& omap_entries,
+    std::map<std::string, bufferlist> omap_entries,
     ceph::os::Transaction *t);
   void submit_push_complete(
     const ObjectRecoveryInfo &recovery_info,
     ObjectStore::Transaction *t);
-  interruptible_future<> _handle_push(
-    pg_shard_t from,
-    PushOp& push_op,
-    PushReplyOp *response,
-    ceph::os::Transaction *t);
   interruptible_future<std::optional<PushOp>> _handle_push_reply(
     pg_shard_t peer,
     const PushReplyOp &op);
@@ -178,7 +174,12 @@ private:
     bool clear_omap,
     ObjectStore::Transaction* t,
     const std::map<std::string, bufferlist, std::less<>> &attrs,
-    bufferlist&& omap_header);
+    bufferlist omap_header);
   using interruptor = crimson::interruptible::interruptor<
     crimson::osd::IOInterruptCondition>;
+
+  std::pair<object_info_t, crimson::osd::SnapSetContextRef>
+  get_md_from_push_op(PushOp &push_op);
 };
+
+}

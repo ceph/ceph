@@ -596,6 +596,68 @@ EOF
     kill_nbd_server
 }
 
+test_import_nbd_stream_disconnected() {
+    local dest_image=$1
+    local migration_execute_pid
+
+    dd if=/dev/urandom of=${TEMPDIR}/large.raw bs=1M count=20480
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        ${TEMPDIR}/large.raw
+
+    cat > ${TEMPDIR}/spec.json <<EOF
+{
+  "type": "raw",
+  "stream": {
+    "type": "nbd",
+    "uri": "nbd://localhost"
+  }
+}
+EOF
+    cat ${TEMPDIR}/spec.json
+
+    # server disappears while importing - abort
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    rbd status ${dest_image} | grep 'state: prepared'
+    qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
+    rbd migration execute ${dest_image} &
+    migration_execute_pid=$!
+    sleep $((5 + RANDOM % 35))
+    kill_nbd_server
+    expect_false wait $migration_execute_pid
+    expect_false rbd status ${dest_image}
+    rbd migration abort ${dest_image}
+
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        ${TEMPDIR}/large.raw
+
+    # server disappears while importing - resume
+    rbd migration prepare --import-only \
+        --source-spec-path ${TEMPDIR}/spec.json ${dest_image}
+    rbd status ${dest_image} | grep 'state: prepared'
+    qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
+    rbd migration execute ${dest_image} &
+    migration_execute_pid=$!
+    sleep $((5 + RANDOM % 35))
+    kill_nbd_server
+    expect_false wait $migration_execute_pid
+    expect_false rbd status ${dest_image}
+    qemu-nbd -f raw --read-only --shared 10 --persistent --fork \
+        ${TEMPDIR}/large.raw
+    rbd status ${dest_image} | grep 'state: executing'
+    qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
+    rbd migration execute ${dest_image}
+    rbd status ${dest_image} | grep 'state: executed'
+    qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
+    rbd migration commit ${dest_image}
+    rbd status ${dest_image} | expect_false grep 'Migration:'
+    qemu-img compare ${TEMPDIR}/large.raw rbd:rbd/${dest_image}
+
+    remove_image "${dest_image}"
+
+    kill_nbd_server
+}
+
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls 2>&1 | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
@@ -613,6 +675,8 @@ test_import_nbd_stream_qcow2 ${IMAGE2} ${IMAGE3}
 
 test_import_raw_format ${IMAGE1} ${IMAGE2}
 test_import_nbd_stream_raw ${IMAGE1} ${IMAGE2}
+
+test_import_nbd_stream_disconnected ${IMAGE2}
 
 rbd namespace create rbd/${NAMESPACE1}
 rbd namespace create rbd/${NAMESPACE2}

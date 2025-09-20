@@ -392,7 +392,7 @@ Commands
 :command:`image-meta set` *image-spec* *key* *value*
   Set metadata key with the value. They will displayed in `image-meta list`.
 
-:command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
+:command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--estimated-size *size-in-M/G/T*]... [--image-shared] *src-path* [*image-spec*]
   Create a new image and import its data from path (use - for
   stdin).  The import operation will try to create sparse rbd images 
   if possible.  For import from stdin, the sparsification unit is
@@ -576,7 +576,11 @@ Commands
   details for every mirror-enabled image in the pool or namespace.
 
 :command:`mirror snapshot schedule add` [-p | --pool *pool*] [--namespace *namespace*] [--image *image*] *interval* [*start-time*]
-  Add mirror snapshot schedule.
+  Add mirror snapshot schedule. The ``interval`` can be specified in
+  days, hours, or minutes using the d, h, m suffix respectively.
+  The ``start-time`` is a time string in ISO 8601 format. Not providing the
+  ``--pool``, ``--namespace`` and ``--image`` options creates a global
+  schedule which applies to all mirror-enabled images in the cluster.
 
 :command:`mirror snapshot schedule list` [-R | --recursive] [--format *format*] [--pretty-format] [-p | --pool *pool*] [--namespace *namespace*] [--image *image*]
   List mirror snapshot schedule.
@@ -891,7 +895,7 @@ Per mapping (block device) `rbd device map` options:
   backend that the data is incompressible, disabling compression in aggressive
   mode (since 5.8).
 
-* ms_mode=legacy - Use msgr1 on-the-wire protocol (since 5.11, default).
+* ms_mode=legacy - Use msgr1 on-the-wire protocol (since 5.11).
 
 * ms_mode=crc - Use msgr2.1 on-the-wire protocol, select 'crc' mode, also
   referred to as plain mode (since 5.11).  If the daemon denies 'crc' mode,
@@ -903,8 +907,8 @@ Per mapping (block device) `rbd device map` options:
   fail the connection.
 
 * ms_mode=prefer-crc - Use msgr2.1 on-the-wire protocol, select 'crc'
-  mode (since 5.11).  If the daemon denies 'crc' mode in favor of 'secure'
-  mode, agree to 'secure' mode.
+  mode (since 5.11, default).  If the daemon denies 'crc' mode in favor of
+  'secure' mode, agree to 'secure' mode.
 
 * ms_mode=prefer-secure - Use msgr2.1 on-the-wire protocol, select 'secure'
   mode (since 5.11).  If the daemon denies 'secure' mode in favor of 'crc'
@@ -1031,6 +1035,9 @@ To restore an image from trash and rename it::
 
        rbd trash restore mypool/myimage-id --image mynewimage
 
+To create a mirror snapshot schedule for an image::
+
+       rbd mirror snapshot schedule add --pool mypool --image myimage 12h 14:00:00-05:00
 
 Availability
 ============

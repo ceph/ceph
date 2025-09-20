@@ -18,7 +18,9 @@ from orchestrator import DaemonDescription, OrchestratorError
   "placement": {
     "count": 1
   },
-  "service_type": "alertmanager"
+  "service_type": "alertmanager",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -31,7 +33,9 @@ from orchestrator import DaemonDescription, OrchestratorError
     "count": 1
   },
   "service_type": "grafana",
-  "protocol": "https"
+  "protocol": "https",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -49,13 +53,17 @@ from orchestrator import DaemonDescription, OrchestratorError
   "placement": {
     "host_pattern": "*"
   },
-  "service_type": "node-exporter"
+  "service_type": "node-exporter",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
     "count": 1
   },
-  "service_type": "prometheus"
+  "service_type": "prometheus",
+  "ssl": true,
+  "certificate_source": "cephadm-signed"
 },
 {
   "placement": {
@@ -68,6 +76,7 @@ from orchestrator import DaemonDescription, OrchestratorError
     ]
   },
   "service_type": "rgw",
+  "certificate_source": "cephadm-signed",
   "service_id": "default-rgw-realm.eu-central-1.1",
   "rgw_realm": "default-rgw-realm",
   "rgw_zone": "eu-central-1"
@@ -118,6 +127,7 @@ def test_spec_octopus(spec_json):
         j_c.pop('objectstore', None)
         j_c.pop('filter_logic', None)
         j_c.pop('anonymous_access', None)
+        j_c.pop('rgw_exit_timeout_secs', None)
         return j_c
 
     assert spec_json == convert_to_old_style_json(spec.to_json())
@@ -286,6 +296,7 @@ def test_dd_octopus(dd_json):
         del j['daemon_name']
         return j
 
+    dd_json.update({'pending_daemon_config': False})
     assert dd_json == convert_to_old_style_json(
         DaemonDescription.from_json(dd_json).to_json())
 

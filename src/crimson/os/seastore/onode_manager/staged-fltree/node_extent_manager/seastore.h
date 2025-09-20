@@ -41,8 +41,10 @@ class SeastoreSuper final: public Super {
 
 class SeastoreNodeExtent final: public NodeExtent {
  public:
-  SeastoreNodeExtent(ceph::bufferptr &&ptr)
+  explicit SeastoreNodeExtent(ceph::bufferptr &&ptr)
     : NodeExtent(std::move(ptr)) {}
+  explicit SeastoreNodeExtent(extent_len_t length)
+    : NodeExtent(length) {}
   SeastoreNodeExtent(const SeastoreNodeExtent& other)
     : NodeExtent(other) {}
   ~SeastoreNodeExtent() override = default;
@@ -111,10 +113,14 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       }
     }
     return tm.read_extent<SeastoreNodeExtent>(t, addr
-    ).si_then([addr, &t](auto&& e) -> read_iertr::future<NodeExtentRef> {
+    ).si_then([addr, &t](auto maybe_indirect_extent)
+              -> read_iertr::future<NodeExtentRef> {
+      auto e = maybe_indirect_extent.extent;
       SUBTRACET(seastore_onode,
           "read {}B at {} -- {}",
           t, e->get_length(), e->get_laddr(), *e);
+      assert(!maybe_indirect_extent.is_indirect());
+      assert(!maybe_indirect_extent.is_clone);
       assert(e->get_laddr() == addr);
       std::ignore = addr;
       return read_iertr::make_ready_future<NodeExtentRef>(e);
@@ -140,7 +146,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         SUBERRORT(seastore_onode,
             "allocated {}B but got invalid extent: {}",
             t, len, *extent);
-        ceph_abort("fatal error");
+        ceph_abort_msg("fatal error");
       }
       assert(extent->get_length() == len);
       std::ignore = len;
@@ -153,7 +159,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
 
   retire_iertr::future<> retire_extent(
       Transaction& t, NodeExtentRef _extent) override {
-    LogicalCachedExtentRef extent = _extent;
+    LogicalChildNodeRef extent = _extent;
     auto addr = extent->get_laddr();
     auto len = extent->get_length();
     SUBDEBUGT(seastore_onode,

@@ -21,8 +21,8 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spe
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
-
-from mgr_util import to_pretty_timedelta, format_bytes
+from ceph.cephadm.images import NonCephImageServiceTypes
+from mgr_util import to_pretty_timedelta, format_bytes, parse_combined_pem_file
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
@@ -49,11 +49,13 @@ from ._interface import (
     MgmtGatewaySpec,
     OAuth2ProxySpec,
     ServiceDescription,
+    UpgradeStatusSpec,
     TunedProfileSpec,
     _cli_read_command,
     _cli_write_command,
     json_to_generic_spec,
     raise_if_exception,
+    completion_to_result,
 )
 
 
@@ -184,6 +186,7 @@ class ServiceType(enum.Enum):
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
+    alloy = 'alloy'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'
@@ -689,6 +692,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
+    @_cli_write_command('orch host drain stop')
+    def _stop_drain_host(self, hostname: str) -> HandleCommandResult:
+        """drain all daemons from a host"""
+        completion = self.stop_drain_host(hostname)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_write_command('orch host set-addr')
     def _update_set_addr(self, hostname: str, addr: str) -> HandleCommandResult:
         """Update a host address"""
@@ -785,8 +795,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     def _host_ok_to_stop(self, hostname: str) -> HandleCommandResult:
         """Check if the specified host can be safely stopped without reducing availability"""""
         completion = self.host_ok_to_stop(hostname)
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host maintenance enter')
     def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
@@ -794,9 +803,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         Prepare a host for maintenance by shutting down and disabling all Ceph daemons (cephadm only)
         """
         completion = self.enter_host_maintenance(hostname, force=force, yes_i_really_mean_it=yes_i_really_mean_it)
-        raise_if_exception(completion)
-
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host maintenance exit')
     def _host_maintenance_exit(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
@@ -804,9 +811,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         Return a host from maintenance, restarting all Ceph daemons (cephadm only)
         """
         completion = self.exit_host_maintenance(hostname, force, offline)
-        raise_if_exception(completion)
-
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch host rescan')
     def _host_rescan(self, hostname: str, with_summary: bool = False) -> HandleCommandResult:
@@ -1148,16 +1153,26 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         result_str = ''
         indent = '  ' * level
         for k, v in d.items():
-            if isinstance(v, dict):
+            if isinstance(v, dict) and v:
                 result_str += f'{indent}{k}\n'
                 result_str += self._process_cert_store_json(v, level + 1)
-            else:
-                result_str += f'{indent}{k} - {v}\n'
+            elif v or isinstance(v, int):
+                result_str += f'{indent}{k}: {v}\n'
         return result_str
 
-    @_cli_read_command('orch cert-store cert ls')
-    def _cert_store_cert_ls(self, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_cert_ls()
+    @_cli_read_command('orch certmgr reload')
+    def _cert_store_reload(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_reload()
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_read_command('orch certmgr cert ls')
+    def _cert_store_cert_ls(self,
+                            filter_by: str = '',
+                            show_details: bool = False,
+                            include_cephadm_signed: bool = False,
+                            format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_ls(filter_by, show_details, include_cephadm_signed)
         cert_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
@@ -1165,9 +1180,31 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(cert_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store key ls')
-    def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.cert_store_key_ls()
+    @_cli_read_command('orch certmgr bindings ls')
+    def _cert_store_bindings_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_bindings_ls()
+        bindings_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(bindings_ls, format, many=False, cls=None))
+        else:
+            result_str = yaml.dump(bindings_ls, default_flow_style=False, sort_keys=False)
+            return HandleCommandResult(stdout=result_str)
+
+    @_cli_read_command('orch certmgr cert check')
+    def _cert_store_cert_check(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_check()
+        cert_check_report = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(cert_check_report, format, many=False, cls=None))
+        else:
+            result_str = "\n".join(f"- {e}" for e in cert_check_report)
+            return HandleCommandResult(stdout=result_str)
+
+    @_cli_read_command('orch certmgr key ls')
+    def _cert_store_key_ls(self,
+                           include_cephadm_generated_keys: bool = False,
+                           format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_key_ls(include_cephadm_generated_keys)
         key_ls = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(key_ls, format, many=False, cls=None))
@@ -1175,17 +1212,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             result_str = self._process_cert_store_json(key_ls, 0)
             return HandleCommandResult(stdout=result_str)
 
-    @_cli_read_command('orch cert-store get cert')
+    @_cli_read_command('orch certmgr cert get')
     def _cert_store_get_cert(
         self,
-        entity: str,
+        cert_name: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
         completion = self.cert_store_get_cert(
-            entity,
+            cert_name,
             service_name,
             hostname,
             no_exception_when_missing
@@ -1193,23 +1230,150 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         cert = raise_if_exception(completion)
         return HandleCommandResult(stdout=cert)
 
-    @_cli_read_command('orch cert-store get key')
+    @_cli_read_command('orch certmgr key get')
     def _cert_store_get_key(
         self,
-        entity: str,
+        key_name: str,
         _end_positional_: int = 0,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
         no_exception_when_missing: bool = False
     ) -> HandleCommandResult:
         completion = self.cert_store_get_key(
-            entity,
+            key_name,
             service_name,
             hostname,
             no_exception_when_missing
         )
         key = raise_if_exception(completion)
         return HandleCommandResult(stdout=key)
+
+    @_cli_write_command('orch certmgr cert-key set')
+    def _cert_store_cert_key_set(
+        self,
+        consumer: str,
+        _end_positional_: int = 0,
+        cert: Optional[str] = None,
+        key: Optional[str] = None,
+        cert_name: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        force: bool = False,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        """
+        Sets the cert-key pair from -i <pem-file>, which must be a valid PEM file containing both the certificate and the private key.
+        """
+        if inbuf:
+            cert_content, key_content = parse_combined_pem_file(inbuf)
+            if not cert_content or not key_content:
+                raise OrchestratorError('Expected a combined PEM file with certificate and key pairs')
+        else:
+            cert_content, key_content = cert, key
+            if not cert_content or not key_content:
+                raise OrchestratorError('This command requires passing cert/key pair by either using --cert/--key parameters or a combined PEM file using "-i" option.')
+
+        completion = self.cert_store_set_pair(
+            cert_content,
+            key_content,
+            consumer,
+            cert_name,
+            service_name,
+            hostname,
+            force
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch certmgr cert set')
+    def _cert_store_set_cert(
+        self,
+        cert_name: str,
+        _end_positional_: int = 0,
+        cert: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        force: bool = False,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        """
+        Sets the cert from the --cert argument or from -i <cert-file>.
+        """
+        cert_content = cert or inbuf
+        if not cert_content:
+            raise OrchestratorError('This command requires passing a certificate using --cert parameter or "-i <filepath>" option')
+
+        completion = self.cert_store_set_cert(
+            cert_name,
+            cert_content,
+            service_name,
+            hostname,
+            force
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch certmgr key set')
+    def _cert_store_set_key(
+        self,
+        key_name: str,
+        _end_positional_: int = 0,
+        key: Optional[str] = None,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+        """
+        Sets the key from the --key argument or from -i <key-file>.
+        """
+        key_content = key or inbuf
+        if not key_content:
+            raise OrchestratorError('This command requires passing a key using --key parameter or "-i <filepath>" option')
+
+        completion = self.cert_store_set_key(
+            key_content,
+            key_name,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch certmgr cert rm')
+    def _cert_store_rm_cert(
+        self,
+        cert_name: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+
+        completion = self.cert_store_rm_cert(
+            cert_name,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch certmgr key rm')
+    def _cert_store_rm_key(
+        self,
+        key_name: str,
+        _end_positional_: int = 0,
+        service_name: Optional[str] = None,
+        hostname: Optional[str] = None,
+        inbuf: Optional[str] = None
+    ) -> HandleCommandResult:
+
+        completion = self.cert_store_rm_key(
+            key_name,
+            service_name,
+            hostname,
+        )
+        output = raise_if_exception(completion)
+        return HandleCommandResult(stdout=output)
 
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
@@ -1363,7 +1527,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     @_cli_write_command('orch daemon add osd')
     def _daemon_add_osd(self,
                         svc_arg: Optional[str] = None,
-                        method: Optional[OSDMethod] = None) -> HandleCommandResult:
+                        method: Optional[OSDMethod] = None,
+                        skip_validation: bool = False) -> HandleCommandResult:
         """Create OSD daemon(s) on specified host and device(s) (e.g., ceph orch daemon add osd myhost:/dev/sdb)"""
         # Create one or more OSDs"""
 
@@ -1418,7 +1583,7 @@ Usage:
             msg = f"Invalid 'host:device' spec: '{svc_arg}': {e}" + usage
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-        completion = self.create_osds(drive_group)
+        completion = self.create_osds(drive_group, skip_validation)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -1471,6 +1636,14 @@ Usage:
             out = table.get_string()
 
         return HandleCommandResult(stdout=out)
+
+    @_cli_write_command('orch osd set-spec-affinity')
+    def _osd_set_spec(self, service_name: str, osd_id: List[str]) -> HandleCommandResult:
+        """Set service spec affinity for osd"""
+        completion = self.set_osd_spec(service_name, osd_id)
+        res = raise_if_exception(completion)
+
+        return HandleCommandResult(stdout=res)
 
     @_cli_write_command('orch daemon add')
     def daemon_add_misc(self,
@@ -1597,11 +1770,11 @@ Usage:
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch daemon')
-    def _daemon_action(self, action: DaemonAction, name: str) -> HandleCommandResult:
+    def _daemon_action(self, action: DaemonAction, name: str, force: bool = False) -> HandleCommandResult:
         """Start, stop, restart, redeploy, reconfig, or rotate-key for a specific daemon"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
-        completion = self.daemon_action(action.value, name)
+        completion = self.daemon_action(action.value, name, force=force)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -1623,14 +1796,12 @@ Usage:
         """Remove specific daemon(s)"""
         for name in names:
             if '.' not in name:
-                raise OrchestratorError('%s is not a valid daemon name' % name)
+                return HandleCommandResult(stderr=f"{name} is not a valid daemon name", retval=-errno.EINVAL)
             (daemon_type) = name.split('.')[0]
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                raise OrchestratorError(
-                    'must pass --force to REMOVE daemon with potentially PRECIOUS DATA for %s' % name)
+                return HandleCommandResult(stderr=f"must pass --force to REMOVE daemon with potentially PRECIOUS DATA for {name}", retval=-errno.EPERM)
         completion = self.remove_daemons(names)
-        raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        return completion_to_result(completion)
 
     @_cli_write_command('orch rm')
     def _service_rm(self,
@@ -1666,7 +1837,13 @@ Usage:
             specs: List[Union[ServiceSpec, HostSpec]] = []
             # YAML '---' document separator with no content generates
             # None entries in the output. Let's skip them silently.
-            content = [o for o in yaml_objs if o is not None]
+            try:
+                content = [o for o in yaml_objs if o is not None]
+            except yaml.scanner.ScannerError as e:
+                msg = f"Invalid YAML received : {str(e)}"
+                self.log.exception(msg)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
             for s in content:
                 try:
                     spec = json_to_generic_spec(s)
@@ -1882,8 +2059,9 @@ Usage:
     @_cli_write_command('orch apply mgmt-gateway')
     def _apply_mgmt_gateway(self,
                             port: Optional[int] = None,
-                            disable_https: Optional[bool] = False,
+                            ssl: Optional[bool] = True,
                             enable_auth: Optional[bool] = False,
+                            virtual_ip: Optional[str] = None,
                             placement: Optional[str] = None,
                             unmanaged: bool = False,
                             dry_run: bool = False,
@@ -1898,7 +2076,8 @@ Usage:
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             port=port,
-            disable_https=disable_https,
+            virtual_ip=virtual_ip,
+            ssl=ssl,
             enable_auth=enable_auth,
             preview_only=dry_run
         )
@@ -2131,6 +2310,12 @@ Usage:
         self.resume()
         return HandleCommandResult()
 
+    @_cli_write_command('orch unpause')
+    def _unpause(self) -> HandleCommandResult:
+        """Alias to orch resume"""
+        self.resume()
+        return HandleCommandResult()
+
     @_cli_write_command('orch cancel')
     def _cancel(self) -> HandleCommandResult:
         """
@@ -2191,7 +2376,13 @@ Usage:
             specs: List[TunedProfileSpec] = []
             # YAML '---' document separator with no content generates
             # None entries in the output. Let's skip them silently.
-            content = [o for o in yaml_objs if o is not None]
+            try:
+                content = [o for o in yaml_objs if o is not None]
+            except yaml.scanner.ScannerError as e:
+                msg = f"Invalid YAML received : {str(e)}"
+                self.log.exception(msg)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
             for spec in content:
                 specs.append(TunedProfileSpec.from_json(spec))
         else:
@@ -2249,6 +2440,39 @@ Usage:
         completion = self.tuned_profile_rm_setting(profile_name, setting)
         res = raise_if_exception(completion)
         return HandleCommandResult(stdout=res)
+
+    @_cli_write_command("orch tuned-profile add-settings")
+    def _tuned_profile_add_settings(self, profile_name: str, settings: str) -> HandleCommandResult:
+        try:
+            setting_pairs = settings.split(",")
+            parsed_setting = {}
+            parsed_setting = {key.strip(): value.strip() for key, value in (s.split('=', 1) for s in setting_pairs)}
+            completion = self.tuned_profile_add_settings(profile_name, parsed_setting)
+            res = raise_if_exception(completion)
+            return HandleCommandResult(stdout=res)
+        except ValueError:
+            error_message = (
+                "Error: Invalid format detected. "
+                "The correct format is key=value pairs separated by commas,"
+                "e.g., 'vm.swappiness=11,vm.user_reserve_kbytes=116851'"
+            )
+            return HandleCommandResult(stderr=error_message)
+
+    @_cli_write_command("orch tuned-profile rm-settings")
+    def _tuned_profile_rm_settings(self, profile_name: str, settings: str) -> HandleCommandResult:
+        try:
+            setting = [s.strip() for s in settings.split(",") if s.strip()]
+            if not setting:
+                raise ValueError(
+                    "Error: Invalid format."
+                    "The correct format is key1,key2"
+                    "e.g., vm.swappiness,vm.user_reserve_kbytes"
+                )
+            completion = self.tuned_profile_rm_settings(profile_name, setting)
+            res = raise_if_exception(completion)
+            return HandleCommandResult(stdout=res)
+        except ValueError as e:
+            return HandleCommandResult(stderr=str(e))
 
     def self_test(self) -> None:
         old_orch = self._select_orchestrator()
@@ -2314,21 +2538,26 @@ Usage:
         return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch upgrade status')
-    def _upgrade_status(self) -> HandleCommandResult:
+    def _upgrade_status(self, format: Optional[str] = None) -> HandleCommandResult:
         """Check the status of any potential ongoing upgrade operation"""
         completion = self.upgrade_status()
         status = raise_if_exception(completion)
-        r = {
-            'target_image': status.target_image,
-            'in_progress': status.in_progress,
-            'which': status.which,
-            'services_complete': status.services_complete,
-            'progress': status.progress,
-            'message': status.message,
-            'is_paused': status.is_paused,
-        }
-        out = json.dumps(r, indent=4)
-        return HandleCommandResult(stdout=out)
+        upgrade_status = UpgradeStatusSpec()
+        upgrade_status.target_image = status.target_image
+        upgrade_status.in_progress = status.in_progress
+        upgrade_status.which = status.which
+        upgrade_status.services_complete = status.services_complete
+        upgrade_status.progress = status.progress
+        upgrade_status.message = status.message
+        upgrade_status.is_paused = status.is_paused
+        if format is not None:
+            format = Format(format)
+            out = to_format(upgrade_status, format, many=False, cls=UpgradeStatusSpec)
+        else:
+            out = json.dumps(upgrade_status.to_dict(), indent=4)
+        if upgrade_status.in_progress:
+            return HandleCommandResult(stdout=out)
+        return HandleCommandResult(stdout="There are no upgrades in progress currently.")
 
     @_cli_write_command('orch upgrade start')
     def _upgrade_start(self,
@@ -2365,5 +2594,12 @@ Usage:
     def _upgrade_stop(self) -> HandleCommandResult:
         """Stop an in-progress upgrade"""
         completion = self.upgrade_stop()
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch update service')
+    def _update_service(self, service_type: NonCephImageServiceTypes, image: str) -> HandleCommandResult:
+        """Update image for non-ceph image daemon"""
+        completion = self.update_service(service_type.value, service_type.name, image)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())

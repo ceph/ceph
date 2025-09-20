@@ -33,7 +33,7 @@ function(add_ceph_test test_name test_path)
       APPEND
       PROPERTY ENVIRONMENT
       ASAN_OPTIONS=detect_odr_violation=0
-      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp)
+      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0)
   endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
@@ -135,4 +135,52 @@ function(add_tox_test name)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:${CMAKE_CURRENT_BINARY_DIR}:$ENV{PATH}
     PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
   list(APPEND tox_test run-tox-${name})
+endfunction()
+
+# Helper for adding new tests built with Catch2:
+function(add_catch2_test test_name)
+if(NOT WITH_CATCH2)
+  return()
+endif()
+
+set(options NO_CATCH2_MAIN)
+set(oneValueArgs)
+set(multiValueArgs EXTRA_LIBS EXTRA_INCS)
+
+cmake_parse_arguments(PARSE_ARGV 0 catch2_opt
+  "${options}" "${oneValueArgs}" "${multiValueArgs}")
+
+ add_executable(unittest_${test_name}
+ test_${test_name}.cc)
+
+SET(tl_libs
+  librados
+  ceph-common
+  ${EXTRALIBS})
+
+SET(tl_incs
+  SYSTEM PRIVATE ${CMAKE_SOURCE_DIR})
+
+if(DEFINED catch2_opt_EXTRA_LIBS)
+  LIST(APPEND tl_libs ${catch2_opt_EXTRA_LIBS})
+endif()
+
+if(DEFINED catch2_opt_EXTRA_INCS)
+  LIST(APPEND tl_incs ${catch2_opt_EXTRA_INCS})
+endif()
+
+if(${catch2_opt_NO_CATCH2_MAIN})
+  LIST(APPEND tl_libs Catch2)
+else()
+  LIST(APPEND tl_libs Catch2WithMain)
+endif()
+
+target_link_libraries(unittest_${test_name} 
+  ${tl_libs})
+
+target_include_directories(unittest_${test_name}
+  ${tl_incs})
+
+add_ceph_unittest(unittest_${test_name})
+
 endfunction()

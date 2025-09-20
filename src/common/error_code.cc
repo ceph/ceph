@@ -13,10 +13,9 @@
  * COPYING.
  */
 
-#include <exception>
+#include "common/error_code.h"
 
 #include <boost/asio/error.hpp>
-#include "common/error_code.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
@@ -189,8 +188,8 @@ const error_category& ceph_category() noexcept {
   }
   // Add any other categories we use here.
 
-  // Marcus likes this as a sentinel for 'Error code? What error code?'
-  return -EDOM;
+  // So many things defautl to EIO this is probably the safest
+  return -EIO;
 }
 }
 #pragma GCC diagnostic pop

@@ -15,6 +15,8 @@
 // template definitions
 #include "librbd/operation/SnapshotProtectRequest.cc"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace operation {
 

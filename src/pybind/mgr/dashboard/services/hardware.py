@@ -23,25 +23,41 @@ class HardwareService(object):
             }
         }
 
+        def count_ok(data: dict) -> int:
+            return sum(
+                component.get("status", {}).get("health") == "OK"
+                for node in data.values()
+                for system in node.values()
+                for component in system.values()
+            )
+
+        def count_total(data: dict) -> int:
+            return sum(
+                len(component)
+                for system in data.values()
+                for component in system.values()
+            )
+
         categories = HardwareService.validate_categories(categories)
 
         orch_hardware_instance = OrchClient.instance().hardware
         for category in categories:
             data = orch_hardware_instance.common(category, hostname)
             category_total = {
-                'total': sum(len(items) for items in data.values()),
-                'ok': sum(item['status']['health'] == 'OK' for items in data.values()
-                          for item in items.values()),
+                'total': count_total(data),
+                'ok': count_ok(data),
                 'error': 0
             }
 
-            for host, items in data.items():
+            for host, systems in data.items():
                 output['host'].setdefault(host, {'flawed': False})
                 if not output['host'][host]['flawed']:
-                    output['host'][host]['flawed'] = any(
-                        item['status']['health'] != 'OK' for item in items.values())
+                    for system in systems.values():
+                        if any(dimm['status']['health'] != 'OK' for dimm in system.values()):
+                            output['host'][host]['flawed'] = True
+                            break
 
-            category_total['error'] = category_total['total'] - category_total['ok']
+            category_total['error'] = max(0, category_total['total'] - category_total['ok'])
             output['total']['category'].setdefault(category, {})
             output['total']['category'][category] = category_total
 

@@ -3,6 +3,7 @@
 #include "global/signal_handler.h"
 #include "common/debug.h"
 #include "include/coredumpctl.h"
+#include "log/Log.h"
 
 #include "gtest/gtest.h"
 

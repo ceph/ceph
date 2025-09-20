@@ -45,42 +45,58 @@ local g = import 'grafonnet/grafana.libsonnet';
                           'MDS Server',
                           '')
     )
+    .addLinks([
+      $.addLinkSchema(
+        asDropdown=true,
+        icon='external link',
+        includeVars=true,
+        keepTime=true,
+        tags=[],
+        targetBlank=false,
+        title='Browse Dashboards',
+        tooltip='',
+        type='dashboards',
+        url=''
+      ),
+    ])
     .addPanels([
       $.addRowSchema(false, true, 'MDS Performance') + { gridPos: { x: 0, y: 0, w: 24, h: 1 } },
-      $.simpleGraphPanel(
-        {},
-        'MDS Workload - $mds_servers',
-        '',
-        'none',
-        'Reads(-) / Writes (+)',
-        0,
-        'sum(rate(ceph_objecter_op_r{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
-        'Read Ops',
-        0,
-        1,
-        12,
-        9
+      $.timeSeriesPanel(
+        title='MDS Workload - $mds_servers',
+        datasource='$datasource',
+        gridPosition={ x: 0, y: 1, w: 12, h: 9 },
+        axisLabel='Reads(-) / Writes (+)',
+        showPoints='never',
+        min=0,
+        spanNulls=true,
       )
-      .addTarget($.addTargetSchema(
-        'sum(rate(ceph_objecter_op_w{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
-        'Write Ops'
-      ))
+      .addTargets([
+        $.addTargetSchema(
+          'sum(rate(ceph_objecter_op_r{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
+          'Read Ops'
+        ),
+        $.addTargetSchema(
+          'sum(rate(ceph_objecter_op_w{ceph_daemon=~"($mds_servers).*", %(matchers)s}[$__rate_interval]))' % $.matchers(),
+          'Write Ops'
+        ),
+      ])
       .addSeriesOverride(
         { alias: '/.*Reads/', transform: 'negative-Y' }
       ),
-      $.simpleGraphPanel(
-        {},
-        'Client Request Load - $mds_servers',
-        '',
-        'none',
-        'Client Requests',
-        0,
-        'ceph_mds_server_handle_client_request{ceph_daemon=~"($mds_servers).*", %(matchers)s}' % $.matchers(),
-        '{{ceph_daemon}}',
-        12,
-        1,
-        12,
-        9
-      ),
+      $.timeSeriesPanel(
+        title='Client Request Load - $mds_servers',
+        datasource='$datasource',
+        gridPosition={ x: 12, y: 1, w: 12, h: 9 },
+        axisLabel='Client Requests',
+        showPoints='never',
+        min=0,
+        spanNulls=true,
+      )
+      .addTargets([
+        $.addTargetSchema(
+          'ceph_mds_server_handle_client_request{ceph_daemon=~"($mds_servers).*", %(matchers)s}' % $.matchers(),
+          '{{ceph_daemon}}'
+        ),
+      ]),
     ]),
 }

@@ -21,6 +21,7 @@
 #include "common/async/context_pool.h"
 #include "common/config.h"
 #include "common/errno.h"
+#include "log/Log.h" // for g_ceph_context->_log
 
 #include "client/Client.h"
 #include "client/fuse_ll.h"
@@ -31,6 +32,7 @@
 
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
+#include "common/debug.h"
 #if defined(__linux__)
 #include "common/linux_version.h"
 #endif
@@ -81,9 +83,10 @@ static void fuse_usage()
 void usage()
 {
   cout <<
-"usage: ceph-fuse [-n client.username] [-m mon-ip-addr:mon-port] <mount point> [OPTIONS]\n"
-"  --client_mountpoint/-r <sub_directory>\n"
-"                    use sub_directory as the mounted root, rather than the full Ceph tree.\n"
+"\nusage: ceph-fuse [-n client.username] [-m mon-ip-addr:mon-port] [--client_fs <fsname>] [--client_mountpoint/-r <sub_directory>] <mount point> [OPTIONS]\n\n"
+
+"  --client_mountpoint/-r: use sub_directory as the mounted root, rather than the full CephFS tree.\n"
+"  --client_fs: named file system to mount (default: usually the first file system created).\n"
 "\n";
   fuse_usage();
   generic_client_usage();

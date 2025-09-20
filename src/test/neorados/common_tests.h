@@ -72,6 +72,13 @@ std::string get_temp_pool_name(std::string_view prefix = {});
 /// \param token Boost.Asio completion token
 ///
 /// \return The ID of the newly created pool
+
+// This is a bug in Boost. It's fixed in 1.87 and these pragmata can
+// be removed then.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wmismatched-new-delete"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmismatched-new-delete"
 template<boost::asio::completion_token_for<
 	   void(boost::system::error_code, int64_t)> CompletionToken>
 auto create_pool(neorados::RADOS& r,
@@ -95,6 +102,8 @@ auto create_pool(neorados::RADOS& r,
      }, r.get_executor()),
      token, std::ref(r), std::move(pname));
 }
+#pragma GCC diagnostic pop
+#pragma clang diagnostic pop
 
 /// \brief Create a new, empty RADOS object
 ///
@@ -387,18 +396,15 @@ private:
 		"test_suite_name must not be empty");                          \
   static_assert(sizeof(GTEST_STRINGIFY_(test_name)) > 1,                       \
 		"test_name must not be empty");                                \
-  class GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) : public fixture {  \
+  class GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)                     \
+    : public fixture, private ::testing::internal::GTestNonCopyable {          \
   public:                                                                      \
     GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() = default;            \
     ~GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() override = default;  \
-    GTEST_DISALLOW_COPY_AND_ASSIGN_(GTEST_TEST_CLASS_NAME_(test_suite_name,    \
-							   test_name));        \
-    GTEST_DISALLOW_MOVE_AND_ASSIGN_(GTEST_TEST_CLASS_NAME_(test_suite_name,    \
-							   test_name));        \
 									       \
   private:                                                                     \
     boost::asio::awaitable<void> CoTestBody() override;                        \
-    static ::testing::TestInfo *const test_info_ GTEST_ATTRIBUTE_UNUSED_;      \
+    [[maybe_unused]] static ::testing::TestInfo *const test_info_;             \
   };                                                                           \
 									       \
   ::testing::TestInfo *const GTEST_TEST_CLASS_NAME_(test_suite_name,           \

@@ -64,7 +64,7 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
   /// handler with an operation_aborted error and default-constructed result
   void cancel(const client_id& client);
 
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override;
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override;
 
@@ -168,9 +168,8 @@ public:
     cct->_conf.add_observer(this);
   }
 
-  const char** get_tracked_conf_keys() const override {
-    static const char* keys[] = { "rgw_max_concurrent_requests", nullptr };
-    return keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {std::string{"rgw_max_concurrent_requests"}};
   }
 
   void handle_conf_change(const ConfigProxy& conf,

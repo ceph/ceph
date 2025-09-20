@@ -117,24 +117,25 @@ class RgwServiceManager:
         return port
 
     def restart_rgw_daemons_and_set_credentials(self):
-        # Restart RGW daemons and set credentials.
-        logger.info("Restarting RGW daemons and setting credentials")
+        if self.restart_rgw_daemons():
+            logger.info("All daemons are up, configuring RGW credentials")
+            self.configure_rgw_credentials()
+        else:
+            logger.error("Not all daemons are up, skipping RGW credentials configuration")
+
+    def restart_rgw_daemons(self):
+        # Restart RGW daemons
+        logger.info("Restarting RGW daemons")
         orch = OrchClient.instance()
         services, _ = orch.services.list(service_type='rgw', offset=0)
-
         all_daemons_up = True
         for service in services:
             logger.info("Verifying service restart for: %s", service['service_id'])
             daemons_up = verify_service_restart('rgw', service['service_id'])
             if not daemons_up:
-                logger.error("Service %s restart verification failed", service['service_id'])
                 all_daemons_up = False
 
-        if all_daemons_up:
-            logger.info("All daemons are up, configuring RGW credentials")
-            self.configure_rgw_credentials()
-        else:
-            logger.error("Not all daemons are up, skipping RGW credentials configuration")
+        return all_daemons_up
 
     def _parse_secrets(self, user: str, data: dict) -> Tuple[str, str]:
         for key in data.get('keys', []):
@@ -203,3 +204,65 @@ class RgwServiceManager:
         except (AssertionError, SubprocessError) as error:
             logger.exception(error)
             raise NoCredentialsException
+
+    def set_rgw_hostname(self, daemon_name: str, hostname: str):
+        if not Settings.RGW_HOSTNAME_PER_DAEMON:
+            Settings.RGW_HOSTNAME_PER_DAEMON = {daemon_name: hostname}
+            return
+
+        rgw_hostname_setting = Settings.RGW_HOSTNAME_PER_DAEMON
+        rgw_hostname_setting[daemon_name] = hostname
+        Settings.RGW_HOSTNAME_PER_DAEMON = rgw_hostname_setting
+
+    def unset_rgw_hostname(self, daemon_name: str):
+        if not Settings.RGW_HOSTNAME_PER_DAEMON:
+            return
+
+        rgw_hostname_setting = Settings.RGW_HOSTNAME_PER_DAEMON
+        rgw_hostname_setting.pop(daemon_name, None)
+        Settings.RGW_HOSTNAME_PER_DAEMON = rgw_hostname_setting
+
+    def get_username_from_realm_name(self, realm_name: str) -> str:
+        realm_period_info = {}
+        master_zone_info = {}
+        rgw_realm_period_cmd = ['period', 'get', '--rgw-realm', realm_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_realm_period_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get realm period info',
+                                         http_status_code=500, component='rgw')
+            realm_period_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if realm_period_info:
+            master_zone_id = realm_period_info.get('master_zone')
+            rgw_zone_info_cmd = ['zone', 'get', '--zone-id', master_zone_id]
+            try:
+                exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_info_cmd)
+                if exit_code > 0:
+                    raise DashboardException('Unable to get master zone info',
+                                             http_status_code=500, component='rgw')
+                master_zone_info = out
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if master_zone_info:
+            access_key = master_zone_info['system_key']['access_key']
+            user_info = {}
+            rgw_user_info_cmd = ['user', 'info', '--access-key', access_key]
+            try:
+                exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+                if exit_code > 0:
+                    raise DashboardException('Unable to get user info',
+                                             http_status_code=500, component='rgw')
+                user_info = out
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            if user_info:
+                user_id = user_info.get('user_id')
+                if user_id:
+                    return user_id
+
+        raise DashboardException('Failed to retrieve user_id for realm',
+                                 http_status_code=500, component='rgw')

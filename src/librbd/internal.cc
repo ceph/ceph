@@ -59,8 +59,10 @@
 #include "journal/Journaler.h"
 
 #include <boost/scope_exit.hpp>
-#include <boost/variant.hpp>
 #include "include/ceph_assert.h"
+
+#include <shared_mutex> // for std::shared_lock
+#include <variant>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -273,7 +275,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   }
 
-  typedef boost::variant<std::string,uint64_t> image_option_value_t;
+  typedef std::variant<std::string, uint64_t> image_option_value_t;
   typedef std::map<int,image_option_value_t> image_options_t;
   typedef std::shared_ptr<image_options_t> image_options_ref;
 
@@ -431,7 +433,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -ENOENT;
     }
 
-    *optval = boost::get<std::string>(j->second);
+    *optval = std::get<std::string>(j->second);
     return 0;
   }
 
@@ -452,7 +454,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return -ENOENT;
     }
 
-    *optval = boost::get<uint64_t>(j->second);
+    *optval = std::get<uint64_t>(j->second);
     return 0;
   }
 

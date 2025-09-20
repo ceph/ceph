@@ -141,13 +141,14 @@ def remove_partition(device):
     # in the output of `udevadm info --query=property`.
     # Probably not ideal and not the best fix but this allows to get around that issue.
     # The idea is to make it retry multiple times before actually failing.
-    for i in range(10):
-        udev_info = udevadm_property(device.path)
-        partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    partition_number = None
+    for _ in range(10):
+        udev_data = UdevData(device.path)
+        partition_number = udev_data.environment.get("ID_PART_ENTRY_NUMBER", None)
         if partition_number:
             break
         time.sleep(0.2)
-    if not partition_number:
+    if partition_number is None:
         raise RuntimeError('Unable to detect the partition number for device: %s' % device.path)
 
     process.run(
@@ -196,47 +197,6 @@ def device_family(device):
         devices.append(_lsblk_parser(line))
 
     return devices
-
-
-def udevadm_property(device, properties=[]):
-    """
-    Query udevadm for information about device properties.
-    Optionally pass a list of properties to return. A requested property might
-    not be returned if not present.
-
-    Expected output format::
-        # udevadm info --query=property --name=/dev/sda                                  :(
-        DEVNAME=/dev/sda
-        DEVTYPE=disk
-        ID_ATA=1
-        ID_BUS=ata
-        ID_MODEL=SK_hynix_SC311_SATA_512GB
-        ID_PART_TABLE_TYPE=gpt
-        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
-        ID_PATH=pci-0000:00:17.0-ata-3
-        ID_PATH_TAG=pci-0000_00_17_0-ata-3
-        ID_REVISION=70000P10
-        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
-        TAGS=:systemd:
-        USEC_INITIALIZED=16117769
-        ...
-    """
-    out = _udevadm_info(device)
-    ret = {}
-    for line in out:
-        p, v = line.split('=', 1)
-        if not properties or p in properties:
-            ret[p] = v
-    return ret
-
-
-def _udevadm_info(device):
-    """
-    Call udevadm and return the output
-    """
-    cmd = ['udevadm', 'info', '--query=property', device]
-    out, _err, _rc = process.call(cmd)
-    return out
 
 
 def lsblk(device, columns=None, abspath=False):
@@ -347,12 +307,21 @@ def lsblk_all(device: str = '',
     return result
 
 
-def is_device(dev):
+def is_device(dev: str) -> bool:
     """
-    Boolean to determine if a given device is a block device (**not**
-    a partition!)
+    Determines whether the given path corresponds to a block device (not a partition).
 
-    For example: /dev/sda would return True, but not /dev/sdc1
+    This function checks whether the provided device path represents a valid block device,
+    such as a physical disk (/dev/sda) or an allowed loop device, but excludes partitions
+    (/dev/sdc1). It performs several validation steps, including file existence, path format,
+    device type, and additional checks for loop devices if allowed.
+
+    Args:
+        dev (str): The path to the device (e.g., "/dev/sda").
+
+    Returns:
+        bool: True if the path corresponds to a valid block device (not a partition),
+              otherwise False.
     """
     if not os.path.exists(dev):
         return False
@@ -364,7 +333,7 @@ def is_device(dev):
 
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE in ['disk', 'mpath']
+        return TYPE in ['disk', 'mpath', 'loop']
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode) and not is_partition(dev)
@@ -898,13 +867,13 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['parent'] = block[3]
 
         # some facts from udevadm
-        p = udevadm_property(sysdir)
-        metadata['id_bus'] = p.get('ID_BUS', '')
+        udev_data = UdevData(sysdir)
+        metadata['id_bus'] = udev_data.environment.get("ID_BUS", "")
 
         device_facts[diskname] = metadata
     return device_facts
 
-def has_bluestore_label(device_path):
+def has_bluestore_label(device_path: str) -> bool:
     isBluestore = False
     bluestoreDiskSignature = 'bluestore block device' # 22 bytes long
 
@@ -920,6 +889,22 @@ def has_bluestore_label(device_path):
         logger.info(f'{device_path} is a directory, skipping.')
 
     return isBluestore
+
+def has_seastore_label(device_path: str) -> bool:
+    is_seastore = False
+    seastore_disk_signature = b'seastore block device\n'  # 23 bytes including newline
+
+    try:
+        with open(device_path, "rb") as fd:
+            signature = fd.read(len(seastore_disk_signature))
+            if signature == seastore_disk_signature:
+                is_seastore = True
+    except IsADirectoryError:
+        print(f'{device_path} is a directory, skipping.')
+    except Exception as e:
+        print(f'Error reading {device_path}: {e}')
+
+    return is_seastore
 
 def get_lvm_mappers(sys_block_path: str = '/sys/block') -> List[str]:
     """
@@ -1178,8 +1163,56 @@ class BlockSysFs:
         """
         self.path: str = path
         self.name: str = os.path.basename(os.path.realpath(self.path))
-        self.sys_dev_block: str = sys_dev_block
+        self.sys_dev_block_dir: str = sys_dev_block
         self.sys_block: str = sys_block
+
+    def _get_sysfs_file_content(self, path: str) -> str:
+        """
+        Reads the content of a sysfs file.
+
+        Args:
+            path (str): The relative path to the sysfs file.
+
+        Returns:
+            str: The content of the file as a string, stripped of leading/trailing whitespace.
+        """
+        content: str = ''
+        _path: str = os.path.join(self.sys_dev_block_path, path)
+        with open(_path, 'r') as f:
+            content = f.read().strip()
+        return content
+
+    @property
+    def blocks(self) -> int:
+        """
+        Retrieves the number of blocks of the block device.
+
+        Returns:
+            int: The total number of blocks.
+        """
+        result: str = self._get_sysfs_file_content('size')
+        return int(result)
+
+    @property
+    def logical_block_size(self) -> int:
+        """
+        Retrieves the logical block size of the block device.
+
+        Returns:
+            int: The logical block size in bytes.
+        """
+        result: str = self._get_sysfs_file_content('queue/logical_block_size')
+        return int(result)
+
+    @property
+    def size(self) -> int:
+        """
+        Calculates the total size of the block device in bytes.
+
+        Returns:
+            int: The total size of the block device in bytes.
+        """
+        return self.blocks * self.logical_block_size
 
     @property
     def is_partition(self) -> bool:
@@ -1189,7 +1222,7 @@ class BlockSysFs:
         Returns:
             bool: True if it is a partition, False otherwise.
         """
-        path: str = os.path.join(self.get_sys_dev_block_path, 'partition')
+        path: str = os.path.join(self.sys_dev_block_path, 'partition')
         return os.path.exists(path)
 
     @property
@@ -1201,13 +1234,13 @@ class BlockSysFs:
             List[str]: A list of holders (other devices) associated with this block device.
         """
         result: List[str] = []
-        path: str = os.path.join(self.get_sys_dev_block_path, 'holders')
+        path: str = os.path.join(self.sys_dev_block_path, 'holders')
         if os.path.exists(path):
             result = os.listdir(path)
         return result
 
     @property
-    def get_sys_dev_block_path(self) -> str:
+    def sys_dev_block_path(self) -> str:
         """
         Gets the sysfs path for the current block device.
 
@@ -1215,9 +1248,9 @@ class BlockSysFs:
             str: The sysfs path corresponding to this block device.
         """
         sys_dev_block_path: str = ''
-        devices: List[str] = os.listdir(self.sys_dev_block)
+        devices: List[str] = os.listdir(self.sys_dev_block_dir)
         for device in devices:
-            path = os.path.join(self.sys_dev_block, device)
+            path = os.path.join(self.sys_dev_block_dir, device)
             if os.path.realpath(path).split('/')[-1:][0] == self.name:
                 sys_dev_block_path = path
         return sys_dev_block_path
@@ -1314,9 +1347,18 @@ class UdevData:
             raise RuntimeError(f'{path} not found.')
         self.path: str = path
         self.realpath: str = os.path.realpath(self.path)
-        self.stats: os.stat_result = os.stat(self.realpath)
-        self.major: int = os.major(self.stats.st_rdev)
-        self.minor: int = os.minor(self.stats.st_rdev)
+
+        if path.startswith("/sys/block/") and os.path.isdir(path):
+            dev_file = os.path.join(path, "dev")
+            if not os.path.exists(dev_file):
+                raise RuntimeError(f"{dev_file} not found.")
+            with open(dev_file) as f:
+                self.major, self.minor = map(int, f.read().strip().split(":"))
+        else:
+            self.stats: os.stat_result = os.stat(self.realpath)
+            self.major: int = os.major(self.stats.st_rdev)
+            self.minor: int = os.minor(self.stats.st_rdev)
+
         self.udev_data_path: str = f'/run/udev/data/b{self.major}:{self.minor}'
         self.symlinks: List[str] = []
         self.id: str = ''
@@ -1339,7 +1381,7 @@ class UdevData:
             if data_type == 'I':
                 self.id = data
             if data_type == 'E':
-                key, value = data.split('=')
+                key, value = data.split('=', maxsplit=1)
                 self.environment[key] = value
             if data_type == 'G':
                 self.group = data

@@ -11,45 +11,9 @@ namespace crimson::os::seastore::backref {
 
 constexpr size_t BACKREF_BLOCK_SIZE = 4096;
 
-class BtreeBackrefMapping : public BtreeNodeMapping<paddr_t, laddr_t> {
-  extent_types_t type;
-public:
-  BtreeBackrefMapping(op_context_t<paddr_t> ctx)
-    : BtreeNodeMapping(ctx) {}
-  BtreeBackrefMapping(
-    op_context_t<paddr_t> ctx,
-    CachedExtentRef parent,
-    uint16_t pos,
-    backref_map_val_t &val,
-    backref_node_meta_t &&meta)
-    : BtreeNodeMapping(
-	ctx,
-	parent,
-	pos,
-	val.laddr,
-	val.len,
-	std::forward<backref_node_meta_t>(meta)),
-      type(val.type)
-  {}
-  extent_types_t get_type() const final {
-    return type;
-  }
-
-  bool is_clone() const final {
-    return false;
-  }
-
-protected:
-  std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>> _duplicate(
-    op_context_t<paddr_t> ctx) const final {
-    return std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>>(
-      new BtreeBackrefMapping(ctx));
-  }
-};
-
 using BackrefBtree = FixedKVBtree<
   paddr_t, backref_map_val_t, BackrefInternalNode,
-  BackrefLeafNode, BtreeBackrefMapping, BACKREF_BLOCK_SIZE, false>;
+  BackrefLeafNode, BackrefCursor, BACKREF_BLOCK_SIZE>;
 
 class BtreeBackrefManager : public BackrefManager {
 public:
@@ -117,8 +81,8 @@ public:
 private:
   Cache &cache;
 
-  op_context_t<paddr_t> get_context(Transaction &t) {
-    return op_context_t<paddr_t>{cache, t};
+  op_context_t get_context(Transaction &t) {
+    return op_context_t{cache, t};
   }
 };
 

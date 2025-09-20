@@ -13,6 +13,8 @@
 #include <vector>
 #include <boost/algorithm/string/predicate.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ConfigWatcher: " \
@@ -24,36 +26,28 @@ template <typename I>
 struct ConfigWatcher<I>::Observer : public md_config_obs_t {
   ConfigWatcher<I>* m_config_watcher;
 
-  std::deque<std::string> m_config_key_strs;
-  mutable std::vector<const char*> m_config_keys;
+  std::vector<std::string> m_config_key_strs;
 
   Observer(CephContext* cct, ConfigWatcher<I>* config_watcher)
     : m_config_watcher(config_watcher) {
-    const std::string rbd_key_prefix("rbd_");
+    static const std::string rbd_key_prefix("rbd_");
     auto& schema = cct->_conf.get_schema();
     for (auto& pair : schema) {
       // watch all "rbd_" keys for simplicity
-      if (!boost::starts_with(pair.first, rbd_key_prefix)) {
+      if (!pair.first.starts_with(rbd_key_prefix)) {
         continue;
       }
 
       m_config_key_strs.emplace_back(pair.first);
     }
-
-    m_config_keys.reserve(m_config_key_strs.size());
-    for (auto& key : m_config_key_strs) {
-      m_config_keys.emplace_back(key.c_str());
-    }
-    m_config_keys.emplace_back(nullptr);
   }
 
-  const char** get_tracked_conf_keys() const override {
-    ceph_assert(!m_config_keys.empty());
-    return &m_config_keys[0];
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return m_config_key_strs;
   }
 
   void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed) override {
+                          const std::set<std::string> &changed) override {
     m_config_watcher->handle_global_config_change(changed);
   }
 };

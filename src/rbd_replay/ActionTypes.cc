@@ -7,7 +7,6 @@
 #include "include/stringify.h"
 #include "common/Formatter.h"
 #include <iostream>
-#include <boost/variant.hpp>
 
 namespace rbd_replay {
 namespace action {
@@ -35,7 +34,7 @@ void decode_big_endian_string(std::string &str, bufferlist::const_iterator &it) 
 #endif
 }
 
-class EncodeVisitor : public boost::static_visitor<void> {
+class EncodeVisitor {
 public:
   explicit EncodeVisitor(bufferlist &bl) : m_bl(bl) {
   }
@@ -50,7 +49,7 @@ private:
   bufferlist &m_bl;
 };
 
-class DecodeVisitor : public boost::static_visitor<void> {
+class DecodeVisitor {
 public:
   DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
@@ -65,7 +64,7 @@ private:
   bufferlist::const_iterator &m_iter;
 };
 
-class DumpVisitor : public boost::static_visitor<void> {
+class DumpVisitor {
 public:
   explicit DumpVisitor(Formatter *formatter) : m_formatter(formatter) {}
 
@@ -106,9 +105,11 @@ void Dependency::dump(Formatter *f) const {
   f->dump_unsigned("time_delta", time_delta);
 }
 
-void Dependency::generate_test_instances(std::list<Dependency *> &o) {
-  o.push_back(new Dependency());
-  o.push_back(new Dependency(1, 123456789));
+std::list<Dependency> Dependency::generate_test_instances() {
+  std::list<Dependency> o;
+  o.push_back(Dependency());
+  o.push_back(Dependency(1, 123456789));
+  return o;
 }
 
 void ActionBase::encode(bufferlist &bl) const {
@@ -270,7 +271,7 @@ void UnknownAction::dump(Formatter *f) const {
 
 void ActionEntry::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
-  boost::apply_visitor(EncodeVisitor(bl), action);
+  std::visit(EncodeVisitor(bl), action);
   ENCODE_FINISH(bl);
 }
 
@@ -329,54 +330,58 @@ void ActionEntry::decode_versioned(__u8 version, bufferlist::const_iterator &it)
     break;
   }
 
-  boost::apply_visitor(DecodeVisitor(version, it), action);
+  std::visit(DecodeVisitor(version, it), action);
 }
 
 void ActionEntry::dump(Formatter *f) const {
-  boost::apply_visitor(DumpVisitor(f), action);
+  std::visit(DumpVisitor(f), action);
 }
 
-void ActionEntry::generate_test_instances(std::list<ActionEntry *> &o) {
+std::list<ActionEntry>  ActionEntry::generate_test_instances() {
+  std::list<ActionEntry> o;
+
   Dependencies dependencies;
   dependencies.push_back(Dependency(3, 123456789));
   dependencies.push_back(Dependency(4, 234567890));
 
-  o.push_back(new ActionEntry(StartThreadAction()));
-  o.push_back(new ActionEntry(StartThreadAction(1, 123456789, dependencies)));
-  o.push_back(new ActionEntry(StopThreadAction()));
-  o.push_back(new ActionEntry(StopThreadAction(1, 123456789, dependencies)));
+  o.push_back(ActionEntry(StartThreadAction()));
+  o.push_back(ActionEntry(StartThreadAction(1, 123456789, dependencies)));
+  o.push_back(ActionEntry(StopThreadAction()));
+  o.push_back(ActionEntry(StopThreadAction(1, 123456789, dependencies)));
 
-  o.push_back(new ActionEntry(ReadAction()));
-  o.push_back(new ActionEntry(ReadAction(1, 123456789, dependencies, 3, 4, 5)));
-  o.push_back(new ActionEntry(WriteAction()));
-  o.push_back(new ActionEntry(WriteAction(1, 123456789, dependencies, 3, 4,
-                                          5)));
-  o.push_back(new ActionEntry(DiscardAction()));
-  o.push_back(new ActionEntry(DiscardAction(1, 123456789, dependencies, 3, 4,
+  o.push_back(ActionEntry(ReadAction()));
+  o.push_back(ActionEntry(ReadAction(1, 123456789, dependencies, 3, 4, 5)));
+  o.push_back(ActionEntry(WriteAction()));
+  o.push_back(ActionEntry(WriteAction(1, 123456789, dependencies, 3, 4,
+                                      5)));
+  o.push_back(ActionEntry(DiscardAction()));
+  o.push_back(ActionEntry(DiscardAction(1, 123456789, dependencies, 3, 4,
                                             5)));
-  o.push_back(new ActionEntry(AioReadAction()));
-  o.push_back(new ActionEntry(AioReadAction(1, 123456789, dependencies, 3, 4,
-                                            5)));
-  o.push_back(new ActionEntry(AioWriteAction()));
-  o.push_back(new ActionEntry(AioWriteAction(1, 123456789, dependencies, 3, 4,
-                                             5)));
-  o.push_back(new ActionEntry(AioDiscardAction()));
-  o.push_back(new ActionEntry(AioDiscardAction(1, 123456789, dependencies, 3, 4,
-                                               5)));
+  o.push_back(ActionEntry(AioReadAction()));
+  o.push_back(ActionEntry(AioReadAction(1, 123456789, dependencies, 3, 4,
+                                        5)));
+  o.push_back(ActionEntry(AioWriteAction()));
+  o.push_back(ActionEntry(AioWriteAction(1, 123456789, dependencies, 3, 4,
+                                         5)));
+  o.push_back(ActionEntry(AioDiscardAction()));
+  o.push_back(ActionEntry(AioDiscardAction(1, 123456789, dependencies, 3, 4,
+                                           5)));
 
-  o.push_back(new ActionEntry(OpenImageAction()));
-  o.push_back(new ActionEntry(OpenImageAction(1, 123456789, dependencies, 3,
-                                              "image_name", "snap_name",
-                                              true)));
-  o.push_back(new ActionEntry(CloseImageAction()));
-  o.push_back(new ActionEntry(CloseImageAction(1, 123456789, dependencies, 3)));
+  o.push_back(ActionEntry(OpenImageAction()));
+  o.push_back(ActionEntry(OpenImageAction(1, 123456789, dependencies, 3,
+                                          "image_name", "snap_name",
+                                          true)));
+  o.push_back(ActionEntry(CloseImageAction()));
+  o.push_back(ActionEntry(CloseImageAction(1, 123456789, dependencies, 3)));
 
-  o.push_back(new ActionEntry(AioOpenImageAction()));
-  o.push_back(new ActionEntry(AioOpenImageAction(1, 123456789, dependencies, 3,
-                                              "image_name", "snap_name",
-                                              true)));
-  o.push_back(new ActionEntry(AioCloseImageAction()));
-  o.push_back(new ActionEntry(AioCloseImageAction(1, 123456789, dependencies, 3)));
+  o.push_back(ActionEntry(AioOpenImageAction()));
+  o.push_back(ActionEntry(AioOpenImageAction(1, 123456789, dependencies, 3,
+					     "image_name", "snap_name",
+					     true)));
+  o.push_back(ActionEntry(AioCloseImageAction()));
+  o.push_back(ActionEntry(AioCloseImageAction(1, 123456789, dependencies, 3)));
+
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out,

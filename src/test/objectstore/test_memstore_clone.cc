@@ -17,6 +17,7 @@
 #include "os/ObjectStore.h"
 #include <gtest/gtest.h>
 #include "include/ceph_assert.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "store_test_fixture.h"
 

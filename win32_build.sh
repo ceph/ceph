@@ -114,8 +114,10 @@ wnbdSrcDir="${depsSrcDir}/wnbd"
 wnbdLibDir="${depsToolsetDir}/wnbd/lib"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
+libicuSrcDir="${depsSrcDir}/icu"
+libicuLibDir="${depsToolsetDir}/libicu"
 
-depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir"
+depsDirs="$lz4Dir;$sslDir;$boostDir;$zlibDir;$backtraceDir;$snappyDir;$libicuLibDir"
 depsDirs+=";$winLibDir"
 
 # Cmake recommends using CMAKE_PREFIX_PATH instead of link_directories.
@@ -231,8 +233,8 @@ if [[ -z $SKIP_DLL_COPY ]]; then
     required_dlls=(
         $zlibDir/zlib1.dll
         $lz4Dir/lib/dll/liblz4-1.dll
-        $sslDir/bin/libcrypto-1_1-x64.dll
-        $sslDir/bin/libssl-1_1-x64.dll
+        $sslDir/bin/libcrypto-3-x64.dll
+        $sslDir/bin/libssl-3-x64.dll
         $mingwLibpthreadDir/libwinpthread-1.dll)
     if [[ $ENABLE_SHARED == "ON" ]]; then
         required_dlls+=(

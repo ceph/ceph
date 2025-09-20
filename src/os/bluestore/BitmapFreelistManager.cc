@@ -9,6 +9,7 @@
 #include "include/stringify.h"
 
 #include "common/debug.h"
+#include "common/strtol.h" // for strict_iecstrtoll()
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -115,7 +116,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 
 int BitmapFreelistManager::_expand(uint64_t old_size, KeyValueDB* db)
 {
-  assert(old_size < size);
+  ceph_assert(old_size < size);
   ceph_assert(std::has_single_bit(bytes_per_block));
 
   KeyValueDB::Transaction txn;

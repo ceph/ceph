@@ -13,9 +13,9 @@
 #include "librbd/Types.h"
 #include <iosfwd>
 #include <list>
+#include <variant>
 #include <boost/none.hpp>
 #include <boost/optional.hpp>
-#include <boost/variant.hpp>
 #include <boost/mpl/vector.hpp>
 
 namespace ceph {
@@ -410,7 +410,7 @@ struct UnknownEvent {
   void dump(Formatter *f) const;
 };
 
-typedef boost::mpl::vector<AioDiscardEvent,
+using Event = std::variant<AioDiscardEvent,
                            AioWriteEvent,
                            AioFlushEvent,
                            OpFinishEvent,
@@ -430,8 +430,7 @@ typedef boost::mpl::vector<AioDiscardEvent,
                            MetadataRemoveEvent,
                            AioWriteSameEvent,
                            AioCompareAndWriteEvent,
-                           UnknownEvent> EventVector;
-typedef boost::make_variant_over<EventVector>::type Event;
+                           UnknownEvent>;
 
 struct EventEntry {
   static uint32_t get_fixed_size() {
@@ -453,7 +452,7 @@ struct EventEntry {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<EventEntry *> &o);
+  static std::list<EventEntry> generate_test_instances();
 
 private:
   static const uint32_t EVENT_FIXED_SIZE = 14; /// version encoding, type
@@ -575,10 +574,10 @@ struct UnknownClientMeta {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<ImageClientMeta,
-                       MirrorPeerClientMeta,
-                       CliClientMeta,
-                       UnknownClientMeta> ClientMeta;
+using ClientMeta = std::variant<ImageClientMeta,
+                                MirrorPeerClientMeta,
+                                CliClientMeta,
+                                UnknownClientMeta>;
 
 struct ClientData {
   ClientData() {
@@ -594,7 +593,7 @@ struct ClientData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<ClientData *> &o);
+  static std::list<ClientData> generate_test_instances();
 };
 
 // Journal Tag data structures
@@ -649,7 +648,7 @@ struct TagData {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<TagData *> &o);
+  static std::list<TagData> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out, const EventType &type);

@@ -3,52 +3,21 @@
 #ifndef CEPH_INCLUDE_FS_TYPES_H
 #define CEPH_INCLUDE_FS_TYPES_H
 
-#include "types.h"
-class JSONObj;
+#include <cstdint>
+#include <list>
+#include <iosfwd>
+#include <string>
 
-#define CEPHFS_EBLOCKLISTED    108
-#define CEPHFS_EPERM           1
-#define CEPHFS_ESTALE          116
-#define CEPHFS_ENOSPC          28
-#define CEPHFS_ETIMEDOUT       110
-#define CEPHFS_EIO             5
-#define CEPHFS_ENOTCONN        107
-#define CEPHFS_EEXIST          17
-#define CEPHFS_EINTR           4
-#define CEPHFS_EINVAL          22
-#define CEPHFS_EBADF           9
-#define CEPHFS_EROFS           30
-#define CEPHFS_EAGAIN          11
-#define CEPHFS_EACCES          13
-#define CEPHFS_ELOOP           40
-#define CEPHFS_EISDIR          21
-#define CEPHFS_ENOENT          2
-#define CEPHFS_ENOTDIR         20
-#define CEPHFS_ENAMETOOLONG    36
-#define CEPHFS_EBUSY           16
-#define CEPHFS_EDQUOT          122
-#define CEPHFS_EFBIG           27
-#define CEPHFS_ERANGE          34
-#define CEPHFS_ENXIO           6
-#define CEPHFS_ECANCELED       125
-#define CEPHFS_ENODATA         61
-#define CEPHFS_EOPNOTSUPP      95
-#define CEPHFS_EXDEV           18
-#define CEPHFS_ENOMEM          12
-#define CEPHFS_ENOTRECOVERABLE 131
-#define CEPHFS_ENOSYS          38
-#define CEPHFS_EWOULDBLOCK     CEPHFS_EAGAIN
-#define CEPHFS_ENOTEMPTY       39
-#define CEPHFS_EDEADLK         35
-#define CEPHFS_EDEADLOCK       CEPHFS_EDEADLK
-#define CEPHFS_EDOM            33
-#define CEPHFS_EMLINK          31
-#define CEPHFS_ETIME           62
-#define CEPHFS_EOLDSNAPC       85
-#define CEPHFS_EFAULT          14
-#define CEPHFS_EISCONN         106
-#define CEPHFS_EMULTIHOP       72
-#define CEPHFS_EINPROGRESS     115
+#include "include/buffer.h"
+#include "include/ceph_fs.h" // for struct ceph_file_layout
+#include "include/encoding.h"
+#include "include/hash.h" // for rjhash
+
+namespace ceph {
+  class Formatter;
+}
+
+class JSONObj;
 
 // taken from linux kernel: include/uapi/linux/fcntl.h
 #define CEPHFS_AT_FDCWD        -100    /* Special value used to indicate
@@ -76,12 +45,12 @@ struct inodeno_t {
     using ceph::decode;
     decode(val, p);
   }
-  void dump(ceph::Formatter *f) const {
-    f->dump_unsigned("val", val);
-  }
-  static void generate_test_instances(std::list<inodeno_t*>& ls) {
-    ls.push_back(new inodeno_t(1));
-    ls.push_back(new inodeno_t(123456789));
+  void dump(ceph::Formatter *f) const;
+  static std::list<inodeno_t> generate_test_instances() {
+    std::list<inodeno_t> ls;
+    ls.push_back(inodeno_t(1));
+    ls.push_back(inodeno_t(123456789));
+    return ls;
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
@@ -103,9 +72,7 @@ struct denc_traits<inodeno_t> {
   }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const inodeno_t& ino) {
-  return out << std::hex << "0x" << ino.val << std::dec;
-}
+std::ostream& operator<<(std::ostream& out, const inodeno_t& ino);
 
 namespace std {
 template<>
@@ -129,9 +96,6 @@ inline bool file_mode_is_readonly(int mode) {
 #define MAX_DENTRY_LEN 255
 
 // --
-namespace ceph {
-  class Formatter;
-}
 void dump(const ceph_file_layout& l, ceph::Formatter *f);
 void dump(const ceph_dir_layout& l, ceph::Formatter *f);
 
@@ -174,7 +138,7 @@ struct file_layout_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<file_layout_t*>& o);
+  static std::list<file_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
 

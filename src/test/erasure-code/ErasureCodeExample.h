@@ -26,12 +26,19 @@
 #include "osd/osd_types.h"
 #include "erasure-code/ErasureCode.h"
 
+// Chunk version is deprecated.
 #define FIRST_DATA_CHUNK 0
 #define SECOND_DATA_CHUNK 1
+#define FIRST_DATA_SHARD shard_id_t(0)
+#define SECOND_DATA_SHARD shard_id_t(1)
 #define DATA_CHUNKS 2u
+#define DATA_SHARDS 2u
 
 #define CODING_CHUNK 2
+#define CODING_SHARD shard_id_t(2)
+
 #define CODING_CHUNKS 1u
+#define CODING_SHARDS 1u
 
 #define MINIMUM_TO_RECOVER 2u
 
@@ -46,6 +53,8 @@ public:
 				 "indep", pg_pool_t::TYPE_ERASURE, ss);
   }
 
+  IGNORE_DEPRECATED
+  [[deprecated]]
   int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
                                           const std::map<int, int> &available,
                                           std::set<int> *minimum) override {
@@ -75,6 +84,41 @@ public:
       available_chunks.insert(i->first);
     return _minimum_to_decode(want_to_read, available_chunks, minimum);
   }
+  END_IGNORE_DEPRECATED
+
+  int minimum_to_decode_with_cost(const shard_id_set &want_to_read,
+                                          const shard_id_map<int> &available,
+                                          shard_id_set *minimum) override {
+    //
+    // If one chunk is more expensive to fetch than the others,
+    // recover it instead. For instance, if the cost reflects the
+    // time it takes for a chunk to be retrieved from a remote
+    // OSD and if CPU is cheap, it could make sense to recover
+    // instead of fetching the chunk.
+    //
+    shard_id_map<int> c2c(available);
+    if (c2c.size() > DATA_SHARDS) {
+      if (c2c[FIRST_DATA_SHARD] > c2c[SECOND_DATA_SHARD] &&
+	  c2c[FIRST_DATA_SHARD] > c2c[CODING_SHARD])
+	c2c.erase(FIRST_DATA_SHARD);
+      else if(c2c[SECOND_DATA_SHARD] > c2c[FIRST_DATA_SHARD] &&
+	      c2c[SECOND_DATA_SHARD] > c2c[CODING_SHARD])
+	c2c.erase(SECOND_DATA_SHARD);
+      else if(c2c[CODING_SHARD] > c2c[FIRST_DATA_SHARD] &&
+	      c2c[CODING_SHARD] > c2c[SECOND_DATA_SHARD])
+	c2c.erase(CODING_SHARD);
+    }
+    shard_id_set available_chunks;
+    for (shard_id_map<int>::const_iterator i = c2c.cbegin();
+	 i != c2c.cend();
+	 ++i)
+      available_chunks.insert(i->first);
+    return _minimum_to_decode(want_to_read, available_chunks, minimum);
+  }
+
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION;
+  }
 
   unsigned int get_chunk_count() const override {
     return DATA_CHUNKS + CODING_CHUNKS;
@@ -88,6 +132,11 @@ public:
     return ( object_size / DATA_CHUNKS ) + 1;
   }
 
+  size_t get_minimum_granularity() override {
+    return 1;
+  }
+
+  [[deprecated]]
   int encode(const std::set<int> &want_to_encode,
                      const bufferlist &in,
                      std::map<int, bufferlist> *encoded) override {
@@ -126,12 +175,67 @@ public:
     return 0;
   }
 
+  int encode(const shard_id_set &want_to_encode,
+                     const bufferlist &in,
+                     shard_id_map<bufferlist> *encoded) override {
+    //
+    // make sure all data chunks have the same length, allocating
+    // padding if necessary.
+    //
+    unsigned int chunk_length = get_chunk_size(in.length());
+    bufferlist out(in);
+    unsigned int width = get_chunk_count() * get_chunk_size(in.length());
+    out.append_zero(width - in.length());
+    //
+    // compute the coding chunk with first chunk ^ second chunk
+    //
+    char *p = out.c_str();
+    for (unsigned i = 0; i < chunk_length; i++)
+      p[i + int(CODING_SHARD) * chunk_length] =
+        p[i + int(FIRST_DATA_SHARD) * chunk_length] ^
+	p[i + int(SECOND_DATA_SHARD) * chunk_length];
+    //
+    // populate the bufferlist with bufferptr pointing
+    // to chunk boundaries
+    //
+    const bufferptr &ptr = out.front();
+    for (auto j = want_to_encode.begin();
+         j != want_to_encode.end();
+         ++j) {
+      bufferlist tmp;
+      bufferptr chunk(ptr, int(*j) * chunk_length, chunk_length);
+      tmp.push_back(chunk);
+      tmp.claim_append((*encoded)[*j]);
+      (*encoded)[*j].swap(tmp);
+    }
+    return 0;
+  }
+
+  [[deprecated]]
   int encode_chunks(const std::set<int> &want_to_encode,
 			    std::map<int, bufferlist> *encoded) override {
     ceph_abort();
     return 0;
   }
 
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
+    ceph_abort();
+    return 0;
+  }
+
+  void encode_delta(const bufferptr &old_data,
+                    const bufferptr &new_data,
+                    bufferptr *delta_maybe_in_place) {
+    ceph_abort();
+  }
+
+  void apply_delta(const shard_id_map<bufferptr> &in,
+                             shard_id_map<bufferptr> &out) override {
+    ceph_abort();
+  }
+
+  [[deprecated]]
   int _decode(const std::set<int> &want_to_read,
 	      const std::map<int, bufferlist> &chunks,
 	      std::map<int, bufferlist> *decoded) override {
@@ -178,6 +282,54 @@ public:
     return 0;
   }
 
+
+  int _decode(const shard_id_set &want_to_read,
+	      const shard_id_map<bufferlist> &chunks,
+	      shard_id_map<bufferlist> *decoded) override {
+    //
+    // All chunks have the same size
+    //
+    unsigned chunk_length = (*chunks.begin()).second.length();
+    for (shard_id_set::const_iterator i = want_to_read.begin();
+         i != want_to_read.end();
+         ++i) {
+      if (chunks.find(*i) != chunks.end()) {
+	//
+	// If the chunk is available, just copy the bufferptr pointer
+	// to the decoded argument.
+	//
+        (*decoded)[*i] = chunks.find(*i)->second;
+      } else if(chunks.size() != 2) {
+	//
+	// If a chunk is missing and there are not enough chunks
+	// to recover, abort.
+	//
+	return -ERANGE;
+      } else {
+	//
+	// No matter what the missing chunk is, XOR of the other
+	// two recovers it.
+	//
+        shard_id_map<bufferlist>::const_iterator k = chunks.begin();
+        const char *a = k->second.front().c_str();
+        ++k;
+        const char *b = k->second.front().c_str();
+        bufferptr chunk(chunk_length);
+	char *c = chunk.c_str();
+        for (unsigned j = 0; j < chunk_length; j++) {
+          c[j] = a[j] ^ b[j];
+        }
+
+	bufferlist tmp;
+	tmp.append(chunk);
+	tmp.claim_append((*decoded)[*i]);
+	(*decoded)[*i].swap(tmp);
+      }
+    }
+    return 0;
+  }
+
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 			    const std::map<int, bufferlist> &chunks,
 			    std::map<int, bufferlist> *decoded) override {
@@ -185,8 +337,15 @@ public:
     return 0;
   }
 
-  const std::vector<int> &get_chunk_mapping() const override {
-    static std::vector<int> mapping;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
+    ceph_abort();
+    return 0;
+  }
+
+  const std::vector<shard_id_t> &get_chunk_mapping() const override {
+    static std::vector<shard_id_t> mapping;
     return mapping;
   }
 

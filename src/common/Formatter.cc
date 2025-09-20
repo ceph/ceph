@@ -23,6 +23,8 @@
 #include <algorithm>
 #include <set>
 #include <limits>
+#include <utility>
+#include <boost/container/small_vector.hpp>
 
 // -----------------------
 namespace ceph {
@@ -83,7 +85,7 @@ FormatterAttrs::FormatterAttrs(const char *attr, ...)
     if (!val)
       break;
 
-    attrs.push_back(make_pair(std::string(s), std::string(val)));
+    attrs.emplace_back(s, val);
     s = va_arg(ap, char *);
   } while (s);
   va_end(ap);
@@ -365,10 +367,21 @@ std::ostream& JSONFormatter::dump_stream(std::string_view name)
 
 void JSONFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
-  char buf[LARGE_SIZE];
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  auto buf = boost::container::small_vector<char, LARGE_SIZE>{
+      LARGE_SIZE, boost::container::default_init};
 
-  add_value(name, buf, quoted);
+  va_list ap_copy;
+  va_copy(ap_copy, ap);
+  int len = vsnprintf(buf.data(), buf.size(), fmt, ap_copy);
+  va_end(ap_copy);
+
+  if (std::cmp_greater_equal(len, buf.size())) {
+    // output was truncated, allocate a buffer large enough
+    buf.resize(len + 1, boost::container::default_init);
+    vsnprintf(buf.data(), buf.size(), fmt, ap);
+  }
+
+  add_value(name, buf.data(), quoted);
 }
 
 int JSONFormatter::get_len() const
@@ -550,15 +563,27 @@ std::ostream& XMLFormatter::dump_stream(std::string_view name)
 
 void XMLFormatter::dump_format_va(std::string_view name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
-  char buf[LARGE_SIZE];
-  size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  auto buf = boost::container::small_vector<char, LARGE_SIZE>{
+      LARGE_SIZE, boost::container::default_init};
+
+  va_list ap_copy;
+  va_copy(ap_copy, ap);
+  int len = vsnprintf(buf.data(), buf.size(), fmt, ap_copy);
+  va_end(ap_copy);
+
+  if (std::cmp_greater_equal(len, buf.size())) {
+    // output was truncated, allocate a buffer large enough
+    buf.resize(len + 1, boost::container::default_init);
+    vsnprintf(buf.data(), buf.size(), fmt, ap);
+  }
+
   auto e = get_xml_name(name);
 
   print_spaces();
   if (ns) {
-    m_ss << "<" << e << " xmlns=\"" << ns << "\">" << xml_stream_escaper(std::string_view(buf, len)) << "</" << e << ">";
+    m_ss << "<" << e << " xmlns=\"" << ns << "\">" << xml_stream_escaper(std::string_view(buf.data(), len)) << "</" << e << ">";
   } else {
-    m_ss << "<" << e << ">" << xml_stream_escaper(std::string_view(buf, len)) << "</" << e << ">";
+    m_ss << "<" << e << ">" << xml_stream_escaper(std::string_view(buf.data(), len)) << "</" << e << ">";
   }
 
   if (m_pretty)
@@ -582,13 +607,11 @@ void XMLFormatter::write_bin_data(const char* buff, int buf_len)
   m_ss.seekg(buf_len);
 }
 
-void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
+void XMLFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const
 {
   CachedStackStringStream css;
 
-  for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
-       iter != attrs->attrs.end(); ++iter) {
-    std::pair<std::string, std::string> p = *iter;
+  for (const auto &p : attrs->attrs) {
     *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 
@@ -849,9 +872,9 @@ size_t TableFormatter::m_vec_index(std::string_view name)
 std::string TableFormatter::get_section_name(std::string_view name)
 {
   std::string t_name{name};
-  for (size_t i = 0; i < m_section.size(); i++) {
+  for (const auto &i : m_section) {
     t_name.insert(0, ":");
-    t_name.insert(0, m_section[i]);
+    t_name.insert(0, i);
   }
   if (m_section_open) {
     std::stringstream lss;
@@ -927,14 +950,26 @@ void TableFormatter::dump_format_va(std::string_view name,
 				    const char *fmt, va_list ap)
 {
   finish_pending_string();
-  char buf[LARGE_SIZE];
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  auto buf = boost::container::small_vector<char, LARGE_SIZE>{
+      LARGE_SIZE, boost::container::default_init};
+
+  va_list ap_copy;
+  va_copy(ap_copy, ap);
+  int len = vsnprintf(buf.data(), buf.size(), fmt, ap_copy);
+  va_end(ap_copy);
+
+  if (std::cmp_greater_equal(len, buf.size())) {
+    // output was truncated, allocate a buffer large enough
+    buf.resize(len + 1, boost::container::default_init);
+    vsnprintf(buf.data(), buf.size(), fmt, ap); 
+  }
 
   size_t i = m_vec_index(name);
   if (ns) {
-    m_ss << ns << "." << buf;
-  } else
-    m_ss << buf;
+    m_ss << ns << "." << buf.data();
+  } else {
+    m_ss << buf.data();
+  }
 
   m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
   m_ss.clear();
@@ -959,13 +994,11 @@ void TableFormatter::write_raw_data(const char *data) {
   // not supported
 }
 
-void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str)
+void TableFormatter::get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str) const
 {
   CachedStackStringStream css;
 
-  for (std::list<std::pair<std::string, std::string> >::const_iterator iter = attrs->attrs.begin();
-       iter != attrs->attrs.end(); ++iter) {
-    std::pair<std::string, std::string> p = *iter;
+  for (const auto &p : attrs->attrs) {
     *css << " " << p.first << "=" << "\"" << p.second << "\"";
   }
 

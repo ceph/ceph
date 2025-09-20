@@ -36,7 +36,6 @@ struct D3nChunkDataInfo : public LRUObject {
 	}
 
 	void dump(Formatter *f) const;
-	static void generate_test_instances(std::list<D3nChunkDataInfo*>& o);
 };
 
 struct D3nCacheAioWriteRequest {

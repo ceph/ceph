@@ -9,6 +9,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "common/Formatter.h"
@@ -24,6 +25,12 @@ class KeyValueDB {
 public:
   class TransactionImpl {
   public:
+    // amount of ops included
+    virtual size_t get_count() const = 0;
+
+    // total encoded data size
+    virtual size_t get_size_bytes() const = 0;
+
     /// Set Keys
     void set(
       const std::string &prefix,                      ///< [in] Prefix for keys, or CF name
@@ -205,6 +212,10 @@ public:
       return "";
     }
     virtual ceph::buffer::list value() = 0;
+    // When valid() returns true, value returned as string-view
+    // is guaranteed to be valid until iterator is moved to another
+    // position; that is until call to next() / seek_to_first() / etc.
+    virtual std::string_view value_as_sv() = 0;
     virtual int status() = 0;
     virtual ~SimplestIteratorImpl() {}
   };
@@ -214,7 +225,12 @@ public:
     virtual ~IteratorImpl() {}
     virtual int seek_to_last() = 0;
     virtual int prev() = 0;
+    // When valid() returns true, key returned as string-view
+    // is guaranteed to be valid until iterator is moved to another
+    // position; that is until call to next() / seek_to_first() / etc.
+    virtual std::string_view key_as_sv() = 0;
     virtual std::pair<std::string, std::string> raw_key() = 0;
+    virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
     virtual ceph::buffer::ptr value_as_ptr() {
       ceph::buffer::list bl = value();
       if (bl.length() == 1) {
@@ -241,7 +257,9 @@ public:
     virtual int next() = 0;
     virtual int prev() = 0;
     virtual std::string key() = 0;
+    virtual std::string_view key_as_sv() = 0;
     virtual std::pair<std::string,std::string> raw_key() = 0;
+    virtual std::pair<std::string_view, std::string_view> raw_key_as_sv() = 0;
     virtual bool raw_key_is_prefixed(const std::string &prefix) = 0;
     virtual ceph::buffer::list value() = 0;
     virtual ceph::buffer::ptr value_as_ptr() {
@@ -252,6 +270,7 @@ public:
         return ceph::buffer::ptr();
       }
     }
+    virtual std::string_view value_as_sv() = 0;
     virtual int status() = 0;
     virtual size_t key_size() {
       return 0;
@@ -309,14 +328,23 @@ private:
     std::string key() override {
       return generic_iter->key();
     }
+    std::string_view key_as_sv() override {
+      return generic_iter->key_as_sv();
+    }
     std::pair<std::string, std::string> raw_key() override {
       return generic_iter->raw_key();
+    }
+    std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+      return generic_iter->raw_key_as_sv();
     }
     ceph::buffer::list value() override {
       return generic_iter->value();
     }
     ceph::buffer::ptr value_as_ptr() override {
       return generic_iter->value_as_ptr();
+    }
+    std::string_view value_as_sv() override {
+      return generic_iter->value_as_sv();
     }
     int status() override {
       return generic_iter->status();

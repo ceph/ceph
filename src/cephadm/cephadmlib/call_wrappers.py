@@ -311,14 +311,14 @@ def call_throws(
     return out, err, ret
 
 
-def call_timeout(ctx, command, timeout):
-    # type: (CephadmContext, List[str], int) -> int
+def call_timeout(
+    ctx: CephadmContext, command: List[str], timeout: int
+) -> int:
     logger.debug(
         'Running command (timeout=%s): %s' % (timeout, ' '.join(command))
     )
 
-    def raise_timeout(command, timeout):
-        # type: (List[str], int) -> NoReturn
+    def raise_timeout(command: List[str], timeout: int) -> NoReturn:
         msg = 'Command `%s` timed out after %s seconds' % (command, timeout)
         logger.debug(msg)
         raise TimeoutExpired(msg)

@@ -4,32 +4,42 @@ import { HttpClient } from '@angular/common/http';
 import _ from 'lodash';
 import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
+import { CephServiceSpec } from '../models/service.interface';
 
-export const MAX_NAMESPACE = 1024;
+export const MAX_NAMESPACE = 4096;
 
-export interface ListenerRequest {
+export type GatewayGroup = CephServiceSpec;
+
+export type GroupsComboboxItem = {
+  content: string;
+  serviceName?: string;
+  selected?: boolean;
+};
+
+type NvmeofRequest = {
   gw_group: string;
+};
+
+export type ListenerRequest = NvmeofRequest & {
   host_name: string;
   traddr: string;
   trsvcid: number;
-}
+};
 
-export interface NamespaceCreateRequest {
+export type NamespaceCreateRequest = NvmeofRequest & {
   rbd_image_name: string;
   rbd_pool: string;
-  size: number;
-  gw_group: string;
-}
+  rbd_image_size?: number;
+  create_image: boolean;
+};
 
-export interface NamespaceEditRequest {
+export type NamespaceUpdateRequest = NvmeofRequest & {
   rbd_image_size: number;
-  gw_group: string;
-}
+};
 
-export interface InitiatorRequest {
+export type InitiatorRequest = NvmeofRequest & {
   host_nqn: string;
-  gw_group: string;
-}
+};
 
 const API_PATH = 'api/nvmeof';
 const UI_API_PATH = 'ui-api/nvmeof';
@@ -40,9 +50,31 @@ const UI_API_PATH = 'ui-api/nvmeof';
 export class NvmeofService {
   constructor(private http: HttpClient) {}
 
+  // formats the gateway groups to be consumed for combobox item
+  formatGwGroupsList(
+    data: CephServiceSpec[][],
+    isGatewayList: boolean = false
+  ): GroupsComboboxItem[] {
+    return data[0].reduce((gwGrpList: GroupsComboboxItem[], group: CephServiceSpec) => {
+      if (isGatewayList && group?.spec?.group && group?.service_name) {
+        gwGrpList.push({
+          content: group.spec.group,
+          serviceName: group.service_name
+        });
+      } else {
+        if (group?.spec?.group) {
+          gwGrpList.push({
+            content: group.spec.group
+          });
+        }
+      }
+      return gwGrpList;
+    }, []);
+  }
+
   // Gateway groups
   listGatewayGroups() {
-    return this.http.get(`${API_PATH}/gateway/group`);
+    return this.http.get<GatewayGroup[][]>(`${API_PATH}/gateway/group`);
   }
 
   // Gateways
@@ -115,13 +147,21 @@ export class NvmeofService {
     });
   }
 
-  deleteListener(subsystemNQN: string, hostName: string, traddr: string, trsvcid: string) {
+  deleteListener(
+    subsystemNQN: string,
+    group: string,
+    hostName: string,
+    traddr: string,
+    trsvcid: string
+  ) {
     return this.http.delete(
       `${API_PATH}/subsystem/${subsystemNQN}/listener/${hostName}/${traddr}`,
       {
         observe: 'response',
         params: {
-          trsvcid
+          gw_group: group,
+          trsvcid,
+          force: 'true'
         }
       }
     );
@@ -144,7 +184,7 @@ export class NvmeofService {
     });
   }
 
-  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceEditRequest) {
+  updateNamespace(subsystemNQN: string, nsid: string, request: NamespaceUpdateRequest) {
     return this.http.patch(`${API_PATH}/subsystem/${subsystemNQN}/namespace/${nsid}`, request, {
       observe: 'response'
     });

@@ -64,6 +64,7 @@ protected:
   param_vec_t headers;
 
   long  req_timeout{0L};
+  long  req_connect_timeout{0L};
 
   void init();
 
@@ -149,6 +150,12 @@ public:
   // zero (default) mean that request will never timeout
   void set_req_timeout(long timeout) {
     req_timeout = timeout;
+  }
+
+  // set request for connect phase timeout in seconds. 
+  // ensures wrong url hits don't stay alive post this limit
+  void set_req_connect_timeout(long connect_timeout) {
+    req_connect_timeout = connect_timeout;
   }
 
   int process(const DoutPrefixProvider* dpp, optional_yield y);

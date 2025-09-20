@@ -679,30 +679,32 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   return 0;
 }
 
-void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
+list<rgw_log_entry> rgw_log_entry::generate_test_instances()
 {
-  rgw_log_entry *e = new rgw_log_entry;
-  e->object_owner = parse_owner("object_owner");
-  e->bucket_owner = parse_owner("bucket_owner");
-  e->bucket = "bucket";
-  e->remote_addr = "1.2.3.4";
-  e->user = "user";
-  e->obj = rgw_obj_key("obj");
-  e->uri = "http://uri/bucket/obj";
-  e->http_status = "200";
-  e->error_code = "error_code";
-  e->bytes_sent = 1024;
-  e->bytes_received = 512;
-  e->obj_size = 2048;
-  e->user_agent = "user_agent";
-  e->referrer = "referrer";
-  e->bucket_id = "10";
-  e->trans_id = "trans_id";
-  e->identity_type = TYPE_RGW;
-  e->account_id = "account_id";
-  e->role_id = "role_id";
-  o.push_back(e);
-  o.push_back(new rgw_log_entry);
+  list<rgw_log_entry> o;
+  rgw_log_entry e;
+  e.object_owner = parse_owner("object_owner");
+  e.bucket_owner = parse_owner("bucket_owner");
+  e.bucket = "bucket";
+  e.remote_addr = "1.2.3.4";
+  e.user = "user";
+  e.obj = rgw_obj_key("obj");
+  e.uri = "http://uri/bucket/obj";
+  e.http_status = "200";
+  e.error_code = "error_code";
+  e.bytes_sent = 1024;
+  e.bytes_received = 512;
+  e.obj_size = 2048;
+  e.user_agent = "user_agent";
+  e.referrer = "referrer";
+  e.bucket_id = "10";
+  e.trans_id = "trans_id";
+  e.identity_type = TYPE_RGW;
+  e.account_id = "account_id";
+  e.role_id = "role_id";
+  o.push_back(std::move(e));
+  o.emplace_back();
+  return o;
 }
 
 void rgw_log_entry::dump(Formatter *f) const

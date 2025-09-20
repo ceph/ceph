@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore compression mode: aggressive
+        bluestore compression algorithm: zstd
+        osd_mclock_skip_benchmark: true #new recompression makes us fail the test

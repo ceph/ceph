@@ -41,10 +41,12 @@ struct SequencerPosition {
     f->dump_unsigned("trans", trans);
     f->dump_unsigned("op", op);
   }
-  static void generate_test_instances(std::list<SequencerPosition*>& o) {
-    o.push_back(new SequencerPosition);
-    o.push_back(new SequencerPosition(1, 2, 3));
-    o.push_back(new SequencerPosition(4, 5, 6));
+  static std::list<SequencerPosition> generate_test_instances() {
+    std::list<SequencerPosition> o;
+    o.emplace_back();
+    o.push_back(SequencerPosition(1, 2, 3));
+    o.push_back(SequencerPosition(4, 5, 6));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(SequencerPosition)

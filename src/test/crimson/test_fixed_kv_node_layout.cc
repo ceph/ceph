@@ -88,12 +88,14 @@ struct TestNode : FixedKVNodeLayout<
   uint32_t, ceph_le32,
   test_val_t, test_val_le_t> {
   char buf[4096];
-  TestNode() : FixedKVNodeLayout(buf) {
+  TestNode() : FixedKVNodeLayout() {
+    set_layout_buf(buf);
     memset(buf, 0, sizeof(buf));
     set_meta({0, std::numeric_limits<uint32_t>::max()});
   }
   TestNode(const TestNode &rhs)
-    : FixedKVNodeLayout(buf) {
+    : FixedKVNodeLayout() {
+    set_layout_buf(buf);
     ::memcpy(buf, rhs.buf, sizeof(buf));
   }
 
@@ -243,7 +245,7 @@ TEST(FixedKVNodeTest, merge) {
   ASSERT_EQ(num, total);
 }
 
-void run_balance_test(unsigned left, unsigned right, bool prefer_left)
+void run_balance_test(unsigned left, unsigned right)
 {
   auto node = TestNode();
   auto node2 = TestNode();
@@ -274,10 +276,11 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
 
   auto node_balanced = TestNode();
   auto node_balanced2 = TestNode();
+  auto pivot_idx = TestNode::get_balance_pivot_idx(node, node2);
   auto pivot = TestNode::balance_into_new_nodes(
     node,
     node2,
-    prefer_left,
+    pivot_idx,
     node_balanced,
     node_balanced2);
 
@@ -285,13 +288,8 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
 
   unsigned left_size, right_size;
   if (total % 2) {
-    if (prefer_left) {
-      left_size = (total/2) + 1;
-      right_size = total/2;
-    } else {
       left_size = total/2;
       right_size = (total/2) + 1;
-    }
   } else {
     left_size = right_size = total/2;
   }
@@ -330,13 +328,11 @@ void run_balance_test(unsigned left, unsigned right, bool prefer_left)
 }
 
 TEST(FixedKVNodeTest, balanced) {
-  run_balance_test(CAPACITY / 2, CAPACITY, true);
-  run_balance_test(CAPACITY / 2, CAPACITY, false);
-  run_balance_test(CAPACITY, CAPACITY / 2, true);
-  run_balance_test(CAPACITY, CAPACITY / 2, false);
-  run_balance_test(CAPACITY - 1, CAPACITY / 2, true);
-  run_balance_test(CAPACITY / 2, CAPACITY - 1, false);
-  run_balance_test(CAPACITY / 2, CAPACITY / 2, false);
+  run_balance_test(CAPACITY / 2, CAPACITY);
+  run_balance_test(CAPACITY, CAPACITY / 2);
+  run_balance_test(CAPACITY - 1, CAPACITY / 2);
+  run_balance_test(CAPACITY / 2, CAPACITY - 1);
+  run_balance_test(CAPACITY / 2, CAPACITY / 2 + 2);
 }
 
 void run_replay_test(

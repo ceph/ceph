@@ -228,27 +228,35 @@ The following host labels have a special meaning to cephadm.  All start with ``_
 Maintenance Mode
 ================
 
-Place a host in and out of maintenance mode (stops all Ceph daemons on host):
+Putting a host into *maintenance mode* stops all Ceph daemons on the host.
+Run a command of the following form to put a host into maintenance mode or
+to take a host out of maintenance mode: 
 
 .. prompt:: bash #
 
    ceph orch host maintenance enter <hostname> [--force] [--yes-i-really-mean-it]
    ceph orch host maintenance exit <hostname> [--force] [--offline]
 
-The ``--force`` flag on the ``enter`` command allows the user to bypass warnings (but not alerts).
-The ``--yes-i-really-mean-it`` flag bypasses all safety checks and will attempt to force the
-host into maintenance mode no matter what. The ``--force`` and ``--offline`` flags to the ``exit`` command
-can be used to to have cephadm mark a host that is in maintenance mode and offline as no longer
-in maintenance mode. Note in this case if the host comes online, the Ceph daemons
-on the host will remain in the stopped state. The ``--force`` and ``--offline`` flags to the ``exit``
-command are intended to be run for hosts in maintenance mode that are permanently offline
-before removing the host entirely from cephadm management using the ``ceph orch host rm`` command.
+* Adding the ``--force`` flag to the ``enter`` command allows the user to
+  bypass warnings (but not alerts). 
+* Adding the ``--yes-i-really-mean-it`` flag to the ``enter`` command
+  bypasses all safety checks and makes an attempt to force the host into
+  maintenance mode.
+* Adding the ``--force`` and ``--offline`` flags to the ``exit`` command
+  causes cephadm to mark hosts that are in maintenance mode and offline as
+  no longer in maintenance mode. Note that if the host comes online, the
+  Ceph daemons on the host will remain in the stopped state. The ``--force``
+  and ``--offline`` flags of the ``exit`` command are meant to be run on
+  hosts that are in maintenance mode and that are permanently offline prior
+  to the removal of those hosts from cephadm management by running the
+  ``ceph orch host rm`` command.
 
-.. warning:: Using the --yes-i-really-mean-it flag to force the host to enter maintenance
-   mode can potentially cause loss of data availability, the mon quorum to break down due
-   to too few running monitors, mgr module commands (such as ``ceph orch . . .`` commands)
-   to be become unresponsive, and a number of other possible issues. Please only use this
-   flag if you're absolutely certain you know what you're doing.
+.. warning:: Using the ``--yes-i-really-mean-it`` flag to force the host to
+   enter maintenance mode can cause loss of data availability, breakdown of
+   the mon quorum due to too few running monitors, unresponsive Manager
+   module commands (such as ``ceph orch . . .`` commands), and other issues.
+   Use this flag only if you're absolutely certain that you know what you're
+   doing.
 
 See also :ref:`cephadm-fqdn`
 
@@ -324,9 +332,10 @@ added to is also added to the default bucket), for example:
 
 .. note:: 
 
-  The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
-  changes of the ``location`` property will be ignored. Also, removing a host will not remove
-  an associated CRUSH bucket unless the ``--rm-crush-entry`` flag is provided to the ``orch host rm`` command
+  The ``location`` attribute will affect only the initial CRUSH location.
+  Subsequent changes to the ``location`` property will be ignored. 
+  Removing a host will not remove an associated CRUSH bucket unless the
+  ``--rm-crush-entry`` flag is provided to the ``orch host rm`` command.
 
 See also :ref:`crush_map_default_types`.
 

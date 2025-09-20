@@ -6,9 +6,10 @@ OSD Service
 List Devices
 ============
 
-``ceph-volume`` scans each host in the cluster from time to time in order
-to determine which devices are present and whether they are eligible to be
-used as OSDs.
+``ceph-volume`` scans each host in the cluster periodically in order
+to determine the devices that are present and responsive. It is also
+determined whether each is eligible to be used for new OSDs in a block,
+DB, or WAL role.
 
 To print a list of devices discovered by ``cephadm``, run this command:
 
@@ -31,29 +32,37 @@ Example::
   srv-03    /dev/sdc  hdd   15R0A0P7FRD6         300G  Unknown  N/A    N/A    No
   srv-03    /dev/sdd  hdd   15R0A0O7FRD6         300G  Unknown  N/A    N/A    No
 
-Using the ``--wide`` option provides all details relating to the device,
-including any reasons that the device might not be eligible for use as an OSD.
-
-In the above example you can see fields named "Health", "Ident", and "Fault".
+In the above examples you can see fields named ``Health``, ``Ident``, and ``Fault``.
 This information is provided by integration with `libstoragemgmt`_. By default,
-this integration is disabled (because `libstoragemgmt`_ may not be 100%
-compatible with your hardware).  To make ``cephadm`` include these fields,
-enable cephadm's "enhanced device scan" option as follows;
+this integration is disabled because `libstoragemgmt`_ may not be 100%
+compatible with your hardware.  To direct Ceph to include these fields,
+enable ``cephadm``'s "enhanced device scan" option as follows:
 
 .. prompt:: bash #
 
   ceph config set mgr mgr/cephadm/device_enhanced_scan true
 
+Note that the columns reported by ``ceph orch device ls`` may vary from release to
+release.
+
+The ``--wide`` option shows device details,
+including any reasons that the device might not be eligible for use as an OSD.
+Example (Reef)::
+
+  HOST               PATH          TYPE  DEVICE ID                                      SIZE  AVAILABLE  REFRESHED  REJECT REASONS
+  davidsthubbins    /dev/sdc       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010W339UW25    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+  nigeltufnel       /dev/sdd       hdd   SEAGATE_ST20000NM002D_ZVTBJNGC17010C3442787    18.1T  No         22m ago    Has a FileSystem, Insufficient space (<10 extents) on vgs, LVM detected
+
 .. warning::
-    Although the libstoragemgmt library performs standard SCSI inquiry calls,
-    there is no guarantee that your firmware fully implements these standards.
+    Although the ``libstoragemgmt`` library issues standard SCSI (SES) inquiry calls,
+    there is no guarantee that your hardware and firmware properly implement these standards.
     This can lead to erratic behaviour and even bus resets on some older
     hardware. It is therefore recommended that, before enabling this feature,
-    you test your hardware's compatibility with libstoragemgmt first to avoid
+    you first test your hardware's compatibility with ``libstoragemgmt`` to avoid
     unplanned interruptions to services.
 
-    There are a number of ways to test compatibility, but the simplest may be
-    to use the cephadm shell to call libstoragemgmt directly - ``cephadm shell
+    There are a number of ways to test compatibility, but the simplest is
+    to use the cephadm shell to call ``libstoragemgmt`` directly: ``cephadm shell
     lsmcli ldl``. If your hardware is supported you should see something like
     this: 
 
@@ -65,7 +74,7 @@ enable cephadm's "enhanced device scan" option as follows;
       /dev/sdb | 50000396082bbbf9 | SAS       | 15P0A0YFFRD6       | Good
 
 
-After you have enabled libstoragemgmt support, the output will look something
+After enabling ``libstoragemgmt`` support, the output will look something
 like this:
 
 ::
@@ -76,26 +85,27 @@ like this:
   srv-01     /dev/sdc  hdd   15R0A08WFRD6         300G  Good     Off    Off    No
   :
 
-In this example, libstoragemgmt has confirmed the health of the drives and the ability to
-interact with the Identification and Fault LEDs on the drive enclosures. For further
+In this example, ``libstoragemgmt`` has confirmed the health of the drives and the ability to
+interact with the identification and fault LEDs on the drive enclosures. For further
 information about interacting with these LEDs, refer to :ref:`devices`.
 
 .. note::
-    The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
-    local disks only. There is no official support for NVMe devices (PCIe)
+    The current release of `libstoragemgmt`` (1.8.8) supports SCSI, SAS, and SATA based
+    local drives only. There is no official support for NVMe devices (PCIe), SAN LUNs,
+    or exotic/complex metadevices.
 
 Retrieve Exact Size of Block Devices
 ====================================
 
 Run a command of the following form to discover the exact size of a block
-device. The value returned here is used by the orchestrator when comparing high
-and low values:
+device. The value returned here is used by the orchestrator when filtering based
+on size:
 
 .. prompt:: bash #
 
    cephadm shell ceph-volume inventory </dev/sda> --format json | jq .sys_api.human_readable_size
 
-The exact size in GB is the size reported in TB, multiplied by 1000.
+The exact size in GB is the size reported in TB, multiplied by 1024.
 
 Example
 -------
@@ -110,7 +120,7 @@ general form of the command above:
 
    "3.64 TB"
 
-This means that the exact device size is 3.64 * 1000, or 3640GB.
+This indicates that the exact device size is 3.64 TB, or 3727.36 GB.
 
 This procedure was developed by Frédéric Nass. See `this thread on the
 [ceph-users] mailing list
@@ -125,7 +135,7 @@ Deploy OSDs
 Listing Storage Devices
 -----------------------
 
-In order to deploy an OSD, there must be a storage device that is *available* on
+In order to deploy an OSD, there must be an available storage device or devices on
 which the OSD will be deployed.
 
 Run this command to display an inventory of storage devices on all cluster hosts:
@@ -144,14 +154,14 @@ conditions are met:
 * The device must not contain a Ceph BlueStore OSD.
 * The device must be larger than 5 GB.
 
-Ceph will not provision an OSD on a device that is not available.
+Ceph will not provision an OSD on a device that is not *available*.
 
 Creating New OSDs
 -----------------
 
-There are a few ways to create new OSDs:
+There are multiple ways to create new OSDs:
 
-* Tell Ceph to consume any available and unused storage device:
+* Consume any available and unused storage device:
 
   .. prompt:: bash #
 
@@ -169,7 +179,7 @@ There are a few ways to create new OSDs:
 
     ceph orch daemon add osd host1:/dev/sdb
 
-  Advanced OSD creation from specific devices on a specific host:
+* Advanced OSD creation from specific devices on a specific host:
 
   .. prompt:: bash #
 
@@ -187,8 +197,8 @@ There are a few ways to create new OSDs:
 
     ceph orch daemon add osd host1:/dev/vg_osd/lvm_osd1701
 
-* You can use :ref:`drivegroups` to categorize device(s) based on their
-  properties. This might be useful in forming a clearer picture of which
+* You can use :ref:`drivegroups` to categorize devices based on their
+  properties. This is useful to clarify which
   devices are available to consume. Properties include device type (SSD or
   HDD), device model names, size, and the hosts on which the devices exist:
 
@@ -196,7 +206,21 @@ There are a few ways to create new OSDs:
 
     ceph orch apply -i spec.yml
 
-.. warning:: When deploying new OSDs with ``cephadm``, ensure that the ``ceph-osd`` package is not already installed on the target host. If it is installed, conflicts may arise in the management and control of the OSD that may lead to errors or unexpected behavior.
+.. warning:: When deploying new OSDs with ``cephadm``, ensure that the ``ceph-osd`` package is not installed on the target host. If it is installed, conflicts may arise in the management and control of the OSD that may lead to errors or unexpected behavior.
+
+* New OSDs created using ``ceph orch daemon add osd`` are added under ``osd.default`` as managed OSDs with a valid spec.
+
+  To attach an existing OSD to a different managed service, ``ceph orch osd set-spec-affinity`` command can be used:
+
+  .. prompt:: bash #
+
+     ceph orch osd set-spec-affinity <service_name> <osd_id(s)>
+
+  For example:
+
+  .. prompt:: bash #
+    
+     ceph orch osd set-spec-affinity osd.default_drive_group 0 1
 
 Dry Run
 -------
@@ -224,8 +248,8 @@ Declarative State
 
 The effect of ``ceph orch apply`` is persistent. This means that drives that
 are added to the system after the ``ceph orch apply`` command completes will be
-automatically found and added to the cluster.  It also means that drives that
-become available (by zapping, for example) after the ``ceph orch apply``
+automatically detected and added to the cluster as specified.  It also means that drives that
+become available (e.g. by zapping) after the ``ceph orch apply``
 command completes will be automatically found and added to the cluster.
 
 We will examine the effects of the following command:
@@ -236,9 +260,9 @@ We will examine the effects of the following command:
 
 After running the above command: 
 
-* If you add new disks to the cluster, they will automatically be used to
+* When you add new drives to the cluster, they will automatically be used to
   create new OSDs.
-* If you remove an OSD and clean the LVM physical volume, a new OSD will be
+* When you remove an OSD and clean the LVM physical volume, a new OSD will be
   created automatically.
 
 If you want to avoid this behavior (disable automatic creation of OSD on available devices), use the ``unmanaged`` parameter:
@@ -251,13 +275,13 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
     Keep these three facts in mind:
 
-    - The default behavior of ``ceph orch apply`` causes cephadm constantly to reconcile. This means that cephadm creates OSDs as soon as new drives are detected.
+    - The default behavior of ``ceph orch apply`` causes ``cephadm`` to constantly reconcile. This means that ``cephadm`` creates OSDs as soon as new drives are detected.
 
     - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
 
     - ``ceph orch daemon add`` creates OSDs, but does not add an OSD service.
 
-* For cephadm, see also :ref:`cephadm-spec-unmanaged`.
+* For more on ``cephadm``, see also :ref:`cephadm-spec-unmanaged`.
 
 .. _cephadm-osd-removal:
 
@@ -266,43 +290,47 @@ Remove an OSD
 
 Removing an OSD from a cluster involves two steps:
 
-#. evacuating all placement groups (PGs) from the OSD
-#. removing the PG-free OSD from the cluster
+#. Evacuating all placement groups (PGs) from the OSD
+#. Removing the PG-free OSD from the cluster
 
 The following command performs these two steps:
 
 .. prompt:: bash #
 
-  ceph orch osd rm <osd_id(s)> [--replace] [--force]
+  ceph orch osd rm <osd_id(s)> [--replace] [--force] [--zap]
 
 Example:
 
 .. prompt:: bash #
 
   ceph orch osd rm 0
+  ceph orch osd rm 1138 --zap
 
 Expected output::
 
   Scheduled OSD(s) for removal
 
-OSDs that are not safe to destroy will be rejected.
+OSDs that are not safe to destroy will be rejected.  Adding the ``--zap`` flag
+directs the orchestrator to remove all LVM and partition information from the
+OSD's drives, leaving it a blank slate for redeployment or other reuse.
 
 .. note::
-    After removing OSDs, if the drives the OSDs were deployed on once again
-    become available, cephadm may automatically try to deploy more OSDs
+    After removing OSDs, if the OSDs' drives
+    become available, ``cephadm`` may automatically try to deploy more OSDs
     on these drives if they match an existing drivegroup spec. If you deployed
     the OSDs you are removing with a spec and don't want any new OSDs deployed on
     the drives after removal, it's best to modify the drivegroup spec before removal.
-    Either set ``unmanaged: true`` to stop it from picking up new drives at all,
+    Either set ``unmanaged: true`` to stop it from picking up new drives,
     or modify it in some way that it no longer matches the drives used for the
     OSDs you wish to remove. Then re-apply the spec. For more info on drivegroup
     specs see :ref:`drivegroups`. For more info on the declarative nature of
-    cephadm in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
+    ``cephadm`` in reference to deploying OSDs, see :ref:`cephadm-osd-declarative`
 
-Monitoring OSD State
---------------------
+Monitoring OSD State During OSD Removal
+---------------------------------------
 
-You can query the state of OSD operation with the following command:
+You can query the state of OSD operations during the process of removing OSDs
+by running the following command:
 
 .. prompt:: bash #
 
@@ -341,7 +369,7 @@ Expected output::
 
   Stopped OSD(s) removal
 
-This resets the initial state of the OSD and takes it off the removal queue.
+This resets the state of the OSD and takes it off the removal queue.
 
 .. _cephadm-replacing-an-osd:
 
@@ -364,7 +392,7 @@ Expected output::
 
 This follows the same procedure as the procedure in the "Remove OSD" section, with
 one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
-instead assigned a 'destroyed' flag.
+instead assigned the ``destroyed`` flag.
 
 .. note::
     The new OSD that will replace the removed OSD must be created on the same host 
@@ -372,16 +400,16 @@ instead assigned a 'destroyed' flag.
 
 **Preserving the OSD ID**
 
-The 'destroyed' flag is used to determine which OSD ids will be reused in the
+The ``destroyed`` flag is used to determine which OSD IDs will be reused in the
 next OSD deployment.
 
-If you use OSDSpecs for OSD deployment, your newly added disks will be assigned
-the OSD ids of their replaced counterparts. This assumes that the new disks
+If you use OSDSpecs for OSD deployment, your newly added drives will be assigned
+the OSD IDs of their replaced counterparts. This assumes that the new drives
 still match the OSDSpecs.
 
-Use the ``--dry-run`` flag to make certain that the ``ceph orch apply osd`` 
-command does what you want it to. The ``--dry-run`` flag shows you what the
-outcome of the command will be without making the changes you specify. When
+Use the ``--dry-run`` flag to ensure that the ``ceph orch apply osd`` 
+command will do what you intend. The ``--dry-run`` flag shows what the
+outcome of the command will be without executing any changes. When
 you are satisfied that the command will do what you want, run the command
 without the ``--dry-run`` flag.
 
@@ -389,7 +417,7 @@ without the ``--dry-run`` flag.
 
   The name of your OSDSpec can be retrieved with the command ``ceph orch ls``
 
-Alternatively, you can use your OSDSpec file:
+Alternatively, you can use an OSDSpec file:
 
 .. prompt:: bash #
 
@@ -401,7 +429,7 @@ Expected output::
   <name_of_osd_spec>    node1 /dev/vdb -  -
 
 
-When this output reflects your intention, omit the ``--dry-run`` flag to
+When this output reflects your intent, omit the ``--dry-run`` flag to
 execute the deployment.
 
 
@@ -422,10 +450,10 @@ Example command:
   ceph orch device zap my_hostname /dev/sdx
 
 .. note::
-    If the unmanaged flag is unset, cephadm automatically deploys drives that
-    match the OSDSpec.  For example, if you use the
+    If the ``unmanaged`` flag is not set, ``cephadm`` automatically deploys drives that
+    match the OSDSpec.  For example, if you specify the
     ``all-available-devices`` option when creating OSDs, when you ``zap`` a
-    device the cephadm orchestrator automatically creates a new OSD in the
+    device the ``cephadm`` orchestrator automatically creates a new OSD on the
     device.  To disable this behavior, see :ref:`cephadm-osd-declarative`.
 
 
@@ -435,22 +463,22 @@ Automatically tuning OSD memory
 ===============================
 
 OSD daemons will adjust their memory consumption based on the
-``osd_memory_target`` config option (several gigabytes, by
-default).  If Ceph is deployed on dedicated nodes that are not sharing
-memory with other services, cephadm can automatically adjust the per-OSD
-memory consumption based on the total amount of RAM and the number of deployed
-OSDs.
+:confval:`osd_memory_target` config option.  If Ceph is deployed
+on dedicated nodes that are not sharing
+memory with other services, ``cephadm`` will automatically adjust the per-OSD
+memory consumption target based on the total amount of RAM and the number of deployed
+OSDs.  This allows the full use of available memory, and adapts when OSDs or
+RAM are added or removed.
 
-.. warning:: Cephadm sets ``osd_memory_target_autotune`` to ``true`` by default which is unsuitable for hyperconverged infrastructures.
+.. warning:: Cephadm sets ``osd_memory_target_autotune`` to ``true`` by default which is usually not appropriate for converged architectures, where a given node is used for both Ceph and compute purposes.
 
-Cephadm will start with a fraction
-(``mgr/cephadm/autotune_memory_target_ratio``, which defaults to
-``.7``) of the total RAM in the system, subtract off any memory
-consumed by non-autotuned daemons (non-OSDs, for OSDs for which
-``osd_memory_target_autotune`` is false), and then divide by the
-remaining OSDs.
+``Cephadm`` will use a fraction
+:confval:`mgr/cephadm/autotune_memory_target_ratio` of available memory,
+subtracting memory consumed by non-autotuned daemons (non-OSDs and OSDs for which
+``osd_memory_target_autotune`` is false), and then divide the balance by the number
+of OSDs.
 
-The final targets are reflected in the config database with options like::
+The final targets are reflected in the config database with options like the below::
 
   WHO   MASK      LEVEL   OPTION              VALUE
   osd   host:foo  basic   osd_memory_target   126092301926
@@ -464,7 +492,7 @@ the ``ceph orch ps`` output in the ``MEM LIMIT`` column::
   osd.2       dael         running (81m)    10s ago  81m    63989k     117.4G  17.0.0-3781-gafaed750  7015fda3cd67  1f0cc479b051  
   osd.3       dael         running (62m)    10s ago  62m    64071k     117.4G  17.0.0-3781-gafaed750  7015fda3cd67  ac5537492f27  
 
-To exclude an OSD from memory autotuning, disable the autotune option
+To exclude an OSD from memory autotuning, disable the ``autotune`` option
 for that OSD and also set a specific memory target.  For example,
 
 .. prompt:: bash #
@@ -478,22 +506,27 @@ for that OSD and also set a specific memory target.  For example,
 Advanced OSD Service Specifications
 ===================================
 
-:ref:`orchestrator-cli-service-spec`\s of type ``osd`` are a way to describe a
-cluster layout, using the properties of disks. Service specifications give the
-user an abstract way to tell Ceph which disks should turn into OSDs with which
-configurations, without knowing the specifics of device names and paths.
+:ref:`orchestrator-cli-service-spec`\s of type ``osd`` provide a way to use the
+properties of drives to describe a Ceph cluster's layout. Service specifications
+are an abstraction used to tell Ceph which drives to transform into OSDs
+and which configurations to apply to those OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to target drives
+for transformation into OSDs even when the Ceph cluster operator does not know
+the specific device names and paths associated with those disks.
 
-Service specifications make it possible to define a yaml or json file that can
-be used to reduce the amount of manual work involved in creating OSDs.
+:ref:`orchestrator-cli-service-spec`\s make it possible to define a ``.yaml``
+or ``.json`` file that can be used to reduce the amount of manual work involved
+in creating OSDs.
 
 .. note::
-    It is recommended that advanced OSD specs include the ``service_id`` field
-    set. The plain ``osd`` service with no service id is where OSDs created
-    using ``ceph orch daemon add`` or ``ceph orch apply osd --all-available-devices``
-    are placed. Not including a ``service_id`` in your OSD spec would mix
-    the OSDs from your spec with those OSDs and potentially overwrite services
-    specs created by cephadm to track them. Newer versions of cephadm will even
-    block creation of advanced OSD specs without the service_id present
+   We recommend that advanced OSD specs include the ``service_id`` field.
+   OSDs created using ``ceph orch daemon add`` or ``ceph orch apply osd
+   --all-available-devices`` are placed in the plain ``osd`` service. Failing
+   to include a ``service_id`` in your OSD spec causes the Ceph cluster to mix
+   the OSDs from your spec with those OSDs, which can potentially result in the
+   overwriting of service specs created by ``cephadm`` to track them. Newer
+   versions of ``cephadm`` block OSD specs that
+   do not include the ``service_id``. 
 
 For example, instead of running the following command:
 
@@ -501,8 +534,8 @@ For example, instead of running the following command:
 
   ceph orch daemon add osd *<host>*:*<path-to-device>*
 
-for each device and each host, we can define a yaml or json file that allows us
-to describe the layout. Here's the most basic example.
+for each device and each host, we can create a ``.yaml`` or ``.json`` file that
+allows us to describe the layout. Here is the most basic example:
 
 Create a file called (for example) ``osd_spec.yml``:
 
@@ -518,21 +551,21 @@ Create a file called (for example) ``osd_spec.yml``:
 
 This means :
 
-#. Turn any available device (ceph-volume decides what 'available' is) into an
-   OSD on all hosts that match the glob pattern '*'. (The glob pattern matches
-   against the registered hosts from `host ls`) A more detailed section on
-   host_pattern is available below.
+#. Turn any available device (``ceph-volume` decides which are _available_) into an
+   OSD on all hosts that match the glob pattern '*'. The glob pattern matches
+   registered hosts from `ceph orch host ls`. See
+   :ref:`cephadm-services-placement-by-pattern-matching` for more on using
+   ``host_pattern`` matching to use devices for OSDs.
 
-#. Then pass it to `osd create` like this:
+#. Pass ``osd_spec.yml`` to ``osd create`` by using the following command:
 
    .. prompt:: bash [monitor.1]#
 
      ceph orch apply -i /path/to/osd_spec.yml
 
-   This instruction will be issued to all the matching hosts, and will deploy
-   these OSDs.
+   This specification is applied to all the matching hosts to deploy OSDs.
 
-   Setups more complex than the one specified by the ``all`` filter are
+   Strategies more complex than the one specified by the ``all`` filter are
    possible. See :ref:`osd_filters` for details.
 
    A ``--dry-run`` flag can be passed to the ``apply osd`` command to display a
@@ -552,40 +585,38 @@ Filters
 -------
 
 .. note::
-    Filters are applied using an `AND` gate by default. This means that a drive
-    must fulfill all filter criteria in order to get selected. This behavior can
+    Filters are applied using an `AND` operation by default. This means that a drive
+    must match all filter criteria to be selected. This behavior can
     be adjusted by setting ``filter_logic: OR`` in the OSD specification. 
 
-Filters are used to assign disks to groups, using their attributes to group
-them. 
-
-The attributes are based off of ceph-volume's disk query. You can retrieve
-information about the attributes with this command:
+Filters are used to select sets of drives for OSD data or WAL+DB offload based
+on various attributes. These attributes are gathered by ``ceph-volume``'s drive
+inventory. Retrieve these attributes with this command:
 
 .. code-block:: bash
 
-    ceph-volume inventory </path/to/disk>
+    ceph-volume inventory </path/to/drive>
 
 Vendor or Model
 ^^^^^^^^^^^^^^^
 
-Specific disks can be targeted by vendor or model:
+Specific drives can be targeted by vendor brand, manufacturer) or model (SKU):
 
 .. code-block:: yaml
 
-    model: disk_model_name
+    model: drive_model_name
 
 or
 
 .. code-block:: yaml
 
-    vendor: disk_vendor_name
+    vendor: drive_vendor_name
 
 
 Size
 ^^^^
 
-Specific disks can be targeted by `Size`:
+Specific drive capacities can be targeted with `size`:
 
 .. code-block:: yaml
 
@@ -601,58 +632,83 @@ Size specifications can be of the following forms:
 * LOW:
 * EXACT
 
-Concrete examples:
+We explore examples below.
 
-To include disks of an exact size
-
-.. code-block:: yaml
-
-    size: '10G'
-
-To include disks within a given range of size: 
+To match only drives of an exact capacity:
 
 .. code-block:: yaml
 
-    size: '10G:40G'
+    size: '10T'
 
-To include disks that are less than or equal to 10G in size:
-
-.. code-block:: yaml
-
-    size: ':10G'
-
-To include disks equal to or greater than 40G in size:
+Note that drive capacity is often not an exact multiple of units, so it is
+often best practice to match drives within a range of sizes as shown below.
+This handles future drives of the same class that may be of a different
+model and thus slightly different in size.  Or say you have 10 TB drives
+today but may add 16 TB drives next year:
 
 .. code-block:: yaml
 
-    size: '40G:'
+    size: '10T:40T'
 
-Sizes don't have to be specified exclusively in Gigabytes(G).
+To match only drives that are less than or equal to 1701 GB in size:
 
-Other units of size are supported: Megabyte(M), Gigabyte(G) and Terabyte(T).
-Appending the (B) for byte is also supported: ``MB``, ``GB``, ``TB``.
+.. code-block:: yaml
+
+    size: ':1701G'
+
+To include drives equal to or greater than 666 GB in size:
+
+.. code-block:: yaml
+
+    size: '666G:'
+
+The supported units of size are Megabyte(M), Gigabyte(G) and Terabyte(T).
+The ``B`` (_byte_) suffix for units is also acceptable: ``MB``, ``GB``, ``TB``.
 
 
 Rotational
 ^^^^^^^^^^
 
-This operates on the 'rotational' attribute of the disk.
+This gates based on the 'rotational' attribute of each drive, as indicated by
+the kernel.  This attribute is usually as expected for bare HDDs and SSDs
+installed in each node.  Exotic or layered device presentations may however
+be reported differently than you might expect or desire:
+
+* Network-accessed SAN LUNs attached to the node
+* Composite devices presented by `dCache`, `Bcache`, `OpenCAS`, etc.
+
+In such cases you may align the kernel's reporting with your expectations
+by adding a ``udev`` rule to override the default behavior.  The below rule
+was used for this purpose to override the ``rotational`` attribute on OSD
+nodes with no local physical drives and only attached SAN LUNs. It is not
+intended for deployment in all scenarios; you will have to determine what is
+right for your systems.  If by emplacing such a rule you summon eldritch horrors
+from beyond spacetime, that's on you.
+
+.. code-block:: none
+
+    ACTION=="add|change", KERNEL=="sd[a-z]*", ATTR{queue/rotational}="0"
+    ACTION=="add|change", KERNEL=="dm*", ATTR{queue/rotational}="0"
+    ACTION=="add|change", KERNEL=="nbd*", ATTR{queue/rotational}="0"
+
+Spec file syntax:
 
 .. code-block:: yaml
 
     rotational: 0 | 1
 
-`1` to match all disks that are rotational
+`1` to match all drives that the kernel indicates are rotational
 
-`0` to match all disks that are non-rotational (SSD, NVME etc)
+`0` to match all drives that are non-rotational (SATA, SATA, NVMe SSDs, SAN LUNs, etc)
 
 
 All
 ^^^
 
-This will take all disks that are 'available'
+This matches all drives that are available, i.e. they are free of partitions,
+GPT labels, etc.
 
-.. note:: This is exclusive for the data_devices section.
+.. note:: This may only be specified for ``data_devices``.
 
 .. code-block:: yaml
 
@@ -662,14 +718,17 @@ This will take all disks that are 'available'
 Limiter
 ^^^^^^^
 
-If you have specified some valid filters but want to limit the number of disks that they match, use the ``limit`` directive:
+If filters are specified but you wish to limit the number of drives that they
+match, use the ``limit`` attribute.  This is useful when one uses some
+drives for non-Ceph purposes, or when multiple OSD strategies are
+intended.
 
 .. code-block:: yaml
 
     limit: 2
 
-For example, if you used `vendor` to match all disks that are from `VendorA`
-but want to use only the first two, you could use `limit`:
+For example, when using ``vendor`` to match all drives branded ``VendorA``
+but you wish to use at most two of them per host as OSDs, specify a ``limit``:
 
 .. code-block:: yaml
 
@@ -677,16 +736,20 @@ but want to use only the first two, you could use `limit`:
       vendor: VendorA
       limit: 2
 
-.. note:: `limit` is a last resort and shouldn't be used if it can be avoided.
+.. note:: ``limit`` is usually appropriate in only certain specific scenarios.
 
 
 Additional Options
 ------------------
 
-There are multiple optional settings you can use to change the way OSDs are deployed.
-You can add these options to the base level of an OSD spec for it to take effect.
+There are multiple optional settings that specify the way OSDs are deployed.
+Add these options to an OSD spec for them to take effect.
 
-This example would deploy all OSDs with encryption enabled.
+This example deploys encrypted OSDs on all unused drives.  Note that if Linux
+MD mirroring is used for the boot, ``/var/log``, or other volumes this spec *may*
+grab replacement or added drives before you can employ them for non-OSD purposes.
+The ``unmanaged`` attribute may be set to pause automatic deployment until you
+are ready.
 
 .. code-block:: yaml
 
@@ -699,8 +762,8 @@ This example would deploy all OSDs with encryption enabled.
         all: true
       encrypted: true
 
-Ceph Squid onwards support tpm2 token enrollment to LUKS2 devices.
-You can add the `tpm2` to your OSD spec:
+Ceph Squid onwards support TPM2 token enrollment for LUKS2 devices.
+Add the `tpm2` attribute to the OSD spec:
 
 .. code-block:: yaml
 
@@ -729,21 +792,22 @@ Examples
 The simple case
 ---------------
 
-All nodes with the same setup
+When all cluster nodes have identical drives and we wish to use
+them all as OSDs with offloaded WAL+DB:
 
 .. code-block:: none
 
-    20 HDDs
+    10 HDDs
     Vendor: VendorA
     Model: HDD-123-foo
     Size: 4TB
 
-    2 SSDs
+    2 SAS/SATA SSDs
     Vendor: VendorB
     Model: MC-55-44-ZX
     Size: 512GB
 
-This is a common setup and can be described quite easily:
+This is a common arrangement and can be described easily:
 
 .. code-block:: yaml
 
@@ -753,11 +817,13 @@ This is a common setup and can be described quite easily:
       host_pattern: '*'
     spec:
       data_devices:
-        model: HDD-123-foo # Note, HDD-123 would also be valid
+        model: HDD-123-foo       # Note, HDD-123 would also be valid
       db_devices:
-        model: MC-55-44-XZ # Same here, MC-55-44 is valid
+        model: MC-55-44-XZ       # Same here, MC-55-44 is valid
 
-However, we can improve it by reducing the filters on core properties of the drives:
+However, we can improve the OSD specification by filtering based on properties
+of the drives instead of specific models, as models may change over time as
+drives are replaced or added:
 
 .. code-block:: yaml
 
@@ -767,13 +833,16 @@ However, we can improve it by reducing the filters on core properties of the dri
       host_pattern: '*'
     spec:
       data_devices:
-        rotational: 1
+        rotational: 1            # The kernel flags as HDD
       db_devices:
-        rotational: 0
+        rotational: 0            # The kernel flags as SSD (SAS/SATA/NVMe)
 
-Now, we enforce all rotating devices to be declared as 'data devices' and all non-rotating devices will be used as shared_devices (wal, db)
+Here designate all HDDs to be data devices (OSDs) and all SSDs to be used
+for WAL+DB offload.
 
-If you know that drives with more than 2TB will always be the slower data devices, you can also filter by size:
+If you know that drives larger than 2 TB should always be used as data devices,
+and drives smaller than 2 TB should always be used as WAL/DB devices, you can
+filter by size:
 
 .. code-block:: yaml
 
@@ -783,40 +852,41 @@ If you know that drives with more than 2TB will always be the slower data device
       host_pattern: '*'
     spec:
       data_devices:
-        size: '2TB:'
+        size: '2TB:'           # Drives larger than 2 TB
       db_devices:
-        size: ':2TB'
+        size: ':2TB'           # Drives smaller than 2TB
 
-.. note:: All of the above OSD specs  are equally valid. Which of those you want to use depends on taste and on how much you expect your node layout to change.
+.. note:: All of the above OSD specs are equally valid. Which you use depends on taste and on how much you expect your node layout to change.
 
 
 Multiple OSD specs for a single host
 ------------------------------------
 
-Here we have two distinct setups
+Here we specify two distinct strategies for deploying OSDs across multiple
+types of media, usually for use by separate pools:
 
 .. code-block:: none
 
-    20 HDDs
+    10 HDDs
     Vendor: VendorA
     Model: HDD-123-foo
     Size: 4TB
 
-    12 SSDs
+    12 SAS/SATA SSDs
     Vendor: VendorB
     Model: MC-55-44-ZX
     Size: 512GB
 
-    2 NVMEs
+    2 NVME SSDs
     Vendor: VendorC
     Model: NVME-QQQQ-987
     Size: 256GB
 
 
-* 20 HDDs should share 2 SSDs
-* 10 SSDs should share 2 NVMes
+* 10 HDD OSDs use 2 SATA/SAS SSDs for WAL+DB offload
+* 10 SATA/SAS SSD OSDs share 2 NVMe SSDs for WAL+DB offload
 
-This can be described with two layouts.
+This can be specificed with two service specs in the same file:
 
 .. code-block:: yaml
 
@@ -825,39 +895,47 @@ This can be described with two layouts.
     placement:
       host_pattern: '*'
     spec:
-      data_devices:
-        rotational: 1
+      data_devices:             # Select all drives the kernel identifies as HDDs
+        rotational: 1           #  for OSD data
       db_devices:
-        model: MC-55-44-XZ
-        limit: 2 # db_slots is actually to be favoured here, but it's not implemented yet
+        model: MC-55-44-XZ      # Select only this model for WAL+DB offload
+        limit: 2                # Select at most two for this purpose
+      db_slots: 5               # Chop the DB device into this many slices and
+                                #  use one for each of this many HDD OSDs
     ---
     service_type: osd
-    service_id: osd_spec_ssd
+    service_id: osd_spec_ssd    # Unique so it doesn't overwrite the above
     placement:
       host_pattern: '*'
-    spec:
+    spec:                       # This scenario is uncommon
       data_devices:
-        model: MC-55-44-XZ
-      db_devices:
-        vendor: VendorC
+        model: MC-55-44-XZ      # Select drives of this model for OSD data
+      db_devices:               # Select drives of this brand for WAL+DB. Since the
+        vendor: VendorC         #   data devices are SAS/SATA SSDs this would make sense for NVMe SSDs
+      db_slots: 2               # Back two slower SAS/SATA SSD data devices with each NVMe slice
 
-This would create the desired layout by using all HDDs as data_devices with two SSD assigned as dedicated db/wal devices.
-The remaining SSDs(10) will be data_devices that have the 'VendorC' NVMEs assigned as dedicated db/wal devices.
+This would create the desired layout by using all HDDs as data devices with two
+SATA/SAS SSDs assigned as dedicated DB/WAL devices, each backing five HDD OSDs.
+The remaining ten SAS/SATA SSDs will be
+used as OSD data devices, with ``VendorC`` NVMEs SSDs assigned as
+dedicated DB/WAL devices, each serving two SAS/SATA OSDs.  We call these _hybrid OSDs.
 
 Multiple hosts with the same disk layout
 ----------------------------------------
 
-Assuming the cluster has different kinds of hosts each with similar disk 
-layout, it is recommended to apply different OSD specs matching only one
-set of hosts. Typically you will have a spec for multiple hosts with the 
-same layout. 
+When a cluster comprises hosts with different drive layouts, or a complex
+constellation of multiple media types, it is recommended to apply
+multiple OSD specs, each matching only one set of hosts.
+Typically you will have a single spec for each type of host.
 
-The service id as the unique key: In case a new OSD spec with an already
-applied service id is applied, the existing OSD spec will be superseded.
-cephadm will now create new OSD daemons based on the new spec
+The ``service_id`` must be unique: if a new OSD spec with an already
+applied ``service_id`` is applied, the existing OSD spec will be superseded.
+Cephadm will then create new OSD daemons on unused drives based on the new spec
 definition. Existing OSD daemons will not be affected. See :ref:`cephadm-osd-declarative`.
 
-Node1-5
+Example:
+
+Nodes 1-5:
 
 .. code-block:: none
 
@@ -870,7 +948,7 @@ Node1-5
     Model: MC-55-44-ZX
     Size: 512GB
 
-Node6-10
+Nodes 6-10:
 
 .. code-block:: none
 
@@ -883,7 +961,7 @@ Node6-10
     Model: MC-55-44-ZX
     Size: 512GB
 
-You can use the 'placement' key in the layout to target certain nodes.
+You can specify a ``placement`` to target only certain nodes.
 
 .. code-block:: yaml
 
@@ -893,9 +971,9 @@ You can use the 'placement' key in the layout to target certain nodes.
       label: disk_layout_a
     spec:
       data_devices:
-        rotational: 1
+        rotational: 1           # All drives identified as HDDs
       db_devices:
-        rotational: 0
+        rotational: 0           # All drives identified as SSDs
     ---
     service_type: osd
     service_id: disk_layout_b
@@ -903,25 +981,26 @@ You can use the 'placement' key in the layout to target certain nodes.
       label: disk_layout_b
     spec:
       data_devices:
-        model: MC-55-44-XZ
+        model: MC-55-44-XZ      # Only this model
       db_devices:
-        model: SSD-123-foo
+        model: SSD-123-foo      # Only this model
 
 
-This applies different OSD specs to different hosts depending on the `placement` key.
+This applies different OSD specs to different hosts that match hosts
+tagged with ``ceph orch`` labels via the ``placement`` filter.
 See :ref:`orchestrator-cli-placement-spec`
 
 .. note::
 
     Assuming each host has a unique disk layout, each OSD 
-    spec needs to have a different service id
+    spec must have a unique ``service_id``.
 
 
-Dedicated wal + db
+Dedicated WAL + DB
 ------------------
 
-All previous cases co-located the WALs with the DBs.
-It's however possible to deploy the WAL on a dedicated device as well, if it makes sense.
+All previous cases colocated the WALs with the DBs.
+It is however possible to deploy the WAL on a separate device if desired.
 
 .. code-block:: none
 
@@ -930,18 +1009,18 @@ It's however possible to deploy the WAL on a dedicated device as well, if it mak
     Model: SSD-123-foo
     Size: 4TB
 
-    2 SSDs
+    2 SAS/SATA SSDs
     Vendor: VendorB
     Model: MC-55-44-ZX
     Size: 512GB
 
-    2 NVMEs
+    2 NVME SSDs
     Vendor: VendorC
     Model: NVME-QQQQ-987
     Size: 256GB
 
 
-The OSD spec for this case would look like the following (using the `model` filter):
+The OSD spec for this case would look like the following, using the ``model`` filter:
 
 .. code-block:: yaml
 
@@ -958,7 +1037,8 @@ The OSD spec for this case would look like the following (using the `model` filt
         model: NVME-QQQQ-987
 
 
-It is also possible to specify directly device paths in specific hosts like the following:
+It is also possible to specify device paths as below, when every matched host
+is expected to present devices identically.
 
 .. code-block:: yaml
 
@@ -966,8 +1046,8 @@ It is also possible to specify directly device paths in specific hosts like the 
     service_id: osd_using_paths
     placement:
       hosts:
-        - Node01
-        - Node02
+        - node01
+        - node02
     spec:
       data_devices:
         paths:
@@ -980,11 +1060,13 @@ It is also possible to specify directly device paths in specific hosts like the 
         - /dev/sdd
 
 
-This can easily be done with other filters, like `size` or `vendor` as well.
+In most cases it is preferable to accomplish this with other filters
+including ``size`` or ``vendor`` so that OSD services adapt when
+Linux or an HBA may enumerate devices differently across boots, or when
+drives are added or replaced.
 
-It's possible to specify the `crush_device_class` parameter within the
-DriveGroup spec, and it's applied to all the devices defined by the `paths`
-keyword:
+It is possible to specify a ``crush_device_class`` parameter
+to be applied to OSDs created on devices matched by the ``paths`` filter:
 
 .. code-block:: yaml
 
@@ -992,8 +1074,8 @@ keyword:
     service_id: osd_using_paths
     placement:
       hosts:
-        - Node01
-        - Node02
+        - node01
+        - node02
     crush_device_class: ssd
     spec:
       data_devices:
@@ -1007,8 +1089,8 @@ keyword:
         paths:
         - /dev/sde
 
-The `crush_device_class` parameter, however, can be defined for each OSD passed
-using the `paths` keyword with the following syntax:
+The ``crush_device_class`` attribute may be specified at OSD granularity
+via the ``paths`` keyword with the following syntax:
 
 .. code-block:: yaml
 
@@ -1016,8 +1098,8 @@ using the `paths` keyword with the following syntax:
     service_id: osd_using_paths
     placement:
       hosts:
-        - Node01
-        - Node02
+        - node01
+        - node02
     crush_device_class: ssd
     spec:
       data_devices:
@@ -1038,15 +1120,107 @@ using the `paths` keyword with the following syntax:
 Activate existing OSDs
 ======================
 
-In case the OS of a host was reinstalled, existing OSDs need to be activated
-again. For this use case, cephadm provides a wrapper for :ref:`ceph-volume-lvm-activate` that
-activates all existing OSDs on a host.
+If a host's operating system has been reinstalled, existing OSDs
+must be activated again. ``cephadm`` provides a wrapper for
+:ref:`ceph-volume-lvm-activate` that activates all existing OSDs on a host.
 
-.. prompt:: bash #
+The following procedure explains how to use ``cephadm`` to activate OSDs on a
+host that has had its operating system reinstalled.
 
-  ceph cephadm osd activate <host>...
+This example applies to two hosts: ``ceph01`` and ``ceph04``.
 
-This will scan all existing disks for OSDs and deploy corresponding daemons.
+- ``ceph01`` is a host equipped with an admin keyring. 
+- ``ceph04`` is the host with the recently reinstalled operating system.
+
+#. Install ``cephadm`` and ``podman`` on the host. The command for installing
+   these utilities will depend upon the operating system of the host.
+
+#. Retrieve the public key.
+
+   .. prompt:: bash ceph01#
+      
+      cd /tmp ; ceph cephadm get-pub-key > ceph.pub
+
+#. Copy the key (from ``ceph01``) to the freshly reinstalled host (``ceph04``):
+
+   .. prompt:: bash ceph01#
+
+      ssh-copy-id -f -i ceph.pub root@<hostname>
+
+#. Retrieve the private key in order to test the connection:
+
+   .. prompt:: bash ceph01#
+
+      cd /tmp ; ceph config-key get mgr/cephadm/ssh_identity_key > ceph-private.key
+
+#. From ``ceph01``, modify the permissions of ``ceph-private.key``:
+
+   .. prompt:: bash ceph01#
+
+      chmod 400 ceph-private.key
+
+#. Log in to ``ceph04`` from ``ceph01`` to test the connection and
+   configuration:
+
+   .. prompt:: bash ceph01#
+
+      ssh -i /tmp/ceph-private.key ceph04
+
+#. While logged into ``ceph01``, remove ``ceph.pub`` and ``ceph-private.key``:
+
+   .. prompt:: bash ceph01#
+
+      cd /tmp ; rm ceph.pub ceph-private.key
+
+#. If you run your own container registry, instruct the orchestrator to log into
+   it on each host: 
+
+   .. prompt:: bash #
+
+      ceph cephadm registry-login my-registry.domain <user> <password>
+
+   When the orchestrator performs the registry login, it will attempt to deploy
+   any missing daemons to the host. This includes ``crash``, ``node-exporter``,
+   and any other daemons that the host ran before its operating system was
+   reinstalled.
+
+   To be clea: ``cephadm`` attempts to deploy missing daemons to all
+   hosts managed by cephadm, when ``cephadm``
+   determines that the hosts are online. In this context, "online" means
+   "present in the output of the ``ceph orch host ls`` command and with a
+   status that is not ``offline`` or ``maintenance``. If it is necessary to log
+   in to the registry in order to pull the images for the missing daemons, then
+   deployment of the missing daemons will fail until the process of logging
+   in to the registry has been completed.
+
+   .. note:: This step is not necessary if you do not run your own container
+             registry. If your host is still in the "host list", which can be
+             retrieved by running the command ``ceph orch host ls``, you do not
+             need to run this command.
+
+#. Activate the OSDs on the host that has recently had its operating system
+   reinstalled:
+
+   .. prompt:: bash #
+
+      ceph cephadm osd activate ceph04
+
+   This command causes ``cephadm`` to scan all existing disks for OSDs. This
+   command will make ``cephadm`` deploy any missing daemons to the host
+   specified. 
+  
+
+
+*This procedure was developed by Eugen Block in Feburary of 2025, and a blog
+post pertinent to its development can be seen here:*
+`Eugen Block's "Cephadm: Activate existing OSDs" blog post <https://heiterbiswolkig.blogs.nde.ag/2025/02/06/cephadm-activate-existing-osds/>`_.
+
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
+
 
 Further Reading
 ===============

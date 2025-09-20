@@ -135,22 +135,23 @@ as follows:
   Purge bucket index entries.
 
 :command:`object rm`
-  Remove an object.
+  Remove an S3/Swift object. Include "--yes-i-really-mean-it" to remove object's
+  entry from bucket index, for example if it's damaged.
 
 :command:`object stat`
-  Stat an object for its metadata.
+  Stat an S3/Swift object for its metadata.
 
 :command:`object manifest`
-  Display the manifest of RADOS objects containing the data.
+  Display the manifest of an S3/Swift object, producing a list of RADOS objects containing the data.
 
 :command:`object unlink`
-  Unlink object from bucket index.
+  Unlink S3/Swift object from bucket index.
 
 :command:`object rewrite`
-  Rewrite the specified object.
+  Rewrite the specified S3/Swift object.
 
 :command:`object reindex`
-  Add an object to its bucket's index. Used rarely for emergency repairs.
+  Add an S3/Swift object to its bucket's index. Used rarely for emergency repairs.
 
 :command:`objects expire`
   Run expired objects cleanup.
@@ -476,26 +477,19 @@ as follows:
   Cancel resharding a bucket
 
 :command:`topic list`
-  List bucket notifications/pubsub topics                                                   
+  List bucket notifications topics
 
 :command:`topic get`
-  Get a bucket notifications/pubsub topic                                                   
-  
+  Get a bucket notification topic 
+
 :command:`topic rm`
-  Remove a bucket notifications/pubsub topic                                                
+  Remove a bucket notifications topic 
 
-:command:`subscription get`
-  Get a pubsub subscription definition
+:command:`topic stats`
+  Get a bucket notifications persistent topic stats (i.e. reservations, entries & size)
 
-:command:`subscription rm`
-  Remove a pubsub subscription
-
-:command:`subscription pull`
-  Show events in a pubsub subscription
-             
-:command:`subscription ack`
-  Acknowledge (remove) events in a pubsub subscription
-
+:command:`topic dump`
+  Dump (in JSON format) all pending bucket notifications of a persistent topic
 
 Options
 =======
@@ -547,6 +541,13 @@ Options
 .. option:: --gen-secret
 
     Generate random secret key.
+
+.. option:: --generate-key
+
+    create user with or without credentials.
+    If this option set to false, then user cannot set --gen-access-key/--gen-secret/--secret-key/--access-key.
+    If this option set to true, then user cannot set  --secret-key/--access-key and bypass options for --gen-secret/--gen-access-key.
+    Default is true.
 
 .. option:: --key-type=<type>
 

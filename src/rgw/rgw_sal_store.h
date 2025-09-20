@@ -25,6 +25,7 @@ struct RGWObjState {
   bool is_atomic{false};
   bool has_attrs{false};
   bool exists{false};
+  bool is_dm{false};
   uint64_t size{0}; //< size of raw object
   uint64_t accounted_size{0}; //< size before compression, encryption
   ceph::real_time mtime;
@@ -37,7 +38,6 @@ struct RGWObjState {
   bool has_data{false};
   bufferlist data;
   bool prefetch_data{false};
-  bool keep_tail{false};
   bool is_olh{false};
   bufferlist olh_tag;
   uint64_t pg_ver{false};
@@ -73,7 +73,6 @@ struct RGWObjState {
       data = rhs.data;
     }
     prefetch_data = rhs.prefetch_data;
-    keep_tail = rhs.keep_tail;
     is_olh = rhs.is_olh;
     objv_tracker = rhs.objv_tracker;
     pg_ver = rhs.pg_ver;
@@ -253,6 +252,26 @@ class StoreBucket : public Bucket {
         optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
     int remove_topics(RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
+    int get_logging_object_name(std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) override { return 0; }
+    int set_logging_object_name(const std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        bool new_obj,
+        RGWObjVersionTracker* objv_tracker) override { return 0; }
+    int remove_logging_object_name(const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) override { return 0; }
+    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override { return 0; }
+    int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override { return 0; }
+    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override {
+      return 0;
+    }
 
     friend class BucketList;
 };
@@ -261,7 +280,6 @@ class StoreObject : public Object {
   protected:
     RGWObjState state;
     Bucket* bucket = nullptr;
-    bool delete_marker{false};
     jspan_context trace_ctx{false, false};
 
   public:
@@ -275,14 +293,13 @@ class StoreObject : public Object {
 
     virtual ~StoreObject() = default;
 
-    virtual void set_atomic() override { state.is_atomic = true; }
+    virtual void set_atomic(bool atomic) override { state.is_atomic = atomic; }
     virtual bool is_atomic() override { return state.is_atomic; }
     virtual void set_prefetch_data() override { state.prefetch_data = true; }
     virtual bool is_prefetch_data() override { return state.prefetch_data; }
     virtual void set_compressed() override { state.compressed = true; }
     virtual bool is_compressed() override { return state.compressed; }
-    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) override { return false; }
+    virtual bool is_delete_marker() override { return state.is_dm; }
     virtual void invalidate() override {
       rgw_obj obj = state.obj;
       bool is_atomic = state.is_atomic;
@@ -326,7 +343,6 @@ class StoreObject : public Object {
     virtual std::string get_hash_source(void) override { return state.obj.index_hash_source; }
     virtual void set_hash_source(std::string s) override { state.obj.index_hash_source = s; }
     virtual std::string get_oid(void) const override { return state.obj.key.get_oid(); }
-    virtual bool get_delete_marker(void) override { return delete_marker; }
     virtual bool get_in_extra_data(void) override { return state.obj.is_in_extra_data(); }
     virtual bool exists(void) override { return state.exists; }
     virtual void set_in_extra_data(bool i) override { state.obj.set_in_extra_data(i); }
@@ -354,16 +370,11 @@ class StoreObject : public Object {
     }
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-    		           RGWObjTier& tier_config,
-			   real_time& mtime,
-			   uint64_t olh_epoch,
 		           std::optional<uint64_t> days,
+			   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-		           uint32_t flags) override {
+			   optional_yield y) override {
       return -1;
     }
     jspan_context& get_trace() override { return trace_ctx; }
@@ -442,6 +453,26 @@ public:
   virtual ~StoreLCSerializer() = default;
 
   virtual void print(std::ostream& out) const override { out << oid; }
+};
+
+class StoreRestoreSerializer : public RestoreSerializer {
+
+protected:
+  std::string oid;
+
+public:
+  StoreRestoreSerializer() {}
+  StoreRestoreSerializer(std::string _oid) : oid(_oid) {}
+
+  virtual ~StoreRestoreSerializer() = default;
+  virtual void print(std::ostream& out) const override { out << oid; }
+};
+
+class StoreRestore : public Restore {
+
+public:
+  StoreRestore() = default;
+  virtual ~StoreRestore() = default;
 };
 
 class StoreNotification : public Notification {

@@ -200,7 +200,6 @@ public:
    * io behavior accordingly.
    */
   enum class io_state_t : uint8_t {
-    none,    // no IO is possible as the connection is not available to the user yet.
     delay,   // IO is delayed until open.
     open,    // Dispatch In and Out concurrently.
     drop,    // Drop IO as the connection is closed.
@@ -309,7 +308,7 @@ public:
       in_exit_dispatching = std::nullopt;
     }
 
-    bool try_enter_out_dispatching() {
+    bool try_enter_out_dispatching(SocketConnection &conn) {
       assert(seastar::this_shard_id() == sid);
       if (out_dispatching) {
         // already dispatching out
@@ -327,7 +326,10 @@ public:
         // do not dispatch out
         return false;
       default:
-        ceph_abort("impossible");
+        crimson::get_logger(ceph_subsys_ms).error(
+          "{} try_enter_out_dispatching() got wrong io_state {}",
+          conn, io_state);
+        ceph_abort_msg("impossible");
       }
     }
 
@@ -559,9 +561,6 @@ struct fmt::formatter<crimson::net::IOHandler::io_state_t>
     using enum crimson::net::IOHandler::io_state_t;
     std::string_view name;
     switch (state) {
-    case none:
-      name = "none";
-      break;
     case delay:
       name = "delay";
       break;
@@ -574,6 +573,8 @@ struct fmt::formatter<crimson::net::IOHandler::io_state_t>
     case switched:
       name = "switched";
       break;
+    default:
+      name = "undefined";
     }
     return formatter<string_view>::format(name, ctx);
   }

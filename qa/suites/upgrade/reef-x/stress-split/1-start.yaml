@@ -1,11 +1,31 @@
 overrides:
   ceph:
     log-ignorelist:
+      - do not have an application enabled
+      - application not enabled
+      - or freeform for custom applications
+      - POOL_APP_NOT_ENABLED
+      - is down
+      - OSD_DOWN
       - mons down
       - mon down
       - MON_DOWN
       - out of quorum
       - PG_AVAILABILITY
+      - PG_DEGRADED
+      - Reduced data availability
+      - Degraded data redundancy
+      - pg .* is stuck inactive
+      - pg .* is stuck peering
+      - pg .* is .*degraded
+      - FS_DEGRADED
+      - OSDMAP_FLAGS
+      - OSD_UPGRADE_FINISHED
+      - Replacing daemon mds
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
+      - filesystem is offline
+      - with fewer MDS than max_mds
 tasks:
 - install:
     branch: reef

@@ -16,8 +16,15 @@
 #include <functional>
 #include <mutex>
 #include <condition_variable>
+#include <deque>
 #include <set>
+#include <optional>
 #include <queue>
+#include <unordered_map>
+#include <unordered_set>
+
+#include "include/cephfs/types.h" // for fs_cluster_id_t
+#include "include/types.h" // for epoch_t
 
 struct QuiesceClusterMembership {
   static const QuiesceInterface::PeerId INVALID_MEMBER;

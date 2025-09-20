@@ -5,6 +5,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
+#include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
 
@@ -81,7 +82,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     dump_alloc();
     PExtentVector extents;
     EXPECT_EQ(block_size, alloc->allocate(block_size, block_size,
-					  0, (int64_t) 0, &extents));
+					  0, (int64_t) -1, &extents));
   }
 
   /*
@@ -93,7 +94,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
-			      0, (int64_t) 0, &extents));
+			      0, (int64_t) -1, &extents));
     EXPECT_EQ(1u, extents.size());
     EXPECT_EQ(extents[0].length, 4 * block_size);
   }
@@ -109,7 +110,7 @@ TEST_P(AllocTest, test_alloc_min_alloc)
   
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
-			      0, (int64_t) 0, &extents));
+			      0, (int64_t) -1, &extents));
     EXPECT_EQ(2u, extents.size());
     EXPECT_EQ(extents[0].length, 2 * block_size);
     EXPECT_EQ(extents[1].length, 2 * block_size);
@@ -134,7 +135,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
-			      block_size, (int64_t) 0, &extents));
+			      block_size, (int64_t) -1, &extents));
     for (auto e : extents) {
       EXPECT_EQ(e.length, block_size);
     }
@@ -152,7 +153,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     PExtentVector extents;
     EXPECT_EQ(4*block_size,
 	      alloc->allocate(4 * (uint64_t)block_size, (uint64_t) block_size,
-			      2 * block_size, (int64_t) 0, &extents));
+			      2 * block_size, (int64_t) -1, &extents));
     EXPECT_EQ(2u, extents.size());
     for (auto& e : extents) {
       EXPECT_EQ(e.length, block_size * 2);
@@ -169,7 +170,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     EXPECT_EQ(1024 * block_size,
 	      alloc->allocate(1024 * (uint64_t)block_size,
 			      (uint64_t) block_size * 4,
-			      block_size * 4, (int64_t) 0, &extents));
+			      block_size * 4, (int64_t) -1, &extents));
     for (auto& e : extents) {
       EXPECT_EQ(e.length, block_size * 4);
     }
@@ -185,7 +186,7 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
     PExtentVector extents;
     EXPECT_EQ(16 * block_size,
 	      alloc->allocate(16 * (uint64_t)block_size, (uint64_t) block_size,
-			      2 * block_size, (int64_t) 0, &extents));
+			      2 * block_size, (int64_t) -1, &extents));
 
     EXPECT_EQ(extents.size(), 8u);
     for (auto& e : extents) {
@@ -217,14 +218,14 @@ TEST_P(AllocTest, test_alloc_failure)
     EXPECT_EQ(512 * block_size,
 	      alloc->allocate(512 * (uint64_t)block_size,
 			      (uint64_t) block_size * 256,
-			      block_size * 256, (int64_t) 0, &extents));
+			      block_size * 256, (int64_t) -1, &extents));
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
     extents.clear();
     EXPECT_EQ(-ENOSPC,
 	      alloc->allocate(512 * (uint64_t)block_size,
 			      (uint64_t) block_size * 512,
-			      block_size * 512, (int64_t) 0, &extents));
+			      block_size * 512, (int64_t) -1, &extents));
   }
 }
 
@@ -239,7 +240,7 @@ TEST_P(AllocTest, test_alloc_big)
     cout << big << std::endl;
     PExtentVector extents;
     EXPECT_EQ(big,
-	      alloc->allocate(big, mas, 0, &extents));
+	      alloc->allocate(big, mas, -1, &extents));
   }
 }
 
@@ -256,7 +257,7 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
   alloc->init_add_free(3670016, 2097152);
 
   PExtentVector extents;
-  EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
+  EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, -1, &extents));
 }
 
 TEST_P(AllocTest, test_alloc_39334)
@@ -286,7 +287,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   {
     tmp.clear();
     EXPECT_EQ(static_cast<int64_t>(want_size),
-      alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+      alloc->allocate(want_size, alloc_unit, 0, -1, &tmp));
     allocated.insert(allocated.end(), tmp.begin(), tmp.end());
 
     // bitmap fragmentation calculation doesn't provide such constant
@@ -296,7 +297,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     }
   }
   tmp.clear();
-  EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+  EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, -1, &tmp));
 
   if (!(GetParam() == string("stupid") || GetParam() == string("bitmap"))) {
     GTEST_SKIP() << "skipping for specific allocators";
@@ -440,7 +441,7 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
 	//allocate
 	want_size = ( rng() % one_alloc_max ) / alloc_unit * alloc_unit + alloc_unit;
 	tmp.clear();
-        int64_t r = alloc->allocate(want_size, alloc_unit, 0, 0, &tmp);
+        int64_t r = alloc->allocate(want_size, alloc_unit, 0, -1, &tmp);
         if (r > 0) {
           for (auto& t: tmp) {
             if (t.length > 0)
@@ -505,7 +506,7 @@ TEST_P(AllocTest, test_alloc_bug_24598)
   alloc->init_add_free(0x4b00000, 0x200000);
 
   EXPECT_EQ(static_cast<int64_t>(want_size),
-	    alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+	    alloc->allocate(want_size, 0x100000, 0, -1, &tmp));
   EXPECT_EQ(1u, tmp.size());
   EXPECT_EQ(0x4b00000u, tmp[0].offset);
   EXPECT_EQ(0x200000u, tmp[0].length);
@@ -525,11 +526,11 @@ TEST_P(AllocTest, test_alloc_big2)
   PExtentVector extents;
   uint64_t need = block_size * blocks / 4; // 2GB
   EXPECT_EQ(need,
-      alloc->allocate(need, mas, 0, &extents));
+      alloc->allocate(need, mas, -1, &extents));
   need = block_size * blocks / 4; // 2GB
   extents.clear();
   EXPECT_EQ(need,
-      alloc->allocate(need, mas, 0, &extents));
+      alloc->allocate(need, mas, -1, &extents));
   EXPECT_TRUE(extents[0].length > 0);
 }
 
@@ -547,7 +548,7 @@ TEST_P(AllocTest, test_alloc_big3)
   PExtentVector extents;
   uint64_t need = block_size * blocks / 2; // 4GB
   EXPECT_EQ(need,
-      alloc->allocate(need, mas, 0, &extents));
+      alloc->allocate(need, mas, -1, &extents));
   EXPECT_TRUE(extents[0].length > 0);
 }
 
@@ -564,7 +565,7 @@ TEST_P(AllocTest, test_alloc_contiguous)
     uint64_t need = 4 * block_size;
     EXPECT_EQ(need,
       alloc->allocate(need, need,
-        0, (int64_t)0, &extents));
+        0, (int64_t)-1, &extents));
     EXPECT_EQ(1u, extents.size());
     EXPECT_EQ(extents[0].offset, 0);
     EXPECT_EQ(extents[0].length, 4 * block_size);
@@ -572,7 +573,7 @@ TEST_P(AllocTest, test_alloc_contiguous)
     extents.clear();
     EXPECT_EQ(need,
       alloc->allocate(need, need,
-        0, (int64_t)0, &extents));
+        0, (int64_t)-1, &extents));
     EXPECT_EQ(1u, extents.size());
     EXPECT_EQ(extents[0].offset, 4 * block_size);
     EXPECT_EQ(extents[0].length, 4 * block_size);
@@ -602,7 +603,7 @@ TEST_P(AllocTest, test_alloc_47883)
 
   PExtentVector extents;
   auto need = 0x3f980000;
-  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)-1, &extents);
   EXPECT_GE(got, 0x630000);
 }
 
@@ -622,7 +623,7 @@ TEST_P(AllocTest, test_alloc_50656_best_fit)
 
   PExtentVector extents;
   auto need = 0x400000;
-  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)-1, &extents);
   EXPECT_GT(got, 0);
   EXPECT_EQ(got, 0x400000);
 }
@@ -642,7 +643,7 @@ TEST_P(AllocTest, test_alloc_50656_first_fit)
 
   PExtentVector extents;
   auto need = 0x400000;
-  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
+  auto got = alloc->allocate(need, 0x10000, 0, (int64_t)-1, &extents);
   EXPECT_GT(got, 0);
   EXPECT_EQ(got, 0x400000);
 }
@@ -668,6 +669,130 @@ TEST_P(AllocTest, test_init_rm_free_unbound)
     alloc->foreach(cb);
   }
 }
+
+TEST_P(AllocTest, test_alloc_spatial_locality)
+{
+  if (GetParam() == string("hybrid_btree2")) {
+    // new generation allocator doesn't support legacy
+    // spatial locality approach. Which is being able to start searching
+    // free extent from the previous lookup success (or externally hinted)
+    // position.
+    // This looks generally useless on a fragmented volume, it might cause
+    // excessive fragmentation and misguide PTL level on SSD drives.
+    // Hence the test case is not applicable.
+    GTEST_SKIP() << "skipping for hybrid_btree2 allocator";
+  }
+
+  int64_t block_size = 0x1000;
+  int64_t capacity = 128 * (1ull << 30); // 128GB
+
+  // do allocations with no hint provided hence enabling internal spatial locality
+  {
+    init_alloc(capacity, block_size);
+
+    alloc->init_add_free(0, capacity);
+
+    PExtentVector extents1;
+    PExtentVector extents2;
+    PExtentVector extents3;
+
+    uint64_t need = 0x1000;
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)-1, &extents1));
+    EXPECT_EQ(1u, extents1.size());
+    EXPECT_EQ(extents1[0].offset, 0);
+    EXPECT_EQ(extents1[0].length, need);
+
+    // mark a large extent allocated
+    // to work around bitmap cursor tracking which uses
+    // l2 granularity (equal to 32GB for 4K unit).
+    uint64_t skip;
+    if (GetParam() == string("bitmap")) {
+      skip = 32 * (1ull << 30) - need;
+      alloc->init_rm_free(need, skip);
+    } else {
+      skip = 0;
+    }
+
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)-1, &extents2));
+    EXPECT_EQ(1u, extents2.size());
+    EXPECT_EQ(extents2[0].offset, need + skip);
+    EXPECT_EQ(extents2[0].length, need);
+
+    {
+      // now release the very first 4K extent
+      interval_set<uint64_t> release_set;
+      release_set.insert(extents1[0].offset, block_size);
+      alloc->release(release_set);
+    }
+    // and now allocate once again, this will get the following LBA,
+    // not zero one
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)-1, &extents3));
+    EXPECT_EQ(1u, extents3.size());
+    EXPECT_EQ(extents3[0].offset, need + need + skip);
+    EXPECT_EQ(extents3[0].length, need);
+    alloc->shutdown();
+  }
+
+  // do allocations with zero hint provided hence disabling internal spatial locality
+  {
+    init_alloc(capacity, block_size);
+
+    alloc->init_add_free(0, capacity);
+
+    PExtentVector extents1;
+    PExtentVector extents2;
+    PExtentVector extents3;
+
+    uint64_t need = 0x1000;
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)0, &extents1));
+    EXPECT_EQ(1u, extents1.size());
+    EXPECT_EQ(extents1[0].offset, 0);
+    EXPECT_EQ(extents1[0].length, need);
+
+    // mark a large extent allocated
+    // to work around bitmap cursor tracking which uses
+    // l2 granularity (equal to 32GB for 4K unit).
+    uint64_t skip;
+    if (GetParam() == string("bitmap")) {
+      skip = 32 * (1ull << 30) - need;
+      alloc->init_rm_free(need, skip);
+    } else {
+      skip = 0;
+    }
+
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)0, &extents2));
+    EXPECT_EQ(1u, extents2.size());
+    EXPECT_EQ(extents2[0].offset, need + skip);
+    EXPECT_EQ(extents2[0].length, need);
+
+    {
+      // now release the very first 4K extent
+      interval_set<uint64_t> release_set;
+      release_set.insert(extents1[0].offset, block_size);
+      alloc->release(release_set);
+    }
+    // and allocate once again, this will get the extent at LBA = 0
+    // which just has been released
+    EXPECT_EQ(need,
+      alloc->allocate(need, need,
+        0, (int64_t)0, &extents3));
+    EXPECT_EQ(1u, extents3.size());
+    EXPECT_EQ(extents3[0].offset, 0);
+    EXPECT_EQ(extents3[0].length, need);
+    alloc->shutdown();
+  }
+}
+
 
 INSTANTIATE_TEST_SUITE_P(
   Allocator,

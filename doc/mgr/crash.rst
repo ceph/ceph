@@ -1,28 +1,31 @@
 Crash Module
 ============
+
 The crash module collects information about daemon crashdumps and stores
 it in the Ceph cluster for later analysis.
 
-Enabling
---------
+Authentication Setup
+--------------------
 
-The *crash* module is enabled with::
+The *crash* module is one of the modules which are always on and cannot be
+disabled. To enable crash report archiving, you must first generate a keyring
+with appropriate privileges.
 
-  ceph mgr module enable crash
+Generate the *crash* upload key by running the following command:
 
-The *crash* upload key is generated with::
+.. prompt:: bash #
 
-  ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
+   ceph auth get-or-create client.crash mon 'profile crash' mgr 'profile crash'
 
-On each node, you should store this key in
-``/etc/ceph/ceph.client.crash.keyring``.
+Store this key in ``/etc/ceph/ceph.client.crash.keyring`` on each node in your
+cluster.
 
 
 Automated collection
 --------------------
 
 Daemon crashdumps are dumped in ``/var/lib/ceph/crash`` by default; this can
-be configured with the option 'crash dir'.  Crash directories are named by
+be configured with the option ``crash dir``.  Crash directories are named by
 time and date and a randomly-generated UUID, and contain a metadata file
 'meta' and a recent log file, with a "crash_id" that is the same.
 
@@ -39,57 +42,61 @@ and a keyring needs to be in ``/etc/ceph``.
 
 Commands
 --------
-::
 
-  ceph crash post -i <metafile>
+.. prompt:: bash #
+
+   ceph crash post -i <metafile>
 
 Save a crash dump.  The metadata file is a JSON blob stored in the crash
 dir as ``meta``.  As usual, the ceph command can be invoked with ``-i -``,
 and will read from stdin.
 
-::
+.. prompt:: bash #
 
-  ceph crash rm <crashid>
+   ceph crash rm <crashid>
 
 Remove a specific crash dump.
 
-::
+.. prompt:: bash #
 
-  ceph crash ls
+   ceph crash ls
 
 List the timestamp/uuid crashids for all new and archived crash info.
 
-::
 
-  ceph crash ls-new
+.. prompt:: bash #
+
+   ceph crash ls-new
 
 List the timestamp/uuid crashids for all newcrash info.
 
-::
 
-  ceph crash stat
+.. prompt:: bash #
+
+   ceph crash stat
 
 Show a summary of saved crash info grouped by age.
 
-::
+.. prompt:: bash #
 
-  ceph crash info <crashid>
+   ceph crash info <crashid>
 
 Show all details of a saved crash.
 
-::
+
+.. prompt:: bash #
 
    ceph crash prune <keep>
 
 Remove saved crashes older than 'keep' days.  <keep> must be an integer.
 
-::
+.. prompt:: bash #
 
    ceph crash archive <crashid>
 
 Archive a crash report so that it is no longer considered for the ``RECENT_CRASH`` health check and does not appear in the ``crash ls-new`` output (it will still appear in the ``crash ls`` output).
 
-::
+.. prompt:: bash #
 
    ceph crash archive-all
 

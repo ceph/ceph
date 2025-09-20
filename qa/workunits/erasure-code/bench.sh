@@ -17,7 +17,8 @@
 #
 # Test that it works from sources with:
 #
-#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  TOTAL_SIZE=$((4 * 1024 * 1024)) SIZE=4096 \
+#  CEPH_ERASURE_CODE_BENCHMARK=build/bin/ceph_erasure_code_benchmark  \
 #  PLUGIN_DIRECTORY=build/lib \
 #      qa/workunits/erasure-code/bench.sh fplot jerasure |
 #      tee qa/workunits/erasure-code/bench.js
@@ -34,10 +35,14 @@
 #  firefox qa/workunits/erasure-code/bench.html
 #
 # Once it is confirmed to work, it can be run with a more significant
-# volume of data so that the measures are more reliable:
+# volume of data so that the measures are more reliable. Ideally the size
+# of the buffers (SIZE) should be larger than the L3 cache to avoid cache hits.
+# The following example uses an 80MB (80 * 1024 * 1024) buffer.
+# A larger buffer with fewer iterations (iterations = TOTAL SIZE / SIZE) should result in
+# more time spent encoding/decoding and less time allocating/aligning buffers:
 #
-#  TOTAL_SIZE=$((4 * 1024 * 1024 * 1024)) \
-#  CEPH_ERASURE_CODE_BENCHMARK=src/ceph_erasure_code_benchmark  \
+#  TOTAL_SIZE=$((100 * 80 * 1024 * 1024)) SIZE=$((80 * 1024 * 1024)) \
+#  CEPH_ERASURE_CODE_BENCHMARK=build/bin/ceph_erasure_code_benchmark  \
 #  PLUGIN_DIRECTORY=build/lib \
 #      qa/workunits/erasure-code/bench.sh fplot jerasure |
 #      tee qa/workunits/erasure-code/bench.js
@@ -51,8 +56,8 @@ export PATH=/sbin:$PATH
 : ${PLUGIN_DIRECTORY:=/usr/lib/ceph/erasure-code}
 : ${PLUGINS:=isa jerasure}
 : ${TECHNIQUES:=vandermonde cauchy liberation reed_sol_r6_op blaum_roth liber8tion}
-: ${TOTAL_SIZE:=$((1024 * 1024))}
-: ${SIZE:=4096}
+: ${TOTAL_SIZE:=$((100 * 80 * 1024 * 1024))} #TOTAL_SIZE / SIZE = number of encode or decode iterations to run
+: ${SIZE:=$((80 * 1024 * 1024))} #size of buffer to encode/decode
 : ${PARAMETERS:=--parameter jerasure-per-chunk-alignment=true}
 
 declare -rA isa_techniques=(

@@ -7,6 +7,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/mon/MonClient.h"
 #include "mon/MonMap.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Graylog.h"
 
 using std::map;

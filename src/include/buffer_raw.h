@@ -30,8 +30,9 @@ inline namespace v15_2_0 {
   public:
     // In the future we might want to have a slab allocator here with few
     // embedded slots. This would allow to avoid the "if" in dtor of ptr_node.
-    std::aligned_storage<sizeof(ptr_node),
-			 alignof(ptr_node)>::type bptr_storage;
+    struct alignas(ptr_node) {
+      unsigned char data[sizeof(ptr_node)];
+    } bptr_storage;
   protected:
     char *data;
     unsigned len;

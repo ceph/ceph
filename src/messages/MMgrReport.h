@@ -84,16 +84,18 @@ public:
     f->dump_int("priority", priority);
     f->dump_int("unit", unit);
   }
-  static void generate_test_instances(std::list<PerfCounterType*>& ls)
+  static std::list<PerfCounterType> generate_test_instances()
   {
-    ls.push_back(new PerfCounterType);
-    ls.push_back(new PerfCounterType);
-    ls.back()->path = "mycounter";
-    ls.back()->description = "mycounter description";
-    ls.back()->nick = "mycounter nick";
-    ls.back()->type = PERFCOUNTER_COUNTER;
-    ls.back()->priority = PerfCountersBuilder::PRIO_CRITICAL;
-    ls.back()->unit = UNIT_BYTES;
+    std::list<PerfCounterType> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().path = "mycounter";
+    ls.back().description = "mycounter description";
+    ls.back().nick = "mycounter nick";
+    ls.back().type = PERFCOUNTER_COUNTER;
+    ls.back().priority = PerfCountersBuilder::PRIO_CRITICAL;
+    ls.back().unit = UNIT_BYTES;
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(PerfCounterType)

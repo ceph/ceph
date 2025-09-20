@@ -12,11 +12,13 @@
  *
  */
 
+#include "MDBalancer.h"
+#include "RetryMessage.h"
+
 #include "include/compat.h"
 #include "mdstypes.h"
 
-#include "mon/MonClient.h"
-#include "MDBalancer.h"
+#include "osdc/Objecter.h"
 #include "MDSRank.h"
 #include "MDSMap.h"
 #include "CInode.h"
@@ -27,6 +29,7 @@
 
 #include "include/Context.h"
 #include "msg/Messenger.h"
+#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <vector>
@@ -35,6 +38,7 @@
 using namespace std;
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "common/errno.h"
 
 /* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
@@ -440,8 +444,8 @@ int MDBalancer::localize_balancer()
   /* success: store the balancer in memory and set the version. */
   if (!r) {
     if (ret_t == std::cv_status::timeout) {
-      mds->objecter->op_cancel(tid, -CEPHFS_ECANCELED);
-      return -CEPHFS_ETIMEDOUT;
+      mds->objecter->op_cancel(tid, -ECANCELED);
+      return -ETIMEDOUT;
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
@@ -830,8 +834,9 @@ void MDBalancer::prep_rebalance(int beat)
       dout(7) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
       return;
     }
+    auto overload_epochs = g_conf().get_val<int64_t>("mds_bal_overload_epochs");
     // am i over long enough?
-    if (last_epoch_under && beat_epoch - last_epoch_under < g_conf()->mds_bal_overload_epochs) {
+    if (last_epoch_under && beat_epoch - last_epoch_under < overload_epochs) {
       dout(7) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
       return;
     }
@@ -854,7 +859,7 @@ void MDBalancer::prep_rebalance(int beat)
 	importer_set.insert(it->second);
       } else {
 	int mds_last_epoch_under = mds_last_epoch_under_map[it->second];
-	if (!(mds_last_epoch_under && beat_epoch - mds_last_epoch_under < 2)) {
+	if (!(mds_last_epoch_under && beat_epoch - mds_last_epoch_under < overload_epochs)) {
 	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
 	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
 	  exporter_set.insert(it->second);
@@ -965,7 +970,7 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* mantle doesn't know about cluster size, so check target len here */
   if ((int) state.targets.size() != cluster_size)
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   else if (ret)
     return ret;
 

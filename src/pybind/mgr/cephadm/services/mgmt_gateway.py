@@ -1,16 +1,20 @@
 import logging
-from typing import List, Any, Tuple, Dict, cast, TYPE_CHECKING
+from typing import List, Any, Tuple, Dict, cast, Optional, TYPE_CHECKING
 
 from orchestrator import DaemonDescription
-from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec
+from ceph.deployment.service_spec import MgmtGatewaySpec, GrafanaSpec, ServiceSpec
 from cephadm.services.cephadmservice import CephadmService, CephadmDaemonDeploySpec, get_dashboard_endpoints
+from .service_registry import register_cephadm_service
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
+INTERNAL_CERT_LABEL = 'internal'
 
+
+@register_cephadm_service
 class MgmtGatewayService(CephadmService):
     TYPE = 'mgmt-gateway'
     SVC_TEMPLATE_PATH = 'services/mgmt-gateway/nginx.conf.j2'
@@ -20,6 +24,8 @@ class MgmtGatewayService(CephadmService):
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        super().register_for_certificates(daemon_spec)
+        self.mgr.cert_mgr.register_self_signed_cert_key_pair(MgmtGatewayService.TYPE, INTERNAL_CERT_LABEL)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -38,42 +44,16 @@ class MgmtGatewayService(CephadmService):
         # if empty list provided, return empty Daemon Desc
         return DaemonDescription()
 
-    def get_mgmt_gw_ips(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> List[str]:
-        mgmt_gw_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
+    def get_mgmt_gw_ip(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> str:
         if svc_spec.virtual_ip is not None:
-            mgmt_gw_ips.append(svc_spec.virtual_ip)
-        return mgmt_gw_ips
+            return svc_spec.virtual_ip
+        else:
+            return self.mgr.inventory.get_addr(daemon_spec.host)
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
         # we adjust the standby behaviour so rev-proxy can pick correctly the active instance
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '503')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'error')
-
-    def get_external_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert = self.mgr.cert_key_store.get_cert('mgmt_gw_cert')
-        key = self.mgr.cert_key_store.get_key('mgmt_gw_key')
-        if not (cert and key):
-            # not available on store, check if provided on the spec
-            if svc_spec.ssl_certificate and svc_spec.ssl_certificate_key:
-                cert = svc_spec.ssl_certificate
-                key = svc_spec.ssl_certificate_key
-            else:
-                # not provided on the spec, let's generate self-sigend certificates
-                ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
-                host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-                cert, key = self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
-            # save certificates
-            if cert and key:
-                self.mgr.cert_key_store.save_cert('mgmt_gw_cert', cert)
-                self.mgr.cert_key_store.save_key('mgmt_gw_key', key)
-            else:
-                logger.error("Failed to obtain certificate and key from mgmt-gateway.")
-        return cert, key
-
-    def get_internal_certificates(self, svc_spec: MgmtGatewaySpec, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        ips = self.get_mgmt_gw_ips(svc_spec, daemon_spec)
-        host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        return self.mgr.cert_mgr.generate_cert(host_fqdn, ips)
 
     def get_service_discovery_endpoints(self) -> List[str]:
         sd_endpoints = []
@@ -83,8 +63,10 @@ class MgmtGatewayService(CephadmService):
             sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
         return sd_endpoints
 
-    @staticmethod
-    def get_dependencies(mgr: "CephadmOrchestrator") -> List[str]:
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
         deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
@@ -113,7 +95,7 @@ class MgmtGatewayService(CephadmService):
             grafana_spec = cast(GrafanaSpec, self.mgr.spec_store['grafana'].spec)
             grafana_protocol = grafana_spec.protocol
         except Exception:
-            grafana_protocol = 'https'  # defualt to https just for UT
+            grafana_protocol = 'https'  # default to https just for UT
 
         main_context = {
             'dashboard_endpoints': dashboard_endpoints,
@@ -138,8 +120,7 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
-        cert, key = self.get_external_certificates(svc_spec, daemon_spec)
-        internal_cert, internal_pkey = self.get_internal_certificates(svc_spec, daemon_spec)
+        internal_cert, internal_pkey = self.get_self_signed_certificates_with_label(svc_spec, daemon_spec, INTERNAL_CERT_LABEL)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
@@ -150,20 +131,22 @@ class MgmtGatewayService(CephadmService):
                 "ca.crt": self.mgr.cert_mgr.get_root_ca()
             }
         }
-        if not svc_spec.disable_https:
-            daemon_config["files"]["nginx.crt"] = cert
-            daemon_config["files"]["nginx.key"] = key
+
+        if svc_spec.ssl:
+            ip = self.get_mgmt_gw_ip(svc_spec, daemon_spec)
+            tls_pair = self.get_certificates(daemon_spec, [ip])
+            daemon_config["files"]["nginx.crt"] = tls_pair.cert
+            daemon_config["files"]["nginx.key"] = tls_pair.key
 
         return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr))
 
-    def pre_remove(self, daemon: DaemonDescription) -> None:
+    def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
         Called before mgmt-gateway daemon is removed.
         """
         # reset the standby dashboard redirection behaviour
+        assert daemon.hostname  # for mypy
+        super().post_remove(daemon, is_failed_deploy=is_failed_deploy)
+        self.mgr.cert_mgr.rm_self_signed_cert_key_pair(MgmtGatewayService.TYPE, daemon.hostname, label=INTERNAL_CERT_LABEL)
         self.mgr.set_module_option_ex('dashboard', 'standby_error_status_code', '500')
         self.mgr.set_module_option_ex('dashboard', 'standby_behaviour', 'redirect')
-        if daemon.hostname is not None:
-            # delete cert/key entires for this mgmt-gateway daemon
-            self.mgr.cert_key_store.rm_cert('mgmt_gw_cert')
-            self.mgr.cert_key_store.rm_key('mgmt_gw_key')

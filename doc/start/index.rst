@@ -23,9 +23,9 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
 
 .. ditaa::
 
-            +---------------+ +------------+ +------------+ +---------------+
-            |      OSDs     | | Monitors   | |  Managers  | |      MDSs     |
-            +---------------+ +------------+ +------------+ +---------------+
+            +------+ +----------+ +----------+ +-------+ +------+
+            | OSDs | | Monitors | | Managers | | MDSes | | RGWs |
+            +------+ +----------+ +----------+ +-------+ +------+
 
 - **Monitors**: A :term:`Ceph Monitor` (``ceph-mon``) maintains maps of the
   cluster state, including the :ref:`monitor map<display-mon-map>`, manager
@@ -51,10 +51,14 @@ The Ceph Metadata Server is necessary to run Ceph File System clients.
   heartbeat. At least three Ceph OSDs are normally required for 
   redundancy and high availability.
 
-- **MDSs**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores metadata
+- **MDSes**: A :term:`Ceph Metadata Server` (MDS, ``ceph-mds``) stores metadata
   for the :term:`Ceph File System`. Ceph Metadata Servers allow CephFS users to
   run basic commands (like ``ls``, ``find``, etc.) without placing a burden on
   the Ceph Storage Cluster.
+
+- **RGWs**: A :term:`Ceph Object Gateway` (RGW, ``ceph-radosgw``) daemon provides
+  a RESTful gateway between applications and Ceph storage clusters. The
+  S3-compatible API is most commonly used, though Swift is also available.
 
 Ceph stores data as objects within logical storage pools. Using the
 :term:`CRUSH` algorithm, Ceph calculates which placement group (PG) should

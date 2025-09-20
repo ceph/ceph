@@ -51,17 +51,23 @@ You can stop, start, or restart a daemon with:
 
 .. prompt:: bash #
 
-   ceph orch daemon stop <name>
-   ceph orch daemon start <name>
-   ceph orch daemon restart <name>
+   ceph orch daemon stop <daemonid>
+   ceph orch daemon start <daemonid>
+   ceph orch daemon restart <daemonid>
 
 You can also do the same for all daemons for a service with:   
 
 .. prompt:: bash #
 
-   ceph orch stop <name>
-   ceph orch start <name>
-   ceph orch restart <name>
+   ceph orch stop <serviceid>
+   ceph orch start <serviceid>
+   ceph orch restart <serviceid>
+
+.. note::
+    It is usually not safe to run ``ceph orch restart osd.myosdservice`` on a
+    running cluster, as attention is not paid to CRUSH failure domains, and
+    parallel OSD restarts may lead to temporary data unavailability or in rare
+    cases even data loss.
 
 
 Redeploying or reconfiguring a daemon
@@ -375,7 +381,7 @@ One or more hosts have failed the basic cephadm host check, which verifies
 that (1) the host is reachable and cephadm can be executed there, and (2)
 that the host satisfies basic prerequisites, like a working container
 runtime (podman or docker) and working time synchronization.
-If this test fails, cephadm will no be able to manage services on that host.
+If this test fails, cephadm will not be able to manage services on that host.
 
 You can manually run this check by running the following command:
 

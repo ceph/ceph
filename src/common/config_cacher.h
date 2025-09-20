@@ -18,20 +18,28 @@
 #include "common/config_obs.h"
 #include "common/config.h"
 
+/**
+ * A simple class to cache a single configuration value.
+ *
+ * The md_config_cacher_t object registers itself to receive
+ * notifications of changes to the specified single configuration
+ * option.  When the option changes, the new value is stored
+ * in an atomic variable.  The value can be accessed using
+ * the dereference operator.
+ */
 template <typename ValueT>
 class md_config_cacher_t : public md_config_obs_t {
   ConfigProxy& conf;
-  const char* const option_name;
+  const std::string option_name;
   std::atomic<ValueT> value_cache;
 
-  const char** get_tracked_conf_keys() const override {
-    const static char* keys[] = { option_name, nullptr };
-    return keys;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return std::vector<std::string>{option_name};
   }
 
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string>& changed) override {
-    if (changed.count(option_name)) {
+    if (changed.contains(option_name)) {
       value_cache.store(conf.get_val<ValueT>(option_name));
     }
   }
@@ -39,8 +47,8 @@ class md_config_cacher_t : public md_config_obs_t {
 public:
   md_config_cacher_t(ConfigProxy& conf,
                      const char* const option_name)
-    : conf(conf),
-      option_name(option_name) {
+    : conf(conf)
+    , option_name{option_name} {
     conf.add_observer(this);
     std::atomic_init(&value_cache,
                      conf.get_val<ValueT>(option_name));
@@ -50,7 +58,7 @@ public:
     conf.remove_observer(this);
   }
 
-  operator ValueT() const {
+  ValueT operator*() const {
     return value_cache.load();
   }
 };

@@ -38,6 +38,20 @@
         </cd-nvmeof-initiators-list>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="performance-details"
+                  *ngIf="permissions.grafana.read">
+      <a ngbNavLink
+         i18n>Performance Details</a>
+      <ng-template ngbNavContent>
+        <cd-grafana i18n-title
+                    title="Subsystem details"
+                    grafanaPath="ceph-nvme-of-gateways-performance?var-group={{group}}&var-subsystem={{subsystemNQN}}"
+                    [type]="'metrics'"
+                    uid="feeuv1dno43r4deed"
+                    grafanaStyle="three">
+        </cd-grafana>
+      </ng-template>
+    </ng-container>
   </nav>
 
   <div [ngbNavOutlet]="nav"></div>

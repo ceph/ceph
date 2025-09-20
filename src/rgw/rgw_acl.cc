@@ -254,12 +254,14 @@ bool ACLOwner::empty() const
       ), id);
 }
 
-void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
+list<ACLPermission> ACLPermission::generate_test_instances()
 {
-  ACLPermission *p = new ACLPermission;
-  p->set_permissions(RGW_PERM_WRITE_ACP);
-  o.push_back(p);
-  o.push_back(new ACLPermission);
+  list<ACLPermission> o;
+  ACLPermission p;
+  p.set_permissions(RGW_PERM_WRITE_ACP);
+  o.push_back(std::move(p));
+  o.emplace_back();
+  return o;
 }
 
 void ACLPermission::dump(Formatter *f) const
@@ -301,69 +303,70 @@ void ACLGrant::dump(Formatter *f) const
   encode_json("permission", permission, f);
 }
 
-void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
+list<ACLGrant> ACLGrant::generate_test_instances()
 {
-  ACLGrant *g1 = new ACLGrant;
-  g1->set_canon(rgw_user{"rgw"}, "Mr. RGW", RGW_PERM_READ);
-  o.push_back(g1);
+  list<ACLGrant> o;
+  ACLGrant g1;
+  g1.set_canon(rgw_user{"rgw"}, "Mr. RGW", RGW_PERM_READ);
+  o.push_back(std::move(g1));
 
-  ACLGrant *g2 = new ACLGrant;
-  g1->set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_WRITE);
-  o.push_back(g2);
+  ACLGrant g2;
+  g1.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_WRITE);
+  o.push_back(std::move(g2));
 
-  o.push_back(new ACLGrant);
+  o.emplace_back();
+  return o;
 }
 
-void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
+list<ACLGranteeType> ACLGranteeType::generate_test_instances()
 {
-  o.push_back(new ACLGranteeType(ACL_TYPE_CANON_USER));
-  o.push_back(new ACLGranteeType);
+  list<ACLGranteeType> o;
+  o.push_back(ACLGranteeType(ACL_TYPE_CANON_USER));
+  o.emplace_back();
+  return o;
 }
 
-void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
+list<RGWAccessControlList> RGWAccessControlList::generate_test_instances()
 {
-  RGWAccessControlList *acl = new RGWAccessControlList;
-
-  list<ACLGrant *> grants;
-  ACLGrant::generate_test_instances(grants);
-  for (ACLGrant* grant : grants) {
-    acl->add_grant(*grant);
-    delete grant;
+  list<RGWAccessControlList> o;
+  RGWAccessControlList acl;
+  list<ACLGrant> grants = ACLGrant::generate_test_instances();
+  for (ACLGrant& grant : grants) {
+    acl.add_grant(grant);
   }
-  o.push_back(acl);
-  o.push_back(new RGWAccessControlList);
+  o.push_back(std::move(acl));
+  o.emplace_back();
+  return o;
 }
 
-void ACLOwner::generate_test_instances(list<ACLOwner*>& o)
+list<ACLOwner> ACLOwner::generate_test_instances()
 {
-  ACLOwner *owner = new ACLOwner;
-  owner->id = "rgw";
-  owner->display_name = "Mr. RGW";
-  o.push_back(owner);
-  o.push_back(new ACLOwner);
+  list<ACLOwner> o;
+  ACLOwner owner;
+  owner.id = "rgw";
+  owner.display_name = "Mr. RGW";
+  o.push_back(std::move(owner));
+  o.emplace_back();
+  return o;
 }
 
-void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy*>& o)
+list<RGWAccessControlPolicy> RGWAccessControlPolicy::generate_test_instances()
 {
-  list<RGWAccessControlList *> acl_list;
-  list<RGWAccessControlList *>::iterator iter;
-  for (iter = acl_list.begin(); iter != acl_list.end(); ++iter) {
-    RGWAccessControlList::generate_test_instances(acl_list);
-    iter = acl_list.begin();
+  list<RGWAccessControlPolicy> o;
+  list<RGWAccessControlList> acl_list = RGWAccessControlList::generate_test_instances();
+  for (auto& acl : acl_list) {
+    RGWAccessControlPolicy p;
+    p.acl = acl;
 
-    RGWAccessControlPolicy *p = new RGWAccessControlPolicy;
-    RGWAccessControlList *l = *iter;
-    p->acl = *l;
+    p.owner.id = rgw_user{"rgw"};
+    p.owner.display_name = "radosgw";
 
-    p->owner.id = rgw_user{"rgw"};
-    p->owner.display_name = "radosgw";
-
-    o.push_back(p);
-
-    delete l;
+    o.push_back(std::move(p));
   }
 
-  o.push_back(new RGWAccessControlPolicy);
+  o.emplace_back();
+
+  return o;
 }
 
 void RGWAccessControlList::dump(Formatter *f) const

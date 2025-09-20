@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <boost/iterator/filter_iterator.hpp>
 
 #include <fmt/ranges.h>
 
@@ -106,24 +107,6 @@ void so_mut_ss(ScrubMap::object &obj, F &&f) {
   so_set_ss(obj, std::invoke(std::forward<F>(f), so_get_ss(obj)));
 }
 
-void so_set_hinfo(
-  ScrubMap::object &obj, const std::optional<ECUtil::HashInfo> &hinfo)
-{
-  return so_set_attr_type<ECUtil::HashInfo>(obj, ECUtil::get_hinfo_key(), hinfo);
-}
-
-std::optional<ECUtil::HashInfo> so_get_hinfo(ScrubMap::object &obj)
-{
-  return so_get_attr_type<ECUtil::HashInfo>(obj, ECUtil::get_hinfo_key());
-}
-
-template <typename F>
-void so_mut_hinfo(ScrubMap::object &obj, F &&f) {
-  auto maybe_hinfo = so_get_hinfo(obj);
-  auto new_maybe_hinfo = std::invoke(std::forward<F>(f), std::move(maybe_hinfo));
-  so_set_hinfo(obj, new_maybe_hinfo);
-}
-
 /**
  * so_builder_t
  *
@@ -174,43 +157,14 @@ struct so_builder_t {
     return ret;
   }
 
-  static so_builder_t make_ec_head(std::string name) {
-    auto ret = make_head(name);
-    so_set_hinfo(ret.so, ECUtil::HashInfo{});
-    return ret;
-  }
-
-  static so_builder_t make_ec_clone(
-    std::string name,
-    snapid_t cloneid = 4
-  ) {
-    auto ret = make_clone(name, cloneid);
-    so_set_hinfo(ret.so, ECUtil::HashInfo{});
-    return ret;
-  }
-
-  so_builder_t &set_size(
-    size_t size,
-    const std::optional<ECUtil::stripe_info_t> stripe_info = std::nullopt) {
-    if (stripe_info) {
-      so.size = stripe_info->logical_to_next_chunk_offset(size);
-    } else {
-      so.size = size;
-    }
+  so_builder_t &set_size(size_t size) {
+    so.size = size;
 
     so_mut_oi(so, [size](auto maybe_oi) {
       if (maybe_oi) {
 	maybe_oi->size = size;
       }
       return maybe_oi;
-    });
-    so_mut_hinfo(so, [size, &stripe_info](auto maybe_hinfo) {
-      if (maybe_hinfo) {
-	ceph_assert(stripe_info);
-	maybe_hinfo->set_total_chunk_size_clear_hash(
-	  stripe_info->logical_to_next_chunk_offset(size));
-      }
-      return maybe_hinfo;
     });
     return *this;
   }
@@ -232,17 +186,14 @@ struct so_builder_t {
  * a stripe_info.
  */
 struct test_obj_t : so_builder_t {
-  std::optional<ECUtil::stripe_info_t> stripe_info;
   std::string desc;
   hobject_t hoid;
 
   test_obj_t(
     so_builder_t _builder,
-    std::optional<ECUtil::stripe_info_t> _stripe_info,
     std::string _desc,
     hobject_t _hoid) :
     so_builder_t(std::move(_builder)),
-    stripe_info(std::move(_stripe_info)),
     desc(std::move(_desc)),
     hoid(std::move(_hoid)) {
     ceph_assert(!desc.empty());
@@ -250,12 +201,10 @@ struct test_obj_t : so_builder_t {
 
   static test_obj_t make(
     const std::string &desc,
-    std::optional<ECUtil::stripe_info_t> stripe_info,
     so_builder_t builder) {
     hobject_t hoid = so_get_oi(builder.so)->soid;
     return test_obj_t{
       std::move(builder),
-      stripe_info,
       desc,
       std::move(hoid)};
   }
@@ -264,7 +213,6 @@ struct test_obj_t : so_builder_t {
   static test_obj_t make_head(const std::string &desc, Args&&... args) {
     return make(
       desc,
-      std::nullopt,
       so_builder_t::make_head(std::forward<Args>(args)...));
   }
 
@@ -272,29 +220,11 @@ struct test_obj_t : so_builder_t {
   static test_obj_t make_clone(const std::string &desc, Args&&... args) {
     return make(
       desc,
-      std::nullopt,
       so_builder_t::make_clone(std::forward<Args>(args)...));
   }
 
-  template <typename... Args>
-  static test_obj_t make_ec_head(const std::string &desc, Args&&... args) {
-    return make(
-      desc,
-      ECUtil::stripe_info_t{4, 1<<20},
-      so_builder_t::make_ec_head(std::forward<Args>(args)...));
-  }
-
-  template <typename... Args>
-  static test_obj_t make_ec_clone(const std::string &desc, Args&&... args) {
-    return make(
-      desc,
-      ECUtil::stripe_info_t{4, 1<<20},
-      so_builder_t::make_ec_clone(std::forward<Args>(args)...));
-  }
-
-  test_obj_t &set_size(
-    size_t size) {
-    so_builder_t::set_size(size, stripe_info);
+  test_obj_t &set_size(size_t size) {
+    so_builder_t::set_size(size);
     return *this;
   }
 
@@ -555,44 +485,6 @@ struct CorruptSS : SingleErrorTestCaseT<CorruptSS> {
   }
 };
 
-struct MissingHinfo : SingleErrorTestCaseT<MissingHinfo> {
-  constexpr static librados::err_t shard_error_sig{
-    librados::err_t::HINFO_MISSING
-  };
-  constexpr static librados::obj_err_t object_error_sig{
-    librados::obj_err_t::HINFO_INCONSISTENCY
-  };
-  constexpr static bool REQUIRES_EC = true;
-
-  std::string_view get_description() const {
-    return "MissingHinfo";
-  };
-  test_obj_t inject_error(test_obj_t obj) const {
-    ceph_assert(obj.stripe_info);
-    so_mut_hinfo(obj.so, [](auto) { return std::nullopt; });
-    return obj;
-  }
-};
-
-struct CorruptHinfo : SingleErrorTestCaseT<CorruptHinfo> {
-  constexpr static librados::err_t shard_error_sig{
-    librados::err_t::HINFO_CORRUPTED
-  };
-  constexpr static librados::obj_err_t object_error_sig{
-    librados::obj_err_t::HINFO_INCONSISTENCY
-  };
-  constexpr static bool REQUIRES_EC = true;
-
-  std::string_view get_description() const {
-    return "CorruptHinfo";
-  };
-  test_obj_t inject_error(test_obj_t obj) const {
-    ceph_assert(obj.stripe_info);
-    so_set_attr_len(obj.so, ECUtil::get_hinfo_key(), 10);
-    return obj;
-  }
-};
-
 struct DataDigestMismatch : SingleErrorTestCaseT<DataDigestMismatch> {
   constexpr static librados::err_t shard_error_sig{
     librados::err_t::DATA_DIGEST_MISMATCH_INFO
@@ -706,8 +598,6 @@ std::unique_ptr<SingleErrorTestCase> test_cases[] = {
   std::make_unique<CorruptOndiskSize>(),
   std::make_unique<MissingSS>(),
   std::make_unique<CorruptSS>(),
-  std::make_unique<MissingHinfo>(),
-  std::make_unique<CorruptHinfo>(),
   std::make_unique<DataDigestMismatch>(),
   std::make_unique<OmapDigestMismatch>(),
   std::make_unique<ExtraAttribute>(),
@@ -803,7 +693,6 @@ TEST_P(TestSingleError, SingleError) {
   const pg_shard_t replica(1, shard_id_t::NO_SHARD);
   crimson::osd::scrub::chunk_validation_policy_t policy {
     primary,
-    obj.stripe_info,
     TEST_MAX_OBJECT_SIZE,
     std::string{TEST_INTERNAL_NAMESPACE},
     TEST_OMAP_KEY_LIMIT,
@@ -853,7 +742,7 @@ TEST_P(TestSingleError, SingleError) {
   bool found_selected_oi = false;
   for (const auto &shard : shards) {
     auto siter = obj_error.shards.find(
-      librados::osd_shard_t{shard.osd, shard.shard}
+      librados::osd_shard_t{shard.osd, static_cast<int8_t>(shard.shard)}
     );
     if (siter == obj_error.shards.end()) {
       EXPECT_NE(siter, obj_error.shards.end());
@@ -882,9 +771,7 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
       test_obj_t::make_head("Small", "foo").set_size(64),
       test_obj_t::make_clone("EmptyWithAttr", "foo2").add_attr("extra_attr", 64),
-      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20),
-      test_obj_t::make_ec_head("ECHead", "foo").set_size(4<<20),
-      test_obj_t::make_ec_clone("LargeECClone", "foo").set_size(16<<20)
+      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20)
     ),
     ::testing::Bool(),
     ::testing::ValuesIn(
@@ -906,33 +793,12 @@ INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(
       test_obj_t::make_head("Small", "foo").set_size(64),
       test_obj_t::make_clone("EmptyWithAttr", "foo2").add_attr("extra_attr", 64),
-      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20),
-      test_obj_t::make_ec_head("ECHead", "foo").set_size(4<<20),
-      test_obj_t::make_ec_clone("LargeECClone", "foo").set_size(16<<20)
+      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20)
     ),
     ::testing::Values(false), // replica only
     ::testing::ValuesIn(
       test_cases_begin<SingleErrorTestCase::restriction_t::REPLICA_ONLY>(),
       test_cases_end<SingleErrorTestCase::restriction_t::REPLICA_ONLY>())
-  ),
-  [](const auto &info) {
-    return fmt::format("{}", info.param);
-  }
-);
-
-/* Some tests only make sense on ec objects. */
-INSTANTIATE_TEST_SUITE_P(
-  SingleErrorOnly,
-  TestSingleError,
-  ::testing::Combine(
-    ::testing::Values(
-      test_obj_t::make_ec_head("ECHead", "foo").set_size(4<<20),
-      test_obj_t::make_ec_clone("LargeECClone", "foo").set_size(16<<20)
-    ),
-    ::testing::Bool(),
-    ::testing::ValuesIn(
-      test_cases_begin<SingleErrorTestCase::restriction_t::EC_ONLY>(),
-      test_cases_end<SingleErrorTestCase::restriction_t::EC_ONLY>())
   ),
   [](const auto &info) {
     return fmt::format("{}", info.param);
@@ -946,8 +812,7 @@ INSTANTIATE_TEST_SUITE_P(
   ::testing::Combine(
     ::testing::Values(
       test_obj_t::make_head("Small", "foo").set_size(64),
-      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20),
-      test_obj_t::make_ec_head("ECHead", "foo").set_size(4<<20)
+      test_obj_t::make_head("ReplicatedRBD", "foo2").set_size(4<<20)
     ),
     ::testing::Bool(),
     ::testing::ValuesIn(
@@ -1099,7 +964,6 @@ TEST_P(TestSnapSetCloneError, CloneError) {
   const pg_shard_t primary(0, shard_id_t::NO_SHARD);
   crimson::osd::scrub::chunk_validation_policy_t policy {
     primary,
-    std::nullopt,
     TEST_MAX_OBJECT_SIZE,
     std::string{TEST_INTERNAL_NAMESPACE},
     TEST_OMAP_KEY_LIMIT,
@@ -1183,7 +1047,6 @@ TEST(TestSnapSet, MissingHead) {
   const pg_shard_t primary(0, shard_id_t::NO_SHARD);
   crimson::osd::scrub::chunk_validation_policy_t policy {
     primary,
-    std::nullopt,
     TEST_MAX_OBJECT_SIZE,
     std::string{TEST_INTERNAL_NAMESPACE},
     TEST_OMAP_KEY_LIMIT,
@@ -1219,7 +1082,6 @@ TEST(TestSnapSet, Stats) {
   const pg_shard_t primary(0, shard_id_t::NO_SHARD);
   crimson::osd::scrub::chunk_validation_policy_t policy {
     primary,
-    std::nullopt,
     TEST_MAX_OBJECT_SIZE,
     std::string{TEST_INTERNAL_NAMESPACE},
     TEST_OMAP_KEY_LIMIT,

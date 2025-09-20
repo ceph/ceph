@@ -18,12 +18,12 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <string>
 #include <string_view>
 #include <typeinfo>
 #include <typeindex>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -34,19 +34,24 @@
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
 #include "msg/msg_types.h"
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
-#include "common/perf_counters_collection.h"
 #endif
 
 
 #include "crush/CrushLocation.h"
 
+#ifdef HAVE_BREAKPAD
+namespace google_breakpad {
+  class ExceptionHandler;
+}
+#endif
+
 class AdminSocket;
+class AdminSocketHook;
 class CryptoHandler;
 class CryptoRandom;
 class MonMap;
@@ -66,7 +71,7 @@ namespace ceph {
   }
 }
 
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#ifdef WITH_CRIMSON
 namespace crimson::common {
 class CephContext {
 public:
@@ -142,6 +147,13 @@ public:
 
   ConfigProxy _conf;
   ceph::logging::Log *_log;
+#ifdef HAVE_BREAKPAD
+  std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+  static_assert(sizeof(std::unique_ptr<google_breakpad::ExceptionHandler>) == sizeof(std::unique_ptr<char>));
+#else
+  // Reserve the space for the case when part of ceph is compiled with and other without HAVE_BREAKPAD
+  std::unique_ptr<char> _ex_handler;
+#endif
 
   /* init ceph::crypto */
   void init_crypto();
@@ -202,7 +214,7 @@ public:
 				       bool drop_on_fork,
 				       Args&&... args) {
     static_assert(sizeof(T) <= largest_singleton,
-		  "Please increase largest singleton.");
+		  "Please increase largest_singleton.");
     std::lock_guard lg(associated_objs_lock);
     std::type_index type = typeid(T);
 
@@ -282,19 +294,17 @@ public:
   void set_mon_addrs(const MonMap& mm);
   void set_mon_addrs(const std::vector<entity_addrvec_t>& in) {
     auto ptr = std::make_shared<std::vector<entity_addrvec_t>>(in);
-#if defined(__GNUC__) && __GNUC__ < 12
-    // workaround for GCC 11 bug
-    atomic_store_explicit(&_mon_addrs, std::move(ptr), std::memory_order_relaxed);
-#else
+#ifdef __cpp_lib_atomic_shared_ptr
     _mon_addrs.store(std::move(ptr), std::memory_order_relaxed);
+#else
+    atomic_store_explicit(&_mon_addrs, std::move(ptr), std::memory_order_relaxed);
 #endif
   }
   std::shared_ptr<std::vector<entity_addrvec_t>> get_mon_addrs() const {
-#if defined(__GNUC__) && __GNUC__ < 12
-    // workaround for GCC 11 bug
-    auto ptr = atomic_load_explicit(&_mon_addrs, std::memory_order_relaxed);
-#else
+#ifdef __cpp_lib_atomic_shared_ptr
     auto ptr = _mon_addrs.load(std::memory_order_relaxed);
+#else
+    auto ptr = atomic_load_explicit(&_mon_addrs, std::memory_order_relaxed);
 #endif
     return ptr;
   }
@@ -316,11 +326,10 @@ private:
 
   int _crypto_inited;
 
-#if defined(__GNUC__) && __GNUC__ < 12
-  // workaround for GCC 11 bug
-  std::shared_ptr<std::vector<entity_addrvec_t>> _mon_addrs;
-#else
+#ifdef __cpp_lib_atomic_shared_ptr
   std::atomic<std::shared_ptr<std::vector<entity_addrvec_t>>> _mon_addrs;
+#else
+  std::shared_ptr<std::vector<entity_addrvec_t>> _mon_addrs;
 #endif
 
   /* libcommon service thread.
@@ -381,8 +390,13 @@ private:
 #ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
 #endif
+
+  std::unique_ptr<AdminSocketHook> _msgr_hook;
+  ceph::mutex _msgr_hook_lock = ceph::make_mutex("CephContext::msgr_hook");
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+  void modify_msgr_hook(std::function<AdminSocketHook*(void)> create,
+			std::function<void(AdminSocketHook*)> add);
 private:
 
   enum {
@@ -397,9 +411,19 @@ private:
     l_mempool_items,
     l_mempool_last
   };
+  // This is just how PerfCounters indices work, we have a bunch of
+  // bare enums all over.
+  enum {
+    // Picked by grepping for the current highest value and adding 1000
+    l_service_first = 1001000,
+    l_service_unique_id,
+    l_service_last
+  };
   PerfCounters *_cct_perf = nullptr;
   PerfCounters* _mempool_perf = nullptr;
   std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+  std::string service_unique_id;
+  PerfCounters* _service_perf = nullptr;
 
   /**
    * Enable the performance counters.
@@ -421,9 +445,9 @@ private:
 #ifdef __cplusplus
 }
 #endif
-#endif	// WITH_SEASTAR
+#endif	// WITH_CRIMSON
 
-#if !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
+#if !defined(WITH_CRIMSON) && defined(__cplusplus)
 namespace ceph::common {
 inline void intrusive_ptr_add_ref(CephContext* cct)
 {
@@ -435,5 +459,5 @@ inline void intrusive_ptr_release(CephContext* cct)
   cct->put();
 }
 }
-#endif // !(defined(WITH_SEASTAR) && !defined(WITH_ALIEN)) && defined(__cplusplus)
+#endif // !defined(WITH_CRIMSON) && defined(__cplusplus)
 #endif

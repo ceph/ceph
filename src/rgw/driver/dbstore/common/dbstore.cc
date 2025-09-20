@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "dbstore.h"
+#include "log/Log.h"
 
 using namespace std;
 
@@ -81,6 +82,13 @@ int DB::Destroy(const DoutPrefixProvider *dpp)
 
   closeDB(dpp);
 
+  {
+    const std::lock_guard lk(mtx);
+    for (auto& bucket_object : DB::objectmap) {
+      delete bucket_object.second;
+    }
+    objectmap.clear();
+  }
 
   ldpp_dout(dpp, 20)<<"DB successfully destroyed - name:" \
     <<db_name << dendl;
@@ -638,11 +646,12 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
   DBOpParams params = {};
   obj_version bucket_version;
   RGWBucketInfo orig_info;
+  map<std::string, bufferlist> attrs;
 
   /* Check if the bucket already exists and return the old info, caller will have a use for it */
   orig_info.bucket.name = info.bucket.name;
   params.op.bucket.info.bucket.name = info.bucket.name;
-  ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr,
+  ret = get_bucket_info(dpp, string("name"), "", orig_info, &attrs, nullptr,
       &bucket_version);
 
   if (ret) {
@@ -668,9 +677,14 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
     pobjv = &info.objv_tracker;
   }
 
+  if (!pattrs) {
+    pattrs = &attrs;
+  }
+
   InitializeParams(dpp, &params);
 
   params.op.bucket.info.bucket.name = info.bucket.name;
+  params.op.bucket.bucket_attrs = *pattrs;
 
   if (powner) {
     params.op.bucket.owner = to_string(*powner);
@@ -689,7 +703,6 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
 
   if (query_str == "attrs") {
     params.op.query_str = "attrs";
-    params.op.bucket.bucket_attrs = *pattrs;
   } else if (query_str == "owner") {
     /* Update only owner i.e, chown. 
      * Update creation_time too */
@@ -1368,14 +1381,22 @@ int DB::Object::Read::prepare(const DoutPrefixProvider *dpp)
 
     if (conds.if_match) {
       string if_match_str = rgw_string_unquote(conds.if_match);
-      ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
-      if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (if_match_str.compare("*") != 0) {
+        ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "If-Match: " << if_match_str << dendl;
       }
     }
 
     if (conds.if_nomatch) {
       string if_nomatch_str = rgw_string_unquote(conds.if_nomatch);
+      if (if_nomatch_str.compare("*") == 0) {
+        ldpp_dout(dpp, 10) << "If-NoMatch: " << if_nomatch_str << dendl;
+        return -ERR_NOT_MODIFIED;
+      }
       ldpp_dout(dpp, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
       if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;

@@ -18,7 +18,6 @@
 #include "include/interval_set.h"
 #include <initializer_list>
 
-template <typename K, typename V, typename S>
 /**
  * interval_map
  *
@@ -31,13 +30,14 @@ template <typename K, typename V, typename S>
  * commutativity, which doesn't work if we want more recent insertions
  * to overwrite previous ones.
  */
+template <typename K, typename V, typename S, template<typename, typename, typename ...> class C = std::map, bool nonconst_iterator = false>
 class interval_map {
   S s;
-  using map = std::map<K, std::pair<K, V> >;
-  using mapiter = typename std::map<K, std::pair<K, V> >::iterator;
-  using cmapiter = typename std::map<K, std::pair<K, V> >::const_iterator;
-  map m;
-  std::pair<mapiter, mapiter> get_range(K off, K len) {
+  using Map = C<K, std::pair<K, V> >;
+  using Mapiter = typename Map::iterator;
+  using Cmapiter = typename Map::const_iterator;
+  Map m;
+  std::pair<Mapiter, Mapiter> get_range(K off, K len) {
     // fst is first iterator with end after off (may be end)
     auto fst = m.upper_bound(off);
     if (fst != m.begin())
@@ -49,7 +49,15 @@ class interval_map {
     auto lst = m.lower_bound(off + len);
     return std::make_pair(fst, lst);
   }
-  std::pair<cmapiter, cmapiter> get_range(K off, K len) const {
+  std::pair<Cmapiter, Cmapiter> get_range(K off, K len) const {
+    // fst is first iterator with end after off (may be end)
+    auto fst = get_range_fst(off);
+
+    // lst is first iterator with start after off + len (may be end)
+    auto lst = m.lower_bound(off + len);
+    return std::make_pair(fst, lst);
+  }
+  Cmapiter get_range_fst(K off) const {
     // fst is first iterator with end after off (may be end)
     auto fst = m.upper_bound(off);
     if (fst != m.begin())
@@ -57,11 +65,9 @@ class interval_map {
     if (fst != m.end() && off >= (fst->first + fst->second.first))
       ++fst;
 
-    // lst is first iterator with start after off + len (may be end)
-    auto lst = m.lower_bound(off + len);
-    return std::make_pair(fst, lst);
+    return fst;
   }
-  void try_merge(mapiter niter) {
+  void try_merge(Mapiter niter) {
     if (niter != m.begin()) {
       auto prev = niter;
       prev--;
@@ -103,7 +109,7 @@ class interval_map {
   }
 public:
   interval_map() = default;
-  interval_map(std::initializer_list<typename map::value_type> l) {
+  interval_map(std::initializer_list<typename Map::value_type> l) {
     for (auto& v : l) {
       insert(v.first, v.second.first, v.second.second);
     }
@@ -196,17 +202,24 @@ public:
   bool empty() const {
     return m.empty();
   }
-  interval_set<K> get_interval_set() const {
-    interval_set<K> ret;
+  interval_set<K, C> get_interval_set() const {
+    interval_set<K, C> ret;
     for (auto &&i: *this) {
       ret.insert(i.get_off(), i.get_len());
     }
     return ret;
   }
+  template<template<typename, typename, typename ...> class ISC = std::map, bool strict = true>
+  void to_interval_set(interval_set<K, ISC, strict> &set) const {
+    for (auto &&i: *this) {
+      set.insert(i.get_off(), i.get_len());
+    }
+  }
+
   class const_iterator {
-    cmapiter it;
-    const_iterator(cmapiter &&it) : it(std::move(it)) {}
-    const_iterator(const cmapiter &it) : it(it) {}
+    Cmapiter it;
+    const_iterator(Cmapiter &&it) : it(std::move(it)) {}
+    const_iterator(const Cmapiter &it) : it(it) {}
 
     friend class interval_map;
   public:
@@ -245,6 +258,11 @@ public:
     const_iterator &operator*() {
       return *this;
     }
+    constexpr bool contains(K _off, K _len) const {
+      K off = get_off();
+      K len = get_len();
+      return off <= _off && _off + _len <= off + len;
+    }
   };
   const_iterator begin() const {
     return const_iterator(m.begin());
@@ -252,11 +270,108 @@ public:
   const_iterator end() const {
     return const_iterator(m.end());
   }
+
+  const_iterator cbegin() const {
+    return const_iterator(m.begin());
+  }
+  const_iterator cend() const {
+    return const_iterator(m.end());
+  }
+
+  class iterator {
+    Mapiter it;
+    bool end;
+    iterator(Mapiter &&it, bool end) : it(std::move(it)), end(end) {}
+
+    friend class interval_map;
+  public:
+    iterator(const iterator &) = default;
+    iterator &operator=(const iterator &) = default;
+
+    iterator &operator++() {
+      /* While the buffer can be modified with a non-const iterator, it
+       * not change size. Allow changes in size would allow for the interval
+       * to be merged into the next one, which would allow for unexpected
+       * behaviour.
+       */
+      if (!end && get_val().length() != get_len()) {
+        throw std::out_of_range("buffer length has changed");
+      }
+      ++it;
+      return *this;
+    }
+    iterator operator++(int) {
+      return const_iterator(it++);
+    }
+    iterator &operator--() {
+      --it;
+      return *this;
+    }
+    iterator operator--(int) {
+      return const_iterator(it--);
+    }
+    bool operator==(const iterator &rhs) const {
+      return it == rhs.it;
+    }
+    bool operator!=(const iterator &rhs) const {
+      return it != rhs.it;
+    }
+    K get_off() const {
+      return it->first;
+    }
+    K get_len() const {
+      return it->second.first;
+    }
+    V &get_val() {
+      return it->second.second;
+    }
+    iterator &operator*() {
+      return *this;
+    }
+    constexpr bool contains(K _off, K _len) const {
+      K off = get_off();
+      K len = get_len();
+      return off <= _off && _off + _len <= off + len;
+    }
+  };
+  static constexpr bool nonconst_iterator_cond() { return nonconst_iterator; }
+  iterator begin() requires (nonconst_iterator) {
+    return iterator(m.begin(), false);
+  }
+  iterator end() requires (nonconst_iterator) {
+    return iterator(m.end(), true);
+  }
   std::pair<const_iterator, const_iterator> get_containing_range(
     K off,
     K len) const {
     auto rng = get_range(off, len);
     return std::make_pair(const_iterator(rng.first), const_iterator(rng.second));
+  }
+
+  const_iterator get_lower_range(
+      K off,
+      K len) const {
+    return const_iterator(get_range_fst(off));
+  }
+  K get_start_off() const
+  {
+    auto i = m.begin();
+    ceph_assert(i != m.end());
+    return i->first;
+  }
+  K get_end_off() const
+  {
+    auto i = m.rbegin();
+    ceph_assert(i != m.rend());
+    return i->first + i->second.first;
+  }
+  bool contains(K off, K len) const {
+    auto it = get_range_fst(off);
+    if (it == m.end()) return false;
+
+    K _off = it->first;
+    K _len = it->second.first;
+    return _off <= off && _off + _len >= off + len;
   }
   unsigned ext_count() const {
     return m.size();
@@ -265,25 +380,41 @@ public:
     return m == rhs.m;
   }
 
-  std::ostream &print(std::ostream &out) const {
+  void print(std::ostream &os) const {
     bool first = true;
-    out << "{";
+    os << "{";
     for (auto &&i: *this) {
       if (first) {
 	first = false;
       } else {
-	out << ",";
+	os << ",";
       }
-      out << i.get_off() << "~" << i.get_len() << "("
+      os << i.get_off() << "~" << i.get_len() << "("
 	  << s.length(i.get_val()) << ")";
     }
-    return out << "}";
+    os << "}";
+  }
+
+  std::string fmt_print() const
+  requires fmt::formattable<K> {
+    std::string str = "{";
+    bool first = true;
+    for (auto &&i: *this) {
+      if (first) {
+        first = false;
+      } else {
+        str += ",";
+      }
+      str += fmt::format("{}~{}({})", i.get_off(), i.get_len(),
+        s.length(i.get_val()));
+    }
+    str += "}";
+    return str;
   }
 };
 
-template <typename K, typename V, typename S>
-std::ostream &operator<<(std::ostream &out, const interval_map<K, V, S> &m) {
-  return m.print(out);
-}
+// make sure fmt::range would not try (and fail) to treat interval_map as a range
+template <typename K, typename V, typename S, template<typename, typename, typename ...> class C>
+struct fmt::is_range<interval_map<K, V, S, C>, char> : std::false_type {};
 
 #endif

@@ -1,4 +1,7 @@
 #include "include/utime.h"
+
+#include <iostream> // for std::cout
+
 #include "gtest/gtest.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"

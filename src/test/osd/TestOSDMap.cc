@@ -426,7 +426,7 @@ public:
         cout << "<<<<<PGs distribution:" << std::endl;
       }
       int high_load_after = 0;
-      for (auto i = 0 ; i < weights.size() ; i++) {
+      for (auto i = 0 ; std::cmp_less(i, weights.size()) ; i++) {
         int pgs = pgs_by_osd[i].size();
         int prims = prim_pgs_by_osd[i].size();
         int cur_load = prims * 100 + (pgs - prims) * (100 - rr);
@@ -3014,6 +3014,94 @@ TEST_F(OSDMapTest, rb_osdsize_opt_score) {
     }
   }
   return;
+}
+
+// Test pgtemp_primaryfirst and pgtemp_unfo_primaryfirst transforms
+TEST_F(OSDMapTest, pgtemp_primaryfirst) {
+  set_up_map();
+
+  pg_pool_t pool;
+  pool.size = 6;
+
+  vector<int> set= { 0, 1, 2, 3, 4, 5 };
+  vector<int> encoded;
+  vector<int> decoded;
+
+  pg_t rawpg(0, my_ec_pool);
+  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+
+  // Pool without EC optimizations, no pg_temp
+  encoded = osdmap.pgtemp_primaryfirst(pool, set);
+  ASSERT_EQ(set, encoded); // no change expected
+  decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(set, decoded);
+
+  // Pool with EC optimizations, no pg_temp
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  encoded = osdmap.pgtemp_primaryfirst(pool, set);
+  ASSERT_EQ(set, encoded); // no change expected
+  decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(set, decoded);
+
+  // Pool without EC optimizations, with pg_temp
+  pool.unset_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  OSDMap::Incremental pgtemp_map(osdmap.get_epoch() + 1);
+  pgtemp_map.new_pg_temp[pgid] = mempool::osdmap::vector<int>(
+    set.begin(), set.end());
+  osdmap.apply_incremental(pgtemp_map);
+
+  encoded = osdmap.pgtemp_primaryfirst(pool, set);
+  ASSERT_EQ(set, encoded); // no change expected
+  decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(set, decoded);
+
+  // Pool with EC optimizations, with pg_temp
+  // No nonprimary_shards
+  pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+  encoded = osdmap.pgtemp_primaryfirst(pool, set);
+  ASSERT_EQ(set, encoded); // no change expected
+  decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+  ASSERT_EQ(set, decoded);
+
+  // With nonprimary_shards, shard 0 is never a non-primary
+  for (int seed = 2; seed < 64; seed += 2) {
+    for (int osd = 0; osd < 6; osd++ ) {
+      if (seed & (1 << osd)) {
+	pool.nonprimary_shards.insert(shard_id_t(osd));
+      } else {
+	pool.nonprimary_shards.erase(shard_id_t(osd));
+      }
+    }
+    ASSERT_TRUE(pool.nonprimary_shards.size() > 0);
+    encoded = osdmap.pgtemp_primaryfirst(pool, set);
+    for (size_t osd = 0; osd < 6; osd++ ) {
+      if (osd < pool.size - pool.nonprimary_shards.size() ) {
+	// primary shards first
+	ASSERT_FALSE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
+      } else {
+	// non-primary shards last
+	ASSERT_TRUE(pool.is_nonprimary_shard(shard_id_t(encoded[osd])));
+      }
+      std::cout << osd << " " << seed << " " << osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)) << std::endl;
+      // Encode and decode should be equivalent
+      ASSERT_EQ(osdmap.pgtemp_undo_primaryfirst(pool, pgid,
+		  osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd))),
+		shard_id_t(osd));
+      // Shard 0 never changes, seed 62 is a special case because all the other
+      // shards are non-primary
+      if ((osd != 0) && (seed != 62)) {
+	// Encode should be different
+	ASSERT_NE(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
+		  shard_id_t(osd));
+      } else {
+	// Encode should not change
+	ASSERT_EQ(osdmap.pgtemp_primaryfirst(pool, pgid, shard_id_t(osd)),
+		  shard_id_t(osd));
+      }
+    }
+    decoded = osdmap.pgtemp_undo_primaryfirst(pool, pgid, encoded);
+    ASSERT_EQ(set, decoded);
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -5,6 +5,8 @@
 
 #include "rgw_sync_module.h"
 
+struct rgw_bucket_entry_owner;
+
 struct rgw_sync_aws_multipart_part_info {
   int part_num{0};
   uint64_t ofs{0};

@@ -22,7 +22,20 @@
    "graphTooltip": 0,
    "hideControls": false,
    "id": null,
-   "links": [ ],
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
    "panels": [
       {
          "cacheTimeout": null,
@@ -1297,23 +1310,50 @@
          "type": "table"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "This chart shows the sum of read and write IOPS from all clients by pool",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "IOPS",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "short"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 8,
             "w": 12,
@@ -1321,101 +1361,84 @@
             "y": 9
          },
          "id": 11,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [ ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) +\n        rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", })\n",
+               "expr": "topk($topk,\n  round(\n    (\n      rate(ceph_pool_rd{cluster=~\"$cluster\", }[$__rate_interval]) +\n      rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval])\n    ), 1\n  ) * on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
-               "legendFormat": "{{name}} ",
+               "legendFormat": "{{name}}",
                "refId": "A"
             },
             {
-               "expr": "topk($topk,\n  rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) +\n    on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
+               "expr": "topk($topk,\n  rate(ceph_pool_wr{cluster=~\"$cluster\", }[$__rate_interval]) +\n  on(pool_id) group_left(instance,name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}} - write",
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Top $topk Client IOPS by Pool",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "short",
-               "label": "IOPS",
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "The chart shows the sum of read and write bytes from all clients, by pool",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Throughput",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "Bps"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 8,
             "w": 12,
@@ -1423,94 +1446,77 @@
             "y": 9
          },
          "id": 12,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [ ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
-               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n      rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
+               "expr": "topk($topk,\n  (\n    rate(ceph_pool_rd_bytes{cluster=~\"$cluster\", }[$__rate_interval]) +\n    rate(ceph_pool_wr_bytes{cluster=~\"$cluster\", }[$__rate_interval])\n  ) * on(pool_id) group_left(instance, name) ceph_pool_metadata{cluster=~\"$cluster\", }\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{name}}",
                "refId": "A"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Top $topk Client Bandwidth by Pool",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "Bps",
-               "label": "Throughput",
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "Historical view of capacity usage, to help identify growth and trends in pool consumption",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Capacity Used",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "bytes"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 7,
             "w": 24,
@@ -1518,31 +1524,20 @@
             "y": 17
          },
          "id": 13,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [ ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "ceph_pool_bytes_used{cluster=~\"$cluster\", } * on(pool_id) group_right ceph_pool_metadata{cluster=~\"$cluster\", }",
@@ -1552,41 +1547,8 @@
                "refId": "A"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Pool Capacity Usage (RAW)",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "bytes",
-               "label": "Capacity Used",
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": 0,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       }
    ],
    "refresh": "30s",

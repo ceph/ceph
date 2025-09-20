@@ -35,7 +35,8 @@ echo "version $version"
 # update submodules
 echo "updating submodules..."
 force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
-if ! git submodule sync || ! git submodule update $force --init --recursive --progress; then
+quiet_or_progress=$(if test -n "$JENKINS_URL"; then echo --quiet; else echo --progress; fi)
+if ! git submodule sync || ! git submodule update $force --init --recursive $quiet_or_progress; then
     echo "Error: could not initialize submodule projects"
     echo "  Network connectivity might be required."
     exit 1
@@ -132,7 +133,7 @@ build_dashboard_frontend() {
 
   $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv --verbose -p --node=20.13.1
+  $TEMP_DIR/bin/nodeenv --verbose -p --node=20.18.1
   cd src/pybind/mgr/dashboard/frontend
 
   . $TEMP_DIR/bin/activate
@@ -191,8 +192,8 @@ ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
-boost_version=1.85.0
-download_boost $boost_version 7009fe1faa1697476bdc7027703a2badb84e849b7b0baad5086b087b971f8617 \
+boost_version=1.87.0
+download_boost $boost_version af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89 \
                https://download.ceph.com/qa \
                https://archives.boost.io/release/$boost_version/source
 download_liburing 2.5 456f5f882165630f0dc7b75e8fd53bd01a955d5d4720729b4323097e6e9f2a98 \

@@ -6,6 +6,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -21,17 +22,26 @@
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
+#include "common/strtol.h"
 #include "include/common_fwd.h"
 #include "include/scope_guard.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
+#include "include/utime.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
 #include "common/debug.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_rocksdb
@@ -47,6 +57,7 @@ using std::ostream;
 using std::pair;
 using std::set;
 using std::string;
+using std::string_view;
 using std::unique_ptr;
 using std::vector;
 
@@ -1239,7 +1250,7 @@ int RocksDBStore::do_open(ostream &out,
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency", nullptr, PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");
@@ -1394,6 +1405,13 @@ bool RocksDBStore::get_property(
 int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
 					   const string& key_prefix)
 {
+  // The default mode is to derive estimates based on
+  // sst files alone (INCLUDE_FILES).
+  // This gives an irritating result when a batch of keys is
+  // just commited but estimate keeps showing 0.
+  rocksdb::DB::SizeApproximationFlags flags(
+    rocksdb::DB::SizeApproximationFlags::INCLUDE_FILES |
+    rocksdb::DB::SizeApproximationFlags::INCLUDE_MEMTABLES);
   uint64_t size = 0;
   auto p_iter = cf_handles.find(prefix);
   if (p_iter != cf_handles.end()) {
@@ -1402,14 +1420,14 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
       string start = key_prefix + string(1, '\x00');
       string limit = key_prefix + string("\xff\xff\xff\xff");
       rocksdb::Range r(start, limit);
-      db->GetApproximateSizes(cf, &r, 1, &s);
+      db->GetApproximateSizes(cf, &r, 1, &s, flags);
       size += s;
     }
   } else {
     string start = combine_strings(prefix , key_prefix);
     string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
-    db->GetApproximateSizes(default_cf, &r, 1, &size);
+    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
   }
   return size;
 }
@@ -1467,7 +1485,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->close_section();
     }
     f->open_object_section("rocksdbstore_perf_counters");
-    logger->dump_formatted(f, false, false);
+    logger->dump_formatted(f, false, select_labeled_t::unlabeled);
     f->close_section();
   }
   if (cct->_conf->rocksdb_collect_memory_stats) {
@@ -1992,7 +2010,7 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
 
   // Find separator inside Slice
   char* separator = (char*) memchr(in.data(), 0, in.size());
-  if (separator == NULL)
+  if (separator == nullptr)
      return -EINVAL;
   prefix_len = size_t(separator - in.data());
   if (prefix_len >= in.size())
@@ -2003,6 +2021,27 @@ int RocksDBStore::split_key(rocksdb::Slice in, string *prefix, string *key)
     *prefix = string(in.data(), prefix_len);
   if (key)
     *key = string(separator+1, in.size()-prefix_len-1);
+  return 0;
+}
+
+// TODO: deduplicate the code, preferrably by removing the string variant
+int RocksDBStore::split_key(rocksdb::Slice in, string_view *prefix, string_view *key)
+{
+  size_t prefix_len = 0;
+
+  // Find separator inside Slice
+  char* separator = (char*) memchr(in.data(), 0, in.size());
+  if (separator == nullptr)
+     return -EINVAL;
+  prefix_len = size_t(separator - in.data());
+  if (prefix_len >= in.size())
+    return -EINVAL;
+
+  // Fetch prefix and/or key directly from Slice
+  if (prefix)
+    *prefix = string_view(in.data(), prefix_len);
+  if (key)
+    *key = string_view(separator + 1, in.size() - prefix_len - 1);
   return 0;
 }
 
@@ -2226,12 +2265,24 @@ int RocksDBStore::RocksDBWholeSpaceIteratorImpl::prev()
 string RocksDBStore::RocksDBWholeSpaceIteratorImpl::key()
 {
   string out_key;
-  split_key(dbiter->key(), 0, &out_key);
+  split_key(dbiter->key(), nullptr, &out_key);
+  return out_key;
+}
+string_view RocksDBStore::RocksDBWholeSpaceIteratorImpl::key_as_sv()
+{
+  string_view out_key;
+  split_key(dbiter->key(), nullptr, &out_key);
   return out_key;
 }
 pair<string,string> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key()
 {
   string prefix, key;
+  split_key(dbiter->key(), &prefix, &key);
+  return make_pair(prefix, key);
+}
+pair<string_view,string_view> RocksDBStore::RocksDBWholeSpaceIteratorImpl::raw_key_as_sv()
+{
+  string_view prefix, key;
   split_key(dbiter->key(), &prefix, &key);
   return make_pair(prefix, key);
 }
@@ -2265,6 +2316,12 @@ bufferptr RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_ptr()
 {
   rocksdb::Slice val = dbiter->value();
   return bufferptr(val.data(), val.size());
+}
+
+std::string_view RocksDBStore::RocksDBWholeSpaceIteratorImpl::value_as_sv()
+{
+  rocksdb::Slice val = dbiter->value();
+  return std::string_view{val.data(), val.size()};
 }
 
 int RocksDBStore::RocksDBWholeSpaceIteratorImpl::status()
@@ -2348,8 +2405,14 @@ public:
   string key() override {
     return dbiter->key().ToString();
   }
+  string_view key_as_sv() override {
+    return dbiter->key().ToStringView();
+  }
   std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
+  }
+  std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+    return make_pair(prefix, dbiter->key().ToStringView());
   }
   bufferlist value() override {
     return to_bufferlist(dbiter->value());
@@ -2357,6 +2420,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = dbiter->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = dbiter->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return dbiter->status().ok() ? 0 : -1;
@@ -2668,12 +2735,30 @@ public:
     }
   }
 
+  std::string_view key_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->key_as_sv();
+    } else {
+      return current_shard->second->key_as_sv();
+    }
+  }
+
   std::pair<std::string,std::string> raw_key() override
   {
     if (smaller == on_main) {
       return main->raw_key();
     } else {
       return { current_shard->first, current_shard->second->key() };
+    }
+  }
+
+  std::pair<std::string_view,std::string_view> raw_key_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->raw_key_as_sv();
+    } else {
+      return { current_shard->first, current_shard->second->key_as_sv() };
     }
   }
 
@@ -2692,6 +2777,15 @@ public:
       return main->value();
     } else {
       return current_shard->second->value();
+    }
+  }
+
+  std::string_view value_as_sv() override
+  {
+    if (smaller == on_main) {
+      return main->value_as_sv();
+    } else {
+      return current_shard->second->value_as_sv();
     }
   }
 
@@ -3017,8 +3111,14 @@ public:
   string key() override {
     return iters[0]->key().ToString();
   }
+  string_view key_as_sv() override {
+    return iters[0]->key().ToStringView();
+  }
   std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
+  }
+  std::pair<std::string_view, std::string_view> raw_key_as_sv() override {
+    return make_pair(prefix, iters[0]->key().ToStringView());
   }
   bufferlist value() override {
     return to_bufferlist(iters[0]->value());
@@ -3026,6 +3126,10 @@ public:
   bufferptr value_as_ptr() override {
     rocksdb::Slice val = iters[0]->value();
     return bufferptr(val.data(), val.size());
+  }
+  std::string_view value_as_sv() override {
+    rocksdb::Slice val = iters[0]->value();
+    return std::string_view{val.data(), val.size()};
   }
   int status() override {
     return iters[0]->status().ok() ? 0 : -1;

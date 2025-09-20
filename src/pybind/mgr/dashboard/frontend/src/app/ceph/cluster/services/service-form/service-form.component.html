@@ -29,6 +29,15 @@
           With an active mgmt-gateway service, the dashboard will continue to be served on {{currentURL}}:{{port}} and all other services will be accessible from {{currentURL}}:{{port}}/service_name
         </cd-alert-panel>
 
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'smb'"
+                        type="warning"
+                        spacingClass="mb-3"
+                        i18n>
+          SMB service management is intended for advanced users only.
+          For most scenarios, it is  recommended to use the SMB module instead.
+          To manage SMB clusters and shares, please visit the <a routerLink="/cephfs/smb">SMB page</a>.
+        </cd-alert-panel>
+
         <!-- Service type -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -245,7 +254,7 @@
               <label class="custom-control-label m-0"
                      for="unmanaged"
                      i18n>Unmanaged</label>
-              <cd-help-text i18n>If Unmanaged is selected, the orchestrator will not stop or stop any daemons associated with this service. Placement and all other properties will be ignored.</cd-help-text>
+              <cd-help-text i18n>If Unmanaged is selected, the orchestrator will not start or stop any daemons associated with this service. Placement and all other properties will be ignored.</cd-help-text>
             </div>
           </div>
         </div>

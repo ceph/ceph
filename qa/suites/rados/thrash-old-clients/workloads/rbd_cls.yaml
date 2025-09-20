@@ -2,6 +2,9 @@ meta:
 - desc: |
    rbd object class functional tests
 tasks:
-- exec:
-    client.2:
-      - ceph_test_cls_rbd --gtest_filter=-TestClsRbd.get_features:TestClsRbd.parents:TestClsRbd.mirror
+- workunit:
+    clients:
+      client.2:
+        - cls/test_cls_rbd.sh
+    env:
+      CLS_RBD_GTEST_FILTER: '-TestClsRbd.group_snap_set:TestClsRbd.group_snap_remove'

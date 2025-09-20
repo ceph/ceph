@@ -2,12 +2,7 @@ import logging
 
 from typing import Any, Dict, List, Tuple
 
-from ceph.cephadm.images import (
-    DEFAULT_ELASTICSEARCH_IMAGE,
-    DEFAULT_JAEGER_AGENT_IMAGE,
-    DEFAULT_JAEGER_COLLECTOR_IMAGE,
-    DEFAULT_JAEGER_QUERY_IMAGE,
-)
+from ceph.cephadm.images import DefaultImages
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
 from ..context import CephadmContext
@@ -27,17 +22,17 @@ class Tracing(ContainerDaemonForm):
 
     components: Dict[str, Dict[str, Any]] = {
         'elasticsearch': {
-            'image': DEFAULT_ELASTICSEARCH_IMAGE,
+            'image': DefaultImages.ELASTICSEARCH.image_ref,
             'envs': ['discovery.type=single-node'],
         },
         'jaeger-agent': {
-            'image': DEFAULT_JAEGER_AGENT_IMAGE,
+            'image': DefaultImages.JAEGER_AGENT.image_ref,
         },
         'jaeger-collector': {
-            'image': DEFAULT_JAEGER_COLLECTOR_IMAGE,
+            'image': DefaultImages.JAEGER_COLLECTOR.image_ref,
         },
         'jaeger-query': {
-            'image': DEFAULT_JAEGER_QUERY_IMAGE,
+            'image': DefaultImages.JAEGER_QUERY.image_ref,
         },
     }  # type: ignore
 

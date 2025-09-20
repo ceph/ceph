@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <type_traits>
 #include "common/config.h"
 #include "common/config_obs.h"
@@ -83,7 +84,7 @@ public:
     return values;
   }
   void set_config_values(const ConfigValues& val) {
-#ifndef WITH_SEASTAR
+#ifndef WITH_CRIMSON
     std::lock_guard l{lock};
 #endif
     values = val;

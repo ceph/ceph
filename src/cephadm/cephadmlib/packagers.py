@@ -118,12 +118,6 @@ class Packager(object):
         else:
             return 'https://download.ceph.com/keys/autobuild.gpg', 'autobuild'
 
-    def enable_service(self, service: str) -> None:
-        """
-        Start and enable the service (typically using systemd).
-        """
-        call_throws(self.ctx, ['systemctl', 'enable', '--now', service])
-
 
 class Apt(Packager):
     DISTRO_NAMES = {

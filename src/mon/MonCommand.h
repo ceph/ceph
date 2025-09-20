@@ -62,14 +62,16 @@ struct MonCommand {
     f->dump_unsigned("flags", flags);
   }
 
-  static void generate_test_instances(std::list<MonCommand*>& ls) {
-    ls.push_back(new MonCommand);
-    ls.push_back(new MonCommand);
-    ls.back()->cmdstring = "foo";
-    ls.back()->helpstring = "bar";
-    ls.back()->module = "baz";
-    ls.back()->req_perms = "quux";
-    ls.back()->flags = FLAG_NOFORWARD;
+  static std::list<MonCommand> generate_test_instances() {
+    std::list<MonCommand> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().cmdstring = "foo";
+    ls.back().helpstring = "bar";
+    ls.back().module = "baz";
+    ls.back().req_perms = "quux";
+    ls.back().flags = FLAG_NOFORWARD;
+    return ls;
   }
 
   /**

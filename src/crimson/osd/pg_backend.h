@@ -29,10 +29,9 @@ namespace ceph::os {
 }
 
 namespace crimson::osd {
-  class ShardServices;
-  class PG;
-  class ObjectContextLoader;
-}
+class ShardServices;
+class PG;
+class ObjectContextLoader;
 
 class PGBackend
 {
@@ -62,7 +61,7 @@ public:
       ::crimson::osd::IOInterruptCondition, T>;
   using rep_op_ret_t = 
     std::tuple<interruptible_future<>,
-	       interruptible_future<crimson::osd::acked_peers_t>>;
+	       interruptible_future<>>;
   using rep_op_fut_t = interruptible_future<rep_op_ret_t>;
   PGBackend(shard_id_t shard, CollectionRef coll,
             crimson::osd::ShardServices &shard_services,
@@ -308,11 +307,6 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
-  void clone(
-    /* const */object_info_t& snap_oi,
-    const ObjectState& os,
-    const ObjectState& d_os,
-    ceph::os::Transaction& trans);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
@@ -320,7 +314,8 @@ public:
     CollectionRef c,
     const ghobject_t& oid,
     uint64_t off,
-    uint64_t len);
+    uint64_t len,
+    uint32_t op_flags = 0);
 
   write_iertr::future<> tmapput(
     ObjectState& os,
@@ -380,11 +375,13 @@ public:
     object_stat_sum_t& delta_stats);
   ll_read_ierrorator::future<ceph::bufferlist> omap_get_header(
     const crimson::os::CollectionRef& c,
-    const ghobject_t& oid) const;
+    const ghobject_t& oid,
+    uint32_t op_flags = 0) const;
   ll_read_ierrorator::future<> omap_get_header(
     const ObjectState& os,
     OSDOp& osd_op,
-    object_stat_sum_t& delta_stats) const;
+    object_stat_sum_t& delta_stats,
+    uint32_t op_flags = 0) const;
   interruptible_future<> omap_set_header(
     ObjectState& os,
     const OSDOp& osd_op,
@@ -411,9 +408,24 @@ public:
     ceph::os::Transaction& trans,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats);
+
+  /// sets oi and (for head) ss attrs
+  void set_metadata(
+    const hobject_t &obj,
+    object_info_t &oi,
+    const SnapSet *ss /* non-null iff head */,
+    ceph::os::Transaction& trans);
+
+  /// clone from->to and clear ss attribute on to
+  void clone_for_write(
+    const hobject_t &from,
+    const hobject_t &to,
+    ceph::os::Transaction& trans);
+
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
 		     const hobject_t& hoid,
+		     crimson::osd::ObjectContextRef&& new_clone,
 		     ceph::os::Transaction&& txn,
 		     osd_op_params_t&& osd_op_p,
 		     epoch_t min_epoch, epoch_t max_epoch,
@@ -504,3 +516,5 @@ private:
 
   friend class RecoveryBackend;
 };
+
+}

@@ -148,12 +148,20 @@ public:
 
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<ECCommon::ec_align_t,
+    uint64_t object_size,
+    const std::list<std::pair<ec_align_t,
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
+  bool get_ec_supports_crc_encode_decode() const override;
+  ECUtil::stripe_info_t ec_get_sinfo() const override;
+  bool ec_can_decode(const shard_id_set &available_shards) const override;
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist &in_bl) const override;
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const override;
 
-private:
+ private:
   // push
   struct push_info_t {
     ObjectRecoveryProgress recovery_progress;
@@ -341,6 +349,40 @@ private:
 	op(op), v(v) {}
   };
   std::map<ceph_tid_t, ceph::ref_t<InProgressOp>> in_progress_ops;
+
+  /// Invoked by pct_callback to update PCT after a pause in IO
+  void send_pct_update();
+
+  /// Handle MOSDPGPCT message
+  void do_pct(OpRequestRef op);
+
+  /// Kick pct timer if repop_queue is empty
+  void maybe_kick_pct_update();
+
+  /// Kick pct timer if repop_queue is empty
+  void cancel_pct_update();
+
+  struct pct_callback_t final : public common::intrusive_timer::callback_t {
+    ReplicatedBackend *backend;
+
+    pct_callback_t(ReplicatedBackend *backend) : backend(backend) {}
+
+    void lock() override {
+      return backend->parent->pg_lock();
+    }
+    void unlock() override {
+      return backend->parent->pg_unlock();
+    }
+    void add_ref() override {
+      return backend->parent->pg_add_ref();
+    }
+    void dec_ref() override {
+      return backend->parent->pg_dec_ref();
+    }
+    void invoke() override {
+      return backend->send_pct_update();
+    }
+  } pct_callback;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -356,7 +398,7 @@ public:
     const eversion_t &at_version,
     PGTransactionUPtr &&t,
     const eversion_t &trim_to,
-    const eversion_t &min_last_complete_ondisk,
+    const eversion_t &pg_committed_to,
     std::vector<pg_log_entry_t>&& log_entries,
     std::optional<pg_hit_set_history_t> &hset_history,
     Context *on_all_commit,
@@ -372,7 +414,7 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const ceph::buffer::list &log_entries,
@@ -386,7 +428,7 @@ private:
     ceph_tid_t tid,
     osd_reqid_t reqid,
     eversion_t pg_trim_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
     const std::vector<pg_log_entry_t> &log_entries,
@@ -406,8 +448,12 @@ private:
 
     ObjectStore::Transaction opt, localt;
     
-    RepModify() : committed(false), ackerosd(-1),
-		  epoch_started(0) {}
+    RepModify(uint64_t features)
+      : committed(false),
+        ackerosd(-1),
+        epoch_started(0),
+        localt(features) {
+    }
   };
   typedef std::shared_ptr<RepModify> RepModifyRef;
 
@@ -416,14 +462,20 @@ private:
   void repop_commit(RepModifyRef rm);
   bool auto_repair_supported() const override { return store->has_builtin_csum(); }
 
+  static inline const uint32_t scrub_fadvise_flags{
+      CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
+      CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+      CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE};
 
   int be_deep_scrub(
+    const Scrub::ScrubCounterSet& io_counters,
     const hobject_t &poid,
     ScrubMap &map,
     ScrubMapBuilder &pos,
     ScrubMap::object &o) override;
 
-  uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
+  uint64_t be_get_ondisk_size(uint64_t logical_size,
+                              shard_id_t unused) const final {
     return logical_size;
   }
 };

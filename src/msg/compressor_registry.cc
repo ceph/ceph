@@ -3,6 +3,9 @@
 
 #include "compressor_registry.h"
 #include "common/dout.h"
+#include "include/types.h" // for operator<<(std::vector)
+
+using namespace std::literals;
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -19,16 +22,14 @@ CompressorRegistry::~CompressorRegistry()
   cct->_conf.remove_observer(this);
 }
 
-const char** CompressorRegistry::get_tracked_conf_keys() const
+std::vector<std::string> CompressorRegistry::get_tracked_keys() const noexcept
 {
-  static const char *keys[] = {
-    "ms_osd_compress_mode",
-    "ms_osd_compression_algorithm",
-    "ms_osd_compress_min_size",
-    "ms_compress_secure",
-    nullptr
+  return {
+    "ms_osd_compress_mode"s,
+    "ms_osd_compression_algorithm"s,
+    "ms_osd_compress_min_size"s,
+    "ms_compress_secure"s
   };
-  return keys;
 }
 
 void CompressorRegistry::handle_conf_change(

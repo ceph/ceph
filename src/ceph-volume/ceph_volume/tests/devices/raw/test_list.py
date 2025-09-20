@@ -1,8 +1,9 @@
 # type: ignore
 import pytest
 from .data_list import ceph_bluestore_tool_show_label_output
-from mock.mock import patch, Mock
+from unittest.mock import patch, Mock
 from ceph_volume.devices import raw
+from ceph_volume.devices.raw import list as list_command
 
 # Sample lsblk output is below that overviews the test scenario. (--json output for reader clarity)
 #  - sda and all its children are used for the OS
@@ -127,12 +128,14 @@ class TestList(object):
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
     @patch('ceph_volume.util.disk.lsblk_all')
-    def test_raw_list(self, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
+    @patch('ceph_volume.devices.raw.list.os.path.exists')
+    def test_raw_list(self, patched_path_exists, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
         raw.list.logger.setLevel("DEBUG")
         patched_call.side_effect = _process_call_side_effect
         patched_disk_lsblk.side_effect = _lsblk_all_devices
         patched_bluestore_label.side_effect = _has_bluestore_label_side_effect
         patched_get_devices.side_effect = _devices_side_effect
+        patched_path_exists.return_value = True
 
         result = raw.list.List([]).generate()
         assert len(result) == 3
@@ -161,13 +164,15 @@ class TestList(object):
     @patch('ceph_volume.util.disk.has_bluestore_label')
     @patch('ceph_volume.process.call')
     @patch('ceph_volume.util.disk.lsblk_all')
-    def test_raw_list_with_OSError(self, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
+    @patch('ceph_volume.devices.raw.list.os.path.exists')
+    def test_raw_list_with_OSError(self, patched_path_exists, patched_disk_lsblk, patched_call, patched_bluestore_label, patched_get_devices):
         def _has_bluestore_label_side_effect_with_OSError(device_path):
             if device_path == "/dev/sdd":
                 raise OSError('fake OSError')
             return _has_bluestore_label_side_effect(device_path)
 
         raw.list.logger.setLevel("DEBUG")
+        patched_path_exists.return_value = True
         patched_disk_lsblk.side_effect = _lsblk_all_devices
         patched_call.side_effect = _process_call_side_effect
         patched_bluestore_label.side_effect = _has_bluestore_label_side_effect_with_OSError
@@ -176,3 +181,44 @@ class TestList(object):
         result = raw.list.List([]).generate()
         assert len(result) == 2
         assert {'sdb-uuid', 'sde1-uuid'} == set(result.keys())
+
+    @patch('ceph_volume.devices.raw.list.os.path.exists')
+    def test_raw_list_exclude_non_existent_loop_devices(self, path_exists_patch):
+        def path_exists_side_effect(path):
+            return path in ["/dev/sda"]
+        path_exists_patch.side_effect = path_exists_side_effect
+
+        devices = [
+            {"NAME": "/dev/loop0", "KNAME": "/dev/loop0", "PKNAME": "", "TYPE": "loop"},
+            {"NAME": "/dev/nvme1n1", "KNAME": "/dev/nvme1n1", "PKNAME": "", "TYPE": "disk"},
+            {"NAME": "/dev/sda", "KNAME": "/dev/sda", "PKNAME": "", "TYPE": "disk"},
+        ]
+        cmd = list_command.List([])
+
+        assert cmd.exclude_invalid_devices(devices) == [
+            {"NAME": "/dev/sda", "KNAME": "/dev/sda", "PKNAME": "", "TYPE": "disk"}
+        ]
+
+    @patch("ceph_volume.devices.raw.list.List.exclude_lvm_osd_devices", Mock())
+    @patch("ceph_volume.util.device.disk.get_devices")
+    @patch("ceph_volume.util.disk.has_bluestore_label")
+    @patch("ceph_volume.process.call")
+    @patch("ceph_volume.util.disk.lsblk_all")
+    def test_exclude_invalid_devices_is_called(
+        self,
+        patched_disk_lsblk,
+        patched_call,
+        patched_bluestore_label,
+        patched_get_devices,
+    ):
+        patched_disk_lsblk.side_effect = _lsblk_all_devices
+        patched_call.side_effect = _process_call_side_effect
+        patched_bluestore_label.side_effect = _has_bluestore_label_side_effect
+        patched_get_devices.side_effect = _devices_side_effect
+
+        with patch(
+            "ceph_volume.devices.raw.list.List.exclude_invalid_devices"
+        ) as mock:
+            list_command.List([]).generate()
+            mock.assert_called_once()
+

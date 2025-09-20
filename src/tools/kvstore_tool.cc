@@ -5,12 +5,18 @@
 
 #include <iostream>
 
+#include "common/config_proxy.h" // for class ConfigProxy
 #include "common/errno.h"
 #include "common/url_escape.h"
 #include "common/pretty_binary.h"
+#include "global/global_context.h" // for g_conf()
 #include "include/buffer.h"
-#include "kv/KeyValueDB.h"
+#include "include/types.h" // for struct byte_u_t
 #include "kv/KeyValueHistogram.h"
+
+#ifdef WITH_BLUESTORE
+#include "os/bluestore/BlueStore.h"
+#endif
 
 using namespace std;
 
@@ -49,6 +55,8 @@ StoreTool::StoreTool(const string& type,
   }
 }
 
+#ifdef WITH_BLUESTORE
+
 int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair)
 {
     auto bluestore = new BlueStore(g_ceph_context, path);
@@ -60,6 +68,8 @@ int StoreTool::load_bluestore(const string& path, bool read_only, bool to_repair
     db = decltype(db){db_ptr, Deleter(bluestore)};
     return 0;
 }
+
+#endif // WITH_BLUESTORE
 
 uint32_t StoreTool::traverse(const string& prefix,
                              const bool do_crc,

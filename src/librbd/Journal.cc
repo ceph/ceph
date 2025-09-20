@@ -4,6 +4,7 @@
 #include "librbd/Journal.h"
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -205,7 +206,7 @@ struct GetTagsRequest {
     }
 
     journal::ImageClientMeta *image_client_meta =
-      boost::get<journal::ImageClientMeta>(&client_data.client_meta);
+      std::get_if<journal::ImageClientMeta>(&client_data.client_meta);
     if (image_client_meta == nullptr) {
       lderr(cct) << this << " OpenJournalerRequest::" << __func__ << ": "
                  << "failed to get client meta" << dendl;
@@ -1768,7 +1769,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
   }
 
   journal::ImageClientMeta *image_client_meta =
-    boost::get<journal::ImageClientMeta>(&client_data.client_meta);
+    std::get_if<journal::ImageClientMeta>(&client_data.client_meta);
   if (image_client_meta == nullptr) {
     lderr(cct) << this << " " << __func__ << ": "
                << "failed to access image client meta struct" << dendl;

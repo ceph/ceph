@@ -15,9 +15,9 @@
 
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <memory>
-#include <type_traits>
 
 #include <boost/intrusive/list.hpp>
 #include "include/rados/librados_fwd.hpp"
@@ -40,7 +40,10 @@ struct AioResult {
   uint64_t id = 0; // id allows caller to associate a result with its request
   bufferlist data; // result buffer for reads
   int result = 0;
-  std::aligned_storage_t<3 * sizeof(void*)> user_data;
+  static constexpr size_t user_data_alignment = std::bit_ceil(3 * sizeof(void*));
+  struct alignas(user_data_alignment) {
+      unsigned char data[user_data_alignment];
+  } user_data;
 
   AioResult() = default;
   AioResult(const AioResult&) = delete;

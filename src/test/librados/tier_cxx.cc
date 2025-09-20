@@ -4,11 +4,13 @@
 
 #include "mds/mdstypes.h"
 #include "include/buffer.h"
+#include "include/intarith.h" // for cbits()
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "global/global_context.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"
 #include "common/ceph_crypto.h"
 #include "test/librados/test_cxx.h"

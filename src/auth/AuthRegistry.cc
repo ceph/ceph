@@ -17,6 +17,7 @@
 #define dout_prefix *_dout << "AuthRegistry(" << this << ") "
 
 using std::string;
+using namespace std::literals;
 
 AuthRegistry::AuthRegistry(CephContext *cct)
   : cct(cct)
@@ -32,23 +33,21 @@ AuthRegistry::~AuthRegistry()
   }
 }
 
-const char** AuthRegistry::get_tracked_conf_keys() const
+std::vector<std::string> AuthRegistry::get_tracked_keys() const noexcept
 {
-  static const char *keys[] = {
-    "auth_supported",
-    "auth_client_required",
-    "auth_cluster_required",
-    "auth_service_required",
-    "ms_mon_cluster_mode",
-    "ms_mon_service_mode",
-    "ms_mon_client_mode",
-    "ms_cluster_mode",
-    "ms_service_mode",
-    "ms_client_mode",
-    "keyring",
-    NULL
+  return {
+    "auth_supported"s,
+    "auth_client_required"s,
+    "auth_cluster_required"s,
+    "auth_service_required"s,
+    "ms_mon_cluster_mode"s,
+    "ms_mon_service_mode"s,
+    "ms_mon_client_mode"s,
+    "ms_cluster_mode"s,
+    "ms_service_mode"s,
+    "ms_client_mode"s,
+    "keyring"s
   };
-  return keys;
 }
 
 void AuthRegistry::handle_conf_change(

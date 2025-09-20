@@ -13,10 +13,18 @@
  */
 
 #include "ScrubStack.h"
-#include "common/Finisher.h"
+#include "CDir.h"
+#include "RetryMessage.h"
+#include "SnapRealm.h"
+#include "common/debug.h"
+#include "common/Formatter.h"
+#include "mds/MDLog.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
+#include "mds/SnapRealm.h"
+#include "messages/MMDSScrub.h"
+#include "messages/MMDSScrubStats.h"
 #include "osdc/Objecter.h"
 
 #define dout_context g_ceph_context
@@ -66,7 +74,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   if (CInode *in = dynamic_cast<CInode*>(obj)) {
     if (in->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
-      return -CEPHFS_EBUSY;
+      return -EBUSY;
     }
     if(in->state_test(CInode::STATE_PURGING)) {
       dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
@@ -80,7 +88,7 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
   } else if (CDir *dir = dynamic_cast<CDir*>(obj)) {
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
-      return -CEPHFS_EBUSY;
+      return -EBUSY;
     }
     if(dir->get_inode()->state_test(CInode::STATE_PURGING)) {
       dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
@@ -161,14 +169,14 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 {
   // abort in progress
   if (clear_stack)
-    return -CEPHFS_EAGAIN;
+    return -EAGAIN;
 
   header->set_origin(in->ino());
   auto ret = scrubbing_map.emplace(header->get_tag(), header);
   if (!ret.second) {
     dout(10) << __func__ << " with {" << *in << "}"
 	     << ", conflicting tag " << header->get_tag() << dendl;
-    return -CEPHFS_EEXIST;
+    return -EEXIST;
   }
   if (header->get_scrub_mdsdir()) {
     filepath fp;
@@ -382,7 +390,15 @@ void ScrubStack::scrub_dir_inode(CInode *in, bool *added_children, bool *done)
     if (queued.contains(fg))
       continue;
     CDir *dir = in->get_or_open_dirfrag(mdcache, fg);
-    if (!dir->is_auth()) {
+    if (mds->damage_table.is_dirfrag_damaged(dir)) {
+      /* N.B.: we are cowardly (and ironically) not looking at dirfrags we've
+       * noted as damaged already. The state of the dirfrag will be missing an
+       * omap (or object) or the fnode is corrupt. Neither situation the MDS
+       * presently knows how to recover from. So skip it for now.
+       */
+      dout(5) << __func__ << ": not scrubbing damaged dirfrag: " << *dir << dendl;
+      continue;
+    } else if (!dir->is_auth()) {
       if (dir->is_ambiguous_auth()) {
 	dout(20) << __func__ << " ambiguous auth " << *dir  << dendl;
 	dir->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, gather.new_sub());
@@ -513,7 +529,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
       }
       if (dnl->is_primary()) {
 	_enqueue(dnl->get_inode(), header, false);
-      } else if (dnl->is_remote()) {
+      } else if (dnl->is_remote() || dnl->is_referent_remote()) {
 	// TODO: check remote linkage
       }
     }
@@ -887,7 +903,7 @@ void ScrubStack::scrub_pause(Context *on_finish) {
   // abort is in progress
   if (clear_stack) {
     if (on_finish)
-      on_finish->complete(-CEPHFS_EINVAL);
+      on_finish->complete(-EINVAL);
     return;
   }
 
@@ -914,10 +930,10 @@ bool ScrubStack::scrub_resume() {
   int r = 0;
 
   if (clear_stack) {
-    r = -CEPHFS_EINVAL;
+    r = -EINVAL;
   } else if (state == STATE_PAUSING) {
     set_state(STATE_RUNNING);
-    complete_control_contexts(-CEPHFS_ECANCELED);
+    complete_control_contexts(-ECANCELED);
   } else if (state == STATE_PAUSED) {
     set_state(STATE_RUNNING);
     kick_off_scrubs();
@@ -985,6 +1001,7 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       ceph_assert(diri);
 
       std::vector<CDir*> dfs;
+      bool has_dirty_dirfrag = false;
       MDSGatherBuilder gather(g_ceph_context);
       frag_vec_t frags;
       diri->dirfragtree.get_leaves(frags);
@@ -1007,6 +1024,10 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 	    dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
 	    dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
 	    continue;
+	  }
+          if (dir->is_dirty()) {
+            dout(10) << __func__ << " found dirty remote dirfrag " << *dir <<  dendl;
+            has_dirty_dirfrag = true;
 	  }
 	  dfs.push_back(dir);
 	}
@@ -1040,7 +1061,8 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
       }
 
       auto r = make_message<MMDSScrub>(MMDSScrub::OP_QUEUEDIR_ACK, m->get_ino(),
-				       std::move(queued), m->get_tag());
+				       std::move(queued), m->get_tag(),
+				       inodeno_t(), false, false, false, false, has_dirty_dirfrag);
       mdcache->mds->send_message_mds(r, from);
     }
     break;
@@ -1062,6 +1084,8 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 
 	    const auto& header = diri->get_scrub_header();
 	    header->set_epoch_last_forwarded(scrub_epoch);
+	    if (m->is_remote_dirfrag_dirty())
+	      diri->mark_dirty_remote_dirfrag_scrubbed();
 	    remove_from_waiting(diri);
 	  }
 	}
@@ -1148,7 +1172,7 @@ void ScrubStack::handle_scrub_stats(const cref_t<MMDSScrubStats> &m)
     bool any_finished = false;
     bool any_repaired = false;
     std::set<std::string> scrubbing_tags;
-    std::unordered_map<std::string, unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
+    std::unordered_map<std::string, std::unordered_map<int, std::vector<_inodeno_t>>> uninline_failed_meta_info;
     std::unordered_map<_inodeno_t, std::string> paths;
     std::unordered_map<std::string, std::vector<uint64_t>> counters;
 
@@ -1366,7 +1390,9 @@ void ScrubStack::uninline_data(CInode *in, Context *fin)
   mdr->snapid = CEPH_NOSNAP;
   mdr->no_early_reply = true;
   mdr->internal_op_finish = fin;
+  mdr->in[0] = in;
 
+  in->auth_pin(this);
   in->mdcache->dispatch_request(mdr);
 }
 

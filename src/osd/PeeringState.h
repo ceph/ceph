@@ -5,13 +5,16 @@
 
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
-#include <boost/statechart/simple_state.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 #include <boost/statechart/event_base.hpp>
 #include <string>
 #include <atomic>
+#include <map>
+#include <optional>
+#include <ostream>
+#include <vector>
 
 #include "include/ceph_assert.h"
 #include "include/common_fwd.h"
@@ -20,12 +23,16 @@
 #include "PGStateUtils.h"
 #include "PGPeeringEvent.h"
 #include "osd_types.h"
-#include "osd_types_fmt.h"
 #include "os/ObjectStore.h"
 #include "OSDMap.h"
 #include "MissingLoc.h"
-#include "osd/osd_perf_counters.h"
-#include "common/ostream_temp.h"
+#include "msg/Message.h"
+#include "msg/MessageRef.h"
+#include "common/ceph_mutex.h"
+#include "common/config_cacher.h"
+#include "common/snap_types.h" // for class SnapContext
+
+class OstreamTemp;
 
 struct PGPool {
   epoch_t cached_epoch;
@@ -78,7 +85,7 @@ struct PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-#if defined(WITH_SEASTAR)
+#ifdef WITH_CRIMSON
   std::map<int, std::vector<MessageURef>> message_map;
 #else
   std::map<int, std::vector<MessageRef>> message_map;
@@ -286,7 +293,7 @@ public:
     virtual uint64_t get_snap_trimq_size() const = 0;
 
     /// Send cluster message to osd
-    #if defined(WITH_SEASTAR)
+    #ifdef WITH_CRIMSON
     virtual void send_cluster_message(
       int osd, MessageURef m, epoch_t epoch, bool share_map_update=false) = 0;
     #else
@@ -417,7 +424,7 @@ public:
 
     // ============ recovery reservation notifications ==========
     virtual void on_backfill_reserved() = 0;
-    virtual void on_backfill_canceled() = 0;
+    virtual void on_backfill_suspended() = 0;
     virtual void on_recovery_reserved() = 0;
     virtual void on_recovery_cancelled() = 0;
 
@@ -551,6 +558,7 @@ public:
   TrivialEvent(MakeStray)
   TrivialEvent(NeedActingChange)
   TrivialEvent(IsIncomplete)
+  TrivialEvent(RepeatGetLog)
   TrivialEvent(IsDown)
 
   TrivialEvent(AllReplicasRecovered)
@@ -625,7 +633,7 @@ public:
     }
 
     PeeringCtxWrapper &get_recovery_ctx() {
-      assert(state->rctx);
+      ceph_assert(state->rctx);
       return *(state->rctx);
     }
 
@@ -963,7 +971,7 @@ public:
     boost::statechart::result react(const RemoteReservationRevoked& evt);
     boost::statechart::result react(const DeferBackfill& evt);
     boost::statechart::result react(const UnfoundBackfill& evt);
-    void cancel_backfill();
+    void suspend_backfill();
     void exit();
   };
 
@@ -1189,6 +1197,7 @@ public:
     std::set<pg_shard_t>::const_iterator remote_recovery_reservation_it;
     explicit WaitRemoteRecoveryReserved(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryReserved &evt);
+    boost::statechart::result react(const AdvMap& ev);
     void exit();
   };
 
@@ -1200,6 +1209,7 @@ public:
     explicit WaitLocalRecoveryReserved(my_context ctx);
     void exit();
     boost::statechart::result react(const RecoveryTooFull &evt);
+    boost::statechart::result react(const AdvMap& ev);
   };
 
   struct Activating : boost::statechart::state< Activating, Active >, NamedState {
@@ -1305,6 +1315,7 @@ public:
 
   struct GetLog : boost::statechart::state< GetLog, Peering >, NamedState {
     pg_shard_t auth_log_shard;
+    bool repeat_getlog = false;
     boost::intrusive_ptr<MOSDPGLog> msg;
 
     explicit GetLog(my_context ctx);
@@ -1317,7 +1328,8 @@ public:
       boost::statechart::custom_reaction< GotLog >,
       boost::statechart::custom_reaction< AdvMap >,
       boost::statechart::transition< NeedActingChange, WaitActingChange >,
-      boost::statechart::transition< IsIncomplete, Incomplete >
+      boost::statechart::transition< IsIncomplete, Incomplete >,
+      boost::statechart::transition< RepeatGetLog, GetLog>
       > reactions;
     boost::statechart::result react(const AdvMap&);
     boost::statechart::result react(const QueryState& q);
@@ -1391,6 +1403,10 @@ public:
 
   PGStateHistory state_history;
   CephContext* cct;
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_seconds{
+    cct->_conf, "osd_pg_stat_report_interval_max_seconds" };
+  md_config_cacher_t<int64_t> osd_pg_stat_report_interval_max_epochs{
+    cct->_conf, "osd_pg_stat_report_interval_max_epochs" };
   spg_t spgid;
   DoutPrefixProvider *dpp;
   PeeringListener *pl;
@@ -1432,6 +1448,7 @@ public:
 
   /// union of acting, recovery, and backfill targets
   std::set<pg_shard_t> acting_recovery_backfill;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   std::vector<HeartbeatStampsRef> hb_stamps;
 
@@ -1470,12 +1487,30 @@ public:
 
   epoch_t last_peering_reset = 0;   ///< epoch of last peering reset
 
-  /// last_update that has committed; ONLY DEFINED WHEN is_active()
-  eversion_t  last_update_ondisk;
+  /**
+   * pg_committed_to
+   *
+   * Maintained on the primary while pg is active (and not merely peered).
+   *
+   * Forall e <= pg_committed_to, e has been committed on all replicas.
+   *
+   * As a consequence:
+   * - No version e <= pg_committed_to can become divergent
+   * - It is safe for replicas to read any object whose most recent update is
+   *   <= pg_committed_to
+   *
+   * Note that if the PG is only peered, pg_committed_to not be set
+   * and will remain eversion_t{} as we cannot guarantee that last_update
+   * at activation will not later become divergent.
+   */
+  eversion_t  pg_committed_to;
+
   eversion_t  last_complete_ondisk; ///< last_complete that has committed.
   eversion_t  last_update_applied;  ///< last_update readable
   /// last version to which rollback_info trimming has been applied
   eversion_t  last_rollback_info_trimmed_to_applied;
+  // last version in which the stats for a shard were updated
+  std::map<pg_shard_t,eversion_t> stats_last_update;
 
   /// Counter to determine when pending flushes have completed
   unsigned flushes_in_progress = 0;
@@ -1490,6 +1525,18 @@ public:
   std::map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
   std::set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
   std::set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+
+  /// not constexpr because classic/crimson might differ
+  const pg_feature_vec_t local_pg_acting_features;
+  
+  /**
+   * acting_pg_features
+   *
+   * PG specific features common to entire acting set.  Valid only on primary
+   * after activation.
+   */
+  pg_feature_vec_t pg_acting_features;
+
 
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -1520,6 +1567,7 @@ public:
   std::set<pg_shard_t> peer_activated;
 
   std::set<pg_shard_t> backfill_targets;       ///< osds to be backfilled
+  shard_id_set backfill_target_shard_id_set;
   std::set<pg_shard_t> async_recovery_targets; ///< osds to be async recovered
 
   /// osds which might have objects on them which are unfound on the primary
@@ -1541,8 +1589,27 @@ public:
 
   void update_heartbeat_peers();
   void query_unfound(Formatter *f, std::string state);
-  bool proc_replica_info(
-    pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log1,
+		  PGLog *log2);
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  pg_log_t *log)
+  {
+    apply_pwlc(pwlc, shard, info, log, nullptr);
+  }
+  void apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
+		  const pg_shard_t &shard,
+		  pg_info_t &info,
+		  PGLog *log = nullptr)
+  {
+    apply_pwlc(pwlc, shard, info, nullptr, log);
+  }
+  void update_peer_info(const pg_shard_t &from, const pg_info_t &oinfo);
+  bool proc_replica_notify(const pg_shard_t &from, const pg_notify_t &notify);
   void remove_down_peer_info(const OSDMapRef &osdmap);
   void check_recovery_sources(const OSDMapRef& map);
   void set_last_peering_reset();
@@ -1623,11 +1690,18 @@ private:
 
   void reject_reservation();
 
+  void calculate_maxles_and_minlua( const std::map<pg_shard_t, pg_info_t> &infos,
+				    epoch_t& max_last_epoch_started,
+				    eversion_t& min_last_update_acceptable,
+				    bool exclude_nonprimary_shards = false,
+				    bool *history_les_bound = nullptr) const;
+
   // acting std::set
   std::map<pg_shard_t, pg_info_t>::const_iterator find_best_info(
     const std::map<pg_shard_t, pg_info_t> &infos,
     bool restrict_to_up_acting,
-    bool *history_les_bound) const;
+    bool exclude_nonprimary_shards,
+    bool *history_les_bound = nullptr) const;
 
   static void calc_ec_acting(
     std::map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -1696,10 +1770,11 @@ private:
     const OSDMapRef osdmap) const;
 
   bool recoverable(const std::vector<int> &want) const;
-  bool choose_acting(pg_shard_t &auth_log_shard,
+  bool choose_acting(pg_shard_t &get_log_shard,
 		     bool restrict_to_up_acting,
-		     bool *history_les_bound,
-		     bool request_pg_temp_change_only = false);
+		     bool request_pg_temp_change_only = false,
+		     bool *history_les_bound = nullptr,
+		     bool *repeat_getlog = nullptr);
 
   bool search_for_missing(
     const pg_info_t &oinfo, const pg_missing_t &omissing,
@@ -1718,10 +1793,12 @@ private:
     pg_log_t&& olog, pg_shard_t from);
 
   void proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &info);
+  void consider_adjusting_pwlc(eversion_t last_complete);
+  void consider_rollback_pwlc(eversion_t last_complete);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo,
 		       pg_log_t&& olog, pg_missing_t&& omissing,
 		       pg_shard_t from);
-  void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
+  void proc_replica_log(pg_info_t &oinfo, pg_log_t &olog,
 			pg_missing_t&& omissing, pg_shard_t from);
 
   void calc_min_last_complete_ondisk();
@@ -1738,7 +1815,7 @@ private:
   void update_blocked_by();
   void update_calc_stats();
 
-  void add_log_entry(const pg_log_entry_t& e, bool applied);
+  void add_log_entry(const pg_log_entry_t& e, ObjectStore::Transaction &t, bool applied);
 
   void calc_trim_to();
   void calc_trim_to_aggressive();
@@ -1750,6 +1827,7 @@ public:
     spg_t spgid,
     const PGPool &pool,
     OSDMapRef curmap,
+    pg_feature_vec_t supported_pg_acting_features,
     DoutPrefixProvider *dpp,
     PeeringListener *pl);
 
@@ -1899,18 +1977,7 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
-
-  void append_log_with_trim_to_updated(
-    std::vector<pg_log_entry_t>&& log_entries,
-    eversion_t roll_forward_to,
-    ObjectStore::Transaction &t,
-    bool transaction_applied,
-    bool async) {
-    update_trim_to();
-    append_log(std::move(log_entries), pg_trim_to, roll_forward_to,
-	min_last_complete_ondisk, t, transaction_applied, async);
-  }
+    std::optional<eversion_t> pg_committed_to);
 
   /**
    * Updates local log to reflect new write from primary.
@@ -1919,10 +1986,20 @@ public:
     std::vector<pg_log_entry_t>&& logv,
     eversion_t trim_to,
     eversion_t roll_forward_to,
-    eversion_t min_last_complete_ondisk,
+    eversion_t pg_committed_to,
     ObjectStore::Transaction &t,
     bool transaction_applied,
     bool async);
+
+  /**
+   * update_pct
+   *
+   * Updates pg_committed_to.  Generally invoked on replica on
+   * receipt of MODPGPCT from primary.
+   */
+  void update_pct(eversion_t pct) {
+    pg_committed_to = pct;
+  }
 
   /**
    * retrieve the min last_backfill among backfill targets
@@ -1937,11 +2014,11 @@ public:
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
     ObjectStore::Transaction &t,
     std::optional<eversion_t> trim_to,
-    std::optional<eversion_t> roll_forward_to);
+    std::optional<eversion_t> pg_committed_to);
 
   /// Update missing set to reflect e (TODOSAM: not sure why this is needed)
   void add_local_next_event(const pg_log_entry_t& e) {
-    pg_log.missing_add_next_entry(e);
+    pg_log.missing_add_next_entry(e, pool.info, pg_whoami.shard);
   }
 
   /// Update log trim boundary
@@ -2210,7 +2287,7 @@ public:
   }
   static bool has_shard(bool ec, const std::vector<int>& v, pg_shard_t osd) {
     if (ec) {
-      return v.size() > (unsigned)osd.shard && v[osd.shard] == osd.osd;
+      return v.size() > (unsigned)osd.shard && v[static_cast<int>(osd.shard)] == osd.osd;
     } else {
       return std::find(v.begin(), v.end(), osd.osd) != v.end();
     }
@@ -2258,6 +2335,10 @@ public:
   const std::set<pg_shard_t> &get_backfill_targets() const {
     return backfill_targets;
   }
+  const shard_id_set &get_backfill_target_shard_id_set() const
+  {
+    return backfill_target_shard_id_set;
+  }
   bool is_async_recovery_target(pg_shard_t peer) const {
     return async_recovery_targets.count(peer);
   }
@@ -2266,6 +2347,9 @@ public:
   }
   const std::set<pg_shard_t> &get_acting_recovery_backfill() const {
     return acting_recovery_backfill;
+  }
+  const shard_id_set &get_acting_recovery_backfill_shard_id_set() const {
+    return acting_recovery_backfill_shard_id_set;
   }
 
   const PGLog &get_pg_log() const {
@@ -2341,13 +2425,13 @@ public:
       return pg_log.get_missing();
     } else {
       auto it = peer_missing.find(peer);
-      assert(it != peer_missing.end());
+      ceph_assert(it != peer_missing.end());
       return it->second;
     }
   }
   const pg_info_t&get_peer_info(pg_shard_t peer) const {
     auto it = peer_info.find(peer);
-    assert(it != peer_info.end());
+    ceph_assert(it != peer_info.end());
     return it->second;
   }
   bool has_peer_info(pg_shard_t peer) const {
@@ -2403,6 +2487,10 @@ public:
   unsigned int get_num_missing() const {
     return pg_log.get_missing().num_missing();
   }
+  bool is_missing_any_head_or_clone_of(const hobject_t &hoid) {
+    const auto& missing = pg_log.get_missing();
+    return missing.is_missing_any_head_or_clone_of(hoid);
+  }
 
   const MissingLoc &get_missing_loc() const {
     return missing_loc;
@@ -2410,10 +2498,6 @@ public:
 
   const MissingLoc::missing_by_count_t &get_missing_by_count() const {
     return missing_loc.get_missing_by_count();
-  }
-
-  eversion_t get_min_last_complete_ondisk() const {
-    return min_last_complete_ondisk;
   }
 
   eversion_t get_pg_trim_to() const {
@@ -2424,8 +2508,8 @@ public:
     return last_update_applied;
   }
 
-  eversion_t get_last_update_ondisk() const {
-    return last_update_ondisk;
+  eversion_t get_pg_committed_to() const {
+    return pg_committed_to;
   }
 
   bool debug_has_dirty_state() const {
@@ -2467,6 +2551,8 @@ public:
   /// Get feature vector common to up/acting set
   uint64_t get_min_upacting_features() const { return upacting_features; }
 
+  /// Get pg features common to acting set
+  pg_feature_vec_t get_pg_acting_features() const { return pg_acting_features; }
 
   // Flush control interface
 private:

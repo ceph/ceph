@@ -12,6 +12,8 @@ cdef extern from "<utime.h>":
 cdef extern from "sys/types.h":
     ctypedef unsigned long mode_t
     ctypedef unsigned long dev_t
+    ctypedef unsigned int uid_t;
+    ctypedef unsigned int gid_t;
 
 cdef extern from "sys/time.h":
     cdef struct timeval:

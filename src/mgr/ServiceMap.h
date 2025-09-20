@@ -6,10 +6,10 @@
 #include <string>
 #include <map>
 #include <list>
-#include <sstream>
 
 #include "include/utime.h"
 #include "include/buffer.h"
+#include "include/types.h" // for epoch_t
 #include "msg/msg_types.h"
 
 namespace ceph {
@@ -28,7 +28,7 @@ struct ServiceMap {
     void encode(ceph::buffer::list& bl, uint64_t features) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static void generate_test_instances(std::list<Daemon*>& ls);
+    static std::list<Daemon> generate_test_instances();
   };
 
   struct Service {
@@ -38,7 +38,7 @@ struct ServiceMap {
     void encode(ceph::buffer::list& bl, uint64_t features) const;
     void decode(ceph::buffer::list::const_iterator& p);
     void dump(ceph::Formatter *f) const;
-    static void generate_test_instances(std::list<Service*>& ls);
+    static std::list<Service> generate_test_instances();
 
     std::string get_summary() const;
     bool has_running_tasks() const;
@@ -54,7 +54,7 @@ struct ServiceMap {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ServiceMap*>& ls);
+  static std::list<ServiceMap> generate_test_instances();
 
   std::pair<Daemon*,bool> get_daemon(const std::string& service,
 				     const std::string& daemon) {

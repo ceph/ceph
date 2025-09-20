@@ -53,6 +53,7 @@ struct AdminOpState {
   std::optional<int64_t> quota_max_size;
   std::optional<int64_t> quota_max_objects;
   std::optional<bool> quota_enabled;
+  bool purge_data = false;
 };
 
 /// create an account
@@ -85,7 +86,7 @@ int stats(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
 int list_users(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
                AdminOpState& op_state, const std::string& path_prefix,
                const std::string& marker, bool max_entries_specified,
-               int max_entries, std::string& err_msg,
+               int max_entries, bool root_only, std::string& err_msg,
                RGWFormatterFlusher& flusher, optional_yield y);
 
 } // namespace rgw::account

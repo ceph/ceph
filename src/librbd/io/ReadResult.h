@@ -11,7 +11,7 @@
 #include "librbd/io/Types.h"
 #include "osdc/Striper.h"
 #include <sys/uio.h>
-#include <boost/variant/variant.hpp>
+#include <variant>
 
 
 namespace librbd {
@@ -60,7 +60,7 @@ public:
       void finish(int r) override;
   };
 
-  ReadResult();
+  ReadResult() = default;
   ReadResult(char *buf, size_t buf_len);
   ReadResult(const struct iovec *iov, int iov_count);
   ReadResult(ceph::bufferlist *bl);
@@ -71,9 +71,6 @@ public:
   void assemble_result(CephContext *cct);
 
 private:
-  struct Empty {
-  };
-
   struct Linear {
     char *buf;
     size_t buf_len;
@@ -109,11 +106,11 @@ private:
     }
   };
 
-  typedef boost::variant<Empty,
-                         Linear,
-                         Vector,
-                         Bufferlist,
-                         SparseBufferlist> Buffer;
+  typedef std::variant<std::monostate,
+		       Linear,
+		       Vector,
+		       Bufferlist,
+		       SparseBufferlist> Buffer;
   struct SetImageExtentsVisitor;
   struct AssembleResultVisitor;
 

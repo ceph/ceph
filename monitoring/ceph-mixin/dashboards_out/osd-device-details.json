@@ -35,7 +35,20 @@
    "graphTooltip": 0,
    "hideControls": false,
    "id": null,
-   "links": [ ],
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
    "panels": [
       {
          "collapse": false,
@@ -57,23 +70,50 @@
          "type": "row"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "s"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -81,36 +121,25 @@
             "y": 1
          },
          "id": 3,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "read",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "rate(ceph_osd_op_r_latency_sum{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval]) /\n  on (ceph_daemon) rate(ceph_osd_op_r_latency_count{cluster=~\"$cluster\", }[$__rate_interval])\n",
@@ -127,60 +156,54 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "$osd Latency",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "s",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "short"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -188,36 +211,25 @@
             "y": 1
          },
          "id": 4,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "Reads",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "rate(ceph_osd_op_r{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
@@ -234,60 +246,54 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "$osd R/W IOPS",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "short",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "bytes"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -295,36 +301,25 @@
             "y": 1
          },
          "id": 5,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "Read Bytes",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "rate(ceph_osd_op_r_out_bytes{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }[$__rate_interval])",
@@ -341,41 +336,8 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "$osd R/W Bytes",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "bytes",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
          "collapse": false,
@@ -397,23 +359,50 @@
          "type": "row"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "s"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -421,36 +410,25 @@
             "y": 11
          },
          "id": 7,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "/.*Reads/",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "(\n  label_replace(\n    rate(node_disk_read_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_reads_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  ) and on (instance, device) label_replace(\n    label_replace(\n      ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n      \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n    ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n  )\n)\n",
@@ -460,67 +438,61 @@
                "refId": "A"
             },
             {
-               "expr": "(\n  label_replace(\n    rate(node_disk_write_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_writes_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device)\n    label_replace(\n      label_replace(\n        ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n      ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n    )\n  )\n",
+               "expr": "(\n  label_replace(\n    rate(node_disk_write_time_seconds_total[$__rate_interval]) /\n      rate(node_disk_writes_completed_total[$__rate_interval]),\n    \"instance\", \"$1\", \"instance\", \"([^:.]*).*\") and on (instance, device)\n    label_replace(\n      label_replace(\n        ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n      ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n    )\n)\n",
                "format": "time_series",
                "intervalFactor": 1,
                "legendFormat": "{{instance}}/{{device}} Writes",
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Physical Device Latency for $osd",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "s",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "short"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -528,36 +500,25 @@
             "y": 11
          },
          "id": 8,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "/.*Reads/",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "label_replace(\n  rate(node_disk_writes_completed_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
@@ -574,60 +535,54 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Physical Device R/W IOPS for $osd",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "short",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "Read (-) / Write (+)",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "Bps"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -635,36 +590,25 @@
             "y": 11
          },
          "id": 9,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null as zero",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [
             {
                "alias": "/.*Reads/",
                "transform": "negative-Y"
             }
          ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "label_replace(\n  rate(node_disk_read_bytes_total[$__rate_interval]), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", },\n    \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
@@ -681,60 +625,54 @@
                "refId": "B"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Physical Device R/W Bytes for $osd",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "Bps",
-               "label": "Read (-) / Write (+)",
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       },
       {
-         "aliasColors": { },
-         "bars": false,
-         "dashLength": 10,
-         "dashes": false,
          "datasource": "$datasource",
-         "description": "",
          "fieldConfig": {
             "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
                "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
                   "fillOpacity": 8,
-                  "showPoints": "never"
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 0,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "never",
+                  "spanNulls": true,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [ ]
                },
                "unit": "percentunit"
-            }
+            },
+            "overrides": [ ]
          },
-         "fill": 1,
-         "fillGradient": 0,
          "gridPos": {
             "h": 9,
             "w": 6,
@@ -742,31 +680,20 @@
             "y": 11
          },
          "id": 10,
-         "legend": {
-            "alignAsTable": false,
-            "avg": false,
-            "current": false,
-            "max": false,
-            "min": false,
-            "rightSide": false,
-            "show": true,
-            "sideWidth": null,
-            "total": false,
-            "values": false
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "none"
+            }
          },
-         "lines": true,
-         "linewidth": 1,
-         "links": [ ],
-         "nullPointMode": "null",
-         "percentage": false,
-         "pointradius": 5,
-         "points": false,
-         "renderer": "flot",
-         "repeat": null,
+         "pluginVersion": "9.1.3",
          "seriesOverrides": [ ],
-         "spaceLength": 10,
-         "stack": false,
-         "steppedLine": false,
          "targets": [
             {
                "expr": "label_replace(\n  rate(node_disk_io_time_seconds_total[$__rate_interval]),\n  \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n) and on (instance, device) label_replace(\n  label_replace(\n    ceph_disk_occupation_human{ceph_daemon=~\"$osd\", cluster=~\"$cluster\", }, \"device\", \"$1\", \"device\", \"/dev/(.*)\"\n  ), \"instance\", \"$1\", \"instance\", \"([^:.]*).*\"\n)\n",
@@ -776,41 +703,8 @@
                "refId": "A"
             }
          ],
-         "thresholds": [ ],
-         "timeFrom": null,
-         "timeShift": null,
          "title": "Physical Device Util% for $osd",
-         "tooltip": {
-            "shared": true,
-            "sort": 0,
-            "value_type": "individual"
-         },
-         "type": "timeseries",
-         "xaxis": {
-            "buckets": null,
-            "mode": "time",
-            "name": null,
-            "show": true,
-            "values": [ ]
-         },
-         "yaxes": [
-            {
-               "format": "percentunit",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            },
-            {
-               "format": "short",
-               "label": null,
-               "logBase": 1,
-               "max": null,
-               "min": null,
-               "show": true
-            }
-         ]
+         "type": "timeseries"
       }
    ],
    "refresh": "30s",

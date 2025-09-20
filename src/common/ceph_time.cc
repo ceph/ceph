@@ -18,9 +18,13 @@
 #include <fmt/chrono.h>
 #include <fmt/ostream.h>
 
+#include "include/rados.h" // for struct ceph_timespec
 #include "log/LogClock.h"
 #include "config.h"
 #include "strtol.h"
+
+#include <iomanip> // for std::setw()
+#include <sstream>
 
 #if defined(__APPLE__)
 #include <mach/mach.h>

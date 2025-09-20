@@ -1,4 +1,5 @@
 #include "FSMapUser.h"
+#include "common/Formatter.h"
 
 void FSMapUser::encode(ceph::buffer::list& bl, uint64_t features) const
 {
@@ -41,16 +42,18 @@ void FSMapUser::fs_info_t::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void FSMapUser::generate_test_instances(std::list<FSMapUser*>& ls)
+std::list<FSMapUser> FSMapUser::generate_test_instances()
 {
-  FSMapUser *m = new FSMapUser();
-  m->epoch = 2;
-  m->legacy_client_fscid = 1;
-  m->filesystems[1].cid = 1;
-  m->filesystems[2].name = "cephfs2";
-  m->filesystems[2].cid = 2;
-  m->filesystems[1].name = "cephfs1";
-  ls.push_back(m);
+  std::list<FSMapUser> ls;
+  FSMapUser m;
+  m.epoch = 2;
+  m.legacy_client_fscid = 1;
+  m.filesystems[1].cid = 1;
+  m.filesystems[2].name = "cephfs2";
+  m.filesystems[2].cid = 2;
+  m.filesystems[1].name = "cephfs1";
+  ls.push_back(std::move(m));
+  return ls;
 }
 
 

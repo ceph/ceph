@@ -50,7 +50,9 @@ automatically.
 When using Filestore, the journal size should be at least twice the product of the expected drive
 speed multiplied by ``filestore_max_sync_interval``. However, the most common
 practice is to partition the journal drive (often an SSD), and mount it such
-that Ceph uses the entire partition for the journal.
+that Ceph uses the entire partition for the journal. Note that Filestore has been
+deprecated for several releases and any legacy Filestore OSDs should be migrated
+to BlueStore.
 
 .. confval:: osd_uuid
 .. confval:: osd_data
@@ -373,6 +375,8 @@ considerably. To maintain operational performance, Ceph performs this migration
 with 'backfilling', which allows Ceph to set backfill operations to a lower
 priority than requests to read or write data.
 
+.. note:: Some of these settings are automatically reset if the `mClock`_
+ 		    scheduler is active, see `mClock backfill`_.
 
 .. confval:: osd_max_backfills
 .. confval:: osd_backfill_scan_min
@@ -415,6 +419,9 @@ To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph
 perform well in a degraded state.
 
+.. note:: Some of these settings are automatically reset if the `mClock`_
+          scheduler is active, see `mClock backfill`_.
+
 .. confval:: osd_recovery_delay_start
 .. confval:: osd_recovery_max_active
 .. confval:: osd_recovery_max_active_hdd
@@ -426,6 +433,10 @@ perform well in a degraded state.
 .. confval:: osd_recovery_sleep_hdd
 .. confval:: osd_recovery_sleep_ssd
 .. confval:: osd_recovery_sleep_hybrid
+.. confval:: osd_recovery_sleep_degraded
+.. confval:: osd_recovery_sleep_degraded_hdd
+.. confval:: osd_recovery_sleep_degraded_ssd
+.. confval:: osd_recovery_sleep_degraded_hybrid
 .. confval:: osd_recovery_priority
 
 Tiering
@@ -452,6 +463,8 @@ Miscellaneous
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
+.. _mClock: ../mclock-config-ref
+.. _mClock backfill: ../mclock-config-ref#recovery-backfill-options
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

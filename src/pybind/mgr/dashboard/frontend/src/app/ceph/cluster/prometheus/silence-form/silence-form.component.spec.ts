@@ -86,7 +86,7 @@ describe('SilenceFormComponent', () => {
     });
 
   const changeAction = (action: string) => {
-    const modes = {
+    const modes: Record<string, string> = {
       add: '/monitoring/silences/add',
       alertAdd: '/monitoring/silences/add/alert0',
       recreate: '/monitoring/silences/recreate/someExpiredId',
@@ -102,7 +102,7 @@ describe('SilenceFormComponent', () => {
 
     prometheus = new PrometheusHelper();
     prometheusService = TestBed.inject(PrometheusService);
-    spyOn(prometheusService, 'getAlerts').and.callFake(() => {
+    spyOn(prometheusService, 'getGroupedAlerts').and.callFake(() => {
       const name = _.split(router.url, '/').pop();
       return of([prometheus.createAlert(name)]);
     });
@@ -180,7 +180,7 @@ describe('SilenceFormComponent', () => {
     let navigateSpy: jasmine.Spy;
 
     const expectError = (action: string, redirected: boolean) => {
-      Object.defineProperty(router, 'url', { value: action });
+      Object.defineProperty(router, 'url', { value: action, configurable: true });
       if (redirected) {
         expect(() => callInit()).toThrowError(DashboardNotFoundError);
       } else {
@@ -285,7 +285,7 @@ describe('SilenceFormComponent', () => {
       params = { id: 'alert0' };
       expectMode('alertAdd', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
-      expect(prometheusService.getAlerts).toHaveBeenCalled();
+      expect(prometheusService.getGroupedAlerts).toHaveBeenCalled();
       expect(component.matchers).toEqual([createMatcher('alertname', 'alert0', false)]);
       expect(component.matcherMatch).toEqual({
         cssClass: 'has-success',

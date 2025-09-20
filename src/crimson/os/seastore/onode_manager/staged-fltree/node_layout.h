@@ -78,12 +78,9 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     return c.nm.alloc_extent(c.t, hint, extent_size
     ).handle_error_interruptible(
       eagain_iertr::pass_further{},
-      crimson::ct_error::input_output_error::assert_failure(
-          [FNAME, c, extent_size, is_level_tail, level] {
-        SUBERRORT(seastore_onode,
-            "EIO -- extent_size={}, is_level_tail={}, level={}",
-            c.t, extent_size, is_level_tail, level);
-      })
+      crimson::ct_error::input_output_error::assert_failure(fmt::format(
+        "{} extent_size={}, is_level_tail={}, level={}",
+        FNAME, extent_size, is_level_tail, level).c_str())
     ).si_then([is_level_tail, level](auto extent) {
       assert(extent);
       assert(extent->is_initial_pending());
@@ -222,7 +219,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         merge_stage = STAGE;
         size_comp = right_node_stage.header_size();
       } else {
-        ceph_abort("impossible path");
+        ceph_abort_msg("impossible path");
       }
     } else {
       key_view_t left_pivot_index;
@@ -281,7 +278,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         auto p_write = left_node_stage.get_end_p_laddr();
         mut.copy_in_absolute((void*)p_write, tail_value);
       } else {
-        ceph_abort("impossible path");
+        ceph_abort_msg("impossible path");
       }
     } else {
       typename stage_t::template StagedAppender<KeyT::VIEW> left_appender;
@@ -426,7 +423,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       stage_t::template get_slot<true, false>(
           extent.read(), cast_down<STAGE>(pos), p_index_key, nullptr);
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
 #ifndef NDEBUG
     if (pp_value) {
@@ -449,7 +446,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       stage_t::template get_prev_slot<false, true>(
           extent.read(), _pos, nullptr, pp_value);
     } else {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     }
 #ifndef NDEBUG
     auto _nxt_pos = _pos;
@@ -472,7 +469,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       find_next = stage_t::template get_next_slot<false, true>(
           extent.read(), cast_down<STAGE>(pos), nullptr, pp_value);
     } else {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     }
     if (find_next) {
       pos = search_position_t::end();
@@ -496,7 +493,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       stage_t::template get_largest_slot<true, false, false>(
           extent.read(), &cast_down_fill_0<STAGE>(*p_pos), nullptr, nullptr);
     } else {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     }
   }
 
@@ -837,7 +834,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       assert(is_level_tail());
       return extent.read().get_end_p_laddr();
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   }
 
@@ -856,7 +853,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       assert(p_value->value == src);
       extent.update_child_addr_replayable(dst, const_cast<laddr_packed_t*>(p_value));
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   }
 
@@ -877,7 +874,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       }
       return {insert_stage, insert_size};
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   }
 
@@ -898,7 +895,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
             key, value, history, mstat, cast_down<STAGE>(insert_pos));
       }
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   }
 

@@ -316,7 +316,7 @@ def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith(
-        'quay.io/titans/prometheus:latest --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=15d --storage.tsdb.retention.size=0 --web.external-url=http://10.10.10.10:9095 --web.listen-address=1.2.3.4:9095'
+        'quay.io/titans/prometheus:latest --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.listen-address=1.2.3.4:9095 --storage.tsdb.retention.time=15d --storage.tsdb.retention.size=0 --web.external-url=http://10.10.10.10:9095'
     )
     assert '--user 8765' in runfile_lines[-1]
     assert f'-v /var/lib/ceph/{fsid}/prometheus.fire/etc/prometheus:/etc/prometheus:Z' in runfile_lines[-1]
@@ -495,6 +495,7 @@ def test_deploy_ceph_exporter_container(cephadm_fs, funkypatch):
 def test_deploy_and_rm_iscsi(cephadm_fs, funkypatch):
     # Test that the deploy and remove paths for iscsi (which has sidecar container)
     # create and remove the correct unit files.
+    funkypatch.patch('shutil.rmtree')  # fakefs + shutil.rmtree breaks on py3.12
     mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'

@@ -9,6 +9,7 @@ events {
 http {
 
     #access_log /dev/stdout;
+    error_log /dev/stderr warn;
     client_header_buffer_size 32K;
     large_client_header_buffers 4 32k;
     proxy_busy_buffers_size 512k;
@@ -51,6 +52,7 @@ http {
 
 {% if prometheus_endpoints %}
     upstream prometheus_servers {
+     ip_hash;
      {% for ep in prometheus_endpoints %}
      server {{ ep }};
      {% endfor %}

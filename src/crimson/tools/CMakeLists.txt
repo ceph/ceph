@@ -8,6 +8,14 @@ target_link_libraries(crimson-store-nbd
   crimson-os)
 install(TARGETS crimson-store-nbd DESTINATION bin)
 
+add_executable(crimson-store-bench
+  store_bench/store-bench.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
+
+target_link_libraries(crimson-store-bench
+  crimson-os)
+install(TARGETS crimson-store-bench DESTINATION bin)
+
 add_executable(perf-crimson-msgr perf_crimson_msgr.cc)
 target_link_libraries(perf-crimson-msgr crimson)
 
@@ -20,3 +28,13 @@ target_link_libraries(perf-staged-fltree crimson-seastore crimson::gtest)
 else()
 target_link_libraries(perf-staged-fltree crimson-seastore)
 endif()
+
+add_executable(crimson-objectstore-tool
+  objectstore/objectstore_tool.cc
+  objectstore/crimson_objectstore_tool.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
+target_link_libraries(crimson-objectstore-tool
+  legacy-option-headers
+  crimson
+  crimson-os)
+install(TARGETS crimson-objectstore-tool DESTINATION bin)

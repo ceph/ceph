@@ -57,6 +57,8 @@ if(NOT WIN32)
   add_subdirectory(cls_queue)
   add_subdirectory(cls_2pc_queue)
   add_subdirectory(cls_cmpomap)
+  add_subdirectory(cls_fifo)
+  add_subdirectory(cls_sem_set)
   add_subdirectory(journal)
 
   add_subdirectory(erasure-code)
@@ -90,7 +92,7 @@ endif(WITH_RADOSGW)
 if(WITH_RBD AND NOT WIN32)
 add_subdirectory(rbd_mirror)
 endif(WITH_RBD AND NOT WIN32)
-if(WITH_SEASTAR)
+if(WITH_CRIMSON)
   add_subdirectory(crimson)
 endif()
 add_subdirectory(system)
@@ -168,7 +170,7 @@ add_executable(ceph_test_mutate
 target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
-if(NOT WIN32)
+if(WITH_BLUESTORE AND NOT WIN32)
 # test_trans
 add_executable(test_trans
   test_trans.cc
@@ -591,6 +593,7 @@ if(NOT WIN32)
   ceph_snappy
   cls_lock
   ceph_test_objectstore
+  ceph_test_bluefs
   ceph_erasure_code_non_regression
   cython_modules
   crushtool
@@ -611,7 +614,7 @@ if(WITH_RBD)
     add_dependencies(tests unittest_librbd rbd-mirror)
   endif(WITH_RBD_MIRROR)
 endif(WITH_RBD)
-if(WITH_RADOSGW)
+if(WITH_RADOSGW AND WITH_RADOSGW_RADOS)
   add_dependencies(tests radosgw radosgw-admin)
 endif()
 #add dependency from fio just to ensure the plugin build isn't failing
@@ -978,6 +981,7 @@ target_link_libraries(unittest_texttable ceph-common)
 add_executable(unittest_not_before_queue
   test_not_before_queue.cc)
 add_ceph_unittest(unittest_not_before_queue)
+target_link_libraries(unittest_not_before_queue ceph-common)
 
 if(NOT WIN32)
 # unittest_on_exit
@@ -1021,3 +1025,21 @@ add_executable(test_nvmeof_mon_encoding
 target_link_libraries(test_nvmeof_mon_encoding
   mon ceph-common global-static
   )
+
+
+if(WITH_BREAKPAD)
+# unittest_ceph_breakpad
+add_executable(unittest_ceph_breakpad
+  ceph_breakpad.cc)
+add_ceph_unittest(unittest_ceph_breakpad)
+target_link_libraries(unittest_ceph_breakpad ceph-common global Breakpad::breakpad)
+endif()
+
+if(NOT WIN32)
+# unittest_ceph_assert
+add_executable(unittest_ceph_assert
+  ceph_assert.cc)
+add_ceph_unittest(unittest_ceph_assert)
+target_link_libraries(unittest_ceph_assert ceph-common global)
+endif()
+

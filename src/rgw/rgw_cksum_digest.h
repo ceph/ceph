@@ -13,8 +13,7 @@
 
 #pragma once
 
-#include <boost/variant.hpp>
-#include <boost/blank.hpp>
+#include <variant>
 #include "common/ceph_crypto.h"
 #include "rgw_blake3_digest.h"
 #include "rgw_crc_digest.h"
@@ -63,20 +62,22 @@ namespace rgw { namespace cksum {
   typedef TDigest<ceph::crypto::SHA1> SHA1;
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
+  typedef TDigest<rgw::digest::Crc64Nvme> Crc64Nvme;
 
-  typedef boost::variant<boost::blank,
-			 Blake3,
-			 Crc32,
-			 Crc32c,
-			 XXH3,
-			 SHA1,
-			 SHA256,
-			 SHA512> DigestVariant;
+  typedef std::variant<std::monostate,
+		       Blake3,
+		       Crc32,
+		       Crc32c,
+		       XXH3,
+		       SHA1,
+		       SHA256,
+		       SHA512,
+		       Crc64Nvme> DigestVariant;
 
-  struct get_digest_ptr : public boost::static_visitor<Digest*>
+  struct get_digest_ptr
   {
     get_digest_ptr() {};
-    Digest* operator()(const boost::blank& b) const { return nullptr; }
+    Digest* operator()(const std::monostate& b) const { return nullptr; }
     Digest* operator()(Blake3& digest) const { return &digest; }
     Digest* operator()(Crc32& digest) const { return &digest; }
     Digest* operator()(Crc32c& digest) const { return &digest; }
@@ -84,11 +85,12 @@ namespace rgw { namespace cksum {
     Digest* operator()(SHA1& digest) const { return &digest; }
     Digest* operator()(SHA256& digest) const { return &digest; }
     Digest* operator()(SHA512& digest) const { return &digest; }
+    Digest* operator()(Crc64Nvme& digest) const { return &digest; }
   };
 
   static inline Digest* get_digest(DigestVariant& ev)
   {
-    return boost::apply_visitor(get_digest_ptr{}, ev);
+    return std::visit(get_digest_ptr{}, ev);
   }
 
   static inline DigestVariant digest_factory(const Type cksum_type)
@@ -106,6 +108,9 @@ namespace rgw { namespace cksum {
     case Type::crc32c:
       return Crc32c();
       break;
+    case Type::crc64nvme:
+      return Crc64Nvme();
+      break;
     case Type::xxh3:
       return XXH3();
       break;
@@ -118,7 +123,7 @@ namespace rgw { namespace cksum {
     case Type::none:
       break;
     };
-    return boost::blank();
+    return std::monostate();
   } /* digest_factory */
 
   static inline Cksum finalize_digest(Digest* digest, Type type)

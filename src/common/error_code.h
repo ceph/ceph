@@ -16,9 +16,29 @@
 #ifndef COMMON_CEPH_ERROR_CODE
 #define COMMON_CEPH_ERROR_CODE
 
-#include <netdb.h>
+#include <cerrno>
+#ifdef __has_include
+#  if __has_include(<format>)
+#    include <format>
+#  endif
+#endif
+#include <functional>
+#include <new>
+#include <optional>
+#include <regex>
+#include <stdexcept>
+#include <system_error>
+#include <variant>
 
-#include <boost/system.hpp>
+#include <boost/system/error_category.hpp>
+#include <boost/system/error_code.hpp>
+#include <boost/system/error_condition.hpp>
+#include <boost/system/generic_category.hpp>
+#include <boost/system/system_error.hpp>
+
+#include <fmt/format.h>
+
+#include <netdb.h>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"
@@ -26,7 +46,6 @@
 #pragma clang diagnostic ignored "-Wnon-virtual-dtor"
 
 namespace ceph {
-
 // This is for error categories we define, so we can specify the
 // equivalent integral value at the point of definition.
 class converting_category : public boost::system::error_category {
@@ -72,9 +91,122 @@ inline boost::system::error_condition make_error_condition(errc e) noexcept {
 
 [[nodiscard]] boost::system::error_code to_error_code(int ret) noexcept;
 [[nodiscard]] int from_error_code(boost::system::error_code e) noexcept;
-}
 #pragma GCC diagnostic pop
 #pragma clang diagnostic pop
+
+[[nodiscard]]
+inline int from_exception(std::exception_ptr eptr, std::string* what = nullptr)
+{
+  if (!eptr) [[likely]] {
+    return 0;
+  }
+  try {
+    std::rethrow_exception(eptr);
+  } catch (const boost::system::system_error& e) {
+    if (what)
+      *what = e.what();
+    return from_error_code(e.code());
+  } catch (const std::system_error& e) {
+    if (what)
+      *what = e.what();
+    return from_error_code(e.code());
+  } catch (const std::invalid_argument& e) {
+    if (what)
+      *what = e.what();
+    return -EINVAL;
+  } catch (const std::domain_error& e) {
+    if (what)
+      *what = e.what();
+    return -EDOM;
+  } catch (const std::length_error& e) {
+    if (what)
+      *what = e.what();
+    return -ERANGE;
+  } catch (const std::out_of_range& e) {
+    if (what)
+      *what = e.what();
+    return -ERANGE;
+  } catch (const std::range_error& e) {
+    if (what)
+      *what = e.what();
+    return -ERANGE;
+  } catch (const std::overflow_error& e) {
+    if (what)
+      *what = e.what();
+    return -EOVERFLOW;
+  } catch (const std::underflow_error& e) {
+    if (what)
+      *what = e.what();
+    return -EOVERFLOW;
+  } catch (const std::bad_alloc& e) {
+    if (what)
+      *what = e.what();
+    return -ENOMEM;
+  } catch (const std::regex_error& e) {
+    if (what)
+      *what = e.what();
+    using namespace std::regex_constants;
+    switch (e.code()) {
+    case error_space:
+    case error_stack:
+      return -ENOMEM;
+    case error_complexity:
+      return -ENOTSUP;
+    default:
+      return -EINVAL;
+    }
+#ifdef __has_include
+#  if __has_include(<format>)
+  } catch (const std::format_error& e) {
+    if (what)
+      *what = e.what();
+    return -EINVAL;
+#  endif
+#endif
+  } catch (const fmt::format_error& e) {
+    if (what)
+      *what = e.what();
+    return -EINVAL;
+  } catch (const std::bad_typeid& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_cast& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_optional_access& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_weak_ptr& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_function_call& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_exception& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::bad_variant_access& e) {
+    if (what)
+      *what = e.what();
+    return -EFAULT;
+  } catch (const std::exception& e) {
+    if (what)
+      *what = e.what();
+    return -EIO;
+  } catch (...) {
+    if (what)
+      *what = "Unknown exception";
+    return -EIO;
+  }
+  return -EIO;
+}
+}
 
 // Moved here from buffer.h so librados doesn't gain a dependency on
 // Boost.System
@@ -138,11 +270,11 @@ struct malformed_input : public error {
     : error(errc::malformed_input, what_arg) {}
 };
 struct error_code : public error {
-  error_code(int r) : error(-r, boost::system::system_category()) {}
+  error_code(int r) : error(-r, boost::system::generic_category()) {}
   error_code(int r, const char* what_arg)
-    : error(-r, boost::system::system_category(), what_arg) {}
+    : error(-r, boost::system::generic_category(), what_arg) {}
   error_code(int r, const std::string& what_arg)
-    : error(-r, boost::system::system_category(), what_arg) {}
+    : error(-r, boost::system::generic_category(), what_arg) {}
 };
 }
 }

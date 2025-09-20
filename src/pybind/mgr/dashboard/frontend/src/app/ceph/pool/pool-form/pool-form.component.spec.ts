@@ -21,14 +21,14 @@ import { ErrorComponent } from '~/app/core/error/error.component';
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
 import { ErasureCodeProfileService } from '~/app/shared/api/erasure-code-profile.service';
 import { PoolService } from '~/app/shared/api/pool.service';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { SelectBadgesComponent } from '~/app/shared/components/select-badges/select-badges.component';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { ErasureCodeProfile } from '~/app/shared/models/erasure-code-profile';
 import { Permission } from '~/app/shared/models/permissions';
 import { PoolFormInfo } from '~/app/shared/models/pool-form-info';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import {
@@ -135,28 +135,25 @@ describe('PoolFormComponent', () => {
 
   const routes: Routes = [{ path: '404', component: ErrorComponent }];
 
-  configureTestBed(
-    {
-      declarations: [ErrorComponent],
-      imports: [
-        BrowserAnimationsModule,
-        HttpClientTestingModule,
-        RouterTestingModule.withRoutes(routes),
-        ToastrModule.forRoot(),
-        NgbNavModule,
-        PoolModule,
-        SharedModule,
-        NgbModalModule
-      ],
-      providers: [
-        ErasureCodeProfileService,
-        NgbActiveModal,
-        SelectBadgesComponent,
-        { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
-      ]
-    },
-    [CriticalConfirmationModalComponent]
-  );
+  configureTestBed({
+    declarations: [ErrorComponent],
+    imports: [
+      BrowserAnimationsModule,
+      HttpClientTestingModule,
+      RouterTestingModule.withRoutes(routes),
+      ToastrModule.forRoot(),
+      NgbNavModule,
+      PoolModule,
+      SharedModule,
+      NgbModalModule
+    ],
+    providers: [
+      ErasureCodeProfileService,
+      NgbActiveModal,
+      SelectBadgesComponent,
+      { provide: ActivatedRoute, useValue: { params: of({ name: 'somePoolName' }) } }
+    ]
+  });
 
   let navigationSpy: jasmine.Spy;
 
@@ -339,30 +336,35 @@ describe('PoolFormComponent', () => {
       it('validates minBlobSize to be only valid between 0 and maxBlobSize', () => {
         formHelper.expectErrorChange('minBlobSize', -1, 'min');
         formHelper.expectValidChange('minBlobSize', 0);
-        formHelper.setValue('maxBlobSize', '2 KiB');
-        formHelper.expectErrorChange('minBlobSize', '3 KiB', 'maximum');
-        formHelper.expectValidChange('minBlobSize', '1.9 KiB');
+        formHelper.setValue('minBlobSizeUnit', 'KiB');
+        formHelper.setValue('maxBlobSize', '2');
+        formHelper.setValue('maxBlobSizeUnit', 'KiB');
+        formHelper.expectErrorChange('minBlobSize', '3', 'maximum');
+        formHelper.expectValidChange('minBlobSize', '1.9');
       });
 
       it('validates minBlobSize converts numbers', () => {
         const control = formHelper.setValue('minBlobSize', '1');
+        const controlUnit = formHelper.setValue('minBlobSizeUnit', 'KiB');
         fixture.detectChanges();
         formHelper.expectValid(control);
-        expect(control.value).toBe('1 KiB');
+        expect(control.value).toBe('1');
+        expect(controlUnit.value).toBe('KiB');
       });
 
       it('validates maxBlobSize to be only valid bigger than minBlobSize', () => {
         formHelper.expectErrorChange('maxBlobSize', -1, 'min');
-        formHelper.setValue('minBlobSize', '1 KiB');
-        formHelper.expectErrorChange('maxBlobSize', '0.5 KiB', 'minimum');
-        formHelper.expectValidChange('maxBlobSize', '1.5 KiB');
+        formHelper.setValue('minBlobSize', '1');
+        formHelper.setValue('minBlobSizeUnit', 'MiB');
+        formHelper.expectErrorChange('maxBlobSize', '0.5', 'minimum');
+        formHelper.expectValidChange('maxBlobSize', '1.5');
       });
 
       it('s valid to only use one blob size', () => {
-        formHelper.expectValid(formHelper.setValue('minBlobSize', '1 KiB'));
+        formHelper.expectValid(formHelper.setValue('minBlobSize', '1'));
         formHelper.expectValid(formHelper.setValue('maxBlobSize', ''));
         formHelper.expectValid(formHelper.setValue('minBlobSize', ''));
-        formHelper.expectValid(formHelper.setValue('maxBlobSize', '1 KiB'));
+        formHelper.expectValid(formHelper.setValue('maxBlobSize', '1'));
       });
 
       it('dismisses any size error if one of the blob sizes is changed into a valid state', () => {
@@ -381,19 +383,22 @@ describe('PoolFormComponent', () => {
 
       it('validates maxBlobSize converts numbers', () => {
         const control = formHelper.setValue('maxBlobSize', '2');
+        const controlUnit = formHelper.setValue('maxBlobSizeUnit', 'KiB');
         fixture.detectChanges();
-        expect(control.value).toBe('2 KiB');
+        expect(control.value).toBe('2');
+        expect(controlUnit.value).toBe('KiB');
       });
 
       it('validates that odd size validator works as expected', () => {
-        const odd = (min: string, max: string) => component['oddBlobSize'](min, max);
-        expect(odd('10', '8')).toBe(true);
-        expect(odd('8', '-')).toBe(false);
-        expect(odd('8', '10')).toBe(false);
-        expect(odd(null, '8')).toBe(false);
-        expect(odd('10', '')).toBe(false);
-        expect(odd('10', null)).toBe(false);
-        expect(odd(null, null)).toBe(false);
+        const odd = (min: string, minUnit: string, max: string, maxUnit: string) =>
+          component['oddBlobSize'](min, minUnit, max, maxUnit);
+        expect(odd('10', 'KiB', '8', 'KiB')).toBe(true);
+        expect(odd('8', 'KiB', '-', 'KiB')).toBe(false);
+        expect(odd('8', 'KiB', '10', 'KiB')).toBe(false);
+        expect(odd(null, 'KiB', '8', 'KiB')).toBe(false);
+        expect(odd('10', 'KiB', '', 'KiB')).toBe(false);
+        expect(odd('10', 'KiB', null, 'KiB')).toBe(false);
+        expect(odd(null, 'KiB', null, 'KiB')).toBe(false);
       });
 
       it('validates ratio to be only valid between 0 and 1', () => {
@@ -765,7 +770,7 @@ describe('PoolFormComponent', () => {
     it('should select the newly created rule', () => {
       expect(form.getValue('crushRule').rule_name).toBe('rep1');
       const name = 'awesomeRule';
-      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
           componentInstance: {
             submitAction: of({ name })
@@ -798,7 +803,7 @@ describe('PoolFormComponent', () => {
 
     describe('crush rule deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
 
@@ -828,7 +833,7 @@ describe('PoolFormComponent', () => {
       };
 
       beforeEach(() => {
-        modalSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
           (deletionClass: any, initialState: any) => {
             deletion = Object.assign(new deletionClass(), initialState);
             return {
@@ -933,7 +938,7 @@ describe('PoolFormComponent', () => {
       spyOn(ecpService, 'list').and.callFake(() => of(infoReturn.erasure_code_profiles));
       expect(form.getValue('erasureProfile').name).toBe('ecp1');
       const name = 'awesomeProfile';
-      spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(() => {
+      spyOn(TestBed.inject(ModalService), 'show').and.callFake(() => {
         return {
           componentInstance: {
             submitAction: of({ name })
@@ -949,7 +954,7 @@ describe('PoolFormComponent', () => {
 
     describe('ecp deletion', () => {
       let taskWrapper: TaskWrapperService;
-      let deletion: CriticalConfirmationModalComponent;
+      let deletion: DeleteConfirmationModalComponent;
       let deleteSpy: jasmine.Spy;
       let modalSpy: jasmine.Spy;
       let modal: NgbModalRef;
@@ -977,7 +982,7 @@ describe('PoolFormComponent', () => {
 
       beforeEach(() => {
         deletion = undefined;
-        modalSpy = spyOn(TestBed.inject(ModalCdsService), 'show').and.callFake(
+        modalSpy = spyOn(TestBed.inject(ModalService), 'show').and.callFake(
           (comp: any, init: any) => {
             modal = modalServiceShow(comp, init);
             return modal;
@@ -1152,10 +1157,13 @@ describe('PoolFormComponent', () => {
         setMultipleValues({
           mode: 'passive',
           algorithm: 'lz4',
-          minBlobSize: '4 K',
-          maxBlobSize: '4 M',
+          minBlobSize: '4',
+          minBlobSizeUnit: 'KiB',
+          maxBlobSize: '4',
+          maxBlobSizeUnit: 'MiB',
           ratio: 0.7
         });
+        fixture.detectChanges();
         expectEcSubmit({
           compression_mode: 'passive',
           compression_algorithm: 'lz4',
@@ -1240,7 +1248,8 @@ describe('PoolFormComponent', () => {
 
       it('creates a pool with quotas', () => {
         setMultipleValues({
-          max_bytes: 1024 * 1024,
+          max_bytes: 1,
+          maxBytesUnit: 'MiB',
           max_objects: 3000
         });
         component.data.applications.selected = ['cephfs', 'rgw'];
@@ -1346,10 +1355,13 @@ describe('PoolFormComponent', () => {
         expect(form.getValue('pgNum')).toBe(pool.pg_num);
         expect(form.getValue('mode')).toBe(pool.options.compression_mode);
         expect(form.getValue('algorithm')).toBe(pool.options.compression_algorithm);
-        expect(form.getValue('minBlobSize')).toBe('512 KiB');
-        expect(form.getValue('maxBlobSize')).toBe('1 MiB');
+        expect(form.getValue('minBlobSize')).toBe('512');
+        expect(form.getValue('minBlobSizeUnit')).toBe('KiB');
+        expect(form.getValue('maxBlobSize')).toBe('1');
+        expect(form.getValue('maxBlobSizeUnit')).toBe('MiB');
         expect(form.getValue('ratio')).toBe(pool.options.compression_required_ratio);
-        expect(form.getValue('max_bytes')).toBe('1 GiB');
+        expect(form.getValue('max_bytes')).toBe('1');
+        expect(form.getValue('maxBytesUnit')).toBe('GiB');
         expect(form.getValue('max_objects')).toBe(pool.quota_max_objects);
       });
 

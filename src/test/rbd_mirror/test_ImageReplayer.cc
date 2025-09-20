@@ -14,6 +14,7 @@
  *
  */
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
@@ -46,6 +47,8 @@
 
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 void register_test_rbd_mirror() {
 }
@@ -243,6 +246,7 @@ public:
   void unwatch() {
     if (m_watch_handle != 0) {
       m_remote_ioctx.unwatch2(m_watch_handle);
+      m_remote_cluster.watch_flush();
       delete m_watch_ctx;
       m_watch_ctx = nullptr;
       m_watch_handle = 0;

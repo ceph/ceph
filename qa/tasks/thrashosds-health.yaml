@@ -30,3 +30,15 @@ overrides:
       - out of quorum
       - noscrub
       - nodeep-scrub
+      - Degraded data redundancy
+      - is down
+      - osds down
+      - pg .*? is .*?degraded.*?, acting
+      - pg .*? is stuck
+      - pg degraded
+      - PG_BACKFILL_FULL
+      - Low space hindering backfill .*? backfill_toofull
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN
+      - pgs degraded
+      - pgs undersized

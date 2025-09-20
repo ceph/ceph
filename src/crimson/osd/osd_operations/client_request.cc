@@ -14,6 +14,7 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "osd/object_state_fmt.h"
+#include "osd/osd_perf_counters.h"
 
 SET_SUBSYS(osd);
 
@@ -42,24 +43,27 @@ void ClientRequest::Orderer::clear_and_cancel(PG &pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::clear_and_cancel);
   for (auto i = list.begin(); i != list.end(); ) {
-    DEBUGDPP("{}", pg, *i);
-    i->complete_request();
-    remove_request(*(i++));
+    auto &req = *i;
+    DEBUGDPP("{}", pg, req);
+    ++i;
+    req.complete_request(pg);
   }
 }
 
-void ClientRequest::complete_request()
+void ClientRequest::complete_request(PG &pg)
 {
   track_event<CompletionEvent>();
+  pg.client_request_orderer.remove_request(*this);
   on_complete.set_value();
 }
 
 ClientRequest::ClientRequest(
   ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : shard_services(&_shard_services),
-    l_conn(std::move(conn)),
+  : RemoteOperation(std::move(conn)),
+    shard_services(&_shard_services),
     m(std::move(m)),
+    begin_time(std::chrono::steady_clock::now()),
     instance_handle(new instance_handle_t)
 {}
 
@@ -98,7 +102,7 @@ PerShardPipeline &ClientRequest::get_pershard_pipeline(
   return shard_services.get_client_request_pipeline();
 }
 
-ClientRequest::PGPipeline &ClientRequest::client_pp(PG &pg)
+CommonPGPipeline &ClientRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }
@@ -137,12 +141,20 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   DEBUGDPP("{} start", *pgref, *this);
   PG &pg = *pgref;
+
+  DEBUGDPP("{}.{}: entering wait_pg_ready stage",
+	   *pgref, *this, this_instance_id);
+  // The prior stage is OrderedExclusive (PerShardPipeline::create_or_wait_pg)
+  // and wait_pg_ready is OrderedConcurrent.  This transition, therefore, cannot
+  // block and using enter_stage_sync is legal and more efficient than
+  // enter_stage.
+  ihref.enter_stage_sync(client_pp(pg).wait_pg_ready, *this);
+
   if (!m->get_hobj().get_key().empty()) {
     // There are no users of locator. It was used to ensure that multipart-upload
     // parts would end up in the same PG so that they could be clone_range'd into
     // the same object via librados, but that's not how multipart upload works
     // anymore and we no longer support clone_range via librados.
-    get_handle().exit();
     co_await reply_op_error(pgref, -ENOTSUP);
     co_return;
   }
@@ -152,31 +164,28 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 	std::ref(get_foreign_connection()), m->get_map_epoch()
       ));
     DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
-    pgref->client_request_orderer.remove_request(*this);
-    complete_request();
     co_return;
   }
-  DEBUGDPP("{}.{}: entering await_map stage",
-	   *pgref, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(client_pp(pg).await_map, *this);
-  DEBUGDPP("{}.{}: entered await_map stage, waiting for map",
-	   pg, *this, this_instance_id);
+
   auto map_epoch = co_await interruptor::make_interruptible(
     ihref.enter_blocker(
       *this, pg.osdmap_gate, &decltype(pg.osdmap_gate)::wait_for_map,
       m->get_min_epoch(), nullptr));
 
-  DEBUGDPP("{}.{}: map epoch got {}, entering wait_for_active",
+  DEBUGDPP("{}.{}: waited for epoch {}, waiting for active",
 	   pg, *this, this_instance_id, map_epoch);
-  co_await ihref.enter_stage<interruptor>(client_pp(pg).wait_for_active, *this);
-
-  DEBUGDPP("{}.{}: entered wait_for_active stage, waiting for active",
-	   pg, *this, this_instance_id);
   co_await interruptor::make_interruptible(
     ihref.enter_blocker(
       *this,
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
+
+  DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
+           pg, *this, this_instance_id);
+
+  co_await ihref.enter_stage<interruptor>(client_pp(pg).get_obc, *this);
+
+  DEBUGDPP("{}.{}: entered get_obc stage", pg, *this, this_instance_id);
 
   if (int res = op_info.set_from_op(&*m, *pg.get_osdmap());
       res != 0) {
@@ -186,54 +195,44 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 
   if (!pg.is_primary()) {
     // primary can handle both normal ops and balanced reads
-    if (is_misdirected(pg)) {
+    if (is_misdirected_replica_read(pg)) {
       DEBUGDPP("{}.{}: dropping misdirected op",
 	       pg, *this, this_instance_id);
       co_return;
-    } else if (const hobject_t& hoid = m->get_hobj();
-               !pg.get_peering_state().can_serve_replica_read(hoid)) {
+    }
+
+    pg.get_perf_logger().inc(l_osd_replica_read);
+    if (pg.is_missing_head_and_clones(m->get_hobj())) {
+      DEBUGDPP("{}.{}: {} possibly missing head or clone object on replica,"
+               " bouncing to primary",
+               pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_missing);
+      co_await reply_op_error(pgref, -EAGAIN);
+      co_return;
+    } else if (!pg.get_peering_state().can_serve_replica_read(m->get_hobj())) {
+      // Note: can_serve_replica_read checks for writes on the head object
+      //       as writes can only occur to head.
       DEBUGDPP("{}.{}: unstable write on replica, bouncing to primary",
 	       pg, *this, this_instance_id);
+      pg.get_perf_logger().inc(l_osd_replica_read_redirect_conflict);
       co_await reply_op_error(pgref, -EAGAIN);
       co_return;
     } else {
       DEBUGDPP("{}.{}: serving replica read on oid {}",
 	       pg, *this, this_instance_id, m->get_hobj());
+      pg.get_perf_logger().inc(l_osd_replica_read_served);
     }
   }
 
   DEBUGDPP("{}.{}: pg active, entering process[_pg]_op",
 	   *pgref, *this, this_instance_id);
 
-  {
-    /* The following works around two different gcc bugs:
-     *  1. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=101244
-     *     This example isn't preciesly as described in the bug, but it seems
-     *     similar.  It causes the generated code to incorrectly execute
-     *     process_pg_op unconditionally before the predicate.  It seems to be
-     *     fixed in gcc 12.2.1.
-     *  2. https://gcc.gnu.org/bugzilla/show_bug.cgi?id=102217
-     *     This one appears to cause the generated code to double-free
-     *     awaiter holding the future.  This one seems to be fixed
-     *     in gcc 13.2.1.
-     *
-     * Assigning the intermediate result and moving it into the co_await
-     * expression bypasses both bugs.
-     */
-    auto fut = (is_pg_op() ? process_pg_op(pgref) :
-		process_op(ihref, pgref, this_instance_id));
-    co_await std::move(fut);
-  }
+  co_await (is_pg_op() ? process_pg_op(pgref) :
+	    process_op(ihref, pgref, this_instance_id));
 
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
-
-  DEBUGDPP("{}.{}: process[_pg]_op complete,"
-	   "removing request from orderer",
-	   *pgref, *this, this_instance_id);
-  pgref->client_request_orderer.remove_request(*this);
-  complete_request();
 }
 
 seastar::future<> ClientRequest::with_pg_process(
@@ -249,16 +248,24 @@ seastar::future<> ClientRequest::with_pg_process(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [this, pgref, this_instance_id, &ihref]() mutable {
-      return with_pg_process_interruptible(pgref, this_instance_id, ihref);
+    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
+      return with_pg_process_interruptible(
+	pgref, this_instance_id, ihref
+      ).then_interruptible([FNAME, this, this_instance_id, pgref] {
+	DEBUGDPP("{}.{}: with_pg_process_interruptible complete,"
+		 " completing request",
+		 *pgref, *this, this_instance_id);
+	complete_request(*pgref);
+      });
     }, [FNAME, this, this_instance_id, pgref](std::exception_ptr eptr) {
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref, pgref->get_osdmap_epoch()).finally(
       [this, FNAME, opref=std::move(opref), pgref,
-       this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
+       this_instance_id, instance_handle=std::move(instance_handle), &ihref]() mutable {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
-	ihref.handle.exit();
+	return ihref.handle.complete(
+	).finally([instance_handle=std::move(instance_handle)] {});
     });
 }
 
@@ -290,28 +297,40 @@ ClientRequest::process_pg_op(
 ClientRequest::interruptible_future<>
 ClientRequest::recover_missing_snaps(
   Ref<PG> pg,
-  instance_handle_t &ihref,
-  ObjectContextRef head,
   std::set<snapid_t> &snaps)
 {
   LOG_PREFIX(ClientRequest::recover_missing_snaps);
-  for (auto &snap : snaps) {
-    auto coid = head->obs.oi.soid;
-    coid.snap = snap;
-    auto oid = resolve_oid(head->get_head_ss(), coid);
-    /* Rollback targets may legitimately not exist if, for instance,
-     * the object is an rbd block which happened to be sparse and
-     * therefore non-existent at the time of the specified snapshot.
-     * In such a case, rollback will simply delete the object.  Here,
-     * we skip the oid as there is no corresponding clone to recover.
-     * See https://tracker.ceph.com/issues/63821 */
-    if (oid) {
-      auto unfound = co_await do_recover_missing(pg, *oid, m->get_reqid());
-      if (unfound) {
-        DEBUGDPP("{} unfound, hang it for now", *pg, *oid);
-        co_await interruptor::make_interruptible(
-          pg->get_recovery_backend()->add_unfound(*oid));
+
+  std::vector<hobject_t> ret;
+  auto resolve_oids = pg->obc_loader.with_obc<RWState::RWREAD>(
+    m->get_hobj().get_head(),
+    [&snaps, &ret](auto head, auto) {
+    for (auto &snap : snaps) {
+      auto coid = head->obs.oi.soid;
+      coid.snap = snap;
+      auto oid = resolve_oid(head->get_head_ss(), coid);
+      /* Rollback targets may legitimately not exist if, for instance,
+       * the object is an rbd block which happened to be sparse and
+       * therefore non-existent at the time of the specified snapshot.
+       * In such a case, rollback will simply delete the object.  Here,
+       * we skip the oid as there is no corresponding clone to recover.
+       * See https://tracker.ceph.com/issues/63821 */
+      if (oid) {
+        ret.emplace_back(std::move(*oid));
       }
+    }
+    return seastar::now();
+  }).handle_error_interruptible(
+    crimson::ct_error::assert_all(fmt::format("{} {} error", *pg, FNAME).c_str())
+  );
+  co_await std::move(resolve_oids);
+
+  for (auto &oid : ret) {
+    auto unfound = co_await pg->do_recover_missing(oid, m->get_reqid());
+    if (unfound) {
+      DEBUGDPP("{} unfound, hang it for now", *pg, oid);
+      co_await interruptor::make_interruptible(
+        pg->get_recovery_backend()->add_unfound(oid));
     }
   }
 }
@@ -321,14 +340,20 @@ ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
   LOG_PREFIX(ClientRequest::process_op);
-  ihref.enter_stage_sync(client_pp(*pg).recover_missing, *this);
+  ihref.obc_orderer = pg->obc_loader.get_obc_orderer(m->get_hobj());
+  auto obc_manager = pg->obc_loader.get_obc_manager(
+    *(ihref.obc_orderer),
+    m->get_hobj());
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().process, *this);
+
   if (!pg->is_primary()) {
     DEBUGDPP(
       "Skipping recover_missings on non primary pg for soid {}",
       *pg, m->get_hobj());
   } else {
-    auto unfound = co_await do_recover_missing(
-      pg, m->get_hobj().get_head(), m->get_reqid());
+    auto unfound = co_await pg->do_recover_missing(
+      m->get_hobj().get_head(), m->get_reqid());
     if (unfound) {
       DEBUGDPP("{} unfound, hang it for now", *pg, m->get_hobj().get_head());
       co_await interruptor::make_interruptible(
@@ -336,29 +361,12 @@ ClientRequest::process_op(
     }
 
     std::set<snapid_t> snaps = snaps_need_to_recover();
-    if (!snaps.empty()) {
-      auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
-        m->get_hobj().get_head(),
-        [&snaps, &ihref, pg, this](auto head, auto) {
-        return recover_missing_snaps(pg, ihref, head, snaps);
-      }).handle_error_interruptible(
-        crimson::ct_error::assert_all("unexpected error")
-      );
-      // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401
-      co_await std::move(with_obc);
+    if (!snaps.empty() &&
+        pg->is_missing_head_and_clones(m->get_hobj().get_head())) {
+      co_await recover_missing_snaps(pg, snaps);
     }
   }
 
-  /**
-   * The previous stage of recover_missing is a concurrent phase.
-   * Checking for already_complete requests must done exclusively.
-   * Since get_obc is also an exclusive stage, we can merge both stages into
-   * a single stage and avoid stage switching overhead.
-   */
-  DEBUGDPP("{}.{}: entering check_already_complete_get_obc",
-	   *pg, *this, this_instance_id);
-  co_await ihref.enter_stage<interruptor>(
-    client_pp(*pg).check_already_complete_get_obc, *this);
   DEBUGDPP("{}.{}: checking already_complete",
 	   *pg, *this, this_instance_id);
   auto completed = co_await pg->already_complete(m->get_reqid());
@@ -385,51 +393,29 @@ ClientRequest::process_op(
 
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
-  // call with_locked_obc() in order, but wait concurrently for loading.
-  ihref.enter_stage_sync(
-      client_pp(*pg).lock_obc, *this);
-  auto process = pg->with_locked_obc(
-    m->get_hobj(), op_info,
-    [FNAME, this, pg, this_instance_id, &ihref] (
-      auto head, auto obc
-    ) -> interruptible_future<> {
-      DEBUGDPP("{}.{}: got obc {}, entering process stage",
-	       *pg, *this, this_instance_id, obc->obs);
-      return ihref.enter_stage<interruptor>(
-	client_pp(*pg).process, *this
-      ).then_interruptible(
-	[FNAME, this, pg, this_instance_id, obc, &ihref]() mutable {
-	  DEBUGDPP("{}.{}: in process stage, calling do_process",
-		   *pg, *this, this_instance_id);
-	  return do_process(
-	    ihref, pg, obc, this_instance_id
-	  );
-	}
-      );
-    }).handle_error_interruptible(
-      PG::load_obc_ertr::all_same_way(
-	[FNAME, this, pg=std::move(pg), this_instance_id](
-	  const auto &code
-	) -> interruptible_future<> {
-	  DEBUGDPP("{}.{}: saw error code {}",
-		   *pg, *this, this_instance_id, code);
-	  assert(code.value() > 0);
-	  return reply_op_error(pg, -code.value());
-	})
-    );
 
-  /* The following works around gcc bug
-   * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98401.
-   * The specific symptom I observed is the pg param being
-   * destructed multiple times resulting in the refcount going
-   * rapidly to 0 destoying the PG prematurely.
-   *
-   * This bug seems to be resolved in gcc 13.2.1.
-   *
-   * Assigning the intermediate result and moving it into the co_await
-   * expression bypasses both bugs.
-   */
-  co_await std::move(process);
+  int load_err = co_await pg->obc_loader.load_and_lock(
+    obc_manager, pg->get_lock_type(op_info)
+  ).si_then([]() -> int {
+    return 0;
+  }).handle_error_interruptible(
+    PG::load_obc_ertr::all_same_way(
+      [](const auto &code) -> int {
+	return -code.value();
+      })
+  );
+  if (load_err) {
+    DEBUGDPP("{}.{}: saw error code loading obc {}",
+	     *pg, *this, this_instance_id, load_err);
+    co_await reply_op_error(pg, load_err);
+    co_return;
+  }
+
+  DEBUGDPP("{}.{}: obc {} loaded and locked, calling do_process",
+	   *pg, *this, this_instance_id, obc_manager.get_obc()->obs);
+  co_await do_process(
+    ihref, pg, obc_manager.get_obc(), this_instance_id
+  );
 }
 
 ClientRequest::interruptible_future<>
@@ -457,6 +443,9 @@ ClientRequest::do_process(
       co_return;
     }
   }
+
+  co_await maybe_inject_delay();
+
   if (m->get_oid().name.size()
     > crimson::common::local_conf()->osd_max_object_name_len) {
     co_await reply_op_error(pg, -ENAMETOOLONG);
@@ -502,7 +491,7 @@ ClientRequest::do_process(
     co_return;
   }
 
-  OpsExecuter ox(pg, obc, op_info, *m, r_conn, snapc);
+  OpsExecuter ox(pg, obc, op_info, *m, get_remote_connection(), snapc);
   auto ret = co_await pg->run_executer(
     ox, obc, op_info, m->ops
   ).si_then([]() -> std::optional<std::error_code> {
@@ -529,6 +518,7 @@ ClientRequest::do_process(
     co_return;
   }
 
+  size_t inb = 0, outb = 0;
   {
     auto all_completed = interruptor::now();
     if (ret) {
@@ -544,16 +534,19 @@ ClientRequest::do_process(
       // simply return the error below, leaving all_completed alone
     } else {
       auto submitted = interruptor::now();
+      inb = ox.get_bytes_written();
       std::tie(submitted, all_completed) = co_await pg->submit_executer(
 	std::move(ox), m->ops);
       co_await std::move(submitted);
     }
-    co_await ihref.enter_stage<interruptor>(client_pp(*pg).wait_repop, *this);
+    co_await ihref.enter_stage<interruptor>(
+      ihref.obc_orderer->obc_pp().wait_repop, *this);
 
     co_await std::move(all_completed);
   }
 
-  co_await ihref.enter_stage<interruptor>(client_pp(*pg).send_reply, *this);
+  co_await ihref.enter_stage<interruptor>(
+    ihref.obc_orderer->obc_pp().send_reply, *this);
 
   if (ret) {
     int err = -ret->value();
@@ -575,9 +568,15 @@ ClientRequest::do_process(
 	  reply->set_result(osdop.rval);
 	  break;
 	}
+        outb += osdop.outdata.length();
       }
     }
 
+    pg->add_client_request_lat(
+      *this,
+      inb,
+      outb,
+      utime_t{std::chrono::steady_clock::now() - begin_time});
     reply->set_enoent_reply_versions(
       pg->peering_state.get_info().last_update,
       pg->peering_state.get_info().last_user_version);
@@ -626,24 +625,28 @@ ClientRequest::do_process(
   }
 }
 
-bool ClientRequest::is_misdirected(const PG& pg) const
+bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
 {
+  LOG_PREFIX(ClientRequest::is_misdirected_replica_read);
   // otherwise take a closer look
   if (const int flags = m->get_flags();
       flags & CEPH_OSD_FLAG_BALANCE_READS ||
       flags & CEPH_OSD_FLAG_LOCALIZE_READS) {
+    if (op_info.rwordered()) {
+      DEBUGDPP("{}: dropping - rwoedered with balanced/localize read {}", pg, *this);
+      return true;
+    }
     if (!op_info.may_read()) {
-      // no read found, so it can't be balanced read
+      DEBUGDPP("{}: dropping - no read found with balanced/localize read", pg, *this);
       return true;
     }
     if (op_info.may_write() || op_info.may_cache()) {
-      // write op, but i am not primary
+      DEBUGDPP("{}: dropping - can't write to replica", pg, *this);
       return true;
     }
-    // balanced reads; any replica will do
     return false;
   }
-  // neither balanced nor localize reads
+  DEBUGDPP("{}: dropping - not a balanced/localize read ", pg, *this);
   return true;
 }
 

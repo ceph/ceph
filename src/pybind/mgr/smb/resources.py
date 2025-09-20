@@ -1,5 +1,7 @@
 from typing import Dict, List, Optional, Tuple, Union, cast
 
+import base64
+import dataclasses
 import errno
 import json
 
@@ -7,6 +9,7 @@ import yaml
 
 from ceph.deployment.service_spec import (
     PlacementSpec,
+    SMBClusterBindIPSpec,
     SMBClusterPublicIPSpec,
     SpecValidationError,
 )
@@ -20,11 +23,18 @@ from .enums import (
     JoinSourceType,
     LoginAccess,
     LoginCategory,
+    PasswordFilter,
     SMBClustering,
+    SourceReferenceType,
+    TLSCredentialType,
     UserGroupSourceType,
 )
 from .proto import Self, Simplified
 from .utils import checked
+
+ConversionOp = Tuple[PasswordFilter, PasswordFilter]
+
+_MASKED = '*' * 16
 
 
 def _get_intent(data: Simplified) -> Intent:
@@ -87,12 +97,38 @@ class InvalidInputError(ValueError, ErrorResponseBase):
         return -errno.EINVAL, data, "Invalid input"
 
 
+class BigString(str):
+    """A subclass of str that exists specifally to assit the YAML
+    formatting of longer strings (SSL/TLS certs). Because the
+    python YAML lib makes doing this automatically very awkward.
+    """
+
+    @staticmethod
+    def yaml_representer(
+        dumper: yaml.SafeDumper, data: 'BigString'
+    ) -> yaml.ScalarNode:
+        _type = 'tag:yaml.org,2002:str'
+        data = str(data)
+        if '\n' in data or len(data) >= 80:
+            return dumper.represent_scalar(_type, data, style='|')
+        return dumper.represent_scalar(_type, data)
+
+
+# thanks yaml lib for your odd api.
+# Maybe this should be part of object_format.py? If this could be useful
+# elsewhere, perhaps lift this.
+yaml.SafeDumper.add_representer(BigString, BigString.yaml_representer)
+
+
 class _RBase:
     # mypy doesn't currently (well?) support class decorators adding methods
     # so we use a base class to add this method to all our resource classes.
     def to_simplified(self) -> Simplified:
         rc = getattr(self, '_resource_config')
         return rc.object_to_simplified(self)
+
+    def convert(self, operation: ConversionOp) -> Self:
+        return self
 
 
 @resourcelib.component()
@@ -187,6 +223,8 @@ class Share(_RBase):
     name: str = ''
     readonly: bool = False
     browseable: bool = True
+    comment: Optional[str] = None
+    max_connections: Optional[int] = None
     cephfs: Optional[CephFSStorage] = None
     custom_smb_share_options: Optional[Dict[str, str]] = None
     login_control: Optional[List[LoginAccessEntry]] = None
@@ -210,6 +248,12 @@ class Share(_RBase):
         # currently only cephfs is supported
         if self.cephfs is None:
             raise ValueError('a cephfs configuration is required')
+        if self.max_connections is not None and self.max_connections < 0:
+            raise ValueError(
+                'max_connections must be 0 or a non-negative integer'
+            )
+        if self.comment is not None and '\n' in self.comment:
+            raise ValueError('Comment cannot contain newlines')
         validation.check_custom_options(self.custom_smb_share_options)
         if self.restrict_access and not self.login_control:
             raise ValueError(
@@ -240,6 +284,12 @@ class JoinAuthValues(_RBase):
     username: str
     password: str
 
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            username=self.username,
+            password=_password_convert(self.password, operation),
+        )
+
 
 @resourcelib.component()
 class JoinSource(_RBase):
@@ -266,6 +316,20 @@ class UserGroupSettings(_RBase):
 
     users: List[Dict[str, str]]
     groups: List[Dict[str, str]]
+
+    def convert(self, operation: ConversionOp) -> Self:
+        def _convert_pw_key(dct: Dict[str, str]) -> Dict[str, str]:
+            pw = dct.get('password', None)
+            if pw is not None:
+                data = dict(dct)
+                data["password"] = _password_convert(pw, operation)
+                return data
+            return dct
+
+        return self.__class__(
+            users=[_convert_pw_key(u) for u in self.users],
+            groups=self.groups,
+        )
 
 
 @resourcelib.component()
@@ -369,6 +433,83 @@ class ClusterPublicIPAssignment(_RBase):
             raise ValueError(str(err)) from err
 
 
+# A resource component wrapper around the service spec class
+# SMBClusterBindIPSpec
+@resourcelib.component()
+class ClusterBindIP(_RBase):
+    """Cluster Bind IP address or network.
+    Restricts what addresses SMB services and/or containers will bind
+    to when run on a cluster node.
+    """
+
+    address: str = ''
+    network: str = ''
+
+    def to_spec(self) -> SMBClusterBindIPSpec:
+        if self.address:
+            kwargs = {'address': self.address}
+        elif self.network:
+            kwargs = {'network': self.network}
+        else:
+            raise ValueError('ClusterBindIP has no values')
+        return SMBClusterBindIPSpec(**kwargs)
+
+    def validate(self) -> None:
+        try:
+            self.to_spec().validate()
+        except SpecValidationError as err:
+            raise ValueError(str(err)) from err
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.address.quiet = True
+        rc.network.quiet = True
+        return rc
+
+
+@resourcelib.component()
+class TLSSource(_RBase):
+    """Represents TLS Certificates and Keys used to configure SMB related
+    resources.
+    """
+
+    source_type: SourceReferenceType = SourceReferenceType.RESOURCE
+    ref: str = ''
+
+    def validate(self) -> None:
+        if not self.ref:
+            raise ValueError('reference value must be specified')
+        else:
+            validation.check_id(self.ref)
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.ref.quiet = True
+        return rc
+
+
+@resourcelib.component()
+class RemoteControl(_RBase):
+    # enabled can be set to explicitly toggle the remote control server
+    enabled: Optional[bool] = None
+    # cert specifies the ssl/tls certificate to use
+    cert: Optional[TLSSource] = None
+    # cert specifies the ssl/tls server key to use
+    key: Optional[TLSSource] = None
+    # ca_cert specifies the ssl/tls ca cert for mTLS auth
+    ca_cert: Optional[TLSSource] = None
+
+    def validate(self) -> None:
+        if bool(self.cert) ^ bool(self.key):
+            raise ValueError('cert and key values must be provided together')
+
+    @property
+    def is_enabled(self) -> bool:
+        if self.enabled is not None:
+            return self.enabled
+        return bool(self.cert and self.key)
+
+
 @resourcelib.resource('ceph.smb.cluster')
 class Cluster(_RBase):
     """Represents a cluster (instance) that is / should be present."""
@@ -385,6 +526,12 @@ class Cluster(_RBase):
     # control if the cluster is really a cluster
     clustering: Optional[SMBClustering] = None
     public_addrs: Optional[List[ClusterPublicIPAssignment]] = None
+    custom_ports: Optional[Dict[str, int]] = None
+    # bind_addrs are used to restrict what IP addresses instances of this
+    # cluster will use
+    bind_addrs: Optional[List[ClusterBindIP]] = None
+    # configure a remote control sidecar server.
+    remote_control: Optional[RemoteControl] = None
 
     def validate(self) -> None:
         if not self.cluster_id:
@@ -411,6 +558,11 @@ class Cluster(_RBase):
                     'domain settings not supported for user auth mode'
                 )
         validation.check_custom_options(self.custom_smb_global_options)
+        validation.check_custom_ports(self.custom_ports)
+        if self.bind_addrs is not None and not self.bind_addrs:
+            raise ValueError(
+                'bind_addrs must have at least one value or not be set'
+            )
 
     @resourcelib.customize
     def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
@@ -425,6 +577,15 @@ class Cluster(_RBase):
     @property
     def clustering_mode(self) -> SMBClustering:
         return self.clustering if self.clustering else SMBClustering.DEFAULT
+
+    @property
+    def remote_control_is_enabled(self) -> bool:
+        """Return true if a remote control service should be enabled for this
+        cluster.
+        """
+        if not self.remote_control:
+            return False
+        return self.remote_control.is_enabled
 
     def is_clustered(self) -> bool:
         """Return true if smbd instance should use (CTDB) clustering."""
@@ -445,6 +606,11 @@ class Cluster(_RBase):
         if self.public_addrs is None:
             return None
         return [a.to_spec() for a in self.public_addrs]
+
+    def service_spec_bind_addrs(self) -> Optional[List[SMBClusterBindIPSpec]]:
+        if self.bind_addrs is None:
+            return None
+        return [b.to_spec() for b in self.bind_addrs]
 
 
 @resourcelib.resource('ceph.smb.join.auth')
@@ -471,6 +637,14 @@ class JoinAuth(_RBase):
         rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
+    def convert(self, operation: ConversionOp) -> Self:
+        return self.__class__(
+            auth_id=self.auth_id,
+            intent=self.intent,
+            auth=None if not self.auth else self.auth.convert(operation),
+            linked_to_cluster=self.linked_to_cluster,
+        )
+
 
 @resourcelib.resource('ceph.smb.usersgroups')
 class UsersAndGroups(_RBase):
@@ -496,6 +670,59 @@ class UsersAndGroups(_RBase):
         rc.on_construction_error(InvalidResourceError.wrap)
         return rc
 
+    def convert(self, operation: ConversionOp) -> Self:
+        values = None if not self.values else self.values.convert(operation)
+        return self.__class__(
+            users_groups_id=self.users_groups_id,
+            intent=self.intent,
+            values=values,
+            linked_to_cluster=self.linked_to_cluster,
+        )
+
+
+@resourcelib.resource('ceph.smb.tls.credential')
+class TLSCredential(_RBase):
+    """Contains a TLS certificate or key that can be used to configure
+    SMB services that make use of TLS/SSL.
+    """
+
+    tls_credential_id: str
+    intent: Intent = Intent.PRESENT
+    credential_type: Optional[TLSCredentialType] = None
+    value: Optional[str] = None
+    # linked resources can only be used by the resource they are linked to
+    # and are automatically removed when the "parent" resource is removed
+    linked_to_cluster: Optional[str] = None
+
+    def validate(self) -> None:
+        if not self.tls_credential_id:
+            raise ValueError('tls_credential_id requires a value')
+        validation.check_id(self.tls_credential_id)
+        if self.linked_to_cluster is not None:
+            validation.check_id(self.linked_to_cluster)
+        if self.intent is Intent.PRESENT:
+            if self.credential_type is None:
+                raise ValueError('credential_type must be specified')
+            if not self.value:
+                raise ValueError('a value must be specified')
+
+    @resourcelib.customize
+    def _customize_resource(rc: resourcelib.Resource) -> resourcelib.Resource:
+        rc.value.wrapper_type = BigString
+        return rc
+
+    def convert(self, operation: ConversionOp) -> Self:
+        """When hiding sensitive data hide TLS/SSL certs too. However, the
+        BASE64 filter enum will act as a no-op. Our certs are already long
+        Base64 encoded strings that are resistant to casual shoulder-surfing.
+        """
+        if (
+            operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN)
+            and self.value
+        ):
+            return dataclasses.replace(self, value=_MASKED)
+        return self
+
 
 # SMBResource is a union of all valid top-level smb resource types.
 SMBResource = Union[
@@ -505,6 +732,7 @@ SMBResource = Union[
     RemovedShare,
     Share,
     UsersAndGroups,
+    TLSCredential,
 ]
 
 
@@ -537,3 +765,18 @@ def load(data: Simplified) -> List[SMBResource]:
     structured types.
     """
     return resourcelib.load(data)
+
+
+def _password_convert(pvalue: str, operation: ConversionOp) -> str:
+    if operation == (PasswordFilter.NONE, PasswordFilter.BASE64):
+        pvalue = base64.b64encode(pvalue.encode("utf8")).decode("utf8")
+    elif operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN):
+        pvalue = _MASKED
+    elif operation == (PasswordFilter.BASE64, PasswordFilter.NONE):
+        pvalue = base64.b64decode(pvalue.encode("utf8")).decode("utf8")
+    else:
+        osrc, odst = operation
+        raise ValueError(
+            f"can not convert password value encoding from {osrc} to {odst}"
+        )
+    return pvalue

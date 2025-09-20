@@ -55,13 +55,19 @@ class NvmeofGatewaysConfig(object):
         config = cls.get_gateways_config()
 
         if name in config.get('gateways', {}):
-            existing_gateways = config['gateways'][name]
-            for gateway in existing_gateways:
-                if 'daemon_name' not in gateway:
-                    gateway['daemon_name'] = daemon_name
-                    break
-                if gateway['service_url'] == service_url:
-                    return
+            # the nvmeof dashboard config used in v19.2.0 saves the below
+            # to a dict. Converting that to a list so that the upgrade
+            # properly migrate it to the newer format, and also keep it empty.
+            if isinstance(config['gateways'][name], dict):
+                config['gateways'][name] = []
+            else:
+                existing_gateways = config['gateways'][name]
+                for gateway in existing_gateways:
+                    if 'daemon_name' not in gateway:
+                        gateway['daemon_name'] = daemon_name
+                        break
+                    if gateway['service_url'] == service_url:
+                        return
 
         new_gateway = {
             'service_url': service_url,
@@ -126,8 +132,7 @@ class NvmeofGatewaysConfig(object):
     @classmethod
     def get_root_ca_cert(cls, service_name: str):
         root_ca_cert = cls.from_cert_store('nvmeof_root_ca_cert', service_name)
-        # If root_ca_cert is not set, use server_cert as root_ca_cert
-        return root_ca_cert.encode() if root_ca_cert else cls.get_server_cert(service_name)
+        return root_ca_cert.encode() if root_ca_cert else None
 
     @classmethod
     def get_server_cert(cls, service_name: str):
@@ -203,3 +208,11 @@ def _get_default_service(gateways):
         service_name = gateway_keys[0]
         return service_name, gateways[service_name][0]['service_url']
     return None
+
+
+def is_mtls_enabled(service_name: str):
+    try:
+        orch = OrchClient.instance()
+        return orch.services.get(service_name)[0].spec.enable_auth
+    except OrchestratorError:
+        return False

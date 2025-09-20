@@ -6,10 +6,14 @@
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Operations.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config_proxy.h"
+#include "common/debug.h"
 #include "common/environment.h"
 #include "common/hostname.h"
 #include "librbd/plugin/Api.h"
+
+#include <shared_mutex> // for std::shared_lock
 
 #undef dout_subsys
 #define dout_subsys ceph_subsys_rbd_pwl

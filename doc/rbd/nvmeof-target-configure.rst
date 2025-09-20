@@ -2,18 +2,10 @@
 Installing and Configuring NVMe-oF Targets
 ==========================================
 
-Traditionally, block-level access to a Ceph storage cluster has been limited to
-(1) QEMU and ``librbd`` (which is a key enabler for adoption within OpenStack
-environments), and (2) the Linux kernel client. Starting with the Ceph Reef
-release, block-level access has been expanded to offer standard NVMe/TCP
-support, allowing wider platform usage and potentially opening new use cases.
-
 Prerequisites
 =============
 
--  Red Hat Enterprise Linux/CentOS 8.0 (or newer); Linux kernel v4.16 (or newer)
-
--  A working Ceph Reef or later storage cluster, deployed with ``cephadm``
+-  A working Ceph Tentacle or later storage cluster, deployed with ``cephadm``
 
 -  NVMe-oF gateways, which can either be colocated with OSD nodes or on dedicated nodes
 
@@ -68,7 +60,7 @@ To download it use the following command:
 
    .. prompt:: bash #
    
-      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem add --subsystem SUSYSTEM_NQN
+      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem add --subsystem SUSYSTEM_NQN
 
    The subsystem NQN is a user defined string, for example ``nqn.2016-06.io.spdk:cnode1``.
 
@@ -84,7 +76,7 @@ To download it use the following command:
 
        .. prompt:: bash #
     
-          podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 listener add --subsystem SUBSYSTEM_NQN --gateway-name GATEWAY_NAME --traddr GATEWAY_IP --trsvcid 4420
+          podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 listener add --subsystem SUBSYSTEM_NQN --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
 
 #. Get the host NQN (NVME Qualified Name) for each host:
 
@@ -100,13 +92,13 @@ To download it use the following command:
 
    .. prompt:: bash #
     
-      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 host add --subsystem SUBSYSTEM_NQN --host "HOST_NQN1, HOST_NQN2"
+      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 host add --subsystem SUBSYSTEM_NQN --host "HOST_NQN1 HOST_NQN2"
 
 #. List all subsystems configured in the gateway:
 
    .. prompt:: bash #
     
-      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem list
+      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem list
 
 #. Create a new NVMe namespace:
 

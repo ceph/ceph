@@ -9,6 +9,7 @@
 #include "include/cpp-btree/btree_set.h"
 
 #include "Allocator.h"
+#include "AllocatorBase.h"
 
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
@@ -19,7 +20,7 @@
  *
  *
  */
-class Btree2Allocator : public Allocator {
+class Btree2Allocator : public AllocatorBase {
   enum {
     RANGE_SIZE_BUCKET_COUNT = 14,
   };
@@ -129,7 +130,7 @@ public:
 
 private:
   CephContext* cct = nullptr;
-  Allocator::OpportunisticExtentCache* cache = nullptr;
+  AllocatorBase::OpportunisticExtentCache* cache = nullptr;
   std::mutex lock;
 
   template<class T>

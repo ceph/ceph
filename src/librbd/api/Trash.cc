@@ -3,6 +3,7 @@
 
 #include "librbd/api/Trash.h"
 #include "include/rados/librados.hpp"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/Cond.h"
@@ -216,6 +217,13 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       ictx->image_lock.unlock_shared();
       ictx->state->close();
       return -EBUSY;
+    }
+    if (ictx->group_spec.is_valid() &&
+        source != RBD_TRASH_IMAGE_SOURCE_MIGRATION) {
+      lderr(cct) << "image is in a group - not moving to trash" << dendl;
+      ictx->image_lock.unlock_shared();
+      ictx->state->close();
+      return -EMLINK;
     }
     ictx->image_lock.unlock_shared();
 
@@ -483,8 +491,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
           }
 
           r = librbd::api::DiffIterate<I>::diff_iterate(
-            ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, ictx->size,
-            false, true,
+            ictx, 0, 0, ictx->size, false, true,
             [](uint64_t offset, size_t len, int exists, void *arg) {
                 auto *to_free = reinterpret_cast<uint64_t *>(arg);
                 if (exists)

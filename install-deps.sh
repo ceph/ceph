@@ -23,9 +23,7 @@ fi
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-if test $(id -u) != 0 ; then
-    SUDO=sudo
-fi
+wrap_sudo
 # enable UTF-8 encoding for programs like pip that expect to
 # print more than just ascii chars
 export LC_ALL=C.UTF-8
@@ -34,15 +32,15 @@ ARCH=$(uname -m)
 
 
 function munge_ceph_spec_in {
-    local with_seastar=$1
+    local with_crimson=$1
     shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if $with_seastar; then
-        sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
+    if $with_crimson; then
+        sed -i -e 's/%bcond_with crimson/%bcond_without crimson/g' $OUTFILE
     fi
     if $for_make_check; then
         sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
@@ -134,14 +132,14 @@ function install_pkg_on_ubuntu {
     fi
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
-        in_jenkins && echo -n "CI_DEBUG: Downloading $shaman_url ... "
+        ci_debug "Downloading $shaman_url ... "
         $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
 }
 
-boost_ver=1.85
+boost_ver=1.87
 
 function clean_boost_on_ubuntu {
     ci_debug "Running clean_boost_on_ubuntu() in install-deps.sh"
@@ -191,14 +189,9 @@ function install_boost_on_ubuntu {
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
-    if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$boost_ver"; then
-            return
-        fi
-    fi
     local codename=$1
     local project=libboost
-    local sha1=55f34507d322314fb0294629b7c0bb406de07aec
+    local sha1=9ea1fb8bdad548a88004db87761f173aa50dcc85
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
@@ -210,8 +203,11 @@ function install_boost_on_ubuntu {
         ceph-libboost-context${boost_ver}-dev \
         ceph-libboost-coroutine${boost_ver}-dev \
         ceph-libboost-date-time${boost_ver}-dev \
+        ceph-libboost-exception${boost_ver}-dev \
         ceph-libboost-filesystem${boost_ver}-dev \
+        ceph-libboost-graph${boost_ver}-dev \
         ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-locale${boost_ver}-dev \
         ceph-libboost-program-options${boost_ver}-dev \
         ceph-libboost-python${boost_ver}-dev \
         ceph-libboost-random${boost_ver}-dev \
@@ -249,6 +245,20 @@ EOF
             source /opt/rh/gcc-toolset-$dts_ver/enable
         fi
     fi
+}
+
+function setup_lab_extras_repo() {
+    # NOTE This repo should be temporary while we work to get the
+    # needed deps into EPEL, etc.
+    local baseurlprefix="http://apt-mirror.front.sepia.ceph.com/lab-extras"
+    local path="/etc/yum.repos.d/ceph-lab-extras.repo"
+    $SUDO tee "${path}" <<EOF
+[ceph-lab-extras]
+name=ceph-lab-extras-\$releasever
+baseurl=${baseurlprefix}/\$releasever
+enabled=1
+gpgcheck=0
+EOF
 }
 
 function populate_wheelhouse() {
@@ -376,7 +386,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         sysutils/fusefs-libs \
     exit
 else
-    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
+    [ $WITH_CRIMSON ] && with_crimson=true || with_crimson=false
     [ $WITH_PMEM ] && with_pmem=true || with_pmem=false
     source /etc/os-release
     case "$ID" in
@@ -385,6 +395,12 @@ else
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
         clean_boost_on_ubuntu
+
+        # update the local package index before installing any packages from the
+        # official repo
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update \
+            -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
@@ -410,8 +426,9 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 ;;
             *Jammy*)
-                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 $SUDO apt-get install -y gcc
+		ensure_decent_gcc_on_ubuntu 12 jammy
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -439,7 +456,7 @@ else
         if $for_make_check; then
             build_profiles+=",pkg.ceph.check"
         fi
-        if $with_seastar; then
+        if $with_crimson; then
             build_profiles+=",pkg.ceph.crimson"
         fi
         if $with_pmem; then
@@ -447,7 +464,7 @@ else
         fi
 
         ci_debug "for_make_check=$for_make_check"
-        ci_debug "with_seastar=$with_seastar"
+        ci_debug "with_crimson=$with_crimson"
         ci_debug "with_jaeger=$with_jaeger"
         ci_debug "build_profiles=$build_profiles"
         ci_debug "Now running 'mk-build-deps' and installing ceph-build-deps package"
@@ -487,8 +504,11 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     $SUDO dnf config-manager --set-enabled crb
+                    if [ "$MAJOR_VERSION" -eq 10 ]; then
+                        setup_lab_extras_repo
+                    fi
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
@@ -504,7 +524,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
         $SUDO dnf install -y python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
@@ -522,7 +542,7 @@ else
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             $SUDO $zypp_install $INSTALL_EXTRA_PACKAGES
         fi
-        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_crimson $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     *)

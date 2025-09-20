@@ -7,8 +7,22 @@ const pages = {
     url: '#/rgw/multisite/sync-policy/(modal:create)',
     id: 'cd-rgw-multisite-sync-policy-form'
   },
-  edit: { url: '#/rgw/multisite/sync-policy/(modal:edit', id: 'cd-rgw-multisite-sync-policy-form' }
+  edit: { url: '#/rgw/multisite/sync-policy/(modal:edit', id: 'cd-rgw-multisite-sync-policy-form' },
+  topology: { url: '#/rgw/multisite/configuration', id: 'cd-rgw-multisite-details' },
+  wizard: {
+    url: '#/rgw/multisite/configuration/(modal:setup-multisite-replication)',
+    id: 'cd-rgw-multisite-wizard'
+  }
 };
+
+enum WizardSteps {
+  CreateRealmZonegroup = 'Create Realm & Zonegroup',
+  CreateZone = 'Create Zone',
+  Review = 'Review'
+}
+
+type Step = keyof typeof WizardSteps;
+
 export class MultisitePageHelper extends PageHelper {
   pages = pages;
 
@@ -288,5 +302,52 @@ export class MultisitePageHelper extends PageHelper {
       });
     // Waits for item to be removed from table
     getRow(pipe_id).should('not.exist');
+  }
+
+  @PageHelper.restrictTo(pages.topology.url)
+  topologyViewerExist() {
+    cy.get(pages.topology.id).should('be.visible');
+    cy.get('[data-testid=rgw-multisite-details-header]').should('have.text', 'Topology Viewer');
+  }
+
+  @PageHelper.restrictTo(pages.wizard.url)
+  replicationWizardExist() {
+    cy.get('cds-modal').then(() => {
+      cy.get('[data-testid=rgw-multisite-wizard-header]').should(
+        'have.text',
+        'Set up Multi-site Replication'
+      );
+    });
+  }
+
+  @PageHelper.restrictTo(pages.index.url)
+  verifyWizardContents(step: Step) {
+    cy.get('cds-modal').then(() => {
+      this.gotoStep(step);
+      if (step === 'CreateRealmZonegroup') {
+        this.typeValueToField('realmName', 'test-realm');
+        this.typeValueToField('zonegroupName', 'test-zg');
+      } else if (step === 'CreateZone') {
+        this.typeValueToField('zoneName', 'test-zone');
+      } else {
+        this.gotoStep('Review');
+        cy.get('.form-group.row').then(() => {
+          cy.get('#realmName').invoke('text').should('eq', 'test-realm');
+          cy.get('#zonegroupName').invoke('text').should('eq', 'test-zg');
+          cy.get('#zoneName').invoke('text').should('eq', 'test-zone');
+        });
+      }
+    });
+  }
+
+  typeValueToField(fieldID: string, value: string) {
+    cy.get(`#${fieldID}`).clear().type(value).should('have.value', value);
+  }
+
+  gotoStep(step: Step) {
+    cy.get('cd-wizard').then(() => {
+      cy.get('form').should('be.visible');
+      cy.get('button').contains(WizardSteps[step]).click();
+    });
   }
 }

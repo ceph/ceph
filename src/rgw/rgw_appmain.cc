@@ -20,7 +20,6 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
-#include "common/openssl_opts_handler.h"
 #include "common/numa.h"
 #include "include/compat.h"
 #include "include/str_list.h"
@@ -66,6 +65,7 @@
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
+#include "rgw_dedup.h"
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
@@ -167,8 +167,6 @@ void rgw::AppMain::init_frontends1(bool nfs)
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
     g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
   }
-
-  ceph::crypto::init_openssl_engine_once();
 } /* init_frontends1 */
 
 void rgw::AppMain::init_numa()
@@ -233,6 +231,10 @@ int rgw::AppMain::init_storage()
     (g_conf()->rgw_enable_lc_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_lc_threads)));
 
+  auto run_restore =
+    (g_conf()->rgw_enable_restore_threads &&
+      ((!nfs) || (nfs && g_conf()->rgw_nfs_run_restore_threads)));
+
   auto run_quota =
     (g_conf()->rgw_enable_quota_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_quota_threads)));
@@ -249,10 +251,12 @@ int rgw::AppMain::init_storage()
 	  site,
           run_gc,
           run_lc,
+	  run_restore,
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
-          true, null_yield, // run notification thread
+	  true, // run notification thread
+	  true, null_yield, env.cfgstore,
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
@@ -407,7 +411,7 @@ void rgw::AppMain::init_opslog()
     olog_manifold->add_sink(ops_log_file);
   }
   olog_manifold->add_sink(new OpsLogRados(env.driver));
-  olog = olog_manifold;
+  env.olog.reset(olog_manifold);
 } /* init_opslog */
 
 int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
@@ -449,7 +453,6 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
 
   // initialize RGWProcessEnv
   env.rest = &rest;
-  env.olog = olog;
   env.auth_registry = rgw::auth::StrategyRegistry::create(
       dpp->get_cct(), *implicit_tenant_context, env.driver);
   env.ratelimiting = ratelimiter.get();
@@ -521,23 +524,33 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     /* ignore error */
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
     // add a watcher to respond to realm configuration changes
-    pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, null_yield);
-    fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
-    rgw_pauser = std::make_unique<RGWPauser>();
-    rgw_pauser->add_pauser(fe_pauser.get());
-    if (env.lua.background) {
-      rgw_pauser->add_pauser(env.lua.background);
+    // if we're part of a realm, add a watcher to respond to configuration changes
+    if (const auto& realm = env.site->get_realm(); realm) {
+      realm_watcher = env.cfgstore->create_realm_watcher(dpp, null_yield, *realm);
     }
-    need_context_pool();
-    reloader = std::make_unique<RGWRealmReloader>(
-      env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
-    realm_watcher = std::make_unique<RGWRealmWatcher>(dpp, g_ceph_context,
-				  static_cast<rgw::sal::RadosStore*>(env.driver)->svc()->zone->get_realm());
-    realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
-    realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher.get());
+    if (realm_watcher) {
+      pusher = std::make_unique<RGWPeriodPusher>(dpp, env.driver, env.cfgstore, null_yield);
+      realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, *pusher);
+
+      fe_pauser = std::make_unique<RGWFrontendPauser>(fes, pusher.get());
+      rgw_pauser = std::make_unique<RGWPauser>();
+      rgw_pauser->add_pauser(fe_pauser.get());
+      if (env.lua.background) {
+        rgw_pauser->add_pauser(env.lua.background);
+      }
+    if (dedup_background) {
+      rgw_pauser->add_pauser(dedup_background.get());
+    }
+      need_context_pool();
+      reloader = std::make_unique<RGWRealmReloader>(
+          env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
+      realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+    }
   }
+#endif
 
   return r;
 } /* init_frontends2 */
@@ -551,10 +564,11 @@ void rgw::AppMain::init_tracepoints()
 
 void rgw::AppMain::init_lua()
 {
+  if (!g_conf().get_val<bool>("rgw_lua_enable"))
+    return;
   rgw::sal::Driver* driver = env.driver;
   int r{0};
   std::string install_dir;
-
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
@@ -570,21 +584,51 @@ void rgw::AppMain::init_lua()
 #endif
 
   env.lua.manager = env.driver->get_lua_manager(install_dir);
+#ifdef WITH_RADOSGW_RADOS
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), env.lua.manager.get());
+      rgw::lua::Background>(dpp->get_cct(), env.lua.manager.get());
     lua_background->start();
     env.lua.background = lua_background.get();
     static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);
   }
+#endif
 } /* init_lua */
+
+void rgw::AppMain::init_dedup()
+{
+  rgw::sal::Driver* driver = env.driver;
+  if (driver->get_name() == "rados") { /* Supported for only RadosStore */
+    try {
+      dedup_background = std::make_unique<rgw::dedup::Background>(driver, dpp->get_cct());
+      dedup_background->start();
+      dedup_background->watch_reload(dpp);
+    }
+    catch (const std::runtime_error&) {
+      ldpp_dout(dpp, 0) << __func__ << "::failed create dedup background job" << dendl;
+    }
+  }
+}
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
+  // stop the realm reloader
+  rgw_pauser.reset();
+  fe_pauser.reset();
+  realm_watcher.reset();
+  pusher.reset();
+  reloader.reset();
+#ifdef WITH_RADOSGW_RADOS
   if (env.driver->get_name() == "rados") {
-    reloader.reset(); // stop the realm reloader
-    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
+    if (g_conf().get_val<bool>("rgw_lua_enable"))
+      static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->
+          unwatch_reload(dpp);
+
+    if (dedup_background) {
+      dedup_background->unwatch_reload(dpp);
+    }
   }
+#endif
 
   for (auto& fe : fes) {
     fe->stop();
@@ -593,12 +637,15 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
 
-  delete olog;
+  if (dedup_background) {
+    dedup_background->shutdown();
+  }
 
   if (lua_background) {
     lua_background->shutdown();
   }
 
+  env.driver->shutdown();
   // Do this before closing storage so requests don't try to call into
   // closed storage.
   context_pool->finish();

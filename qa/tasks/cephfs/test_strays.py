@@ -380,7 +380,15 @@ class TestStrays(CephFSTestCase):
         in reintegration of inode into the previously-remote dentry,
         rather than lingering as a stray indefinitely.
         """
+
+        # stray perf count numbers in the test don't match when referent inode feature
+        # is enabled because referent inodes becomes a stray whenever hardlink is
+        # deleted or stray is reintegrated, so disable referent inodes here. The
+        # same test for referent inodes is added at qa/tasks/cephfs/test_referent.py
+        self.fs.set_allow_referent_inodes(False)
+
         # Write some bytes to file_a
+
         size_mb = 8
         self.mount_a.run_shell(["mkdir", "dir_1"])
         self.mount_a.write_n_mb("dir_1/file_a", size_mb)
@@ -542,6 +550,13 @@ class TestStrays(CephFSTestCase):
         then we make a stray for B which is then reintegrated
         into one of his hardlinks.
         """
+
+        # stray perf count numbers in the test don't match when referent inode feature
+        # is enabled because referent inodes becomes a stray whenever hardlink is
+        # deleted or stray is reintegrated, so disable referent inodes here. The
+        # same test for referent inodes is added at qa/tasks/cephfs/test_referent.py
+        self.fs.set_allow_referent_inodes(False)
+
         # Create file_a, file_b, and a hardlink to file_b
         size_mb = 8
         self.mount_a.write_n_mb("file_a", size_mb)
@@ -1022,3 +1037,32 @@ touch pin/placeholder
 
         duration = (end - begin).total_seconds()
         self.assertLess(duration, (file_count * tick_period) * 0.25)
+    
+    def test_asok_dump_stray_command(self):
+        """
+        Test MDS asok dump stray command
+        """
+
+        LOW_LIMIT = 50
+        # need to create more folder to force fragmentation, creating more then needed
+        # to be on the safe side.
+        # we want to test the case when dumping stray folder must wait for the next dirfrag to be fetched
+        NUM_DIRS = LOW_LIMIT * 20
+        TOP_DIR = "topdir"
+        self.config_set("mds", "mds_bal_split_size", str(LOW_LIMIT))
+        self.assertEqual(self.config_get("mds", "mds_bal_split_size"), str(LOW_LIMIT), "LOW_LIMIT was not set on mds!")
+              
+        # create 2 level tree with enough folders to force the stray folder be fragmented
+        # total of NUM_DIRS subdirs will be created
+        self.mount_a.run_shell(f"mkdir -p {TOP_DIR}/subdir{{1..{NUM_DIRS}}}")  
+        # create snapshot
+        self.mount_a.run_shell(f"mkdir {TOP_DIR}/.snap/snap1")
+
+        # delete 2nd level dirs to generate strays
+        # don't wait, we want to dump stray dir while delete runs, to make it more interesting
+        self.mount_a.run_shell(f"rm -rf {TOP_DIR}/*", wait=False)
+
+        # wait for all deleted folders to become strays
+        self.wait_until_equal(
+        lambda: len(self.fs.rank_tell(["dump", "stray"])),
+        expect_val=NUM_DIRS, timeout=60, period=1)

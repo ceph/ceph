@@ -3,9 +3,9 @@ from copy import deepcopy
 from ceph_volume.devices.lvm import activate
 from ceph_volume.api import lvm as api
 from ceph_volume.tests.conftest import Capture
-from ceph_volume import objectstore
+from ceph_volume.objectstore import lvm
 #from ceph_volume.util.prepare import create_key
-from mock import patch, call
+from unittest.mock import patch, call
 from argparse import Namespace
 
 class Args(object):
@@ -37,20 +37,20 @@ class TestActivate(object):
         volumes = []
         volumes.append(FooVolume)
         monkeypatch.setattr(api, 'get_lvs', lambda **kwargs: volumes)
-        monkeypatch.setattr(objectstore.lvmbluestore.LvmBlueStore,
+        monkeypatch.setattr(lvm.Lvm,
                             '_activate',
                             capture)
 
         args = Args(osd_id=None, osd_fsid='1234', bluestore=True)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args=args)
         a.objectstore.activate()
         assert capture.calls[0]['args'][0] == [FooVolume]
 
     def test_osd_id_no_osd_fsid(self, m_create_key, is_root):
         args = Args(osd_id=42, osd_fsid=None)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args=args)
         with pytest.raises(RuntimeError) as result:
             a.objectstore.activate()
         assert result.value.args[0] == 'could not activate osd.42, please provide the osd_fsid too'
@@ -58,7 +58,7 @@ class TestActivate(object):
     def test_no_osd_id_no_osd_fsid(self, m_create_key, is_root):
         args = Args(osd_id=None, osd_fsid=None)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args=args)
         with pytest.raises(RuntimeError) as result:
             a.objectstore.activate()
         assert result.value.args[0] == 'Please provide both osd_id and osd_fsid'
@@ -70,8 +70,8 @@ class TestActivate(object):
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.util.system.chown', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.process.run', lambda *a, **kw: True)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'enable_volume', fake_enable)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'start_osd', fake_start_osd)
+        monkeypatch.setattr(lvm.systemctl, 'enable_volume', fake_enable)
+        monkeypatch.setattr(lvm.systemctl, 'start_osd', fake_start_osd)
         DataVolume = api.Volume(
             lv_name='data',
             lv_path='/dev/vg/data',
@@ -83,7 +83,7 @@ class TestActivate(object):
 
         args = Args(osd_id=None, osd_fsid='1234', no_systemd=True, bluestore=True)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args=args)
         a.objectstore.activate()
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
@@ -95,8 +95,8 @@ class TestActivate(object):
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.util.system.chown', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.process.run', lambda *a, **kw: True)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'enable_volume', fake_enable)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'start_osd', fake_start_osd)
+        monkeypatch.setattr(lvm.systemctl, 'enable_volume', fake_enable)
+        monkeypatch.setattr(lvm.systemctl, 'start_osd', fake_start_osd)
         DataVolume = api.Volume(
             lv_name='data',
             lv_path='/dev/vg/data',
@@ -109,7 +109,7 @@ class TestActivate(object):
         args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
                     bluestore=True)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args)
         a.objectstore.activate()
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
@@ -121,8 +121,8 @@ class TestActivate(object):
         monkeypatch.setattr('ceph_volume.util.system.path_is_mounted', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.util.system.chown', lambda *a, **kw: True)
         monkeypatch.setattr('ceph_volume.process.run', lambda *a, **kw: True)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'enable_volume', fake_enable)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'start_osd', fake_start_osd)
+        monkeypatch.setattr(lvm.systemctl, 'enable_volume', fake_enable)
+        monkeypatch.setattr(lvm.systemctl, 'start_osd', fake_start_osd)
         DataVolume = api.Volume(
             lv_name='data',
             lv_path='/dev/vg/data',
@@ -135,7 +135,7 @@ class TestActivate(object):
         args = Args(osd_id=None, osd_fsid='1234', no_systemd=True,
                     bluestore=True, auto_detect_objectstore=True)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args)
         a.objectstore.activate()
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
@@ -149,8 +149,8 @@ class TestActivate(object):
         monkeypatch.setattr('ceph_volume.util.system.chown', lambda *a, **kw:
                             True)
         monkeypatch.setattr('ceph_volume.process.run', lambda *a, **kw: True)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'enable_volume', fake_enable)
-        monkeypatch.setattr(objectstore.lvmbluestore.systemctl, 'start_osd', fake_start_osd)
+        monkeypatch.setattr(lvm.systemctl, 'enable_volume', fake_enable)
+        monkeypatch.setattr(lvm.systemctl, 'start_osd', fake_start_osd)
         DataVolume = api.Volume(
             lv_name='data',
             lv_path='/dev/vg/data',
@@ -163,15 +163,15 @@ class TestActivate(object):
         args = Args(osd_id=None, osd_fsid='1234', no_systemd=False,
                     bluestore=True, auto_detect_objectstore=False)
         a = activate.Activate([])
-        a.objectstore = objectstore.lvmbluestore.LvmBlueStore(args=args)
+        a.objectstore = lvm.Lvm(args=args)
         a.objectstore.activate()
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
 
 
 @patch('ceph_volume.util.prepare.create_key', return_value='fake-secret')
-@patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.activate_all')
-@patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.activate')
+@patch('ceph_volume.objectstore.lvm.Lvm.activate_all')
+@patch('ceph_volume.objectstore.lvm.Lvm.activate')
 class TestActivateFlags(object):
 
     def test_default_objectstore(self, m_activate, m_activate_all, m_create_key, capture):
@@ -192,7 +192,7 @@ class TestActivateFlags(object):
 class TestActivateAll(object):
 
     def test_does_not_detect_osds(self, m_create_key, capsys, is_root, monkeypatch):
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: {})
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: {})
         args = ['--all']
         activation = activate.Activate(args)
         activation.main()
@@ -201,8 +201,8 @@ class TestActivateAll(object):
         assert 'Verify OSDs are present with ' in err
 
     def test_detects_running_osds(self, m_create_key, capsys, is_root, capture, monkeypatch):
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: direct_report)
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.systemctl.osd_is_active', lambda x: True)
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: direct_report)
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.systemctl.osd_is_active', lambda x: True)
         args = ['--all']
         activation = activate.Activate(args)
         activation.main()
@@ -210,10 +210,10 @@ class TestActivateAll(object):
         assert 'a8789a96ce8b process is active. Skipping activation' in err
         assert 'b8218eaa1634 process is active. Skipping activation' in err
 
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.activate')
+    @patch('ceph_volume.objectstore.lvm.Lvm.activate')
     def test_detects_osds_to_activate_systemd(self, m_activate, m_create_key, is_root, monkeypatch):
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: direct_report)
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.systemctl.osd_is_active', lambda x: False)
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: direct_report)
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.systemctl.osd_is_active', lambda x: False)
         args = ['--all', '--bluestore']
         a = activate.Activate(args)
         a.main()
@@ -241,9 +241,9 @@ class TestActivateAll(object):
         ]
         m_activate.assert_has_calls(calls)
 
-    @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.activate')
+    @patch('ceph_volume.objectstore.lvm.Lvm.activate')
     def test_detects_osds_to_activate_no_systemd(self, m_activate, m_create_key, is_root, monkeypatch):
-        monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: direct_report)
+        monkeypatch.setattr('ceph_volume.objectstore.lvm.direct_report', lambda: direct_report)
         args = ['--all', '--no-systemd', '--bluestore']
         a = activate.Activate(args)
         a.main()

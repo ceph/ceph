@@ -10,6 +10,8 @@
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/Utils.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 namespace {
 
@@ -135,7 +137,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
       .WillOnce(Invoke([&mock_image_ctx, object_no, offset, length, r]
                 (ObjectDispatchSpec* spec) {
-                  auto* discard_spec = boost::get<ObjectDispatchSpec::DiscardRequest>(&spec->request);
+                  auto* discard_spec = std::get_if<ObjectDispatchSpec::DiscardRequest>(&spec->request);
                   ASSERT_TRUE(discard_spec != nullptr);
                   ASSERT_EQ(object_no, discard_spec->object_no);
                   ASSERT_EQ(offset, discard_spec->object_off);
@@ -163,7 +165,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
       .WillOnce(
         Invoke([&mock_image_ctx, object_no, snap_delta, r]
                (ObjectDispatchSpec* spec) {
-                  auto request = boost::get<
+                  auto request = std::get_if<
                     librbd::io::ObjectDispatchSpec::ListSnapsRequest>(
                       &spec->request);
                   ASSERT_TRUE(request != nullptr);

@@ -1588,10 +1588,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release squid
+  ceph osd require-osd-release tentacle
   # can't lower
+  expect_false ceph osd require-osd-release squid
   expect_false ceph osd require-osd-release reef
-  expect_false ceph osd require-osd-release quincy
   # these are no-ops but should succeed.
 
   ceph osd set noup
@@ -2900,6 +2900,51 @@ function test_per_pool_scrub_status()
   ceph osd pool rm noscrub_pool2 noscrub_pool2 --yes-i-really-really-mean-it
 }
 
+function do_messenger_dump_basics_test()
+{
+  local target="$1"
+  ceph tell "$target" messenger dump | expect_true jq --exit-status '.messengers | length > 0'
+  ceph tell "$target" messenger dump | jq -r '.messengers[]' | while read messenger; do
+    dump="$(ceph tell "$target" messenger dump "$messenger" all)"
+    expect_true jq --exit-status 'has("messenger")' <<< "$dump"
+    expect_true jq --exit-status 'has("name")' <<< "$dump"
+    expect_true jq --arg expected_messenger "$messenger" --exit-status '
+	 .name == $expected_messenger' <<< "$dump"
+    expect_true jq --exit-status '.messenger | type == "object"' <<< "$dump"
+    expect_true jq --exit-status '.messenger |
+        all([.connections,
+             .listen_sockets,
+	     .anon_conns,
+	     .accepting_conns,
+	     .deleted_conns][];
+            type == "array")' \
+		<<< "$dump"
+  done
+}
+
+function test_osd_messenger_dump()
+{
+  do_messenger_dump_basics_test osd.0
+}
+function test_mon_messenger_dump()
+{
+  do_messenger_dump_basics_test mon.a
+  # Testing the tcp_info feature requires at lease one messenger TCP
+  # conneciton. Test only the mon as it is very unlikely that it
+  # doesn't have an active connection. Also only test for one
+  # connection, as disconnected connections don't set tcp_info
+  expect_true ceph tell "$target" messenger dump mon --tcp-info \
+    | jq 'any(.messenger.connections[].async_connection.tcp_info; has("tcpi_state"))'
+}
+function test_mgr_messenger_dump()
+{
+  do_messenger_dump_basics_test mgr
+}
+function test_mds_messenger_dump()
+{
+  do_messenger_dump_basics_test mds.a
+}
+
 #
 # New tests should be added to the TESTS array below
 #
@@ -2944,6 +2989,7 @@ MON_TESTS+=" mon_caps"
 MON_TESTS+=" mon_cephdf_commands"
 MON_TESTS+=" mon_tell_help_command"
 MON_TESTS+=" mon_stdin_stdout"
+MON_TESTS+=" mon_messenger_dump"
 
 OSD_TESTS+=" osd_bench"
 OSD_TESTS+=" osd_negative_filestore_merge_threshold"
@@ -2952,14 +2998,17 @@ OSD_TESTS+=" admin_heap_profiler"
 OSD_TESTS+=" osd_tell_help_command"
 OSD_TESTS+=" osd_compact"
 OSD_TESTS+=" per_pool_scrub_status"
+OSD_TESTS+=" osd_messenger_dump"
 
 MDS_TESTS+=" mds_tell"
 MDS_TESTS+=" mon_mds"
 MDS_TESTS+=" mon_mds_metadata"
 MDS_TESTS+=" mds_tell_help_command"
+MDS_TESTS+=" mds_messenger_dump"
 
 MGR_TESTS+=" mgr_tell"
 MGR_TESTS+=" mgr_devices"
+MGR_TESTS+=" mgr_messenger_dump"
 
 TESTS+=$MON_TESTS
 TESTS+=$OSD_TESTS

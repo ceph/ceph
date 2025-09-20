@@ -11,6 +11,7 @@
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthSessionHandler.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -420,6 +421,17 @@ void ProtocolV1::write_event() {
 
 bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
+}
+
+void ProtocolV1::dump(Formatter* f) {
+  f->open_object_section("v1");
+  f->dump_string("state", get_state_name(state));
+  f->dump_unsigned("connect_seq", connect_seq);
+  f->dump_unsigned("peer_global_seq", peer_global_seq);
+  if (auth_meta) {
+    f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
+  }
+  f->close_section();  // v1
 }
 
 void ProtocolV1::run_continuation(CtPtr pcontinuation) {
@@ -1281,11 +1293,11 @@ void ProtocolV1::reset_recv_state()
   // `write_message()`. `submit_to()` here is NOT blocking.
   if (!connection->center->in_thread()) {
     connection->center->submit_to(connection->center->get_id(), [this] {
-      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
-                    << dendl;
       // Possibly unnecessary. See the comment in `deactivate_existing`.
       std::lock_guard<std::mutex> l(connection->lock);
       std::lock_guard<std::mutex> wl(connection->write_lock);
+      ldout(cct, 5) << "reset_recv_state (warped) reseting security handlers"
+                    << dendl;
       reset_security();
     }, /* always_async = */true);
   } else {

@@ -13,6 +13,7 @@
 #include "auth/AuthClientHandler.h"
 #include "auth/RotatingKeyRing.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/hostname.h"
 #include "include/utime_fmt.h"
 
@@ -563,13 +564,21 @@ void Client::ms_handle_reset(crimson::net::ConnectionRef conn, bool /* is_replac
   });
 }
 
-std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
+std::vector<uint32_t>
 Client::get_supported_auth_methods(int peer_type)
 {
     std::vector<uint32_t> methods;
+    auth_registry.get_supported_methods(peer_type, &methods, nullptr);
+    return methods;
+}
+
+std::vector<uint32_t>
+Client::get_supported_con_modes(int peer_type,
+				uint32_t auth_method)
+{
     std::vector<uint32_t> modes;
-    auth_registry.get_supported_methods(peer_type, &methods, &modes);
-    return {methods, modes};
+    auth_registry.get_supported_modes(peer_type, auth_method, &modes);
+    return modes;
 }
 
 uint32_t Client::pick_con_mode(int peer_type,

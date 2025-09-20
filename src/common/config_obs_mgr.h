@@ -60,10 +60,10 @@ private:
 template<class ConfigObs>
 void ObserverMgr<ConfigObs>::add_observer(ConfigObs* observer)
 {
-  const char **keys = observer->get_tracked_conf_keys();
   auto ptr = std::make_shared<ConfigObs*>(observer);
-  for (const char ** k = keys; *k; ++k) {
-    observers.emplace(*k, ptr);
+
+  for (auto&& k : observer->get_tracked_keys()) {
+    observers.emplace(std::move(k), ptr);
   }
 }
 

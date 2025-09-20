@@ -5,6 +5,7 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "include/Context.h"
+#include "include/rados.h" // for EBLOCKLISTED
 #include "tools/cephfs_mirror/aio_utils.h"
 #include "RewatchRequest.h"
 

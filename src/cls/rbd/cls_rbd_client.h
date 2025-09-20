@@ -10,6 +10,8 @@
 #include "include/types.h"
 #include "include/rados/librados_fwd.hpp"
 
+#include <boost/optional.hpp>
+
 class Context;
 namespace ceph { template <uint8_t> class BitVector; }
 namespace neorados { struct WriteOp; }

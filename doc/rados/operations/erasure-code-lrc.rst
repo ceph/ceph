@@ -2,9 +2,9 @@
 Locally repairable erasure code plugin
 ======================================
 
-With the *jerasure* plugin, when an erasure coded object is stored on
+With the *isa* plugin, when an erasure coded object is stored on
 multiple OSDs, recovering from the loss of one OSD requires reading
-from *k* others. For instance if *jerasure* is configured with
+from *k* others. For instance if *isa* is configured with
 *k=8* and *m=4*, recovering from the loss of one OSD requires reading
 from eight others.
 
@@ -195,7 +195,7 @@ Minimal testing
 ---------------
 
 It is strictly equivalent to using a *K=2* *M=1* erasure code profile. The *DD*
-implies *K=2*, the *c* implies *M=1* and the *jerasure* plugin is used
+implies *K=2*, the *c* implies *M=1* and the *isa* plugin is used
 by default.:
 
 .. prompt:: bash $
@@ -253,11 +253,11 @@ the same rack as the lost chunk. **WARNING: PROMPTS ARE SELECTABLE**
 Testing with different Erasure Code backends
 --------------------------------------------
 
-LRC now uses jerasure as the default EC backend. It is possible to
+LRC now uses ISA as the default EC backend. It is possible to
 specify the EC backend/algorithm on a per layer basis using the low
 level configuration. The second argument in layers='[ [ "DDc", "" ] ]'
 is actually an erasure code profile to be used for this level. The
-example below specifies the ISA backend with the cauchy technique to
+example below specifies the Jerasure backend with the cauchy technique to
 be used in the lrcpool.:
 
 .. prompt:: bash $
@@ -265,7 +265,7 @@ be used in the lrcpool.:
    ceph osd erasure-code-profile set LRCprofile \
       plugin=lrc \
       mapping=DD_ \
-      layers='[ [ "DDc", "plugin=isa technique=cauchy" ] ]'
+      layers='[ [ "DDc", "plugin=jerasure technique=cauchy" ] ]'
    ceph osd pool create lrcpool erasure LRCprofile
 
 You could also use a different erasure code profile for each

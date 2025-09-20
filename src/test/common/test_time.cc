@@ -15,6 +15,8 @@
 
 #include <ctime>
 
+#include <math.h> // for pow()
+
 #include "common/ceph_time.h"
 #include "include/rados.h"
 #include "gtest/gtest.h"
@@ -27,6 +29,8 @@ using ceph::real_time;
 
 using ceph::real_clock;
 using ceph::real_time;
+
+using ceph::mono_clock;
 
 using ceph::coarse_real_clock;
 using ceph::coarse_mono_clock;

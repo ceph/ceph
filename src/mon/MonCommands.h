@@ -407,6 +407,7 @@ COMMAND("fs set "
           "|session_autoclose"
           "|session_timeout"
           "|standby_count_wanted"
+          "|allow_referent_inodes"
           " "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
@@ -557,6 +558,11 @@ COMMAND("mon enable_stretch_mode " \
 	"failure handling on all pools with <tiebreaker_mon> "
 	"as the tiebreaker and setting <dividing_bucket> locations "
 	"as the units for stretching across",
+	"mon", "rw")
+COMMAND("mon disable_stretch_mode " \
+	"name=crush_rule,type=CephString,req=false, "
+	"name=yes_i_really_mean_it,type=CephBool,req=false, ",
+	"disable stretch mode, reverting to normal peering rules",
 	"mon", "rw")
 COMMAND("mon set_new_tiebreaker " \
 	"name=name,type=CephString "
@@ -890,7 +896,7 @@ COMMAND("osd unset "
 	"notieragent|nosnaptrim|noautoscale",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid "
+	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid|tentacle "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
@@ -1029,6 +1035,9 @@ COMMAND("osd rm-pg-upmap-primary "
 	"name=pgid,type=CephPgid ",
 	"clear pg primary setting for <pgid>",
         "osd", "rw")
+COMMAND("osd rm-pg-upmap-primary-all ",
+        "clear all pg primary entries (developers only)",
+        "osd", "rw")
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName",
@@ -1161,11 +1170,11 @@ COMMAND("osd pool rename "
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio",
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio|pct_update_delay|allow_ec_optimizations",
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set "
 	"name=pool,type=CephPoolname "
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio "
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|pg_num_max|target_size_bytes|target_size_ratio|dedup_tier|dedup_chunk_algorithm|dedup_cdc_chunk_size|eio|bulk|read_ratio|pct_update_delay|allow_ec_optimizations "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
@@ -1228,9 +1237,19 @@ COMMAND("osd pool stretch set "
         "make the pool stretched across the specified number of CRUSH buckets",
         "osd", "rw")
 COMMAND("osd pool stretch unset "
-		"name=pool,type=CephPoolname",
+		"name=pool,type=CephPoolname "
+		"name=crush_rule,type=CephString "
+		"name=size,type=CephInt,range=0 "
+		"name=min_size,type=CephInt,range=0 ",
 		"unset the stretch mode for the pool",
 		"osd", "rw")
+COMMAND("osd pool availability-status", \
+        "obtain availability stats from all pools", \
+        "osd", "r")
+COMMAND("osd pool clear-availability-status "
+		"name=pool,type=CephPoolname ",
+        "clear a pool's existing availability stats", 
+        "osd", "r")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
@@ -1505,7 +1524,15 @@ COMMAND_WITH_FLAG("dump_historic_ops",
             "show recent ops",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_ops_by_duration",
+            "show recent ops sorted by duration",
+            "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_slow_ops",
             "show recent slow ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_ops_in_flight",
+            "show the ops currently in flight",
             "mon", "r",
             FLAG(TELL))

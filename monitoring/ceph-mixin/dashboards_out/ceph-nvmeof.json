@@ -1,0 +1,1834 @@
+{
+   "__inputs": [ ],
+   "__requires": [ ],
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [ ],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "Ceph NVMe-oF gateways overview",
+   "editable": false,
+   "gnetId": null,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [
+      {
+         "asDropdown": true,
+         "icon": "external link",
+         "includeVars": true,
+         "keepTime": true,
+         "tags": [ ],
+         "targetBlank": false,
+         "title": "Browse Dashboards",
+         "tooltip": "",
+         "type": "dashboards",
+         "url": ""
+      }
+   ],
+   "panels": [
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "Overview",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "dark-green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 0,
+            "y": 1
+         },
+         "id": 3,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(count  by (group) (ceph_nvmeof_gateway_info))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Gateway Groups",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "",
+                  "steps": [
+                     {
+                        "color": "#808080",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 1.0003
+                     }
+                  ]
+               },
+               "unit": ""
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Down"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "red",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Total"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "#a7a38b",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Available"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "green",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 5,
+            "x": 3,
+            "y": 1
+         },
+         "id": 4,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(ceph_nvmeof_gateway_info) + sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "format": "time_series",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "Total",
+               "range": false,
+               "refId": "A"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "count(ceph_nvmeof_gateway_info)",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Available",
+               "range": true,
+               "refId": "B"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "format": "time_series",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "Down",
+               "range": false,
+               "refId": "C"
+            }
+         ],
+         "title": "Total Gateways",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "datasource": "$datasource",
+         "description": "Ceph healthchecks NVMeoF WARNINGs",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 5,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "normal"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 0,
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "NVMEOF_GATEWAY_DOWN"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "red",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "NVMEOF_GATEWAY_DELETING"
+                  },
+                  "properties": [
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "dark-purple",
+                           "mode": "fixed"
+                        }
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "NVMEOF_SINGLE_GATEWAY"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.lineWidth",
+                        "value": 1
+                     },
+                     {
+                        "id": "color",
+                        "value": {
+                           "fixedColor": "super-light-orange",
+                           "mode": "shades"
+                        }
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 7,
+            "x": 8,
+            "y": 1
+         },
+         "id": 5,
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "desc"
+            }
+         },
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "sum(ceph_health_detail{name='NVMEOF_GATEWAY_DOWN'})",
+               "format": "",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "NVMEOF_GATEWAY_DOWN",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "sum(ceph_health_detail{name='NVMEOF_GATEWAY_DELETING'})",
+               "format": "",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "NVMEOF_GATEWAY_DELETING",
+               "range": true,
+               "refId": "B"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "sum(ceph_health_detail{name='NVMEOF_SINGLE_GATEWAY'})",
+               "format": "",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "NVMEOF_SINGLE_GATEWAY",
+               "range": true,
+               "refId": "C"
+            }
+         ],
+         "title": "Ceph Health NVMeoF WARNING",
+         "type": "timeseries"
+      },
+      {
+         "datasource": {
+            "type": "datasource",
+            "uid": "grafana"
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 15,
+            "y": 1
+         },
+         "id": 6,
+         "limit": 10,
+         "onlyAlertsOnDashboard": true,
+         "options": {
+            "alertInstanceLabelFilter": "",
+            "alertName": "NVMEOF",
+            "dashboardAlerts": false,
+            "groupBy": [ ],
+            "groupMode": "default",
+            "maxItems": 20,
+            "sortOrder": 3,
+            "stateFilter": {
+               "error": true,
+               "firing": true,
+               "noData": false,
+               "normal": false,
+               "pending": true
+            },
+            "viewMode": "list"
+         },
+         "show": "current",
+         "sortOrder": 1,
+         "stateFilter": [ ],
+         "title": "Active Alerts",
+         "type": "alertlist"
+      },
+      {
+         "datasource": "$datasource",
+         "description": "Gateways in each group",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  }
+               },
+               "mappings": [ ]
+            },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 5,
+            "w": 8,
+            "x": 0,
+            "y": 4
+         },
+         "id": 7,
+         "options": {
+            "displayLabels": [ ],
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "table",
+               "placement": "right",
+               "showLegend": true,
+               "values": [
+                  "value"
+               ]
+            },
+            "pieType": "pie",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "tooltip": {
+               "maxHeight": 600,
+               "mode": "single",
+               "sort": "none"
+            }
+         },
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count  by (group) (ceph_nvmeof_gateway_info)",
+               "format": "time_series",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Gateways per group",
+         "type": "piechart"
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 9
+         },
+         "id": 8,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "NVMeoF Group Overview -  $group",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 0,
+            "y": 10
+         },
+         "id": 9,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(ceph_nvmeof_gateway_info{group=~'$group'})",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Gateways",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "purple",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 3,
+            "y": 10
+         },
+         "id": 10,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(count by(nqn) (ceph_nvmeof_subsystem_metadata{group=~'$group',instance=~'$gateway'}))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Subsystems",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "blue",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 6,
+            "y": 10
+         },
+         "id": 11,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(count by (bdev_name) (\n  ceph_nvmeof_bdev_metadata{instance=~'$gateway'} * on (instance) group_left(group) ceph_nvmeof_gateway_info{group=~'$group'}\n))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Namespaces",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "Average connected clients",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "yellow",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 3,
+            "x": 9,
+            "y": 10
+         },
+         "id": 12,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "avg by (nqn) (sum by(gw_name, nqn) (ceph_nvmeof_host_connection_state{instance=~'$gateway'} * on (instance) group_left(group) ceph_nvmeof_gateway_info{group=~'$group'}))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Connected Clients",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "The sum of capacity from all namespaces defined to subsystems",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": null,
+                        "result": {
+                           "index": 1,
+                           "text": "0"
+                        }
+                     },
+                     "type": "special"
+                  }
+               ],
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "light-blue",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "bytes"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 5,
+            "x": 12,
+            "y": 10
+         },
+         "id": 13,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "sum(avg by (group) (sum by(group, instance) (ceph_nvmeof_bdev_capacity_bytes{instance=~'$gateway'} * on (instance) group_left(group) ceph_nvmeof_gateway_info{group=~'$group'})))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Capacity Exported",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "WARNING if any subsystem is defined with open/no security",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [
+                  {
+                     "id": 0,
+                     "options": {
+                        "match": "null",
+                        "result": {
+                           "color": "dark-green",
+                           "index": 0,
+                           "text": "OK"
+                        }
+                     },
+                     "type": "special"
+                  },
+                  {
+                     "id": 1,
+                     "options": {
+                        "from": 1,
+                        "result": {
+                           "color": "dark-yellow",
+                           "index": 1,
+                           "text": "WARNING"
+                        },
+                        "to": 9999
+                     },
+                     "type": "range"
+                  },
+                  {
+                     "id": 2,
+                     "options": {
+                        "0": {
+                           "color": "dark-green",
+                           "index": 2,
+                           "text": "OK"
+                        }
+                     },
+                     "type": "value"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            }
+         },
+         "gridPos": {
+            "h": 3,
+            "w": 7,
+            "x": 17,
+            "y": 10
+         },
+         "id": 14,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "background_solid",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count(ceph_nvmeof_subsystem_metadata{allow_any_host='yes',group=~'$group', instance=~'$gateway'}) ",
+               "format": "",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Subsystem Security",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "datasource": "$datasource",
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "drawStyle": "line",
+                  "fillOpacity": 5,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 0,
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": [ ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 9,
+            "x": 0,
+            "y": 13
+         },
+         "id": 15,
+         "options": {
+            "legend": {
+               "calcs": [ ],
+               "displayMode": "list",
+               "placement": "bottom",
+               "showLegend": true
+            },
+            "tooltip": {
+               "mode": "multi",
+               "sort": "desc"
+            }
+         },
+         "pluginVersion": "9.1.3",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "count by (group) (ceph_nvmeof_gateway_info{group=~'$group',instance=~'$gateway'})",
+               "format": "",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Active gateways count",
+         "type": "timeseries"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Shows the highest average CPU on a gateway within the gateway group",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "thresholds"
+               },
+               "decimals": 2,
+               "displayName": "${__field.instance}",
+               "mappings": [ ],
+               "max": 100,
+               "min": 0,
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "percentunit"
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byType",
+                     "unit": "number"
+                  },
+                  "properties": [
+                     {
+                        "id": "unit",
+                        "value": "decbytes"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 9,
+            "y": 13
+         },
+         "id": 16,
+         "options": {
+            "displayMode": "lcd",
+            "maxVizHeight": 50,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "top",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "/^Value$/",
+               "limit": 5,
+               "values": true
+            },
+            "showUnfilled": true,
+            "sizing": "manual",
+            "valueMode": "text"
+         },
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "topk(5, avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode='busy',instance=~'$gateway'}[$__rate_interval])))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top 5 Busiest Gateway CPU",
+         "type": "bargauge"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "All gateways",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "locale"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 7,
+            "x": 17,
+            "y": 13
+         },
+         "id": 17,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_nvmeof_bdev_reads_completed_total{instance=~'$gateway'}[$__rate_interval]))",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "Read",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "sum(irate(ceph_nvmeof_bdev_writes_completed_total{instance=~'$gateway'}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Write",
+               "range": true,
+               "refId": "B"
+            }
+         ],
+         "title": "IOPS - $gateway",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "colors": null,
+         "datasource": "$datasource",
+         "description": "All gateways",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [ ],
+               "mappings": [ ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "semi-dark-blue",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "binBps"
+            }
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 7,
+            "x": 17,
+            "y": 17
+         },
+         "id": 18,
+         "interval": "1m",
+         "links": [ ],
+         "options": {
+            "colorMode": "none",
+            "graphMode": "area",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "textMode": "auto"
+         },
+         "pluginVersion": "9.1.3",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "sum (irate(ceph_nvmeof_bdev_read_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Read",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": "$datasource",
+               "expr": "sum (irate(ceph_nvmeof_bdev_written_bytes_total{instance=~'$gateway'}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Write",
+               "range": true,
+               "refId": "B"
+            }
+         ],
+         "title": "Throughput - $gateway",
+         "transparent": false,
+         "type": "stat"
+      },
+      {
+         "columns": [ ],
+         "datasource": "$datasource",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "thresholds"
+               },
+               "custom": {
+                  "align": "auto",
+                  "cellOptions": {
+                     "type": "auto"
+                  },
+                  "filterable": false,
+                  "inspect": false
+               },
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "GW Version"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.width",
+                        "value": 110
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Count"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.width",
+                        "value": 80
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Address"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.width",
+                        "value": 112
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Group Name"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.width",
+                        "value": 128
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Group Name"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.filterable",
+                        "value": true
+                     }
+                  ]
+               },
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Reactors"
+                  },
+                  "properties": [
+                     {
+                        "id": "custom.width",
+                        "value": 70
+                     },
+                     {
+                        "id": "custom.align",
+                        "value": "left"
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 12,
+            "w": 17,
+            "x": 0,
+            "y": 21
+         },
+         "id": 19,
+         "links": [ ],
+         "options": {
+            "cellHeight": "sm",
+            "footer": {
+               "countRows": false,
+               "enablePagination": true,
+               "fields": "",
+               "reducer": [
+                  "sum"
+               ],
+               "show": false
+            },
+            "showHeader": true,
+            "sortBy": [ ]
+         },
+         "pluginVersion": "9.1.3",
+         "styles": "",
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "(count by(instance) (ceph_nvmeof_reactor_seconds_total{mode='busy'})) * on (instance) group_left(group,hostname,version,addr) ceph_nvmeof_gateway_info{group=~'$group'}",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Gateway Information",
+         "transformations": [
+            {
+               "id": "organize",
+               "options": {
+                  "excludeByName": {
+                     "Time": true,
+                     "Value": false,
+                     "__name__": true,
+                     "instance": true,
+                     "job": true,
+                     "name": true,
+                     "port": true,
+                     "spdk_version": true
+                  },
+                  "includeByName": { },
+                  "indexByName": {
+                     "Time": 0,
+                     "Value": 11,
+                     "__name__": 3,
+                     "addr": 4,
+                     "group": 1,
+                     "hostname": 2,
+                     "instance": 5,
+                     "job": 6,
+                     "name": 7,
+                     "port": 8,
+                     "spdk_version": 9,
+                     "version": 10
+                  },
+                  "renameByName": {
+                     "Value": "Reactors",
+                     "addr": "Address",
+                     "group": "Group Name",
+                     "hostname": "Hostname",
+                     "job": "",
+                     "version": "GW Version"
+                  }
+               }
+            }
+         ],
+         "type": "table"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Show the subsystems by the count of namespaces they present to the client",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "continuous-blues"
+               },
+               "displayName": "${__field.nqn}",
+               "mappings": [ ],
+               "min": 0,
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green",
+                        "value": null
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "title": "",
+                              "url": "d/feeuv1dno43r4deed/ceph-nvme-of-gateways-performance?var-subsystem=${__data.fields.nqn}"
+                           }
+                        ]
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 7,
+            "x": 17,
+            "y": 21
+         },
+         "id": 20,
+         "options": {
+            "displayMode": "basic",
+            "maxVizHeight": 50,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "top",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "/^Value$/",
+               "limit": 5,
+               "values": true
+            },
+            "showUnfilled": true,
+            "sizing": "manual",
+            "valueMode": "text"
+         },
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "topk(5, avg by (nqn) (ceph_nvmeof_subsystem_namespace_count{instance=~'$gateway'} * on (instance) group_left(group) ceph_nvmeof_gateway_info{group=~'$group'}))",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "{{nqn}}",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top 5 Subsystems by Namespace",
+         "type": "bargauge"
+      },
+      {
+         "datasource": "${datasource}",
+         "description": "Show the subsystems by the count of namespaces they present to the client",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "continuous-purples"
+               },
+               "displayName": "${__field.nqn}",
+               "mappings": [ ],
+               "min": 0,
+               "noValue": "0",
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     }
+                  ]
+               }
+            },
+            "overrides": [
+               {
+                  "matcher": {
+                     "id": "byName",
+                     "options": "Value"
+                  },
+                  "properties": [
+                     {
+                        "id": "links",
+                        "value": [
+                           {
+                              "title": "",
+                              "url": "d/feeuv1dno43r4deed/ceph-nvme-of-gateways-performance?var-subsystem=${__data.fields.nqn}"
+                           }
+                        ]
+                     }
+                  ]
+               }
+            ]
+         },
+         "gridPos": {
+            "h": 9,
+            "w": 7,
+            "x": 17,
+            "y": 29
+         },
+         "id": 21,
+         "options": {
+            "displayMode": "basic",
+            "maxVizHeight": 50,
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "namePlacement": "top",
+            "orientation": "horizontal",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "/^Value$/",
+               "limit": 5,
+               "values": true
+            },
+            "showUnfilled": true,
+            "sizing": "manual",
+            "valueMode": "text"
+         },
+         "targets": [
+            {
+               "datasource": "$datasource",
+               "expr": "topk(5, avg by (nqn) (sum by(gw_name, nqn) (ceph_nvmeof_host_connection_state{instance=~'$gateway'} * on (instance) group_left(group) ceph_nvmeof_gateway_info{group=~'$group'}))) ",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": false,
+               "refId": "A"
+            }
+         ],
+         "title": "Top 5 Subsystems with Most Connected Clients",
+         "type": "bargauge"
+      }
+   ],
+   "refresh": "30s",
+   "rows": [ ],
+   "schemaVersion": "39",
+   "style": "dark",
+   "tags": [
+      "ceph-mixin"
+   ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "hide": 0,
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [ ],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "37788254-f1d2-11ef-b13a-02000488170e",
+                  "value": "37788254-f1d2-11ef-b13a-02000488170e"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "37788254-f1d2-11ef-b13a-02000488170e",
+                  "value": "37788254-f1d2-11ef-b13a-02000488170e"
+               }
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": false,
+            "label": "cluster",
+            "multi": false,
+            "name": "cluster",
+            "options": [ ],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 1,
+            "regex": "(.*)",
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               }
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Gateway Group",
+            "multi": false,
+            "name": "group",
+            "options": [ ],
+            "query": "label_values(ceph_nvmeof_gateway_info,group)",
+            "refresh": 2,
+            "regex": "",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         },
+         {
+            "allValue": null,
+            "current": {
+               "text": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               },
+               "value": {
+                  "selected": false,
+                  "text": "All",
+                  "value": "$__all"
+               }
+            },
+            "datasource": "$datasource",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Gateway Hostname",
+            "multi": false,
+            "name": "gateway",
+            "options": [ ],
+            "query": "label_values(ceph_nvmeof_gateway_info{group=~'$group'},hostname)",
+            "refresh": 2,
+            "regex": "",
+            "sort": 0,
+            "tagValuesQuery": "",
+            "tags": [ ],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+         }
+      ]
+   },
+   "time": {
+      "from": "now-6h",
+      "to": "now"
+   },
+   "timepicker": {
+      "refresh_intervals": [
+         "5s",
+         "10s",
+         "30s",
+         "1m",
+         "5m",
+         "15m",
+         "30m",
+         "1h",
+         "2h",
+         "1d"
+      ],
+      "time_options": [
+         "5m",
+         "15m",
+         "1h",
+         "6h",
+         "12h",
+         "24h",
+         "2d",
+         "7d",
+         "30d"
+      ]
+   },
+   "timezone": "",
+   "title": "Ceph NVMe-oF Gateways - Overview",
+   "uid": "feeuv1dno43r4ddjhjssdd",
+   "version": 0
+}

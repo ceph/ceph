@@ -47,7 +47,7 @@ int add(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_add(op, resource, exclusive, limit);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int get(const DoutPrefixProvider* dpp,
@@ -69,7 +69,7 @@ int get(const DoutPrefixProvider* dpp,
   int ret = 0;
   ::cls_user_account_resource_get(op, name, resource, &ret);
 
-  r = ref.operate(dpp, &op, nullptr, y);
+  r = ref.operate(dpp, std::move(op), nullptr, y);
   if (r < 0) {
     return r;
   }
@@ -102,7 +102,7 @@ int remove(const DoutPrefixProvider* dpp,
 
   librados::ObjectWriteOperation op;
   ::cls_user_account_resource_rm(op, name);
-  return ref.operate(dpp, &op, y);
+  return ref.operate(dpp, std::move(op), y);
 }
 
 int list(const DoutPrefixProvider* dpp,
@@ -128,7 +128,7 @@ int list(const DoutPrefixProvider* dpp,
   ::cls_user_account_resource_list(op, marker, path_prefix, max_items,
                                    entries, &truncated, &next_marker, &ret);
 
-  r = ref.operate(dpp, &op, nullptr, y);
+  r = ref.operate(dpp, std::move(op), nullptr, y);
   if (r == -ENOENT) {
     next_marker.clear();
     return 0;
@@ -163,12 +163,14 @@ void resource_metadata::dump(ceph::Formatter* f) const
   encode_json("user_id", user_id, f);
 }
 
-void resource_metadata::generate_test_instances(std::list<resource_metadata*>& o)
+std::list<resource_metadata> resource_metadata::generate_test_instances()
 {
-  o.push_back(new resource_metadata);
-  auto m = new resource_metadata;
-  m->user_id = "uid";
-  o.push_back(m);
+  std::list<resource_metadata> o;
+  o.emplace_back();
+  resource_metadata m;;
+  m.user_id = "uid";
+  o.push_back(std::move(m));
+  return o;
 }
 
 } // namespace rgwrados::users

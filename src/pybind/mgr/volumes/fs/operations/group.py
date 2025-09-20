@@ -6,6 +6,7 @@ from contextlib import contextmanager
 import cephfs
 
 from .snapshot_util import mksnap, rmsnap
+from .charmap_util import charmap_get, charmap_set, charmap_rm
 from .pin_util import pin
 from .template import GroupTemplate
 from ..fs_util import listdir, listsnaps, get_ancestor_xattr, create_base_dir, has_subdir
@@ -78,6 +79,15 @@ class Group(GroupTemplate):
     def pin(self, pin_type, pin_setting):
         return pin(self.fs, self.path, pin_type, pin_setting)
 
+    def charmap_set(self, setting, value):
+        return charmap_set(self.fs, self.path, setting, value)
+
+    def charmap_rm(self):
+        return charmap_rm(self.fs, self.path)
+
+    def charmap_get(self, setting):
+        return charmap_get(self.fs, self.path, setting)
+
     def create_snapshot(self, snapname):
         snappath = os.path.join(self.path,
                                 self.vol_spec.snapshot_dir_prefix.encode('utf-8'),
@@ -116,6 +126,17 @@ class Group(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+        try:
+            normalization = self.fs.getxattr(self.path, 'ceph.dir.normalization').decode('utf-8')
+        except cephfs.NoData:
+            normalization = "none"
+
+        try:
+            casesensitive = self.fs.getxattr(self.path, 'ceph.dir.casesensitive').decode('utf-8')
+            casesensitive = casesensitive == "1"
+        except cephfs.NoData:
+            casesensitive = True
+
         return {'uid': int(st["uid"]),
                 'gid': int(st["gid"]),
                 'atime': str(st["atime"]),
@@ -126,7 +147,10 @@ class Group(GroupTemplate):
                 'created_at': str(st["btime"]),
                 'bytes_quota': "infinite" if nsize == 0 else nsize,
                 'bytes_used': int(usedbytes),
-                'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0)}
+                'bytes_pcent': "undefined" if nsize == 0 else '{0:.2f}'.format((float(usedbytes) / nsize) * 100.0),
+                'normalization': normalization,
+                'casesensitive': casesensitive,
+        }
 
     def resize(self, newsize, noshrink):
         try:
@@ -213,7 +237,21 @@ def set_group_attrs(fs, path, attrs):
     if mode is not None:
         fs.lchmod(path, mode)
 
-def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
+    normalization = attrs.get("normalization")
+    if normalization is not None:
+        try:
+            fs.setxattr(path, "ceph.dir.normalization", normalization.encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    casesensitive = attrs.get("casesensitive")
+    if casesensitive is False:
+        try:
+            fs.setxattr(path, "ceph.dir.casesensitive", "0".encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid, normalization, casesensitive):
     """
     create a subvolume group.
 
@@ -225,6 +263,8 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
     :param mode: the user permissions
     :param uid: the user identifier
     :param gid: the group identifier
+    :param normalization: the unicode normalization form to use (nfd, nfc, nfkd or nfkc)
+    :param casesensitive: whether to make the subvolume case insensitive or not
     :return: None
     """
     group = Group(fs, vol_spec, groupname)
@@ -239,7 +279,9 @@ def create_group(fs, vol_spec, groupname, size, pool, mode, uid, gid):
             'uid': uid,
             'gid': gid,
             'data_pool': pool,
-            'quota': size
+            'quota': size,
+            'normalization': normalization,
+            'casesensitive': casesensitive,
         }
         set_group_attrs(fs, path, attrs)
     except (cephfs.Error, VolumeException) as e:

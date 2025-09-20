@@ -4,8 +4,8 @@ etc/bash_completion.d/ceph
 etc/bash_completion.d/rados
 etc/bash_completion.d/radosgw-admin
 etc/bash_completion.d/rbd
-lib/systemd/system/ceph.target
-lib/systemd/system/rbdmap.service
+{usr/,}lib/systemd/system/ceph.target
+{usr/,}lib/systemd/system/rbdmap.service
 usr/bin/ceph
 usr/bin/ceph-authtool
 usr/bin/ceph-conf

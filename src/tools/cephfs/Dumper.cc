@@ -12,12 +12,11 @@
  * 
  */
 
-#ifndef _BACKWARD_BACKWARD_WARNING_H
-#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
-#endif
+#include "Dumper.h"
 
 #include "include/compat.h"
 #include "include/fs_types.h"
+#include "common/debug.h"
 #include "common/entity_name.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
@@ -26,8 +25,6 @@
 #include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
 #include "mon/MonClient.h"
-
-#include "Dumper.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -227,23 +224,54 @@ int Dumper::undump(const char *dump_file, bool force)
   char buf[HEADER_LEN];
   r = safe_read(fd, buf, sizeof(buf));
   if (r < 0) {
+    derr << "Error reading " << dump_file << dendl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return r;
+  } else if (r == 0) {
+    //Empty file read
+    derr << "No-op since empty journal dump file: " << dump_file << dendl;
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return r;
   }
 
   long long unsigned start, len, write_pos, format, trimmed_pos;
   long unsigned stripe_unit, stripe_count, object_size;
-  sscanf(strstr(buf, "start offset"), "start offset %llu", &start);
-  sscanf(strstr(buf, "length"), "length %llu", &len);
-  sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
-  sscanf(strstr(buf, "format"), "format %llu", &format);
+  char *phdr = strstr(buf, "start offset");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'start offset' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "start offset %llu", &start);
+  phdr = strstr(buf, "length");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'length' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "length %llu", &len);
+  phdr = strstr(buf, "write_pos");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'write_pos' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "write_pos %llu", &write_pos);
+  phdr = strstr(buf, "format");
+  if (phdr == NULL) {
+      derr  << "Invalid header, no 'format' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+  }
+  sscanf(phdr, "format %llu", &format);
 
   if (!force) {
     // need to check if fsid match onlien cluster fsid
-    if (strstr(buf, "fsid")) {
+    phdr = strstr(buf, "fsid");
+    if (phdr) {
       uuid_d fsid;
       char fsid_str[40];
-      sscanf(strstr(buf, "fsid"), "fsid %39s", fsid_str);
+      sscanf(phdr, "fsid %39s", fsid_str);
       r = fsid.parse(fsid_str);
       if (!r) {
 	derr  << "Invalid fsid" << dendl;
@@ -265,24 +293,41 @@ int Dumper::undump(const char *dump_file, bool force)
   }
 
   if (recovered == 0) {
+    //Check if the headers are available in the dump file
+    if (!strstr(buf, "stripe_unit")) {
+      derr  << "Invalid header, no 'stripe_unit' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+    } else if (!strstr(buf, "stripe_count")) {
+      derr  << "Invalid header, no 'stripe_count' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+    } else if (!strstr(buf, "object_size")) {
+      derr  << "Invalid header, no 'object_size' embedded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+    }
     auto&& last_committed = journaler.get_last_committed();
     stripe_unit = last_committed.layout.stripe_unit;
     stripe_count = last_committed.layout.stripe_count;
     object_size = last_committed.layout.object_size;
   } else {
     // try to get layout from dump file header, if failed set layout to default
-    if (strstr(buf, "stripe_unit")) {
-      sscanf(strstr(buf, "stripe_unit"), "stripe_unit %lu", &stripe_unit);
+    char *p_stripe_unit = strstr(buf, "stripe_unit");
+    if (p_stripe_unit) {
+      sscanf(p_stripe_unit, "stripe_unit %lu", &stripe_unit);
     } else {
       stripe_unit = file_layout_t::get_default().stripe_unit;
     }
-    if (strstr(buf, "stripe_count")) {
-      sscanf(strstr(buf, "stripe_count"), "stripe_count %lu", &stripe_count);
+    char *p_stripe_count = strstr(buf, "stripe_count");
+    if (p_stripe_count) {
+      sscanf(p_stripe_count, "stripe_count %lu", &stripe_count);
     } else {
       stripe_count = file_layout_t::get_default().stripe_count;
     }
-    if (strstr(buf, "object_size")) {
-      sscanf(strstr(buf, "object_size"), "object_size %lu", &object_size);
+    char *p_object_size = strstr(buf, "object_size");
+    if (p_object_size) {
+      sscanf(p_object_size, "object_size %lu", &object_size);
     } else {
       object_size = file_layout_t::get_default().object_size;
     }

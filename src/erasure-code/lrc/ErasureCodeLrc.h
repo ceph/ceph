@@ -54,6 +54,7 @@ public:
     std::vector<int> data;
     std::vector<int> coding;
     std::vector<int> chunks;
+    shard_id_set chunks_as_shard_set;
     std::set<int> chunks_as_set;
     std::string chunks_map;
     ceph::ErasureCodeProfile profile;
@@ -84,16 +85,30 @@ public:
 
   ~ErasureCodeLrc() override {}
 
+  [[deprecated]]
   std::set<int> get_erasures(const std::set<int> &need,
 			const std::set<int> &available) const;
 
+  shard_id_set get_erasures(const shard_id_set &need,
+			const shard_id_set &available) const;
+
+  [[deprecated]]
   int _minimum_to_decode(const std::set<int> &want_to_read,
 			 const std::set<int> &available,
 			 std::set<int> *minimum) override;
+  int _minimum_to_decode(const shard_id_set &want_to_read,
+			 const shard_id_set &available,
+			 shard_id_set *minimum) override;
 
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,
 			     std::ostream *ss) const override;
+
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+      FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+      FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION;
+  }
 
   unsigned int get_chunk_count() const override {
     return chunk_count;
@@ -105,12 +120,20 @@ public:
 
   unsigned int get_chunk_size(unsigned int stripe_width) const override;
 
-  int encode_chunks(const std::set<int> &want_to_encode,
-		    std::map<int, ceph::buffer::list> *encoded) override;
+  size_t get_minimum_granularity() override;
 
+  [[deprecated]]
+  int encode_chunks(const std::set<int> &want_to_encode,
+                  std::map<int, ceph::buffer::list> *encoded) override;
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out);
+  [[deprecated]]
   int decode_chunks(const std::set<int> &want_to_read,
 		    const std::map<int, ceph::buffer::list> &chunks,
 		    std::map<int, ceph::buffer::list> *decoded) override;
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override;
 
   int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
@@ -134,5 +157,6 @@ public:
   int layers_sanity_checks(const std::string &description_string,
 			   std::ostream *ss) const;
 };
+static_assert(!std::is_abstract<ErasureCodeLrc>());
 
 #endif

@@ -24,7 +24,7 @@ RecordBatch::add_pending(
   LOG_PREFIX(RecordBatch::add_pending);
   auto new_size = get_encoded_length_after(record, block_size);
   auto dlength_offset = pending.size.dlength;
-  TRACE("{} batches={}, write_size={}, dlength_offset={} ...",
+  TRACE("{} batches={}, write_size=0x{:x}, dlength_offset=0x{:x} ...",
         name,
         pending.get_size() + 1,
         new_size.get_encoded_length(),
@@ -144,7 +144,7 @@ RecordSubmitter::RecordSubmitter(
     batches(new RecordBatch[io_depth + 1])
 {
   LOG_PREFIX(RecordSubmitter);
-  INFO("{} io_depth_limit={}, batch_capacity={}, batch_flush_size={}, "
+  INFO("{} io_depth_limit={}, batch_capacity={}, batch_flush_size=0x{:x}, "
        "preferred_fullness={}",
        get_name(), io_depth, batch_capacity,
        batch_flush_size, preferred_fullness);
@@ -469,7 +469,7 @@ void RecordSubmitter::update_state()
   } else if (num_outstanding_io == io_depth_limit) {
     state = state_t::FULL;
   } else {
-    ceph_abort("fatal error: io-depth overflow");
+    ceph_abort_msg("fatal error: io-depth overflow");
   }
 }
 

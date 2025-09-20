@@ -130,11 +130,16 @@ public:
   virtual void populate_params(param_vec_t& params, const rgw_owner* uid, const std::string& zonegroup);
 
   /* sync request */
-  int forward(const DoutPrefixProvider *dpp, const rgw_owner& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
+  auto forward(const DoutPrefixProvider *dpp, const rgw_owner& uid,
+               const req_info& info, size_t max_response,
+               bufferlist *inbl, bufferlist *outbl, optional_yield y)
+    -> tl::expected<int, int>;
 
   /* sync request */
-  int forward_iam_request(const DoutPrefixProvider *dpp, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y);
-
+  auto forward_iam(const DoutPrefixProvider *dpp, const req_info& info,
+                   size_t max_response, bufferlist *inbl,
+                   bufferlist *outbl, optional_yield y)
+    -> tl::expected<int, int>;
 
   /* async requests */
   int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
@@ -145,7 +150,8 @@ public:
                        ceph::real_time *mtime, optional_yield y);
 
   struct get_obj_params {
-    rgw_owner uid;
+    const rgw_owner *uid{nullptr};
+    const rgw_user *perm_check_uid{nullptr};
     req_info *info{nullptr};
     const ceph::real_time *mod_ptr{nullptr};
     const ceph::real_time *unmod_ptr{nullptr};
@@ -173,7 +179,9 @@ public:
 
   int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw_owner& uid, req_info *info /* optional */, const rgw_obj& obj,
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_owner* uid,
+              const rgw_user* perm_check_uid,
+              req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
@@ -349,7 +357,7 @@ public:
   int wait(const DoutPrefixProvider* dpp, bufferlist *pbl, optional_yield y) {
     int ret = req.wait(dpp, y);
     if (ret < 0) {
-      if (ret == -EIO) {
+      if (ret == -ERR_INTERNAL_ERROR) {
         conn->set_url_unconnectable(req.get_url_orig());
       }
       return ret;
@@ -405,7 +413,7 @@ int RGWRESTReadResource::wait(const DoutPrefixProvider* dpp, T *dest,
 {
   int ret = req.wait(dpp, y);
   if (ret < 0) {
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       conn->set_url_unconnectable(req.get_url_orig());
     }
     return ret;
@@ -480,7 +488,7 @@ public:
     int ret = req.wait(dpp, y);
     *pbl = bl;
 
-    if (ret == -EIO) {
+    if (ret == -ERR_INTERNAL_ERROR) {
       conn->set_url_unconnectable(req.get_url_orig());
     }
 
@@ -501,7 +509,7 @@ int RGWRESTSendResource::wait(const DoutPrefixProvider* dpp, T *dest,
                               optional_yield y, E *err_result)
 {
   int ret = req.wait(dpp, y);
-  if (ret == -EIO) {
+  if (ret == -ERR_INTERNAL_ERROR) {
     conn->set_url_unconnectable(req.get_url_orig());
   }
 

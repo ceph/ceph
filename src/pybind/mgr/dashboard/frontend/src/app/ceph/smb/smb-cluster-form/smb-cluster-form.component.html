@@ -1,0 +1,457 @@
+<div cdsCol
+     [columnNumbers]="{ md: 4 }"
+     *ngIf="orchStatus$ | async as orchStatus">
+  <ng-container *cdFormLoading="loading">
+    <form name="smbForm"
+          #formDir="ngForm"
+          [formGroup]="smbForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+
+      <!-- Cluster Id -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="cluster_id"
+          i18n
+          helperText="Unique identifier"
+          i18n-helperText
+          cdRequiredField="Cluster Name"
+          [disabled]="isEdit"
+          [invalid]="smbForm.controls.cluster_id.invalid && smbForm.controls.cluster_id.dirty"
+          [invalidText]="clusterError"
+          >Cluster Name
+          <input
+            cdsText
+            type="text"
+            id="cluster_id"
+            formControlName="cluster_id"
+            [invalid]="smbForm.controls.cluster_id.invalid && smbForm.controls.cluster_id.dirty"
+          />
+        </cds-text-label>
+        <ng-template #clusterError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbForm.showError('cluster_id', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Auth Mode -->
+      <div class="form-item">
+        <cds-select
+          formControlName="auth_mode"
+          label="Authentication Mode"
+          cdRequiredField="Authentication Mode"
+          id="auth_mode"
+          [invalid]="smbForm.controls.auth_mode.invalid && smbForm.controls.auth_mode.dirty"
+          [invalidText]="authModeError"
+          (change)="onAuthModeChange()"
+          [disabled]="isEdit"
+          helperText="Active-directory authentication for domain member servers and User authentication for
+          Stand-alone servers configuration."
+          i18n-helperText
+        >
+          <option value="active-directory"
+                  i18n>Active Directory</option>
+          <option value="user"
+                  i18n>User</option>
+        </cds-select>
+        <ng-template #authModeError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbForm.showError('auth_mode', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Domain Settings -->
+      <div class="form-item"
+           *ngIf="this.smbForm.get('auth_mode').value === 'active-directory'">
+        <div cdsCol
+             [columnNumbers]="{ md: 12 }"
+             class="d-flex">
+          <cds-text-label labelInputID="domain_settings"
+                          i18n
+                          cdRequiredField="Domain Settings">Active Directory (AD) Settings
+            <div class="cds-input-group">
+              <input
+                cdsText
+                type="text"
+                id="domain_settings"
+                formControlName="domain_settings"
+                [value]="domainSettingsObject?.realm"
+                (click)="editDomainSettingsModal()"
+                [invalid]="
+                  !smbForm.controls.domain_settings.valid &&
+                  smbForm.controls.domain_settings.dirty &&
+                  smbForm.controls.domain_settings.touched
+                "
+              />
+              <cds-icon-button kind="ghost"
+                               (click)="editDomainSettingsModal()"
+                               size="md">
+                <svg cdsIcon="edit"
+                     size="32"
+                     class="cds--btn__icon"
+                     icon></svg>
+              </cds-icon-button>
+
+              <cds-icon-button kind="danger"
+                               (click)="deleteDomainSettingsModal()"
+                               size="md">
+                <svg cdsIcon="trash-can"
+                     size="32"
+                     class="cds--btn__icon"
+                     icon></svg>
+              </cds-icon-button>
+            </div>
+          </cds-text-label>
+        </div>
+        <span
+          class="invalid-feedback"
+          *ngIf="
+            smbForm.get('domain_settings').hasError('required') &&
+            smbForm.controls.domain_settings.touched
+          "
+          i18n>Specify the Realm and AD access resources in the Domain Settings field.</span
+        >
+        <div></div>
+      </div>
+
+      <!-- User Group Settings -->
+      <ng-container formArrayName="joinSources"
+                    *ngFor="let _ of joinSources.controls; index as i">
+        <div
+          cdsRow
+          *ngIf="this.smbForm.get('auth_mode').value === 'user' && usersGroups$ | async as usersGroups"
+          class="form-item form-item-append"
+        >
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 14 }"
+          >
+            <cds-select
+              label="Standalone user access resources"
+              i18n-label
+              [formControlName]="i"
+              [invalid]="smbForm.controls.joinSources.controls[i].invalid && smbForm.controls.joinSources.controls[i].dirty"
+              [invalidText]="ugError"
+            >
+              <option
+                [value]="null"
+                i18n
+              >-- List of users and groups access resources --
+              </option>
+              <option *ngFor="let ug of usersGroups"
+                      [value]="ug.users_groups_id">{{ ug.users_groups_id }}</option>
+            </cds-select>
+            <ng-template #ugError>
+              <span
+                class="invalid-feedback"
+                i18n
+              >This field is required.</span>
+            </ng-template>
+          </div>
+          <div
+            cdsCol
+            [columnNumbers]="{ lg: 1 }"
+            class="item-action-btn spacing"
+          >
+            <cds-icon-button
+              kind="danger"
+              *ngIf="i > 0"
+              size="sm"
+              (click)="removeUserGroupSetting(i)"
+            >
+              <svg
+                cdsIcon="trash-can"
+                size="32"
+                class="cds--btn__icon"></svg>
+            </cds-icon-button>
+          </div>
+        </div>
+      </ng-container>
+
+      <div class="form-item"
+           *ngIf="this.smbForm.get('auth_mode').value === 'user'">
+        <button cdsButton="tertiary"
+                type="button"
+                (click)="addUserGroupSetting()"
+                i18n>
+          Add user group
+          <svg cdsIcon="add"
+               size="32"
+               class="cds--btn__icon"
+               icon></svg>
+        </button>
+
+        <button
+          cdsButton="tertiary"
+          type="button"
+          (click)="navigateCreateUsersGroups()"
+          i18n
+        >
+          Create user group
+        <svg
+          cdsIcon="launch"
+          size="32"
+          class="cds--btn__icon"></svg>
+        </button>
+      </div>
+
+      <cd-form-advanced-fieldset title="Service specifications">
+        <!-- Placement -->
+        <ng-container *ngIf="orchStatus.available">
+          <div class="form-item">
+            <cds-select
+              label="Placement"
+              for="placement"
+              formControlName="placement"
+              id="placement"
+            >
+              <option value="hosts"
+                      i18n>Hosts</option>
+              <option value="label"
+                      i18n>Labels</option>
+            </cds-select>
+          </div>
+          <ng-container *ngIf="hostsAndLabels$ | async as data">
+            <!-- Label -->
+            <div *ngIf="smbForm.controls.placement.value === 'label'"
+                 class="form-item">
+              <cds-combo-box
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Label"
+                formControlName="label"
+                id="label"
+                placeholder="Select labels..."
+                [appendInline]="true"
+                [items]="data.labels"
+                i18n-placeholder
+                (selected)="multiSelector($event, 'label')"
+                [invalid]="smbForm.controls.label.invalid && smbForm.controls.label.dirty"
+                [invalidText]="labelError"
+                cdRequiredField="Label"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+              <ng-template #labelError>
+                <span
+                  class="invalid-feedback"
+                  *ngIf="smbForm.showError('label', formDir, 'required')"
+                  i18n
+                  >This field is required.</span
+                >
+              </ng-template>
+            </div>
+
+            <!-- Hosts -->
+            <div *ngIf="smbForm.controls.placement.value === 'hosts'"
+                 class="form-item">
+              <cds-combo-box
+                type="multi"
+                selectionFeedback="top-after-reopen"
+                label="Hosts"
+                formControlName="hosts"
+                id="hosts"
+                placeholder="Select hosts..."
+                i18n-placeholder
+                [appendInline]="true"
+                [items]="data.hosts"
+                (selected)="multiSelector($event, 'hosts')"
+                i18n
+              >
+                <cds-dropdown-list></cds-dropdown-list>
+              </cds-combo-box>
+            </div>
+          </ng-container>
+        </ng-container>
+
+        <div class="form-item">
+          <cds-number
+            [id]="'count'"
+            [formControlName]="'count'"
+            [label]="'Count'"
+            [min]="1"
+          ></cds-number>
+        </div>
+
+        <!-- Custom DNS -->
+        <ng-container formArrayName="custom_dns"
+                      *ngFor="let _ of custom_dns.controls; index as i">
+          <div cdsRow
+               class="form-item form-item-append">
+            <div cdsCol
+                 [columnNumbers]="{ lg: 14 }">
+              <cds-text-label
+                for="custom_dns"
+                i18n
+              >DNS
+              <input cdsText
+                     [formControlName]="i"
+                     placeholder="192.168.76.204"/>
+              </cds-text-label>
+            </div>
+            <div
+              cdsCol
+              [columnNumbers]="{ lg: 1 }"
+              class="item-action-btn spacing"
+            >
+              <cds-icon-button
+                kind="danger"
+                size="sm"
+                (click)="removeCustomDNS(i)"
+              >
+                <svg
+                  cdsIcon="trash-can"
+                  size="32"
+                  class="cds--btn__icon"
+                >
+                </svg>
+              </cds-icon-button>
+            </div>
+          </div>
+        </ng-container>
+
+        <div class="form-item">
+          <button cdsButton="tertiary"
+                  type="button"
+                  (click)="addCustomDns()"
+                  i18n>
+            Add custom DNS
+            <svg
+              cdsIcon="add"
+              size="32"
+              class="cds--btn__icon"
+              icon></svg>
+          </button>
+          <cd-helper i18n>One or more IP Addresses that will be
+            applied to the Samba containers to override
+            the default DNS resolver(s). This option is
+            intended to be used when the host Ceph node
+            is not configured to resolve DNS entries within
+            AD domain(s).
+          </cd-helper>
+        </div>
+
+        <!-- Clustering -->
+        <div class="form-item">
+          <cds-select
+            formControlName="clustering"
+            for="clustering"
+            label="Clustering"
+            id="clustering"
+            helperText="Default value indicates that clustering should be enabled if the placement count value is any value other than 1. Always value enables clustering regardless of the placement count. Never value disables clustering regardless of the placement count. "
+            i18n-helperText
+          >
+            <option *ngFor="let data of allClustering"
+                    i18n>{{ data | upperFirst }}</option>
+          </cds-select>
+        </div>
+
+        <!-- Public addrs -->
+        <ng-container formArrayName="public_addrs"
+                      *ngFor="let _ of public_addrs.controls; index as i">
+          <ng-container [formGroupName]="i">
+            <div cdsRow
+                 class="form-item form-item-append">
+              <!-- Address -->
+              <div cdsCol
+                   [columnNumbers]="{ lg: 7 }">
+                <cds-text-label
+                  for="public_addrs"
+                  i18n
+                  helperText="This address will be assigned to one of the host's network devices and managed automatically."
+                  i18n-helperText
+                  cdrequiredField
+                  [invalid]="smbForm?.controls['public_addrs']?.controls[i].controls.address.invalid && smbForm?.controls['public_addrs']?.controls[i].controls.address.dirty"
+                  [invalidText]="addressError"
+                >Address
+                  <input
+                    cdsText
+                    type="text"
+                    formControlName="address"
+                    placeholder="192.168.4.51/24"
+                    [invalid]="smbForm?.controls['public_addrs'].controls[i].controls.address.invalid && smbForm?.controls['public_addrs']?.controls[i].controls.address.dirty"
+                  />
+                </cds-text-label>
+                <ng-template #addressError>
+                  <span
+                    class="invalid-feedback"
+                  >
+                    <ng-container i18n> This field is required. </ng-container>
+                  </span>
+                </ng-template>
+              </div>
+              <!-- Destination -->
+              <div cdsCol
+                   [columnNumbers]="{ lg: 7 }">
+                <cds-text-label
+                  for="public_addrs"
+                  i18n
+                  helperText="Defines where the system will assign the managed IPs. Each string value must be a network address."
+                  i18n-helperText
+                >Destination
+                <input
+                  cdsText
+                  type="text"
+                  formControlName="destination"
+                  placeholder="192.168.4.0/24"/>
+                </cds-text-label>
+              </div>
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 1 }"
+                class="item-action-btn spacing"
+              >
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  (click)="removePublicAddrs(i)"
+                >
+                  <svg cdsIcon="trash-can"
+                       size="32"
+                       class="cds--btn__icon"></svg>
+                </cds-icon-button>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+        <div
+          *ngIf="(this.smbForm.get('count').value > 1 && this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Default) || this.smbForm.get('clustering').value.toLowerCase() == CLUSTERING.Always"
+          class="form-item"
+        >
+          <button cdsButton="tertiary"
+                  type="button"
+                  (click)="addPublicAddrs()"
+                  i18n>
+            Add public address
+            <svg
+              cdsIcon="add"
+              size="32"
+              class="cds--btn__icon"
+              icon></svg>
+          </button>
+          <cd-helper i18n>Assign virtual IP addresses that will be managed
+            by the clustering subsystem and may automatically
+            move between nodes running Samba containers.</cd-helper>
+        </div>
+      </cd-form-advanced-fieldset>
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="smbForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>

@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <ctime>
+#include <iomanip>
 #include <list>
 #include <memory>
 
@@ -113,17 +114,17 @@ class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   timeout_timer& timeout;
-  boost::asio::yield_context yield;
+  optional_yield y;
   parse_buffer& buffer;
   boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
-           rgw::asio::parser_type& parser, boost::asio::yield_context yield,
+           rgw::asio::parser_type& parser, optional_yield y,
            parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), timeout(timeout), yield(yield),
+        cct(cct), stream(stream), timeout(timeout), y(y),
         buffer(buffer)
   {}
 
@@ -132,8 +133,14 @@ class StreamIO : public rgw::asio::ClientIO {
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
     timeout.start();
-    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
-                                          yield[ec]);
+    size_t bytes = 0;
+    if (y) {
+      boost::asio::yield_context& yield = y.get_yield_context();
+      bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
+                                       yield[ec]);
+    } else {
+      bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    }
     timeout.cancel();
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
@@ -158,7 +165,12 @@ class StreamIO : public rgw::asio::ClientIO {
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
       timeout.start();
-      http::async_read_some(stream, buffer, parser, yield[ec]);
+      if (y) {
+        boost::asio::yield_context& yield = y.get_yield_context();
+        http::async_read_some(stream, buffer, parser, yield[ec]);
+      } else {
+        http::read_some(stream, buffer, parser, ec);
+      }
       timeout.cancel();
       if (ec == http::error::need_buffer) {
         break;
@@ -314,7 +326,11 @@ void handle_connection(boost::asio::io_context& context,
         return;
       }
 
-      StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
+      optional_yield y = null_yield;
+      if (cct->_conf->rgw_beast_enable_async) {
+        y = optional_yield{yield};
+      }
+      StreamIO real_client{cct, stream, timeout, parser, y, buffer,
                            is_ssl, local_endpoint, remote_endpoint};
 
       auto real_client_io = rgw::io::add_reordering(
@@ -323,9 +339,15 @@ void handle_connection(boost::asio::io_context& context,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      optional_yield y = null_yield;
-      if (cct->_conf->rgw_beast_enable_async) {
-        y = optional_yield{yield};
+      // getting ssl_cipher and tls_version
+      if(is_ssl) {
+        ceph_assert(typeid(Stream) == typeid(boost::asio::ssl::stream<tcp::socket&>));
+        const SSL * native_handle = reinterpret_cast<const SSL *>(stream.native_handle());
+        const auto ssl_cipher = SSL_CIPHER_get_name(SSL_get_current_cipher(native_handle));
+        const auto tls_version = SSL_get_version(native_handle);
+        auto& client_env = client.get_env();
+        client_env.set("SSL_CIPHER", ssl_cipher);
+        client_env.set("TLS_VERSION", tls_version);
       }
       int http_ret = 0;
       string user = "-";
@@ -685,8 +707,12 @@ int AsioFrontend::init()
       l.use_nodelay = (nodelay->second == "1");
     }
   }
-  
 
+  bool reuse_port = false;
+  auto reuse_port_it = config.find("so_reuseport");
+  if (reuse_port_it != config.end()) {
+    reuse_port = (reuse_port_it->second == "1");
+  }
   bool socket_bound = false;
   // start listeners
   for (auto& l : listeners) {
@@ -711,7 +737,21 @@ int AsioFrontend::init()
       }
     }
 
-    l.acceptor.set_option(tcp::acceptor::reuse_address(true));
+    if (reuse_port) {
+      // setting option |SO_REUSEPORT| allows running of multiple rgw processes on
+      // the same port. Can read more about the implementation here.
+      // https://web.git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next.git/commit/?id=c617f398edd4db2b8567a28e899a88f8f574798d
+      int one = 1;
+      if (setsockopt(l.acceptor.native_handle(), SOL_SOCKET,
+                     SO_REUSEADDR | SO_REUSEPORT, &one, sizeof(one)) == -1) {
+        lderr(ctx()) << "setsockopt SO_REUSEADDR | SO_REUSEPORT failed:" <<
+ dendl;
+        return -1;
+      }
+    } else {
+      l.acceptor.set_option(tcp::acceptor::reuse_address(true));
+    }
+
     l.acceptor.bind(l.endpoint, ec);
     if (ec) {
       lderr(ctx()) << "failed to bind address " << l.endpoint
@@ -1194,8 +1234,11 @@ void AsioFrontend::pause()
     l.signal.emit(boost::asio::cancellation_type::terminal);
   }
 
-  // close all connections so outstanding requests fail quickly
-  connections.close(ec);
+  const bool graceful_stop{ g_ceph_context->_conf->rgw_graceful_stop };
+  if (!graceful_stop) {
+    // close all connections so outstanding requests fail quickly
+    connections.close(ec);
+  }
 
   // pause and wait until outstanding requests complete
   pause_mutex.lock(ec);

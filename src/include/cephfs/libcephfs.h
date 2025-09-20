@@ -39,9 +39,9 @@ using CephContext = ceph::common::CephContext;
 extern "C" {
 #endif
 
-#define LIBCEPHFS_VER_MAJOR 10
+#define LIBCEPHFS_VER_MAJOR 11
 #define LIBCEPHFS_VER_MINOR 0
-#define LIBCEPHFS_VER_EXTRA 3
+#define LIBCEPHFS_VER_EXTRA 0
 
 #define LIBCEPHFS_VERSION(maj, min, extra) ((maj << 16) + (min << 8) + extra)
 #define LIBCEPHFS_VERSION_CODE LIBCEPHFS_VERSION(LIBCEPHFS_VER_MAJOR, LIBCEPHFS_VER_MINOR, LIBCEPHFS_VER_EXTRA)
@@ -318,6 +318,17 @@ int ceph_mount(struct ceph_mount_info *cmount, const char *root);
  * mounted filesystem, this returns a negative error code.
  */
 int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount);
+
+typedef void (*libcephfs_c_completion_t)(int rc, const void* out, size_t outlen, const void* outs, size_t outslen, void* ud);
+
+int ceph_mds_command2(struct ceph_mount_info *cmount,
+    const char *mds_spec,
+    const char **cmd,
+    size_t cmdlen,
+    const char *inbuf, size_t inbuflen,
+    int one_shot,
+    libcephfs_c_completion_t c,
+    void* ud);
 
 /**
  * Execute a management command remotely on an MDS.
@@ -637,6 +648,71 @@ struct ceph_snapdiff_info
                                    // doesn't exist in the second snapshot
 };
 
+struct ceph_file_blockdiff_result;
+
+// blockdiff stream handle
+struct ceph_file_blockdiff_info
+{
+  struct ceph_mount_info* cmount;
+  struct ceph_file_blockdiff_result* blockp;
+};
+
+// set of file block diff's
+struct cblock
+{
+  uint64_t offset;
+  uint64_t len;
+};
+struct ceph_file_blockdiff_changedblocks
+{
+  uint64_t num_blocks;
+  struct cblock *b;
+};
+
+/**
+ * Initialize blockdiff stream to get file block deltas.
+ *
+ * @param cmount the ceph mount handle to use for snapdiff retrieval.
+ * @param root_path  root path for snapshots-in-question
+ * @param rel_path subpath under the root to build delta for
+ * @param snap1 the first snapshot name
+ * @param snap2 the second snapshot name
+ * @param out_info resulting blockdiff stream handle to be used for blokdiff results
+                   retrieval via ceph_file_blockdiff().
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
+                             const char* root_path,
+                             const char* rel_path,
+                             const char* snap1,
+                             const char* snap2,
+                             struct ceph_file_blockdiff_info* out_info);
+
+/**
+ * Get a set of file blockdiff's
+ *
+ * @param info blockdiff stream handle
+ * @param blocks next set of file blockdiff's (offset, length)
+ * @returns 0 or 1 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff(struct ceph_file_blockdiff_info* info,
+                        struct ceph_file_blockdiff_changedblocks* blocks);
+/**
+ * Free blockdiff buffer
+ *
+ * @param blocks file block diff's from ceph_file_blockdiff()
+ * @returns None
+ */
+void ceph_free_file_blockdiff_buffer(struct ceph_file_blockdiff_changedblocks* blocks);
+
+/**
+ * Close blockdiff stream
+ *
+ * @param info blockdiff stream handle
+ * @returns 0 on success and negative error code otherwise
+ */
+int ceph_file_blockdiff_finish(struct ceph_file_blockdiff_info* info);
+
 /**
  * Opens snapdiff stream to get snapshots delta (aka snapdiff).
  *
@@ -937,7 +1013,7 @@ int ceph_fstatx(struct ceph_mount_info *cmount, int fd, struct ceph_statx *stx,
  * @param relpath to the file/directory to get statistics of
  * @param stx the ceph_statx struct that will be filled in with the file's statistics.
  * @param want bitfield of CEPH_STATX_* flags showing designed attributes
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_SYNC_AS_STAT, AT_STATX_FORCE_SYNC, AT_STATX_DONT_SYNC and AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_STATX_DONT_SYNC, AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
@@ -1072,7 +1148,7 @@ int ceph_chmodat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_chown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file from an open file descriptor.
@@ -1083,7 +1159,7 @@ int ceph_chown(struct ceph_mount_info *cmount, const char *path, int uid, int gi
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
+int ceph_fchown(struct ceph_mount_info *cmount, int fd, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory, don't follow symlinks.
@@ -1094,7 +1170,7 @@ int ceph_fchown(struct ceph_mount_info *cmount, int fd, int uid, int gid);
  * @param gid the group id to set on the file/directory.
  * @returns 0 on success or negative error code on failure.
  */
-int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int gid);
+int ceph_lchown(struct ceph_mount_info *cmount, const char *path, uid_t uid, gid_t gid);
 
 /**
  * Change the ownership of a file/directory releative to a file descriptor.
@@ -1104,7 +1180,7 @@ int ceph_lchown(struct ceph_mount_info *cmount, const char *path, int uid, int g
  * @param relpath the relpath of the file/directory to change the ownership of.
  * @param uid the user id to set on the file/directory.
  * @param gid the group id to set on the file/directory.
- * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW)
+ * @param flags bitfield that can be used to set AT_* modifier flags (AT_SYMLINK_NOFOLLOW and AT_EMPTY_PATH)
  * @returns 0 on success or negative error code on failure.
  */
 int ceph_chownat(struct ceph_mount_info *cmount, int dirfd, const char *relpath,
@@ -1199,6 +1275,32 @@ int ceph_utimensat(struct ceph_mount_info *cmount, int dirfd, const char *relpat
  */
 int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
 	       uint64_t owner);
+
+/**
+ * Test the existence of a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to test the existence of a record lock.
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner);
+
+/**
+ * Set a record lock.
+ *
+ * @param cmount the ceph mount handle to use for performing the lock.
+ * @param fd the open file descriptor to set a record lock
+ * @param pointer to an flock structure.
+ * @param owner the user-supplied owner identifier (an arbitrary integer)
+ * @param sleep the user-supplied sleep flag
+ * @returns 0 on success or negative error code on failure.
+ */ 
+ 
+ int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *flock,
+		uint64_t owner, int sleep);
 
 /**
  * Truncate the file to the given size.  If this operation causes the
@@ -1918,6 +2020,7 @@ int ceph_ll_lookup_root(struct ceph_mount_info *cmount,
 int ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 		   const char *name, Inode **out, struct ceph_statx *stx,
 		   unsigned want, unsigned flags, const UserPerm *perms);
+void ceph_ll_get(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_put(struct ceph_mount_info *cmount, struct Inode *in);
 int ceph_ll_forget(struct ceph_mount_info *cmount, struct Inode *in,
 		   int count);
@@ -1949,6 +2052,8 @@ int64_t ceph_ll_writev(struct ceph_mount_info *cmount, struct Fh *fh,
 		       const struct iovec *iov, int iovcnt, int64_t off);
 int64_t ceph_ll_nonblocking_readv_writev(struct ceph_mount_info *cmount,
 					 struct ceph_ll_io_info *io_info);
+int64_t ceph_ll_nonblocking_fsync(struct ceph_mount_info *cmount,
+				  Inode *in, struct ceph_ll_io_info *io_info);
 int ceph_ll_close(struct ceph_mount_info *cmount, struct Fh* filehandle);
 int ceph_ll_iclose(struct ceph_mount_info *cmount, struct Inode *in, int mode);
 /**
@@ -2209,6 +2314,23 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  * @param snap_info snapshot info struct (fetched via call to ceph_get_snap_info()).
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
+
+/**
+ * perf counters via libcephfs API.
+ */
+
+/**
+ * Get a json string of performance counters
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param perf_dump buffer holding the perf dump
+ *
+ * Returns 0 success with the performance counters populated in the
+ * passed in perf_dump buffer. Caller is responsible for freeing the
+ * @perf_dump buffer using free().
+ */
+int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
+
 #ifdef __cplusplus
 }
 #endif

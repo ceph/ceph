@@ -14,11 +14,14 @@
 #ifndef MGR_MAP_H_
 #define MGR_MAP_H_
 
-#include <sstream>
+#include <map>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "msg/msg_types.h"
 #include "include/encoding.h"
+#include "include/types.h" // for epoch_t
 #include "include/utime.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -104,22 +107,24 @@ public:
       }
       f->close_section();
     }
-    static void generate_test_instances(std::list<ModuleOption*>& ls)
+    static std::list<ModuleOption> generate_test_instances()
     {
-      ls.push_back(new ModuleOption);
-      ls.push_back(new ModuleOption);
-      ls.back()->name = "name";
-      ls.back()->type = Option::TYPE_STR;
-      ls.back()->level = Option::LEVEL_ADVANCED;
-      ls.back()->flags = Option::FLAG_RUNTIME;
-      ls.back()->default_value = "default_value";
-      ls.back()->min = "min";
-      ls.back()->max = "max";
-      ls.back()->enum_allowed.insert("enum_allowed");
-      ls.back()->desc = "desc";
-      ls.back()->long_desc = "long_desc";
-      ls.back()->tags.insert("tag");
-      ls.back()->see_also.insert("see_also");
+      std::list<ModuleOption> ls;
+      ls.emplace_back();
+      ls.emplace_back();
+      ls.back().name = "name";
+      ls.back().type = Option::TYPE_STR;
+      ls.back().level = Option::LEVEL_ADVANCED;
+      ls.back().flags = Option::FLAG_RUNTIME;
+      ls.back().default_value = "default_value";
+      ls.back().min = "min";
+      ls.back().max = "max";
+      ls.back().enum_allowed.insert("enum_allowed");
+      ls.back().desc = "desc";
+      ls.back().long_desc = "long_desc";
+      ls.back().tags.insert("tag");
+      ls.back().see_also.insert("see_also");
+      return ls;
     }
   };
 
@@ -143,7 +148,7 @@ public:
     }
 
     void decode(ceph::buffer::list::const_iterator &bl) {
-      DECODE_START(1, bl);
+      DECODE_START(2, bl);
       decode(name, bl);
       decode(can_run, bl);
       decode(error_string, bl);
@@ -172,14 +177,16 @@ public:
       f->close_section();
     }
 
-    static void generate_test_instances(std::list<ModuleInfo*>& ls)
+    static std::list<ModuleInfo> generate_test_instances()
     {
-      ls.push_back(new ModuleInfo);
-      ls.push_back(new ModuleInfo);
-      ls.back()->name = "name";
-      ls.back()->can_run = true;
-      ls.back()->error_string = "error_string";
-      ls.back()->module_options["module_option"] = ModuleOption();
+      std::list<ModuleInfo> ls;
+      ls.emplace_back();
+      ls.emplace_back();
+      ls.back().name = "name";
+      ls.back().can_run = true;
+      ls.back().error_string = "error_string";
+      ls.back().module_options["module_option"] = ModuleOption();
+      return ls;
     }
   };
 
@@ -246,11 +253,13 @@ public:
       encode_json("available_modules", available_modules, f);
       f->dump_unsigned("mgr_features", mgr_features);
     }
-    static void generate_test_instances(std::list<StandbyInfo*>& ls)
+    static std::list<StandbyInfo> generate_test_instances()
     {
-      ls.push_back(new StandbyInfo(1, "a", {}, 0));
-      ls.push_back(new StandbyInfo(2, "b", {}, 0));
-      ls.push_back(new StandbyInfo(3, "c", {}, 0));
+      std::list<StandbyInfo> ls;
+      ls.push_back(StandbyInfo(1, "a", {}, 0));
+      ls.push_back(StandbyInfo(2, "b", {}, 0));
+      ls.push_back(StandbyInfo(3, "c", {}, 0));
+      return ls;
     }
 
     bool have_module(const std::string &module_name) const
@@ -630,9 +639,11 @@ public:
     f->close_section(); // active_clients
   }
 
-  static void generate_test_instances(std::list<MgrMap*> &l)
+  static std::list<MgrMap> generate_test_instances()
   {
-    l.push_back(new MgrMap);
+    std::list<MgrMap> l;
+    l.emplace_back();
+    return l;
   }
 
   void print_summary(ceph::Formatter *f, std::ostream *ss) const

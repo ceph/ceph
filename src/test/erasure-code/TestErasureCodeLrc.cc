@@ -417,7 +417,7 @@ TEST(ErasureCodeLrc, layers_init)
     EXPECT_EQ(0, lrc.layers_init(&cerr));
     EXPECT_EQ("5", lrc.layers.front().profile["k"]);
     EXPECT_EQ("2", lrc.layers.front().profile["m"]);
-    EXPECT_EQ("jerasure", lrc.layers.front().profile["plugin"]);
+    EXPECT_EQ("isa", lrc.layers.front().profile["plugin"]);
     EXPECT_EQ("reed_sol_van", lrc.layers.front().profile["technique"]);
   }
 }
@@ -465,12 +465,12 @@ TEST(ErasureCodeLrc, minimum_to_decode)
       "]";
     profile["layers"] = description_string;
     EXPECT_EQ(0, lrc.init(profile, &cerr));
-    set<int> want_to_read;
-    want_to_read.insert(1);
-    set<int> available_chunks;
-    available_chunks.insert(1);
-    available_chunks.insert(2);
-    set<int> minimum;
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(1));
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(2));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(want_to_read, minimum);
   }
@@ -493,34 +493,34 @@ TEST(ErasureCodeLrc, minimum_to_decode)
 	      lrc.get_chunk_count());
     {
       // want to read the last chunk
-      set<int> want_to_read;
-      want_to_read.insert(lrc.get_chunk_count() - 1);
+      shard_id_set want_to_read;
+      want_to_read.insert(shard_id_t(lrc.get_chunk_count() - 1));
       // all chunks are available except the last chunk
-      set<int> available_chunks;
+      shard_id_set available_chunks;
       for (int i = 0; i < (int)lrc.get_chunk_count() - 1; i++)
-	available_chunks.insert(i);
+	available_chunks.insert(shard_id_t(i));
       // _____DDDDc can recover c
-      set<int> minimum;
+      shard_id_set minimum;
       EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
-      set<int> expected_minimum;
-      expected_minimum.insert(5);
-      expected_minimum.insert(6);
-      expected_minimum.insert(7);
-      expected_minimum.insert(8);
+      shard_id_set expected_minimum;
+      expected_minimum.insert(shard_id_t(5));
+      expected_minimum.insert(shard_id_t(6));
+      expected_minimum.insert(shard_id_t(7));
+      expected_minimum.insert(shard_id_t(8));
       EXPECT_EQ(expected_minimum, minimum);
     }
     {
-      set<int> want_to_read;
-      want_to_read.insert(0);
-      set<int> available_chunks;
+      shard_id_set want_to_read;
+      want_to_read.insert(shard_id_t(0));
+      shard_id_set available_chunks;
       for (int i = 1; i < (int)lrc.get_chunk_count(); i++)
-	available_chunks.insert(i);
-      set<int> minimum;
+	available_chunks.insert(shard_id_t(i));
+      shard_id_set minimum;
       EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
-      set<int> expected_minimum;
-      expected_minimum.insert(2);
-      expected_minimum.insert(3);
-      expected_minimum.insert(4);
+      shard_id_set expected_minimum;
+      expected_minimum.insert(shard_id_t(2));
+      expected_minimum.insert(shard_id_t(3));
+      expected_minimum.insert(shard_id_t(4));
       EXPECT_EQ(expected_minimum, minimum);
     }
   }
@@ -540,23 +540,23 @@ TEST(ErasureCodeLrc, minimum_to_decode)
     EXPECT_EQ(0, lrc.init(profile, &cerr));
     EXPECT_EQ(profile["mapping"].length(),
 	      lrc.get_chunk_count());
-    set<int> want_to_read;
-    want_to_read.insert(8);
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(8));
     //
     // unable to recover, too many chunks missing
     //
     {
-      set<int> available_chunks;
-      available_chunks.insert(0);
-      available_chunks.insert(1);
+      shard_id_set available_chunks;
+      available_chunks.insert(shard_id_t(0));
+      available_chunks.insert(shard_id_t(1));
       // missing             (2)
       // missing             (3)
-      available_chunks.insert(4);
-      available_chunks.insert(5);
-      available_chunks.insert(6);
+      available_chunks.insert(shard_id_t(4));
+      available_chunks.insert(shard_id_t(5));
+      available_chunks.insert(shard_id_t(6));
       // missing             (7)
       // missing             (8)
-      set<int> minimum;
+      shard_id_set minimum;
       EXPECT_EQ(-EIO, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     }
     //
@@ -585,17 +585,17 @@ TEST(ErasureCodeLrc, minimum_to_decode)
     // _cDDD_cDD  success: recovers chunk 7, 8
     //
     {
-      set<int> available_chunks;
-      available_chunks.insert(0);
-      available_chunks.insert(1);
+      shard_id_set available_chunks;
+      available_chunks.insert(shard_id_t(0));
+      available_chunks.insert(shard_id_t(1));
       // missing             (2)
-      available_chunks.insert(3);
-      available_chunks.insert(4);
-      available_chunks.insert(5);
-      available_chunks.insert(6);
+      available_chunks.insert(shard_id_t(3));
+      available_chunks.insert(shard_id_t(4));
+      available_chunks.insert(shard_id_t(5));
+      available_chunks.insert(shard_id_t(6));
       // missing             (7)
       // missing             (8)
-      set<int> minimum;
+      shard_id_set minimum;
       EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
       EXPECT_EQ(available_chunks, minimum);
     }
@@ -620,117 +620,124 @@ TEST(ErasureCodeLrc, encode_decode)
   unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
   unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
+  shard_id_set want_to_encode;
+  shard_id_map<bufferlist> encoded(lrc.get_chunk_count());
   for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
-    want_to_encode.insert(i);
+    want_to_encode.insert(shard_id_t(i));
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
     bufferlist tmp;
     tmp.push_back(ptr);
-    tmp.claim_append(encoded[i]);
-    encoded[i].swap(tmp);
+    tmp.claim_append(encoded[shard_id_t(i)]);
+    encoded[shard_id_t(i)].swap(tmp);
   }
-  const vector<int> &mapping = lrc.get_chunk_mapping();
+  const vector<shard_id_t> &mapping = lrc.get_chunk_mapping();
   char c = 'A';
   for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
-    int j = mapping[i];
+    shard_id_t j = mapping[i];
     string s(chunk_size, c);
     encoded[j].clear();
     encoded[j].append(s);
     c++;
   }
-  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
+  shard_id_map<bufferptr> in(lrc.get_chunk_count());
+  shard_id_map<bufferptr> out(lrc.get_chunk_count());
+  for (auto&& [shard, list] : encoded) {
+    auto bp = list.begin().get_current_ptr();
+    if (shard < lrc.get_data_chunk_count()) in[shard] = bp;
+    else out[shard] = bp;
+  }
+  EXPECT_EQ(0, lrc.encode_chunks(in, out));
 
   {
-    map<int, bufferlist> chunks;
-    chunks[4] = encoded[4];
-    chunks[5] = encoded[5];
-    chunks[6] = encoded[6];
-    set<int> want_to_read;
-    want_to_read.insert(7);
-    set<int> available_chunks;
-    available_chunks.insert(4);
-    available_chunks.insert(5);
-    available_chunks.insert(6);
-    set<int> minimum;
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(4)] = encoded[shard_id_t(4)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(6)] = encoded[shard_id_t(6)];
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(7));
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(4));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(6));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     // only need three chunks from the second local layer
     EXPECT_EQ(3U, minimum.size());
-    EXPECT_EQ(1U, minimum.count(4));
-    EXPECT_EQ(1U, minimum.count(5));
-    EXPECT_EQ(1U, minimum.count(6));
-    map<int, bufferlist> decoded;
+    EXPECT_EQ(1U, minimum.count(shard_id_t(4)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(5)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(6)));
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
     string s(chunk_size, 'D');
-    EXPECT_EQ(s, string(decoded[7].c_str(), chunk_size));
+    EXPECT_EQ(s, string(decoded[shard_id_t(7)].c_str(), chunk_size));
   }
   {
-    set<int> want_to_read;
-    want_to_read.insert(2);
-    map<int, bufferlist> chunks;
-    chunks[1] = encoded[1];
-    chunks[3] = encoded[3];
-    chunks[5] = encoded[5];
-    chunks[6] = encoded[6];
-    chunks[7] = encoded[7];
-    set<int> available_chunks;
-    available_chunks.insert(1);
-    available_chunks.insert(3);
-    available_chunks.insert(5);
-    available_chunks.insert(6);
-    available_chunks.insert(7);
-    set<int> minimum;
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(2));
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(1)] = encoded[shard_id_t(1)];
+    chunks[shard_id_t(3)] = encoded[shard_id_t(3)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(6)] = encoded[shard_id_t(6)];
+    chunks[shard_id_t(7)] = encoded[shard_id_t(7)];
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(6));
+    available_chunks.insert(shard_id_t(7));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size());
     EXPECT_EQ(available_chunks, minimum);
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, encoded, &decoded));
     string s(chunk_size, 'A');
-    EXPECT_EQ(s, string(decoded[2].c_str(), chunk_size));
+    EXPECT_EQ(s, string(decoded[shard_id_t(2)].c_str(), chunk_size));
   }
   {
-    set<int> want_to_read;
-    want_to_read.insert(3);
-    want_to_read.insert(6);
-    want_to_read.insert(7);
-    set<int> available_chunks;
-    available_chunks.insert(0);
-    available_chunks.insert(1);
-    available_chunks.insert(2);
-    // available_chunks.insert(3);
-    available_chunks.insert(4);
-    available_chunks.insert(5);
-    // available_chunks.insert(6);
-    // available_chunks.insert(7);
-    encoded.erase(3);
-    encoded.erase(6);
-    set<int> minimum;
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(3));
+    want_to_read.insert(shard_id_t(6));
+    want_to_read.insert(shard_id_t(7));
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(2));
+    // available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(4));
+    available_chunks.insert(shard_id_t(5));
+    // available_chunks.insert(shard_id_t(6));
+    // available_chunks.insert(shard_id_t(7));
+    encoded.erase(shard_id_t(3));
+    encoded.erase(shard_id_t(6));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(4U, minimum.size());
     // only need two chunks from the first local layer
-    EXPECT_EQ(1U, minimum.count(0));
-    EXPECT_EQ(1U, minimum.count(2));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(0)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(2)));
     // the above chunks will rebuild chunk 3 and the global layer only needs
     // three more chunks to reach the required amount of chunks (4) to recover
     // the last two
-    EXPECT_EQ(1U, minimum.count(1));
-    EXPECT_EQ(1U, minimum.count(2));
-    EXPECT_EQ(1U, minimum.count(5));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(1)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(2)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(5)));
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, encoded, &decoded));
     {
       string s(chunk_size, 'B');
-      EXPECT_EQ(s, string(decoded[3].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(3)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'C');
-      EXPECT_EQ(s, string(decoded[6].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(6)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'D');
-      EXPECT_EQ(s, string(decoded[7].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(7)].c_str(), chunk_size));
     }
   }
 }
@@ -753,165 +760,172 @@ TEST(ErasureCodeLrc, encode_decode_2)
   unsigned int chunk_size = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
   unsigned int stripe_width = lrc.get_data_chunk_count() * chunk_size;
   EXPECT_EQ(chunk_size, lrc.get_chunk_size(stripe_width));
-  set<int> want_to_encode;
-  map<int, bufferlist> encoded;
+  shard_id_set want_to_encode;
+  shard_id_map<bufferlist> encoded(lrc.get_chunk_count());
   for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
-    want_to_encode.insert(i);
+    want_to_encode.insert(shard_id_t(i));
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
     bufferlist tmp;
     tmp.push_back(ptr);
-    tmp.claim_append(encoded[i]);
-    encoded[i].swap(tmp);
+    tmp.claim_append(encoded[shard_id_t(i)]);
+    encoded[shard_id_t(i)].swap(tmp);
   }
-  const vector<int> &mapping = lrc.get_chunk_mapping();
+  const vector<shard_id_t> &mapping = lrc.get_chunk_mapping();
   char c = 'A';
   for (unsigned int i = 0; i < lrc.get_data_chunk_count(); i++) {
-    int j = mapping[i];
+    shard_id_t j = mapping[i];
     string s(chunk_size, c);
     encoded[j].clear();
     encoded[j].append(s);
     c++;
   }
-  EXPECT_EQ(0, lrc.encode_chunks(want_to_encode, &encoded));
+  shard_id_map<bufferptr> in(lrc.get_chunk_count());
+  shard_id_map<bufferptr> out(lrc.get_chunk_count());
+  for (auto&& [shard, list] : encoded) {
+    auto bp = list.begin().get_current_ptr();
+    if (shard < lrc.get_data_chunk_count()) in[shard] = bp;
+    else out[shard] = bp;
+  }
+  EXPECT_EQ(0, lrc.encode_chunks(in, out));
 
   {
-    set<int> want_to_read;
-    want_to_read.insert(0);
-    map<int, bufferlist> chunks;
-    chunks[1] = encoded[1];
-    chunks[3] = encoded[3];
-    chunks[4] = encoded[4];
-    chunks[5] = encoded[5];
-    chunks[6] = encoded[6];
-    chunks[7] = encoded[7];
-    set<int> available_chunks;
-    available_chunks.insert(1);
-    available_chunks.insert(3);
-    available_chunks.insert(4);
-    available_chunks.insert(5);
-    available_chunks.insert(6);
-    available_chunks.insert(7);
-    set<int> minimum;
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(0));
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(1)] = encoded[shard_id_t(1)];
+    chunks[shard_id_t(3)] = encoded[shard_id_t(3)];
+    chunks[shard_id_t(4)] = encoded[shard_id_t(4)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(6)] = encoded[shard_id_t(6)];
+    chunks[shard_id_t(7)] = encoded[shard_id_t(7)];
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(4));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(6));
+    available_chunks.insert(shard_id_t(7));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(4U, minimum.size());
-    EXPECT_EQ(1U, minimum.count(1));
-    EXPECT_EQ(1U, minimum.count(4));
-    EXPECT_EQ(1U, minimum.count(5));
-    EXPECT_EQ(1U, minimum.count(6));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(1)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(4)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(5)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(6)));
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
     string s(chunk_size, 'A');
-    EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+    EXPECT_EQ(s, string(decoded[shard_id_t(0)].c_str(), chunk_size));
   }
   {
-    set<int> want_to_read;
+    shard_id_set want_to_read;
     for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
-      want_to_read.insert(i);
-    map<int, bufferlist> chunks;
-    chunks[1] = encoded[1];
-    chunks[3] = encoded[3];
-    chunks[5] = encoded[5];
-    chunks[6] = encoded[6];
-    chunks[7] = encoded[7];
-    set<int> available_chunks;
-    available_chunks.insert(1);
-    available_chunks.insert(3);
-    available_chunks.insert(5);
-    available_chunks.insert(6);
-    available_chunks.insert(7);
-    set<int> minimum;
+      want_to_read.insert(shard_id_t(i));
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(1)] = encoded[shard_id_t(1)];
+    chunks[shard_id_t(3)] = encoded[shard_id_t(3)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(6)] = encoded[shard_id_t(6)];
+    chunks[shard_id_t(7)] = encoded[shard_id_t(7)];
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(6));
+    available_chunks.insert(shard_id_t(7));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size());
-    EXPECT_EQ(1U, minimum.count(1));
-    EXPECT_EQ(1U, minimum.count(3));
-    EXPECT_EQ(1U, minimum.count(5));
-    EXPECT_EQ(1U, minimum.count(6));
-    EXPECT_EQ(1U, minimum.count(7));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(1)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(3)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(5)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(6)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(7)));
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
     {
       string s(chunk_size, 'A');
-      EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(0)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'B');
-      EXPECT_EQ(s, string(decoded[1].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(1)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'C');
-      EXPECT_EQ(s, string(decoded[4].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(4)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'D');
-      EXPECT_EQ(s, string(decoded[5].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(5)].c_str(), chunk_size));
     }
   }
   {
-    set<int> want_to_read;
+    shard_id_set want_to_read;
     for (unsigned int i = 0; i < lrc.get_chunk_count(); i++)
-      want_to_read.insert(i);
-    map<int, bufferlist> chunks;
-    chunks[1] = encoded[1];
-    chunks[3] = encoded[3];
-    chunks[5] = encoded[5];
-    chunks[6] = encoded[6];
-    chunks[7] = encoded[7];
-    set<int> available_chunks;
-    available_chunks.insert(1);
-    available_chunks.insert(3);
-    available_chunks.insert(5);
-    available_chunks.insert(6);
-    available_chunks.insert(7);
-    set<int> minimum;
+      want_to_read.insert(shard_id_t(i));
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(1)] = encoded[shard_id_t(1)];
+    chunks[shard_id_t(3)] = encoded[shard_id_t(3)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(6)] = encoded[shard_id_t(6)];
+    chunks[shard_id_t(7)] = encoded[shard_id_t(7)];
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(6));
+    available_chunks.insert(shard_id_t(7));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(5U, minimum.size());
-    EXPECT_EQ(1U, minimum.count(1));
-    EXPECT_EQ(1U, minimum.count(3));
-    EXPECT_EQ(1U, minimum.count(5));
-    EXPECT_EQ(1U, minimum.count(6));
-    EXPECT_EQ(1U, minimum.count(7));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(1)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(3)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(5)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(6)));
+    EXPECT_EQ(1U, minimum.count(shard_id_t(7)));
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
     {
       string s(chunk_size, 'A');
-      EXPECT_EQ(s, string(decoded[0].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(0)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'B');
-      EXPECT_EQ(s, string(decoded[1].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(1)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'C');
-      EXPECT_EQ(s, string(decoded[4].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(4)].c_str(), chunk_size));
     }
     {
       string s(chunk_size, 'D');
-      EXPECT_EQ(s, string(decoded[5].c_str(), chunk_size));
+      EXPECT_EQ(s, string(decoded[shard_id_t(5)].c_str(), chunk_size));
     }
   }
   {
-    set<int> want_to_read;
-    want_to_read.insert(6);
-    map<int, bufferlist> chunks;
-    chunks[0] = encoded[0];
-    chunks[1] = encoded[1];
-    chunks[3] = encoded[3];
-    chunks[5] = encoded[5];
-    chunks[7] = encoded[7];
-    set<int> available_chunks;
-    available_chunks.insert(0);
-    available_chunks.insert(1);
-    available_chunks.insert(3);
-    available_chunks.insert(5);
-    available_chunks.insert(7);
-    set<int> minimum;
+    shard_id_set want_to_read;
+    want_to_read.insert(shard_id_t(6));
+    shard_id_map<bufferlist> chunks(lrc.get_chunk_count());
+    chunks[shard_id_t(0)] = encoded[shard_id_t(0)];
+    chunks[shard_id_t(1)] = encoded[shard_id_t(1)];
+    chunks[shard_id_t(3)] = encoded[shard_id_t(3)];
+    chunks[shard_id_t(5)] = encoded[shard_id_t(5)];
+    chunks[shard_id_t(7)] = encoded[shard_id_t(7)];
+    shard_id_set available_chunks;
+    available_chunks.insert(shard_id_t(0));
+    available_chunks.insert(shard_id_t(1));
+    available_chunks.insert(shard_id_t(3));
+    available_chunks.insert(shard_id_t(5));
+    available_chunks.insert(shard_id_t(7));
+    shard_id_set minimum;
     EXPECT_EQ(0, lrc._minimum_to_decode(want_to_read, available_chunks, &minimum));
     EXPECT_EQ(available_chunks, minimum);
 
-    map<int, bufferlist> decoded;
+    shard_id_map<bufferlist> decoded(lrc.get_chunk_count());
     EXPECT_EQ(0, lrc._decode(want_to_read, chunks, &decoded));
   }
 }

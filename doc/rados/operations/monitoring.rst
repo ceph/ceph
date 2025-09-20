@@ -655,3 +655,161 @@ Runtime`_.
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
+
+Messenger Status
+=================
+
+Ceph daemons and librados clients support an admin socket command
+``messenger dump`` that surfaces a snapshot of runtime information
+about connections, sockets, bound addresses, and kernel TCP stats (via
+tcp(7) TCP_INFO).
+
+.. note:: The queried messenger needs to lock the connection data
+  structures for the time it takes to create the snapshot. This lock's
+  duration is in the order of tens of milliseconds. This might
+  interfere with normal operation. Use the ``dumpcontents`` argument
+  to limit data structures dumped.
+
+Examples
+---------
+
+When a command is issued without specifying a messenger to dump, the
+list of available messengers is returned:
+
+.. prompt:: bash $
+
+   ceph tell osd.0 messenger dump
+
+.. code-block:: javascript
+
+ {
+    "messengers": [
+        "client",
+        "cluster",
+        "hb_back_client",
+        "hb_back_server",
+        "hb_front_client",
+        "hb_front_server",
+        "ms_objecter",
+        "temp_mon_client"
+    ]
+  }
+
+The ``client`` and ``cluster`` messengers correspond to the configured
+client / cluster network (see :doc:`/rados/configuration/network-config-ref`). Messengers
+with ``hb_`` prefix are part of the heartbeat system.
+
+List all current connections on the client messenger:
+
+.. code-block:: bash
+
+	    ceph tell osd.0 messenger dump client \
+	       | jq -r '.messenger.connections[].async_connection |
+	                   [.conn_id, .socket_fd, .worker_id,
+			    if .status.connected then "connected" else "disconnected" end,
+			    .state,
+			    "\(.peer.type).\(.peer.entity_name.id).\(.peer.id)",
+			    .protocol.v2.con_mode, .protocol.v2.crypto.rx, .protocol.v2.compression.rx] |
+			   @tsv'
+
+.. code-block:: bash
+
+  249     102     0       connected       STATE_CONNECTION_ESTABLISHED    client.admin.6407       crc    PLAIN   UNCOMPRESSED
+  242     99      1       connected       STATE_CONNECTION_ESTABLISHED    client.rgw.8000.4473    crc     PLAIN   UNCOMPRESSED
+  248     89      1       connected       STATE_CONNECTION_ESTABLISHED    mgr..-1 secure  AES-128-GCM     UNCOMPRESSED
+  32      101     2       connected       STATE_CONNECTION_ESTABLISHED    client.rgw.8000.4483    crc     PLAIN   UNCOMPRESSED
+  3       86      2       connected       STATE_CONNECTION_ESTABLISHED    mon..-1 secure  AES-128-GCM     UNCOMPRESSED
+  244     102     0       connected       STATE_CONNECTION_ESTABLISHED    client.admin.6383       crc     PLAIN   UNCOMPRESSED
+
+
+Print active connections and their TCP round trip time and retransmission counters:
+
+.. code-block:: bash
+
+	    ceph tell osd.0 messenger dump client --tcp-info \
+	       | jq -r '.messenger.connections[].async_connection |
+	                   select(.status.connected) |
+			   select(.peer.type != "client") |
+			   [.conn_id, .socket_fd, .worker_id,
+			    "\(.peer.type).\(.peer.global_id)",
+			    .tcp_info.tcpi_rtt_us, .tcp_info.tcpi_rttvar_us, .tcp_info.tcpi_total_retrans] |
+			    @tsv'
+.. code-block:: bash
+
+	248     89      1       mgr.0   863     1677    0
+	3       86      2       mon.0   230     278     0
+
+Tracking Data Availability Score of a Cluster
+=============================================
+
+Ceph internally tracks the data availability of each pool in a cluster.
+To check the data availability score of each pool in a cluster, 
+the following command can be invoked: 
+
+
+.. prompt:: bash $
+
+   ceph osd pool availability-status
+
+Example output:  
+
+.. prompt:: bash $
+
+   POOL       	UPTIME  DOWNTIME  NUMFAILURES  MTBF  MTTR  SCORE 	AVAILABLE
+   rbd             2m     21s        	1	     2m   21s  0.888889      	1
+   .mgr          	86s    	0s        	0	     0s	  0s     	1      	1
+   cephfs.a.meta 	77s    	0s        	0	     0s	  0s     	1      	1
+   cephfs.a.data 	76s    	0s        	0	     0s	  0s     	1      	1
+
+A pool is considered ``unavailable`` when at least one PG in the pool 
+becomes inactive or there is at least one unfound object in the pool. 
+Otherwise the pool is considered ``available``. Depending on the 
+current and previous state of the pool we update ``uptime`` and 
+``downtime`` values: 
+
+================ =============== =============== =================
+ Previous State   Current State   Uptime Update   Downtime Update 
+================ =============== =============== =================
+ Available        Available       +diff time      no update    
+ Available        Unavailable     +diff time      no update
+ Unavailable      Available       +diff time      no update 
+ Unavailable      Unavailable     no update       +diff time 
+================ =============== =============== =================
+
+From the updated ``uptime`` and ``downtime`` values, we calculate 
+the Mean Time Between Failures (MTBF) and Mean Time To Recover (MTTR)
+for each pool. The availability score is then calculated by finding 
+the ratio of MTBF to the total time.  
+
+The score is updated every one second. Transient changes to pools that 
+occur and are reverted between successive updates will not be captured. 
+It is possible to configure this interval with a command of the following 
+form: 
+
+.. prompt:: bash $
+
+   ceph config set mon pool_availability_update_interval 2
+
+This will set the update interval to two seconds. Please note that 
+it is not possible to set this interval less than the config value set
+for ``paxos_propose_interval``. 
+
+
+This feature is on by default. To turn the feature off, e.g. - for an expected 
+downtime, the ``enable_availability_tracking`` config option can be set to ``false``. 
+
+.. prompt:: bash $
+
+   ceph config set mon enable_availability_tracking false
+
+While the feature is turned off, the last calculated score will be preserved. The 
+score will again start updating once the feature is turned on again. 
+
+It's also possible to clear the data availability score for a specific 
+pool if needed with a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd pool clear-availability-status <pool-name>
+
+Note: Clearing a score is not allowed if the feature itself is disabled. 

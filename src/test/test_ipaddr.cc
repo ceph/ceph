@@ -995,3 +995,158 @@ TEST(pick_address, ipv4_ipv6_enabled2)
     ASSERT_EQ(-1, r);
   }
 }
+
+// Test for IPv4 address
+TEST(is_addr_in_subnet, ipv4)
+{
+  std::string public_network = "10.1.1.0/24";
+  entity_addr_t addr;
+  addr.parse("10.1.1.2", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "false");
+
+  bool r = is_addr_in_subnet(cct.get(), public_network, addr);
+  ASSERT_EQ(true, r);
+}
+
+// Test for IPv6 address
+TEST(is_addr_in_subnet, ipv6)
+{
+  std::string public_network = "2001:db8::/64";
+  entity_addr_t addr;
+  addr.parse("2001:db8::1", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+  cct->_conf.set_val("ms_bind_ipv4", "false");
+
+  bool r = is_addr_in_subnet(cct.get(), public_network, addr);
+  ASSERT_EQ(true, r);
+}
+
+// Test for invalid address
+TEST(is_addr_in_subnet, invalid_address)
+{
+  std::string public_network = "10.1.1.0/24";
+  entity_addr_t addr;
+  addr.parse("192.168.1.1", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "false");
+
+  bool r = is_addr_in_subnet(cct.get(), public_network, addr);
+  ASSERT_EQ(false, r);
+}
+
+// Test for malformed address
+TEST(is_addr_in_subnet, malformed_address)
+{
+  std::string public_network = "10.1.1.0/24";
+  entity_addr_t addr;
+  addr.parse("invalid_address", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "false");
+
+  // Test with a malformed address
+  bool r = is_addr_in_subnet(cct.get(), public_network, addr);
+  ASSERT_EQ(false, r);
+}
+
+TEST(is_addr_in_subnet, boundary_ipv4)
+{
+  std::string public_network = "10.1.1.0/24";
+  entity_addr_t addr_low;
+  addr_low.parse("10.1.1.0", nullptr);
+  entity_addr_t addr_high;
+  addr_high.parse("10.1.1.255", nullptr);
+  entity_addr_t addr_out;
+  addr_out.parse("10.1.2.0", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "false");
+
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), public_network, addr_low));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), public_network, addr_high));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network, addr_out));
+}
+
+TEST(is_addr_in_subnet, boundary_ipv6)
+{
+  std::string public_network = "2001:db8::/64";
+  entity_addr_t addr_low;
+  addr_low.parse("2001:db8::", nullptr);
+  entity_addr_t addr_high;
+  addr_high.parse("2001:db8:0:0:ffff:ffff:ffff:ffff", nullptr);
+  entity_addr_t addr_out;
+  addr_out.parse("2001:db9::", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+  cct->_conf.set_val("ms_bind_ipv4", "false");
+
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), public_network, addr_low));
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), public_network, addr_high));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network, addr_out));
+}
+
+TEST(is_addr_in_subnet, overlapping_subnets)
+{
+  std::string public_network_1 = "10.1.1.0/24";
+  std::string public_network_2 = "10.1.2.0/24";
+  entity_addr_t addr;
+  addr.parse("10.1.1.5", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "false");
+
+  ASSERT_TRUE(is_addr_in_subnet(cct.get(), public_network_1, addr));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_2, addr));
+}
+
+TEST(is_addr_in_subnet, mismatched_family)
+{
+  std::string public_network_1 = "2001:db8::/64";
+  entity_addr_t addr_1;
+  addr_1.parse("10.1.1.5", nullptr);
+  
+  std::string public_network_2 = "10.1.1.0/24";
+  entity_addr_t addr_2;
+  addr_2.parse("2001:db8::1", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+  cct->_conf.set_val("ms_bind_ipv4", "true");
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_1, addr_1));
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_2, addr_2));
+}
+
+TEST(is_addr_in_subnet, invalid_subnets)
+{
+  std::string public_network_1 = "10.1.1.0/33";
+  std::string public_network_2 = "25.0.0.99/10";
+  entity_addr_t addr;
+  addr.parse("10.1.1.2", nullptr);
+
+  boost::intrusive_ptr<CephContext> cct(new CephContext(CEPH_ENTITY_TYPE_OSD), false);
+  cct->_conf._clear_safe_to_start_threads();
+
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_1, addr)); // Invalid prefix
+  ASSERT_FALSE(is_addr_in_subnet(cct.get(), public_network_2, addr)); // Invalid subnet string
+}
+

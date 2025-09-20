@@ -21,7 +21,6 @@
 #include "common/Timer.h"
 #include "common/LogClient.h"
 
-#include "client/Client.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "messages/MNVMeofGwMap.h"
@@ -46,6 +45,13 @@ private:
   epoch_t     gwmap_epoch;  // last received gw map epoch
   std::chrono::time_point<std::chrono::steady_clock>
               last_map_time; // used to panic on disconnect
+  std::chrono::time_point<std::chrono::steady_clock>
+                reset_timestamp; // used to bypass some validations
+  std::chrono::time_point<std::chrono::steady_clock>
+                start_time; // used to panic on connect
+
+  bool first_beacon = true;
+  bool set_group_id = false;
 
   // init gw ssl opts
   void init_gw_ssl_opts();
@@ -58,7 +64,6 @@ protected:
   MonClient monc;
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;
-  Client client;
   std::map<NvmeGroupKey, NvmeGwMonClientStates> map;
   ceph::mutex lock = ceph::make_mutex("NVMeofGw::lock");
   // allow beacons to be sent independently of handle_nvmeof_gw_map
@@ -76,15 +81,17 @@ public:
   ~NVMeofGwMonitorClient() override;
 
   // Dispatcher interface
-  bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
+  Dispatcher::dispatch_result_t ms_dispatch2(const ceph::ref_t<Message>& m) override;
   bool ms_handle_reset(Connection *con) override { return false; }
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override { return false; };
 
   // config observer bits
-  const char** get_tracked_conf_keys() const override;
+  std::vector<std::string> get_tracked_keys() const noexcept override {
+    return {};
+  }
   void handle_conf_change(const ConfigProxy& conf,
-			  const std::set <std::string> &changed) override {};
+			  const std::set<std::string> &changed) override {};
 
   int init();
   void shutdown();
@@ -93,6 +100,8 @@ public:
   void disconnect_panic();
 
   void handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> m);
+
+  void connect_panic();
 };
 
 #endif

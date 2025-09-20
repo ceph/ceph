@@ -87,7 +87,10 @@ struct cache_test_t : public seastar_test_suite_t {
 
   auto get_transaction() {
     return cache->create_transaction(
-        Transaction::src_t::MUTATE, "test_cache", false);
+      Transaction::src_t::MUTATE,
+      "test_cache",
+      CACHE_HINT_TOUCH,
+      false);
   }
 
   template <typename T, typename... Args>
@@ -107,7 +110,12 @@ struct cache_test_t : public seastar_test_suite_t {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->test_init_no_background(segment_manager.get());
@@ -193,8 +201,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t,
 	  reladdr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_clean());
-	ASSERT_TRUE(extent->is_pending());
+	ASSERT_TRUE(extent->is_initial_pending());
 	ASSERT_TRUE(extent->get_paddr().is_relative());
 	ASSERT_EQ(extent->get_version(), 0);
 	ASSERT_EQ(csum, extent->calc_crc32c());
@@ -236,8 +243,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t2,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_clean());
-	ASSERT_FALSE(extent->is_pending());
+	ASSERT_FALSE(extent->is_initial_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 0);
 	ASSERT_EQ(csum, extent->calc_crc32c());
@@ -248,15 +254,14 @@ TEST_F(cache_test_t, test_dirty_extent)
 	  *t,
 	  addr,
 	  TestBlockPhysical::SIZE).unsafe_get();
-	ASSERT_TRUE(extent->is_dirty());
-	ASSERT_TRUE(extent->is_pending());
+	ASSERT_TRUE(extent->is_mutation_pending());
 	ASSERT_EQ(addr, extent->get_paddr());
 	ASSERT_EQ(extent->get_version(), 1);
 	ASSERT_EQ(csum2, extent->calc_crc32c());
       }
       // submit transaction
       submit_transaction(std::move(t)).get();
-      ASSERT_TRUE(extent->is_dirty());
+      ASSERT_TRUE(extent->is_stable_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(extent->calc_crc32c(), csum2);
@@ -268,7 +273,7 @@ TEST_F(cache_test_t, test_dirty_extent)
 	*t,
 	addr,
 	TestBlockPhysical::SIZE).unsafe_get();
-      ASSERT_TRUE(extent->is_dirty());
+      ASSERT_TRUE(extent->is_stable_dirty());
       ASSERT_EQ(addr, extent->get_paddr());
       ASSERT_EQ(extent->get_version(), 1);
       ASSERT_EQ(csum2, extent->calc_crc32c());

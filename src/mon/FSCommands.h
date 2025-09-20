@@ -19,11 +19,16 @@
 #include "Monitor.h"
 #include "CommandHandler.h"
 
-#include "osd/OSDMap.h"
-#include "mds/FSMap.h"
+#include "include/cephfs/types.h" // for fs_cluster_id_t"
 
+#include <iosfwd>
+#include <memory>
 #include <string>
-#include <ostream>
+#include <variant>
+
+class Filesystem;
+class FSMap;
+class OSDMap;
 
 class FileSystemCommandHandler : protected CommandHandler
 {

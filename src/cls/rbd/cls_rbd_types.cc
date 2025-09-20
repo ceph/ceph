@@ -5,6 +5,8 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/Formatter.h"
 
+#include <iomanip>
+
 namespace cls {
 namespace rbd {
 
@@ -77,14 +79,16 @@ void MirrorPeer::dump(Formatter *f) const {
   f->dump_stream("last_seen") << last_seen;
 }
 
-void MirrorPeer::generate_test_instances(std::list<MirrorPeer*> &o) {
-  o.push_back(new MirrorPeer());
-  o.push_back(new MirrorPeer("uuid-123", MIRROR_PEER_DIRECTION_RX, "site A",
-                             "client name", ""));
-  o.push_back(new MirrorPeer("uuid-234", MIRROR_PEER_DIRECTION_TX, "site B",
-                             "", "mirror_uuid"));
-  o.push_back(new MirrorPeer("uuid-345", MIRROR_PEER_DIRECTION_RX_TX, "site C",
-                             "client name", "mirror_uuid"));
+std::list<MirrorPeer> MirrorPeer::generate_test_instances() {
+  std::list<MirrorPeer> o;
+  o.push_back(MirrorPeer());
+  o.push_back(MirrorPeer("uuid-123", MIRROR_PEER_DIRECTION_RX, "site A",
+                         "client name", ""));
+  o.push_back(MirrorPeer("uuid-234", MIRROR_PEER_DIRECTION_TX, "site B",
+                         "", "mirror_uuid"));
+  o.push_back(MirrorPeer("uuid-345", MIRROR_PEER_DIRECTION_RX_TX, "site C",
+                         "client name", "mirror_uuid"));
+  return o;
 }
 
 bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
@@ -106,6 +110,9 @@ std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
     break;
   case MIRROR_MODE_POOL:
     os << "pool";
+    break;
+  case MIRROR_MODE_INIT_ONLY:
+    os << "init-only";
     break;
   default:
     os << "unknown (" << static_cast<uint32_t>(mirror_mode) << ")";
@@ -154,12 +161,14 @@ void MirrorImage::dump(Formatter *f) const {
   f->dump_stream("state") << state;
 }
 
-void MirrorImage::generate_test_instances(std::list<MirrorImage*> &o) {
-  o.push_back(new MirrorImage());
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123",
-                              MIRROR_IMAGE_STATE_ENABLED));
-  o.push_back(new MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc",
-                              MIRROR_IMAGE_STATE_DISABLING));
+std::list<MirrorImage> MirrorImage::generate_test_instances() {
+  std::list<MirrorImage> o;
+  o.push_back(MirrorImage());
+  o.push_back(MirrorImage(MIRROR_IMAGE_MODE_JOURNAL, "uuid-123",
+                          MIRROR_IMAGE_STATE_ENABLED));
+  o.push_back(MirrorImage(MIRROR_IMAGE_MODE_SNAPSHOT, "uuid-abc",
+                          MIRROR_IMAGE_STATE_DISABLING));
+  return o;
 }
 
 bool MirrorImage::operator==(const MirrorImage &rhs) const {
@@ -301,15 +310,16 @@ std::string MirrorImageSiteStatus::state_to_string() const {
   return ss.str();
 }
 
-void MirrorImageSiteStatus::generate_test_instances(
-  std::list<MirrorImageSiteStatus*> &o) {
-  o.push_back(new MirrorImageSiteStatus());
-  o.push_back(new MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_REPLAYING,
-                                        ""));
-  o.push_back(new MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_ERROR,
-                                        "error"));
-  o.push_back(new MirrorImageSiteStatus("2fb68ca9-1ba0-43b3-8cdf-8c5a9db71e65",
-                                        MIRROR_IMAGE_STATUS_STATE_STOPPED, ""));
+std::list<MirrorImageSiteStatus> MirrorImageSiteStatus::generate_test_instances() {
+  std::list<MirrorImageSiteStatus> o;
+  o.push_back(MirrorImageSiteStatus());
+  o.push_back(MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_REPLAYING,
+                                    ""));
+  o.push_back(MirrorImageSiteStatus("", MIRROR_IMAGE_STATUS_STATE_ERROR,
+                                    "error"));
+  o.push_back(MirrorImageSiteStatus("2fb68ca9-1ba0-43b3-8cdf-8c5a9db71e65",
+                                    MIRROR_IMAGE_STATUS_STATE_STOPPED, ""));
+  return o;
 }
 
 bool MirrorImageSiteStatus::operator==(const MirrorImageSiteStatus &rhs) const {
@@ -352,13 +362,14 @@ void MirrorImageSiteStatusOnDisk::decode(bufferlist::const_iterator &it) {
   cls::rbd::MirrorImageSiteStatus::decode(it);
 }
 
-void MirrorImageSiteStatusOnDisk::generate_test_instances(
-    std::list<MirrorImageSiteStatusOnDisk*> &o) {
-  o.push_back(new MirrorImageSiteStatusOnDisk());
-  o.push_back(new MirrorImageSiteStatusOnDisk(
+std::list<MirrorImageSiteStatusOnDisk> MirrorImageSiteStatusOnDisk::generate_test_instances() {
+  std::list<MirrorImageSiteStatusOnDisk> o;
+  o.push_back(MirrorImageSiteStatusOnDisk());
+  o.push_back(MirrorImageSiteStatusOnDisk(
     {"", MIRROR_IMAGE_STATUS_STATE_ERROR, "error"}));
-  o.push_back(new MirrorImageSiteStatusOnDisk(
+  o.push_back(MirrorImageSiteStatusOnDisk(
     {"siteA", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""}));
+  return o;
 }
 
 int MirrorImageStatus::get_local_mirror_image_site_status(
@@ -464,12 +475,13 @@ bool MirrorImageStatus::operator==(const MirrorImageStatus &rhs) const {
   return (mirror_image_site_statuses == rhs.mirror_image_site_statuses);
 }
 
-void MirrorImageStatus::generate_test_instances(
-    std::list<MirrorImageStatus*> &o) {
-  o.push_back(new MirrorImageStatus());
-  o.push_back(new MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_ERROR, ""}}));
-  o.push_back(new MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""},
-                                     {"siteA", MIRROR_IMAGE_STATUS_STATE_REPLAYING, ""}}));
+std::list<MirrorImageStatus> MirrorImageStatus::generate_test_instances() {
+  std::list<MirrorImageStatus> o;
+  o.push_back(MirrorImageStatus());
+  o.push_back(MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_ERROR, ""}}));
+  o.push_back(MirrorImageStatus({{"", MIRROR_IMAGE_STATUS_STATE_STOPPED, ""},
+                                 {"siteA", MIRROR_IMAGE_STATUS_STATE_REPLAYING, ""}}));
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& os,
@@ -525,10 +537,12 @@ void ParentImageSpec::dump(Formatter *f) const {
   f->dump_unsigned("snap_id", snap_id);
 }
 
-void ParentImageSpec::generate_test_instances(std::list<ParentImageSpec*>& o) {
-  o.push_back(new ParentImageSpec{});
-  o.push_back(new ParentImageSpec{1, "", "foo", 3});
-  o.push_back(new ParentImageSpec{1, "ns", "foo", 3});
+std::list<ParentImageSpec> ParentImageSpec::generate_test_instances() {
+  std::list<ParentImageSpec> o;
+  o.emplace_back();
+  o.push_back(ParentImageSpec{1, "", "foo", 3});
+  o.push_back(ParentImageSpec{1, "ns", "foo", 3});
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& os, const ParentImageSpec& rhs) {
@@ -565,10 +579,12 @@ void ChildImageSpec::dump(Formatter *f) const {
   f->dump_string("image_id", image_id);
 }
 
-void ChildImageSpec::generate_test_instances(std::list<ChildImageSpec*> &o) {
-  o.push_back(new ChildImageSpec());
-  o.push_back(new ChildImageSpec(123, "", "abc"));
-  o.push_back(new ChildImageSpec(123, "ns", "abc"));
+std::list<ChildImageSpec> ChildImageSpec::generate_test_instances() {
+  std::list<ChildImageSpec> o;
+  o.push_back(ChildImageSpec());
+  o.push_back(ChildImageSpec(123, "", "abc"));
+  o.push_back(ChildImageSpec(123, "ns", "abc"));
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& os, const ChildImageSpec& rhs) {
@@ -632,9 +648,11 @@ std::string GroupImageSpec::image_key() {
   }
 }
 
-void GroupImageSpec::generate_test_instances(std::list<GroupImageSpec*> &o) {
-  o.push_back(new GroupImageSpec("10152ae8944a", 0));
-  o.push_back(new GroupImageSpec("1018643c9869", 3));
+std::list<GroupImageSpec> GroupImageSpec::generate_test_instances() {
+  std::list<GroupImageSpec> o;
+  o.push_back(GroupImageSpec("10152ae8944a", 0));
+  o.push_back(GroupImageSpec("1018643c9869", 3));
+  return o;
 }
 
 void GroupImageStatus::encode(bufferlist &bl) const {
@@ -667,11 +685,13 @@ void GroupImageStatus::dump(Formatter *f) const {
   f->dump_string("state", state_to_string());
 }
 
-void GroupImageStatus::generate_test_instances(std::list<GroupImageStatus*> &o) {
-  o.push_back(new GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_ATTACHED));
-  o.push_back(new GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_ATTACHED));
-  o.push_back(new GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
-  o.push_back(new GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
+std::list<GroupImageStatus> GroupImageStatus::generate_test_instances() {
+  std::list<GroupImageStatus> o;
+  o.push_back(GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_ATTACHED));
+  o.push_back(GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_ATTACHED));
+  o.push_back(GroupImageStatus(GroupImageSpec("10152ae8944a", 0), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
+  o.push_back(GroupImageStatus(GroupImageSpec("1018643c9869", 3), GROUP_IMAGE_LINK_STATE_INCOMPLETE));
+  return o;
 }
 
 
@@ -698,9 +718,11 @@ bool GroupSpec::is_valid() const {
   return (!group_id.empty()) && (pool_id != -1);
 }
 
-void GroupSpec::generate_test_instances(std::list<GroupSpec *> &o) {
-  o.push_back(new GroupSpec("10152ae8944a", 0));
-  o.push_back(new GroupSpec("1018643c9869", 3));
+std::list<GroupSpec> GroupSpec::generate_test_instances() {
+  std::list<GroupSpec> o;
+  o.push_back(GroupSpec("10152ae8944a", 0));
+  o.push_back(GroupSpec("1018643c9869", 3));
+  return o;
 }
 
 void GroupSnapshotNamespace::encode(bufferlist& bl) const {
@@ -876,24 +898,26 @@ void SnapshotInfo::dump(Formatter *f) const {
   f->dump_stream("timestamp") << timestamp;
 }
 
-void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
-  o.push_back(new SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
-                               {123456, 0}, 12));
-  o.push_back(new SnapshotInfo(2ULL,
-                               GroupSnapshotNamespace{567, "group1", "snap1"},
-                               "snap1", 123, {123456, 0}, 987));
-  o.push_back(new SnapshotInfo(3ULL,
-                               TrashSnapshotNamespace{
-                                 SNAPSHOT_NAMESPACE_TYPE_USER, "snap1"},
-                               "12345", 123, {123456, 0}, 429));
-  o.push_back(new SnapshotInfo(1ULL,
-                               MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_PRIMARY,
-                                                       {"1", "2"}, "", CEPH_NOSNAP},
-                               "snap1", 123, {123456, 0}, 12));
-  o.push_back(new SnapshotInfo(1ULL,
-                               MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
-                                                       {"1", "2"}, "uuid", 123},
-                               "snap1", 123, {123456, 0}, 12));
+std::list<SnapshotInfo> SnapshotInfo::generate_test_instances() {
+  std::list<SnapshotInfo> o;
+  o.push_back(SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
+                           {123456, 0}, 12));
+  o.push_back(SnapshotInfo(2ULL,
+                           GroupSnapshotNamespace{567, "group1", "snap1"},
+                           "snap1", 123, {123456, 0}, 987));
+  o.push_back(SnapshotInfo(3ULL,
+                           TrashSnapshotNamespace{
+                             SNAPSHOT_NAMESPACE_TYPE_USER, "snap1"},
+                           "12345", 123, {123456, 0}, 429));
+  o.push_back(SnapshotInfo(1ULL,
+                           MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                                   {"1", "2"}, "", CEPH_NOSNAP},
+                           "snap1", 123, {123456, 0}, 12));
+  o.push_back(SnapshotInfo(1ULL,
+                           MirrorSnapshotNamespace{MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
+                                                   {"1", "2"}, "uuid", 123},
+                           "snap1", 123, {123456, 0}, 12));
+  return o;
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
@@ -932,25 +956,27 @@ void SnapshotNamespace::dump(Formatter *f) const {
   visit(DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"));
 }
 
-void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o) {
-  o.push_back(new SnapshotNamespace(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
-                                                           "2118643c9732")));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
-                                                           "33352be8933c")));
-  o.push_back(new SnapshotNamespace(TrashSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY,
-                                                            {"peer uuid"},
-                                                            "", CEPH_NOSNAP)));
-  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
-                                                            {"peer uuid"},
-                                                            "", CEPH_NOSNAP)));
-  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
-                                                            {"peer uuid"},
-                                                            "uuid", 123)));
-  o.push_back(new SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED,
-                                                            {"peer uuid"},
-                                                            "uuid", 123)));
+std::list<SnapshotNamespace> SnapshotNamespace::generate_test_instances() {
+  std::list<SnapshotNamespace> o;
+  o.push_back(SnapshotNamespace(UserSnapshotNamespace()));
+  o.push_back(SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
+                                                       "2118643c9732")));
+  o.push_back(SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
+                                                       "33352be8933c")));
+  o.push_back(SnapshotNamespace(TrashSnapshotNamespace()));
+  o.push_back(SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY,
+                                                        {"peer uuid"},
+                                                        "", CEPH_NOSNAP)));
+  o.push_back(SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED,
+                                                        {"peer uuid"},
+                                                        "", CEPH_NOSNAP)));
+  o.push_back(SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY,
+                                                        {"peer uuid"},
+                                                        "uuid", 123)));
+  o.push_back(SnapshotNamespace(MirrorSnapshotNamespace(MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED,
+                                                        {"peer uuid"},
+                                                        "uuid", 123)));
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& os, const SnapshotNamespace& ns) {
@@ -1068,9 +1094,11 @@ void ImageSnapshotSpec::dump(Formatter *f) const {
   f->dump_int("snap_id", snap_id);
 }
 
-void ImageSnapshotSpec::generate_test_instances(std::list<ImageSnapshotSpec *> &o) {
-  o.push_back(new ImageSnapshotSpec(0, "myimage", 2));
-  o.push_back(new ImageSnapshotSpec(1, "testimage", 7));
+std::list<ImageSnapshotSpec> ImageSnapshotSpec::generate_test_instances() {
+  std::list<ImageSnapshotSpec> o;
+  o.push_back(ImageSnapshotSpec(0, "myimage", 2));
+  o.push_back(ImageSnapshotSpec(1, "testimage", 7));
+  return o;
 }
 
 void GroupSnapshot::encode(bufferlist& bl) const {
@@ -1099,9 +1127,11 @@ void GroupSnapshot::dump(Formatter *f) const {
   f->dump_int("state", state);
 }
 
-void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
-  o.push_back(new GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
-  o.push_back(new GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
+std::list<GroupSnapshot> GroupSnapshot::generate_test_instances() {
+  std::list<GroupSnapshot> o;
+  o.push_back(GroupSnapshot("10152ae8944a", "groupsnapshot1", GROUP_SNAPSHOT_STATE_INCOMPLETE));
+  o.push_back(GroupSnapshot("1018643c9869", "groupsnapshot2", GROUP_SNAPSHOT_STATE_COMPLETE));
+  return o;
 }
 void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_START(2, 1, bl);
@@ -1157,13 +1187,14 @@ void MirrorImageMap::dump(Formatter *f) const {
   f->dump_string("data", data_ss.str());
 }
 
-void MirrorImageMap::generate_test_instances(
-  std::list<MirrorImageMap*> &o) {
+std::list<MirrorImageMap> MirrorImageMap::generate_test_instances() {
+  std::list<MirrorImageMap> o;
   bufferlist data;
   data.append(std::string(128, '1'));
 
-  o.push_back(new MirrorImageMap("uuid-123", utime_t(), data));
-  o.push_back(new MirrorImageMap("uuid-abc", utime_t(), data));
+  o.push_back(MirrorImageMap("uuid-123", utime_t(), data));
+  o.push_back(MirrorImageMap("uuid-abc", utime_t(), data));
+  return o;
 }
 
 bool MirrorImageMap::operator==(const MirrorImageMap &rhs) const {
@@ -1302,16 +1333,18 @@ void MigrationSpec::dump(Formatter *f) const {
   f->dump_stream("mirror_image_mode") << mirror_image_mode;
 }
 
-void MigrationSpec::generate_test_instances(std::list<MigrationSpec*> &o) {
-  o.push_back(new MigrationSpec());
-  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "ns",
-                                "image_name", "image_id", "", {{1, 2}}, 123,
-                                true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
-                                MIGRATION_STATE_PREPARED, "description"));
-  o.push_back(new MigrationSpec(MIGRATION_HEADER_TYPE_DST, -1, "", "", "",
-                                "{\"format\": \"raw\"}", {{1, 2}}, 123,
-                                true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
-                                MIGRATION_STATE_PREPARED, "description"));
+std::list<MigrationSpec> MigrationSpec::generate_test_instances() {
+  std::list<MigrationSpec> o;
+  o.push_back(MigrationSpec());
+  o.push_back(MigrationSpec(MIGRATION_HEADER_TYPE_SRC, 1, "ns",
+                            "image_name", "image_id", "", {{1, 2}}, 123,
+                            true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
+                            MIGRATION_STATE_PREPARED, "description"));
+  o.push_back(MigrationSpec(MIGRATION_HEADER_TYPE_DST, -1, "", "", "",
+                            "{\"format\": \"raw\"}", {{1, 2}}, 123,
+                            true, MIRROR_IMAGE_MODE_SNAPSHOT, true,
+                            MIGRATION_STATE_PREPARED, "description"));
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& os,

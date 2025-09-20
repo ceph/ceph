@@ -29,6 +29,7 @@ if(ENABLE_SHARED)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -static-libstdc++ -static-libgcc")
   endif()
+  target_compile_definitions(librados PRIVATE -DLIBRADOS_SHARED=1)
 endif()
 target_link_libraries(librados PRIVATE
   librados_impl osdc ceph-common cls_lock_client

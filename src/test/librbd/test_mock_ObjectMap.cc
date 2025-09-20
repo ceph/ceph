@@ -10,6 +10,8 @@
 #include "librbd/object_map/UpdateRequest.h"
 #include <boost/scope_exit.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 namespace librbd {
 
 namespace {

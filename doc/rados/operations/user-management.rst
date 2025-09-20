@@ -134,7 +134,7 @@ Capability syntax follows this form::
 
     osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
 
-    osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+    osd 'profile {name} [pool={pool-name}] [namespace={namespace-name}] [network {network/prefix}]'
 
   There are two alternative forms of the ``{access-spec}`` syntax: ::
 
@@ -142,9 +142,13 @@ Capability syntax follows this form::
 
         class {class name} [{method name}]
 
-  There are two alternative forms of the optional ``{match-spec}`` syntax::
+  There are four alternative forms of the optional ``{match-spec}`` syntax::
 
         pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
+
+        [pool={pool-name}] namespace={namespace-name} [object_prefix {prefix}]
+
+        [pool={pool-name}] [namespace={namespace-name}] object_prefix {prefix}
 
         [namespace={namespace-name}] tag {application} {key}={value}
 
@@ -331,6 +335,17 @@ The following entries describe valid capability profiles:
 :Description: Gives a user read-only access to monitors. Used in conjunction
               with the manager ``crash`` module to upload daemon crash
               dumps into monitor storage for later analysis.
+
+.. important:: If you run the command ``ceph auth caps client.admin mgr
+   'allow*'``, you will remove necessary capabilities from ``client.admin``. To
+   repair this, run a command of the following form from within the
+   ``/var/lib/ceph/mon/<monitor_name>`` directory:
+
+      .. prompt:: bash #
+
+         ceph -n mon. --keyring keyring auth caps client.admin mds 'allow *' osd 'allow *' mon 'allow *'
+
+
 
 Pool
 ----

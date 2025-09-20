@@ -152,9 +152,9 @@ class node_extent_t {
       const Key& key, const value_input_t& value,
       index_t index, node_offset_t size, const char* p_left_bound) {
     if constexpr (FIELD_TYPE == field_type_t::N3) {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     } else {
-      ceph_abort("impossible");
+      ceph_abort_msg("impossible");
     }
   }
 
@@ -216,7 +216,7 @@ class node_extent_t<FieldType, NODE_TYPE>::Appender {
       FieldType::append_offset(*p_mut, new_offset, p_append_left);
       ++num_keys;
     } else {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     }
   }
 

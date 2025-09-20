@@ -6,6 +6,7 @@
 #include "common/errno.h"
 
 #include "rgw_zone.h"
+#include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_sync.h"
 
@@ -14,6 +15,12 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
+
+#define FIRST_EPOCH 1
+
+struct RGWAccessKey;
 
 namespace rgw_zone_defaults {
 
@@ -61,11 +68,12 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
   targets[t.name] = t;
 }
 
-void RGWZone::generate_test_instances(list<RGWZone*> &o)
+list<RGWZone> RGWZone::generate_test_instances()
 {
-  RGWZone *z = new RGWZone;
-  o.push_back(z);
-  o.push_back(new RGWZone);
+  list<RGWZone> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
 void RGWZone::dump(Formatter *f) const
@@ -103,90 +111,6 @@ void RGWZone::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("supported_features", supported_features, obj);
 }
 
-int RGWSystemMetaObj::init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc,
-			   optional_yield y,
-			   bool setup_obj, bool old_format)
-{
-  reinit_instance(_cct, _sysobj_svc);
-
-  if (!setup_obj)
-    return 0;
-
-  if (old_format && id.empty()) {
-    id = name;
-  }
-
-  if (id.empty()) {
-    id = get_predefined_id(cct);
-  }
-
-  if (id.empty()) {
-    int r;
-    if (name.empty()) {
-      name = get_predefined_name(cct);
-    }
-    if (name.empty()) {
-      r = use_default(dpp, y, old_format);
-      if (r < 0) {
-	return r;
-      }
-    } else if (!old_format) {
-      r = read_id(dpp, name, id, y);
-      if (r < 0) {
-        if (r != -ENOENT) {
-          ldpp_dout(dpp, 0) << "error in read_id for object name: " << name << " : " << cpp_strerror(-r) << dendl;
-        }
-        return r;
-      }
-    }
-  }
-
-  return read_info(dpp, id, y, old_format);
-}
-
-RGWZoneGroup::~RGWZoneGroup() {}
-
-const string RGWZoneGroup::get_default_oid(bool old_region_format) const
-{
-  if (old_region_format) {
-    if (cct->_conf->rgw_default_region_info_oid.empty()) {
-      return default_region_info_oid;
-    }
-    return cct->_conf->rgw_default_region_info_oid;
-  }
-
-  string default_oid = cct->_conf->rgw_default_zonegroup_info_oid;
-
-  if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
-    default_oid = default_zone_group_info_oid;
-  }
-
-  default_oid += "." + realm_id;
-
-  return default_oid;
-}
-
-const string& RGWZoneGroup::get_info_oid_prefix(bool old_region_format) const
-{
-  if (old_region_format) {
-    return region_info_oid_prefix;
-  }
-  return zone_group_info_oid_prefix;
-}
-
-const string& RGWZoneGroup::get_names_oid_prefix() const
-{
-  return zonegroup_names_oid_prefix;
-}
-
-string RGWZoneGroup::get_predefined_id(CephContext *cct) const {
-  return cct->_conf.get_val<string>("rgw_zonegroup_id");
-}
-
-const string& RGWZoneGroup::get_predefined_name(CephContext *cct) const {
-  return cct->_conf->rgw_zonegroup;
-}
-
 rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
 {
   if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
@@ -196,66 +120,10 @@ rgw_pool RGWZoneGroup::get_pool(CephContext *cct_) const
   return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
 }
 
-int RGWZoneGroup::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				  bool old_format)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
-    // no default realm exist
-    if (ret < 0) {
-      return read_id(dpp, default_zonegroup_name, default_id, y);
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::read_default_id(dpp, default_id, y, old_format);
-}
-
-int RGWSystemMetaObj::use_default(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  return read_default_id(dpp, id, y, old_format);
-}
-
-void RGWSystemMetaObj::reinit_instance(CephContext *_cct, RGWSI_SysObj *_sysobj_svc)
-{
-  cct = _cct;
-  sysobj_svc = _sysobj_svc;
-  zone_svc = _sysobj_svc->get_zone_svc();
-}
-
-int RGWSystemMetaObj::read_info(const DoutPrefixProvider *dpp, const string& obj_id, optional_yield y,
-				bool old_format)
-{
-  rgw_pool pool(get_pool(cct));
-
-  bufferlist bl;
-
-  string oid = get_info_oid_prefix(old_format) + obj_id;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "failed reading obj info from " << pool << ":" << oid << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-  using ceph::decode;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
 void RGWZoneGroup::decode_json(JSONObj *obj)
 {
-  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
   if (id.empty()) {
     derr << "old format " << dendl;
     JSONDecoder::decode_json("name", name, obj);
@@ -277,13 +145,13 @@ void RGWZoneGroup::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("enabled_features", enabled_features, obj);
 }
 
-RGWZoneParams::~RGWZoneParams() {}
-
 void RGWZoneParams::decode_json(JSONObj *obj)
 {
-  RGWSystemMetaObj::decode_json(obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("name", name, obj);
   JSONDecoder::decode_json("domain_root", domain_root, obj);
   JSONDecoder::decode_json("control_pool", control_pool, obj);
+  JSONDecoder::decode_json("dedup_pool", dedup_pool, obj);
   JSONDecoder::decode_json("gc_pool", gc_pool, obj);
   JSONDecoder::decode_json("lc_pool", lc_pool, obj);
   JSONDecoder::decode_json("log_pool", log_pool, obj);
@@ -304,13 +172,16 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("placement_pools", placement_pools, obj);
   JSONDecoder::decode_json("tier_config", tier_config, obj);
   JSONDecoder::decode_json("realm_id", realm_id, obj);
+  JSONDecoder::decode_json("restore_pool", restore_pool, obj);
 }
 
 void RGWZoneParams::dump(Formatter *f) const
 {
-  RGWSystemMetaObj::dump(f);
+  encode_json("id", id, f);
+  encode_json("name", name, f);
   encode_json("domain_root", domain_root, f);
   encode_json("control_pool", control_pool, f);
+  encode_json("dedup_pool", dedup_pool, f);
   encode_json("gc_pool", gc_pool, f);
   encode_json("lc_pool", lc_pool, f);
   encode_json("log_pool", log_pool, f);
@@ -331,17 +202,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("placement_pools", placement_pools, f);
   encode_json("tier_config", tier_config, f);
   encode_json("realm_id", realm_id, f);
-}
-
-int RGWZoneParams::init(const DoutPrefixProvider *dpp, 
-                        CephContext *cct, RGWSI_SysObj *sysobj_svc,
-			optional_yield y, bool setup_obj, bool old_format)
-{
-  if (name.empty()) {
-    name = cct->_conf->rgw_zone;
-  }
-
-  return RGWSystemMetaObj::init(dpp, cct, sysobj_svc, y, setup_obj, old_format);
+  encode_json("restore_pool", restore_pool, f);
 }
 
 rgw_pool RGWZoneParams::get_pool(CephContext *cct) const
@@ -351,97 +212,6 @@ rgw_pool RGWZoneParams::get_pool(CephContext *cct) const
   }
 
   return rgw_pool(cct->_conf->rgw_zone_root_pool);
-}
-
-const string RGWZoneParams::get_default_oid(bool old_format) const
-{
-  if (old_format) {
-    return cct->_conf->rgw_default_zone_info_oid;
-  }
-
-  return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
-}
-
-const string& RGWZoneParams::get_names_oid_prefix() const
-{
-  return zone_names_oid_prefix;
-}
-
-const string& RGWZoneParams::get_info_oid_prefix(bool old_format) const
-{
-  return zone_info_oid_prefix;
-}
-
-string RGWZoneParams::get_predefined_id(CephContext *cct) const {
-  return cct->_conf.get_val<string>("rgw_zone_id");
-}
-
-const string& RGWZoneParams::get_predefined_name(CephContext *cct) const {
-  return cct->_conf->rgw_zone;
-}
-
-int RGWZoneParams::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				   bool old_format)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
-    //no default realm exist
-    if (ret < 0) {
-      return read_id(dpp, default_zone_name, default_id, y);
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::read_default_id(dpp, default_id, y, old_format);
-}
-
-
-int RGWZoneParams::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -EINVAL;
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::set_as_default(dpp, y, exclusive);
-}
-
-int RGWZoneParams::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  RGWZonePlacementInfo default_placement;
-  default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-  rgw_pool pool = name + "." + default_storage_pool_suffix;
-  default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-  default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
-  placement_pools["default-placement"] = default_placement;
-
-  int r = fix_pool_names(dpp, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: fix_pool_names returned r=" << r << dendl;
-    return r;
-  }
-
-  r = RGWSystemMetaObj::create(dpp, y, exclusive);
-  if (r < 0) {
-    return r;
-  }
-
-  // try to set as default. may race with another create, so pass exclusive=true
-  // so we don't override an existing default
-  r = set_as_default(dpp, y, true);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 10) << "WARNING: failed to set zone as default, r=" << r << dendl;
-  }
-
-  return 0;
 }
 
 rgw_pool fix_zone_pool_dup(const set<rgw_pool>& pools,
@@ -472,6 +242,7 @@ void add_zone_pools(const RGWZoneParams& info,
 {
   pools.insert(info.domain_root);
   pools.insert(info.control_pool);
+  pools.insert(info.dedup_pool);
   pools.insert(info.gc_pool);
   pools.insert(info.log_pool);
   pools.insert(info.intent_log_pool);
@@ -500,7 +271,148 @@ void add_zone_pools(const RGWZoneParams& info,
   }
 }
 
+void RGWDefaultZoneGroupInfo::dump(Formatter *f) const {
+  encode_json("default_zonegroup", default_zonegroup, f);
+}
+
+void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
+
+  JSONDecoder::decode_json("default_zonegroup", default_zonegroup, obj);
+  /* backward compatability with region */
+  if (default_zonegroup.empty()) {
+    JSONDecoder::decode_json("default_region", default_zonegroup, obj);
+  }
+}
+
+int RGWZoneGroup::equals(const string& other_zonegroup) const
+{
+  if (is_master && other_zonegroup.empty())
+    return true;
+
+  return (id  == other_zonegroup);
+}
+
+void RGWDefaultSystemMetaObjInfo::dump(Formatter *f) const {
+  encode_json("default_id", default_id, f);
+}
+
+void RGWDefaultSystemMetaObjInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("default_id", default_id, obj);
+}
+
+const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
+{
+  static const std::string NONE{"none"};
+  auto p = placement_pools.find(placement_rule.name);
+  if (p == placement_pools.end()) {
+    return NONE;
+  }
+  const auto& type = p->second.get_compression_type(placement_rule.get_storage_class());
+  return !type.empty() ? type : NONE;
+}
+
+// run an MD5 hash on the zone_id and return the first 32 bits
+static uint32_t gen_short_zone_id(const std::string zone_id)
+{
+  unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  MD5 hash;
+  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  hash.Update((const unsigned char *)zone_id.c_str(), zone_id.size());
+  hash.Final(md5);
+
+  uint32_t short_id;
+  memcpy((char *)&short_id, md5, sizeof(short_id));
+  return std::max(short_id, 1u);
+}
+
+int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
+{
+  if (zonegroup.is_master_zonegroup() && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
+    ldout(cct,0) << "Error updating periodmap, multiple master zonegroups configured "<< dendl;
+    ldout(cct,0) << "master zonegroup: " << master_zonegroup << " and  " << zonegroup.get_id() <<dendl;
+    return -EINVAL;
+  }
+  map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
+  if (iter != zonegroups.end()) {
+    RGWZoneGroup& old_zonegroup = iter->second;
+    if (!old_zonegroup.api_name.empty()) {
+      zonegroups_by_api.erase(old_zonegroup.api_name);
+    }
+  }
+  zonegroups[zonegroup.get_id()] = zonegroup;
+
+  if (!zonegroup.api_name.empty()) {
+    zonegroups_by_api[zonegroup.api_name] = zonegroup;
+  }
+
+  if (zonegroup.is_master_zonegroup()) {
+    master_zonegroup = zonegroup.get_id();
+  } else if (master_zonegroup == zonegroup.get_id()) {
+    master_zonegroup = "";
+  }
+
+  for (auto& i : zonegroup.zones) {
+    auto& zone = i.second;
+    if (short_zone_ids.find(zone.id) != short_zone_ids.end()) {
+      continue;
+    }
+    // calculate the zone's short id
+    uint32_t short_id = gen_short_zone_id(zone.id);
+
+    // search for an existing zone with the same short id
+    for (auto& s : short_zone_ids) {
+      if (s.second == short_id) {
+        ldout(cct, 0) << "New zone '" << zone.name << "' (" << zone.id
+                      << ") generates the same short_zone_id " << short_id
+                      << " as existing zone id " << s.first << dendl;
+        return -EEXIST;
+      }
+    }
+
+    short_zone_ids[zone.id] = short_id;
+  }
+
+  return 0;
+}
+
+uint32_t RGWPeriodMap::get_zone_short_id(const string& zone_id) const
+{
+  auto i = short_zone_ids.find(zone_id);
+  if (i == short_zone_ids.end()) {
+    return 0;
+  }
+  return i->second;
+}
+
+bool RGWPeriodMap::find_zone_by_name(const string& zone_name,
+                                     RGWZoneGroup *zonegroup,
+                                     RGWZone *zone) const
+{
+  for (auto& iter : zonegroups) {
+    auto& zg = iter.second;
+    for (auto& ziter : zg.zones) {
+      auto& z = ziter.second;
+
+      if (z.name == zone_name) {
+        *zonegroup = zg;
+        *zone = z;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 namespace rgw {
+/// Generate a random uuid for realm/period/zonegroup/zone ids
+std::string gen_random_uuid()
+{
+  uuid_d uuid;
+  uuid.generate_random();
+  return uuid.to_string();
+}
 
 int get_zones_pool_set(const DoutPrefixProvider *dpp,
                        optional_yield y,
@@ -537,119 +449,6 @@ int get_zones_pool_set(const DoutPrefixProvider *dpp,
 
 }
 
-static int get_zones_pool_set(const DoutPrefixProvider *dpp,
-                              CephContext* cct,
-                              RGWSI_SysObj* sysobj_svc,
-                              const list<string>& zone_names,
-                              const string& my_zone_id,
-                              set<rgw_pool>& pool_names,
-		              optional_yield y)
-{
-  for (const auto& name : zone_names) {
-    RGWZoneParams zone(name);
-    int r = zone.init(dpp, cct, sysobj_svc, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "Error: failed to load zone " << name
-          << " with " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    if (zone.get_id() != my_zone_id) {
-      add_zone_pools(zone, pool_names);
-    }
-  }
-  return 0;
-}
-
-int RGWZoneParams::fix_pool_names(const DoutPrefixProvider *dpp, optional_yield y)
-{
-
-  list<string> zones;
-  int r = zone_svc->list_zones(dpp, zones);
-  if (r < 0) {
-    ldpp_dout(dpp, 10) << "WARNING: driver->list_zones() returned r=" << r << dendl;
-  }
-
-  set<rgw_pool> pools;
-  r = get_zones_pool_set(dpp, cct, sysobj_svc, zones, id, pools, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "Error: get_zones_pool_names" << r << dendl;
-    return r;
-  }
-
-  domain_root = fix_zone_pool_dup(pools, name, ".rgw.meta:root", domain_root);
-  control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
-  gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
-  lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);
-  log_pool = fix_zone_pool_dup(pools, name, ".rgw.log", log_pool);
-  intent_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:intent", intent_log_pool);
-  usage_log_pool = fix_zone_pool_dup(pools, name, ".rgw.log:usage", usage_log_pool);
-  user_keys_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.keys", user_keys_pool);
-  user_email_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.email", user_email_pool);
-  user_swift_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.swift", user_swift_pool);
-  user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
-  roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
-  reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
-  otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
-  oidc_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:oidc", oidc_pool);
-  notif_pool = fix_zone_pool_dup(pools, name ,".rgw.log:notif", notif_pool);
-  topics_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:topics", topics_pool);
-  account_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:accounts", account_pool);
-  group_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:groups", group_pool);
-
-  for(auto& iter : placement_pools) {
-    iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
-                                               iter.second.index_pool);
-    for (auto& pi : iter.second.storage_classes.get_all()) {
-      if (pi.second.data_pool) {
-        rgw_pool& pool = pi.second.data_pool.get();
-        pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
-                                 pool);
-      }
-    }
-    iter.second.data_extra_pool= fix_zone_pool_dup(pools, name, "." + default_storage_extra_pool_suffix,
-                                                   iter.second.data_extra_pool);
-  }
-
-  return 0;
-}
-
-int RGWPeriodConfig::read(const DoutPrefixProvider *dpp, RGWSI_SysObj *sysobj_svc, const std::string& realm_id,
-			  optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    return ret;
-  }
-  using ceph::decode;
-  try {
-    auto iter = bl.cbegin();
-    decode(*this, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-  return 0;
-}
-
-int RGWPeriodConfig::write(const DoutPrefixProvider *dpp, 
-                           RGWSI_SysObj *sysobj_svc,
-			   const std::string& realm_id, optional_yield y)
-{
-  const auto& pool = get_pool(sysobj_svc->ctx());
-  const auto& oid = get_oid(realm_id);
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(false)
-               .write(dpp, bl, y);
-}
-
 void RGWPeriodConfig::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("bucket_quota", quota.bucket_quota, obj);
@@ -668,73 +467,10 @@ void RGWPeriodConfig::dump(Formatter *f) const
   encode_json("anonymous_ratelimit", anon_ratelimit, f);
 }
 
-std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
-{
-  if (realm_id.empty()) {
-    return "period_config.default";
-  }
-  return "period_config." + realm_id;
-}
-
-rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
-{
-  const auto& pool_name = cct->_conf->rgw_period_root_pool;
-  if (pool_name.empty()) {
-    return {RGW_DEFAULT_PERIOD_ROOT_POOL};
-  }
-  return {pool_name};
-}
-
-int RGWSystemMetaObj::delete_obj(const DoutPrefixProvider *dpp, optional_yield y, bool old_format)
-{
-  rgw_pool pool(get_pool(cct));
-
-  /* check to see if obj is the default */
-  RGWDefaultSystemMetaObjInfo default_info;
-  int ret = read_default(dpp, default_info, get_default_oid(old_format), y);
-  if (ret < 0 && ret != -ENOENT)
-    return ret;
-  if (default_info.default_id == id || (old_format && default_info.default_id == name)) {
-    string oid = get_default_oid(old_format);
-    rgw_raw_obj default_named_obj(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(default_named_obj);
-    ret = sysobj.wop().remove(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Error delete default obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-  if (!old_format) {
-    string oid  = get_names_oid_prefix() + name;
-    rgw_raw_obj object_name(pool, oid);
-    auto sysobj = sysobj_svc->get_obj(object_name);
-    ret = sysobj.wop().remove(dpp, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "Error delete obj name  " << name << ": " << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-  }
-
-  string oid = get_info_oid_prefix(old_format);
-  if (old_format) {
-    oid += name;
-  } else {
-    oid += id;
-  }
-
-  rgw_raw_obj object_id(pool, oid);
-  auto sysobj = sysobj_svc->get_obj(object_id);
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "Error delete object id " << id << ": " << cpp_strerror(-ret) << dendl;
-  }
-
-  return ret;
-}
-
 void RGWZoneGroup::dump(Formatter *f) const
 {
-  RGWSystemMetaObj::dump(f);
+  encode_json("id", id , f);
+  encode_json("name", name , f);
   encode_json("api_name", api_name, f);
   encode_json("is_master", is_master, f);
   encode_json("endpoints", endpoints, f);
@@ -772,15 +508,17 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
    * rather not clutter the output */
 }
 
-void RGWZonePlacementInfo::generate_test_instances(list<RGWZonePlacementInfo*>& o)
+list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
-  o.push_back(new RGWZonePlacementInfo);
-  o.push_back(new RGWZonePlacementInfo);
-  o.back()->index_pool = rgw_pool("rgw.buckets.index");
+  list<RGWZonePlacementInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().index_pool = rgw_pool("rgw.buckets.index");
   
-  o.back()->data_extra_pool = rgw_pool("rgw.buckets.non-ec");
-  o.back()->index_type = rgw::BucketIndexType::Normal;
-  o.back()->inline_data = false;
+  o.back().data_extra_pool = rgw_pool("rgw.buckets.non-ec");
+  o.back().index_type = rgw::BucketIndexType::Normal;
+  o.back().inline_data = false;
+  return o;
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
@@ -790,7 +528,9 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
-  JSONDecoder::decode_json("inline_data", inline_data, obj);
+  if(!JSONDecoder::decode_json("inline_data", inline_data, obj)) {
+    inline_data = true;
+  }
   index_type = (rgw::BucketIndexType)it;
 
   /* backward compatibility, these are now defined in storage_classes */
@@ -809,42 +549,6 @@ void RGWZonePlacementInfo::decode_json(JSONObj *obj)
   }
 }
 
-void RGWSystemMetaObj::dump(Formatter *f) const
-{
-  encode_json("id", id , f);
-  encode_json("name", name , f);
-}
-
-void RGWSystemMetaObj::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("name", name, obj);
-}
-
-int RGWSystemMetaObj::read_default(const DoutPrefixProvider *dpp, 
-                                   RGWDefaultSystemMetaObjInfo& default_info,
-				   const string& oid, optional_yield y)
-{
-  using ceph::decode;
-  auto pool = get_pool(cct);
-  bufferlist bl;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0)
-    return ret;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(default_info, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "error decoding data from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-
-  return 0;
-}
-
 void RGWZoneGroupPlacementTarget::dump(Formatter *f) const
 {
   encode_json("name", name, f);
@@ -860,11 +564,14 @@ void RGWZoneGroupPlacementTier::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("tier_type", tier_type, obj);
   JSONDecoder::decode_json("storage_class", storage_class, obj);
   JSONDecoder::decode_json("retain_head_object", retain_head_object, obj);
+  if (is_tier_type_s3()) {
+    JSONDecoder::decode_json("s3", t.s3, obj);
+  }
   JSONDecoder::decode_json("allow_read_through", allow_read_through, obj);
   JSONDecoder::decode_json("read_through_restore_days", read_through_restore_days, obj);
-
-  if (tier_type == "cloud-s3") {
-    JSONDecoder::decode_json("s3", t.s3, obj);
+  JSONDecoder::decode_json("restore_storage_class", restore_storage_class, obj);
+  if (is_tier_type_s3_glacier()) {
+    JSONDecoder::decode_json("s3-glacier", s3_glacier, obj);
   }
 }
 
@@ -875,9 +582,11 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClasses::generate_test_instances(list<RGWZoneStorageClasses*>& o)
+list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClasses);
+  list<RGWZoneStorageClasses> o;
+  o.emplace_back();
+  return o;
 }
 
 void RGWZoneStorageClasses::decode_json(JSONObj *obj)
@@ -894,16 +603,39 @@ void RGWZoneStorageClasses::decode_json(JSONObj *obj)
   standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
 }
 
+void RGWZoneGroupTierS3Glacier::dump(Formatter *f) const
+{
+  encode_json("glacier_restore_days", glacier_restore_days, f);
+  string s = (glacier_restore_tier_type == Standard ? "Standard" : "Expedited");
+  encode_json("glacier_restore_tier_type", s, f);
+}
+
+void RGWZoneGroupTierS3Glacier::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("glacier_restore_days", glacier_restore_days, obj);
+  string s;
+  JSONDecoder::decode_json("glacier_restore_tier_type", s, obj);
+  if (s != "Expedited") {
+    glacier_restore_tier_type = Standard;
+  } else {
+    glacier_restore_tier_type = Expedited;
+  }
+}
+
 void RGWZoneGroupPlacementTier::dump(Formatter *f) const
 {
   encode_json("tier_type", tier_type, f);
   encode_json("storage_class", storage_class, f);
   encode_json("retain_head_object", retain_head_object, f);
+  if (is_tier_type_s3()) {
+    encode_json("s3", t.s3, f);
+  }
   encode_json("allow_read_through", allow_read_through, f);
   encode_json("read_through_restore_days", read_through_restore_days, f);
+  encode_json("restore_storage_class", restore_storage_class, f);
 
-  if (tier_type == "cloud-s3") {
-    encode_json("s3", t.s3, f);
+  if (is_tier_type_s3_glacier()) {
+    encode_json("s3-glacier", s3_glacier, f);
   }
 }
 
@@ -937,12 +669,14 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClass::generate_test_instances(list<RGWZoneStorageClass*>& o)
+list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClass);
-  o.push_back(new RGWZoneStorageClass);
-  o.back()->data_pool = rgw_pool("pool1");
-  o.back()->compression_type = "zlib";
+  list<RGWZoneStorageClass> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().data_pool = rgw_pool("pool1");
+  o.back().compression_type = "zlib";
+  return o;
 }
 
 void RGWZoneStorageClass::decode_json(JSONObj *obj)
@@ -1061,135 +795,6 @@ void RGWPeriodMap::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-int RGWSystemMetaObj::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  int ret;
-
-  /* check to see the name is not used */
-  ret = read_id(dpp, name, id, y);
-  if (exclusive && ret == 0) {
-    ldpp_dout(dpp, 10) << "ERROR: name " << name << " already in use for obj id " << id << dendl;
-    return -EEXIST;
-  } else if ( ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "failed reading obj id  " << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  if (id.empty()) {
-    /* create unique id */
-    uuid_d new_uuid;
-    char uuid_str[37];
-    new_uuid.generate_random();
-    new_uuid.print(uuid_str);
-    id = uuid_str;
-  }
-
-  ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR:  storing info for " << id << ": " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  return store_name(dpp, exclusive, y);
-}
-
-int RGWSystemMetaObj::read_default_id(const DoutPrefixProvider *dpp, string& default_id, optional_yield y,
-				      bool old_format)
-{
-  RGWDefaultSystemMetaObjInfo default_info;
-
-  int ret = read_default(dpp, default_info, get_default_oid(old_format), y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  default_id = default_info.default_id;
-
-  return 0;
-}
-
-int RGWSystemMetaObj::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  using ceph::encode;
-  string oid  = get_default_oid();
-
-  rgw_pool pool(get_pool(cct));
-  bufferlist bl;
-
-  RGWDefaultSystemMetaObjInfo default_info;
-  default_info.default_id = id;
-
-  encode(default_info, bl);
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.wop()
-                  .set_exclusive(exclusive)
-                  .write(dpp, bl, y);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
-int RGWSystemMetaObj::store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  rgw_pool pool(get_pool(cct));
-
-  string oid = get_info_oid_prefix() + id;
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(*this, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj{pool, oid});
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
-}
-
-int RGWSystemMetaObj::read_id(const DoutPrefixProvider *dpp, const string& obj_name, string& object_id,
-			      optional_yield y)
-{
-  using ceph::decode;
-  rgw_pool pool(get_pool(cct));
-  bufferlist bl;
-
-  string oid = get_names_oid_prefix() + obj_name;
-
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  int ret = sysobj.rop().read(dpp, &bl, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  RGWNameToId nameToId;
-  try {
-    auto iter = bl.cbegin();
-    decode(nameToId, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode obj from " << pool << ":" << oid << dendl;
-    return -EIO;
-  }
-  object_id = nameToId.obj_id;
-  return 0;
-}
-
-int RGWSystemMetaObj::store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  rgw_pool pool(get_pool(cct));
-  string oid = get_names_oid_prefix() + name;
-
-  RGWNameToId nameToId;
-  nameToId.obj_id = id;
-
-  bufferlist bl;
-  using ceph::encode;
-  encode(nameToId, bl);
-  auto sysobj = sysobj_svc->get_obj(rgw_raw_obj(pool, oid));
-  return sysobj.wop()
-               .set_exclusive(exclusive)
-               .write(dpp, bl, y);
-}
-
 bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
                                    RGWZoneGroup *zonegroup,
                                    RGWZone *zone) const
@@ -1208,37 +813,6 @@ bool RGWPeriodMap::find_zone_by_id(const rgw_zone_id& zone_id,
   return false;
 }
 
-int RGWZoneGroup::set_as_default(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive)
-{
-  if (realm_id.empty()) {
-    /* try using default realm */
-    RGWRealm realm;
-    int ret = realm.init(dpp, cct, sysobj_svc, y);
-    if (ret < 0) {
-      ldpp_dout(dpp, 10) << "could not read realm id: " << cpp_strerror(-ret) << dendl;
-      return -EINVAL;
-    }
-    realm_id = realm.get_id();
-  }
-
-  return RGWSystemMetaObj::set_as_default(dpp, y, exclusive);
-}
-
-int RGWSystemMetaObj::write(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y)
-{
-  int ret = store_info(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): store_info() returned ret=" << ret << dendl;
-    return ret;
-  }
-  ret = store_name(dpp, exclusive, y);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << __func__ << "(): store_name() returned ret=" << ret << dendl;
-    return ret;
-  }
-  return 0;
-}
-
 namespace rgw {
 
 int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
@@ -1246,8 +820,10 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
 {
   info.domain_root = fix_zone_pool_dup(pools, info.name, ".rgw.meta:root", info.domain_root);
   info.control_pool = fix_zone_pool_dup(pools, info.name, ".rgw.control", info.control_pool);
+  info.dedup_pool = fix_zone_pool_dup(pools, info.name, ".rgw.dedup", info.dedup_pool);
   info.gc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:gc", info.gc_pool);
   info.lc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:lc", info.lc_pool);
+  info.restore_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:restore", info.restore_pool);
   info.log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log", info.log_pool);
   info.intent_log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:intent", info.intent_log_pool);
   info.usage_log_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:usage", info.usage_log_pool);
@@ -1414,5 +990,1180 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
   return 0;
 }
 
+int read_realm(const DoutPrefixProvider* dpp, optional_yield y,
+               sal::ConfigStore* cfgstore,
+               std::string_view realm_id,
+               std::string_view realm_name,
+               RGWRealm& info,
+               std::unique_ptr<sal::RealmWriter>* writer)
+{
+  if (!realm_id.empty()) {
+    return cfgstore->read_realm_by_id(dpp, y, realm_id, info, writer);
+  }
+  if (!realm_name.empty()) {
+    return cfgstore->read_realm_by_name(dpp, y, realm_name, info, writer);
+  }
+  return cfgstore->read_default_realm(dpp, y, info, writer);
+}
+
+int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
+                 sal::ConfigStore* cfgstore, bool exclusive,
+                 RGWRealm& info,
+                 std::unique_ptr<sal::RealmWriter>* writer_out)
+{
+  if (info.name.empty()) {
+    ldpp_dout(dpp, -1) << __func__ << " requires a realm name" << dendl;
+    return -EINVAL;
+  }
+  if (info.id.empty()) {
+    info.id = gen_random_uuid();
+  }
+
+  // if the realm already has a current_period, just make sure it exists
+  std::optional<RGWPeriod> period;
+  if (!info.current_period.empty()) {
+    period.emplace();
+    int r = cfgstore->read_period(dpp, y, info.current_period,
+                                  std::nullopt, *period);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __func__ << " failed to read realm's current_period="
+          << info.current_period << " with " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  // create the realm
+  std::unique_ptr<sal::RealmWriter> writer;
+  int r = cfgstore->create_realm(dpp, y, exclusive, info, &writer);
+  if (r < 0) {
+    return r;
+  }
+
+  if (!period) {
+    // initialize and exclusive-create the initial period
+    period.emplace();
+    period->id = gen_random_uuid();
+    period->period_map.id = period->id;
+    period->epoch = FIRST_EPOCH;
+    period->realm_id = info.id;
+
+    r = cfgstore->create_period(dpp, y, true, *period);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __func__ << " failed to create the initial period id="
+          << period->id << " for realm " << info.name
+          << " with " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  // update the realm's current_period
+  r = realm_set_current_period(dpp, y, cfgstore, *writer, info, *period);
+  if (r < 0) {
+    return r;
+  }
+
+  if (writer_out) {
+    *writer_out = std::move(writer);
+  }
+  return 0;
+}
+
+int set_default_realm(const DoutPrefixProvider* dpp, optional_yield y,
+                      sal::ConfigStore* cfgstore, const RGWRealm& info,
+                      bool exclusive)
+{
+  return cfgstore->write_default_realm_id(dpp, y, exclusive, info.id);
+}
+
+int realm_set_current_period(const DoutPrefixProvider* dpp, optional_yield y,
+                             sal::ConfigStore* cfgstore,
+                             sal::RealmWriter& writer, RGWRealm& realm,
+                             const RGWPeriod& period)
+{
+  // update realm epoch to match the period's
+  if (realm.epoch > period.realm_epoch) {
+    ldpp_dout(dpp, -1) << __func__ << " with old realm epoch "
+        << period.realm_epoch << ", current epoch=" << realm.epoch << dendl;
+    return -EINVAL;
+  }
+  if (realm.epoch == period.realm_epoch && realm.current_period != period.id) {
+    ldpp_dout(dpp, -1) << __func__ << " with same realm epoch "
+        << period.realm_epoch << ", but different period id "
+        << period.id << " != " << realm.current_period << dendl;
+    return -EINVAL;
+  }
+
+  realm.epoch = period.realm_epoch;
+  realm.current_period = period.id;
+
+  // update the realm object
+  int r = writer.write(dpp, y, realm);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __func__ << " failed to overwrite realm "
+        << realm.name << " with " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // reflect the zonegroup and period config
+  (void) reflect_period(dpp, y, cfgstore, period);
+  return 0;
+}
+
+int reflect_period(const DoutPrefixProvider* dpp, optional_yield y,
+                   sal::ConfigStore* cfgstore, const RGWPeriod& info)
+{
+  // overwrite the local period config and zonegroup objects
+  constexpr bool exclusive = false;
+
+  int r = cfgstore->write_period_config(dpp, y, exclusive, info.realm_id,
+                                        info.period_config);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << __func__ << " failed to store period config for realm id="
+        << info.realm_id << " with " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (auto& [zonegroup_id, zonegroup] : info.period_map.zonegroups) {
+    r = cfgstore->create_zonegroup(dpp, y, exclusive, zonegroup, nullptr);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __func__ << " failed to store zonegroup id="
+          << zonegroup_id << " with " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (zonegroup.is_master) {
+      // set master as default if no default exists
+      constexpr bool exclusive = true;
+      r = set_default_zonegroup(dpp, y, cfgstore, zonegroup, exclusive);
+      if (r == 0) {
+        ldpp_dout(dpp, 1) << "Set the period's master zonegroup "
+            << zonegroup.name << " as the default" << dendl;
+      }
+    }
+  }
+  return 0;
+}
+
+std::string get_staging_period_id(std::string_view realm_id)
+{
+  return string_cat_reserve(realm_id, ":staging");
+}
+
+void fork_period(const DoutPrefixProvider* dpp, RGWPeriod& info)
+{
+  ldpp_dout(dpp, 20) << __func__ << " realm id=" << info.realm_id
+      << " period id=" << info.id << dendl;
+
+  info.predecessor_uuid = std::move(info.id);
+  info.id = get_staging_period_id(info.realm_id);
+  info.period_map.reset();
+  info.realm_epoch++;
+}
+
+int update_period(const DoutPrefixProvider* dpp, optional_yield y,
+                  sal::ConfigStore* cfgstore, RGWPeriod& info)
+{
+  // clear zone short ids of removed zones. period_map.update() will add the
+  // remaining zones back
+  info.period_map.short_zone_ids.clear();
+
+  // list all zonegroups in the realm
+  rgw::sal::ListResult<std::string> listing;
+  std::array<std::string, 1000> zonegroup_names; // list in pages of 1000
+  do {
+    int ret = cfgstore->list_zonegroup_names(dpp, y, listing.next,
+                                             zonegroup_names, listing);
+    if (ret < 0) {
+      std::cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    for (const auto& name : listing.entries) {
+      RGWZoneGroup zg;
+      ret = cfgstore->read_zonegroup_by_name(dpp, y, name, zg, nullptr);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to read zonegroup "
+            << name << ": " << cpp_strerror(-ret) << dendl;
+        continue;
+      }
+
+      if (zg.realm_id != info.realm_id) {
+        ldpp_dout(dpp, 20) << "skipping zonegroup " << zg.get_name()
+            << " with realm id " << zg.realm_id
+            << ", not on our realm " << info.realm_id << dendl;
+        continue;
+      }
+
+      if (zg.master_zone.empty()) {
+        ldpp_dout(dpp, 0) << "ERROR: zonegroup " << zg.get_name() << " should have a master zone " << dendl;
+        return -EINVAL;
+      }
+
+      if (zg.zones.find(zg.master_zone) == zg.zones.end()) {
+        ldpp_dout(dpp, 0) << "ERROR: zonegroup " << zg.get_name()
+                     << " has a non existent master zone "<< dendl;
+        return -EINVAL;
+      }
+
+      if (zg.is_master_zonegroup()) {
+        info.master_zonegroup = zg.get_id();
+        info.master_zone = zg.master_zone;
+      }
+
+      ret = info.period_map.update(zg, dpp->get_cct());
+      if (ret < 0) {
+        return ret;
+      }
+    } // foreach name in listing.entries
+  } while (!listing.next.empty());
+
+  // read the realm's current period config
+  int ret = cfgstore->read_period_config(dpp, y, info.realm_id,
+                                         info.period_config);
+  if (ret < 0 && ret != -ENOENT) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to read period config: "
+        << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
+                  sal::ConfigStore* cfgstore, sal::Driver* driver,
+                  RGWRealm& realm, sal::RealmWriter& realm_writer,
+                  const RGWPeriod& current_period,
+                  RGWPeriod& info, std::ostream& error_stream,
+                  bool force_if_stale, const rgw::SiteConfig& site)
+{
+  ldpp_dout(dpp, 20) << __func__ << " realm " << realm.id
+      << " period " << current_period.id << dendl;
+
+  // gateway must be in the master zone to commit
+  if (info.master_zone != site.get_zone_params().id) {
+    error_stream << "Cannot commit period on zone "
+        << site.get_zone_params().id << ", it must be sent to "
+        "the period's master zone " << info.master_zone << '.' << std::endl;
+    return -EINVAL;
+  }
+  // period predecessor must match current period
+  if (info.predecessor_uuid != current_period.id) {
+    error_stream << "Period predecessor " << info.predecessor_uuid
+        << " does not match current period " << current_period.id
+        << ". Use 'period pull' to get the latest period from the master, "
+        "reapply your changes, and try again." << std::endl;
+    return -EINVAL;
+  }
+  // realm epoch must be 1 greater than current period
+  if (info.realm_epoch != current_period.realm_epoch + 1) {
+    error_stream << "Period's realm epoch " << info.realm_epoch
+        << " does not come directly after current realm epoch "
+        << current_period.realm_epoch << ". Use 'realm pull' to get the "
+        "latest realm and period from the master zone, reapply your changes, "
+        "and try again." << std::endl;
+    return -EINVAL;
+  }
+  // did the master zone change?
+  if (info.master_zone != current_period.master_zone) {
+    // store the current metadata sync status in the period
+    int r = info.update_sync_status(dpp, driver, current_period,
+                                    error_stream, force_if_stale);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to update metadata sync status: "
+          << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    // create an object with a new period id
+    info.period_map.id = info.id = gen_random_uuid();
+    info.epoch = FIRST_EPOCH;
+
+    constexpr bool exclusive = true;
+    r = cfgstore->create_period(dpp, y, exclusive, info);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    // set as current period
+    r = realm_set_current_period(dpp, y, cfgstore, realm_writer, realm, info);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to update realm's current period: "
+          << cpp_strerror(-r) << dendl;
+      return r;
+    }
+    ldpp_dout(dpp, 4) << "Promoted to master zone and committed new period "
+        << info.id << dendl;
+    return 0;
+  }
+  // period must be based on current epoch
+  if (info.epoch != current_period.epoch) {
+    error_stream << "Period epoch " << info.epoch << " does not match "
+        "predecessor epoch " << current_period.epoch << ". Use "
+        "'period pull' to get the latest epoch from the master zone, "
+        "reapply your changes, and try again." << std::endl;
+    return -EINVAL;
+  }
+  // set period as next epoch
+  info.id = current_period.id;
+  info.epoch = current_period.epoch + 1;
+  info.predecessor_uuid = current_period.predecessor_uuid;
+  info.realm_epoch = current_period.realm_epoch;
+  // write the period
+  constexpr bool exclusive = true;
+  int r = cfgstore->create_period(dpp, y, exclusive, info);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to store period: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = reflect_period(dpp, y, cfgstore, info);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to update local objects: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldpp_dout(dpp, 4) << "Committed new epoch " << info.epoch
+      << " for period " << info.id << dendl;
+  return 0;
+}
+
+
+int read_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                   sal::ConfigStore* cfgstore,
+                   std::string_view zonegroup_id,
+                   std::string_view zonegroup_name,
+                   RGWZoneGroup& info,
+                   std::unique_ptr<sal::ZoneGroupWriter>* writer)
+{
+  if (!zonegroup_id.empty()) {
+    return cfgstore->read_zonegroup_by_id(dpp, y, zonegroup_id, info, writer);
+  }
+  if (!zonegroup_name.empty()) {
+    return cfgstore->read_zonegroup_by_name(dpp, y, zonegroup_name, info, writer);
+  }
+
+  std::string realm_id;
+  int r = cfgstore->read_default_realm_id(dpp, y, realm_id);
+  if (r == -ENOENT) {
+    return cfgstore->read_zonegroup_by_name(dpp, y, default_zonegroup_name,
+                                            info, writer);
+  }
+  if (r < 0) {
+    return r;
+  }
+  return cfgstore->read_default_zonegroup(dpp, y, realm_id, info, writer);
+}
+
+int create_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                     sal::ConfigStore* cfgstore, bool exclusive,
+                     RGWZoneGroup& info)
+{
+  if (info.name.empty()) {
+    ldpp_dout(dpp, -1) << __func__ << " requires a zonegroup name" << dendl;
+    return -EINVAL;
+  }
+  if (info.id.empty()) {
+    info.id = gen_random_uuid();
+  }
+
+  // insert the default placement target if it doesn't exist
+  constexpr std::string_view default_placement_name = "default-placement";
+
+  RGWZoneGroupPlacementTarget placement_target;
+  placement_target.name = default_placement_name;
+
+  info.placement_targets.emplace(default_placement_name, placement_target);
+  if (info.default_placement.name.empty()) {
+    info.default_placement.name = default_placement_name;
+  }
+
+  int r = cfgstore->create_zonegroup(dpp, y, exclusive, info, nullptr);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to create zonegroup with "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // try to set as default. may race with another create, so pass exclusive=true
+  // so we don't override an existing default
+  r = set_default_zonegroup(dpp, y, cfgstore, info, true);
+  if (r < 0 && r != -EEXIST) {
+    ldpp_dout(dpp, 0) << "WARNING: failed to set zonegroup as default: "
+        << cpp_strerror(r) << dendl;
+  }
+
+  return 0;
+}
+
+static int create_default_zonegroup(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    sal::ConfigStore* cfgstore,
+                                    bool exclusive,
+                                    const RGWZoneParams& default_zone,
+                                    RGWZoneGroup& info)
+{
+  info.name = default_zonegroup_name;
+  info.api_name = default_zonegroup_name;
+  info.is_master = true;
+
+  // enable all supported features
+  info.enabled_features.insert(rgw::zone_features::enabled.begin(),
+                               rgw::zone_features::enabled.end());
+
+  // add the zone to the zonegroup
+  bool is_master = true;
+  std::list<std::string> empty_list;
+  rgw::zone_features::set disable_features; // empty
+  int r = add_zone_to_group(dpp, info, default_zone, &is_master, nullptr,
+                            empty_list, nullptr, nullptr, empty_list,
+                            empty_list, nullptr, std::nullopt,
+                            info.enabled_features, disable_features);
+  if (r < 0) {
+    return r;
+  }
+
+  // write the zone
+  return create_zonegroup(dpp, y, cfgstore, exclusive, info);
+}
+
+int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                          sal::ConfigStore* cfgstore, const RGWZoneGroup& info,
+                          bool exclusive)
+{
+  return cfgstore->write_default_zonegroup_id(
+      dpp, y, exclusive, info.realm_id, info.id);
+}
+
+int remove_zone_from_group(const DoutPrefixProvider* dpp,
+                           RGWZoneGroup& zonegroup,
+                           const rgw_zone_id& zone_id)
+{
+  auto z = zonegroup.zones.find(zone_id);
+  if (z == zonegroup.zones.end()) {
+    return -ENOENT;
+  }
+  zonegroup.zones.erase(z);
+
+  if (zonegroup.master_zone == zone_id) {
+    // choose a new master zone
+    auto m = zonegroup.zones.begin();
+    if (m != zonegroup.zones.end()) {
+      zonegroup.master_zone = m->first;
+      ldpp_dout(dpp, 0) << "NOTICE: promoted " << m->second.name
+         << " as new master_zone of zonegroup " << zonegroup.name << dendl;
+    } else {
+      ldpp_dout(dpp, 0) << "NOTICE: removed master_zone of zonegroup "
+          << zonegroup.name << dendl;
+    }
+  }
+
+  const bool log_data = zonegroup.zones.size() > 1;
+  for (auto& [id, zone] : zonegroup.zones) {
+    zone.log_data = log_data;
+  }
+
+  return 0;
+}
+
+// try to remove the given zone id from every zonegroup in the cluster
+static int remove_zone_from_groups(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   sal::ConfigStore* cfgstore,
+                                   const rgw_zone_id& zone_id)
+{
+  std::array<std::string, 128> zonegroup_names;
+  sal::ListResult<std::string> listing;
+  do {
+    int r = cfgstore->list_zonegroup_names(dpp, y, listing.next,
+                                           zonegroup_names, listing);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to list zonegroups with "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    for (const auto& name : listing.entries) {
+      RGWZoneGroup zonegroup;
+      std::unique_ptr<sal::ZoneGroupWriter> writer;
+      r = cfgstore->read_zonegroup_by_name(dpp, y, name, zonegroup, &writer);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to load zonegroup " << name
+            << " with " << cpp_strerror(r) << dendl;
+        continue;
+      }
+
+      r = remove_zone_from_group(dpp, zonegroup, zone_id);
+      if (r < 0) {
+        continue;
+      }
+
+      // write the updated zonegroup
+      r = writer->write(dpp, y, zonegroup);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "WARNING: failed to write zonegroup " << name
+            << " with " << cpp_strerror(r) << dendl;
+        continue;
+      }
+      ldpp_dout(dpp, 0) << "Removed zone from zonegroup " << name << dendl;
+    }
+  } while (!listing.next.empty());
+
+  return 0;
+}
+
+
+int read_zone(const DoutPrefixProvider* dpp, optional_yield y,
+              sal::ConfigStore* cfgstore,
+              std::string_view zone_id,
+              std::string_view zone_name,
+              RGWZoneParams& info,
+              std::unique_ptr<sal::ZoneWriter>* writer)
+{
+  if (!zone_id.empty()) {
+    return cfgstore->read_zone_by_id(dpp, y, zone_id, info, writer);
+  }
+  if (!zone_name.empty()) {
+    return cfgstore->read_zone_by_name(dpp, y, zone_name, info, writer);
+  }
+
+  std::string realm_id;
+  int r = cfgstore->read_default_realm_id(dpp, y, realm_id);
+  if (r == -ENOENT) {
+    return cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, writer);
+  }
+  if (r < 0) {
+    return r;
+  }
+  return cfgstore->read_default_zone(dpp, y, realm_id, info, writer);
+}
+
+extern int get_zones_pool_set(const DoutPrefixProvider *dpp, optional_yield y,
+                              rgw::sal::ConfigStore* cfgstore,
+                              std::string_view my_zone_id,
+                              std::set<rgw_pool>& pools);
+
+int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                sal::ConfigStore* cfgstore, bool exclusive,
+                RGWZoneParams& info, std::unique_ptr<sal::ZoneWriter>* writer)
+{
+  if (info.name.empty()) {
+    ldpp_dout(dpp, -1) << __func__ << " requires a zone name" << dendl;
+    return -EINVAL;
+  }
+  if (info.id.empty()) {
+    info.id = gen_random_uuid();
+  }
+
+  // add default placement with empty pool name
+  RGWZonePlacementInfo placement;
+  rgw_pool pool;
+  placement.storage_classes.set_storage_class(
+      RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+  // don't overwrite if it already exists
+  info.placement_pools.emplace("default-placement", std::move(placement));
+
+  // build a set of all pool names used by other zones
+  std::set<rgw_pool> pools;
+  int r = get_zones_pool_set(dpp, y, cfgstore, info.id, pools);
+  if (r < 0) {
+    return r;
+  }
+
+  // initialize pool names with the zone name prefix
+  r = init_zone_pool_names(dpp, y, pools, info);
+  if (r < 0) {
+    return r;
+  }
+
+  r = cfgstore->create_zone(dpp, y, exclusive, info, nullptr);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to create zone with "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // try to set as default. may race with another create, so pass exclusive=true
+  // so we don't override an existing default
+  r = set_default_zone(dpp, y, cfgstore, info, true);
+  if (r < 0 && r != -EEXIST) {
+    ldpp_dout(dpp, 0) << "WARNING: failed to set zone as default: "
+        << cpp_strerror(r) << dendl;
+  }
+
+  return 0;
+
+}
+
+int set_default_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                     sal::ConfigStore* cfgstore, const RGWZoneParams& info,
+                     bool exclusive)
+{
+  return cfgstore->write_default_zone_id(
+      dpp, y, exclusive, info.realm_id, info.id);
+}
+
+int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
+                sal::ConfigStore* cfgstore, const RGWZoneParams& info,
+                sal::ZoneWriter& writer)
+{
+  // remove this zone from any zonegroups that contain it
+  int r = remove_zone_from_groups(dpp, y, cfgstore, info.id);
+  if (r < 0) {
+    return r;
+  }
+
+  return writer.remove(dpp, y);
+}
+
+auto find_zone_placement(const DoutPrefixProvider* dpp,
+                         const RGWZoneParams& info,
+                         const rgw_placement_rule& rule)
+    -> const RGWZonePlacementInfo*
+{
+  auto i = info.placement_pools.find(rule.name);
+  if (i == info.placement_pools.end()) {
+    ldpp_dout(dpp, 0) << "ERROR: This zone does not contain placement rule "
+        << rule.name << dendl;
+    return nullptr;
+  }
+
+  const std::string& storage_class = rule.get_storage_class();
+  if (!i->second.storage_class_exists(storage_class)) {
+    ldpp_dout(dpp, 5) << "ERROR: The zone placement for rule " << rule.name
+        << " does not contain storage class " << storage_class << dendl;
+    return nullptr;
+  }
+
+  return &i->second;
+}
+
+bool all_zonegroups_support(const SiteConfig& site, std::string_view feature)
+{
+  const auto& period = site.get_period();
+  if (!period) {
+    // if we're not in a realm, just check the local zonegroup
+    return site.get_zonegroup().supports(feature);
+  }
+  const auto& zgs = period->period_map.zonegroups;
+  return std::all_of(zgs.begin(), zgs.end(), [feature] (const auto& pair) {
+      return pair.second.supports(feature);
+    });
+}
+
+static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       sal::ConfigStore* cfgstore,
+                                       RGWZoneParams& info)
+{
+  int r = cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, nullptr);
+  if (r == -ENOENT) {
+    info.name = default_zone_name;
+    constexpr bool exclusive = true;
+    r = create_zone(dpp, y, cfgstore, exclusive, info, nullptr);
+    if (r == -EEXIST) {
+      r = cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, nullptr);
+    }
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to create default zone: "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  return r;
+}
+
+static int read_or_create_default_zonegroup(const DoutPrefixProvider* dpp,
+                                            optional_yield y,
+                                            sal::ConfigStore* cfgstore,
+                                            const RGWZoneParams& zone_params,
+                                            RGWZoneGroup& info)
+{
+  int r = cfgstore->read_zonegroup_by_name(dpp, y, default_zonegroup_name,
+                                           info, nullptr);
+  if (r == -ENOENT) {
+    constexpr bool exclusive = true;
+    r = create_default_zonegroup(dpp, y, cfgstore, exclusive,
+                                 zone_params, info);
+    if (r == -EEXIST) {
+      r = cfgstore->read_zonegroup_by_name(dpp, y, default_zonegroup_name,
+                                           info, nullptr);
+    }
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to create default zonegroup: "
+          << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+  return r;
+}
+
+int SiteConfig::load(const DoutPrefixProvider* dpp, optional_yield y,
+                     sal::ConfigStore* cfgstore, bool force_local_zonegroup)
+{
+  // clear existing configuration
+  zone = nullptr;
+  zonegroup = nullptr;
+  local_zonegroup = std::nullopt;
+  period = std::nullopt;
+  zone_params = RGWZoneParams{};
+
+  int r = 0;
+
+  // try to load a realm
+  realm.emplace();
+  std::string realm_name = dpp->get_cct()->_conf->rgw_realm;
+  if (!realm_name.empty()) {
+    r = cfgstore->read_realm_by_name(dpp, y, realm_name, *realm, nullptr);
+  } else {
+    r = cfgstore->read_default_realm(dpp, y, *realm, nullptr);
+    if (r == -ENOENT) { // no realm
+      r = 0;
+      realm = std::nullopt;
+    }
+  }
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to load realm: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // try to load the local zone params
+  std::string zone_name = dpp->get_cct()->_conf->rgw_zone;
+  if (!zone_name.empty()) {
+    r = cfgstore->read_zone_by_name(dpp, y, zone_name, zone_params, nullptr);
+  } else if (realm) {
+    // load the realm's default zone
+    r = cfgstore->read_default_zone(dpp, y, realm->id, zone_params, nullptr);
+    if (r == -ENOENT) {
+      if (realm_name.empty()) {
+        // rgw_realm was not specified, and we found a default realm that
+        // doesn't have a default zone. ignore the realm and try to load the
+        // global default zone
+        realm = std::nullopt;
+        r = read_or_create_default_zone(dpp, y, cfgstore, zone_params);
+      } else {
+        ldpp_dout(dpp, 0) << "No rgw_zone configured, and the selected realm \""
+            << realm->name << "\" does not have a default zone." << dendl;
+      }
+    }
+  } else {
+    // load or create the "default" zone
+    r = read_or_create_default_zone(dpp, y, cfgstore, zone_params);
+  }
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to load zone: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (!realm && !zone_params.realm_id.empty()) {
+    realm.emplace();
+    r = cfgstore->read_realm_by_id(dpp, y, zone_params.realm_id,
+                                   *realm, nullptr);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to load realm: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
+  if (realm && !force_local_zonegroup) {
+    // try to load the realm's period
+    r = load_period_zonegroup(dpp, y, cfgstore, *realm, zone_params.id);
+    if (r != -ENOENT) {
+      return r;
+    }
+    ldpp_dout(dpp, 10) << "cannot find current period zonegroup, "
+        "using local zonegroup configuration" << dendl;
+  }
+
+  // fall back to a local zonegroup
+  return load_local_zonegroup(dpp, y, cfgstore, zone_params.id);
+}
+
+std::unique_ptr<SiteConfig> SiteConfig::make_fake() {
+  auto fake = std::make_unique<SiteConfig>();
+  fake->local_zonegroup.emplace();
+  fake->local_zonegroup->zones.emplace(""s, RGWZone{});
+  fake->zonegroup = &*fake->local_zonegroup;
+  fake->zone = &fake->zonegroup->zones.begin()->second;
+  return fake;
+}
+
+int SiteConfig::load_period_zonegroup(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      sal::ConfigStore* cfgstore,
+                                      const RGWRealm& realm,
+                                      const rgw_zone_id& zone_id)
+{
+  // load the realm's current period
+  period.emplace();
+  int r = cfgstore->read_period(dpp, y, realm.current_period,
+                                std::nullopt, *period);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to load current period: "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // find our zone and zonegroup in the period
+  for (const auto& zg : period->period_map.zonegroups) {
+    auto z = zg.second.zones.find(zone_id);
+    if (z != zg.second.zones.end()) {
+      zone = &z->second;
+      zonegroup = &zg.second;
+      return 0;
+    }
+  }
+
+  ldpp_dout(dpp, 0) << "ERROR: current period " << period->id
+      << " does not contain zone id " << zone_id << dendl;
+
+  period = std::nullopt;
+  return -ENOENT;
+}
+
+int SiteConfig::load_local_zonegroup(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     sal::ConfigStore* cfgstore,
+                                     const rgw_zone_id& zone_id)
+{
+  int r = 0;
+
+  // load the zonegroup
+  local_zonegroup.emplace();
+  std::string zonegroup_name = dpp->get_cct()->_conf->rgw_zonegroup;
+  if (!zonegroup_name.empty()) {
+    r = cfgstore->read_zonegroup_by_name(dpp, y, zonegroup_name,
+                                         *local_zonegroup, nullptr);
+  } else if (realm) {
+    r = cfgstore->read_default_zonegroup(dpp, y, realm->id,
+                                         *local_zonegroup, nullptr);
+  } else {
+    r = read_or_create_default_zonegroup(dpp, y, cfgstore, zone_params,
+                                         *local_zonegroup);
+  }
+
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "failed to load zonegroup: "
+        << cpp_strerror(r) << dendl;
+  } else {
+    // find our zone in the zonegroup
+    auto z = local_zonegroup->zones.find(zone_id);
+    if (z != local_zonegroup->zones.end()) {
+      zone = &z->second;
+      zonegroup = &*local_zonegroup;
+      return 0;
+    }
+    ldpp_dout(dpp, 0) << "ERROR: zonegroup " << local_zonegroup->id
+        << " does not contain zone id " << zone_id << dendl;
+    r = -ENOENT;
+  }
+
+  local_zonegroup = std::nullopt;
+  return r;
+}
+
 } // namespace rgw
+
+static inline int conf_to_uint64(const JSONFormattable& config, const string& key, uint64_t *pval)
+{
+  string sval;
+  if (config.find(key, &sval)) {
+    string err;
+    uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
+    if (!err.empty()) {
+      return -EINVAL;
+    }
+    *pval = val;
+  }
+  return 0;
+}
+
+int RGWZoneGroupPlacementTier::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("retain_head_object")) {
+    string s = config["retain_head_object"];
+    if (s == "true") {
+      retain_head_object = true;
+    } else {
+      retain_head_object = false;
+    }
+  }
+  if (config.exists("allow_read_through")) {
+    string s = config["allow_read_through"];
+    if (s == "true") {
+      allow_read_through = true;
+    } else {
+      allow_read_through = false;
+    }
+  }
+  if (config.exists("read_through_restore_days")) {
+    r = conf_to_uint64(config, "read_through_restore_days", &read_through_restore_days);
+    if (r < 0) {
+      read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
+    }
+  }
+
+  if (is_tier_type_s3()) {
+    r = t.s3.update_params(config);
+  }
+
+  if (config.exists("restore_storage_class")) {
+    restore_storage_class = config["restore_storage_class"];
+  }
+
+  if (is_tier_type_s3_glacier()) {
+    r = s3_glacier.update_params(config);
+  }
+  return r;
+}
+
+int RGWZoneGroupPlacementTier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("retain_head_object")) {
+    retain_head_object = false;
+  }
+  if (config.exists("allow_read_through")) {
+    allow_read_through = false;
+  }
+  if (config.exists("read_through_restore_days")) {
+    read_through_restore_days = DEFAULT_READ_THROUGH_RESTORE_DAYS;
+  }
+
+  if (is_tier_type_s3()) {
+    t.s3.clear_params(config);
+  }
+
+  if (config.exists("restore_storage_class")) {
+    restore_storage_class = RGW_STORAGE_CLASS_STANDARD;
+  }
+
+  if (is_tier_type_s3_glacier()) {
+    s3_glacier.clear_params(config);
+  }
+
+  return 0;
+}
+
+int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("endpoint")) {
+    endpoint = config["endpoint"];
+  }
+  if (config.exists("target_path")) {
+    target_path = config["target_path"];
+  }
+  if (config.exists("region")) {
+    region = config["region"];
+  }
+  if (config.exists("host_style")) {
+    string s;
+    s = config["host_style"];
+    if (s != "virtual") {
+      host_style = PathStyle;
+    } else {
+      host_style = VirtualStyle;
+    }
+  }
+  if (config.exists("target_storage_class")) {
+    target_storage_class = config["target_storage_class"];
+  }
+  if (config.exists("access_key")) {
+    key.id = config["access_key"];
+  }
+  if (config.exists("secret")) {
+    key.key = config["secret"];
+  }
+  if (config.exists("multipart_sync_threshold")) {
+    r = conf_to_uint64(config, "multipart_sync_threshold", &multipart_sync_threshold);
+    if (r < 0) {
+      multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
+  if (config.exists("multipart_min_part_size")) {
+    r = conf_to_uint64(config, "multipart_min_part_size", &multipart_min_part_size);
+    if (r < 0) {
+      multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+    }
+  }
+
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        if (!m.source_id.empty()) {
+          acl_mappings[m.source_id] = m;
+        }
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      if (!m.source_id.empty()) {
+        acl_mappings[m.source_id] = m;
+      }
+    }
+  }
+  return 0;
+}
+
+int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("endpoint")) {
+    endpoint.clear();
+  }
+  if (config.exists("target_path")) {
+    target_path.clear();
+  }
+  if (config.exists("region")) {
+    region.clear();
+  }
+  if (config.exists("host_style")) {
+    /* default */
+    host_style = PathStyle;
+  }
+  if (config.exists("target_storage_class")) {
+    target_storage_class.clear();
+  }
+  if (config.exists("access_key")) {
+    key.id.clear();
+  }
+  if (config.exists("secret")) {
+    key.key.clear();
+  }
+  if (config.exists("multipart_sync_threshold")) {
+    multipart_sync_threshold = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+  }
+  if (config.exists("multipart_min_part_size")) {
+    multipart_min_part_size = DEFAULT_MULTIPART_SYNC_PART_SIZE;
+  }
+  if (config.exists("acls")) {
+    const JSONFormattable& cc = config["acls"];
+    if (cc.is_array()) {
+      for (auto& c : cc.array()) {
+        RGWTierACLMapping m;
+        m.init(c);
+        acl_mappings.erase(m.source_id);
+      }
+    } else {
+      RGWTierACLMapping m;
+      m.init(cc);
+      acl_mappings.erase(m.source_id);
+    }
+  }
+  return 0;
+}
+
+int RGWZoneGroupTierS3Glacier::update_params(const JSONFormattable& config)
+{
+  int r = -1;
+
+  if (config.exists("glacier_restore_days")) {
+    r = conf_to_uint64(config, "glacier_restore_days", &glacier_restore_days);
+    if (r < 0) {
+      glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
+    }
+  }
+  if (config.exists("glacier_restore_tier_type")) {
+    string s;
+    s = config["glacier_restore_tier_type"];
+    if (s != "Expedited") {
+      glacier_restore_tier_type = Standard;
+    } else {
+      glacier_restore_tier_type = Expedited;
+    }
+  }
+  return 0;
+}
+
+int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
+{
+  if (config.exists("glacier_restore_days")) {
+    glacier_restore_days = DEFAULT_GLACIER_RESTORE_DAYS;
+  }
+  if (config.exists("glacier_restore_tier_type")) {
+    /* default */
+    glacier_restore_tier_type = Standard;
+  }
+  return 0;
+}
+
+std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
+{
+  std::list<rgw_meta_sync_info> o;
+  rgw_meta_sync_info info;
+  info.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info.period = "periodid";
+  info.realm_epoch = 5;
+  o.push_back(std::move(info));
+  o.emplace_back();
+  return o;
+}
+
+std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
+{
+  std::list<rgw_meta_sync_marker> o;
+  rgw_meta_sync_marker marker;
+  marker.state = rgw_meta_sync_marker::IncrementalSync;
+  marker.marker = "01234";
+  marker.realm_epoch = 5;
+  o.push_back(std::move(marker));
+  o.emplace_back();
+  return o;
+}
+
+std::list<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
+{
+  std::list<rgw_meta_sync_status> o;
+  o.emplace_back();
+  return o;
+}
+
+std::list<RGWZoneParams> RGWZoneParams::generate_test_instances()
+{
+  std::list<RGWZoneParams> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
+}
+
+std::list<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
+{
+  std::list<RGWPeriodLatestEpochInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
+}
+
+std::list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
+{
+  std::list<RGWZoneGroup> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
+}
+
+void RGWPeriodLatestEpochInfo::dump(Formatter *f) const {
+  encode_json("latest_epoch", epoch, f);
+}
+
+void RGWPeriodLatestEpochInfo::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("latest_epoch", epoch, obj);
+}
+
+void RGWNameToId::dump(Formatter *f) const {
+  encode_json("obj_id", obj_id, f);
+}
+
+void RGWNameToId::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("obj_id", obj_id, obj);
+}
+
+std::list<RGWNameToId> RGWNameToId::generate_test_instances() {
+  std::list<RGWNameToId> o;
+  RGWNameToId n;
+  n.obj_id = "id";
+  o.push_back(std::move(n));
+  o.emplace_back();
+  return o;
+}
 

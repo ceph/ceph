@@ -3,12 +3,11 @@
 import pytest
 from ceph_volume.util.device import Devices
 from ceph_volume.util.lsmdisk import LSMDisk
-from mock.mock import patch
+from unittest.mock import patch
 import ceph_volume.util.lsmdisk as lsmdisk
 
 
 @pytest.fixture
-@patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
 def device_report_keys(device_info):
     device_info(devices={
         # example output of disk.get_devices()

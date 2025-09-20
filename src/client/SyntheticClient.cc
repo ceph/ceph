@@ -16,9 +16,11 @@
 
 #include <iostream>
 #include <sstream>
+#include <unordered_map>
 
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "SyntheticClient.h"
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
@@ -290,6 +292,7 @@ SyntheticClient::SyntheticClient(StandaloneClient *client, int w)
 
 void *synthetic_client_thread_entry(void *ptr)
 {
+  ceph_pthread_setname("client");
   SyntheticClient *sc = static_cast<SyntheticClient*>(ptr);
   //int r = 
   sc->run();
@@ -945,7 +948,6 @@ int SyntheticClient::start_thread()
 
   pthread_create(&thread_id, NULL, synthetic_client_thread_entry, this);
   ceph_assert(thread_id);
-  ceph_pthread_setname(thread_id, "client");
   return 0;
 }
 
@@ -1014,12 +1016,12 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 
   utime_t start = ceph_clock_now();
 
-  ceph::unordered_map<int64_t, int64_t> open_files;
-  ceph::unordered_map<int64_t, dir_result_t*> open_dirs;
+  std::unordered_map<int64_t, int64_t> open_files;
+  std::unordered_map<int64_t, dir_result_t*> open_dirs;
 
-  ceph::unordered_map<int64_t, Fh*> ll_files;
-  ceph::unordered_map<int64_t, dir_result_t*> ll_dirs;
-  ceph::unordered_map<uint64_t, int64_t> ll_inos;
+  std::unordered_map<int64_t, Fh*> ll_files;
+  std::unordered_map<int64_t, dir_result_t*> ll_dirs;
+  std::unordered_map<uint64_t, int64_t> ll_inos;
 
   Inode *i1, *i2;
 
@@ -1218,8 +1220,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
       const char *a = t.get_string(buf, p);
       // Client users should remember their path, but since this
       // is just a synthetic client we ignore it.
-      std::string ignore;
-      client->chdir(a, ignore, perms);
+      client->chdir(a, perms);
     } else if (strcmp(op, "statfs") == 0) {
       struct statvfs stbuf;
       client->statfs("/", &stbuf, perms);
@@ -1514,27 +1515,19 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
   dout(10) << "trace finished on line " << t.get_line() << dendl;
 
   // close open files
-  for (ceph::unordered_map<int64_t, int64_t>::iterator fi = open_files.begin();
-       fi != open_files.end();
-       ++fi) {
+  for (auto fi = open_files.begin(); fi != open_files.end(); ++fi) {
     dout(1) << "leftover close " << fi->second << dendl;
     if (fi->second > 0) client->close(fi->second);
   }
-  for (ceph::unordered_map<int64_t, dir_result_t*>::iterator fi = open_dirs.begin();
-       fi != open_dirs.end();
-       ++fi) {
+  for (auto fi = open_dirs.begin(); fi != open_dirs.end(); ++fi) {
     dout(1) << "leftover closedir " << fi->second << dendl;
     if (fi->second != 0) client->closedir(fi->second);
   }
-  for (ceph::unordered_map<int64_t,Fh*>::iterator fi = ll_files.begin();
-       fi != ll_files.end();
-       ++fi) {
+  for (auto fi = ll_files.begin(); fi != ll_files.end(); ++fi) {
     dout(1) << "leftover ll_release " << fi->second << dendl;
     if (fi->second) client->ll_release(fi->second);
   }
-  for (ceph::unordered_map<int64_t,dir_result_t*>::iterator fi = ll_dirs.begin();
-       fi != ll_dirs.end();
-       ++fi) {
+  for (auto fi = ll_dirs.begin(); fi != ll_dirs.end(); ++fi) {
     dout(1) << "leftover ll_releasedir " << fi->second << dendl;
     if (fi->second) client->ll_releasedir(fi->second);
   }
@@ -1594,8 +1587,8 @@ int SyntheticClient::full_walk(string& basedir)
   frag_info_t empty;
   statq.push_back(empty);
 
-  ceph::unordered_map<inodeno_t, int> nlink;
-  ceph::unordered_map<inodeno_t, int> nlink_seen;
+  std::unordered_map<inodeno_t, int> nlink;
+  std::unordered_map<inodeno_t, int> nlink_seen;
 
   UserPerm perms = client->pick_my_perms();
   while (!dirq.empty()) {
@@ -1674,7 +1667,7 @@ int SyntheticClient::full_walk(string& basedir)
     }
   }
 
-  for (ceph::unordered_map<inodeno_t,int>::iterator p = nlink.begin(); p != nlink.end(); ++p) {
+  for (auto p = nlink.begin(); p != nlink.end(); ++p) {
     if (nlink_seen[p->first] != p->second)
       dout(0) << p->first << " nlink " << p->second << " != " << nlink_seen[p->first] << "seen" << dendl;
   }

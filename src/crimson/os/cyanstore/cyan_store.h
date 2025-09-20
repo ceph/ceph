@@ -34,11 +34,13 @@ public:
 
     seastar::future<struct stat> stat(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     base_errorator::future<bool> exists(
       CollectionRef ch,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     read_errorator::future<ceph::bufferlist> read(
       CollectionRef c,
@@ -56,33 +58,40 @@ public:
     get_attr_errorator::future<ceph::bufferlist> get_attr(
       CollectionRef c,
       const ghobject_t& oid,
-      std::string_view name) const final;
+      std::string_view name,
+      uint32_t op_flags = 0) const final;
 
     get_attrs_ertr::future<attrs_t> get_attrs(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     read_errorator::future<omap_values_t> omap_get_values(
       CollectionRef c,
       const ghobject_t& oid,
-      const omap_keys_t& keys) final;
+      const omap_keys_t& keys,
+      uint32_t op_flags = 0) final;
 
-    read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
-      CollectionRef c,           ///< [in] collection
-      const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start ///< [in] start, empty for begin
-      ) final;
+    read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,
+      const ghobject_t &oid,
+      ObjectStore::omap_iter_seek_t start_from,
+      omap_iterate_cb_t callback,
+      uint32_t op_flags = 0
+    ) final;
 
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(
       CollectionRef c,
-      const ghobject_t& oid) final;
+      const ghobject_t& oid,
+      uint32_t op_flags = 0) final;
 
     seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>>
     list_objects(
       CollectionRef c,
       const ghobject_t& start,
       const ghobject_t& end,
-      uint64_t limit) const final;
+      uint64_t limit,
+      uint32_t op_flags = 0) const final;
 
     seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
 
@@ -101,7 +110,8 @@ public:
       CollectionRef c,
       const ghobject_t& oid,
       uint64_t off,
-      uint64_t len) final;
+      uint64_t len,
+      uint32_t op_flags) final;
 
     unsigned get_max_attr_name_length() const final;
 
@@ -185,11 +195,8 @@ public:
     return shard_stores.invoke_on_all(
       [](auto &local_store) {
       return local_store.mount().handle_error(
-      crimson::stateful_ec::assert_failure([](const auto& ec) {
-        crimson::get_logger(ceph_subsys_cyanstore).error(
-	    "error mounting cyanstore: ({}) {}",
-            ec.value(), ec.message());
-      }));
+      crimson::stateful_ec::assert_failure(
+        fmt::format("error mounting cyanstore").c_str()));
     });
   }
 
@@ -220,6 +227,8 @@ public:
   read_meta(const std::string& key) final;
 
   seastar::future<std::vector<coll_core_t>> list_collections() final;
+
+  seastar::future<std::string> get_default_device_class() final;
 
 private:
   seastar::sharded<CyanStore::Shard> shard_stores;

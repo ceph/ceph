@@ -3,7 +3,12 @@ import copy, datetime, json, os, socket, threading
 
 import pytest
 
-from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
+from tests.fixtures import (
+    cephadm_fs,
+    funkypatch,
+    import_cephadm,
+    with_cephadm_ctx,
+)
 
 from typing import Optional
 
@@ -182,7 +187,7 @@ def test_agent_ceph_volume(_ceph_volume):
             out, _ = agent._ceph_volume(False)
 
 
-def test_agent_daemon_ls_subset(cephadm_fs):
+def test_agent_daemon_ls_subset(cephadm_fs, funkypatch):
     # Basing part of this test on some actual sample output
 
     # Some sample "podman stats --format '{{.ID}},{{.MemUsage}}' --no-stream" output
@@ -225,10 +230,11 @@ def test_agent_daemon_ls_subset(cephadm_fs):
     cephadm_fs.create_dir(f'/var/lib/ceph/{FSID}/mgr.host1.pntmho')  # cephadm daemon
     cephadm_fs.create_dir(f'/var/lib/ceph/{FSID}/crash.host1')  # cephadm daemon
 
-    with with_cephadm_ctx([]) as ctx:
+    with with_cephadm_ctx([], mock_cephadm_call_fn=False) as ctx:
         ctx.fsid = FSID
         agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
-        _cephadm.call.side_effect = _fake_call
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call')
+        _call.side_effect = _fake_call
         daemons = agent._daemon_ls_subset()
 
         assert 'agent.host1' in daemons
@@ -668,7 +674,7 @@ def test_mgr_listener_run(_load_cert_chain, _load_verify_locations, _handle_json
         agent.mgr_listener.run()
 
         # verify payload was correctly extracted
-        assert _handle_json_payload.called_with(json.loads(payload))
+        _handle_json_payload.assert_called_with(json.loads(payload))
         FakeConn.send.assert_called_once_with(b'ACK')
 
         # second run, with bad json data received

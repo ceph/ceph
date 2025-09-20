@@ -3,6 +3,7 @@
 
 #include "include/Context.h"
 #include "common/ceph_json.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "rgw_coroutine.h"
 #include "rgw_asio_thread.h"
 
@@ -10,6 +11,8 @@
 #include "include/ceph_assert.h"
 
 #include <boost/asio/yield.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -1085,7 +1088,7 @@ int RGWSimpleCoroutine::operate(const DoutPrefixProvider *dpp)
       yield return state_send_request(dpp);
       yield return state_request_complete();
 
-      if (op_ret == -EIO && tries < max_eio_retries - 1) {
+      if (op_ret == -ERR_INTERNAL_ERROR && tries < max_eio_retries - 1) {
         ldout(cct, 20) << "request IO error. retries=" << tries << dendl;
         continue;
       } else if (op_ret < 0) {
@@ -1126,7 +1129,7 @@ int RGWSimpleCoroutine::state_send_request(const DoutPrefixProvider *dpp)
 int RGWSimpleCoroutine::state_request_complete()
 {
   op_ret = request_complete();
-  if (op_ret < 0 && op_ret != -EIO) {
+  if (op_ret < 0 && op_ret != -ERR_INTERNAL_ERROR) {
     call_cleanup();
     return set_state(RGWCoroutine_Error, op_ret);
   }

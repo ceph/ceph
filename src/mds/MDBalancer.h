@@ -14,21 +14,27 @@
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
 
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "mdstypes.h" // for dirfrag_t, mds_load_t
 #include "include/types.h"
+#include "common/ceph_time.h" // for coarse_mono_time()
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "common/Clock.h"
-#include "common/Cond.h"
+#include "common/ref.h"
 
-#include "msg/Message.h"
-#include "messages/MHeartbeat.h"
-
-#include "MDSMap.h"
-
+class MDSMap;
 class MDSRank;
 class MHeartbeat;
 class CInode;
 class CDir;
 class Messenger;
 class MonClient;
+class Message;
 
 class MDBalancer {
 public:

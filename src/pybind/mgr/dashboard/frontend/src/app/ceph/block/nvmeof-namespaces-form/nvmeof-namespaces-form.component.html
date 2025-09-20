@@ -17,13 +17,12 @@
           </label>
           <div class="cd-col-form-input">
             <input *ngIf="edit"
-                   name="pool"
                    class="form-control"
                    type="text"
+                   id="pool-edit"
                    formControlName="pool">
             <select *ngIf="!edit"
-                    id="pool"
-                    name="pool"
+                    id="pool-create"
                     class="form-select"
                     formControlName="pool">
               <option *ngIf="rbdPools === null"
@@ -46,26 +45,25 @@
                   i18n>This field is required.</span>
           </div>
         </div>
-        <!-- Image Name -->
-        <div class="form-group row">
+        <!-- Namespace Count -->
+        <div *ngIf="!edit"
+             class="form-group row"
+             id="namespace-count">
           <label class="cd-col-form-label"
-                 for="image">
+                 for="nsCount">
             <span [ngClass]="{'required': !edit}"
-                  i18n>Image Name</span>
+                  i18n>Namespace Count</span>
           </label>
           <div class="cd-col-form-input">
-            <input name="image"
-                   class="form-control"
-                   type="text"
-                   formControlName="image">
-            <span class="invalid-feedback"
-                  *ngIf="nsForm.showError('image', formDir, 'required')">
-              <ng-container i18n>This field is required.</ng-container>
-            </span>
-            <span class="invalid-feedback"
-                  *ngIf="nsForm.showError('image', formDir, 'pattern')">
-              <ng-container i18n>'/' and '@' are not allowed.</ng-container>
-            </span>
+            <cds-number
+              formControlName="nsCount"
+              helperText="The number of namespaces to create"
+              i18n-helperText
+              [min]="MIN_NAMESPACE_CREATE"
+              [max]="MAX_NAMESPACE_CREATE"
+              [invalid]="nsForm.showError('nsCount', formDir, 'max') || nsForm.showError('nsCount', formDir, 'min') || nsForm.showError('nsCount', formDir, 'required')"
+              [invalidText]="nsForm.get('nsCount').hasError('required') ? requiredInvalidText: nsCountInvalidText"
+              size="sm"></cds-number>
           </div>
         </div>
         <!-- Image Size -->
@@ -80,10 +78,8 @@
               <input id="size"
                      class="form-control"
                      type="text"
-                     name="image_size"
                      formControlName="image_size">
               <select id="unit"
-                      name="unit"
                       class="form-input form-select"
                       formControlName="unit">
                 <option *ngFor="let u of units"
@@ -99,6 +95,7 @@
                 <ng-container i18n>This field is required</ng-container>
               </span>
               <span class="invalid-feedback"
+                    id="image-size-invalid"
                     *ngIf="edit && invalidSizeError">
                 <ng-container i18n>Enter a value above than previous. A block device image can be expanded but not reduced.</ng-container>
               </span>

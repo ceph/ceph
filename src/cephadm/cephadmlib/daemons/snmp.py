@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
-from ceph.cephadm.images import DEFAULT_SNMP_GATEWAY_IMAGE
+from ceph.cephadm.images import DefaultImages
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer
 from ..context import CephadmContext
@@ -24,7 +24,7 @@ class SNMPGateway(ContainerDaemonForm):
 
     daemon_type = 'snmp-gateway'
     SUPPORTED_VERSIONS = ['V2c', 'V3']
-    default_image = DEFAULT_SNMP_GATEWAY_IMAGE
+    default_image = DefaultImages.SNMP_GATEWAY.image_ref
     DEFAULT_PORT = 9464
     env_filename = 'snmp-gateway.conf'
 

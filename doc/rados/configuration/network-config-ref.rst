@@ -2,30 +2,42 @@
  Network Configuration Reference
 =================================
 
-Network configuration is critical for building a high performance  :term:`Ceph
-Storage Cluster`. The Ceph Storage Cluster does not perform  request routing or
-dispatching on behalf of the :term:`Ceph Client`. Instead, Ceph Clients make
-requests directly to Ceph OSD Daemons. Ceph OSD Daemons perform data replication
-on behalf of Ceph Clients, which means replication and other factors impose
-additional loads on Ceph Storage Cluster networks.
+Careful network infrastructure and configuration is critical for building a
+resilieht and high performance  :term:`Ceph Storage Cluster`. The Ceph Storage
+Cluster does not perform  request routing or dispatching on behalf of
+the :term:`Ceph Client`. Instead, Ceph clients make requests directly to Ceph
+OSD Daemons. Ceph OSDs perform data replication on behalf of Ceph clients,
+which imposes additional load on Ceph networks.
 
-Our Quick Start configurations provide a trivial Ceph configuration file that
-sets monitor IP addresses and daemon host names only. Unless you specify a
-cluster network, Ceph assumes a single "public" network. Ceph functions just
-fine with a public network only, but you may see significant performance
-improvement with a second "cluster" network in a large cluster.
+Our Quick Start configurations provide a minimal Ceph configuration file that
+includes Monitor IP addresses and daemon host names. Unless you specify a
+cluster network, Ceph assumes a single *public* network. Ceph functions just
+fine with only a public network in many deployments, especially with 25GE or
+faster network links.  Clusters with high client traffic may experience
+significant resilience and performance improvement by provisioning a second,
+private network.
 
-It is possible to run a Ceph Storage Cluster with two networks: a public
-(client, front-side) network and a cluster (private, replication, back-side)
-network.  However, this approach
-complicates network configuration (both hardware and software) and does not usually
-have a significant impact on overall performance.  For this reason, we recommend
-that for resilience and capacity dual-NIC systems either active/active bond
-these interfaces or implement a layer 3 multipath strategy with eg. FRR.
+It is possible to run a Ceph Storage Cluster with two networks: a *public*
+(*client*, *front-side*) network and a *cluster* (*private*, *replication*,
+*back-side*) network.  However, this approach complicates network configuration,
+costs, and management, and often may not have a significant impact on overall
+performance. If the network technology in use is slow by modern standards, say
+1GE or for dense or SSD nodes 10GE, you may wish to bond more than two links for
+sufficient throughput and/or implement a dedicated replication network.
 
-If, despite the complexity, one still wishes to use two networks, each
-:term:`Ceph Node` will need to have more than one network interface or VLAN. See `Hardware
-Recommendations - Networks`_ for additional details.
+We recommend that for resilience and capacity network interfaces are bonded
+and connect to redundant switches.  Bonding should be active/active,
+or implement a layer 3 multipath strategy with FRR or similar technlogy. When
+using LACP bonding it is important to consult your organization's network team
+to determine the proper transmit hash policy Usually this is 2+3 or 3+4. The
+wrong choice can result in imbalanced network link utilization with a fraction
+of the available throughput.  Network observability tools including ``bmon``
+and ``iftop`` and ``netstat`` are invaluable when ensuring that bond member
+links are well-utilized.
+
+If, despite the complexity, one still wishes to provision a dedicated replication
+network for a Ceph cluster, each :term:`Ceph Node` will need to have more than
+one network interface or VLAN. See `Hardware Recommendations - Networks`_ for additional details.
 
 .. ditaa::
                                +-------------+
@@ -34,23 +46,23 @@ Recommendations - Networks`_ for additional details.
                                     |  ^
                             Request |  : Response
                                     v  |
- /----------------------------------*--*-------------------------------------\
- |                              Public Network                               |
- \---*--*------------*--*-------------*--*------------*--*------------*--*---/
-     ^  ^            ^  ^             ^  ^            ^  ^            ^  ^
-     |  |            |  |             |  |            |  |            |  |
-     |  :            |  :             |  :            |  :            |  :
-     v  v            v  v             v  v            v  v            v  v
- +---*--*---+    +---*--*---+     +---*--*---+    +---*--*---+    +---*--*---+
- | Ceph MON |    | Ceph MDS |     | Ceph OSD |    | Ceph OSD |    | Ceph OSD |
- +----------+    +----------+     +---*--*---+    +---*--*---+    +---*--*---+
-                                      ^  ^            ^  ^            ^  ^
-     The cluster network relieves     |  |            |  |            |  |
-     OSD replication and heartbeat    |  :            |  :            |  :
-     traffic from the public network. v  v            v  v            v  v
- /------------------------------------*--*------------*--*------------*--*---\
- |   cCCC                      Cluster Network                               |
- \---------------------------------------------------------------------------/
+ /----------------------------------*--*-------------------------------------------\
+ |                              Public Network                                     |
+ \-----*--*--------------*--*-------------*--*------------*--*------------*--*-----/
+       ^  ^              ^  ^             ^  ^            ^  ^            ^  ^
+       |  |              |  |             |  |            |  |            |  |
+       |  :              |  :             |  :            |  :            |  :
+       v  v              v  v             v  v            v  v            v  v
+ +-----*--*-----+    +---*--*---+     +---*--*---+    +---*--*---+    +---*--*---+
+ | Ceph Monitor |    | Ceph MDS |     | Ceph OSD |    | Ceph OSD |    | Ceph OSD |
+ +--------------+    +----------+     +---*--*---+    +---*--*---+    +---*--*---+
+                                          ^  ^            ^  ^            ^  ^
+     The cluster network offloads         |  |            |  |            |  |
+     OSD replication and heartbeat        |  :            |  :            |  :
+     traffic from the public network      v  v            v  v            v  v
+ /----------------------------------------*--*------------*--*------------*--*----\
+ |   cCCC                      Cluster Network                                    |
+ \--------------------------------------------------------------------------------/
 
 
 IP Tables
@@ -72,6 +84,12 @@ except SSH from all network interfaces. For example::
 You will need to delete these rules on both your public and cluster networks
 initially, and replace them with appropriate rules when you are ready to 
 harden the ports on your Ceph Nodes.
+
+.. note:: Docker and Podman containers may experience disruption when rules
+	  are adjusted or reloaded.  You may find it best to update rules on
+	  cluster nodes by serially setting maintenance mode, stopping
+	  container services, applying rule changes, then starting container
+	  services and exiting maintenance mode.
 
 
 Monitor IP Tables

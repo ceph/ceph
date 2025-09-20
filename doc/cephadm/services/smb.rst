@@ -103,6 +103,30 @@ custom_dns
     Active Directory even if the Ceph host nodes are not tied into the Active
     Directory DNS domain(s).
 
+custom_ports
+    A mapping of service names to port numbers that will override the
+    default ports used for those services. The service names are:
+    ``smb``, ``smbmetrics``, and ``ctdb``. If a service name is not
+    present in the mapping the default port will be used.
+    For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
+    ports used by smb for client access and the metrics exporter, but
+    not change the port used by the CTDB clustering daemon.
+
+bind_addrs
+    A list of objects indicating what IP address or IP network the
+    SMB and related services may bind to. The fields described for these
+    objects are mutually exclusive, but at least one field is required.
+    Fields:
+
+    address
+        Optional. A single IP address represented as a string. For example,
+        ``192.168.7.50``.
+    network
+        Optional. A single IP network represented as a string. A network
+        can be used to specify a range of many IP addresses. The network
+        string always includes a "/" character before a prefix length.
+        For example, ``192.168.7.0/24``.
+
 include_ceph_users
     A list of cephx user (aka entity) names that the Samba Containers may use.
     The cephx keys for each user in the list will automatically be added to

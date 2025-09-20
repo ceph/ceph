@@ -14,8 +14,13 @@
 
 #include "Mutation.h"
 #include "ScatterLock.h"
+#include "SimpleLock.h"
+#include "BatchOp.h"
+#include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "messages/MClientRequest.h"
+#include "messages/MMDSPeerRequest.h"
 
 using namespace std;
 
@@ -101,6 +106,16 @@ bool MutationImpl::is_wrlocked(SimpleLock *lock) const {
   if (lock_cache)
     return static_cast<const MutationImpl*>(lock_cache)->is_wrlocked(lock);
   return false;
+}
+
+void MutationImpl::LockOp::print(std::ostream& out) const {
+  CachedStackStringStream css;
+  *css << "0x" << std::hex << flags;
+  out << "LockOp(l=" << *lock << ",f=" << css->strv();
+  if (wrlock_target != MDS_RANK_NONE) {
+    out << ",wt=" << wrlock_target;
+  }
+  out << ")";
 }
 
 void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
@@ -274,6 +289,15 @@ void MutationImpl::_dump_op_descriptor(ostream& stream) const
 }
 
 // MDRequestImpl
+
+MDRequestImpl::Params::Params() = default;
+MDRequestImpl::Params::~Params() noexcept = default;
+
+MDRequestImpl::MDRequestImpl(const Params* params, OpTracker *tracker) :
+  MutationImpl(tracker, params->initiated,
+	       params->reqid, params->attempt, params->peer_to),
+  item_session_request(this), client_request(params->client_req),
+  internal_op(params->internal_op) {}
 
 MDRequestImpl::~MDRequestImpl()
 {

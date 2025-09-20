@@ -77,6 +77,11 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
     return -EINVAL;
   }
   string secret_s = cct->_conf->rgw_sts_key;
+  if (secret_s.empty()) {
+    ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
+    return -EINVAL;
+  }
+
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
@@ -124,7 +129,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   if (identity) {
     token.acct_name = identity->get_acct_name();
     token.perm_mask = identity->get_perm_mask();
-    token.is_admin = identity->is_admin_of(token.user);
+    token.is_admin = identity->is_admin();
     token.acct_type = identity->get_identity_type();
   } else {
     token.acct_name = {};

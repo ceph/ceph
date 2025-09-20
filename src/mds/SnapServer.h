@@ -15,19 +15,24 @@
 #ifndef CEPH_SNAPSERVER_H
 #define CEPH_SNAPSERVER_H
 
-#include "MDSTableServer.h"
-#include "snap.h"
+#include <list>
+#include <map>
+#include <set>
 
-#include "messages/MRemoveSnaps.h"
+#include "MDSTableServer.h"
+#include "include/encoding.h"
+#include "include/object.h" // for struct snapid_t
 
 class MDSRank;
+class MRemoveSnaps;
 class MonClient;
+struct SnapInfo;
 
 class SnapServer : public MDSTableServer {
 public:
-  SnapServer(MDSRank *m, MonClient *monc)
-    : MDSTableServer(m, TABLE_SNAP), mon_client(monc) {}
-  SnapServer() : MDSTableServer(NULL, TABLE_SNAP) {}
+  SnapServer(MDSRank *m, MonClient *monc);
+  SnapServer();
+  ~SnapServer() noexcept;
 
   void handle_remove_snaps(const cref_t<MRemoveSnaps> &m);
 
@@ -53,9 +58,7 @@ public:
 
   void check_osd_map(bool force);
 
-  bool can_allow_multimds_snaps() const {
-    return snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
-  }
+  bool can_allow_multimds_snaps() const;
 
   void encode(bufferlist& bl) const {
     encode_server_state(bl);
@@ -65,55 +68,14 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<SnapServer*>& ls);
+  static std::list<SnapServer> generate_test_instances();
 
   bool force_update(snapid_t last, snapid_t v2_since,
 		    std::map<snapid_t, SnapInfo>& _snaps);
 
 protected:
-  void encode_server_state(bufferlist& bl) const override {
-    ENCODE_START(5, 3, bl);
-    encode(last_snap, bl);
-    encode(snaps, bl);
-    encode(need_to_purge, bl);
-    encode(pending_update, bl);
-    encode(pending_destroy, bl);
-    encode(pending_noop, bl);
-    encode(last_created, bl);
-    encode(last_destroyed, bl);
-    encode(snaprealm_v2_since, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode_server_state(bufferlist::const_iterator& bl) override {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    decode(last_snap, bl);
-    decode(snaps, bl);
-    decode(need_to_purge, bl);
-    decode(pending_update, bl);
-    if (struct_v >= 2)
-      decode(pending_destroy, bl);
-    else {
-      std::map<version_t, snapid_t> t;
-      decode(t, bl);
-      for (auto& [ver, snapid] : t) {
-	pending_destroy[ver].first = snapid;
-      }
-    }
-    decode(pending_noop, bl);
-    if (struct_v >= 4) {
-      decode(last_created, bl);
-      decode(last_destroyed, bl);
-    } else {
-      last_created = last_snap;
-      last_destroyed = last_snap;
-    }
-    if (struct_v >= 5)
-      decode(snaprealm_v2_since, bl);
-    else
-      snaprealm_v2_since = CEPH_NOSNAP;
-
-    DECODE_FINISH(bl);
-  }
+  void encode_server_state(bufferlist& bl) const override;
+  void decode_server_state(bufferlist::const_iterator& bl) override;
 
   // server bits
   void _prepare(const bufferlist &bl, uint64_t reqid, mds_rank_t bymds, bufferlist &out) override;

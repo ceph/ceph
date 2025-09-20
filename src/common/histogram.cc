@@ -39,14 +39,16 @@ void pow2_hist_t::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void pow2_hist_t::generate_test_instances(std::list<pow2_hist_t*>& ls)
+std::list<pow2_hist_t> pow2_hist_t::generate_test_instances()
 {
-  ls.push_back(new pow2_hist_t);
-  ls.push_back(new pow2_hist_t);
-  ls.back()->h.push_back(1);
-  ls.back()->h.push_back(3);
-  ls.back()->h.push_back(0);
-  ls.back()->h.push_back(2);
+  std::list<pow2_hist_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().h.push_back(1);
+  ls.back().h.push_back(3);
+  ls.back().h.push_back(0);
+  ls.back().h.push_back(2);
+  return ls;
 }
 
 void pow2_hist_t::decay(int bits)

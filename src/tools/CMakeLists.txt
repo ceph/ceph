@@ -5,7 +5,7 @@ set(rados_srcs
   rados/PoolDump.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
-  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc)
 if(WIN32)
   list(APPEND rados_srcs ../common/win32/code_page.rc)
 endif()
@@ -45,10 +45,6 @@ install(PROGRAMS
   ceph-monstore-update-crush.sh
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
 endif(WITH_TESTS)
-
-add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
-target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
-install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
 add_executable(ceph-monstore-tool
   ceph_monstore_tool.cc

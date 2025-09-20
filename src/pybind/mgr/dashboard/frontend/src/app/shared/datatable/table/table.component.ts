@@ -89,6 +89,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
 
+  @Input()
+  headerTitle: string;
+  @Input()
+  headerDescription: string;
   // This is the array with the items to be shown.
   @Input()
   data: any[];
@@ -200,6 +204,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    */
   @Input()
   theme: string;
+
+  /**
+   * Use to make the expandable row scrollable with max-height
+   */
+  @Input()
+  scrollable: boolean = true;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -372,6 +382,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       return filter.value !== undefined;
     });
   }
+  private previousRows = new Map<string | number, TableItem[]>();
 
   constructor(
     // private ngZone: NgZone,
@@ -438,43 +449,59 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       .subscribe({
         next: (values) => {
           const datasets: TableItem[][] = values.map((val) => {
-            return this.tableColumns.map((column: CdTableColumn, colIndex: number) => {
+            const rowId = val?.id ?? val?.[this.identifier];
+            const prevRow = this.previousRows.get(rowId);
+
+            const newRow: TableItem[] = this.tableColumns.map((column, colIndex) => {
               const rowValue = _.get(val, column?.prop);
 
               const pipeTransform = () =>
                 column?.prop ? column.pipe.transform(rowValue) : column.pipe.transform(val);
 
-              let tableItem = new TableItem({
-                selected: val,
-                data: {
-                  value: column.pipe ? pipeTransform() : rowValue,
-                  row: val,
-                  column: { ...column, ...val }
-                }
-              });
+              let existingCell: TableItem | undefined = prevRow?.[colIndex];
+              const oldValue = existingCell?.data?.value;
 
-              if (colIndex === 0) {
-                tableItem.data = { ...tableItem.data, row: val };
+              const newValue = column.pipe ? pipeTransform() : rowValue;
 
-                if (this.hasDetails) {
-                  tableItem.expandedData = val;
-                  tableItem.expandedTemplate = this.rowDetailTpl;
+              if (existingCell && !_.isEqual(oldValue, newValue)) {
+                // here i am updating value in place
+                existingCell.data.value = newValue;
+                existingCell.data.row = val;
+                existingCell.data.column = { ...column, ...val };
+
+                if (colIndex === 0 && this.hasDetails) {
+                  existingCell.expandedData = val;
+                  existingCell.expandedTemplate = this.rowDetailTpl;
                 }
               }
 
-              if (column.cellClass && _.isFunction(column.cellClass)) {
-                this.model.header[colIndex].className = column.cellClass({
-                  row: val,
-                  column,
-                  value: rowValue
-                });
-              }
-
-              tableItem.template = column.cellTemplate || this.defaultValueTpl;
-              return tableItem;
+              return (
+                existingCell ??
+                new TableItem({
+                  selected: val,
+                  data: {
+                    value: newValue,
+                    row: val,
+                    column: { ...column, ...val }
+                  },
+                  template: column.cellTemplate || this.defaultValueTpl,
+                  ...(colIndex === 0 && this.hasDetails
+                    ? { expandedData: val, expandedTemplate: this.rowDetailTpl }
+                    : {})
+                })
+              );
             });
+
+            this.previousRows.set(rowId, newRow);
+            return newRow;
           });
-          if (!_.isEqual(this.model.data, datasets)) {
+          // Only update  the data if actual row content changed
+          const prevRaw = this.model.data.map((row) => row?.[0]?.data?.row);
+          const newRaw = values;
+
+          const dataChanged = !_.isEqual(prevRaw, newRaw);
+
+          if (dataChanged || this.model.data.length !== datasets.length) {
             this.model.data = datasets;
           }
         }
@@ -558,9 +585,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // this method was triggered by ngOnChanges().
     if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
-      const loadingSubscription = this.fetchData.subscribe(() => {
-        this.loadingIndicator = false;
-        this.cdRef.detectChanges();
+      const loadingSubscription = this.fetchData.subscribe({
+        next: () => this.cdRef.detectChanges(),
+        complete: () => (this.loadingIndicator = false)
       });
       this._subscriptions.add(loadingSubscription);
     }
@@ -897,7 +924,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     if (this.limit === 0) {
       this.model.currentPage = 1;
-      this.model.pageLength = filteredData.length;
+      this.model.pageLength = filteredData.length || 1;
       this._dataset.next(filteredData);
       return;
     }
@@ -974,15 +1001,23 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       }
     });
-    if (newSelected.size === 0) return;
+
     const newSelectedArray = Array.from(newSelected.values());
 
-    newSelectedArray?.forEach?.((selection: any) => {
+    if (newSelectedArray.length === 0) {
+      this.selection.selected = [];
+      this.updateSelection.emit(_.clone(this.selection));
+      return;
+    }
+
+    newSelectedArray.forEach((selection: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
           _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
       );
-      rowIndex > -1 && this.model.selectRow(rowIndex, true);
+      if (rowIndex > -1) {
+        this.model.selectRow(rowIndex, true);
+      }
     });
 
     if (
@@ -994,11 +1029,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     this.selection.selected = newSelectedArray;
 
-    if (this.updateSelectionOnRefresh === 'never') {
-      return;
+    if (this.updateSelectionOnRefresh !== 'never') {
+      this.updateSelection.emit(_.clone(this.selection));
     }
-
-    this.updateSelection.emit(_.clone(this.selection));
   }
 
   updateExpanded() {
@@ -1019,7 +1052,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   _toggleSelection(rowIndex: number, isSelected: boolean) {
     const selectedData = _.get(this.model.data?.[rowIndex], [0, 'selected']);
     if (isSelected) {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const alreadySelected = this.selection.selected.some(
+        (s) => s[this.identifier] === selectedData[this.identifier]
+      );
+      if (!alreadySelected) {
+        this.selection.selected = [...this.selection.selected, selectedData];
+      }
     } else {
       this.selection.selected = this.selection.selected.filter(
         (s) => s[this.identifier] !== selectedData[this.identifier]
@@ -1028,14 +1066,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
     if (this.selectionType === 'single') {
       this.model.selectAll(false);
-      this.selection.selected = [selectedData];
+      this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
+      this.model.selectRow(selectedRowIndex, true);
     } else {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const isSelected = this.model.rowsSelected[selectedRowIndex] ?? false;
+      this._toggleSelection(selectedRowIndex, !isSelected);
+      this.model.selectRow(selectedRowIndex, !isSelected);
     }
-    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 

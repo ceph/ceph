@@ -12,7 +12,6 @@
  * 
  */
 
-#include <sstream>
 #include "Paxos.h"
 #include "Monitor.h"
 #include "messages/MMonPaxos.h"
@@ -23,6 +22,12 @@
 #include "include/stringify.h"
 #include "common/Timer.h"
 #include "messages/PaxosServiceMessage.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 using std::string;
 using std::unique_lock;
@@ -868,7 +873,7 @@ void Paxos::commit_start()
   logger->inc(l_paxos_commit);
   logger->inc(l_paxos_commit_keys, t->get_keys());
   logger->inc(l_paxos_commit_bytes, t->get_bytes());
-  commit_start_stamp = ceph_clock_now();
+  commit_start_stamp = ceph::coarse_mono_clock::now();
 
   get_store()->queue_transaction(t, new C_Committed(this));
 
@@ -890,8 +895,8 @@ void Paxos::commit_start()
 void Paxos::commit_finish()
 {
   dout(20) << __func__ << " " << (last_committed+1) << dendl;
-  utime_t end = ceph_clock_now();
-  logger->tinc(l_paxos_commit_latency, end - commit_start_stamp);
+  auto end = ceph::coarse_mono_clock::now();
+  logger->tinc(l_paxos_commit_latency, to_timespan(end - commit_start_stamp));
 
   ceph_assert(g_conf()->paxos_kill_at != 8);
 
@@ -974,7 +979,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
 void Paxos::extend_lease()
 {
   ceph_assert(mon.is_leader());
-  //assert(is_active());
+  //ceph_assert(is_active());
 
   lease_expire = ceph::real_clock::now();
   lease_expire += ceph::make_timespan(g_conf()->mon_lease);

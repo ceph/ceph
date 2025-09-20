@@ -7,6 +7,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ReactiveFormsModule } from '@angular/forms';
 import { ToastrModule } from 'ngx-toastr';
 import { RouterTestingModule } from '@angular/router/testing';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('RgwMultisiteWizardComponent', () => {
   let component: RgwMultisiteWizardComponent;
@@ -22,6 +23,7 @@ describe('RgwMultisiteWizardComponent', () => {
         ToastrModule.forRoot(),
         RouterTestingModule
       ],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: [NgbActiveModal]
     }).compileComponents();
 

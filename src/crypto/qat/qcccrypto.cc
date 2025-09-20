@@ -18,7 +18,7 @@
 
 // -----------------------------------------------------------------------------
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_crypto
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
 
@@ -239,7 +239,10 @@ bool QccCrypto::init(const size_t chunk_size, const size_t max_requests) {
 
       stat = cpaCySymDpRegCbFunc(qcc_inst->cy_inst_handles[iter], symDpCallback);
       if (stat != CPA_STATUS_SUCCESS) {
-        dout(1) << "Unable to register callback function for instance " << iter << " with status = " << stat << dendl;
+        dout(1) << "QAT init error, Unable to register callback function for instance " << iter << " with status = " << stat << dendl;
+        if (stat == CPA_STATUS_FAIL) {
+          dout(1) << "QAT init: check that 'ServicesEnabled' in '/etc/sysconfig/qat' is configured with 'sym'" << dendl;
+        }
         return false;
       }
     } else {
@@ -324,7 +327,7 @@ bool QccCrypto::perform_op_batch(unsigned char* out, const unsigned char* in, si
 
   if (!is_init)
   {
-    dout(10) << "QAT not initialized in this instance or init failed" << dendl;
+    dout(1) << "QAT not initialized in this instance or init failed" << dendl;
     return is_init;
   }
   CpaStatus status = CPA_STATUS_SUCCESS;

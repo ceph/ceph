@@ -14,9 +14,9 @@
 
 #include "SnapServer.h"
 #include "MDSRank.h"
+#include "snap.h"
 #include "osd/OSDMap.h"
 #include "osdc/Objecter.h"
-#include "mon/MonClient.h"
 
 #include "include/types.h"
 #include "messages/MMDSTableRequest.h"
@@ -25,6 +25,7 @@
 #include "msg/Messenger.h"
 
 #include "common/config.h"
+#include "common/debug.h"
 #include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
@@ -33,6 +34,12 @@
 #define dout_prefix *_dout << "mds." << rank << ".snap "
 
 using namespace std;
+
+SnapServer::SnapServer(MDSRank *m, MonClient *monc)
+  : MDSTableServer(m, TABLE_SNAP), mon_client(monc) {}
+SnapServer::SnapServer() : MDSTableServer(NULL, TABLE_SNAP) {}
+
+SnapServer::~SnapServer() noexcept = default;
 
 void SnapServer::reset_state()
 {
@@ -69,6 +76,50 @@ void SnapServer::reset_state()
   MDSTableServer::reset_state();
 }
 
+void SnapServer::encode_server_state(bufferlist& bl) const {
+  ENCODE_START(5, 3, bl);
+  encode(last_snap, bl);
+  encode(snaps, bl);
+  encode(need_to_purge, bl);
+  encode(pending_update, bl);
+  encode(pending_destroy, bl);
+  encode(pending_noop, bl);
+  encode(last_created, bl);
+  encode(last_destroyed, bl);
+  encode(snaprealm_v2_since, bl);
+  ENCODE_FINISH(bl);
+}
+
+void SnapServer::decode_server_state(bufferlist::const_iterator& bl) {
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+  decode(last_snap, bl);
+  decode(snaps, bl);
+  decode(need_to_purge, bl);
+  decode(pending_update, bl);
+  if (struct_v >= 2)
+    decode(pending_destroy, bl);
+  else {
+    std::map<version_t, snapid_t> t;
+    decode(t, bl);
+    for (auto& [ver, snapid] : t) {
+      pending_destroy[ver].first = snapid;
+    }
+  }
+  decode(pending_noop, bl);
+  if (struct_v >= 4) {
+    decode(last_created, bl);
+    decode(last_destroyed, bl);
+  } else {
+    last_created = last_snap;
+    last_destroyed = last_snap;
+  }
+  if (struct_v >= 5)
+    decode(snaprealm_v2_since, bl);
+  else
+    snaprealm_v2_since = CEPH_NOSNAP;
+
+  DECODE_FINISH(bl);
+}
 
 // SERVER
 
@@ -364,6 +415,10 @@ void SnapServer::check_osd_map(bool force)
   last_checked_osdmap = version;
 }
 
+bool SnapServer::can_allow_multimds_snaps() const {
+  return snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
+}
+
 void SnapServer::handle_remove_snaps(const cref_t<MRemoveSnaps> &m)
 {
   dout(10) << __func__ << " " << *m << dendl;
@@ -453,28 +508,28 @@ void SnapServer::dump(Formatter *f) const
   f->close_section();
 }
 
-void SnapServer::generate_test_instances(std::list<SnapServer*>& ls)
+std::list<SnapServer> SnapServer::generate_test_instances()
 {
-  list<SnapInfo*> snapinfo_instances;
-  SnapInfo::generate_test_instances(snapinfo_instances);
-  SnapInfo populated_snapinfo = *(snapinfo_instances.back());
-  for (auto& info : snapinfo_instances) {
-    delete info;
-    info = nullptr;
-  }
+  std::list<SnapServer> ls;
+  list<SnapInfo> snapinfo_instances = SnapInfo::generate_test_instances();
 
-  SnapServer *blank = new SnapServer();
-  ls.push_back(blank);
-  SnapServer *populated = new SnapServer();
-  populated->last_snap = 123;
-  populated->snaps[456] = populated_snapinfo;
-  populated->need_to_purge[2].insert(012);
-  populated->pending_update[234] = populated_snapinfo;
-  populated->pending_destroy[345].first = 567;
-  populated->pending_destroy[345].second = 768;
-  populated->pending_noop.insert(890);
+  SnapInfo populated_snapinfo = snapinfo_instances.back();
 
-  ls.push_back(populated);
+  SnapServer blank;
+  ls.push_back(std::move(blank));
+
+  SnapServer populated;
+  populated.last_snap = 123;
+  populated.snaps[456] = populated_snapinfo;
+  populated.need_to_purge[2].insert(012);
+  populated.pending_update[234] = populated_snapinfo;
+  populated.pending_destroy[345].first = 567;
+  populated.pending_destroy[345].second = 768;
+  populated.pending_noop.insert(890);
+
+  ls.push_back(std::move(populated));
+
+  return ls;
 }
 
 bool SnapServer::force_update(snapid_t last, snapid_t v2_since,

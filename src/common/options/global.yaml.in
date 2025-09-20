@@ -6,7 +6,7 @@ options:
   type: str
   level: basic
   desc: local hostname
-  long_desc: if blank, ceph assumes the short hostname (hostname -s)
+  long_desc: If blank, Ceph uses the short hostname (hostname -s)
   tags:
   - network
   services:
@@ -32,7 +32,7 @@ options:
 - name: public_addr
   type: addr
   level: basic
-  desc: public-facing address to bind to
+  desc: Public-facing address to which to bind
   fmt_desc: The IP address for the public (front-side) network.
    Set for each daemon.
   services:
@@ -46,7 +46,7 @@ options:
 - name: public_addrv
   type: addrvec
   level: basic
-  desc: public-facing address to bind to
+  desc: Public-facing addresses to which services are to bind
   services:
   - mon
   - mds
@@ -62,7 +62,7 @@ options:
   - mon
   flags:
   - startup
-  fmt_desc: In some dynamic deployments the Ceph MON daemon might bind
+  fmt_desc: In some dynamic deployments Ceph Monitor daemons might bind
    to an IP address locally that is different from the ``public_addr``
    advertised to other peers in the network. The environment must ensure
    that routing rules are set correctly. If ``public_bind_addr`` is set
@@ -73,7 +73,7 @@ options:
 - name: cluster_addr
   type: addr
   level: basic
-  desc: cluster-facing address to bind to
+  desc: Cluster-facing address to bind to
   fmt_desc: The IP address for the cluster (back-side) network.
    Set for each daemon.
   tags:
@@ -162,7 +162,7 @@ options:
 - name: mon_host
   type: str
   level: basic
-  desc: list of hosts or addresses to search for a monitor
+  desc: List of hosts or addresses to search for a monitor
   long_desc: This is a list of IP addresses or hostnames that are separated by commas, whitespace, or semicolons. Hostnames are resolved via DNS. All A and AAAA records are included in the search list.
   services:
   - common
@@ -172,8 +172,8 @@ options:
 - name: mon_host_override
   type: str
   level: advanced
-  desc: monitor(s) to use overriding the MonMap
-  fmt_desc: This is the list of monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
+  desc: Monitor(s) to use overriding the MonMap
+  fmt_desc: This is the list of Monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
   services:
   - common
   flags:
@@ -182,8 +182,8 @@ options:
 - name: mon_dns_srv_name
   type: str
   level: advanced
-  desc: name of DNS SRV record to check for monitor addresses
-  fmt_desc: the service name used querying the DNS for the monitor hosts/addresses
+  desc: Name of DNS SRV record to check for monitor addresses
+  fmt_desc: The service name used querying the DNS for Monitor hosts / addresses
   default: ceph-mon
   tags:
   - network
@@ -196,15 +196,15 @@ options:
 - name: container_image
   type: str
   level: basic
-  desc: container image (used by cephadm orchestrator)
+  desc: Container image for core daemons, used by the cephadm orchestrator
   default: docker.io/ceph/daemon-base:latest-master-devel
   flags:
   - startup
 - name: no_config_file
   type: bool
   level: advanced
-  desc: signal that we don't require a config file to be present
-  long_desc: When specified, we won't be looking for a configuration file, and will
+  desc: Signal that we don't require a config file to be present
+  long_desc: When specified, we won't look for a configuration file, and will
     instead expect that whatever options or values are required for us to work will
     be passed as arguments.
   default: false
@@ -218,7 +218,7 @@ options:
 - name: lockdep
   type: bool
   level: dev
-  desc: enable lockdep lock dependency analyzer
+  desc: Enable the lockdep lock dependency analyzer
   default: false
   services:
   - common
@@ -229,7 +229,7 @@ options:
 - name: lockdep_force_backtrace
   type: bool
   level: dev
-  desc: always gather current backtrace at every lock
+  desc: Gather a current backtrace at every lock
   default: false
   services:
   - common
@@ -241,7 +241,7 @@ options:
 - name: run_dir
   type: str
   level: advanced
-  desc: path for the 'run' directory for storing pid and socket files
+  desc: Path for the 'run' directory for storing pid and socket files
   default: /var/run/ceph
   services:
   - common
@@ -253,7 +253,7 @@ options:
 - name: tmp_dir
   type: str
   level: advanced
-  desc: path for the 'tmp' directory
+  desc: Path for the 'tmp' directory
   default: /tmp
   services:
   - common
@@ -265,7 +265,7 @@ options:
   type: str
   level: advanced
   desc: Template for temporary files created by daemons for ceph tell commands
-  long_desc: The template file name prefix for temporary files. For example, temporary files may be created by `ceph tell` commands using the --daemon-output-file switch.
+  long_desc: The template file name prefix for temporary files. For example, temporary files may be created by 'ceph tell' commands using the --daemon-output-file switch.
   daemon_default: $tmp_dir/$cluster-$name.XXXXXX
   services:
   - osd
@@ -276,7 +276,7 @@ options:
 - name: admin_socket
   type: str
   level: advanced
-  desc: path for the runtime control socket file, used by the 'ceph daemon' command
+  desc: Path for the runtime control socket file, used by the 'ceph daemon' command
   fmt_desc: The socket for executing administrative commands on a daemon,
     irrespective of whether Ceph Monitors have established a quorum.
   daemon_default: $run_dir/$cluster-$name.asok
@@ -289,7 +289,7 @@ options:
 - name: admin_socket_mode
   type: str
   level: advanced
-  desc: file mode to set for the admin socket file, e.g, '0755'
+  desc: File mode to set for the admin socket, e.g, '0755'
   services:
   - common
   see_also:
@@ -300,7 +300,7 @@ options:
 - name: daemonize
   type: bool
   level: advanced
-  desc: whether to daemonize (background) after startup
+  desc: Whether to daemonize (background) after startup
   default: false
   daemon_default: true
   tags:
@@ -321,7 +321,7 @@ options:
 - name: setuser
   type: str
   level: advanced
-  desc: uid or user name to switch to on startup
+  desc: UID or user name to switch to on startup
   long_desc: This is normally specified by the systemd unit file.
   tags:
   - service
@@ -338,7 +338,7 @@ options:
 - name: setgroup
   type: str
   level: advanced
-  desc: gid or group name to switch to on startup
+  desc: GID or group name to switch to on startup
   long_desc: This is normally specified by the systemd unit file.
   tags:
   - service
@@ -355,13 +355,13 @@ options:
 - name: setuser_match_path
   type: str
   level: advanced
-  desc: if set, setuser/setgroup is condition on this path matching ownership
+  desc: If set, setuser/setgroup is conditional on this path matching ownership
   long_desc: If setuser or setgroup are specified, and this option is non-empty, then
     the uid/gid of the daemon will only be changed if the file or directory specified
     by this option has a matching uid and/or gid.  This exists primarily to allow
-    switching to user ceph for OSDs to be conditional on whether the osd data contents
+    switching to the 'ceph' user for OSDs to be conditional on whether the OSD data contents
     have also been chowned after an upgrade.  This is normally specified by the systemd
-    unit file.
+    unit file and is a historical artifact of changes made in the Jewel release.
   tags:
   - service
   services:
@@ -379,8 +379,8 @@ options:
   type: str
   level: advanced
   desc: path to write a pid file (if any)
-  fmt_desc: The file in which the mon, osd or mds will write its
-    PID.  For instance, ``/var/run/$cluster/$type.$id.pid``
+  fmt_desc: The file in which Monitors, OSDs, and MDSes will write their
+    PIDs.  For instance, ``/var/run/$cluster/$type.$id.pid``
     will create /var/run/ceph/mon.a.pid for the ``mon`` with
     id ``a`` running in the ``ceph`` cluster. The ``pid
     file`` is removed when the daemon stops gracefully. If
@@ -399,7 +399,7 @@ options:
 - name: chdir
   type: str
   level: advanced
-  desc: path to chdir(2) to after daemonizing
+  desc: Path to chdir(2) to after daemonizing
   fmt_desc: The directory Ceph daemons change to once they are
     up and running. Default ``/`` directory recommended.
   tags:
@@ -418,7 +418,7 @@ options:
 - name: fatal_signal_handlers
   type: bool
   level: advanced
-  desc: whether to register signal handlers for SIGABRT etc that dump a stack trace
+  desc: Whether to register signal handlers for SIGABRT etc that dump a stack trace
   long_desc: This is normally true for daemons and values for libraries.
   fmt_desc: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL,
     FPE, XCPU, XFSZ, SYS signals to generate a useful log message
@@ -430,6 +430,14 @@ options:
   - mgr
   - osd
   - mds
+  flags:
+  - startup
+  with_legacy: true
+- name: breakpad
+  type: bool
+  level: advanced
+  desc: setup breakpad crash handler
+  default: false
   flags:
   - startup
   with_legacy: true
@@ -454,7 +462,7 @@ options:
 - name: erasure_code_dir
   type: str
   level: advanced
-  desc: directory where erasure-code plugins can be found
+  desc: Directory where erasure-code plugins can be found
   default: @CEPH_INSTALL_FULL_PKGLIBDIR@/erasure-code
   services:
   - mon
@@ -479,8 +487,8 @@ options:
 - name: log_max_new
   type: int
   level: advanced
-  desc: max unwritten log entries to allow before waiting to flush to the log
-  fmt_desc: The maximum number of new log files.
+  desc: Max unwritten log entries to allow before flushing
+  fmt_desc: The maximum number of new log entries.
   default: 1000
   see_also:
   - log_max_recent
@@ -489,7 +497,7 @@ options:
 - name: log_max_recent
   type: int
   level: advanced
-  desc: recent log entries to keep in memory to dump in the event of a crash
+  desc: Recent log entries to keep in memory to dump in the event of a crash
   long_desc: The purpose of this option is to log at a higher debug level only to
     the in-memory buffer, and write out the detailed log messages only if there is
     a crash.  Only log entries below the lower log level will be written unconditionally
@@ -538,28 +546,28 @@ options:
 - name: log_to_syslog
   type: bool
   level: basic
-  desc: send log lines to syslog facility
+  desc: Send log lines to syslog facility
   fmt_desc: Determines if logging messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: err_to_syslog
   type: bool
   level: basic
-  desc: send critical error log lines to syslog facility
+  desc: Send critical error log lines to syslog facility
   fmt_desc: Determines if error messages should appear in ``syslog``.
   default: false
   with_legacy: true
 - name: log_flush_on_exit
   type: bool
   level: advanced
-  desc: set a process exit handler to ensure the log is flushed on exit
+  desc: Set a process exit handler to ensure the log is flushed on exit
   fmt_desc: Determines if Ceph should flush the log files after exit.
   default: false
   with_legacy: true
 - name: log_stop_at_utilization
   type: float
   level: basic
-  desc: stop writing to the log file when device utilization reaches this ratio
+  desc: Stop writing to the log file when device utilization reaches this ratio
   default: 0.97
   see_also:
   - log_file
@@ -569,7 +577,7 @@ options:
 - name: log_to_graylog
   type: bool
   level: basic
-  desc: send log lines to remote graylog server
+  desc: Send log lines to remote Graylog server
   default: false
   see_also:
   - err_to_graylog
@@ -579,7 +587,7 @@ options:
 - name: err_to_graylog
   type: bool
   level: basic
-  desc: send critical error log lines to remote graylog server
+  desc: Send critical error log lines to remote Graylog server
   default: false
   see_also:
   - log_to_graylog
@@ -589,7 +597,7 @@ options:
 - name: log_graylog_host
   type: str
   level: basic
-  desc: address or hostname of graylog server to log to
+  desc: Address or hostname of Graylog server to log to
   default: 127.0.0.1
   see_also:
   - log_to_graylog
@@ -599,7 +607,7 @@ options:
 - name: log_graylog_port
   type: int
   level: basic
-  desc: port number for the remote graylog server
+  desc: TCP port number for the remote Graylog server
   default: 12201
   see_also:
   - log_graylog_host
@@ -607,21 +615,21 @@ options:
 - name: log_to_journald
   type: bool
   level: basic
-  desc: send log lines to journald
+  desc: Send log lines to journald
   default: false
   see_also:
   - err_to_journald
 - name: err_to_journald
   type: bool
   level: basic
-  desc: send critical error log lines to journald
+  desc: Send critical error log lines to journald
   default: false
   see_also:
   - log_to_journald
 - name: log_coarse_timestamps
   type: bool
   level: advanced
-  desc: timestamp log entries from coarse system clock to improve performance
+  desc: Timestamp log entries from coarse system clock to improve performance
   default: true
   tags:
   - performance
@@ -814,14 +822,13 @@ options:
   desc: Crypto accelerator library to use
   default: crypto_isal
   with_legacy: true
-- name: openssl_engine_opts
+- name: openssl_conf
   type: str
   level: advanced
-  desc: Use engine for specific openssl algorithm
-  long_desc: 'Pass opts in this way: engine_id=engine1,dynamic_path=/some/path/engine1.so,default_algorithms=DIGESTS:engine_id=engine2,dynamic_path=/some/path/engine2.so,default_algorithms=CIPHERS,other_ctrl=other_value'
+  desc: Use openssl_conf for specific openssl algorithm
+  long_desc: 'Pass opts in this way: openssl_conf=/path/to/openssl.conf'
   flags:
   - startup
-  with_legacy: true
 - name: mempool_debug
   type: bool
   level: dev
@@ -964,7 +971,7 @@ options:
   type: str
   level: basic
   desc: Allowed connection modes (crc, secure) for connections to mons
-  fmt_desc: a list of permitted modes for clients or
+  fmt_desc: A list of permitted modes for clients or
     other Ceph daemons to use when connecting to monitors.
   default: secure crc
   see_also:
@@ -980,7 +987,7 @@ options:
   level: basic
   desc: Connection modes (crc, secure) for connections from clients to monitors in
     order of preference
-  fmt_desc: a list of connection modes, in order of
+  fmt_desc: A list of connection modes, in order of
     preference, for clients or non-monitor daemons to use when
     connecting to monitors.
   default: secure crc
@@ -1021,7 +1028,7 @@ options:
   type: str
   level: basic
   desc: Connection modes (crc, secure) for connections from clients in order of preference
-  fmt_desc: a list of connection modes, in order of
+  fmt_desc: A list of connection modes, in order of
     preference, for clients to use (or allow) when talking to a Ceph
     cluster.
   default: crc secure
@@ -1114,7 +1121,7 @@ options:
   type: size
   level: advanced
   desc: Maximum amount of data to prefetch out of the socket receive buffer
-  default: 4_K
+  default: 64_K
   with_legacy: true
 - name: ms_initial_backoff
   type: float
@@ -1602,7 +1609,7 @@ options:
 - name: mon_osd_full_ratio
   type: float
   level: advanced
-  desc: full ratio of OSDs to be set during initial creation of the cluster
+  desc: Full ratio of OSDs to be set during initial creation of the cluster
   default: 0.95
   flags:
   - no_mon_update
@@ -1619,7 +1626,7 @@ options:
 - name: mon_osd_nearfull_ratio
   type: float
   level: advanced
-  desc: nearfull ratio for OSDs to be set during initial creation of cluster
+  desc: Nearfull ratio for OSDs to be set during initial creation of cluster
   default: 0.85
   flags:
   - no_mon_update
@@ -1637,7 +1644,7 @@ options:
   type: bool
   level: advanced
   desc: allow pool deletions
-  fmt_desc: Should monitors allow pools to be removed, regardless of what the pool flags say?
+  fmt_desc: Should Monitors allow pools to be removed, regardless of what the pool flags say?
   default: false
   services:
   - mon
@@ -1645,7 +1652,7 @@ options:
 - name: mon_fake_pool_delete
   type: bool
   level: advanced
-  desc: fake pool deletions by renaming the rados pool
+  desc: Fake pool deletions by renaming the RADOS pool
   default: false
   services:
   - mon
@@ -1665,7 +1672,7 @@ options:
 - name: mon_osd_report_timeout
   type: int
   level: advanced
-  desc: time before OSDs who do not report to the mons are marked down (seconds)
+  desc: Time before OSDs who do not report to the mons are marked down (seconds)
   fmt_desc: The grace period in seconds before declaring
               unresponsive Ceph OSD Daemons ``down``.
   default: 15_min
@@ -1675,8 +1682,8 @@ options:
 - name: mon_warn_on_insecure_global_id_reclaim
   type: bool
   level: advanced
-  desc: issue AUTH_INSECURE_GLOBAL_ID_RECLAIM health warning if any connected
-    clients are insecurely reclaiming global_id
+  desc: Raise the AUTH_INSECURE_GLOBAL_ID_RECLAIM health warning if any connected
+    clients are insecurely reclaiming global_ids
   default: true
   services:
   - mon
@@ -1699,7 +1706,7 @@ options:
 - name: mon_warn_on_msgr2_not_enabled
   type: bool
   level: advanced
-  desc: issue MON_MSGR2_NOT_ENABLED health warning if monitors are all running Nautilus
+  desc: Raise the MON_MSGR2_NOT_ENABLED health warning if monitors are all running Nautilus
     but not all binding to a msgr2 port
   default: true
   services:
@@ -1735,14 +1742,14 @@ options:
 - name: mon_max_snap_prune_per_epoch
   type: uint
   level: advanced
-  desc: max number of pruned snaps we will process in a single OSDMap epoch
+  desc: Max number of pruned snaps we will process in a single OSDMap epoch
   default: 100
   services:
   - mon
 - name: mon_min_osdmap_epochs
   type: int
   level: advanced
-  desc: min number of OSDMaps to store
+  desc: Min number of OSDMaps to store
   fmt_desc: Minimum number of OSD map epochs to keep at all times.
   default: 500
   services:
@@ -1751,7 +1758,7 @@ options:
 - name: mon_max_log_epochs
   type: int
   level: advanced
-  desc: max number of past cluster log epochs to store
+  desc: Max number of past cluster log epochs to store
   fmt_desc: Maximum number of Log epochs the monitor should keep.
   default: 500
   services:
@@ -1760,7 +1767,7 @@ options:
 - name: mon_max_mdsmap_epochs
   type: int
   level: advanced
-  desc: max number of FSMaps/MDSMaps to store
+  desc: Max number of FSMaps/MDSMaps to store
   fmt_desc: The maximum number of mdsmap epochs to trim during a single proposal.
   default: 500
   services:
@@ -1769,21 +1776,21 @@ options:
 - name: mon_max_mgrmap_epochs
   type: int
   level: advanced
-  desc: max number of MgrMaps to store
+  desc: Max number of MgrMaps to store
   default: 500
   services:
   - mon
 - name: mon_max_nvmeof_epochs
   type: int
   level: advanced
-  desc: max number of nvmeof gateway maps to store
+  desc: Max number of NVMeoF gateway maps to store
   default: 500
   services:
   - mon
 - name: mon_max_osd
   type: int
   level: advanced
-  desc: max number of OSDs in a cluster
+  desc: Max number of OSDs in a cluster
   fmt_desc: The maximum number of OSDs allowed in the cluster.
   default: 10000
   services:
@@ -1792,7 +1799,7 @@ options:
 - name: mon_probe_timeout
   type: float
   level: advanced
-  desc: timeout for querying other mons during bootstrap pre-election phase (seconds)
+  desc: Timeout for querying other mons during bootstrap pre-election phase (seconds)
   fmt_desc: Number of seconds the monitor will wait to find peers before bootstrapping.
   default: 2
   services:
@@ -1801,7 +1808,7 @@ options:
 - name: mon_client_bytes
   type: size
   level: advanced
-  desc: max bytes of outstanding client messages mon will read off the network
+  desc: Max bytes of outstanding client messages mon will read off the network
   fmt_desc: The amount of client message data allowed in memory (in bytes).
   default: 100_M
   services:
@@ -1810,7 +1817,7 @@ options:
 - name: mon_warn_pg_not_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the scrub max interval past the scrub max interval to warn
+  desc: Raise a health warning when shallow scrubs are delayed by this percentage of the shallow scrub interval. Note that this must be set at mgr or with global scope. Set this configurable with the command "ceph config set mgr mon_warn_pg_not_scrubbed_ratio <ratio_value>".
   default: 0.5
   see_also:
   - osd_scrub_max_interval
@@ -1819,7 +1826,7 @@ options:
 - name: mon_warn_pg_not_deep_scrubbed_ratio
   type: float
   level: advanced
-  desc: Percentage of the deep scrub interval past the deep scrub interval to warn
+  desc: Percentage of the deep scrub interval past the deep scrub interval to warn - Set this configurable with the command "ceph config set mgr mon_warn_pg_not_deep_scrubbed_ratio <ratio_value>"
   default: 0.75
   see_also:
   - osd_deep_scrub_interval
@@ -1828,17 +1835,18 @@ options:
 - name: mon_scrub_interval
   type: secs
   level: advanced
-  desc: frequency for scrubbing mon database
+  desc: Frequency for scrubbing the Monitor database
   fmt_desc: How often the monitor scrubs its store by comparing
     the stored checksums with the computed ones for all stored
-    keys. (0 disables it. dangerous, use with care)
+    keys. (0 disables, which is dangerous and must be used with care,
+    lest the gods smite you.)
   default: 1_day
   services:
   - mon
 - name: mon_scrub_timeout
   type: int
   level: advanced
-  desc: timeout to restart scrub of mon quorum participant does not respond for the
+  desc: Timeout to restart scrub of mon quorum participant does not respond for the
     latest chunk
   default: 5_min
   services:
@@ -1847,7 +1855,7 @@ options:
 - name: mon_scrub_max_keys
   type: int
   level: advanced
-  desc: max keys per on scrub chunk/step
+  desc: Max keys per on scrub chunk/step
   fmt_desc: The maximum number of keys to scrub each time.
   default: 100
   services:
@@ -1857,7 +1865,7 @@ options:
 - name: mon_scrub_inject_crc_mismatch
   type: float
   level: dev
-  desc: probability for injecting crc mismatches into mon scrub
+  desc: Probability for injecting crc mismatches into mon scrub
   default: 0
   services:
   - mon
@@ -1866,7 +1874,7 @@ options:
 - name: mon_scrub_inject_missing_keys
   type: float
   level: dev
-  desc: probability for injecting missing keys into mon scrub
+  desc: Probability for injecting missing keys into mon scrub
   default: 0
   services:
   - mon
@@ -1883,7 +1891,7 @@ options:
 - name: mon_sync_timeout
   type: float
   level: advanced
-  desc: timeout before canceling sync if syncing mon does not respond
+  desc: Timeout before canceling sync if syncing mon does not respond
   fmt_desc: Number of seconds the monitor will wait for the next update
     message from its sync provider before it gives up and bootstrap
     again.
@@ -1894,7 +1902,7 @@ options:
 - name: mon_sync_max_payload_size
   type: size
   level: advanced
-  desc: target max message payload for mon sync
+  desc: Target max message payload for mon sync
   fmt_desc: The maximum size for a sync payload (in bytes).
   default: 1_M
   services:
@@ -1903,7 +1911,7 @@ options:
 - name: mon_sync_max_payload_keys
   type: int
   level: advanced
-  desc: target max keys in message payload for mon sync
+  desc: Target max keys in message payload for Monitor sync
   default: 2000
   services:
   - mon
@@ -1911,7 +1919,7 @@ options:
 - name: mon_sync_debug
   type: bool
   level: dev
-  desc: enable extra debugging during mon sync
+  desc: Enable extra debugging during mon sync
   default: false
   services:
   - mon
@@ -1919,7 +1927,7 @@ options:
 - name: mon_inject_sync_get_chunk_delay
   type: float
   level: dev
-  desc: inject delay during sync (seconds)
+  desc: Inject delay during Monitor sync (seconds)
   default: 0
   services:
   - mon
@@ -1927,7 +1935,7 @@ options:
 - name: mon_osd_min_down_reporters
   type: uint
   level: advanced
-  desc: number of OSDs from different subtrees who need to report a down OSD for it
+  desc: Number of OSDs from different subtrees who need to report a down OSD for it
     to count
   fmt_desc: The minimum number of Ceph OSD Daemons required to report a
               ``down`` Ceph OSD Daemon.
@@ -1939,8 +1947,8 @@ options:
 - name: mon_osd_reporter_subtree_level
   type: str
   level: advanced
-  desc: in which level of parent bucket the reporters are counted
-  fmt_desc: In which level of parent bucket the reporters are counted. The OSDs
+  desc: At which level of parent bucket the reporters are counted
+  fmt_desc: At which level of parent bucket the reporters are counted. The OSDs
               send failure reports to monitors if they find a peer that is not responsive.
               Monitors mark the reported ``OSD`` out and then ``down`` after a grace period.
   default: host
@@ -1951,7 +1959,7 @@ options:
 - name: mon_osd_snap_trim_queue_warn_on
   type: int
   level: advanced
-  desc: Warn when snap trim queue is that large (or larger).
+  desc: Warn when snap trim queue reaches or exceeds this value
   long_desc: Warn when snap trim queue length for at least one PG crosses this value,
     as this is indicator of snap trimmer not keeping up, wasting disk space
   default: 32768
@@ -1962,10 +1970,10 @@ options:
 - name: mon_osd_force_trim_to
   type: int
   level: dev
-  desc: force mons to trim osdmaps through this epoch
+  desc: Force Monitors to trim osdmaps through this epoch
   fmt_desc: Force monitor to trim osdmaps to this point, even if there is
-    PGs not clean at the specified epoch (0 disables it. dangerous,
-    use with care)
+    PGs not clean at the specified epoch (0 disables, which is dangerous and
+    must be used with care).
   default: 0
   services:
   - mon
@@ -1991,7 +1999,7 @@ options:
 - name: mon_debug_deprecated_as_obsolete
   type: bool
   level: dev
-  desc: treat deprecated mon commands as obsolete
+  desc: Treat deprecated mon commands as obsolete
   default: false
   services:
   - mon
@@ -1999,7 +2007,7 @@ options:
 - name: mon_debug_dump_transactions
   type: bool
   level: dev
-  desc: dump paxos transactions to log
+  desc: Dump Paxos transactions to log
   default: false
   services:
   - mon
@@ -2009,7 +2017,7 @@ options:
 - name: mon_debug_dump_json
   type: bool
   level: dev
-  desc: dump paxos transasctions to log as json
+  desc: Dump paxos transasctions to log as JSON
   default: false
   services:
   - mon
@@ -2019,26 +2027,26 @@ options:
 - name: mon_debug_dump_location
   type: str
   level: dev
-  desc: file to dump paxos transactions to
+  desc: File to which to dump Paxos transactions
   default: /var/log/ceph/$cluster-$name.tdump
   services:
   - mon
   see_also:
   - mon_debug_dump_transactions
   with_legacy: true
-- name: mon_debug_no_require_reef
+- name: mon_debug_no_require_squid
   type: bool
   level: dev
-  desc: do not set reef feature for new mon clusters
+  desc: Do not require the Squid feature for new Monitor clusters
   default: false
   services:
   - mon
   flags:
   - cluster_create
-- name: mon_debug_no_require_squid
+- name: mon_debug_no_require_tentacle
   type: bool
   level: dev
-  desc: do not set squid feature for new mon clusters
+  desc: Do not require the Tentacle feature for new Monitor clusters
   default: false
   services:
   - mon
@@ -2047,7 +2055,7 @@ options:
 - name: mon_debug_no_require_bluestore_for_ec_overwrites
   type: bool
   level: dev
-  desc: do not require bluestore OSDs to enable EC overwrites on a rados pool
+  desc: Do not require BlueStore OSDs to enable EC overwrites within a RADOS pool
   default: false
   services:
   - mon
@@ -2055,7 +2063,7 @@ options:
 - name: mon_debug_no_initial_persistent_features
   type: bool
   level: dev
-  desc: do not set any monmap features for new mon clusters
+  desc: Do not set any monmap features for new Monitor clusters
   default: false
   services:
   - mon
@@ -2065,7 +2073,7 @@ options:
 - name: mon_inject_transaction_delay_max
   type: float
   level: dev
-  desc: max duration of injected delay in paxos
+  desc: Max duration of injected delay in Paxos
   default: 10
   services:
   - mon
@@ -2074,7 +2082,7 @@ options:
 - name: mon_inject_transaction_delay_probability
   type: float
   level: dev
-  desc: probability of injecting a delay in paxos
+  desc: Probability of injecting a delay in Paxos
   default: 0
   services:
   - mon
@@ -2082,7 +2090,7 @@ options:
 - name: mon_inject_pg_merge_bounce_probability
   type: float
   level: dev
-  desc: probability of failing and reverting a pg_num decrement
+  desc: Probability of failing and reverting a pg_num decrement
   default: 0
   services:
   - mon
@@ -2090,7 +2098,7 @@ options:
 - name: mon_sync_provider_kill_at
   type: int
   level: dev
-  desc: kill mon sync requester at specific point
+  desc: Kill mon sync provider at specific point
   default: 0
   services:
   - mon
@@ -2099,7 +2107,7 @@ options:
 - name: mon_sync_requester_kill_at
   type: int
   level: dev
-  desc: kill mon sync requestor at specific point
+  desc: Kill mon sync requestor at specific point
   default: 0
   services:
   - mon
@@ -2108,8 +2116,8 @@ options:
 - name: mon_force_quorum_join
   type: bool
   level: advanced
-  desc: force mon to rejoin quorum even though it was just removed
-  fmt_desc: Force monitor to join quorum even if it has been previously removed from the map
+  desc: Force a Monitor to rejoin the quorum even though it was just removed
+  fmt_desc: Force a Monitor to join quorum even if it has been previously removed from the map
   default: false
   services:
   - mon
@@ -2118,7 +2126,7 @@ options:
 - name: mon_keyvaluedb
   type: str
   level: advanced
-  desc: database backend to use for the mon database
+  desc: Database backend to use for the Monitor database
   default: rocksdb
   services:
   - mon
@@ -2139,8 +2147,8 @@ options:
 - name: auth_cluster_required
   type: str
   level: advanced
-  desc: authentication methods required by the cluster
-  fmt_desc: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
+  desc: Authentication methods required by the cluster
+  fmt_desc: If enabled, Ceph cluster daemons (i.e., ``ceph-mon``,
    ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
@@ -2149,9 +2157,9 @@ options:
 - name: auth_service_required
   type: str
   level: advanced
-  desc: authentication methods required by service daemons
-  fmt_desc: If enabled, the Ceph Storage Cluster daemons require Ceph Clients
-   to authenticate with the Ceph Storage Cluster in order to access
+  desc: Authentication methods required by service daemons
+  fmt_desc: If enabled, Ceph cluster daemons require clients
+   to authenticate with the cluster in order to access
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
   with_legacy: true
@@ -2159,9 +2167,9 @@ options:
 - name: auth_client_required
   type: str
   level: advanced
-  desc: authentication methods allowed by clients
-  fmt_desc: If enabled, the Ceph Client requires the Ceph Storage Cluster to
-   authenticate with the Ceph Client. Valid settings are ``cephx``
+  desc: Authentication methods allowed by clients
+  fmt_desc: If enabled, Ceph clients require the Ceph cluster to
+   authenticate with Ceph clients. Valid settings are ``cephx``
    or ``none``.
   default: cephx, none
   with_legacy: true
@@ -2169,23 +2177,23 @@ options:
 - name: auth_supported
   type: str
   level: advanced
-  desc: authentication methods required (deprecated)
+  desc: Authentication methods required (deprecated)
   with_legacy: true
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
-  desc: number of attempts to initialize rotating keys before giving up
+  desc: Mumber of attempts to initialize rotating keys before giving up
   default: 10
   with_legacy: true
 - name: rotating_keys_bootstrap_timeout
   type: int
   level: advanced
-  desc: timeout for obtaining rotating keys during bootstrap phase (seconds)
+  desc: Timeout for obtaining rotating keys during bootstrap phase (seconds)
   default: 30
 - name: rotating_keys_renewal_timeout
   type: int
   level: advanced
-  desc: timeout for updating rotating keys (seconds)
+  desc: Timeout for updating rotating keys (seconds)
   default: 10
 - name: cephx_require_signatures
   type: bool
@@ -2209,7 +2217,7 @@ options:
   type: bool
   level: advanced
   default: false
-  fmt_desc:    If set to ``true``, Ceph requires signatures on all message
+  fmt_desc: If set to ``true``, Ceph requires signatures on all message
    traffic between Ceph daemons comprising the Ceph Storage Cluster.
   with_legacy: true
 - name: cephx_cluster_require_version
@@ -2306,20 +2314,20 @@ options:
   min: -1
   flags:
   - runtime
-  fmt_desc: automatically target mon rank for client communication
+  fmt_desc: Automatically target mon rank for client communication
 # try new mon every N seconds until we connect
 - name: mon_client_hunt_interval
   type: float
   level: advanced
   default: 3
-  fmt_desc: The client will try a new monitor every ``N`` seconds until it
+  fmt_desc: The client will attempt to connect to a different Monitor every ``N`` seconds until it
     establishes a connection.
   with_legacy: true
 # send logs every N seconds
 - name: mon_client_log_interval
   type: float
   level: advanced
-  desc: How frequently we send queued cluster log messages to mon
+  desc: How frequently we send queued cluster log messages to the Monitors
   default: 1
   with_legacy: true
 # ping every N seconds
@@ -2327,7 +2335,7 @@ options:
   type: float
   level: advanced
   default: 10
-  fmt_desc: The client will ping the monitor every ``N`` seconds.
+  fmt_desc: The client will ping the Monitors every this many seconds.
   with_legacy: true
 # fail if we don't hear back
 - name: mon_client_ping_timeout
@@ -2350,17 +2358,25 @@ options:
   level: advanced
   default: 10
   with_legacy: true
+- name: mon_client_hunt_on_resend
+  type: bool
+  level: advanced
+  default: true
+  fmt_desc: On commands connection failure, hunt for any Monitor.
+    If false, try to resend the command to the same Monitor to prevent
+    command race conditions.
+  with_legacy: true
 - name: mon_client_max_log_entries_per_message
   type: int
   level: advanced
   default: 1000
-  fmt_desc: The maximum number of log entries a monitor will generate
+  fmt_desc: The maximum number of log entries a Monitor will generate
     per client message.
   with_legacy: true
 - name: mon_client_directed_command_retry
   type: int
   level: dev
-  desc: Number of times to try sending a command directed at a specific monitor
+  desc: Number of times to try sending a command directed at a specific Monitor
   default: 2
   with_legacy: true
 # whitespace-separated list of key=value pairs describing crush location
@@ -2386,7 +2402,7 @@ options:
 - name: objecter_timeout
   type: float
   level: advanced
-  desc: Seconds before in-flight op is considered 'laggy' and we query mon for the
+  desc: Seconds before in-flight op is considered laggy and we query the Monitors for the
     latest OSDMap
   default: 10
   with_legacy: true
@@ -2463,7 +2479,7 @@ options:
 - name: osd_calc_pg_upmaps_aggressively
   type: bool
   level: advanced
-  desc: try to calculate PG upmaps more aggressively, e.g., by doing a fairly exhaustive
+  desc: Try to calculate PG upmaps more aggressively, e.g., by doing a fairly exhaustive
     search of existing PGs that can be unmapped or upmapped
   default: true
   flags:
@@ -2479,8 +2495,8 @@ options:
 - name: osd_calc_pg_upmaps_local_fallback_retries
   type: uint
   level: advanced
-  desc: 'Maximum number of PGs we can attempt to unmap or upmap for a specific overfull
-    or underfull osd per iteration '
+  desc: Maximum number of PGs we can attempt to unmap or upmap for a specific overfull
+    or underfull OSD per iteration
   default: 100
   flags:
   - runtime
@@ -2542,7 +2558,7 @@ options:
 - name: osd_pool_default_min_size
   type: uint
   level: advanced
-  desc: the minimal number of copies allowed to write to a degraded pool for new replicated
+  desc: The minimal number of copies allowed to write to a degraded pool for new replicated
     pools
   long_desc: 0 means no specific default; ceph will use size-size/2
   fmt_desc: Sets the minimum number of written replicas for objects in the
@@ -2597,7 +2613,7 @@ options:
 - name: osd_pool_default_type
   type: str
   level: advanced
-  desc: default type of pool to create
+  desc: Default data protection strategy type when creating a new pool
   default: replicated
   services:
   - mon
@@ -2609,8 +2625,8 @@ options:
 - name: osd_pool_default_erasure_code_profile
   type: str
   level: advanced
-  desc: default erasure code profile for new erasure-coded pools
-  default: plugin=jerasure technique=reed_sol_van k=2 m=2
+  desc: Default EC profile for new erasure-coded pools
+  default: plugin=isa technique=reed_sol_van k=2 m=2
   services:
   - mon
   flags:
@@ -2630,7 +2646,7 @@ options:
 - name: osd_erasure_code_plugins
   type: str
   level: advanced
-  desc: erasure code plugins to load
+  desc: Erasure code plugins to load
   default: @osd_erasure_code_plugins@
   services:
   - mon
@@ -2641,7 +2657,7 @@ options:
 - name: osd_pool_default_flags
   type: int
   level: dev
-  desc: (integer) flags to set on new pools
+  desc: The (integer) flags to set on new pools
   fmt_desc: The default flags for new pools.
   default: 0
   services:
@@ -2651,7 +2667,7 @@ options:
 - name: osd_pool_default_flag_hashpspool
   type: bool
   level: advanced
-  desc: set hashpspool (better hashing scheme) flag on new pools
+  desc: Set hashpspool (better hashing scheme) flag on new pools
   default: true
   services:
   - mon
@@ -2660,7 +2676,7 @@ options:
 - name: osd_pool_default_flag_nodelete
   type: bool
   level: advanced
-  desc: set nodelete flag on new pools
+  desc: Set the nodelete flag on new pools
   fmt_desc: Set the ``nodelete`` flag on new pools, which prevents pool removal.
   default: false
   services:
@@ -2670,7 +2686,7 @@ options:
 - name: osd_pool_default_flag_nopgchange
   type: bool
   level: advanced
-  desc: set nopgchange flag on new pools
+  desc: Set the nopgchange flag on new pools
   fmt_desc: Set the ``nopgchange`` flag on new pools. Does not allow the number of PGs to be changed.
   default: false
   services:
@@ -2680,7 +2696,7 @@ options:
 - name: osd_pool_default_flag_nosizechange
   type: bool
   level: advanced
-  desc: set nosizechange flag on new pools
+  desc: Set the nosizechange flag on new pools
   fmt_desc: Set the ``nosizechange`` flag on new pools. Does not allow the ``size`` to be changed.
   default: false
   services:
@@ -2689,8 +2705,17 @@ options:
 - name: osd_pool_default_flag_bulk
   type: bool
   level: advanced
-  desc: set bulk flag on new pools
+  desc: Set the bulk flag on new pools
   fmt_desc: Set the ``bulk`` flag on new pools. Allowing autoscaler to use scale-down mode.
+  default: false
+  services:
+  - mon
+  with_legacy: true
+- name: osd_pool_default_flag_ec_optimizations
+  type: bool
+  level: advanced
+  desc: Control whether to create new erasure coded pools with EC optimizations turned on by default.
+  fmt_desc: Set the ``allow_ec_optimizations`` flag on new erasure coded pools.
   default: false
   services:
   - mon
@@ -2741,8 +2766,8 @@ options:
   type: str
   level: advanced
   desc: Default PG autoscaling behavior for new pools
-  long_desc: With default value `on`, the autoscaler starts a new pool with 1
-    pg, unless the user specifies the pg_num.
+  long_desc: When 'on', the autoscaler assigns 1 pg to new pools unless the user
+    specifies a value.
   default: 'on'
   enum_values:
   - 'off'
@@ -2826,12 +2851,12 @@ options:
 - name: osd_tier_default_cache_min_read_recency_for_promote
   type: uint
   level: advanced
-  desc: number of recent HitSets the object must appear in to be promoted (on read)
+  desc: Number of recent HitSets the object must appear in to be promoted (on read)
   default: 1
 - name: osd_tier_default_cache_min_write_recency_for_promote
   type: uint
   level: advanced
-  desc: number of recent HitSets the object must appear in to be promoted (on write)
+  desc: Number of recent HitSets the object must appear in to be promoted (on write)
   default: 1
 - name: osd_tier_default_cache_hit_set_grade_decay_rate
   type: uint
@@ -2857,7 +2882,7 @@ options:
 - name: osd_map_message_max
   type: int
   level: advanced
-  desc: maximum number of OSDMaps to include in a single message
+  desc: Maximum number of OSDMaps to include in a single message
   fmt_desc: The maximum map entries allowed per MOSDMap message.
   default: 40
   services:
@@ -2867,7 +2892,7 @@ options:
 - name: osd_map_message_max_bytes
   type: size
   level: advanced
-  desc: maximum number of bytes worth of OSDMaps to include in a single message
+  desc: Maximum number of bytes worth of OSDMaps to include in a single message
   default: 10_M
   services:
   - osd
@@ -2895,9 +2920,9 @@ options:
   level: advanced
   default: 20
   fmt_desc: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
-              that the Ceph Storage Cluster considers it ``down``.
-              This setting must be set in both the [mon] and [osd] or [global]
-              sections so that it is read by both monitor and OSD daemons.
+    that the Ceph Storage Cluster considers it ``down``.
+    This setting must be set in both the [mon] and [osd] or [global]
+    sections so that it is read by both monitor and OSD daemons.
   with_legacy: true
 - name: osd_heartbeat_stale
   type: int
@@ -2917,8 +2942,9 @@ options:
 - name: osd_heartbeat_min_size
   type: size
   level: advanced
-  desc: Minimum heartbeat packet size in bytes. Will add dummy payload if heartbeat
-    packet is smaller than this.
+  desc: Minimum heartbeat packet size in bytes. Will padd if the heartbeat
+    packet is smaller than this. This helps identify host and switch
+    MTU configuration issues when jumbo frames are in use.
   default: 2000
   with_legacy: true
 # max number of parallel snap trims/pg
@@ -2947,7 +2973,7 @@ options:
   level: advanced
   default: 30
   fmt_desc: How often the Ceph OSD Daemon pings a Ceph Monitor if it has no
-              Ceph OSD Daemon peers.
+    Ceph OSD Daemon peers.
   with_legacy: true
 - name: osd_mon_heartbeat_stat_stale
   type: int
@@ -2955,16 +2981,16 @@ options:
   desc: Stop reporting on heartbeat ping times not updated for this many seconds.
   long_desc: Stop reporting on old heartbeat information unless this is set to zero
   fmt_desc: Stop reporting on heartbeat ping times which haven't been updated for
-              this many seconds.  Set to zero to disable this action.
+    this many seconds. Set to 0 to disable this action.
   default: 1_hr
 # failures, up_thru, boot.
 - name: osd_mon_report_interval
   type: int
   level: advanced
   desc: Frequency of OSD reports to mon for peer failures, fullness status changes
-  fmt_desc: The number of seconds a Ceph OSD Daemon may wait
-              from startup or another reportable event before reporting
-              to a Ceph Monitor.
+  fmt_desc: The number of seconds a Ceph OSD may wait
+    from startup or another reportable event before reporting
+    to a Ceph Monitor.
   default: 5
   with_legacy: true
 # max updates in flight
@@ -3049,7 +3075,7 @@ options:
 - name: osd_target_pg_log_entries_per_osd
   type: uint
   level: dev
-  desc: target number of PG entries total on an OSD - limited per pg by the min and
+  desc: Target number of PG entries total on an OSD, limited per PG by the min and
     max options below
   default: 300000
   see_also:
@@ -3059,7 +3085,7 @@ options:
 - name: osd_min_pg_log_entries
   type: uint
   level: dev
-  desc: minimum number of entries to maintain in the PG log
+  desc: Minimum number of entries to maintain in the PG log
   fmt_desc: The minimum number of placement group logs to maintain
     when trimming log files.
   default: 250
@@ -3073,7 +3099,7 @@ options:
 - name: osd_max_pg_log_entries
   type: uint
   level: dev
-  desc: maximum number of entries to maintain in the PG log
+  desc: Maximum number of entries to maintain in the PG log
   fmt_desc: The maximum number of placement group logs to maintain
     when trimming log files.
   default: 10000
@@ -3087,7 +3113,7 @@ options:
 - name: osd_pg_log_dups_tracked
   type: uint
   level: dev
-  desc: how many versions back to track in order to detect duplicate ops; this is
+  desc: How many versions back to track in order to detect duplicate ops; this is
     combined with both the regular pg log entries and additional minimal dup detection
     entries
   default: 3000
@@ -3100,8 +3126,8 @@ options:
 - name: osd_object_clean_region_max_num_intervals
   type: int
   level: dev
-  desc: number of intervals in clean_offsets
-  long_desc: partial recovery uses multiple intervals to record the clean part of
+  desc: Number of intervals in clean_offsets
+  long_desc: Partial recovery uses multiple intervals to record the clean part of
     the objectwhen the number of intervals is greater than osd_object_clean_region_max_num_intervals,
     minimum interval will be trimmed(0 will recovery the entire object data interval)
   default: 10
@@ -3141,8 +3167,8 @@ options:
 - name: osd_max_pg_per_osd_hard_ratio
   type: float
   level: advanced
-  desc: Maximum number of PG per OSD, a factor of 'mon_max_pg_per_osd'
-  long_desc: OSD will refuse to instantiate PG if the number of PG it serves exceeds
+  desc: Maximum multiple of mon_max_pg_per_osd PGs an OSD will allow
+  long_desc: An OSD will refuse to instantiate a PG if the number of PGs it serves exceeds
     this number.
   fmt_desc: The ratio of number of PGs per OSD allowed by the cluster before the
     OSD refuses to create new PGs. An OSD stops creating new PGs if the number
@@ -3155,7 +3181,7 @@ options:
 - name: osd_pg_log_trim_max
   type: uint
   level: advanced
-  desc: maximum number of entries to remove at once from the PG log
+  desc: Maximum number of entries to remove at once from the PG log
   default: 10000
   services:
   - osd
@@ -3386,15 +3412,15 @@ options:
 - name: osd_fast_shutdown_timeout
   type: int
   level: advanced
-  desc: timeout in seconds for osd fast-shutdown (0 is unlimited)
+  desc: Timeout in seconds for osd fast-shutdown (0 is unlimited)
   default: 15
   with_legacy: true
   min: 0
 - name: osd_fast_shutdown_notify_mon
   type: bool
   level: advanced
-  desc: Tell mon about OSD shutdown on immediate shutdown
-  long_desc: Tell the monitor the OSD is shutting down on immediate shutdown. This
+  desc: Tell the Monitors about OSD shutdown on immediate shutdown
+  long_desc: Tell the Monitors the OSD is shutting down on immediate shutdown. This
     helps with cluster log messages from other OSDs reporting it immediately failed.
   default: true
   see_also:
@@ -3583,8 +3609,8 @@ options:
 - name: rocksdb_partition_filters
   type: bool
   level: dev
-  desc: (experimental) partition SST index/filters into smaller blocks
-  long_desc: 'This is an experimental option for rocksdb that works in conjunction
+  desc: (Experimental) partition SST index/filters into smaller blocks
+  long_desc: 'This is an experimental option for RocksDB that works in conjunction
     with two_level indices to avoid having to keep the entire filter/index in cache
     when cache_index_and_filter_blocks is true.  The idea is to keep a much smaller
     top-level index in heap/cache and then opportunistically cache the lower level
@@ -3794,7 +3820,7 @@ options:
 - name: osd_objectstore
   type: str
   level: advanced
-  desc: backend type for an OSD (like filestore or bluestore)
+  desc: Default back end for new OSDs
   default: bluestore
   enum_values:
   - bluestore
@@ -3874,7 +3900,7 @@ options:
 - name: osd_memory_target
   type: size
   level: basic
-  desc: When tcmalloc and cache autotuning is enabled, try to keep this many bytes
+  desc: When TCMalloc and cache autotuning are enabled, try to keep this many bytes
     mapped in memory.
   long_desc: The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min.
   fmt_desc: |
@@ -3902,7 +3928,9 @@ options:
   type: bool
   default: false
   level: advanced
-  desc: If enabled, allow orchestrator to automatically tune osd_memory_target
+  desc: If enabled, allow the orchestrator to automatically tune osd_memory_target
+    at host granularity based on available memory, the number of OSDs provisioned
+    on the host, other daemons provisioned on the host, and mgr/cephadm/autotune_memory_target_ratio
   see_also:
   - osd_memory_target
 - name: osd_memory_target_cgroup_limit_ratio
@@ -3919,7 +3947,7 @@ options:
 - name: osd_memory_base
   type: size
   level: dev
-  desc: When tcmalloc and cache autotuning is enabled, estimate the minimum amount
+  desc: When TCMalloc and cache autotuning are enabled, estimate the minimum amount
     of memory in bytes the OSD will need.
   fmt_desc: When TCMalloc and cache autotuning are enabled, estimate the minimum
     amount of memory in bytes the OSD will need.  This is used to help
@@ -3933,9 +3961,9 @@ options:
 - name: osd_memory_expected_fragmentation
   type: float
   level: dev
-  desc: When tcmalloc and cache autotuning is enabled, estimate the percent of memory
+  desc: When TCMalloc and cache autotuning are enabled, estimate the percent of memory
     fragmentation.
-  fmt_desc: When TCMalloc and cache autotuning is enabled, estimate the
+  fmt_desc: When TCMalloc and cache autotuning are enabled, estimate the
     percentage of memory fragmentation.  This is used to help the
     autotuner estimate the expected aggregate memory consumption
     of the caches.
@@ -3949,7 +3977,7 @@ options:
 - name: osd_memory_cache_min
   type: size
   level: dev
-  desc: When tcmalloc and cache autotuning is enabled, set the minimum amount of memory
+  desc: When TCMalloc and cache autotuning are enabled, set the minimum amount of memory
     used for caches.
   fmt_desc: |
     When TCMalloc and cache autotuning are enabled, set the minimum
@@ -3964,7 +3992,7 @@ options:
 - name: osd_memory_cache_resize_interval
   type: float
   level: dev
-  desc: When tcmalloc and cache autotuning is enabled, wait this many seconds between
+  desc: When TCMalloc and cache autotuning are enabled, wait this many seconds between
     resizing caches.
   fmt_desc: When TCMalloc and cache autotuning are enabled, wait this many
     seconds between resizing caches.  This setting changes the total
@@ -4040,6 +4068,16 @@ options:
   level: advanced
   default: 16
   with_legacy: true
+- name: bdev_aio_submit_retry_max
+  type: int
+  level: advanced
+  default: 16
+  with_legacy: true
+- name: bdev_aio_submit_retry_initial_delay_us
+  type: int
+  level: advanced
+  default: 125
+  with_legacy: true
 - name: bdev_block_size
   type: size
   level: advanced
@@ -4059,7 +4097,7 @@ options:
     sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
     Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
     Otherwise the OSD wil fail early.
-    Beware BlueStore, by default, stores large chunks across many smaller blobs.
+    Beware that BlueStore, by default, stores large chunks across many smaller blobs.
     Increasing bluestore_max_blob_size changes that, and thus allows the data to
     be read back into small number of huge page-backed buffers.
   fmt_desc: List of key=value pairs delimited by comma, semicolon or tab.
@@ -4094,7 +4132,7 @@ options:
   default: false
   with_legacy: true
 - name: bdev_enable_discard
-  desc: send discards to the block device
+  desc: Enable OSD devices trimming during in runtime
   type: bool
   level: advanced
   default: false
@@ -4103,8 +4141,9 @@ options:
   - runtime
   see_also:
   - bdev_async_discard_threads
+  - bluestore_discard_on_mkfs
 - name: bdev_async_discard_threads
-  desc: number of discard threads used to issue discards to the device
+  desc: Number of discard threads used to issue discards to the device
   type: uint
   level: advanced
   default: 0
@@ -4114,10 +4153,37 @@ options:
   - runtime
   see_also:
   - bdev_enable_discard
+  - bdev_async_discard_max_pending
+- name: bdev_async_discard_max_pending
+  desc: maximum number of pending discards
+  long_desc: The maximum number of pending async discards that can be queued and not claimed by an
+    async discard thread. Discards will not be issued once the queue is full and blocks will be
+    freed back to the allocator immediately instead. This is useful if you have a device with slow
+    discard performance that can't keep up to a consistently high write workload. 0 means
+    'unlimited'.
+  type: uint
+  level: advanced
+  default: 1000000
+  min: 0
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_async_discard_threads
+- name: bdev_max_discard_length
+  desc: Maximum length of a single discard request
+  type: uint
+  level: advanced
+  default: 2147483648
+  with_legacy: true
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
 - name: bdev_flock_retry_interval
   type: float
   level: advanced
-  desc: interval to retry the flock
+  desc: Interval after which to retry flock
   default: 0.1
 - name: bdev_flock_retry
   type: uint
@@ -4194,12 +4260,12 @@ options:
 - name: bluefs_buffered_io
   type: bool
   level: advanced
-  desc: Enabled buffered IO for bluefs reads.
-  long_desc: When this option is enabled, bluefs will in some cases perform buffered
+  desc: Enabled buffered IO for BlueFS reads.
+  long_desc: When this option is enabled, BlueFS will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
-    like RocksDB block reads.  For example, if the rocksdb block cache isn't large
-    enough to hold all blocks during OMAP iteration, it may be possible to read them
-    from page cache instead of from the disk.  This can dramatically improve
+    like RocksDB block reads.  For example, if the RocksDB block cache isn't large
+    enough to hold all blocks during omap iteration, it may be possible to read them
+    from page cache instead of from the device.  This can dramatically improve
     performance when the osd_memory_target is too small to hold all entries in block
     cache but it does come with downsides.  It has been reported to occasionally
     cause excessive kernel swapping (and associated stalls) under certain workloads.
@@ -4213,6 +4279,15 @@ options:
   level: advanced
   default: false
   with_legacy: true
+- name: bluefs_wal_envelope_mode
+  type: bool
+  level: advanced
+  desc: Enables a faster backend in BlueFS for WAL writes.
+  long_desc: In envelope mode BlueFS files do not need to update metadata. When applied to RocksDB WAL files,
+    it reduces by ~50% the amount of fdatasync syscalls.
+    Downgrading from an envelope mode to legacy mode requires `ceph-bluestore-tool --command downgrade-wal-to-v1`.
+  default: true
+  with_legacy: false
 - name: bluefs_allocator
   type: str
   level: dev
@@ -4283,10 +4358,10 @@ options:
 - name: bluestore_bluefs
   type: bool
   level: dev
-  desc: Use BlueFS to back rocksdb
-  long_desc: BlueFS allows rocksdb to share the same physical device(s) as the rest
+  desc: Use BlueFS to back RocksDB
+  long_desc: BlueFS allows RocksDB to share the same physical device(s) as the rest
     of BlueStore.  It should be used in all cases unless testing/developing an alternative
-    metadata database for BlueStore.
+    metadata database.
   default: true
   flags:
   - create
@@ -4295,7 +4370,7 @@ options:
 - name: bluestore_bluefs_env_mirror
   type: bool
   level: dev
-  desc: Mirror bluefs data to file system for testing/validation
+  desc: Mirror BlueFS data to file system for testing/validation
   default: false
   flags:
   - create
@@ -4328,8 +4403,8 @@ options:
 - name: bluestore_spdk_max_io_completion
   type: uint
   level: dev
-  desc: Maximal I/Os to be batched completed while checking queue pair completions,
-    0 means let spdk library determine it
+  desc: Maximum number of operations to be batched completed while checking queue pair completions,
+    0 means to let the SPDK library determine the value
   default: 0
 - name: bluestore_spdk_io_sleep
   type: uint
@@ -4352,7 +4427,7 @@ options:
 - name: bluestore_block_size
   type: size
   level: dev
-  desc: Size of file to create for backing bluestore
+  desc: Size of file to create for backing BlueStore
   default: 100_G
   flags:
   - create
@@ -4371,7 +4446,7 @@ options:
 - name: bluestore_block_db_path
   type: str
   level: dev
-  desc: Path for db block device
+  desc: Path for DB block device
   flags:
   - create
   with_legacy: true
@@ -4398,7 +4473,7 @@ options:
 - name: bluestore_block_wal_path
   type: str
   level: dev
-  desc: Path to block device/file backing bluefs wal
+  desc: Path to block device/file backing the BlueFS WAL
   flags:
   - create
   with_legacy: true
@@ -4477,7 +4552,7 @@ options:
   type: str
   level: advanced
   desc: Default checksum algorithm to use
-  long_desc: crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants
+  long_desc: Algorithms crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants
     use only a subset of the bits for more compact (but less reliable) checksumming.
   fmt_desc: The default checksum algorithm to use.
   default: crc32c
@@ -4511,8 +4586,12 @@ options:
     rewritten when a copy-on-write operation is triggered (e.g., when writing to something
     that was recently snapshotted).  Similarly, less data is journaled before performing
     an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore
-    journal).  Larger values of min_alloc_size reduce the amount of metadata required
-    to describe the on-disk layout and reduce overall fragmentation.
+    WAL).  Larger values of min_alloc_size reduce the amount of metadata required
+    to describe the on-disk layout and reduce overall fragmentation. Setting to 0
+    directs that the effective value is taken from bluestore_min_alloc_size_hdd or
+    bluestore_min_alloc_size_ssd according to the kernel's rotational attribute for the
+    underlying device. Note that this is baked into each OSD at creation. An
+    OSD must be rebuilt to use a different value.
   default: 0
   flags:
   - create
@@ -4541,9 +4620,9 @@ options:
   type: uint
   level: dev
   desc: Enforces specific min_alloc size usages
-  long_desc: This overrides actual min_alloc_size value persisted on mkfs
-    (and originally obtained from bluestore_min_alloc_size) and permits to
-    use arbitrary value for this value. Intended primarily for dev/debug
+  long_desc: This overrides the actual min_alloc_size value persisted on mkfs
+    (and originally obtained from bluestore_min_alloc_size) and permits an
+   arbitrary value. Intended primarily for dev/debug
     purposes and should be used with care and deep understanding of potential
     consequences, e.g. data corruption.
   default: 0
@@ -4555,7 +4634,9 @@ options:
 - name: bluestore_use_optimal_io_size_for_min_alloc_size 
   type: bool
   level: advanced
-  desc: Discover media optimal IO Size and use for min_alloc_size
+  desc: Discover media optimal IO size and use for min_alloc_size. This is useful
+    when OSDs are created on coarse-IU QLC SSDs or other novel types of underlyinng
+    block device. It is a no-op for conventional media.
   default: false
   see_also:
   - bluestore_min_alloc_size
@@ -4724,6 +4805,21 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_recompression_min_gain
+  type: float
+  level: advanced
+  desc: Required estimated gain for accepting extents for recompressing.
+  long_desc: Partial writes over compressed blobs have high cost. New data requires
+    new allocation units, but whole old blob must remain. To combat it BlueStore
+    looks around write position to find blobs that will make it profitable to read
+    and recompress.
+  fmt_desc: A float value, (size_exact_released / size_expected_after_compression).
+  default: 1.2
+  see_also:
+  - bluestore_compression_max_blob_size
+  flags:
+  - runtime
+  with_legacy: true
 # Specifies minimum expected amount of saved allocation units
 # per single blob to enable compressed blobs garbage collection
 - name: bluestore_gc_enable_blob_threshold
@@ -4745,10 +4841,11 @@ options:
 - name: bluestore_max_blob_size
   type: size
   level: dev
-  long_desc: Bluestore blobs are collections of extents (ie on-disk data) originating
-    from one or more objects.  Blobs can be compressed, typically have checksum data,
+  long_desc: BlueStore blobs are collections of extents (on-disk data) originating
+    from one or more RADOS objects.  Blobs can be compressed, typically have checksum data,
     may be overwritten, may be shared (with an extent ref map), or split.  This setting
-    controls the maximum size a blob is allowed to be.
+    controls the maximum size a blob is allowed to be. A value of 0 indicates that no
+    limiit is to be enforced.
   default: 0
   flags:
   - runtime
@@ -4819,6 +4916,14 @@ options:
   desc: Preallocated buffer for inline shards
   default: 256
   with_legacy: true
+- name: bluestore_debug_extent_map_encode_check
+  type: bool
+  level: dev
+  desc: Check correctness of extents in encode_some
+  default: false
+  with_legacy: false
+  flags:
+  - startup
 - name: bluestore_cache_trim_interval
   type: float
   level: advanced
@@ -4886,7 +4991,7 @@ options:
 - name: bluestore_cache_meta_ratio
   type: float
   level: dev
-  desc: Ratio of bluestore cache to devote to metadata
+  desc: Ratio of BlueStore cache to devote to metadata
   default: 0.45
   see_also:
   - bluestore_cache_size
@@ -4894,7 +4999,7 @@ options:
 - name: bluestore_cache_kv_ratio
   type: float
   level: dev
-  desc: Ratio of bluestore cache to devote to key/value database (RocksDB)
+  desc: Ratio of BlueStore cache to devote to key/value database (RocksDB)
   default: 0.45
   see_also:
   - bluestore_cache_size
@@ -4902,7 +5007,7 @@ options:
 - name: bluestore_cache_kv_onode_ratio
   type: float
   level: dev
-  desc: Ratio of bluestore cache to devote to kv onode column family (rocksdb)
+  desc: Ratio of BlueStore cache to devote to key/value onode column family (rocksdb)
   default: 0.04
   see_also:
   - bluestore_cache_size
@@ -5036,7 +5141,7 @@ options:
 - name: bluestore_kvbackend
   type: str
   level: dev
-  desc: Key value database to use for bluestore
+  desc: Key value database to use for BlueStore
   default: rocksdb
   flags:
   - create
@@ -5044,9 +5149,9 @@ options:
 - name: bluestore_elastic_shared_blobs
   type: bool
   level: advanced
-  desc: Let bluestore to reuse existing shared blobs if possible
-  long_desc: Overwrites on snapped objects cause shared blob count to grow.
-    It has a very negative performance effect. When enabled shared blob count
+  desc: Let BlueStore reuse existing shared blobs if possible
+  long_desc: Overwrites on snapped objects cause the shared blob count to grow.
+    This has a very negative performance effect. When enabled, the shared blob count
     is significantly reduced.
   default: true
   flags:
@@ -5056,10 +5161,10 @@ options:
   type: bool
   level: advanced
   desc: Use faster write path
-  long_desc: Original write path was developed over long time by constantly adding features.
-    The price was layered inefficiencies gained along the way.
-    Rework of write path done from scratch clears it and optimizes for typical cases.
-    Write_v2 is necessary for recompression feature.
+  long_desc: The original write path was developed over time, incrementally adding features
+    at the cost of layered inefficiencies.
+    This rework of the write path clears and optimizes for typical cases.
+    Write_v2 is necessary for the recompression feature.
   default: false
   flags:
   - startup
@@ -5068,7 +5173,7 @@ options:
   type: bool
   level: advanced
   desc: Random selection of write path mode
-  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected.
+  long_desc: For testing purposes. If true, value of bluestore_write_v2 is randomly selected on each mount.
   default: false
   see_also:
   - bluestore_write_v2
@@ -5079,7 +5184,7 @@ options:
   type: str
   level: advanced
   desc: Allocator policy
-  long_desc: Allocator to use for bluestore.  Stupid should only be used for testing.
+  long_desc: Allocator to use for BlueStore.  Stupid should only be used for testing.
   default: hybrid
   enum_values:
   - bitmap
@@ -5115,31 +5220,31 @@ options:
 - name: bluestore_max_defer_interval
   type: float
   level: advanced
-  desc: max duration to force deferred submit
+  desc: Max duration to force deferred submit
   default: 3
   with_legacy: true
 - name: bluestore_rocksdb_options
   type: str
   level: advanced
-  desc: Full set of rocksdb settings to override
+  desc: Full set of RocksDB settings to override
   default: compression=kLZ4Compression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
   level: advanced
-  desc: An addition to bluestore_rocksdb_options. Allows setting rocksdb options without
+  desc: An addition to bluestore_rocksdb_options. Allows setting RocksDB options without
     repeating the existing defaults.
   with_legacy: true
 - name: bluestore_rocksdb_cf
   type: bool
   level: advanced
-  desc: Enable use of rocksdb column families for bluestore metadata
+  desc: Enable use of RocksDB column families for bluestore metadata
   fmt_desc: Enables sharding of BlueStore's RocksDB.
     When ``true``, ``bluestore_rocksdb_cfs`` is used.
     Only applied when OSD is doing ``--mkfs``.
   default: true
   verbatim: |
-    #ifdef WITH_SEASTAR
+    #ifdef WITH_CRIMSON
     // This is necessary as the Seastar's allocator imposes restrictions
     // on the number of threads that entered malloc/free/*. Unfortunately,
     // RocksDB sharding in BlueStore dramatically lifted the number of
@@ -5173,8 +5278,7 @@ options:
   type: bool
   level: dev
   desc: Perform DB compaction requests asynchronously
-  long_desc: 'How to perform DB compactions triggered either through async socket or
-    by OSD initialization procedure on start.'
+  long_desc: Should BlueStore accept DB compaction requests via the admin socket?
   default: true
 - name: bluestore_qfsck_on_mount
   type: bool
@@ -5238,10 +5342,20 @@ options:
   desc: Run deep fsck after mkfs
   default: false
   with_legacy: true
+- name: bluestore_discard_on_mkfs
+  desc: Trim OSD devices after deployment
+  type: bool
+  level: advanced
+  default: true
+  with_legacy: false
+  flags:
+  - create
+  see_also:
+  - bdev_enable_discard
 - name: bluestore_sync_submit_transaction
   type: bool
   level: dev
-  desc: Try to submit metadata transaction to rocksdb in queuing thread context
+  desc: Try to submit metadata transaction to RocksDB in queuing thread context
   default: false
   with_legacy: true
 - name: bluestore_fsck_read_bytes_cap
@@ -5261,7 +5375,9 @@ options:
 - name: bluestore_fsck_shared_blob_tracker_size
   type: float
   level: dev
-  desc: Size(a fraction of osd_memory_target, defaults to 128MB) of a hash table to track shared blobs ref counts. Higher the size, more precise is the tracker -> less overhead during the repair.
+  desc: Size  (a fraction of osd_memory_target, defaults to 128MB) of a hash
+    table that tracks shared blob ref counts. A higher value makes the
+    the tracker more precise and reduces overhead during repairs.
   default: 0.03125
   see_also:
   - osd_memory_target
@@ -5294,7 +5410,7 @@ options:
 - name: bluestore_throttle_cost_per_io_hdd
   type: uint
   level: advanced
-  desc: Default bluestore_throttle_cost_per_io for rotational media
+  desc: Default bluestore_throttle_cost_per_io for rotational media (HDDs)
   default: 670000
   see_also:
   - bluestore_throttle_cost_per_io
@@ -5304,7 +5420,7 @@ options:
 - name: bluestore_throttle_cost_per_io_ssd
   type: uint
   level: advanced
-  desc: Default bluestore_throttle_cost_per_io for non-rotation (solid state) media
+  desc: Default bluestore_throttle_cost_per_io for non-rotation (SSD) media
   default: 4000
   see_also:
   - bluestore_throttle_cost_per_io
@@ -5324,7 +5440,7 @@ options:
 - name: bluestore_deferred_batch_ops_hdd
   type: uint
   level: advanced
-  desc: Default bluestore_deferred_batch_ops for rotational media
+  desc: Default bluestore_deferred_batch_ops for rotational media (HDD)
   default: 64
   see_also:
   - bluestore_deferred_batch_ops
@@ -5336,7 +5452,7 @@ options:
 - name: bluestore_deferred_batch_ops_ssd
   type: uint
   level: advanced
-  desc: Default bluestore_deferred_batch_ops for non-rotational (solid state) media
+  desc: Default bluestore_deferred_batch_ops for non-rotational (SSD) media
   default: 16
   see_also:
   - bluestore_deferred_batch_ops
@@ -5348,13 +5464,13 @@ options:
 - name: bluestore_nid_prealloc
   type: int
   level: dev
-  desc: Number of unique object ids to preallocate at a time
+  desc: Number of unique object IDs to preallocate at a time
   default: 1024
   with_legacy: true
 - name: bluestore_blobid_prealloc
   type: uint
   level: dev
-  desc: Number of unique blob ids to preallocate at a time
+  desc: Number of unique blob IDs to preallocate at a time
   default: 10_K
   with_legacy: true
 - name: bluestore_clone_cow
@@ -5445,14 +5561,14 @@ options:
 - name: bluestore_debug_inject_csum_err_probability
   type: float
   level: dev
-  desc: inject crc verification errors into bluestore device reads
+  desc: Inject CRC verification errors into BlueStore device reads
   default: 0
   with_legacy: true
 - name: bluestore_debug_legacy_omap
   type: bool
   level: dev
-  desc: Allows mkfs to create OSD in legacy OMAP naming mode (neither per-pool nor per-pg).
-    This is intended primarily for developers' purposes. The resulting OSD might/would
+  desc: Allows mkfs to create OSDs with the legacy omap naming mode (neither per-pool nor per-pg).
+    This is intended primarily for developers. The resulting OSDs might / would
     be transformed to the currrently default 'per-pg' format when BlueStore's quick-fix or
     repair are applied.
   default: false
@@ -5460,95 +5576,144 @@ options:
 - name: bluestore_fsck_error_on_no_per_pool_stats
   type: bool
   level: advanced
-  desc: Make fsck error (instead of warn) when bluestore lacks per-pool stats, e.g.,
-    after an upgrade
+  desc: Direct that fsck throws an error (instead of raising a warning) when BlueStore OSDs
+     lack per-pool stats, for example after an upgrade
   default: false
   with_legacy: true
 - name: bluestore_warn_on_bluefs_spillover
   type: bool
   level: advanced
-  desc: Enable health indication on bluefs slow device usage
+  desc: Raise a health warning on BlueFS slow device spillover
   default: true
   with_legacy: true
 - name: bluestore_warn_on_legacy_statfs
   type: bool
   level: advanced
-  desc: Enable health indication on lack of per-pool statfs reporting from bluestore
+  desc: Raise a health warning on the lack of per-pool statfs reporting from a BlueStore OSD
   default: true
   with_legacy: true
 - name: bluestore_warn_on_spurious_read_errors
   type: bool
   level: advanced
-  desc: Enable health indication when spurious read errors are observed by OSD
+  desc: Raise a health warning when spurious read errors are observed by an OSD
   default: true
   with_legacy: true
+- name: bluestore_warn_on_free_fragmentation
+  type: float
+  level: basic
+  desc: The level at which BlueStore block device free fragmentation raises a
+    health warning. Set to "1" to disable.
+    This is the value reported by the admin socket command "bluestore allocator score block".
+  default: 0.8
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_fragmentation_check_period
+- name: bluestore_fragmentation_check_period
+  type: uint
+  level: basic
+  desc: The interval at which to perform a BlueStore free fragmentation check.
+    Checking fragmentation is usually almost immediate. For highly fragmented storage,
+    it can take several miliseconds and can cause a write operation to stall.
+  default: 3600
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bluestore_warn_on_free_fragmentation
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
-  desc: A configurable duration for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the duration aftr which BlueStore slow ops warnings clear after being raised by
+    exceeding the `bluestore_slow_ops_warn_threshold`.  This is not the same as `osd_op_complaint_time`, which is about RADOS ops at the
+    OSD level.
   default: 86400
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_threshold
+  - osd_op_complaint_time
 - name: bluestore_slow_ops_warn_threshold
   type: uint
   level: advanced
-  desc: A configurable number for slow ops warning to be appeared if number of occurence pass `bluestore_slow_ops_warn_threshold` in `bluestore_slow_ops_warn_lifetime` seconds
+  desc: Set the minimum number of BlueStore slow ops before raising a health warning
   default: 1
   with_legacy: true
+  see_also:
+  - bluestore_slow_ops_warn_lifetime
+  - osd_op_complaint_time
 - name: bluestore_fsck_error_on_no_per_pool_omap
   type: bool
   level: advanced
-  desc: Make fsck error (instead of warn) when objects without per-pool omap are found
+  desc: Throw a fsck error (instead of a warning) when objects without per-pool omap are found
   default: false
   with_legacy: true
 - name: bluestore_fsck_error_on_no_per_pg_omap
   type: bool
   level: advanced
-  desc: Make fsck error (instead of warn) when objects without per-pg omap are found
+  desc: Throw a fsck error (instead of a warning) when objects without per-pg omap are found
   default: false
   with_legacy: true
 - name: bluestore_warn_on_no_per_pool_omap
   type: bool
   level: advanced
-  desc: Enable health indication on lack of per-pool omap
+  desc: Raise a health warning on lack of per-pool omap
   default: true
   with_legacy: true
 - name: bluestore_warn_on_no_per_pg_omap
   type: bool
   level: advanced
-  desc: Enable health indication on lack of per-pg omap
+  desc: Raise a health warning on lack of per-pg omap
   default: false
   with_legacy: true
 - name: bluestore_log_op_age
   type: float
   level: advanced
-  desc: log operation if it's slower than this age (seconds)
+  desc: Log a BlueStore operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
 - name: bluestore_log_omap_iterator_age
   type: float
   level: advanced
-  desc: log omap iteration operation if it's slower than this age (seconds)
+  desc: Log an omap iteration operation if it is slower than this age (seconds)
   default: 5
   with_legacy: true
 - name: bluestore_log_collection_list_age
   type: float
   level: advanced
-  desc: log collection list operation if it's slower than this age (seconds)
+  desc: Log a collection list operation if it is slower than this age (seconds)
   default: 1_min
   with_legacy: true
 - name: bluestore_debug_enforce_settings
   type: str
   level: dev
-  desc: Enforces specific hw profile settings
-  long_desc: '''hdd'' enforces settings intended for BlueStore above a rotational
-    drive. ''ssd'' enforces settings intended for BlueStore above a solid drive. ''default''
-    - using settings for the actual hardware.'
+  desc: Enforces specific hardware profile settings
+  long_desc: '''hdd'' enforces settings intended for BlueStore on a rotational
+    drive. ''ssd'' enforces settings intended for BlueStore on an SSD. ''default''
+    indicates that BlueStore is to use settings based on the detected hardware.'
   default: default
   enum_values:
   - default
   - hdd
   - ssd
   with_legacy: true
+- name: bluestore_allocator_lookup_policy
+  type: str
+  level: advanced
+  desc: Determines how to perform the next free extent lookup.
+  long_desc: When set to 'hdd_optimized' the allocator searches from the last
+     location found. This may facilitate contiguous disk writes. It may similarly
+     be beneficial for large-IU QLC SSDs to enable firmware coalescing of sub-IU
+     writes.
+     When set to 'ssd-optimized' the allocator will search from the beginning of
+     the device. This may facilitate SSD firmware housekeeping.
+     When set to 'auto' the value will be derived from the detected device type
+    (rotational or non-rotational).
+  default: auto
+  enum_values:
+  - hdd_optimized
+  - ssd_optimized
+  - auto
 - name: bluestore_avl_alloc_ff_max_search_count
   type: uint
   level: dev
@@ -5566,7 +5731,7 @@ options:
   level: dev
   desc: Sets threshold at which shrinking max free chunk size triggers enabling best-fit
     mode.
-  long_desc: 'AVL allocator works in two modes: near-fit and best-fit. By default,
+  long_desc: 'The AVL allocator works in two modes: near-fit and best-fit. By default,
     it uses very fast near-fit mode, in which it tries to fit a new block near the
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
@@ -5579,14 +5744,14 @@ options:
 - name: bluestore_avl_alloc_bf_free_pct
   type: uint
   level: dev
-  desc: Sets threshold at which shrinking free space (in %, integer) triggers enabling
+  desc: Sets the threshold at which shrinking free space (in %, integer) triggers enabling
     best-fit mode.
   long_desc: 'AVL allocator works in two modes: near-fit and best-fit. By default,
     it uses very fast near-fit mode, in which it tries to fit a new block near the
     last allocated block of similar size. The second mode is much slower best-fit
     mode, in which it tries to find an exact match for the requested allocation. This
     mode is used when either the device gets fragmented or when it is low on free
-    space. When free space is smaller than ''bluestore_avl_alloc_bf_free_pct'', best-fit
+    space. When free space is smaller than `bluestore_avl_alloc_bf_free_pct`, best-fit
     mode is used.'
   default: 4
   see_also:
@@ -5594,7 +5759,7 @@ options:
 - name: bluestore_hybrid_alloc_mem_cap
   type: uint
   level: dev
-  desc: Maximum RAM hybrid allocator should use before enabling bitmap supplement
+  desc: The maximum amount of memory the hybrid allocator should use before enabling bitmap supplement
   default: 64_M
 - name: bluestore_btree2_alloc_weight_factor
   type: float
@@ -5604,12 +5769,12 @@ options:
 - name: bluestore_volume_selection_policy
   type: str
   level: dev
-  desc: Determines bluefs volume selection policy
-  long_desc: Determines bluefs volume selection policy. 'use_some_extra*' policy allows
-    to override RocksDB level granularity and put high level's data to faster device
-    even when the level doesn't completely fit there. 'fit_to_fast' policy enables
-    using 100% of faster disk capacity and allows the user to turn on 'level_compaction_dynamic_level_bytes'
-    option in RocksDB options.
+  desc: Determine the BlueFS volume selection policy
+  long_desc: Determine the BlueFS volume selection policy. The 'use_some_extra*' policy allows
+    overriding RocksDB level granularity and placing a high levels' data on a faster device
+    even when the level doesn't completely fit there. The 'fit_to_fast' policy enables
+    using 100% of faster device capacity and allows the user to enable the 'level_compaction_dynamic_level_bytes'
+    RocksDB option.
   default: use_some_extra
   enum_values:
   - rocksdb_original
@@ -5620,9 +5785,9 @@ options:
 - name: bluestore_volume_selection_reserved_factor
   type: float
   level: advanced
-  desc: DB level size multiplier. Determines amount of space at DB device to bar from
-    the usage when 'use some extra' policy is in action. Reserved size is determined
-    as sum(L_max_size[0], L_max_size[L-1]) + L_max_size[L] * this_factor
+  desc: RocksDB level size multiplier. Determines amount of space at DB device to bar from
+    the usage when 'use some extra' policy is in action. The reserved size is determined
+    by sum(L_max_size[0], L_max_size[L-1]) + L_max_size[L] * this_factor
   default: 2
   flags:
   - startup
@@ -5630,9 +5795,9 @@ options:
 - name: bluestore_volume_selection_reserved
   type: int
   level: advanced
-  desc: Space reserved at DB device and not allowed for 'use some extra' policy usage.
-    Overrides 'bluestore_volume_selection_reserved_factor' setting and introduces
-    straightforward limit.
+  desc: Space reserved on the DB device and not allowed for 'use some extra' policy usage.
+    Overrides the 'bluestore_volume_selection_reserved_factor' setting and introduces
+    a straightforward limit.
   default: 0
   flags:
   - startup
@@ -5640,7 +5805,7 @@ options:
 - name: bdev_ioring
   type: bool
   level: advanced
-  desc: Enables Linux io_uring API instead of libaio
+  desc: Enables the Linux io_uring API instead of libaio
   default: false
 - name: bdev_ioring_hipri
   type: bool
@@ -5666,7 +5831,7 @@ options:
   type: bool
   level: dev
   desc: fail/crash on EIO
-  long_desc: whether bluestore osd fails on eio
+  long_desc: Whether BlueStore OSDs fail on EIO
   default: false
   flags:
   - runtime
@@ -5744,13 +5909,13 @@ options:
 - name: filestore_rocksdb_options
   type: str
   level: dev
-  desc: Options to pass through when RocksDB is used as the KeyValueDB for filestore.
+  desc: Options to pass through when RocksDB is used as the KeyValueDB for (deprecated) Filestore.
   default: max_background_jobs=10,compaction_readahead_size=2097152,compression=kNoCompression
   with_legacy: true
 - name: filestore_omap_backend
   type: str
   level: dev
-  desc: The KeyValueDB to use for filestore metadata (ie omap).
+  desc: The KeyValueDB to use for Filestore metadata (that is, omaps) (deprecated).
   default: rocksdb
   enum_values:
   - leveldb
@@ -5759,119 +5924,122 @@ options:
 - name: filestore_omap_backend_path
   type: str
   level: dev
-  desc: The path where the filestore KeyValueDB should store it's database(s).
+  desc: The path where the Filestore KeyValueDB should store its database(s) (deprecated)
   with_legacy: true
 # filestore wb throttle limits
 - name: filestore_wbthrottle_enable
   type: bool
   level: advanced
-  desc: Enabling throttling of operations to backing file system
+  desc: Enabling throttling of operations to backing file system (deprecated)
   default: true
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_bytes_start_flusher
   type: size
   level: advanced
-  desc: Start flushing (fsyncing) when this many bytes are written(btrfs)
+  desc: Start flushing (fsyncing) when this many bytes are written (btrfs, deprecated)  
   default: 40_M
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_bytes_hard_limit
   type: size
   level: advanced
-  desc: Block writes when this many bytes haven't been flushed (fsynced) (btrfs)
+  desc: Block writes when this many bytes haven't been flushed (fsynced) (btrfs, deprecated)
   default: 400_M
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (brtrfs)
+  desc: Start flushing (fsyncing) when this many IOs are written (brtrfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (btrfs)
+  desc: Block writes when this many IOs haven't been flushed (fsynced) (btrfs,deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_inodes_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many distinct inodes have been modified
+  desc: Start flushing (fsyncing) when this many distinct inodes have been modified (deprecated)
     (btrfs)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_xfs_bytes_start_flusher
   type: size
   level: advanced
-  desc: Start flushing (fsyncing) when this many bytes are written(xfs)
+  desc: Start flushing (fsyncing) when this many bytes are written (xfs, deprecated)
   default: 40_M
   with_legacy: true
 - name: filestore_wbthrottle_xfs_bytes_hard_limit
   type: size
   level: advanced
-  desc: Block writes when this many bytes haven't been flushed (fsynced) (xfs)
+  desc: Block writes when this many bytes haven't been flushed (fsynced) (xfs, deprecated)
   default: 400_M
   with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (xfs)
+  desc: Start flushing (fsyncing) when this many IOs are written (xfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (xfs)
+  desc: Block writes when this many IOs haven't been flushed (fsynced) (xfs, deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_start_flusher
   type: uint
   level: advanced
   desc: Start flushing (fsyncing) when this many distinct inodes have been modified
-    (xfs)
+    (xfs, deprecated)
   default: 500
   with_legacy: true
 # These must be less than the fd limit
 - name: filestore_wbthrottle_btrfs_inodes_hard_limit
   type: uint
   level: advanced
-  desc: Block writing when this many inodes have outstanding writes (btrfs)
+  desc: Block writing when this many inodes have outstanding writes (btrfs, deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_hard_limit
   type: uint
   level: advanced
-  desc: Block writing when this many inodes have outstanding writes (xfs)
+  desc: Block writing when this many inodes have outstanding writes (xfs, deprecated)
   default: 5000
   with_legacy: true
-# Introduce a O_DSYNC write in the filestore
+# O_DSYNC writes to Filestore
 - name: filestore_odsync_write
   type: bool
   level: dev
-  desc: Write with O_DSYNC
+  desc: Write with O_DSYNC (deprecated)
   default: false
   with_legacy: true
 # Tests index failure paths
 - name: filestore_index_retry_probability
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Allow object read error injection
 - name: filestore_debug_inject_read_err
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_debug_omap_check
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   fmt_desc: Debugging check on synchronization. This is an expensive operation.
-
   with_legacy: true
 - name: filestore_omap_header_cache_size
   type: size
   level: dev
+  desc: Deprecated
   default: 1_K
   with_legacy: true
 # Use omap for xattrs for attrs over
@@ -5879,57 +6047,68 @@ options:
 - name: filestore_max_inline_xattr_size
   type: size
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 - name: filestore_max_inline_xattr_size_xfs
   type: size
   level: dev
+  desc: Deprecated
   default: 64_K
   with_legacy: true
 - name: filestore_max_inline_xattr_size_btrfs
   type: size
   level: dev
+  desc: Deprecated
   default: 2_K
   with_legacy: true
 - name: filestore_max_inline_xattr_size_other
   type: size
   level: dev
+  desc: Deprecated
   default: 512
   with_legacy: true
 # for more than filestore_max_inline_xattrs attrs
 - name: filestore_max_inline_xattrs
   type: uint
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 - name: filestore_max_inline_xattrs_xfs
   type: uint
   level: dev
+  desc: Deprecated
   default: 10
   with_legacy: true
 - name: filestore_max_inline_xattrs_btrfs
   type: uint
   level: dev
+  desc: Deprecated
   default: 10
   with_legacy: true
 - name: filestore_max_inline_xattrs_other
   type: uint
   level: dev
+  desc: Deprecated
   default: 2
   with_legacy: true
 - name: filestore_max_xattr_value_size
   type: size
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 - name: filestore_max_xattr_value_size_xfs
   type: size
   level: dev
+  desc: Deprecated
   default: 64_K
   with_legacy: true
 - name: filestore_max_xattr_value_size_btrfs
   type: size
   level: dev
+  desc: Deprecated
   default: 64_K
   with_legacy: true
 # ext4 allows 4k xattrs total including some smallish extra fields and the
@@ -5941,71 +6120,78 @@ options:
 - name: filestore_max_xattr_value_size_other
   type: size
   level: dev
+  desc: Deprecated
   default: 1_K
   with_legacy: true
 # track sloppy crcs
 - name: filestore_sloppy_crc
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_sloppy_crc_block_size
   type: size
   level: dev
+  desc: Deprecated
   default: 64_K
   with_legacy: true
 - name: filestore_max_alloc_hint_size
   type: size
   level: dev
+  desc: Deprecated
   default: 1_M
   with_legacy: true
 # seconds
 - name: filestore_max_sync_interval
   type: float
   level: advanced
-  desc: Period between calls to syncfs(2) and journal trims (seconds)
+  desc: Period between calls to syncfs(2) and journal trims (seconds)(Deprecated)
   default: 5
   with_legacy: true
 # seconds
 - name: filestore_min_sync_interval
   type: float
   level: dev
-  desc: Minimum period between calls to syncfs(2)
+  desc: Minimum period between calls to syncfs(2) (deprecated)
   default: 0.01
   with_legacy: true
 - name: filestore_btrfs_snap
   type: bool
   level: dev
+  desc: Deprecated
   default: true
   with_legacy: true
 - name: filestore_btrfs_clone_range
   type: bool
   level: advanced
-  desc: Use btrfs clone_range ioctl to efficiently duplicate objects
+  desc: Use btrfs clone_range ioctl to efficiently duplicate objects (deprecated)
   default: true
   with_legacy: true
 # zfsonlinux is still unstable
 - name: filestore_zfs_snap
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_fsync_flushes_journal_data
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 # (try to) use fiemap
 - name: filestore_fiemap
   type: bool
   level: advanced
-  desc: Use fiemap ioctl(2) to determine which parts of objects are sparse
+  desc: Use fiemap ioctl(2) to determine which parts of objects are sparse (deprecated)
   default: false
   with_legacy: true
 - name: filestore_punch_hole
   type: bool
   level: advanced
-  desc: Use fallocate(2) FALLOC_FL_PUNCH_HOLE to efficiently zero ranges of objects
+  desc: Use fallocate(2) FALLOC_FL_PUNCH_HOLE to efficiently zero ranges of objects (deprecated)
   default: false
   with_legacy: true
 # (try to) use seek_data/hole
@@ -6013,26 +6199,26 @@ options:
   type: bool
   level: advanced
   desc: Use lseek(2) SEEK_HOLE and SEEK_DATA to determine which parts of objects are
-    sparse
+    sparse (deprecated)
   default: false
   with_legacy: true
 - name: filestore_splice
   type: bool
   level: advanced
-  desc: Use splice(2) to more efficiently copy data between files
+  desc: Use splice(2) to more efficiently copy data between files (deprecated)
   default: false
   with_legacy: true
 - name: filestore_fadvise
   type: bool
   level: advanced
-  desc: Use posix_fadvise(2) to pass hints to file system
+  desc: Use posix_fadvise(2) to pass hints to file system (deprecated)
   default: true
   with_legacy: true
 # collect device partition information for management application to use
 - name: filestore_collect_device_partition_information
   type: bool
   level: advanced
-  desc: Collect metadata about the backing file system on OSD startup
+  desc: Collect metadata about the backing file system on OSD startup (deprecated)
   default: true
   with_legacy: true
 # (try to) use extsize for alloc hint NOTE: extsize seems to trigger
@@ -6045,172 +6231,194 @@ options:
 - name: filestore_xfs_extsize
   type: bool
   level: advanced
-  desc: Use XFS extsize ioctl(2) to hint allocator about expected write sizes
+  desc: Use XFS extsize ioctl(2) to hint allocator about expected write sizes (deprecated)
   default: false
   with_legacy: true
 - name: filestore_journal_parallel
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_journal_writeahead
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_journal_trailing
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_queue_max_ops
   type: uint
   level: advanced
-  desc: Max IO operations in flight
+  desc: Max IO operations in flight (deprecated)
   default: 50
   with_legacy: true
 - name: filestore_queue_max_bytes
   type: size
   level: advanced
-  desc: Max (written) bytes in flight
+  desc: Max (written) bytes in flight (deprecated)
   default: 100_M
   with_legacy: true
 - name: filestore_caller_concurrency
   type: int
   level: dev
+  desc: Deprecated
   default: 10
   with_legacy: true
 # Expected filestore throughput in B/s
 - name: filestore_expected_throughput_bytes
   type: float
   level: advanced
-  desc: Expected throughput of backend device (aids throttling calculations)
+  desc: Expected throughput of backend device (aids throttling calculations) (deprecated)
   default: 209715200
   with_legacy: true
 # Expected filestore throughput in ops/s
 - name: filestore_expected_throughput_ops
   type: float
   level: advanced
-  desc: Expected through of backend device in IOPS (aids throttling calculations)
+  desc: Expected through of backend device in IOPS (aids throttling calculations) (deprecated)
   default: 200
   with_legacy: true
 # Filestore max delay multiple.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Filestore high delay multiple.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Filestore max delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple_bytes
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Filestore high delay multiple bytes.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple_bytes
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Filestore max delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_max_delay_multiple_ops
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Filestore high delay multiple ops.  Defaults to 0 (disabled)
 - name: filestore_queue_high_delay_multiple_ops
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 - name: filestore_queue_low_threshhold
   type: float
   level: dev
+  desc: Deprecated
   default: 0.3
   with_legacy: true
 - name: filestore_queue_high_threshhold
   type: float
   level: dev
+  desc: Deprecated
   with_legacy: true
   default: 0.9
 - name: filestore_op_threads
   type: int
   level: advanced
-  desc: Threads used to apply changes to backing file system
+  desc: Threads used to apply changes to backing file system (deprecated)
   default: 2
   with_legacy: true
 - name: filestore_op_thread_timeout
   type: int
   level: advanced
-  desc: Seconds before a worker thread is considered stalled
+  desc: Seconds before a worker thread is considered stalled (deprecated)
   default: 1_min
   with_legacy: true
 - name: filestore_op_thread_suicide_timeout
   type: int
   level: advanced
-  desc: Seconds before a worker thread is considered dead
+  desc: Seconds before a worker thread is considered dead (deprecated)
   default: 3_min
   with_legacy: true
 - name: filestore_commit_timeout
   type: float
   level: advanced
-  desc: Seconds before backing file system is considered hung
+  desc: Seconds before backing file system is considered hung (deprecated)
   default: 10_min
   with_legacy: true
 - name: filestore_fiemap_threshold
   type: size
   level: dev
+  desc: Deprecated
   default: 4_K
   with_legacy: true
 - name: filestore_merge_threshold
   type: int
   level: dev
+  desc: Deprecated
   default: -10
   with_legacy: true
 - name: filestore_split_multiple
   type: int
   level: dev
+  desc: Deprecated
   default: 2
   with_legacy: true
 - name: filestore_split_rand_factor
   type: uint
   level: dev
+  desc: Deprecated
   default: 20
   with_legacy: true
 - name: filestore_update_to
   type: int
   level: dev
+  desc: Deprecated
   default: 1000
   with_legacy: true
 - name: filestore_blackhole
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: filestore_fd_cache_size
   type: int
   level: dev
+  desc: Deprecated
   default: 128
   with_legacy: true
 - name: filestore_fd_cache_shards
   type: int
+  desc: Deprecated
   level: dev
   default: 16
   with_legacy: true
 - name: filestore_ondisk_finisher_threads
   type: int
+  desc: Deprecated
   level: dev
   default: 1
   with_legacy: true
 - name: filestore_apply_finisher_threads
   type: int
+  desc: Deprecated
   level: dev
   default: 1
   with_legacy: true
@@ -6218,28 +6426,33 @@ options:
 - name: filestore_dump_file
   type: str
   level: dev
+  desc: Deprecated
   with_legacy: true
 # inject a failure at the n'th opportunity
 - name: filestore_kill_at
   type: int
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # artificially stall for N seconds in op queue thread
 - name: filestore_inject_stall
   type: int
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # fail/crash on EIO
 - name: filestore_fail_eio
   type: bool
   level: dev
+  desc: Deprecated
   default: true
   with_legacy: true
 - name: filestore_debug_verify_split
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: journal_dio
@@ -6247,7 +6460,7 @@ options:
   level: dev
   default: true
   fmt_desc: Enables direct i/o to the journal. Requires ``journal block
-   align`` set to ``true``.
+   align`` set to ``true``. (deprecateD)
   with_legacy: true
 - name: journal_aio
   type: bool
@@ -6260,11 +6473,13 @@ options:
 - name: journal_force_aio
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 - name: journal_block_size
   type: size
   level: dev
+  desc: Deprecated
   default: 4_K
   with_legacy: true
 - name: journal_block_align
@@ -6289,7 +6504,7 @@ options:
 - name: journal_max_write_entries
   type: int
   level: advanced
-  desc: Max IOs in flight to journal
+  desc: Max IOs in flight to journal (deprecated)
   fmt_desc: The maximum number of entries the journal will write at
    any one time.
   default: 100
@@ -6298,67 +6513,77 @@ options:
 - name: journal_throttle_low_threshhold
   type: float
   level: dev
+  desc: Deprecated
   default: 0.6
   with_legacy: true
 - name: journal_throttle_high_threshhold
   type: float
   level: dev
+  desc: Deprecated
   default: 0.9
   with_legacy: true
 # Multiple over expected at high_threshhold. Defaults to 0 (disabled).
 - name: journal_throttle_high_multiple
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # Multiple over expected at max.  Defaults to 0 (disabled).
 - name: journal_throttle_max_multiple
   type: float
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 # align data payloads >= this.
 - name: journal_align_min_size
   type: size
   level: dev
+  desc: Deprecated
   default: 64_K
   fmt_desc: Align data payloads greater than the specified minimum.
   with_legacy: true
 - name: journal_replay_from
   type: int
   level: dev
+  desc: Deprecated
   default: 0
   with_legacy: true
 - name: journal_zero_on_create
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   fmt_desc: |
-    Causes the file store to overwrite the entire journal with
+    Causes Filestore to overwrite the entire journal with
     ``0``'s during ``mkfs``.
   with_legacy: true
 # assume journal is not corrupt
 - name: journal_ignore_corruption
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 # using ssd disk as journal, whether support discard nouse journal-data.
 - name: journal_discard
   type: bool
   level: dev
+  desc: Deprecated
   default: false
   with_legacy: true
 # fio data directory for fio-objectstore
 - name: fio_dir
   type: str
   level: advanced
+  desc: FIO data directory for FIO-objectstore
   default: /tmp/fio
   with_legacy: true
 - name: rados_mon_op_timeout
   type: secs
   level: advanced
-  desc: timeout for operations handled by monitors such as statfs (0 is unlimited)
+  desc: Timeout for operations handled by Monitors, for example  statfs(). (0 is unlimited)
   default: 0
   min: 0
   flags:
@@ -6366,75 +6591,107 @@ options:
 - name: rados_osd_op_timeout
   type: secs
   level: advanced
-  desc: timeout for operations handled by osds such as write (0 is unlimited)
+  desc: Timeout for operations handled by OSDs, for example write(). (0 is unlimited)
   default: 0
   min: 0
   flags:
   - runtime
+- name: rados_replica_read_policy
+  type: str
+  level: advanced
+  desc: Read policy for sending read requests to OSD
+  fmt_desc : |
+    Policy for determining which OSD in a PG acting set will receive read operations.
+    If set to ``default``, each PG's primary OSD will always be used
+    for read operations. If set to ``balance``, read operations will
+    be sent to a randomly selected OSD within the replica set. If set
+    to ``localize``, read operations will be sent to the closest OSD
+    as determined by the CRUSH map.
+  default: default
+  enum_values:
+  - default
+  - balance
+  - localize
+  flags:
+  - runtime
+- name: rados_replica_read_policy_on_objclass
+  type: bool
+  level: advanced
+  desc: Enable read policy for sending read requests to OSD on objclass ops
+  fmt_desc : |
+    This enables objclass ops to leverage read policy that can
+    determine which OSD will receive read operations. The reason
+    to disable by default this is because objclass operations may
+    not be flagged correctly as read or write ops and we don't want
+    write ops to be sent to the wrong OSD, in which case the system won't function
+    correctly.
+  default: false
 # true if LTTng-UST tracepoints should be enabled
 - name: rados_tracing
   type: bool
   level: advanced
+  desc: Should LTTng-UST tracepoints be enabled?
   default: false
   with_legacy: true
 - name: mgr_connect_retry_interval
   type: float
   level: dev
+  desc: Manager reconnect retry interval
   default: 1
   services:
   - common
 - name: mgr_client_service_daemon_unregister_timeout
   type: float
   level: dev
-  desc: Time to wait during shutdown to deregister service with mgr
+  desc: Time to wait during shutdown to deregister a service with the Manager
   default: 1
 - name: mgr_enable_op_tracker
   type: bool
   level: advanced
-  desc: Enable / disable MGR Op Tracker
+  desc: Enable / disable the Manager op tracker
   default: true
   with_legacy: true
 - name: mgr_num_op_tracker_shard
   type: uint
   level: advanced
-  desc: The number of shards for holding the ops
+  desc: The number of shards for Manager ops
   default: 32
   with_legacy: true
 - name: mgr_op_complaint_time
   type: float
   level: advanced
   default: 30
-  desc: An operation becomes complaint worthy after the specified number of seconds have elapsed.
+  desc: A Manager operation becomes complaint-worthy after the specified number of seconds have elapsed.
   with_legacy: true
 - name: mgr_op_log_threshold
   type: int
   level: advanced
   default: 5
-  fmt_desc: How many operations logs to display at once.
+  fmt_desc: How many Manager op logs to display at once.
   with_legacy: true
 - name: mgr_op_history_size
   type: uint
   level: advanced
   default: 20
-  fmt_desc: The maximum number of completed operations to track.
+  fmt_desc: The maximum number of completed Manager ops to track.
   with_legacy: true
 - name: mgr_op_history_duration
   type: uint
   level: advanced
   default: 600
-  desc: The oldest completed operation to track.
+  desc: The oldest completed Manager operation to track.
   with_legacy: true
 - name: mgr_op_history_slow_op_size
   type: uint
   level: advanced
   default: 20
-  desc: Max number of slow ops to track
+  desc: Max number of slow Manager ops to track
   with_legacy: true
 - name: mgr_op_history_slow_op_threshold
   type: float
   level: advanced
   default: 10
-  desc: Duration of an op to be considered as a historical slow op
+  desc: Duration of a Manager op to be considered as a historical slow op
   with_legacy: true
 - name: throttler_perf_counter
   type: bool
@@ -6449,12 +6706,12 @@ options:
 - name: bluestore_tracing
   type: bool
   level: advanced
-  desc: Enable bluestore event tracing.
+  desc: Enable BlueStore event tracing.
   default: false
 - name: bluestore_throttle_trace_rate
   type: float
   level: advanced
-  desc: Rate at which to sample bluestore transactions (per second)
+  desc: Rate at which to sample BlueStore transactions (per second)
   default: 0
 - name: debug_deliberately_leak_memory
   type: bool
@@ -6464,19 +6721,22 @@ options:
 - name: debug_asserts_on_shutdown
   type: bool
   level: dev
-  desc: Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738
+  desc: Enable certain assertions to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738
   default: false
 - name: debug_asok_assert_abort
   type: bool
   level: dev
-  desc: allow commands 'assert' and 'abort' via asok for testing crash dumps etc
+  desc: Enable the admin socket commands 'assert' and 'abort' testing crash dumps etc.
   default: false
   with_legacy: true
 - name: target_max_misplaced_ratio
   type: float
   level: basic
-  desc: Max ratio of misplaced objects to target when throttling data rebalancing
-    activity
+  desc: Max ratio of misplaced RADOS objects to target when scheduling data rebalancing
+    activity. A lower value results in the balancer making smaller, less impactful changes
+    with the tradeoff of decreased efficiency and longer time to converge. When making
+    CRUSH rules or topolgy changes or performing large cluster expansions, a lower value
+    can help avoid transitory nearfull or backfillfull ratio excursions.
   default: 0.05
 - name: device_failure_prediction_mode
   type: str
@@ -6504,7 +6764,7 @@ options:
 - name: gss_target_name
   type: str
   level: advanced
-  long_desc: This sets the gss target service name.
+  long_desc: This sets the GSS target service name.
   default: ceph
   services:
   - mon
@@ -6538,7 +6798,7 @@ options:
 - name: cephsqlite_lock_renewal_interval
   type: millisecs
   level: advanced
-  desc: number of milliseconds before lock is renewed
+  desc: Number of milliseconds before a cephsqlite lock is renewed
   default: 2000
   tags:
   - client
@@ -6548,7 +6808,7 @@ options:
 - name: cephsqlite_lock_renewal_timeout
   type: millisecs
   level: advanced
-  desc: number of milliseconds before transaction lock times out
+  desc: Number of milliseconds before a libcephsqlite transaction lock times out
   long_desc: The amount of time before a running libcephsqlite VFS connection has
     to renew a lock on the database before the lock is automatically lost. If the
     lock is lost, the VFS will abort the process to prevent database corruption.
@@ -6561,7 +6821,7 @@ options:
 - name: cephsqlite_blocklist_dead_locker
   type: bool
   level: advanced
-  desc: blocklist the last dead owner of the database lock
+  desc: Blocklist the last dead owner of the database lock
   long_desc: Require that the Ceph SQLite VFS blocklist the last dead owner of the
     database when cleanup was incomplete. DO NOT CHANGE THIS UNLESS YOU UNDERSTAND
     THE RAMIFICATIONS. CORRUPTION MAY RESULT.
@@ -6571,7 +6831,7 @@ options:
 - name: bdev_type
   type: str
   level: advanced
-  desc: Explicitly set the device type to select the driver if it's needed
+  desc: Explicitly set the device type to select the driver if needed
   enum_values:
   - aio
   - spdk
@@ -6579,25 +6839,81 @@ options:
 - name: bdev_stalled_read_warn_lifetime
   type: uint
   level: advanced
-  desc: A configurable duration for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  desc: A configurable duration for a stalled read warning to be raised when the
+    number of stalled reads passes the `bdev_stalled_read_warn_threshold`
+    in `bdev_stalled_read_warn_lifetime` seconds
   default: 86400
   with_legacy: true
 - name: bdev_stalled_read_warn_threshold
   type: uint
   level: advanced
-  desc: A configurable number for stalled read warning to be appeared if number of stalled read occurence pass `bdev_stalled_read_warn_threshold` in `bdev_stalled_read_warn_lifetime` seconds
+  desc: A configurable number for stalled read warnings to be raised if the number
+    of stalled reads passes the `bdev_stalled_read_warn_threshold`
+    in `bdev_stalled_read_warn_lifetime` seconds
   default: 1
+  with_legacy: true
+- name: bdev_discard_max_bytes
+  type: size
+  level: advanced
+  desc: Discard queue size in bytes that triggers health warning
+  long_desc: This parameter sets a threshold for the discard queue size (in bytes), triggering a health
+    warning when the queue exceeds the specified limit. This is particularly useful for devices with
+    slow discard operations, as a large backlog in the queue can block disk space that is marked as free
+    but not yet available for allocation, impacting system performance and storage efficiency.
+    `bdev_async_discard_max_pending` is measured in items, not bytes, so its value does not directly
+    correspond to the discard queue size in bytes.
+  default: 10_G
+  with_legacy: true
+  see_also:
+  - bdev_async_discard_max_pending
+- name: bdev_debug_discard_sleep
+  type: uint
+  level: dev
+  desc: A debugging tool to simulate slow discard operations by introducing a delay of
+    `bdev_debug_discard_sleep` milliseconds
+  default: 0
   with_legacy: true
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced
-  desc: How long cleaner should sleep before re-checking utilization
+  desc: How long the BlueStore cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_onode_segment_size
+  type: size
+  level: advanced
+  desc: Size of segment for onode.
+  long_desc: When object size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). When multiple blobs overlap each other
+    some of them might belong to more than one shard. The encoding for such case
+    is inefficient (spanning blobs). Segmentation of data prevents blobs from crossing
+    specific separation lines, preventing spanning blobs altogether.
+    The smaller values give better split on onode shards.
+    The larger values minimize space loss for padding in compression.
+    Recommended values 256K, 512K, 1024K. Value 0 disables segmentation.
+    Actual segment size cannot be smaller than "compression_max_blob_size" pool option, if set.
+  default: 0
+  see_also:
+  - bluestore_extent_map_shard_max_size
+  - bluestore_extent_map_shard_target_size
+  - bluestore_debug_onode_segmentation_random
+  with_legacy: false
+- name: bluestore_debug_onode_segmentation_random
+  type: bool
+  level: dev
+  desc: Random selection of onode segmentation
+  long_desc: For testing purposes. On each mount 50% roll decides whether to use
+    bluestore_onode_segment_size or set it to 0 (disable).
+  default: false
+  see_also:
+  - bluestore_onode_segment_size
+  flags:
+  - startup
+  with_legacy: false
 - name: jaeger_tracing_enable
   type: bool
   level: advanced
-  desc: Ceph should use jaeger tracing system
+  desc: Ceph should use the Jaeger tracing system
   default: false
   services:
   - rgw
@@ -6606,7 +6922,7 @@ options:
 - name: jaeger_agent_port
   type: int
   level: advanced
-  desc: port number of the jaeger agent
+  desc: TCP port number of the Jaeger agent
   default: 6799
   services:
   - rgw
@@ -6614,7 +6930,7 @@ options:
 - name: mgr_ttl_cache_expire_seconds
   type: uint
   level: dev
-  desc: Set the time to live in seconds - set to 0 to disable the cache.
+  desc: Set the Manager cache time to live in seconds; set to 0 to disable the cache.
   default: 0
   services:
   - mgr
@@ -6624,3 +6940,39 @@ options:
   desc: Enables exception throwing instead of process abort on transaction submission error.
   default: false
   with_legacy: false
+- name: ceph_assert_supresssions
+  type: str
+  desc: Suppress specific ceph_assert instances to let the execution continue with unknown, potentially DESTRUCTIVE consequences.
+  fmt_desc: Comma-separated list of locations of ceph_assert in the source code.
+    The format is ``{file}:{line} [, {file}:{line}]``
+  level: dev
+  with_legacy: false
+- name: ec_extent_cache_size
+  type: uint
+  level: advanced
+  desc: Size of the per-shard extent cache
+  default: 10485760
+  services:
+  - osd
+- name: ec_pdw_write_mode
+  type: uint
+  level: dev
+  default: 0
+  desc: When EC writes should generate PDWs (development only) 0=optimal 1=never 2=when possible
+- name: service_unique_id
+  type: str
+  level: advanced
+  desc: Unique string to be returned in PerfCounters
+  fmt_desc: A unique id to be created by orchestration software or the
+    administrator upon initial setup of a service. Enforcing uniqueness
+    is entirely the responsibility of the process used to create and
+    manage the cluster. A unique id will be unique within the scope of
+    the entire cluster across all services if they are chosen to be so.
+  note: If this is empty no uniquifier is provided.
+  tags:
+  - service
+  services:
+  - common
+  flags:
+  - no_mon_update
+  - startup

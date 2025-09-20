@@ -21,7 +21,7 @@ namespace crimson::osd {
 LogMissingRequestReply::LogMissingRequestReply(
   crimson::net::ConnectionRef&& conn,
   Ref<MOSDPGUpdateLogMissingReply> &&req)
-  : l_conn{std::move(conn)},
+  : RemoteOperation{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -54,11 +54,6 @@ PerShardPipeline &LogMissingRequestReply::get_pershard_pipeline(
     ShardServices &shard_services)
 {
   return shard_services.get_replicated_request_pipeline();
-}
-
-ClientRequest::PGPipeline &LogMissingRequestReply::client_pp(PG &pg)
-{
-  return pg.request_pg_pipeline;
 }
 
 seastar::future<> LogMissingRequestReply::with_pg(

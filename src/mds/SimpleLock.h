@@ -16,10 +16,14 @@
 #ifndef CEPH_SIMPLELOCK_H
 #define CEPH_SIMPLELOCK_H
 
+#include <ostream>
+#include <set>
+#include <string_view>
+#include <vector>
+
 #include <boost/intrusive_ptr.hpp>
 
 #include "MDSCacheObject.h"
-#include "MDSContext.h"
 
 // -- lock types --
 // see CEPH_LOCK_*
@@ -35,6 +39,7 @@ extern "C" {
 struct MDLockCache;
 struct MDLockCacheItem;
 struct MutationImpl;
+class MDSContext;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 struct LockType {
@@ -236,7 +241,7 @@ public:
   void finish_waiters(uint64_t mask, int r=0) {
     parent->finish_waiting(getmask(mask), r);
   }
-  void take_waiting(uint64_t mask, MDSContext::vec& ls) {
+  void take_waiting(uint64_t mask, std::vector<MDSContext*>& ls) {
     parent->take_waiting(getmask(mask), ls);
   }
   void add_waiter(uint64_t mask, MDSContext *c) {
@@ -244,6 +249,9 @@ public:
   }
   bool is_waiter_for(uint64_t mask) const {
     return parent->is_waiter_for(getmask(mask));
+  }
+  bool has_any_waiter() const {
+    return is_waiter_for(std::numeric_limits<uint64_t>::max());
   }
 
   bool is_cached() const {
@@ -260,7 +268,7 @@ public:
     //assert(!is_stable() || gather_set.size() == 0);  // gather should be empty in stable states.
     return s;
   }
-  void set_state_rejoin(int s, MDSContext::vec& waiters, bool survivor) {
+  void set_state_rejoin(int s, std::vector<MDSContext*>& waiters, bool survivor) {
     ceph_assert(!get_parent()->is_auth());
 
     // If lock in the replica object was not in SYNC state when auth mds of the object failed.
@@ -419,37 +427,9 @@ public:
   }
 
   // xlock
-  void get_xlock(MutationRef who, client_t client) { 
-    ceph_assert(get_xlock_by() == MutationRef());
-    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
-    parent->get(MDSCacheObject::PIN_LOCK);
-    more()->num_xlock++;
-    more()->xlock_by = who; 
-    more()->xlock_by_client = client;
-  }
-  void set_xlock_done() {
-    ceph_assert(more()->xlock_by);
-    ceph_assert(state == LOCK_XLOCK || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a peer */);
-    if (!is_locallock())
-      state = LOCK_XLOCKDONE;
-    more()->xlock_by.reset();
-  }
-  void put_xlock() {
-    ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
-	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
-	   state == LOCK_LOCK  || /* if we are a leader of a peer */
-	   state == LOCK_PREXLOCK || state == LOCK_SYNC ||
-	   is_locallock());
-    --more()->num_xlock;
-    parent->put(MDSCacheObject::PIN_LOCK);
-    if (more()->num_xlock == 0) {
-      more()->xlock_by.reset();
-      more()->xlock_by_client = -1;
-      try_clear_more();
-    }
-  }
+  void get_xlock(MutationRef who, client_t client);
+  void set_xlock_done();
+  void put_xlock();
   bool is_xlocked() const {
     return have_more() && more()->num_xlock > 0;
   }
@@ -462,8 +442,12 @@ public:
   bool is_xlocked_by_client(client_t c) const {
     return have_more() ? more()->xlock_by_client == c : false;
   }
-  MutationRef get_xlock_by() const {
-    return have_more() ? more()->xlock_by : MutationRef();
+  MutationRef get_xlock_by() const;
+  bool has_xlock_by() const noexcept {
+    return have_more() && more()->xlock_by;
+  }
+  bool is_xlocked_by(const MutationRef &who) const noexcept {
+    return have_more() && more()->xlock_by == who;
   }
   
   // lease
@@ -521,7 +505,7 @@ public:
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
+  void decode_state_rejoin(ceph::buffer::list::const_iterator& p, std::vector<MDSContext*>& waiters, bool survivor) {
     __s16 s;
     using ceph::decode;
     decode(s, p);
@@ -595,7 +579,7 @@ public:
    * to formatter, or nothing if is_sync_and_unlocked.
    */
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SimpleLock*>& ls);
+  static std::list<SimpleLock> generate_test_instances();
 
   virtual void print(std::ostream& out) const {
     out << "(";
@@ -623,6 +607,7 @@ private:
   // XXX not in mempool
   struct unstable_bits_t {
     unstable_bits_t();
+    ~unstable_bits_t() noexcept;
 
     bool empty() {
       return
@@ -647,16 +632,8 @@ private:
   };
 
   bool have_more() const { return _unstable ? true : false; }
-  unstable_bits_t *more() const {
-    if (!_unstable)
-      _unstable.reset(new unstable_bits_t);
-    return _unstable.get();
-  }
-  void try_clear_more() {
-    if (_unstable && _unstable->empty()) {
-      _unstable.reset();
-    }
-  }
+  unstable_bits_t *more() const;
+  void try_clear_more();
 
   int num_rdlock = 0;
 

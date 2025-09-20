@@ -5,7 +5,9 @@
 #include "bluefs_types.h"
 #include "BlueFS.h"
 #include "common/Formatter.h"
+#include "include/byteorder.h"
 #include "include/denc.h"
+#include "include/encoding.h"
 #include "include/uuid.h"
 #include "include/stringify.h"
 
@@ -23,18 +25,116 @@ void bluefs_extent_t::dump(Formatter *f) const
   f->dump_unsigned("bdev", bdev);
 }
 
-void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
+list<bluefs_extent_t> bluefs_extent_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_extent_t);
-  ls.push_back(new bluefs_extent_t);
-  ls.back()->offset = 1;
-  ls.back()->length = 2;
-  ls.back()->bdev = 1;
+  list<bluefs_extent_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().offset = 1;
+  ls.back().length = 2;
+  ls.back().bdev = 1;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 {
   return out << (int)e.bdev << ":0x" << std::hex << e.offset << "~" << e.length
+	     << std::dec;
+}
+
+bluefs_locked_extents_t::bluefs_locked_extents_t(uint64_t head_reserved,
+  uint64_t full_size, uint64_t alloc_size)
+{
+  // Calculating three extents which are potential candidates for locking:
+  // [start, end]
+  // - head: [reserved, p2nphase(reserved, alloc_size)]
+  // - gray_tail: an area which should be locked if head becomes void
+  // - tail: [p2align(full_size, alloc_size), full_size]
+  // Final decision whether locked extents to be maintained is made after
+  // BlueFS replay depending on existing allocations.
+  // This class performs that recalculation on  reset_intercepted() calls
+  // which indicate existing allocations to it.
+  //
+
+  head_offset = head_reserved;
+  head_length = p2nphase(head_reserved, alloc_size);
+  if (head_reserved) {
+    ceph_assert(full_size > head_reserved);
+    uint64_t gray_free_end = p2align(full_size - head_reserved, alloc_size);
+    gray_free_end += head_reserved;
+    if (gray_free_end < full_size) {
+      gray_tail_offset = gray_free_end;
+      gray_tail_length = full_size - gray_free_end;
+    }
+  }
+  uint64_t free_end = p2align(full_size, alloc_size);
+  if (free_end < full_size) {
+    tail_offset = free_end;
+    tail_length = full_size - free_end;
+  }
+}
+
+void bluefs_locked_extents_t::reset_intersected(const bluefs_extent_t& e)
+{
+  if (e.offset < head_end() && e.end() > head_offset) {
+    head_offset = 0;
+    head_length = 0;
+  }
+  if (e.offset < gray_tail_end() && e.end() > gray_tail_offset) {
+    gray_tail_offset = 0;
+    gray_tail_length = 0;
+  }
+  if (e.offset < tail_end() && e.end() > tail_offset) {
+    tail_offset = 0;
+    tail_length = 0;
+  }
+}
+
+bluefs_locked_extents_t bluefs_locked_extents_t::get_merged() const
+{
+  bluefs_locked_extents_t res;
+  res.head_offset = head_offset;
+  res.head_length = head_length;
+  if (gray_tail_length) {
+    if (tail_length) {
+      ceph_assert(gray_tail_offset > 0);
+      ceph_assert(tail_offset > 0);
+      res.tail_offset = std::min(tail_offset, gray_tail_offset);
+      res.tail_length = std::max(tail_end(), gray_tail_end()) - res.tail_offset;
+    } else {
+      res.tail_offset = gray_tail_offset;
+      res.tail_length = gray_tail_length;
+    }
+  } else {
+    res.tail_offset = tail_offset;
+    res.tail_length = tail_length;
+  }
+  return res;
+}
+
+bluefs_locked_extents_t bluefs_locked_extents_t::finalize() const
+{
+  bluefs_locked_extents_t res;
+  if (head_length) {
+    res.head_offset = head_offset;
+    res.head_length = head_length;
+    if (tail_length) {
+      res.tail_offset = tail_offset;
+      res.tail_length = tail_length;
+    }
+  } else {
+    res.tail_offset = gray_tail_offset;
+    res.tail_length = gray_tail_length;
+  }
+  return res;
+}
+
+ostream& operator<<(ostream& out, const bluefs_locked_extents_t& e)
+{
+  return out << std::hex
+             << "<0x" << e.head_offset << "~" << e.head_length
+             << ", [0x"  << e.gray_tail_offset << "~" << e.gray_tail_length
+             << "], 0x"  << e.tail_offset << "~" << e.tail_length << ">"
 	     << std::dec;
 }
 
@@ -65,48 +165,49 @@ void bluefs_layout_t::dump(Formatter *f) const
   f->dump_stream("dedicated_wal") << dedicated_wal;
 }
 
-void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
+list<bluefs_layout_t> bluefs_layout_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_layout_t);
-  ls.push_back(new bluefs_layout_t);
-  ls.back()->shared_bdev = 1;
-  ls.back()->dedicated_db = true;
-  ls.back()->dedicated_wal = true;
+  list<bluefs_layout_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().shared_bdev = 1;
+  ls.back().dedicated_db = true;
+  ls.back().dedicated_wal = true;
+  return ls;
 }
 
 // bluefs_super_t
-bluefs_super_t::bluefs_super_t() : version(0), block_size(4096) {
-  bluefs_max_alloc_size.resize(BlueFS::MAX_BDEV, 0);
+bluefs_super_t::bluefs_super_t() : seq(0), block_size(4096) {
 }
 
 void bluefs_super_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(3, 1, bl);
+  ceph_assert(_version >= BASELINE);
+  __u8 _compat = 1;
+  if (_version == ENVELOPE_MODE_ENABLED) {
+    _compat = ENVELOPE_MODE_ENABLED;
+  }
+  ENCODE_START(_version, _compat, bl);
   encode(uuid, bl);
   encode(osd_uuid, bl);
-  encode(version, bl);
+  encode(seq, bl);
   encode(block_size, bl);
   encode(log_fnode, bl);
   encode(memorized_layout, bl);
-  encode(bluefs_max_alloc_size, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
+
   DECODE_START(3, p);
   decode(uuid, p);
   decode(osd_uuid, p);
-  decode(version, p);
+  decode(seq, p);
   decode(block_size, p);
   decode(log_fnode, p);
   if (struct_v >= 2) {
     decode(memorized_layout, p);
-  }
-  if (struct_v >= 3) {
-    decode(bluefs_max_alloc_size, p);
-  } else {
-    std::fill(bluefs_max_alloc_size.begin(), bluefs_max_alloc_size.end(), 0);
   }
   DECODE_FINISH(p);
 }
@@ -115,29 +216,28 @@ void bluefs_super_t::dump(Formatter *f) const
 {
   f->dump_stream("uuid") << uuid;
   f->dump_stream("osd_uuid") << osd_uuid;
-  f->dump_unsigned("version", version);
+  f->dump_unsigned("seq", seq);
   f->dump_unsigned("block_size", block_size);
   f->dump_object("log_fnode", log_fnode);
-  for (auto& p : bluefs_max_alloc_size)
-    f->dump_unsigned("max_alloc_size", p);
 }
 
-void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
+list<bluefs_super_t> bluefs_super_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_super_t);
-  ls.push_back(new bluefs_super_t);
-  ls.back()->version = 1;
-  ls.back()->block_size = 4096;
+  list<bluefs_super_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().seq = 1;
+  ls.back().block_size = 4096;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
   return out << "super(uuid " << s.uuid
 	     << " osd " << s.osd_uuid
-	     << " v " << s.version
+	     << " seq " << s.seq
 	     << " block_size 0x" << std::hex << s.block_size
 	     << " log_fnode 0x" << s.log_fnode
-	     << " max_alloc_size " << s.bluefs_max_alloc_size
 	     << std::dec << ")";
 }
 
@@ -151,15 +251,17 @@ mempool::bluefs::vector<bluefs_extent_t>::iterator bluefs_fnode_t::seek(
   if (extents_index.size() > 4) {
     auto it = std::upper_bound(extents_index.begin(), extents_index.end(),
       offset);
-    assert(it != extents_index.begin());
+    ceph_assert(it != extents_index.begin());
     --it;
-    assert(offset >= *it);
-    p += it - extents_index.begin();
+    ceph_assert(offset >= *it);
+    uint32_t skip = it - extents_index.begin();
+    ceph_assert(skip <= extents.size());
+    p += skip;
     offset -= *it;
   }
 
   while (p != extents.end()) {
-    if ((int64_t) offset >= p->length) {
+    if (offset >= p->length) {
       offset -= p->length;
       ++p;
     } else {
@@ -177,6 +279,9 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
   delta->mtime = mtime;
   delta->offset = allocated_commited;
   delta->extents.clear();
+
+  delta->encoding = encoding;
+  delta->content_size = content_size;
   if (allocated_commited < allocated) {
     uint64_t x_off = 0;
     auto p = seek(allocated_commited, &x_off);
@@ -205,38 +310,57 @@ void bluefs_fnode_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
+list<bluefs_fnode_t> bluefs_fnode_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_fnode_t);
-  ls.push_back(new bluefs_fnode_t);
-  ls.back()->ino = 123;
-  ls.back()->size = 1048576;
-  ls.back()->mtime = utime_t(123,45);
-  ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
-  ls.back()->__unused__ = 1;
+  list<bluefs_fnode_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().ino = 123;
+  ls.back().size = 1048576;
+  ls.back().mtime = utime_t(123,45);
+  ls.back().extents.push_back(bluefs_extent_t(0, 1048576, 4096));
+  ls.back().__unused__ = 1;
+  ls.back().encoding = 0;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
-  return out << "file(ino " << file.ino
+  out << "file(ino " << file.ino
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
-	     << " extents " << file.extents
-	     << ")";
+	     << " extents " << file.extents;
+  if (file.encoding == ENVELOPE || file.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << file.content_size << std::dec << std::hex;
+    if (file.encoding == ENVELOPE)
+      out << " ENVELOPE " << std::dec;
+    if (file.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN " << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_fnode_delta_t
 
 std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 {
-  return out << "delta(ino " << delta.ino
-	     << " size 0x" << std::hex << delta.size << std::dec
-	     << " mtime " << delta.mtime
-	     << " offset " << std::hex << delta.offset << std::dec
-	     << " extents " << delta.extents
-	     << ")";
+  out << "delta(ino " << delta.ino
+    << " size 0x" << std::hex << delta.size << std::dec
+    << " mtime " << delta.mtime
+    << " offset " << std::hex << delta.offset << std::dec
+    << " extents " << delta.extents;
+  if (delta.encoding == ENVELOPE || delta.encoding == ENVELOPE_FIN) {
+    out << " content-size 0x" << std::hex << delta.content_size << std::dec << std::hex;
+    if (delta.encoding == ENVELOPE)
+      out << " ENVELOPE" << std::dec;
+    if (delta.encoding == ENVELOPE_FIN)
+      out << " ENVELOPE-FIN" << std::dec;
+  }
+  out << ")";
+  return out;
 }
 
 // bluefs_transaction_t
@@ -292,21 +416,22 @@ void bluefs_transaction_t::dump(Formatter *f) const
   f->dump_unsigned("crc", op_bl.crc32c(-1));
 }
 
-void bluefs_transaction_t::generate_test_instances(
-  list<bluefs_transaction_t*>& ls)
+list<bluefs_transaction_t> bluefs_transaction_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_transaction_t);
-  ls.push_back(new bluefs_transaction_t);
-  ls.back()->op_init();
-  ls.back()->op_dir_create("dir");
-  ls.back()->op_dir_create("dir2");
+  list<bluefs_transaction_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().op_init();
+  ls.back().op_dir_create("dir");
+  ls.back().op_dir_create("dir2");
   bluefs_fnode_t fnode;
   fnode.ino = 2;
-  ls.back()->op_file_update(fnode);
-  ls.back()->op_dir_link("dir", "file1", 2);
-  ls.back()->op_dir_unlink("dir", "file1");
-  ls.back()->op_file_remove(2);
-  ls.back()->op_dir_remove("dir2");
+  ls.back().op_file_update(fnode);
+  ls.back().op_dir_link("dir", "file1", 2);
+  ls.back().op_dir_unlink("dir", "file1");
+  ls.back().op_file_remove(2);
+  ls.back().op_dir_remove("dir2");
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
@@ -316,4 +441,3 @@ ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 	     << " crc 0x" << t.op_bl.crc32c(-1)
 	     << std::dec << ")";
 }
-

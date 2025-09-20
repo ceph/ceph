@@ -5,20 +5,24 @@
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
+#include "common/Clock.h" // for ceph_clock_now()
+#include "common/debug.h"
 #include "common/deleter.h"
-#include "common/dout.h"
 #include "common/environment.h"
 #include "common/errno.h"
 #include "common/hostname.h"
 #include "common/WorkQueue.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/asio/ContextWQ.h"
 #include "librbd/cache/pwl/ImageCacheState.h"
 #include "librbd/cache/pwl/LogEntry.h"
 #include "librbd/plugin/Api.h"
+
 #include <map>
+#include <shared_mutex> // for std::shared_lock
 #include <vector>
 
 #undef dout_subsys
@@ -301,7 +305,8 @@ void AbstractWriteLog<I>::log_perf() {
   ss << "\"image\": \"" << m_image_ctx.name << "\",";
   bl.append(ss);
   bl.append("\"stats\": ");
-  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(f, false, false);
+  m_image_ctx.cct->get_perfcounters_collection()->dump_formatted(
+      f, false, select_labeled_t::unlabeled);
   f->flush(bl);
   bl.append(",\n\"histograms\": ");
   m_image_ctx.cct->get_perfcounters_collection()->dump_formatted_histograms(f, 0);
@@ -657,6 +662,20 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
       periodic_stats();
 
       std::unique_lock locker(m_lock);
+
+      ceph_assert(m_current_sync_point);
+      if (!m_current_sync_point->earlier_sync_point) {
+        // This is the only sync point, hence no need to wait for the persistence
+        // of prior sync points.
+        m_current_sync_point->prior_persisted_gather_activate();
+        // we don't create a new sync point, if there are no writes in current sync point's
+        // log entry.
+        ceph_assert(m_current_sync_point->log_entry->writes == 0);
+        // In that case, we shold not wait for the log entry's persistence of current
+        // sync point, which is otherwise waited until we flush its prior sync point.
+        m_current_sync_point->persist_gather_activate();
+      }
+
       check_image_cache_state_clean();
       m_wake_up_enabled = false;
       m_log_entries.clear();

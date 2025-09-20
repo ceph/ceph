@@ -28,9 +28,11 @@ class time_point_wrapper {
     auto epoch_time = Clock::to_time_t(t);
     f->dump_string("time", std::ctime(&epoch_time));
   }
-  static void generate_test_instances(std::list<time_point_wrapper*>& ls) {
+  static std::list<time_point_wrapper> generate_test_instances() {
+    std::list<time_point_wrapper> ls;
     constexpr time_t t{455500800}; // Ghostbusters release date
-    ls.push_back(new time_point_wrapper(Clock::from_time_t(t)));
+    ls.push_back(time_point_wrapper(Clock::from_time_t(t)));
+    return ls;
   }
 };
 
@@ -58,9 +60,11 @@ class timespan_wrapper {
   void dump(Formatter* f) {
     f->dump_int("timespan", d.count());
   }
-  static void generate_test_instances(std::list<timespan_wrapper*>& ls) {
+  static std::list<timespan_wrapper> generate_test_instances() {
+    std::list<timespan_wrapper> ls;
     constexpr std::chrono::seconds d{7377}; // marathon world record (2:02:57)
-    ls.push_back(new timespan_wrapper(d));
+    ls.push_back(timespan_wrapper(d));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(timespan_wrapper)

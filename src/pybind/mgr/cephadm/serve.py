@@ -1,3 +1,4 @@
+import datetime
 import ipaddress
 import hashlib
 import json
@@ -25,12 +26,13 @@ import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.schedule import HostAssignment
+from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
 from mgr_module import MonCommandFailed
-from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfigException
+from mgr_util import format_bytes
+from cephadm.services.service_registry import service_registry
 
 from . import utils
 from . import exchange
@@ -62,6 +64,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
+        self.last_certificates_check: Optional[datetime.datetime] = None
 
     def serve(self) -> None:
         """
@@ -86,6 +89,7 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
+                self.mgr.update_maintenance_healthcheck()
 
                 if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
                     self.mgr.need_connect_dashboard_rgw = False
@@ -138,39 +142,28 @@ class CephadmServe:
         self.log.debug("serve exit")
 
     def _check_certificates(self) -> None:
-        for d in self.mgr.cache.get_daemons_by_type('grafana'):
-            host = d.hostname
-            assert host is not None
-            cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=host)
-            key = self.mgr.cert_key_store.get_key('grafana_key', host=host)
-            if (not cert or not cert.strip()) and (not key or not key.strip()):
-                # certificate/key are empty... nothing to check
-                return
 
-            try:
-                get_cert_issuer_info(cert)
-                verify_tls(cert, key)
-                self.mgr.remove_health_warning('CEPHADM_CERT_ERROR')
-            except ServerConfigException as e:
-                err_msg = f"""
-                Detected invalid grafana certificates. Please, use the following commands:
+        if self.mgr.certificate_check_period == 0:
+            # certificate check has been disabled by the user
+            return
 
-                  > ceph config-key set mgr/cephadm/{d.hostname}/grafana_crt -i <path-to-ctr-file>
-                  > ceph config-key set mgr/cephadm/{d.hostname}/grafana_key -i <path-to-key-file>
+        # Check certificates if:
+        # - This is the first time (startup, last_certificates_check is None)
+        # - We are running in certificates check debug mode (for testing only)
+        # - Or the elapsed time is greater than or equal to the configured check period
+        check_certificates = (
+            self.last_certificates_check is None
+            or self.mgr.certificate_check_debug_mode
+            or (datetime_now() - self.last_certificates_check).days >= self.mgr.certificate_check_period
+        )
 
-                to set valid key and certificate or reset their value to an empty string
-                in case you want cephadm to generate self-signed Grafana certificates.
-
-                Once done, run the following command to reconfig the daemon:
-
-                  > ceph orch daemon reconfig grafana.{d.hostname}
-
-                """
-                self.log.error(f'Detected invalid grafana certificate on host {d.hostname}: {e}')
-                self.mgr.set_health_warning('CEPHADM_CERT_ERROR',
-                                            f'Invalid grafana certificate on host {d.hostname}: {e}',
-                                            1, [err_msg])
-                break
+        if check_certificates:
+            self.log.debug('_check_certificates')
+            self.last_certificates_check = datetime_now()
+            services_to_reconfig, _ = self.mgr.cert_mgr.check_services_certificates(fix_issues=True)
+            for svc in services_to_reconfig:
+                self.log.info(f'certmgr: certificate has changed, reconfiguring service {svc}')
+                self.mgr.service_action('reconfig', svc)
 
     def _serve_sleep(self) -> None:
         sleep_interval = max(
@@ -180,6 +173,7 @@ class CephadmServe:
                 self.mgr.facts_cache_timeout,
                 self.mgr.daemon_cache_timeout,
                 self.mgr.device_cache_timeout,
+                self.mgr.stray_daemon_check_interval,
             )
         )
         self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -473,6 +467,9 @@ class CephadmServe:
             (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
+        cutoff = datetime_now() - datetime.timedelta(seconds=self.mgr.stray_daemon_check_interval)
+        if self.mgr.last_stray_daemon_check is not None and self.mgr.last_stray_daemon_check >= cutoff:
+            return
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
@@ -523,6 +520,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+            self.mgr.last_stray_daemon_check = datetime_now()
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
@@ -552,7 +550,7 @@ class CephadmServe:
             daemon_type_to_service(cast(str, dd.daemon_type))
             for dd in managed
         }
-        _services = [self.mgr.cephadm_services[dt] for dt in svcs]
+        _services = [service_registry.get_service(dt) for dt in svcs]
 
         def _filter(
             service_type: str, daemon_id: str, name: str
@@ -752,8 +750,10 @@ class CephadmServe:
             # return a solid indication
             return False
 
-        svc = self.mgr.cephadm_services[service_type]
+        svc = service_registry.get_service(service_type)
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
+
+        blocking_daemon_hosts = svc.get_blocking_daemon_hosts(service_name)
         related_service_daemons = self.mgr.cache.get_related_service_daemons(spec)
 
         public_networks: List[str] = []
@@ -802,6 +802,14 @@ class CephadmServe:
                         )
                         found = True
                         break
+                if not found and ingress_spec.virtual_interface_networks:
+                    for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                        if subnet in ingress_spec.virtual_interface_networks:
+                            logger.debug(
+                                f'{subnet} found in virtual_interface_networks list {list(ingress_spec.virtual_interface_networks)}'
+                            )
+                            found = True
+                            break
                 if not found:
                     self.log.info(
                         f"Filtered out host {host}: Host has no interface available for VIP: {vip}"
@@ -817,12 +825,14 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
             ) == 'agent' else self.mgr.cache.get_schedulable_hosts(),
             unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
             draining_hosts=self.mgr.cache.get_draining_hosts(),
+            blocking_daemon_hosts=blocking_daemon_hosts,
             daemons=daemons,
             related_service_daemons=related_service_daemons,
             networks=self.mgr.cache.networks,
@@ -831,6 +841,8 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
+            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
+            host_selector=host_selector,
         )
 
         try:
@@ -1112,7 +1124,7 @@ class CephadmServe:
             if dd.daemon_type in REQUIRES_POST_ACTIONS:
                 daemons_post[dd.daemon_type].append(dd)
 
-            if self.mgr.cephadm_services[daemon_type_to_service(dd.daemon_type)].get_active_daemon(
+            if service_registry.get_service(daemon_type_to_service(dd.daemon_type)).get_active_daemon(
                self.mgr.cache.get_daemons_by_service(dd.service_name())).daemon_id == dd.daemon_id:
                 dd.is_active = True
             else:
@@ -1129,8 +1141,8 @@ class CephadmServe:
                     dd.name()))
                 action = 'reconfig'
             elif last_deps != deps:
-                self.log.debug(f'{dd.name()} deps {last_deps} -> {deps}')
-                self.log.info(f'Reconfiguring {dd.name()} (dependencies changed)...')
+                sym_diff = set(deps).symmetric_difference(last_deps)
+                self.log.info(f'Reconfiguring {dd.name()} deps {last_deps} -> {deps} (diff {sym_diff})')
                 action = 'reconfig'
                 # we need only redeploy if secure_monitoring_stack or mgmt-gateway value has changed:
                 # TODO(redo): check if we should just go always with redeploy (it's fast enough)
@@ -1192,11 +1204,14 @@ class CephadmServe:
         for daemon_type, daemon_descs in daemons_post.items():
             run_post = False
             for d in daemon_descs:
-                if d.name() in self.mgr.requires_post_actions:
-                    self.mgr.requires_post_actions.remove(d.name())
+                if d.pending_daemon_config:
+                    assert d.hostname is not None
+                    cache_dd = self.mgr.cache.get_daemon(d.name(), d.hostname)
+                    cache_dd.update_pending_daemon_config(False)
+                    self.mgr.cache.save_host(d.hostname)
                     run_post = True
             if run_post:
-                self.mgr._get_cephadm_service(daemon_type_to_service(
+                service_registry.get_service(daemon_type_to_service(
                     daemon_type)).daemon_check_post(daemon_descs)
 
     def _purge_deleted_services(self) -> None:
@@ -1212,7 +1227,7 @@ class CephadmServe:
 
             logger.info(f'Purge service {service_name}')
 
-            self.mgr.cephadm_services[spec.service_type].purge(service_name)
+            service_registry.get_service(spec.service_type).purge(service_name)
             self.mgr.spec_store.finally_rm(service_name)
 
     def convert_tags_to_repo_digest(self) -> None:
@@ -1436,7 +1451,23 @@ class CephadmServe:
                         config_blobs=daemon_spec.final_config,
                     ).dump_json_str(),
                     use_current_daemon_image=reconfig,
+                    error_ok=True
                 )
+
+                # return number corresponding to DAEMON_FAILED_ERROR
+                # in src/cephadm/cephadmlib/constants.
+                # TODO: link these together so one cannot be changed without the other
+                if code == 17:
+                    # daemon failed on systemctl start command, meaning while
+                    # deployment failed the daemon is present and we should handle
+                    # this as if the deploy command "succeeded" and mark the daemon
+                    # as failed later when we fetch its status
+                    self.mgr.log.error(f'Deployment of {daemon_spec.name()} failed during "systemctl start" command')
+                elif code:
+                    # some other failure earlier in the deploy process. Just raise an exception
+                    # the same as we would in _run_cephadm on a nonzero rc
+                    raise OrchestratorError(
+                        f'cephadm exited with an error code: {code}, stderr: {err}')
 
                 if daemon_spec.daemon_type == 'agent':
                     self.mgr.agent_cache.agent_timestamp[daemon_spec.host] = datetime_now()
@@ -1449,9 +1480,10 @@ class CephadmServe:
                         # just created
                         sd = daemon_spec.to_daemon_description(
                             DaemonDescriptionStatus.starting, 'starting')
-                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
+                        # If daemon requires post action, then mark pending_daemon_config as true
                         if daemon_spec.daemon_type in REQUIRES_POST_ACTIONS:
-                            self.mgr.requires_post_actions.add(daemon_spec.name())
+                            sd.update_pending_daemon_config(True)
+                        self.mgr.cache.add_daemon(daemon_spec.host, sd)
                     self.mgr.cache.invalidate_host_daemons(daemon_spec.host)
 
                 if daemon_spec.daemon_type != 'agent':
@@ -1478,7 +1510,7 @@ class CephadmServe:
                     # we have to clean up the daemon. E.g. keyrings.
                     servict_type = daemon_type_to_service(daemon_spec.daemon_type)
                     dd = daemon_spec.to_daemon_description(DaemonDescriptionStatus.error, 'failed')
-                    self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
+                    service_registry.get_service(servict_type).post_remove(dd, is_failed_deploy=True)
                 raise
 
     def _setup_extra_deployment_args(
@@ -1535,18 +1567,21 @@ class CephadmServe:
         """
         Remove a daemon
         """
-        (daemon_type, daemon_id) = name.split('.', 1)
+        dd = self.mgr.cache.get_daemon(name)
+        daemon_type = dd.daemon_type
+        daemon_id = dd.daemon_id
+        assert (daemon_type is not None and daemon_id is not None)
         daemon = orchestrator.DaemonDescription(
             daemon_type=daemon_type,
             daemon_id=daemon_id,
+            service_name=dd.service_name(),
             hostname=host)
 
         with set_exception_subject('service', daemon.service_id(), overwrite=True):
 
-            self.mgr.cephadm_services[daemon_type_to_service(daemon_type)].pre_remove(daemon)
+            service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
-            dd = self.mgr.cache.get_daemon(daemon.daemon_name)
             if dd.ports:
                 args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
             else:
@@ -1563,11 +1598,11 @@ class CephadmServe:
 
             if not no_post_remove:
                 if daemon_type not in ['iscsi']:
-                    self.mgr.cephadm_services[daemon_type_to_service(
-                        daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                    service_registry.get_service(daemon_type_to_service(
+                        daemon_type)).post_remove(daemon, is_failed_deploy=False)
                 else:
-                    self.mgr.scheduled_async_actions.append(lambda: self.mgr.cephadm_services[daemon_type_to_service(
-                                                            daemon_type)].post_remove(daemon, is_failed_deploy=False))
+                    self.mgr.scheduled_async_actions.append(lambda: service_registry.get_service(daemon_type_to_service(
+                                                            daemon_type)).post_remove(daemon, is_failed_deploy=False))
                     self.mgr._kick_serve_loop()
 
             self.mgr.recently_altered_daemons[name] = datetime_now()
@@ -1633,7 +1668,7 @@ class CephadmServe:
         # Skip the image check for daemons deployed that are not ceph containers
         if not str(entity).startswith(bypass_image):
             if not image and entity is not cephadmNoImage:
-                image = self.mgr._get_container_image(
+                image = self.mgr.get_container_image(
                     entity,
                     use_current_daemon_image=use_current_daemon_image
                 )
@@ -1696,7 +1731,12 @@ class CephadmServe:
                 self.log.debug('stdin: %s' % stdin)
 
             cmd = ssh.RemoteCommand(WHICH, ['python3'])
-            python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            try:
+                # when connection was broken/closed, retrying resets the connection
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+            except ssh.HostConnectionError:
+                python = await self.mgr.ssh._check_execute_command(host, cmd, addr=addr)
+
             # N.B. because the python3 executable is based on the results of the
             # which command we can not know it ahead of time and must be converted
             # into a RemoteExecutable.
@@ -1791,15 +1831,15 @@ class CephadmServe:
         return r
 
     # function responsible for logging single host into custom registry
-    async def _registry_login(self, host: str, registry_json: Dict[str, str]) -> Optional[str]:
+    async def _registry_login(self, host: str, registry_json: Dict[str, list[Dict[str, str]]]) -> Optional[str]:
         self.log.debug(
-            f"Attempting to log host {host} into custom registry @ {registry_json['url']}")
+            f"Attempting to log host {host} into custom registries")
         # want to pass info over stdin rather than through normal list of args
         out, err, code = await self._run_cephadm(
             host, 'mon', 'registry-login',
             ['--registry-json', '-'], stdin=json.dumps(registry_json), error_ok=True)
         if code:
-            return f"Host {host} failed to login to {registry_json['url']} as {registry_json['username']} with given password"
+            return f"Host {host} failed to login to all registries"
         return None
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
@@ -1807,3 +1847,9 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
                                               self.mgr._cephadm, addr=addr)
+
+
+def _host_selector(svc: Any) -> Optional[HostSelector]:
+    if hasattr(svc, 'filter_host_candidates'):
+        return cast(HostSelector, svc)
+    return None

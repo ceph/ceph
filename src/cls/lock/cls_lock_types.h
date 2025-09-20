@@ -90,7 +90,7 @@ namespace rados {
 	  out << data.locker;
 	  return out;
 	}
-        static void generate_test_instances(std::list<locker_id_t*>& o);
+        static std::list<locker_id_t> generate_test_instances();
       };
       WRITE_CLASS_ENCODER(locker_id_t)
 
@@ -133,7 +133,7 @@ namespace rados {
 
 	  return out;
 	}
-        static void generate_test_instances(std::list<locker_info_t *>& o);
+        static std::list<locker_info_t > generate_test_instances();
       };
       WRITE_CLASS_ENCODER_FEATURES(locker_info_t)
 
@@ -164,7 +164,7 @@ namespace rados {
 
         lock_info_t() : lock_type(ClsLockType::NONE) {}
         void dump(ceph::Formatter *f) const;
-        static void generate_test_instances(std::list<lock_info_t *>& o);
+        static std::list<lock_info_t > generate_test_instances();
       };
       WRITE_CLASS_ENCODER_FEATURES(lock_info_t);
     }

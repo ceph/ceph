@@ -30,10 +30,12 @@ struct cls_rgw_gc_queue_init_op {
     f->dump_unsigned("num_deferred_entries", num_deferred_entries);
   }
 
-  static void generate_test_instances(std::list<cls_rgw_gc_queue_init_op*>& o) {
-    o.push_back(new cls_rgw_gc_queue_init_op);
-    o.back()->size = 1024;
-    o.back()->num_deferred_entries = 512;
+  static std::list<cls_rgw_gc_queue_init_op> generate_test_instances() {
+    std::list<cls_rgw_gc_queue_init_op> o;
+    o.emplace_back();
+    o.back().size = 1024;
+    o.back().num_deferred_entries = 512;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_queue_init_op)

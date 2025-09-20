@@ -1,3 +1,4 @@
+import contextlib
 import mock
 import os
 import pytest
@@ -153,6 +154,8 @@ def with_cephadm_ctx(
     cmd: List[str],
     list_networks: Optional[Dict[str, Dict[str, List[str]]]] = None,
     hostname: Optional[str] = None,
+    *,
+    mock_cephadm_call_fn: bool = True,
 ):
     """
     :param cmd: cephadm command argv
@@ -163,25 +166,25 @@ def with_cephadm_ctx(
         hostname = 'host1'
 
     _cephadm = import_cephadm()
-    with mock.patch('cephadmlib.net_utils.attempt_bind'), \
-         mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)), \
-         mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0), \
-         mock.patch('cephadm.call', return_value=('', '', 0)), \
-         mock.patch('cephadm.call_timeout', return_value=0), \
-         mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'), \
-         mock.patch('cephadm.get_container_info', return_value=None), \
-         mock.patch('cephadm.is_available', return_value=True), \
-         mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
-         mock.patch('cephadm.logger'), \
-         mock.patch('cephadm.FileLock'), \
-         mock.patch('socket.gethostname', return_value=hostname):
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch('cephadmlib.net_utils.attempt_bind'))
+        stack.enter_context(mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'))
+        stack.enter_context(mock.patch('cephadmlib.container_lookup.get_container_info', return_value=None))
+        stack.enter_context(mock.patch('cephadm.is_available', return_value=True))
+        stack.enter_context(mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}))
+        stack.enter_context(mock.patch('cephadm.logger'))
+        stack.enter_context(mock.patch('cephadm.FileLock'))
+        stack.enter_context(mock.patch('socket.gethostname', return_value=hostname))
+        if mock_cephadm_call_fn:
+            stack.enter_context(mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)))
+            stack.enter_context(mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0))
+            stack.enter_context(mock.patch('cephadm.call', return_value=('', '', 0)))
+            stack.enter_context(mock.patch('cephadm.call_timeout', return_value=0))
+        if list_networks is not None:
+            stack.enter_context(mock.patch('cephadm.list_networks', return_value=list_networks))
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(cmd)
         ctx.container_engine = mock_podman()
-        if list_networks is not None:
-            with mock.patch('cephadm.list_networks', return_value=list_networks):
-                yield ctx
-        else:
-            yield ctx
+        yield ctx
 
 
 @pytest.fixture()

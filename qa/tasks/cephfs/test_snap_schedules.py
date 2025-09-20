@@ -545,6 +545,30 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
 
         self.mount_a.run_shell(['rmdir', test_dir[1:]])
 
+    def test_failure_for_duplicate_retention(self):
+        """
+        Test that adding retention for same spec fails for second time.
+        """
+        test_dir = '/' + TestSnapSchedules.TEST_DIRECTORY
+
+        self.mount_a.run_shell(['mkdir', '-p', test_dir[1:]])
+
+        self.fs_snap_schedule_cmd('add', path=test_dir, snap_schedule='1m')
+        self.fs_snap_schedule_cmd('retention', 'add', path=test_dir,
+                                  retention_spec_or_period='m',
+                                  retention_count='50')
+
+        # Adding a duplicate retention spec should fail
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('retention', 'add', path=test_dir,
+                                      retention_spec_or_period='m',
+                                      retention_count='50')
+
+        # remove snapshot schedule
+        self.fs_snap_schedule_cmd('remove', path=test_dir)
+
+        self.mount_a.run_shell(['rmdir', test_dir[1:]])
+
     def test_snap_schedule_all_periods(self):
         test_dir = TestSnapSchedulesSnapdir.TEST_DIRECTORY + "/minutes"
         self.mount_a.run_shell(['mkdir', '-p', test_dir])

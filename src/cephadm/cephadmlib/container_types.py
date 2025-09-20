@@ -9,8 +9,13 @@ from typing import Dict, List, Optional, Any, Union, Tuple, Iterable, cast
 
 from .call_wrappers import call, call_throws, CallVerbosity
 from .constants import DEFAULT_TIMEOUT
-import ceph.cephadm.images as default_images
-from .container_engines import Docker, Podman
+from ceph.cephadm.images import DefaultImages
+from .container_engines import (
+    ContainerInfo,
+    Docker,
+    Podman,
+    parsed_container_stats,
+)
 from .context import CephadmContext
 from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .exceptions import Error
@@ -665,14 +670,20 @@ def enable_shared_namespaces(
 
 def get_mgr_images() -> dict:
     """Return dict of default mgr images"""
-    mgr_prefix = 'mgr/cephadm/container_image_'
-    mgr_images = {}
-    images = vars(default_images)
-    for key, value in images.items():
-        if key.startswith('DEFAULT_') and key.endswith('_IMAGE'):
-            # flake8 and black disagree about spaces around ":" hence the noqa comment
-            suffix = key[
-                len('DEFAULT_') : -len('_IMAGE')  # noqa: E203
-            ].lower()
-            mgr_images[mgr_prefix + suffix] = value
+    mgr_prefix = 'mgr/cephadm/'
+    mgr_images = {
+        f'{mgr_prefix}{image.key}': image.image_ref for image in DefaultImages
+    }
     return mgr_images
+
+
+def get_container_stats(
+    ctx: CephadmContext, identity: DaemonIdentity, *, container_path: str = ''
+) -> Optional[ContainerInfo]:
+    """returns container id, image name, image id, created time, and ceph version if available"""
+    c = CephContainer.for_daemon(ctx, identity, 'bash')
+    for name in (c.cname, c.old_cname):
+        ci = parsed_container_stats(ctx, name, container_path=container_path)
+        if ci is not None:
+            return ci
+    return None

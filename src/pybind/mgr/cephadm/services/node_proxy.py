@@ -3,14 +3,19 @@ import ssl
 import base64
 
 from urllib.error import HTTPError, URLError
-from typing import List, Any, Dict, Tuple, Optional, MutableMapping
+from typing import List, Any, Dict, Tuple, Optional, MutableMapping, TYPE_CHECKING
 
+from .service_registry import register_cephadm_service
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from ceph.utils import http_req
 from orchestrator import OrchestratorError
 
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
+
+@register_cephadm_service
 class NodeProxy(CephService):
     TYPE = 'node-proxy'
 
@@ -29,6 +34,19 @@ class NodeProxy(CephService):
 
         return daemon_spec
 
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        root_cert = ''
+        server_port = ''
+        try:
+            server_port = str(mgr.http_server.agent.server_port)
+            root_cert = mgr.cert_mgr.get_root_ca()
+        except Exception:
+            pass
+        return sorted([mgr.get_mgr_ip(), server_port, root_cert])
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # node-proxy is re-using the agent endpoint and therefore
         # needs similar checks to see if the endpoint is ready.
@@ -40,20 +58,19 @@ class NodeProxy(CephService):
             raise OrchestratorError(
                 'Cannot deploy node-proxy daemons until cephadm endpoint has finished generating certs')
 
-        listener_cert, listener_key = self.mgr.cert_mgr.generate_cert(daemon_spec.host, self.mgr.inventory.get_addr(daemon_spec.host))
+        tls_pair = self.get_certificates(daemon_spec)
         cfg = {
             'target_ip': self.mgr.get_mgr_ip(),
             'target_port': self.agent_endpoint.server_port,
             'name': f'node-proxy.{daemon_spec.host}',
             'keyring': daemon_spec.keyring,
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-            'listener.crt': listener_cert,
-            'listener.key': listener_key,
+            'listener.crt': tls_pair.cert,
+            'listener.key': tls_pair.key,
         }
         config = {'node-proxy.json': json.dumps(cfg)}
 
-        return config, sorted([str(self.mgr.get_mgr_ip()), str(self.agent_endpoint.server_port),
-                               self.mgr.cert_mgr.get_root_ca()])
+        return config, self.get_dependencies(self.mgr)
 
     def handle_hw_monitoring_setting(self) -> bool:
         # function to apply or remove node-proxy service spec depending

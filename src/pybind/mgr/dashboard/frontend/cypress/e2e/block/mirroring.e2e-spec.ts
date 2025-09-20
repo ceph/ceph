@@ -60,9 +60,9 @@ describe('Mirroring page', () => {
           cy.get('#password').type('admin');
           cy.get('[type=submit]').click();
 
-          cy.get('input[name=name]').clear().type(name);
-          cy.get(`select[name=poolType]`).select('replicated');
-          cy.get(`select[name=poolType] option:checked`).contains('replicated');
+          cy.get('[data-testid="pool-name"]').clear().type(name);
+          cy.get('[data-testid="pool-type-select"]').select('replicated');
+          cy.get('[data-testid="pool-type-select"] option:checked').contains('replicated');
           cy.get('.float-start.me-2.select-menu-edit').click();
           cy.get('.popover-body').should('be.visible');
           // Choose rbd as the application label
@@ -112,7 +112,7 @@ describe('Mirroring page', () => {
 
     afterEach(() => {
       pools.navigateTo();
-      pools.delete(poolName, null, null, true);
+      pools.delete(poolName, null, null, true, false, false, true);
     });
   });
 });

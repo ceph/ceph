@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iostream> // for std::cout
+
 #include "include/types.h"
 #include "common/Thread.h"
 #include "common/debug.h"
@@ -8,6 +10,7 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
+#include "log/Log.h"
 
 #define dout_context g_ceph_context
 

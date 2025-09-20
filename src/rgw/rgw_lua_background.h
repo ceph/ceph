@@ -155,12 +155,12 @@ private:
 
   std::string rgw_script;
   int read_script();
+  std::unique_ptr<lua_state_guard> initialize_lguard_state();
 
-public:
-  Background(rgw::sal::Driver* _driver,
-      CephContext* _cct,
-      rgw::sal::LuaManager* _lua_manager,
-      int _execute_interval = INIT_EXECUTE_INTERVAL);
+ public:
+  Background(CephContext* _cct,
+             rgw::sal::LuaManager* _lua_manager,
+             int _execute_interval = INIT_EXECUTE_INTERVAL);
 
   ~Background() override = default;
   void start();
@@ -176,7 +176,8 @@ public:
   // update the manager after 
   void set_manager(rgw::sal::LuaManager* _lua_manager);
   void pause() override;
-  void resume(rgw::sal::Driver* _driver) override;
+  // Does not actually use `Driver` argument.
+  void resume(rgw::sal::Driver*) override;
 };
 
 } //namespace rgw::lua

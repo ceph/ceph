@@ -130,7 +130,7 @@ struct NodeLayoutReplayableT {
       // return erase_stage, last_pos
       return {erase_stage, last_pos};
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
   }
 };

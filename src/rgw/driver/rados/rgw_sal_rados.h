@@ -43,8 +43,11 @@ public:
   virtual ~RadosPlacementTier() = default;
 
   virtual const std::string& get_tier_type() { return tier.tier_type; }
+  virtual bool is_tier_type_s3() { return (tier.is_tier_type_s3()); }
   virtual const std::string& get_storage_class() { return tier.storage_class; }
   virtual bool retain_head_object() { return tier.retain_head_object; }
+  virtual bool allow_read_through() { return tier.allow_read_through; }
+  virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
   RGWZoneGroupPlacementTier& get_rt() { return tier; }
 };
 
@@ -107,7 +110,6 @@ class RadosZone : public StoreZone {
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
-    virtual bool has_zonegroup_api(const std::string& api) const override;
     virtual const std::string& get_current_period_id() override;
     virtual const RGWAccessKey& get_system_key() override;
     virtual const std::string& get_realm_name() override;
@@ -118,22 +120,21 @@ class RadosZone : public StoreZone {
 
 class RadosStore : public StoreDriver {
   private:
-    boost::asio::io_context& io_context;
+    neorados::RADOS neorados;
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
-    std::optional<neorados::RADOS> neorados;
     std::string topics_oid(const std::string& tenant) const;
 
   public:
-    RadosStore(boost::asio::io_context& io_context)
-      : io_context(io_context), rados(nullptr) {
-      }
+    RadosStore(neorados::RADOS neorados)
+      : neorados(neorados), rados(nullptr) {
+      ceph_assert(neorados);
+    }
     ~RadosStore() {
       delete rados;
     }
 
-    int init_neorados(const DoutPrefixProvider* dpp);
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual const std::string get_name() const override {
       return "rados";
@@ -280,6 +281,8 @@ class RadosStore : public StoreDriver {
     virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
     virtual int cluster_stat(RGWClusterStat& stats) override;
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
+    virtual std::unique_ptr<Restore> get_restore(void) override;
+    virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s, rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) override;
     virtual std::unique_ptr<Notification> get_notification(
         const DoutPrefixProvider* dpp,
@@ -340,6 +343,7 @@ class RadosStore : public StoreDriver {
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
+    virtual rgw::restore::Restore* get_rgwrestore(void) override { return rados->get_restore(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
     virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) override;
@@ -424,6 +428,8 @@ class RadosStore : public StoreDriver {
     virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
     virtual bool valid_placement(const rgw_placement_rule& rule) override;
 
+    virtual void shutdown(void) override;
+
     virtual void finalize(void) override;
 
     virtual CephContext* ctx(void) override { return rados->ctx(); }
@@ -439,8 +445,8 @@ class RadosStore : public StoreDriver {
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
-    boost::asio::io_context& get_io_context() { return io_context; }
-    neorados::RADOS& get_neorados() { return *neorados; }
+    boost::asio::io_context& get_io_context() { return neorados.get_io_context(); }
+    neorados::RADOS& get_neorados() { return neorados; }
 
     RGWServices* svc() { return &rados->svc; }
     const RGWServices* svc() const { return &rados->svc; }
@@ -580,9 +586,9 @@ class RadosObject : public StoreObject {
                const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
-    virtual void set_atomic() override {
-      rados_ctx->set_atomic(state.obj);
-      StoreObject::set_atomic();
+    virtual void set_atomic(bool atomic) override {
+      rados_ctx->set_atomic(state.obj, atomic);
+      StoreObject::set_atomic(atomic);
     }
     virtual void set_prefetch_data() override {
       rados_ctx->set_prefetch_data(state.obj);
@@ -593,15 +599,22 @@ class RadosObject : public StoreObject {
       StoreObject::set_compressed();
     }
 
-
-    virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
-      const ceph::real_time& obj_mtime) override;
+    bool is_sync_completed(const DoutPrefixProvider* dpp, optional_yield y,
+                           const ceph::real_time& obj_mtime) override;
     /* For rgw_admin.cc */
     RGWObjState& get_state() { return state; }
     virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
+
+    /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+    virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t&& each_func,
+			   optional_yield y) override;
+
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
     virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
-    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp) override;
+    virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
+                                 uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
     virtual bool is_expired() override;
     virtual void gen_rand_obj_instance_name() override;
@@ -628,16 +641,11 @@ class RadosObject : public StoreObject {
 			   optional_yield y) override;
     virtual int restore_obj_from_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
-			   rgw_placement_rule& placement_rule,
-			   rgw_bucket_dir_entry& o,
 			   CephContext* cct,
-         		   RGWObjTier& tier_config,
-			   real_time& mtime,
-			   uint64_t olh_epoch,
   		           std::optional<uint64_t> days,
+			   bool& in_progress,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y,
-		           uint32_t flags) override;
+			   optional_yield y) override;
     virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -724,7 +732,7 @@ class RadosBucket : public StoreBucket {
     int create(const DoutPrefixProvider* dpp, const CreateParams& params,
                optional_yield y) override;
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int read_stats(const DoutPrefixProvider *dpp,
+    virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
                            const bucket_index_layout_generation& idx_layout,
                            int shard_id, std::string* bucket_ver, std::string* master_ver,
                            std::map<RGWObjCategory, RGWStorageStats>& stats,
@@ -737,7 +745,10 @@ class RadosBucket : public StoreBucket {
                          RGWBucketEnt* ent) override;
     int check_bucket_shards(const DoutPrefixProvider* dpp, uint64_t num_objs,
                             optional_yield y) override;
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) override;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
@@ -748,9 +759,11 @@ class RadosBucket : public StoreBucket {
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;
     virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) override;
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) override;
-    virtual int check_index(const DoutPrefixProvider *dpp, std::map<RGWObjCategory, RGWStorageStats>& existing_stats, std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
-    virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
-    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
+    virtual int check_index(const DoutPrefixProvider *dpp, optional_yield y,
+                            std::map<RGWObjCategory, RGWStorageStats>& existing_stats,
+                            std::map<RGWObjCategory, RGWStorageStats>& calculated_stats) override;
+    virtual int rebuild_index(const DoutPrefixProvider *dpp, optional_yield y) override;
+    virtual int set_tag_timeout(const DoutPrefixProvider *dpp, optional_yield y, uint64_t timeout) override;
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual std::unique_ptr<Bucket> clone() override {
       return std::make_unique<RadosBucket>(*this);
@@ -775,6 +788,24 @@ class RadosBucket : public StoreBucket {
         optional_yield y, const DoutPrefixProvider *dpp) override;
     int remove_topics(RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int get_logging_object_name(std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) override;
+    int set_logging_object_name(const std::string& obj_name,
+        const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        bool new_obj,
+        RGWObjVersionTracker* objv_tracker) override;
+    int remove_logging_object_name(const std::string& prefix,
+        optional_yield y,
+        const DoutPrefixProvider *dpp,
+        RGWObjVersionTracker* objv_tracker) override;
+    int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp, const std::string& prefix, std::string* last_committed) override;
+    int remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) override;
+    int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) override;
 
   private:
     int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
@@ -869,15 +900,12 @@ protected:
 class MPRadosSerializer : public StoreMPSerializer {
   librados::IoCtx ioctx;
   ::rados::cls::lock::Lock lock;
-  librados::ObjectWriteOperation op;
 
 public:
   MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* store, RadosObject* obj, const std::string& lock_name);
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override {
-    return lock.unlock(&ioctx, oid);
-  }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 class LCRadosSerializer : public StoreLCSerializer {
@@ -888,9 +916,7 @@ public:
   LCRadosSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
 
   virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
-  virtual int unlock() override {
-    return lock.unlock(ioctx, oid);
-  }
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
 };
 
 class RadosLifecycle : public Lifecycle {
@@ -920,6 +946,58 @@ public:
   virtual std::unique_ptr<LCSerializer> get_serializer(const std::string& lock_name,
 						       const std::string& oid,
 						       const std::string& cookie) override;
+};
+
+class RadosRestoreSerializer : public StoreRestoreSerializer {
+  librados::IoCtx& ioctx;
+  ::rados::cls::lock::Lock lock;
+
+public:
+  RadosRestoreSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
+
+  virtual int try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y) override;
+  virtual int unlock(const DoutPrefixProvider* dpp, optional_yield y) override;
+};
+
+class RadosRestore : public StoreRestore {
+  RadosStore* store;
+  librados::IoCtx& ioctx;
+  neorados::RADOS& r;
+  neorados::IOContext neo_ioctx;  
+  std::vector<std::unique_ptr<fifo::FIFO>> fifos;  
+  int num_objs;
+  std::vector<std::string> obj_names;
+
+public:
+  RadosRestore(RadosStore* _st) ;
+  ~RadosRestore() override {
+    finalize();
+  }
+
+  virtual int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+		  int n_objs, std::vector<std::string>& obj_names) override;
+  void finalize();  
+
+  virtual int add_entries(const DoutPrefixProvider* dpp, optional_yield y,
+	       int index, const std::vector<rgw::restore::RestoreEntry>& restore_entries) override;
+  virtual int list(const DoutPrefixProvider *dpp, optional_yield y,
+	       	   int index,
+	           const std::string& marker, std::string* out_marker,
+		   uint32_t max_entries, std::vector<rgw::restore::RestoreEntry>& entries,
+		   bool* truncated) override;
+  virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
+		 	  int index, const std::string_view& marker) override;
+  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+	  				       const std::string& lock_name,
+					       const std::string& oid,
+					       const std::string& cookie) override;
+  /** Below routines deal with actual FIFO */
+  int trim(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, const std::string_view& marker);
+  int push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, ceph::buffer::list&& bl);
+  int push(const DoutPrefixProvider *dpp, optional_yield y,
+		int index, std::deque<ceph::buffer::list>&& items);
 };
 
 class RadosNotification : public StoreNotification {

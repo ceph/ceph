@@ -4,6 +4,7 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "common/ceph_time.h" // for coarse_mono_time()
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "common/ceph_mutex.h"

@@ -65,18 +65,20 @@ void RGWCORSRule::erase_origin_if_present(string& origin, bool *rule_empty) {
   }
 }
 
-void RGWCORSRule::generate_test_instances(list<RGWCORSRule*>& o)
+list<RGWCORSRule> RGWCORSRule::generate_test_instances()
 {
-  o.push_back(new RGWCORSRule);
-  o.push_back(new RGWCORSRule);
-  o.back()->id = "test";
-  o.back()->max_age = 100;
-  o.back()->allowed_methods = RGW_CORS_GET | RGW_CORS_PUT;
-  o.back()->allowed_origins.insert("http://origin1");
-  o.back()->allowed_origins.insert("http://origin2");
-  o.back()->allowed_hdrs.insert("accept-encoding");
-  o.back()->allowed_hdrs.insert("accept-language");
-  o.back()->exposable_hdrs.push_back("x-rgw-something");
+  list<RGWCORSRule> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().id = "test";
+  o.back().max_age = 100;
+  o.back().allowed_methods = RGW_CORS_GET | RGW_CORS_PUT;
+  o.back().allowed_origins.insert("http://origin1");
+  o.back().allowed_origins.insert("http://origin2");
+  o.back().allowed_hdrs.insert("accept-encoding");
+  o.back().allowed_hdrs.insert("accept-language");
+  o.back().exposable_hdrs.push_back("x-rgw-something");
+  return o;
 }
 
 /*

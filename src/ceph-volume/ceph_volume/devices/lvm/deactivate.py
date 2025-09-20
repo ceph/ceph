@@ -5,11 +5,13 @@ from textwrap import dedent
 from ceph_volume import conf
 from ceph_volume.util import encryption, system
 from ceph_volume.api.lvm import get_lvs_by_tag
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-def deactivate_osd(osd_id=None, osd_uuid=None):
+def deactivate_osd(osd_id: Optional[str] = None,
+                   osd_uuid: Optional[str] = None) -> None:
 
     lvs = []
     if osd_uuid is not None:
@@ -35,7 +37,10 @@ class Deactivate(object):
 
     help = 'Deactivate OSDs'
 
-    def deactivate(self, args=None):
+    def __init__(self, argv: Optional[List[str]] = None) -> None:
+        self.argv = argv
+
+    def deactivate(self, args: Optional[argparse.Namespace] = None) -> None:
         if args:
             self.args = args
         try:
@@ -45,10 +50,7 @@ class Deactivate(object):
                           '{}').format(self.args.osd_id))
             sys.exit(1)
 
-    def __init__(self, argv):
-        self.argv = argv
-
-    def main(self):
+    def main(self) -> None:
         sub_command_help = dedent("""
         Deactivate unmounts and OSDs tmpfs and closes any crypt devices.
 
@@ -76,6 +78,8 @@ class Deactivate(object):
         #     action='store_true',
         #     help='Deactivate all OSD volumes found in the system',
         # )
+        if self.argv is None:
+            self.argv = []
         if len(self.argv) == 0:
             print(sub_command_help)
             return

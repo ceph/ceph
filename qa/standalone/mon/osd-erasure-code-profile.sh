@@ -46,15 +46,15 @@ function TEST_set() {
     #
     ceph osd erasure-code-profile set $profile 2>&1 || return 1
     ceph osd erasure-code-profile get $profile | \
-        grep plugin=jerasure || return 1
+        grep plugin=isa || return 1
     ceph osd erasure-code-profile rm $profile
     #
     # key=value pairs override the default
     #
     ceph osd erasure-code-profile set $profile \
-        key=value plugin=isa || return 1
+        key=value plugin=jerasure || return 1
     ceph osd erasure-code-profile get $profile | \
-        grep -e key=value -e plugin=isa || return 1
+        grep -e key=value -e plugin=jerasure || return 1
     #
     # --force & --yes-i-really-mean-it are required to override
     # an existing profile
@@ -116,9 +116,9 @@ function TEST_get() {
 
     local default_profile=default
     ceph osd erasure-code-profile get $default_profile | \
-        grep plugin=jerasure || return 1
+        grep plugin=isa || return 1
     ceph --format xml osd erasure-code-profile get $default_profile | \
-        grep '<plugin>jerasure</plugin>' || return 1
+        grep '<plugin>isa</plugin>' || return 1
     ! ceph osd erasure-code-profile get WRONG > $dir/out 2>&1 || return 1
     grep -q "unknown erasure code profile 'WRONG'" $dir/out || return 1
 }

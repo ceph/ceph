@@ -23,7 +23,8 @@ def zap_device(path: str) -> None:
     Args:
         path (str): The path to the device to zap.
     """
-    zap_bluestore(path)
+    if disk.has_bluestore_label(path):
+        zap_bluestore(path)
     wipefs(path)
     zap_data(path)
 
@@ -42,7 +43,7 @@ def zap_bluestore(path: str) -> None:
         '--yes-i-really-really-mean-it'
     ])
 
-def wipefs(path):
+def wipefs(path: str) -> None:
     """
     Removes the filesystem from an lv or partition.
 
@@ -52,34 +53,29 @@ def wipefs(path):
     * ``CEPH_VOLUME_WIPEFS_INTERVAL``: Defaults to 5
 
     """
-    tries = str_to_int(
-        os.environ.get('CEPH_VOLUME_WIPEFS_TRIES', 8)
-    )
-    interval = str_to_int(
-        os.environ.get('CEPH_VOLUME_WIPEFS_INTERVAL', 5)
-    )
+    tries = str_to_int(os.environ.get('CEPH_VOLUME_WIPEFS_TRIES', 8)) + 1
+    interval = str_to_int(os.environ.get('CEPH_VOLUME_WIPEFS_INTERVAL', 5))
 
-    for trying in range(tries):
-        stdout, stderr, exit_code = process.call([
+    for attempt in range(1, tries):
+        _, _, exit_code = process.call([
             'wipefs',
             '--all',
             path
         ])
-        if exit_code != 0:
-            # this could narrow the retry by poking in the stderr of the output
-            # to verify that 'probing initialization failed' appears, but
-            # better to be broad in this retry to prevent missing on
-            # a different message that needs to be retried as well
-            terminal.warning(
-                'failed to wipefs device, will try again to workaround probable race condition'
-            )
-            time.sleep(interval)
-        else:
+        if not exit_code:
             return
+        # this could narrow the retry by poking in the stderr of the output
+        # to verify that 'probing initialization failed' appears, but
+        # better to be broad in this retry to prevent missing on
+        # a different message that needs to be retried as well
+        terminal.warning(
+            f'failed to wipefs device, will try again ({attempt}/{tries}) to workaround probable race condition'
+        )
+        time.sleep(interval)
     raise RuntimeError("could not complete wipefs on device: %s" % path)
 
 
-def zap_data(path):
+def zap_data(path: str) -> None:
     """
     Clears all data from the given path. Path should be
     an absolute path to an lv or partition.
@@ -119,15 +115,14 @@ class Zap:
                     osd_uuid = details.get('osd_uuid')
                     break
 
-        for osd_uuid, details in raw_report.items():
+        for _, details in raw_report.items():
             device: str = details.get('device')
             if details.get('osd_uuid') == osd_uuid:
                 raw_devices.add(device)
 
         return list(raw_devices)
-        
 
-    def find_associated_devices(self) -> List[api.Volume]:
+    def find_associated_devices(self) -> List[Device]:
         """From an ``osd_id`` and/or an ``osd_fsid``, filter out all the Logical Volumes (LVs) in the
         system that match those tag values, further detect if any partitions are
         part of the OSD, and then return the set of LVs and partitions (if any).
@@ -284,7 +279,10 @@ class Zap:
         Device examples: vg-name/lv-name, /dev/vg-name/lv-name
         Requirements: Must be a logical volume (LV)
         """
-        lv: api.Volume = device.lv_api
+        if device.lv_api is not None:
+            lv: api.Volume = device.lv_api
+        else:
+            raise RuntimeError(f"Unexpected error while attempting to zap LV device {device}.")
         self.unmount_lv(lv)
         self.parent_device: str = disk.get_parent_device_from_mapper(lv.lv_path)
         zap_device(device.path)
@@ -303,7 +301,7 @@ class Zap:
                     'db': self.args.replace_db,
                     'wal': self.args.replace_wal
                 }
-                if replacement_args.get(lv.tags.get('ceph.type'), False):
+                if replacement_args.get(lv.tags.get('ceph.type', ''), False):
                     mlogger.info(f'Marking {self.parent_device} as being replaced')
                     self._write_replacement_header(self.parent_device)
             else:
@@ -401,7 +399,7 @@ class Zap:
         devices = self.args.devices
         for device in devices:
             mlogger.info("Zapping: %s", device.path)
-            if device.is_mapper and not device.is_mpath:
+            if device.is_mapper and not device.is_mpath and not device.is_partition:
                 terminal.error("Refusing to zap the mapper device: {}".format(device))
                 raise SystemExit(1)
             if device.is_lvm_member:

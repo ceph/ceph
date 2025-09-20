@@ -9,93 +9,10 @@
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
 #include <boost/container/flat_map.hpp>
+#include "rgw_s3_filter.h"
+#include <ranges>
 
 class XMLObj;
-
-struct rgw_s3_key_filter {
-  std::string prefix_rule;
-  std::string suffix_rule;
-  std::string regex_rule;
-
-  bool has_content() const;
-
-  void dump(Formatter *f) const;
-  bool decode_xml(XMLObj *obj);
-  void dump_xml(Formatter *f) const;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(prefix_rule, bl);
-    encode(suffix_rule, bl);
-    encode(regex_rule, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(prefix_rule, bl);
-    decode(suffix_rule, bl);
-    decode(regex_rule, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_s3_key_filter)
-
-using KeyValueMap = boost::container::flat_map<std::string, std::string>;
-using KeyMultiValueMap = std::multimap<std::string, std::string>;
-
-struct rgw_s3_key_value_filter {
-  KeyValueMap kv;
-  
-  bool has_content() const;
-
-  void dump(Formatter *f) const;
-  bool decode_xml(XMLObj *obj);
-  void dump_xml(Formatter *f) const;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(kv, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(kv, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_s3_key_value_filter)
-
-struct rgw_s3_filter {
-  rgw_s3_key_filter key_filter;
-  rgw_s3_key_value_filter metadata_filter;
-  rgw_s3_key_value_filter tag_filter;
-
-  bool has_content() const;
-
-  void dump(Formatter *f) const;
-  bool decode_xml(XMLObj *obj);
-  void dump_xml(Formatter *f) const;
-  
-  void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode(key_filter, bl);
-    encode(metadata_filter, bl);
-    encode(tag_filter, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
-    decode(key_filter, bl);
-    decode(metadata_filter, bl);
-    if (struct_v >= 2) {
-        decode(tag_filter, bl);
-    }
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(rgw_s3_filter)
 
 using OptionalFilter = std::optional<rgw_s3_filter>;
 
@@ -336,6 +253,8 @@ WRITE_CLASS_ENCODER(rgw_pubsub_s3_event)
 // setting a unique ID for an event based on object hash and timestamp
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts);
 
+using ShardNamesView = std::ranges::transform_view<std::ranges::iota_view<uint64_t, uint64_t>, std::function<std::string(uint64_t)>>; 
+
 struct rgw_pubsub_dest {
   std::string push_endpoint;
   std::string push_endpoint_args;
@@ -347,9 +266,12 @@ struct rgw_pubsub_dest {
   uint32_t time_to_live;
   uint32_t max_retries;
   uint32_t retry_sleep_duration;
+  // naming convention of sharded queues in the 'notif' pool -> persistent_queue, persistent_queue.1, persistent_queue.(num_shards -1)...
+  uint64_t num_shards; //defaults to a single shard for now, for backward compatibility
+
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode("", bl);
     encode("", bl);
     encode(push_endpoint, bl);
@@ -361,26 +283,30 @@ struct rgw_pubsub_dest {
     encode(max_retries, bl);
     encode(retry_sleep_duration, bl);
     encode(persistent_queue, bl);
+    encode(num_shards, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(5, bl);
+    DECODE_START(8, bl);
     std::string dummy;
     decode(dummy, bl);
     decode(dummy, bl);
     decode(push_endpoint, bl);
     if (struct_v >= 2) {
-        decode(push_endpoint_args, bl);
+      decode(push_endpoint_args, bl);
     }
     if (struct_v >= 3) {
-        decode(arn_topic, bl);
+      decode(arn_topic, bl);
     }
     if (struct_v >= 4) {
-        decode(stored_secret, bl);
+      decode(stored_secret, bl);
     }
     if (struct_v >= 5) {
-        decode(persistent, bl);
+      decode(persistent, bl);
+    }
+    else {
+      num_shards = persistent ? 1 : 0; //defaults to a single shard for backward compatibility
     }
     if (struct_v >= 6) {
       decode(time_to_live, bl);
@@ -389,11 +315,16 @@ struct rgw_pubsub_dest {
     }
     if (struct_v >= 7) {
       decode(persistent_queue, bl);
-    } else if (persistent) {
+    } 
+    else if (persistent) {
       // persistent topics created before v7 did not support tenant namespacing.
       // continue to use 'arn_topic' alone as the queue's rados object name
       persistent_queue = arn_topic;
     }
+    if (struct_v >= 8) { 
+      decode(num_shards, bl);
+    }
+
     DECODE_FINISH(bl);
   }
 
@@ -401,6 +332,9 @@ struct rgw_pubsub_dest {
   void dump_xml(Formatter *f) const;
   std::string to_json_str() const;
   void decode_json(JSONObj* obj);
+
+  // get the names of the shards in the persistent queue
+  ShardNamesView get_shard_names() const; 
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_dest)
 

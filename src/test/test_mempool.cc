@@ -16,6 +16,8 @@
 
 #include <stdio.h>
 
+#include <iostream> // for std::cout
+
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
 #include "global/global_context.h"
@@ -404,11 +406,13 @@ TEST(mempool, btree_map_test)
   ASSERT_EQ(0, mempool::osd::allocated_bytes());
 }
 
-#if !defined(__arm__) && !defined(__aarch64__)
 TEST(mempool, check_shard_select)
 {
-  const size_t samples = mempool::num_shards * 100;
-  std::atomic_int shards[mempool::num_shards] = {0};
+  const size_t samples = mempool::get_num_shards() * 30;
+
+  std::unique_ptr<std::atomic_int[]> shards =
+    std::make_unique<std::atomic_int[]>(mempool::get_num_shards());
+
   std::vector<std::thread> workers;
   for (size_t i = 0; i < samples; i++) {
     workers.push_back(
@@ -422,18 +426,18 @@ TEST(mempool, check_shard_select)
   }
   workers.clear();
 
+#if !defined(MEMPOOL_SCHED_GETCPU)
   size_t missed = 0;
-  for (size_t i = 0; i < mempool::num_shards; i++) {
-    if (shards[i] == 0) {
+  for (size_t i = 0; i < mempool::get_num_shards(); i++) {
+    if (shards[i] != 30) {
+      // Each shard is expected to have exactly 30 threads
       missed++;
     }
   }
-
-  // If more than half of the shards did not get anything,
-  // the distribution is bad enough to deserve a failure.
-  EXPECT_LT(missed, mempool::num_shards / 2);
-}
+  EXPECT_EQ(missed, 0u);
 #endif
+  // Else: test_c2c.cc is a better test of the sharding algorithm
+}
 
 
 int main(int argc, char **argv)

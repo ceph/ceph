@@ -41,8 +41,8 @@ of its RGWs and OSDs have upgraded.
 compress-encrypted
 ~~~~~~~~~~~~~~~~~~
 
-This feature enables support for combining `Server-Side Encryption`_ and
-`Compression`_ on the same object. Object data gets compressed before encryption.
+This feature enables support for combining :ref:`Server-Side Encryption <radosgw-encryption>` and
+:ref:`radosgw-compression` on the same object. Object data gets compressed before encryption.
 Prior to Reef, multisite would not replicate such objects correctly, so all zones
 must upgrade to Reef or later before enabling.
 
@@ -112,6 +112,3 @@ On any cluster in the realm:
    radosgw-admin zonegroup modify --rgw-zonegroup={zonegroup-name} --disable-feature={feature-name}
    radosgw-admin period update --commit
 
-
-.. _`Server-Side Encryption`: ../encryption
-.. _`Compression`: ../compression

@@ -1,3 +1,6 @@
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/layout';
+
 .details {
   font-size: larger;
 
@@ -29,5 +32,55 @@
     display: -webkit-box; /* stylelint-disable-line value-no-vendor-prefix */
     -webkit-line-clamp: 2;
     white-space: normal;
+  }
+
+  .card-text .date {
+    display: inline-block;
+    min-width: layout.rem(220px);
+  }
+
+  .card-text .alert_count {
+    display: inline-block;
+  }
+}
+
+.info-card-popover-cluster-status {
+  max-height: 20vh;
+  max-width: 23vw;
+
+  .popover-body {
+    font-size: 1rem;
+    max-height: 19vh;
+    max-width: 100%;
+    overflow: auto;
+
+    li {
+      span {
+        font-size: 1.1em;
+        font-weight: bold;
+      }
+
+      span.health-warn-description {
+        color: vv.$health-color-warning-800 !important;
+      }
+    }
+  }
+}
+
+@media (max-width: vv.$screen-lg-max) {
+  .info-card-popover-cluster-status {
+    max-width: 31vw;
+  }
+}
+
+@media (max-width: vv.$screen-md-max) {
+  .info-card-popover-cluster-status {
+    max-width: 46vw;
+  }
+}
+
+@media (max-width: vv.$screen-sm-max) {
+  .info-card-popover-cluster-status {
+    max-width: 83vw;
   }
 }

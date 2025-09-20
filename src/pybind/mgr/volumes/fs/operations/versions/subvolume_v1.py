@@ -85,7 +85,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """ Path to user data directory within a subvolume snapshot named 'snapname' """
         return self.snapshot_path(snapname)
 
-    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark):
+    def create(self, size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -104,7 +104,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 'data_pool': pool,
                 'pool_namespace': self.namespace if isolate_nspace else None,
                 'quota': size,
-                'earmark': earmark
+                'earmark': earmark,
+                'normalization': normalization,
+                'casesensitive': casesensitive,
             }
             self.set_attrs(subvol_path, attrs)
 
@@ -133,11 +135,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             self.metadata_mgr.update_section("source", "group", subvolume.group_name)
         self.metadata_mgr.update_section("source", "subvolume", subvolume.subvol_name)
         self.metadata_mgr.update_section("source", "snapshot", snapname)
-        if flush:
-            self.metadata_mgr.flush()
-
-    def remove_clone_source(self, flush=False):
-        self.metadata_mgr.remove_section("source")
         if flush:
             self.metadata_mgr.flush()
 
@@ -655,30 +652,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 log.error(msg)
                 raise EvictionError(msg)
 
-    def _get_clone_source(self):
-        try:
-            clone_source = {
-                'volume'   : self.metadata_mgr.get_option("source", "volume"),
-                'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
-                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
-            }
-
-            try:
-                clone_source["group"] = self.metadata_mgr.get_option("source", "group")
-            except MetadataMgrException as me:
-                if me.errno == -errno.ENOENT:
-                    pass
-                else:
-                    raise
-        except MetadataMgrException:
-            raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
-        return clone_source
-
-    def get_clone_source(self):
-        src = self._get_clone_source()
-        return (src['volume'], src.get('group', None), src['subvolume'],
-                src['snapshot'])
-
     def _get_clone_failure(self):
         clone_failure = {
             'errno'     : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
@@ -749,6 +722,20 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 return False
             raise
 
+    def remove_non_existent_pending_clones(self, path, link_path, track_id):
+        try:
+            self.fs.lstat(link_path)
+        except cephfs.Error as e:
+            if e.args[0] == errno.ENOENT:
+                try:
+                    log.info(f"Cleaning up dangling symlink for the clone: {path}")
+                    self.fs.unlink(path)
+                    self._remove_snap_clone(track_id)
+                except (cephfs.Error, MetadataMgrException) as e:
+                    log.warning(f'Removing of dangling symlink for the clone {path}'
+                                f' failed with the exception:"{e}"')
+                    pass
+    
     def get_pending_clones(self, snapname):
         pending_clones_info: Dict[str, Any] = {"has_pending_clones": "no"}
         pending_track_id_list = []
@@ -774,7 +761,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         for track_id in pending_track_id_list:
             try:
-                link_path = self.fs.readlink(os.path.join(index_path, track_id), 4096)
+                t_path = os.path.join(index_path, track_id)
+                link_path = self.fs.readlink(t_path, 4096)
+                self.remove_non_existent_pending_clones(t_path, link_path, track_id)
             except cephfs.Error as e:
                 if e.errno != errno.ENOENT:
                     raise VolumeException(-e.args[0], e.args[1])

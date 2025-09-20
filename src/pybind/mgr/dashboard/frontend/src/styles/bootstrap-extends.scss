@@ -4,22 +4,6 @@
  * thus reducing the final css size.
 */
 
-cd-info-card {
-  .card {
-    @extend .pb-2;
-
-    .card-body {
-      .card-title {
-        @extend .ps-2;
-      }
-
-      .card-text {
-        @extend .pt-2;
-      }
-    }
-  }
-}
-
 .btn-toolbar cd-table-actions.btn-group {
   @extend .me-2;
 }
@@ -42,43 +26,6 @@ cd-table {
           }
         }
       }
-    }
-  }
-}
-
-cd-health {
-  cd-info-card {
-    @extend .d-flex;
-    @extend .flex-column;
-    @extend .mb-4;
-
-    @extend .col-12;
-    @extend .col-sm-12;
-    @extend .col-md-6;
-    @extend .col-lg-4;
-
-    &.cd-status-card {
-      @extend .col-xl-3;
-    }
-
-    &.cd-performance-card,
-    &.cd-capacity-card {
-      @extend .col-xl;
-    }
-
-    &.cd-capacity-card {
-      @extend .col-lg-3;
-    }
-
-    &.cd-performance-card {
-      @extend .col-lg-6;
-    }
-
-    &.cd-chart-card {
-      @extend .col-md-12;
-      @extend .col-lg-6;
-      @extend .col-xl-4;
-      @extend .col-2xl-3;
     }
   }
 }

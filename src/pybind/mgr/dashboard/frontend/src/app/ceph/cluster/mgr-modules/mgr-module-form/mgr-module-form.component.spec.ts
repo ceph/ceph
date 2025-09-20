@@ -5,7 +5,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastrModule } from 'ngx-toastr';
 
-import { LoadingPanelComponent } from '~/app/shared/components/loading-panel/loading-panel.component';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { MgrModuleFormComponent } from './mgr-module-form.component';
@@ -14,19 +13,16 @@ describe('MgrModuleFormComponent', () => {
   let component: MgrModuleFormComponent;
   let fixture: ComponentFixture<MgrModuleFormComponent>;
 
-  configureTestBed(
-    {
-      declarations: [MgrModuleFormComponent],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
-      ]
-    },
-    [LoadingPanelComponent]
-  );
+  configureTestBed({
+    declarations: [MgrModuleFormComponent],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastrModule.forRoot()
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(MgrModuleFormComponent);

@@ -2,9 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "Replayer.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
 #include "include/stringify.h"
 #include "common/Timer.h"
@@ -33,7 +35,9 @@
 #include "tools/rbd_mirror/image_replayer/snapshot/ApplyImageStateRequest.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/StateBuilder.h"
 #include "tools/rbd_mirror/image_replayer/snapshot/Utils.h"
+
 #include <set>
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -333,6 +337,22 @@ bool Replayer<I>::get_replay_status(std::string* description,
 }
 
 template <typename I>
+bool Replayer<I>::is_remote_primary() {
+  auto remote_image_ctx = m_state_builder->remote_image_ctx;
+  std::shared_lock image_locker{remote_image_ctx->image_lock};
+  for (auto snap_info_it = remote_image_ctx->snap_info.rbegin();
+       snap_info_it != remote_image_ctx->snap_info.rend(); ++snap_info_it) {
+    const auto& snap_ns = snap_info_it->second.snap_namespace;
+    auto mirror_ns = std::get_if<
+      cls::rbd::MirrorSnapshotNamespace>(&snap_ns);
+    if (mirror_ns != nullptr) {
+      return mirror_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
+    }
+  }
+  return false;
+}
+
+template <typename I>
 void Replayer<I>::load_local_image_meta() {
   dout(10) << dendl;
 
@@ -376,48 +396,13 @@ void Replayer<I>::handle_load_local_image_meta(int r) {
     return;
   }
 
-  if (r >= 0 && m_state_builder->local_image_meta->resync_requested) {
-    m_resync_requested = true;
-
-    dout(10) << "local image resync requested" << dendl;
-    handle_replay_complete(0, "resync requested");
-    return;
-  }
-
-  refresh_local_image();
-}
-
-template <typename I>
-void Replayer<I>::refresh_local_image() {
-  if (!m_state_builder->local_image_ctx->state->is_refresh_required()) {
-    refresh_remote_image();
-    return;
-  }
-
-  dout(10) << dendl;
-  auto ctx = create_context_callback<
-    Replayer<I>, &Replayer<I>::handle_refresh_local_image>(this);
-  m_state_builder->local_image_ctx->state->refresh(ctx);
-}
-
-template <typename I>
-void Replayer<I>::handle_refresh_local_image(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    derr << "failed to refresh local image: " << cpp_strerror(r) << dendl;
-    handle_replay_complete(r, "failed to refresh local image");
-    return;
-  }
-
   refresh_remote_image();
 }
 
 template <typename I>
 void Replayer<I>::refresh_remote_image() {
   if (!m_state_builder->remote_image_ctx->state->is_refresh_required()) {
-    std::unique_lock locker{m_lock};
-    scan_local_mirror_snapshots(&locker);
+    refresh_local_image();
     return;
   }
 
@@ -434,6 +419,42 @@ void Replayer<I>::handle_refresh_remote_image(int r) {
   if (r < 0) {
     derr << "failed to refresh remote image: " << cpp_strerror(r) << dendl;
     handle_replay_complete(r, "failed to refresh remote image");
+    return;
+  }
+
+  refresh_local_image();
+}
+
+template <typename I>
+void Replayer<I>::refresh_local_image() {
+  if (m_state_builder->local_image_meta->resync_requested &&
+      is_remote_primary()) {
+    std::unique_lock locker{m_lock};
+    m_resync_requested = true;
+
+    dout(10) << "local image resync requested" << dendl;
+    handle_replay_complete(&locker, 0, "resync requested");
+    return;
+  }
+  if (!m_state_builder->local_image_ctx->state->is_refresh_required()) {
+    std::unique_lock locker{m_lock};
+    scan_local_mirror_snapshots(&locker);
+    return;
+  }
+
+  dout(10) << dendl;
+  auto ctx = create_context_callback<
+    Replayer<I>, &Replayer<I>::handle_refresh_local_image>(this);
+  m_state_builder->local_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void Replayer<I>::handle_refresh_local_image(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to refresh local image: " << cpp_strerror(r) << dendl;
+    handle_replay_complete(r, "failed to refresh local image");
     return;
   }
 

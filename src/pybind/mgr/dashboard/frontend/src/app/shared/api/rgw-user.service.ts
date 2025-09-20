@@ -4,6 +4,7 @@ import { Injectable } from '@angular/core';
 import _ from 'lodash';
 import { forkJoin as observableForkJoin, Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo, mergeMap } from 'rxjs/operators';
+import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { cdEncode } from '~/app/shared/decorators/cd-encode';
@@ -40,9 +41,10 @@ export class RgwUserService {
    * Get the list of usernames.
    * @return {Observable<string[]>}
    */
-  enumerate() {
+  enumerate(detailed: boolean = false) {
     return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(this.url, { params: params });
+      params = params.append('detailed', detailed);
+      return this.http.get(this.url, { params });
     });
   }
 
@@ -67,6 +69,9 @@ export class RgwUserService {
   create(args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.post(this.url, null, { params: params });
@@ -76,6 +81,9 @@ export class RgwUserService {
   update(uid: string, args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
+        if (typeof args[key] === 'object') {
+          args[key] = JSON.stringify(args[key]);
+        }
         params = params.append(key, args[key]);
       });
       return this.http.put(`${this.url}/${uid}`, null, { params: params });
@@ -175,5 +183,16 @@ export class RgwUserService {
         return observableOf(-1 !== index);
       })
     );
+  }
+
+  updateUserRateLimit(uid: string, rateLimitArgs: RgwRateLimitConfig) {
+    return this.http.put(`${this.url}/${uid}/ratelimit`, rateLimitArgs);
+  }
+
+  getUserRateLimit(uid: string) {
+    return this.http.get(`${this.url}/${uid}/ratelimit`);
+  }
+  getGlobalUserRateLimit() {
+    return this.http.get(`${this.url}/ratelimit`);
   }
 }

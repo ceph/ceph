@@ -233,6 +233,11 @@ class LocalRemoteProcess(object):
         else:
             self.stderr.write(err)
 
+    def _handle_subprocess_output(self, output, stream):
+        if isinstance(stream, StringIO):
+            return rm_nonascii_chars(output)
+        return output
+
     def wait(self, timeout=None):
         # Null subproc.stdin so communicate() does not try flushing/closing it
         # again.
@@ -250,7 +255,8 @@ class LocalRemoteProcess(object):
                 return
 
         out, err = self.subproc.communicate(timeout=timeout)
-        out, err = rm_nonascii_chars(out), rm_nonascii_chars(err)
+        out = self._handle_subprocess_output(out, self.stdout)
+        err = self._handle_subprocess_output(err, self.stderr)
         self._write_stdout(out)
         self._write_stderr(err)
 
@@ -348,10 +354,20 @@ class LocalRemote(RemoteShell):
             self._hostname = 'localhost'
         return self._hostname
 
-    def get_file(self, path, sudo, dest_dir):
-        tmpfile = tempfile.NamedTemporaryFile(delete=False).name
-        shutil.copy(path, tmpfile)
-        return tmpfile
+    def get_file(self, path, sudo=False, dest_dir='/tmp'):
+        if dest_dir == '/tmp':
+            # If we're storing in /tmp, generate a unique filename
+            (_fd, local_path) = tempfile.mkstemp(dir=dest_dir)
+        else:
+            # If we are storing somewhere other than /tmp, use the original
+            # filename
+            local_path = os.path.join(dest_dir, path.split(os.path.sep)[-1])
+        try:
+            shutil.copy(path, local_path)
+        except shutil.SameFileError:
+            log.info("path and local_path refer to the same file")
+            pass
+        return local_path
 
     # XXX: This method ignores the error raised when src and dst are
     # holding same path. For teuthology, same path still represents
@@ -361,6 +377,26 @@ class LocalRemote(RemoteShell):
             shutil.copy(src, dst)
         except shutil.SameFileError:
             pass
+
+    def write_file(self, path, data, owner=None,
+                   mode='0644', mkdir=False, append=False, sudo=False):
+        dd = 'sudo dd' if sudo else 'dd'
+        args = dd + ' of=' + path
+        if append:
+            args += ' conv=notrunc oflag=append'
+        if mkdir:
+            mkdirp = 'sudo mkdir -p' if sudo else 'mkdir -p'
+            dirpath = os.path.dirname(path)
+            if dirpath:
+                args = mkdirp + ' ' + dirpath + '\n' + args
+        if mode:
+            chmod = 'sudo chmod' if sudo else 'chmod'
+            args += '\n' + chmod + ' ' + mode + ' ' + path
+        if owner:
+            chown = 'sudo chown' if sudo else 'chown'
+            args += '\n' + chown + ' ' + owner + ' ' + path
+        args = 'set -ex' + '\n' + args
+        self.run(args=args, stdin=data, quiet=True)
 
     def _expand_teuthology_tools(self, args):
         assert isinstance(args, list)

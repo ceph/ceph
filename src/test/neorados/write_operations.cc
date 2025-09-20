@@ -17,6 +17,7 @@
 #include <utility>
 
 #include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <boost/system/error_code.hpp>
 #include <boost/system/errc.hpp>
@@ -189,5 +190,12 @@ CORO_TEST_F(NeoRadosWriteOps, CmpExt, NeoRadosTest) {
     EXPECT_EQ(0, unmatch);
     EXPECT_EQ(0, unmatch);
   }
+  co_return;
+}
+
+CORO_TEST_F(NeoRadosWriteOps, Cancel, NeoRadosTest) {
+  using namespace boost::asio::experimental::awaitable_operators;
+  auto bl = filled_buffer_list(0x33, 4 * 1 << 20);
+  co_await (execute(oid, WriteOp{}.write_full(std::move(bl))) || wait_for(1us));
   co_return;
 }

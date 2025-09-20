@@ -758,6 +758,9 @@ public:
 		    uint64_t ofs, uint64_t len,
                     bool include_parent, bool whole_object,
 		    int (*cb)(uint64_t, size_t, int, void *), void *arg);
+  int diff_iterate3(uint64_t from_snap_id,
+                    uint64_t ofs, uint64_t len, uint32_t flags,
+                    int (*cb)(uint64_t, size_t, int, void *), void *arg);
 
   ssize_t write(uint64_t ofs, size_t len, ceph::bufferlist& bl);
   /* @param op_flags see librados.h constants beginning with LIBRADOS_OP_FLAG */

@@ -54,10 +54,15 @@ void decode_json_obj(BucketHashType& t, JSONObj *obj);
 struct bucket_index_normal_layout {
   uint32_t num_shards = 1;
 
+  // the fewest number of shards this bucket layout allows
+  uint32_t min_num_shards = 1;
+
   BucketHashType hash_type = BucketHashType::Mod;
 
-  friend std::ostream& operator<<(std::ostream& out, const bucket_index_normal_layout& l) {
-    out << "num_shards=" << l.num_shards << ", hash_type=" << to_string(l.hash_type);
+  friend std::ostream& operator<<(std::ostream& out,
+				  const bucket_index_normal_layout& l) {
+    out << "num_shards=" << l.num_shards << ", min_num_shards=" <<
+      l.min_num_shards << ", hash_type=" << to_string(l.hash_type);
     return out;
   }
 };
@@ -131,6 +136,7 @@ void decode_json_obj(bucket_index_layout_generation& l, JSONObj *obj);
 enum class BucketLogType : uint8_t {
   // colocated with bucket index, so the log layout matches the index layout
   InIndex,
+  Deleted
 };
 
 std::string_view to_string(const BucketLogType& t);
@@ -143,6 +149,8 @@ inline std::ostream& operator<<(std::ostream& out, const BucketLogType &log_type
   switch (log_type) {
     case BucketLogType::InIndex:
       return out << "InIndex";
+    case BucketLogType::Deleted:
+      return out << "Deleted";
     default:
       return out << "Unknown";
   }
@@ -210,7 +218,6 @@ inline auto matches_gen(uint64_t gen)
 
 inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layout_generation& log_layout)
 {
-  ceph_assert(log_layout.layout.type == BucketLogType::InIndex);
   bucket_index_layout_generation index;
   index.gen = log_layout.layout.in_index.gen;
   index.layout.normal = log_layout.layout.in_index.layout;
@@ -278,8 +285,12 @@ inline uint32_t num_shards(const bucket_index_layout& index) {
 inline uint32_t num_shards(const bucket_index_layout_generation& index) {
   return num_shards(index.layout);
 }
+
 inline uint32_t current_num_shards(const BucketLayout& layout) {
   return num_shards(layout.current_index);
+}
+inline uint32_t current_min_layout_shards(const BucketLayout& layout) {
+  return layout.current_index.layout.normal.min_num_shards;
 }
 inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
   return layout.layout.type == BucketIndexType::Indexless;

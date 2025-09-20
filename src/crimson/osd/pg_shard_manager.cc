@@ -26,7 +26,7 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
           return get_pg_to_shard_mapping().get_or_create_pg_mapping(
             pgid, shard_core
           ).then([this, pgid] (auto core) {
-            return this->template with_remote_shard_state(
+            return this->with_remote_shard_state(
               core,
               [pgid](
 	      PerShardState &per_shard_state,

@@ -23,9 +23,111 @@
 #include "common/Thread.h"
 #include "include/stringify.h"
 #include "osd/ReplicatedBackend.h"
+
+#include <iostream> // for std::cout
 #include <sstream>
 
 using namespace std;
+
+void compare_pg_pool_t(const pg_pool_t l, const pg_pool_t r)
+{
+  ASSERT_EQ(l.type, r.type);
+  ASSERT_EQ(l.size, r.size);
+  ASSERT_EQ(l.crush_rule, r.crush_rule);
+  ASSERT_EQ(l.object_hash, r.object_hash);
+  ASSERT_EQ(l.last_change, r.last_change);
+  ASSERT_EQ(l.snap_seq, r.snap_seq);
+  ASSERT_EQ(l.snap_epoch, r.snap_epoch);
+  //ASSERT_EQ(l.snaps, r.snaps);
+  ASSERT_EQ(l.removed_snaps, r.removed_snaps);
+  ASSERT_EQ(l.auid, r.auid);
+  ASSERT_EQ(l.flags, r.flags);
+  ASSERT_EQ(l.min_size, r.min_size);
+  ASSERT_EQ(l.quota_max_bytes, r.quota_max_bytes);
+  ASSERT_EQ(l.quota_max_objects, r.quota_max_objects);
+  ASSERT_EQ(l.tiers, r.tiers);
+  ASSERT_EQ(l.tier_of, r.tier_of);
+  ASSERT_EQ(l.read_tier, r.read_tier);
+  ASSERT_EQ(l.write_tier, r.write_tier);
+  ASSERT_EQ(l.properties, r.properties);
+  //ASSERT_EQ(l.hit_set_params, r.hit_set_params);
+  //ASSERT_EQ(l.hit_set_period, r.hit_set_period);
+  //ASSERT_EQ(l.hit_set_count, r.hit_set_count);
+  ASSERT_EQ(l.stripe_width, r.stripe_width);
+  ASSERT_EQ(l.target_max_bytes, r.target_max_bytes);
+  ASSERT_EQ(l.target_max_objects, r.target_max_objects);
+  ASSERT_EQ(l.cache_target_dirty_ratio_micro, r.cache_target_dirty_ratio_micro);
+  ASSERT_EQ(l.cache_target_full_ratio_micro, r.cache_target_full_ratio_micro);
+  ASSERT_EQ(l.cache_min_flush_age, r.cache_min_flush_age);
+  ASSERT_EQ(l.cache_min_evict_age, r.cache_min_evict_age);
+  ASSERT_EQ(l.erasure_code_profile, r.erasure_code_profile);
+  ASSERT_EQ(l.last_force_op_resend_preluminous, r.last_force_op_resend_preluminous);
+  ASSERT_EQ(l.min_read_recency_for_promote, r.min_read_recency_for_promote);
+  ASSERT_EQ(l.expected_num_objects, r.expected_num_objects);
+  ASSERT_EQ(l.cache_target_dirty_high_ratio_micro, r.cache_target_dirty_high_ratio_micro);
+  ASSERT_EQ(l.min_write_recency_for_promote, r.min_write_recency_for_promote);
+  ASSERT_EQ(l.use_gmt_hitset, r.use_gmt_hitset);
+  ASSERT_EQ(l.fast_read, r.fast_read);
+  ASSERT_EQ(l.hit_set_grade_decay_rate, r.hit_set_grade_decay_rate);
+  ASSERT_EQ(l.hit_set_search_last_n, r.hit_set_search_last_n);
+  //ASSERT_EQ(l.opts, r.opts);
+  ASSERT_EQ(l.last_force_op_resend_prenautilus, r.last_force_op_resend_prenautilus);
+  ASSERT_EQ(l.application_metadata, r.application_metadata);
+  ASSERT_EQ(l.create_time, r.create_time);
+  ASSERT_EQ(l.get_pg_num_target(), r.get_pg_num_target());
+  ASSERT_EQ(l.get_pgp_num_target(), r.get_pgp_num_target());
+  ASSERT_EQ(l.get_pg_num_pending(), r.get_pg_num_pending());
+  ASSERT_EQ(l.last_force_op_resend, r.last_force_op_resend);
+  ASSERT_EQ(l.pg_autoscale_mode, r.pg_autoscale_mode);
+  ASSERT_EQ(l.last_pg_merge_meta.source_pgid, r.last_pg_merge_meta.source_pgid);
+  ASSERT_EQ(l.peering_crush_bucket_count, r.peering_crush_bucket_count);
+  ASSERT_EQ(l.peering_crush_bucket_target, r.peering_crush_bucket_target);
+  ASSERT_EQ(l.peering_crush_bucket_barrier, r.peering_crush_bucket_barrier);
+  ASSERT_EQ(l.peering_crush_mandatory_member, r.peering_crush_mandatory_member);
+  ASSERT_EQ(l.peering_crush_bucket_count , r.peering_crush_bucket_count);
+  ASSERT_EQ(l.peering_crush_bucket_target , r.peering_crush_bucket_target);
+  ASSERT_EQ(l.peering_crush_bucket_barrier , r.peering_crush_bucket_barrier);
+  ASSERT_EQ(l.peering_crush_mandatory_member , r.peering_crush_mandatory_member);
+}
+
+TEST(pg_pool_t, encodeDecode)
+{
+  uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5 |
+                          CEPH_FEATURE_INCARNATION_2 |
+                          CEPH_FEATURE_PGPOOL3 |
+                          CEPH_FEATURE_OSDENC |
+                          CEPH_FEATURE_OSD_POOLRESEND |
+                          CEPH_FEATURE_NEW_OSDOP_ENCODING |
+                          CEPH_FEATUREMASK_SERVER_LUMINOUS |
+                          CEPH_FEATUREMASK_SERVER_MIMIC |
+                          CEPH_FEATUREMASK_SERVER_NAUTILUS;
+  {
+    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    for(auto p1 : pools){
+      bufferlist bl;
+      p1.encode(bl, features);
+      bl.hexdump(std::cout);
+      auto pbl = bl.cbegin();
+      pg_pool_t p2;
+      p2.decode(pbl);
+      compare_pg_pool_t(p1, p2);
+    }
+  }
+
+  {
+    // test reef
+    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
+    for(auto p1 : pools){
+      bufferlist bl;
+      p1.encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);
+      bl.hexdump(std::cout);
+      auto pbl = bl.cbegin();
+      pg_pool_t p2;
+      p2.decode(pbl);
+      compare_pg_pool_t(p1, p2);
+    }
+  }
+}
 
 TEST(hobject, prefixes0)
 {
@@ -1047,7 +1149,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1055,7 +1157,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
@@ -1072,7 +1174,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_FALSE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1080,7 +1182,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
     // adding the same object replaces the previous one
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
@@ -1097,7 +1199,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
@@ -1106,7 +1208,7 @@ TEST(pg_missing_t, add_next_event)
 
     // adding the same object with a different version
     e.prior_version = prior_version;
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(1U, missing.num_missing());
@@ -1123,7 +1225,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
@@ -1142,12 +1244,12 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
 
     e.op = pg_log_entry_t::DELETE;
     EXPECT_TRUE(e.is_delete());
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
@@ -1167,14 +1269,14 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_FALSE(missing.get_items().at(oid).is_delete());
 
     e.op = pg_log_entry_t::LOST_DELETE;
     e.version.version++;
     EXPECT_TRUE(e.is_delete());
-    missing.add_next_event(e);
+    missing.add_next_event(e, pg_pool_t(), shard_id_t());
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
@@ -1326,6 +1428,35 @@ TEST(pg_missing_t, split_into)
   EXPECT_FALSE(child.is_missing(oid2));
   EXPECT_FALSE(missing.is_missing(oid1));
   EXPECT_TRUE(missing.is_missing(oid2));
+}
+
+TEST(pg_missing_t, is_missing_any_head_or_clone_of)
+{
+  hobject_t head_oid(object_t("objname"), "key", 123, 456, 0, "");
+  auto clone_oid = head_oid;
+  clone_oid.snap = 1;
+
+  // empty missing
+  pg_missing_t missing;
+  EXPECT_FALSE(missing.is_missing(head_oid));
+  EXPECT_FALSE(missing.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_FALSE(missing.is_missing(clone_oid));
+  EXPECT_FALSE(missing.is_missing_any_head_or_clone_of(clone_oid));
+
+  // only head is missing
+  missing.add(head_oid, eversion_t(), eversion_t(), false);
+  EXPECT_TRUE(missing.is_missing(head_oid));
+  EXPECT_TRUE(missing.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_FALSE(missing.is_missing(clone_oid));
+  EXPECT_TRUE(missing.is_missing_any_head_or_clone_of(clone_oid));
+
+  // only clone is missing
+  pg_missing_t missing2;
+  missing2.add(clone_oid, eversion_t(), eversion_t(), false);
+  EXPECT_FALSE(missing2.is_missing(head_oid));
+  EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(head_oid));
+  EXPECT_TRUE(missing2.is_missing(clone_oid));
+  EXPECT_TRUE(missing2.is_missing_any_head_or_clone_of(clone_oid));
 }
 
 TEST(pg_pool_t_test, get_pg_num_divisor) {

@@ -282,6 +282,7 @@ def _fetch_cephadm_from_rpm(ctx):
 def _fetch_cephadm_from_github(ctx, config, ref):
     ref = config.get('cephadm_branch', ref)
     git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
+    file_path = config.get('cephadm_file_path', 'src/cephadm/cephadm')
     log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
     if git_url.startswith('https://github.com/'):
         # git archive doesn't like https:// URLs, which we use with github.
@@ -290,7 +291,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
         ctx.cluster.run(
             args=[
                 'curl', '--silent',
-                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                f'https://raw.githubusercontent.com/{rest}/{ref}/{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -305,7 +306,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
                 run.Raw('&&'),
                 'cd', 'testrepo',
                 run.Raw('&&'),
-                'git', 'show', f'{ref}:src/cephadm/cephadm',
+                'git', 'show', f'{ref}:{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -475,12 +476,16 @@ def ceph_log(ctx, config):
                 run.Raw('|'), 'head', '-n', '1',
             ])
             r = ctx.ceph[cluster_name].bootstrap_remote.run(
-                stdout=StringIO(),
+                stdout=BytesIO(),
                 args=args,
+                stderr=StringIO(),
             )
-            stdout = r.stdout.getvalue()
-            if stdout != '':
+            stdout = r.stdout.getvalue().decode()
+            if stdout:
                 return stdout
+            stderr = r.stderr.getvalue()
+            if stderr:
+                return stderr
             return None
 
         # NOTE: technically the first and third arg to first_in_ceph_log
@@ -878,6 +883,15 @@ def ceph_bootstrap(ctx, config):
         yield
 
     finally:
+        log.info('Disabling cephadm mgr module')
+        _shell(
+            ctx,
+            cluster_name,
+            bootstrap_remote,
+            ['ceph', 'mgr', 'module', 'disable', 'cephadm'],
+            check_status=False  # can fail if bootstrap failed and mask errors
+        )
+
         log.info('Cleaning up testdir ceph.* files...')
         ctx.cluster.run(args=[
             'rm', '-f',
@@ -913,11 +927,14 @@ def ceph_bootstrap(ctx, config):
         )
 
         # clean up /etc/ceph
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        ctx.cluster.run(
+            args=[
+                'sudo', 'rm', '-f',
+                '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
+            ],
+            check_status=False,  # rm-cluster above should have cleaned these up
+        )
 
 
 @contextlib.contextmanager
@@ -1101,6 +1118,7 @@ def ceph_osds(ctx, config):
 
         cur = 0
         raw = config.get('raw-osds', False)
+        use_skip_validation = True
         for osd_id in sorted(id_to_remote.keys()):
             if raw:
                 raise ConfigError(
@@ -1135,7 +1153,16 @@ def ceph_osds(ctx, config):
             osd_method = config.get('osd_method')
             if osd_method:
                 add_osd_args.append(osd_method)
-            _shell(ctx, cluster_name, remote, add_osd_args)
+            if use_skip_validation:
+                try:
+                    _shell(ctx, cluster_name, remote, add_osd_args + ['--skip-validation'])
+                except Exception as e:
+                    log.warning(f"--skip-validation falied with error {e}. Retrying without it")
+                    use_skip_validation = False
+                    _shell(ctx, cluster_name, remote, add_osd_args)
+            else:
+                _shell(ctx, cluster_name, remote, add_osd_args)
+
             ctx.daemons.register_daemon(
                 remote, 'osd', id_,
                 cluster=cluster_name,
@@ -2278,6 +2305,16 @@ def task(ctx, config):
               username: registry-user
               password: registry-password
 
+    By default, the image tag is determined as a suite 'branch' value,
+    or 'sha1' if provided. However, the tag value can be overridden by
+    including ':TAG' or '@DIGEST' in the container image name, for example,
+    for the tag 'latest', the 'overrides' section looks like:
+
+        overrides:
+          cephadm:
+            containers:
+              image: 'quay.io/ceph-ci/ceph:latest'
+
     :param ctx: the argparse.Namespace object
     :param config: the config dict
     :param watchdog_setup: start DaemonWatchdog to watch daemons for failures
@@ -2325,8 +2362,11 @@ def task(ctx, config):
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
-        if sha1:
-            if flavor == "crimson":
+        if any(_ in container_image_name for _ in (':', '@')):
+            log.info('Provided image contains tag or digest, using it as is')
+            ctx.ceph[cluster_name].image = container_image_name
+        elif sha1:
+            if flavor == "crimson-debug" or flavor == "crimson-release":
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1

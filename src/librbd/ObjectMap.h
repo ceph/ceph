@@ -14,6 +14,8 @@
 #include "librbd/Utils.h"
 #include <boost/optional.hpp>
 
+#include <shared_mutex> // for std::shared_lock
+
 class Context;
 namespace ZTracer { struct Trace; }
 
@@ -65,7 +67,6 @@ public:
   void close(Context *on_finish);
   bool set_object_map(ceph::BitVector<2> &target_object_map);
   bool object_may_exist(uint64_t object_no) const;
-  bool object_may_not_exist(uint64_t object_no) const;
 
   void aio_save(Context *on_finish);
   void aio_resize(uint64_t new_size, uint8_t default_object_state,

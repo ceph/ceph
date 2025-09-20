@@ -3,9 +3,15 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
+#include <list>
+#include <iosfwd>
+#include <string>
 #include <string_view>
+#include <vector>
 
-#include "mdstypes.h"
+#include "include/buffer.h" // for ceph::buffer::list
+#include "include/fs_types.h" // for inodeno_t
+#include "include/types.h" // for version_t
 
 namespace ceph {
   class Formatter;
@@ -29,7 +35,7 @@ struct inode_backpointer_t {
   void decode(ceph::buffer::list::const_iterator &bl);
   void decode_old(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inode_backpointer_t*>& ls);
+  static std::list<inode_backpointer_t> generate_test_instances();
 
   inodeno_t dirino;    // containing directory ino
   std::string dname;        // linking dentry name
@@ -41,9 +47,7 @@ inline bool operator==(const inode_backpointer_t& l, const inode_backpointer_t& 
 	return l.dirino == r.dirino && l.version == r.version && l.dname == r.dname;
 }
 
-inline std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib) {
-  return out << "<" << ib.dirino << "/" << ib.dname << " v" << ib.version << ">";
-}
+std::ostream& operator<<(std::ostream& out, const inode_backpointer_t& ib);
 
 /*
  * inode_backtrace_t is a complete ancestor backtraces for a given inode.
@@ -56,7 +60,7 @@ struct inode_backtrace_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inode_backtrace_t*>& ls);
+  static std::list<inode_backtrace_t> generate_test_instances();
 
   /**
    * Compare two backtraces *for the same inode*.
@@ -85,9 +89,7 @@ struct inode_backtrace_t {
 };
 WRITE_CLASS_ENCODER(inode_backtrace_t)
 
-inline std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it) {
-  return out << "(" << it.pool << ")" << it.ino << ":" << it.ancestors << "//" << it.old_pools;
-}
+std::ostream& operator<<(std::ostream& out, const inode_backtrace_t& it);
 
 inline bool operator==(const inode_backtrace_t& l,
                        const inode_backtrace_t& r) {

@@ -17,6 +17,8 @@
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
 
+#include "common/ceph_context.h"
+#include "common/debug.h"
 #include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"
@@ -24,7 +26,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << "snap_mapper."
+#define dout_prefix *_dout << "snap_mapper "
 
 using std::make_pair;
 using std::map;
@@ -40,7 +42,6 @@ using result_t = Scrub::SnapMapReaderI::result_t;
 using code_t = Scrub::SnapMapReaderI::result_t::code_t;
 
 
-const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
@@ -53,14 +54,6 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   mapped to a particular snapshot, and (2) from object to snaps, so we
   can identify which reverse mappings exist for any given object (and,
   e.g., clean up on deletion).
-
-  "MAP_"
-  + ("%016x" % snapid)
-  + "_"
-  + (".%x" % shard_id)
-  + "_"
-  + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
-  -> SnapMapping::Mapping { snap, hoid }
 
   "SNA_"
   + ("%lld" % poolid)
@@ -79,7 +72,7 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
   */
 
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
 #include "crimson/common/log.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
   template <typename ValuesT = void>
@@ -104,7 +97,7 @@ int OSDriver::get_keys(
     reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
-    assert(e.value() > 0);
+    ceph_assert(e.value() > 0);
     return -e.value();
   }))); // this requires seastar::thread
 }
@@ -115,24 +108,42 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
-    ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+  ObjectStore::omap_iter_seek_t start_from{
+    key,
+    ObjectStore::omap_iter_seek_t::UPPER_BOUND
+  };
+  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+    [key, next] (std::string_view _key, std::string_view _value)
+  {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
-    if (auto nit = std::begin(vals);
-        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
+    if (!SnapMapper::is_mapping(std::string(_key))) {
       CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
-      return -ENOENT;
+      return ObjectStore::omap_iter_ret_t::NEXT;
     } else {
-      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", nit->first);
-      assert(nit->first > key);
-      *next = *nit;
-      return 0;
+      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", _key);
+      ceph_assertf(_key > key,
+        "Key order violation: input_key='%s' got_key='%s'",
+         key.c_str(), std::string(_key).c_str());
+      ceph::bufferlist bl;
+      bl.append(_value);
+      *next = std::make_pair(_key, bl);
+      return ObjectStore::omap_iter_ret_t::STOP;
     }
-  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-    CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
-    return -EINVAL;
-  }))); // this requires seastar::thread
+  };
+  return interruptor::green_get(
+    os->omap_iterate(ch, hoid, start_from, callback
+    ).safe_then([key] (auto ret) {
+      if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
+        CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+        return -ENOENT;
+      }
+      return 0; // found and Stopped
+    }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+        CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
+        return -EINVAL;
+      })
+    )
+  ); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
@@ -146,7 +157,7 @@ int OSDriver::get_next_or_current(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
   ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
-    assert(vals.size() == 1);
+    ceph_assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
@@ -165,45 +176,71 @@ int OSDriver::get_keys(
 }
 
 int OSDriver::get_next(
-  const std::string &key,
+  const std::string &seek_key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(ch, hoid);
-  if (!iter) {
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  const auto result = os->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = seek_key,
+      .seek_type = omap_iter_seek_t::UPPER_BOUND
+    },
+    [next] (std::string_view key, std::string_view value) mutable {
+      next->first = key;
+      next->second.clear();
+      next->second.append(value);
+      return ObjectStore::omap_iter_ret_t::STOP;
+    });
+  if (result < 0) {
     ceph_abort();
-    return -EINVAL;
-  }
-  iter->upper_bound(key);
-  if (iter->valid()) {
-    if (next)
-      *next = make_pair(iter->key(), iter->value());
-    return 0;
-  } else {
+  } else if (!result) {
     return -ENOENT;
+  } else {
+    return 0; // found and STOPped
   }
 }
 
 int OSDriver::get_next_or_current(
-  const std::string &key,
+  const std::string &seek_key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(ch, hoid);
-  if (!iter) {
+  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
+  const auto result = os->omap_iterate(
+    ch, hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = seek_key,
+      .seek_type = omap_iter_seek_t::LOWER_BOUND
+    },
+    [next_or_current] (std::string_view key, std::string_view value) mutable {
+      next_or_current->first = key;
+      next_or_current->second.clear();
+      next_or_current->second.append(value);
+      return ObjectStore::omap_iter_ret_t::STOP;
+    });
+  if (result < 0) {
     ceph_abort();
-    return -EINVAL;
-  }
-  iter->lower_bound(key);
-  if (iter->valid()) {
-    if (next_or_current)
-      *next_or_current = make_pair(iter->key(), iter->value());
-    return 0;
-  } else {
+  } else if (!result) {
     return -ENOENT;
+  } else {
+    return 0; // found and STOPped
   }
 }
-#endif // WITH_SEASTAR
+#endif // WITH_CRIMSON
+
+  SnapMapper::SnapMapper(
+    CephContext* cct,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list> *driver,
+    uint32_t match,  ///< [in] pgid
+    uint32_t bits,   ///< [in] current split bits
+    int64_t pool,    ///< [in] pool
+    shard_id_t shard ///< [in] shard
+    )
+    : cct(cct), backend(driver), mask_bits(bits), match(match), pool(pool),
+      shard(shard), shard_prefix(make_shard_prefix(shard)) {
+    dout(10) << *this << __func__ << dendl;
+    update_bits(mask_bits);
+  }
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
@@ -290,14 +327,15 @@ void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
   f->dump_stream("snaps") << snaps;
 }
 
-void SnapMapper::object_snaps::generate_test_instances(
-  std::list<object_snaps *> &o)
+auto SnapMapper::object_snaps::generate_test_instances() -> std::list<object_snaps>
 {
-  o.push_back(new object_snaps);
-  o.push_back(new object_snaps);
-  o.back()->oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
-  o.back()->snaps.insert(1);
-  o.back()->snaps.insert(2);
+  std::list<object_snaps> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
+  o.back().snaps.insert(1);
+  o.back().snaps.insert(2);
+  return o;
 }
 
 bool SnapMapper::check(const hobject_t &hoid) const
@@ -483,13 +521,31 @@ void SnapMapper::set_snaps(
   backend.set_keys(to_set, t);
 }
 
+void SnapMapper::update_bits(
+  uint32_t new_bits)  ///< [in] new split bits
+{
+    dout(20) << *this << __func__ << " new_bits: " << new_bits << dendl;
+    mask_bits = new_bits;
+    std::set<std::string> _prefixes = hobject_t::get_prefixes(
+      mask_bits,
+      match,
+      pool);
+    prefixes.clear();
+    for (auto i = _prefixes.begin(); i != _prefixes.end(); ++i) {
+      prefixes.insert(shard_prefix + *i);
+    }
+    dout(20) << *this <<__func__ << " prefix updated" << dendl;
+
+    reset_prefix_itr(CEPH_NOSNAP, "update_bits");
+  }
+
 int SnapMapper::update_snaps(
   const hobject_t &oid,
   const set<snapid_t> &new_snaps,
   const set<snapid_t> *old_snaps_check,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << " " << new_snaps
+  dout(20) << *this << __func__ << " " << oid << " " << new_snaps
 	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
 	   << dendl;
   ceph_assert(check(oid));
@@ -536,7 +592,7 @@ void SnapMapper::add_oid(
     object_snaps out;
     int r = get_snaps(oid, &out);
     if (r != -ENOENT) {
-      derr << __func__ << " found existing snaps mapped on " << oid
+      derr << *this << __func__ << " found existing snaps mapped on " << oid
 	   << ", removing" << dendl;
       ceph_assert(!cct->_conf->osd_debug_verify_snaps);
       remove_oid(oid, t);
@@ -554,7 +610,7 @@ void SnapMapper::add_oid(
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
-      dout(20) << __func__ << " set " << i.first << dendl;
+      dout(20) << *this << __func__ << " set " << i.first << dendl;
     }
   }
   backend.set_keys(to_add, t);
@@ -564,17 +620,17 @@ void SnapMapper::add_oid(
 void SnapMapper::reset_prefix_itr(snapid_t snap, const char *s)
 {
   if (prefix_itr_snap == CEPH_NOSNAP) {
-    dout(10) << __func__ << "::from <CEPH_NOSNAP> to <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <CEPH_NOSNAP> to <" << snap << "> ::" << s << dendl;
   }
   else if (snap == CEPH_NOSNAP) {
-    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <"<< prefix_itr_snap << "> to <CEPH_NOSNAP> ::" << s << dendl;
   }
   else if (prefix_itr_snap == snap) {
-    dout(10) << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::with the same snapid <" << snap << "> ::" << s << dendl;
   }
   else {
     // This is unexpected!!
-    dout(10) << __func__ << "::from <"<< prefix_itr_snap << "> to <" << snap << "> ::" << s << dendl;
+    dout(10) << *this << __func__ << "::from <"<< prefix_itr_snap << "> to <" << snap << "> ::" << s << dendl;
   }
   prefix_itr_snap = snap;
   prefix_itr      = prefixes.begin();
@@ -594,7 +650,7 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
       pair<string, ceph::buffer::list> next;
       // access RocksDB (an expensive operation!)
       int r = backend.get_next(pos, &next);
-      dout(20) << __func__ << " get_next(" << pos << ") returns " << r
+      dout(20) << *this << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next.first << dendl;
       if (r != 0) {
 	return out; // Done
@@ -611,18 +667,18 @@ vector<hobject_t> SnapMapper::get_objects_by_prefixes(
 	break; // Done with this prefix
       }
 
-      dout(20) << __func__ << " " << next.first << dendl;
+      dout(20) <<  *this << __func__ << " found " << next.first << dendl;
       pair<snapid_t, hobject_t> next_decoded(from_raw(next));
       ceph_assert(next_decoded.first == snap);
       ceph_assert(check(next_decoded.second));
-
       out.push_back(next_decoded.second);
+
       pos = next.first;
     }
 
     if (out.size() >= max) {
-      dout(20) << fmt::format("{}: reached max of: {} returning",
-                              __func__, out.size())
+      dout(20) << *this << fmt::format("{}: reached max of: {} returning",
+                                       __func__, out.size())
                << dendl;
       return out;
     }
@@ -634,7 +690,7 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
   snapid_t snap,
   unsigned max)
 {
-  dout(20) << __func__ << "::snapid=" << snap << dendl;
+  dout(20) << *this << __func__ << "snapid=" << snap << dendl;
 
   // if max would be 0, we return ENOENT and the caller would mistakenly
   // trim the snaptrim queue
@@ -664,7 +720,7 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
     objs = get_objects_by_prefixes(snap, max);
 
     if (unlikely(objs.size() > 0)) {
-      derr << __func__ << "::New Clone-Objects were added to Snap " << snap
+      derr << *this << __func__ << " New Clone-Objects were added to Snap " << snap
 	   << " after trimming was started" << dendl;
     }
     reset_prefix_itr(CEPH_NOSNAP, "Trim was completed successfully");
@@ -682,7 +738,7 @@ int SnapMapper::remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << dendl;
+  dout(20) << *this << __func__ << " " << oid << dendl;
   ceph_assert(check(oid));
   return _remove_oid(oid, t);
 }
@@ -691,7 +747,7 @@ int SnapMapper::_remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << dendl;
+  dout(20) << *this << __func__ << " " << oid << dendl;
   object_snaps out;
   int r = get_snaps(oid, &out);
   if (r < 0)
@@ -707,7 +763,7 @@ int SnapMapper::_remove_oid(
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_remove) {
-      dout(20) << __func__ << "::rm " << i << dendl;
+      dout(20) << *this << __func__ << "::rm " << i << dendl;
     }
   }
   backend.remove_keys(to_remove, t);
@@ -739,7 +795,7 @@ void SnapMapper::update_snap_map(
       i.soid,
       _t);
     if (r)
-      dout(20) << __func__ << " remove_oid " << i.soid << " failed with " << r << dendl;
+      dout(20) << *this << __func__ << " remove_oid " << i.soid << " failed with " << r << dendl;
     // On removal tolerate missing key corruption
     ceph_assert(r == 0 || r == -ENOENT);
   } else if (i.is_update()) {
@@ -750,7 +806,7 @@ void SnapMapper::update_snap_map(
     try {
       decode(snaps, p);
     } catch (...) {
-      dout(20) << __func__ << " decode snaps failure on " << i << dendl;
+      dout(20) << *this << __func__ << " decode snaps failure on " << i << dendl;
       snaps.clear();
     }
     std::set<snapid_t> _snaps(snaps.begin(), snaps.end());
@@ -887,45 +943,40 @@ void SnapMapper::record_purged_snaps(
 }
 
 
-#ifndef WITH_SEASTAR
-bool SnapMapper::Scrubber::_parse_p()
+#ifndef WITH_CRIMSON
+bool SnapMapper::Scrubber::_parse_p(std::string_view key, std::string_view value)
 {
-  if (!psit->valid()) {
+  if (key.find(PURGED_SNAP_PREFIX) != 0) {
     pool = -1;
     return false;
   }
-  if (psit->key().find(PURGED_SNAP_PREFIX) != 0) {
-    pool = -1;
-    return false;
-  }
-  ceph::buffer::list v = psit->value();
+  ceph::buffer::list v;
+  v.append(value);
   auto p = v.cbegin();
   ceph::decode(pool, p);
   ceph::decode(begin, p);
   ceph::decode(end, p);
   dout(20) << __func__ << " purged_snaps pool " << pool
 	   << " [" << begin << "," << end << ")" << dendl;
-  psit->next();
   return true;
 }
 
-bool SnapMapper::Scrubber::_parse_m()
+bool SnapMapper::Scrubber::_parse_m(
+  std::string_view key,
+  std::string_view value)
 {
-  if (!mapit->valid()) {
+  if (key.find(MAPPING_PREFIX) != 0) {
     return false;
   }
-  if (mapit->key().find(MAPPING_PREFIX) != 0) {
-    return false;
-  }
-  auto v = mapit->value();
+  ceph::bufferlist v;
+  v.append(value); // create_static if decoding if anyhow visible a flamegraph
   auto p = v.cbegin();
   mapping.decode(p);
 
   {
     unsigned long long p, s;
     long sh;
-    string k = mapit->key();
-    int r = sscanf(k.c_str(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
+    int r = sscanf(key.data(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
     if (r != 1) {
       shard = shard_id_t::NO_SHARD;
     } else {
@@ -936,7 +987,6 @@ bool SnapMapper::Scrubber::_parse_m()
 	   << " snap " << mapping.snap
 	   << " shard " << shard
 	   << " " << mapping.hoid << dendl;
-  mapit->next();
   return true;
 }
 
@@ -944,168 +994,68 @@ void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
 
-  psit = store->get_omap_iterator(ch, purged_snaps_hoid);
-  psit->upper_bound(PURGED_SNAP_PREFIX);
-  _parse_p();
-
-  mapit = store->get_omap_iterator(ch, mapping_hoid);
-  mapit->upper_bound(MAPPING_PREFIX);
-
-  while (_parse_m()) {
-    // advance to next purged_snaps range?
-    while (pool >= 0 &&
-	   (mapping.hoid.pool > pool ||
-	    (mapping.hoid.pool == pool && mapping.snap >= end))) {
-      _parse_p();
-    }
-    if (pool < 0) {
-      dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
-	       << dendl;
-      break;
-    }
-    if (mapping.hoid.pool < pool ||
-	mapping.snap < begin) {
-      // ok
-      dout(20) << __func__ << " ok " << mapping.hoid
-	       << " snap " << mapping.snap
-	       << " precedes pool " << pool
-	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
-    } else {
-      assert(mapping.snap >= begin &&
-	     mapping.snap < end &&
-	     mapping.hoid.pool == pool);
-      // invalid
-      dout(10) << __func__ << " stray " << mapping.hoid
-	       << " snap " << mapping.snap
-	       << " in pool " << pool
-	       << " shard " << shard
-	       << " purged_snaps [" << begin << "," << end << ")" << dendl;
-      stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
-			   pool, mapping.snap, mapping.hoid.get_hash(),
-			   shard
-			   ));
-    }
-  }
-
-  dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
-  psit = ObjectMap::ObjectMapIterator();
-  mapit = ObjectMap::ObjectMapIterator();
-}
-#endif // !WITH_SEASTAR
-
-
-// -------------------------------------
-// legacy conversion/support
-
-string SnapMapper::get_legacy_prefix(snapid_t snap)
-{
-  ceph_assert(snap != CEPH_NOSNAP && snap != CEPH_SNAPDIR);
-  return fmt::sprintf("%s%.16X_",
-		      LEGACY_MAPPING_PREFIX,
-		      static_cast<uint64_t>(snap));
-}
-
-string SnapMapper::to_legacy_raw_key(
-  const pair<snapid_t, hobject_t> &in)
-{
-  return get_legacy_prefix(in.first) + shard_prefix + in.second.to_str();
-}
-
-bool SnapMapper::is_legacy_mapping(const string &to_test)
-{
-  return to_test.substr(0, LEGACY_MAPPING_PREFIX.size()) ==
-    LEGACY_MAPPING_PREFIX;
-}
-
-#ifndef WITH_SEASTAR
-/* Octopus modified the SnapMapper key format from
- *
- *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
- *
- * to
- *
- *  <MAPPING_PREFIX><pool>_<snapid>_<shardid>_<hobject_t::to_str()>
- *
- * We can't reconstruct the new key format just from the value since the
- * Mapping object contains an hobject rather than a ghobject. Instead,
- * we exploit the fact that the new format is identical starting at <snapid>.
- *
- * Note that the original version of this conversion introduced in 94ebe0ea
- * had a crucial bug which essentially destroyed legacy keys by mapping
- * them to
- *
- *  <MAPPING_PREFIX><poolid>_<snapid>_
- *
- * without the object-unique suffix.
- * See https://tracker.ceph.com/issues/56147
- */
-std::string SnapMapper::convert_legacy_key(
-  const std::string& old_key,
-  const ceph::buffer::list& value)
-{
-  auto old = from_raw(make_pair(old_key, value));
-  std::string object_suffix = old_key.substr(
-    SnapMapper::LEGACY_MAPPING_PREFIX.length());
-  return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
-    + "_" + object_suffix;
-}
-
-int SnapMapper::convert_legacy(
-  CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  ghobject_t hoid,
-  unsigned max)
-{
-  uint64_t n = 0;
-
-  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-  if (!iter) {
-    return -EIO;
-  }
-
-  auto start = ceph::mono_clock::now();
-
-  iter->upper_bound(SnapMapper::LEGACY_MAPPING_PREFIX);
-  map<string,ceph::buffer::list> to_set;
-  while (iter->valid()) {
-    bool valid = SnapMapper::is_legacy_mapping(iter->key());
-    if (valid) {
-      to_set.emplace(
-	convert_legacy_key(iter->key(), iter->value()),
-	iter->value());
-      ++n;
-      iter->next();
-    }
-    if (!valid || !iter->valid() || to_set.size() >= max) {
-      ObjectStore::Transaction t;
-      t.omap_setkeys(ch->cid, hoid, to_set);
-      int r = store->queue_transaction(ch, std::move(t));
-      ceph_assert(r == 0);
-      to_set.clear();
-      if (!valid) {
-	break;
+  store->omap_iterate(
+    ch, mapping_hoid,
+    ObjectStore::omap_iter_seek_t{
+      .seek_position = MAPPING_PREFIX,
+      .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+    },
+    [this] (std::string_view key, std::string_view value) mutable {
+      if (!_parse_m(key, value)) {
+        return ObjectStore::omap_iter_ret_t::STOP;
       }
-      dout(10) << __func__ << " converted " << n << " keys" << dendl;
-    }
-  }
-
-  auto end = ceph::mono_clock::now();
-
-  dout(1) << __func__ << " converted " << n << " keys in "
-	  << timespan_str(end - start) << dendl;
-
-  // remove the old keys
-  {
-    ObjectStore::Transaction t;
-    string end = SnapMapper::LEGACY_MAPPING_PREFIX;
-    ++end[end.size()-1]; // turn _ to whatever comes after _
-    t.omap_rmkeyrange(ch->cid, hoid,
-		      SnapMapper::LEGACY_MAPPING_PREFIX,
-		      end);
-    int r = store->queue_transaction(ch, std::move(t));
-    ceph_assert(r == 0);
-  }
-  return 0;
+      // advance to next purged_snaps range?
+      const auto ret = store->omap_iterate(
+        ch, purged_snaps_hoid,
+        ObjectStore::omap_iter_seek_t{
+          .seek_position = PURGED_SNAP_PREFIX,
+          .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
+        },
+        [this] (std::string_view key, std::string_view value) mutable {
+          _parse_p(key, value);
+          if (pool >= 0 &&
+                 (mapping.hoid.pool > pool ||
+                  (mapping.hoid.pool == pool && mapping.snap >= end))) {
+            return ObjectStore::omap_iter_ret_t::NEXT;
+	  } else {
+            return ObjectStore::omap_iter_ret_t::STOP;
+	  }
+        });
+      if (ret < 0) {
+	// beware _parse_p() also modifies pool
+	pool = -1;
+	derr << "omap_iterate() on purged_snaps_hoid returns " << ret << dendl;
+      } else if (const auto more = static_cast<bool>(ret); !more) {
+	pool = -1;
+      }
+      if (pool < 0) {
+        dout(10) << __func__ << " passed final purged_snaps interval, rest ok"
+                 << dendl;
+        return ObjectStore::omap_iter_ret_t::STOP;
+      }
+      if (mapping.hoid.pool < pool ||
+          mapping.snap < begin) {
+        // ok
+        dout(20) << fmt::format(
+                      "{} ok {} snap {} precedes pool {} purged_snaps [{}, {})",
+                      __func__, mapping.hoid, mapping.snap, pool, begin, end)
+                 << dendl;
+      } else {
+        ceph_assert(mapping.snap >= begin);
+        ceph_assert(mapping.snap < end);
+        ceph_assert(mapping.hoid.pool == pool);
+        // invalid
+        dout(10) << fmt::format(
+                      "{} stray {} snap {} in pool {} shard {} purged_snaps[{}, {})",
+                      __func__, mapping.hoid, mapping.snap, pool, shard, begin, end)
+                 << dendl;
+        stray.emplace_back(std::tuple<int64_t,snapid_t,uint32_t,shard_id_t>(
+          		   pool, mapping.snap, mapping.hoid.get_hash(),
+          		   shard
+          		   ));
+      }
+      return ObjectStore::omap_iter_ret_t::NEXT;
+    });
+  dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
 }
-#endif // !WITH_SEASTAR
+#endif // !WITH_CRIMSON

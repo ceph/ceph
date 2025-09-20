@@ -171,13 +171,15 @@ void SloppyCRCMap::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void SloppyCRCMap::generate_test_instances(list<SloppyCRCMap*>& ls)
+list<SloppyCRCMap> SloppyCRCMap::generate_test_instances()
 {
-  ls.push_back(new SloppyCRCMap);
-  ls.push_back(new SloppyCRCMap(2));
+  list<SloppyCRCMap> ls;
+  ls.emplace_back();
+  ls.push_back(SloppyCRCMap(2));
   bufferlist bl;
   bl.append("some data");
-  ls.back()->write(1, bl.length(), bl);
-  ls.back()->write(10, bl.length(), bl);
-  ls.back()->zero(4, 2);
+  ls.back().write(1, bl.length(), bl);
+  ls.back().write(10, bl.length(), bl);
+  ls.back().zero(4, 2);
+  return ls;
 }

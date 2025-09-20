@@ -13,6 +13,7 @@
  */
 
 #include "Writer.h"
+#include "common/debug.h"
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 
@@ -155,6 +156,15 @@ inline void bluestore_blob_use_tracker_t::init_and_ref(
   }
 }
 
+inline void bluestore_blob_use_tracker_t::init_and_ref_compressed(
+  uint32_t logical_length)
+{
+  au_size = logical_length;
+  num_au = 0;
+  alloc_au = 0;
+  total_bytes = logical_length;
+}
+
 inline void bluestore_blob_t::allocated_full(
   uint32_t length,
   PExtentVector&& allocs)
@@ -281,7 +291,6 @@ inline BlueStore::extent_map_t::iterator BlueStore::Writer::_find_mutable_blob_r
       if (it->blob_end() <= mapmust_end) continue;
     }
     return it;
-    break;
   };
   return map.end();
 }
@@ -499,6 +508,9 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _get_disk_space(blob_length - alloc_offset, blob_allocs);
   bblob.allocated(alloc_offset, blob_length - alloc_offset, blob_allocs);
   //^sets also logical_length = blob_length
+  if (min_alloc_size != block_size) {
+    bblob.add_unused_all();
+  }
   dout(25) << __func__ << " @0x" << std::hex << in_blob_offset
     << "~" << disk_data.length()
     << " alloc_offset=" << alloc_offset
@@ -507,6 +519,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   _crop_allocs_to_io(disk_extents, in_blob_offset - alloc_offset,
     blob_length - in_blob_offset - disk_data.length());
   _schedule_io(disk_extents, disk_data);
+  bblob.mark_used(in_blob_offset, data_length);
   return blob;
 }
 
@@ -523,8 +536,6 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   uint32_t blob_length = disk_data.length();
   ceph_assert(p2phase<uint32_t>(blob_length, bstore->min_alloc_size) == 0);
   BlobRef blob = onode->c->new_blob();
-
-  //uint32_t in_blob_end = disk_data.length();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -534,13 +545,105 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
     bblob.calc_csum(0, disk_data);
     tracked_unit = std::max(1u << csum_order, min_alloc_size);
   }
-  //std::cout << "blob_length=" << blob_length << std::endl;
   blob->dirty_blob_use_tracker().init_and_ref(blob_length, tracked_unit);
   PExtentVector blob_allocs;
   _get_disk_space(blob_length, blob_allocs);
   _schedule_io(blob_allocs, disk_data); //have to do before move()
   bblob.allocated_full(blob_length, std::move(blob_allocs));
-  bblob.mark_used(0, blob_length); //todo - optimize; this obviously clears it
+  bblob.mark_used_all();
+  return blob;
+}
+
+inline void BlueStore::Writer::_place_extent_in_blob(
+  Extent* ex,
+  uint32_t map_begin,
+  uint32_t map_end,
+  uint32_t in_blob_offset)
+{
+  if (ex->logical_end() <= map_begin) {
+    // we are adding to right side of the target
+    if (ex->logical_end() == map_begin) {
+      // we can just expand existing Extent
+      ex->length += map_end - map_begin;
+      dout(20) << __func__ << " expanded extent " << ex->print(pp_mode) << dendl;
+      left_affected_range = std::min(left_affected_range, ex->logical_offset);
+    } else {
+      // disjointed, new extent needed
+      Extent *le = new Extent(
+        map_begin, in_blob_offset, map_end - map_begin, ex->blob);
+      dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
+      onode->extent_map.extent_map.insert(*le);
+      left_affected_range = std::min(left_affected_range, le->logical_offset);
+    }
+  } else if (ex->logical_offset >= map_end) {
+    // we are adding to left side of target
+    if (ex->logical_offset == map_end) {
+      // we can just expand existing Extent
+      //ceph_assert(ref_end == want_subau_end);
+      ex->logical_offset -= (map_end - map_begin);
+      ex->blob_offset -= (map_end - map_begin);
+      ex->length += (map_end - map_begin);
+      dout(20) << __func__ << " expanded extent " << ex->print(pp_mode) << dendl;
+      right_affected_range = std::max(right_affected_range, ex->logical_end());
+    } else {
+      // disjointed, new extent needed
+      Extent *le = new Extent(
+        map_begin, in_blob_offset, map_end - map_begin, ex->blob);
+      dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
+      onode->extent_map.extent_map.insert(*le);
+      right_affected_range = std::max(right_affected_range, le->logical_end());
+    }
+  }
+}
+
+// Iterator it can be invalidated.
+void BlueStore::Writer::_maybe_meld_with_prev_extent(exmp_it it)
+{
+  if (it == onode->extent_map.extent_map.end())   return; // can't merge with non-existent
+  if (it == onode->extent_map.extent_map.begin()) return; // can't merge when there is only 1 extent
+  if (it->logical_end() >= right_shard_bound)     return; // not allowed to escape shard range
+  auto it_p = it;
+  --it_p;
+  if (it_p->logical_offset < left_shard_bound) return; // we could jump here behind our inserted range
+  if (it_p->blob == it->blob &&
+      it_p->logical_end() == it->logical_offset &&
+      it_p->blob_offset + it_p->length == it->blob_offset) // this one is specifc, currently is always true
+  {
+    it_p->length += it->length;
+    onode->extent_map.rm(it);
+    left_affected_range = std::min(left_affected_range, it_p->logical_offset);
+    right_affected_range = std::max(right_affected_range, it_p->logical_end());
+  }
+}
+
+BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
+  bufferlist& disk_data,
+  uint32_t compressed_length,
+  bufferlist& object_data)
+{
+  uint32_t disk_length = disk_data.length();
+  uint32_t object_length = object_data.length();
+  ceph_assert(p2phase<uint32_t>(disk_length, bstore->min_alloc_size) == 0);
+  BlobRef blob = onode->c->new_blob();
+
+  bluestore_blob_t &bblob = blob->dirty_blob();
+  uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
+    std::min<uint32_t>(wctx->csum_order, std::countr_zero(disk_length));
+  if (wctx->csum_type != Checksummer::CSUM_NONE) {
+    bblob.init_csum(wctx->csum_type, csum_order, disk_length);
+    bblob.calc_csum(0, disk_data);
+  }
+  bblob.set_compressed(object_length, compressed_length);
+  blob->dirty_blob_use_tracker().init_and_ref_compressed(object_length);
+  PExtentVector blob_allocs;
+  _get_disk_space(disk_length, blob_allocs);
+  _schedule_io(blob_allocs, disk_data); //have to do before move()
+  //todo: we are setting blob's logical length twice
+  bblob.allocated_full(object_length, std::move(blob_allocs));
+  //no unused in compressed //bblob.mark_used(0, disk_length);
+  statfs_delta.compressed_allocated() += disk_length;
+  statfs_delta.compressed_original() += object_length;
+  statfs_delta.compressed() += compressed_length;
   return blob;
 }
 
@@ -609,7 +712,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
 inline void BlueStore::Writer::_schedule_io_masked(
   uint64_t disk_position,
   bufferlist data,
-  bluestore_blob_t::unused_t mask,
+  uint64_t mask,
   uint32_t chunk_size)
 {
   if (test_write_divertor == nullptr) {
@@ -729,6 +832,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
   blob_data_t& bd)            // modified when consumed
 {
   uint32_t search_stop = p2align(logical_offset, (uint32_t)wctx->target_blob_size);
+  search_stop = std::max(left_shard_bound, search_stop);
   uint32_t au_size = bstore->min_alloc_size;
   uint32_t block_size = bstore->block_size;
   ceph_assert(!bd.is_compressed());
@@ -770,7 +874,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_left = split_left(data, data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_left);
     // transfer do disk
     _schedule_io_masked(subau_disk_offset, data_at_left, mask, chunk_size);
@@ -778,11 +882,7 @@ void BlueStore::Writer::_try_reuse_allocated_l(
     uint32_t ref_end = std::min(ref_end_offset, want_subau_end);
     //fixme/improve - need something without stupid extras - that is without coll
     b->get_ref(onode->c, in_blob_offset, ref_end - want_subau_begin);
-    Extent *le = new Extent(
-      want_subau_begin, in_blob_offset, ref_end - want_subau_begin, it->blob);
-    dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
-    emap.extent_map.insert(*le);
-
+    _place_extent_in_blob(&*it, want_subau_begin, ref_end, in_blob_offset);
     logical_offset += data_size;
     break;
   }
@@ -809,6 +909,7 @@ void BlueStore::Writer::_try_reuse_allocated_r(
   uint32_t block_size = bstore->block_size;
   uint32_t blob_size = wctx->target_blob_size;
   uint32_t search_end = p2roundup(end_offset, blob_size);
+  search_end = std::min(right_shard_bound, search_end);
   ceph_assert(!bd.is_compressed());
   ceph_assert(p2phase<uint32_t>(end_offset, au_size) != 0);
   BlueStore::ExtentMap& emap = onode->extent_map;
@@ -843,19 +944,15 @@ void BlueStore::Writer::_try_reuse_allocated_r(
     uint32_t data_size = want_subau_end - want_subau_begin;
     bufferlist data_at_right = split_right(data, data.length() - data_size);
     bd.real_length -= data_size;
-    uint32_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
+    uint64_t mask = bb.get_unused_mask(in_blob_offset, data_size, chunk_size);
     _blob_put_data_subau(b, in_blob_offset, data_at_right);
-    //transfer to disk
+    // transfer to disk
     _schedule_io_masked(subau_disk_offset, data_at_right, mask, chunk_size);
 
     uint32_t ref_end = std::min(ref_end_offset, want_subau_end);
     //fixme/improve - need something without stupid extras - that is without coll
     b->get_ref(onode->c, in_blob_offset, ref_end - want_subau_begin);
-    Extent *le = new Extent(
-      want_subau_begin, in_blob_offset, ref_end - want_subau_begin, it->blob);
-    dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
-    emap.extent_map.insert(*le);
-
+    _place_extent_in_blob(&*it, want_subau_begin, ref_end, in_blob_offset);
     end_offset -= data_size;
     break;
   }
@@ -958,7 +1055,7 @@ void BlueStore::Writer::_do_put_new_blobs(
   extent_map_t& emap = onode->extent_map.extent_map;
   uint32_t blob_size = wctx->target_blob_size;
   while (bd_it != bd_end) {
-    Extent* le;
+    Extent* le = nullptr;
     if (!bd_it->is_compressed()) {
       // only 1st blob to write can have blob_location != logical_offset
       uint32_t blob_location = p2align(logical_offset, blob_size);
@@ -981,7 +1078,13 @@ void BlueStore::Writer::_do_put_new_blobs(
       logical_offset = ref_end;
     } else {
       // compressed
-      ceph_assert(false);
+      BlobRef new_blob = _blob_create_full_compressed(
+        bd_it->disk_data, bd_it->compressed_length, bd_it->object_data);
+      le = new Extent(
+        logical_offset, 0, bd_it->real_length, new_blob);
+      dout(20) << __func__ << " new compressed extent+blob " << le->print(pp_mode) << dendl;
+      emap.insert(*le);
+      logical_offset += bd_it->real_length;
     }
     bstore->logger->inc(l_bluestore_write_big);
     bstore->logger->inc(l_bluestore_write_big_bytes, le->length);
@@ -1020,14 +1123,11 @@ void BlueStore::Writer::_do_put_blobs(
       uint32_t ref_end = std::min(ref_end_offset, data_end_offset);
       //fixme/improve - need something without stupid extras - that is without coll
       left_b->blob->get_ref(coll, in_blob_offset, ref_end - logical_offset);
-      Extent *le = new Extent(
-        logical_offset, in_blob_offset, ref_end - logical_offset, left_b->blob);
-      dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
-      emap.insert(*le);
+      _place_extent_in_blob(&*left_b, logical_offset, ref_end, in_blob_offset);
+      bstore->logger->inc(l_bluestore_write_small);
+      bstore->logger->inc(l_bluestore_write_small_bytes, ref_end - logical_offset);
       logical_offset = ref_end;
       ++bd_it;
-      bstore->logger->inc(l_bluestore_write_small);
-      bstore->logger->inc(l_bluestore_write_small_bytes, le->length);
     } else {
       // it is still possible to use first bd and put it into
       // blob after punch_hole
@@ -1059,13 +1159,10 @@ void BlueStore::Writer::_do_put_blobs(
         uint32_t ref_end = std::min(ref_end_offset, data_begin_offset + back_it->disk_data.length());
         //fixme - need something without stupid extras
         right_b->blob->get_ref(coll, in_blob_offset, ref_end - data_begin_offset);
-        Extent *le = new Extent(
-          data_begin_offset, in_blob_offset, ref_end - data_begin_offset, right_b->blob);
-        dout(20) << __func__ << " new extent " << le->print(pp_mode) << dendl;
-        emap.insert(*le);
+        _place_extent_in_blob(&*right_b, data_begin_offset, ref_end, in_blob_offset);
         bd.erase(back_it); //TODO - or other way of limiting end
         bstore->logger->inc(l_bluestore_write_small);
-        bstore->logger->inc(l_bluestore_write_small_bytes, le->length);
+        bstore->logger->inc(l_bluestore_write_small_bytes, ref_end - data_begin_offset);
       }
     }
   }
@@ -1335,6 +1432,15 @@ void BlueStore::Writer::do_write(
   if (ref_end < onode->onode.size) {
     ref_end = std::min<uint32_t>(data_end, onode->onode.size);
   }
+  do_write_with_blobs(location, data_end, ref_end, bd);
+}
+
+void BlueStore::Writer::do_write_with_blobs(
+  uint32_t location,
+  uint32_t data_end,
+  uint32_t ref_end,
+  blob_vec& bd)
+{
   dout(20) << "blobs to put:" << blob_data_printer(bd, location) << dendl;
   statfs_delta.stored() += ref_end - location;
   exmp_it after_punch_it =
@@ -1345,9 +1451,15 @@ void BlueStore::Writer::do_write(
   // todo: if we align to disk block before splitting, we could do it in one go
   uint32_t pos = location;
   for (auto& b : bd) {
-    bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
-      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-    pos += b.disk_data.length();
+    if (b.is_compressed()) {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.object_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.object_data.length();
+    } else {
+      bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
+        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      pos += b.disk_data.length();
+    }
   }
   ceph_assert(pos == data_end);
 
@@ -1361,10 +1473,13 @@ void BlueStore::Writer::do_write(
     uint32_t location_tmp = location;
     for (auto& i : bd) {
       uint32_t location_end = location_tmp + i.real_length;
-      need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      if (i.is_compressed()) {
+        need_size += p2roundup(i.disk_data.length(), au_size);
+      } else {
+        need_size += p2roundup(location_end, au_size) - p2align(location_tmp, au_size);
+      }
       location_tmp = location_end;
     }
-
     _defer_or_allocate(need_size);
     _do_put_blobs(location, data_end, ref_end, bd, after_punch_it);
   } else {
@@ -1376,6 +1491,13 @@ void BlueStore::Writer::do_write(
   _collect_released_allocated();
   // update statfs
   txc->statfs_delta += statfs_delta;
+  // Note: compress extent is mostly not needed; _try_reuse_allocated_* joins extents if possible;
+  // same is done after _blob_put_data_subau_allocate (allocate more to existing blob).
+  // New blobs cannot be joined with existing ones.
+  // The only case that adjecent extents can be meld together is on the boundary.
+  // More specific, since we are operating left side first, right side later
+  // the only non-joined extent is between after_punch_it - 1 and after_punch_it.
+  _maybe_meld_with_prev_extent(after_punch_it);
   dout(25) << "result: " << std::endl << onode->print(pp_mode) << dendl;
 }
 

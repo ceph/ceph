@@ -34,7 +34,7 @@ bool PerfCountersCollection::reset(const std::string &name)
   return perf_impl.reset(name);
 }
 void PerfCountersCollection::dump_formatted(ceph::Formatter *f, bool schema,
-                      bool dump_labeled,
+                      select_labeled_t dump_labeled,
                       const std::string &logger,
                       const std::string &counter)
 {

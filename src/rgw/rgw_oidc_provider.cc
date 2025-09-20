@@ -27,15 +27,17 @@ void RGWOIDCProviderInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("thumbprints", thumbprints, obj);
 }
 
-void RGWOIDCProviderInfo::generate_test_instances(std::list<RGWOIDCProviderInfo*>& l)
+std::list<RGWOIDCProviderInfo> RGWOIDCProviderInfo::generate_test_instances()
 {
-  auto p = new RGWOIDCProviderInfo;
-  p->id = "id";
-  p->provider_url = "server.example.com";
-  p->arn = "arn:aws:iam::acct:oidc-provider/server.example.com";
-  p->creation_date = "someday";
-  p->client_ids = {"a", "b"};
-  p->thumbprints = {"c", "d"};
-  l.push_back(p);
-  l.push_back(new RGWOIDCProviderInfo);
+  std::list<RGWOIDCProviderInfo> l;
+  RGWOIDCProviderInfo p;
+  p.id = "id";
+  p.provider_url = "server.example.com";
+  p.arn = "arn:aws:iam::acct:oidc-provider/server.example.com";
+  p.creation_date = "someday";
+  p.client_ids = {"a", "b"};
+  p.thumbprints = {"c", "d"};
+  l.push_back(std::move(p));
+  l.emplace_back();
+  return l;
 }

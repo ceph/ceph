@@ -19,9 +19,11 @@
 #ifndef CEPH_MONMAPMONITOR_H
 #define CEPH_MONMAPMONITOR_H
 
-#include <map>
+#include <iosfwd>
 #include <set>
+#include <string>
 
+#include "include/buffer_fwd.h"
 #include "include/types.h"
 #include "msg/Messenger.h"
 

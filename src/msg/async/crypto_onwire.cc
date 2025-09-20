@@ -1,14 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <array>
-#include <openssl/evp.h>
-
 #include "crypto_onwire.h"
-
 #include "common/debug.h"
 #include "common/ceph_crypto.h"
+#include "include/buffer.h"
 #include "include/types.h"
+
+#include <openssl/evp.h>
+
+#include <array>
+#include <numeric> // for std::accumulate()
 
 #define dout_subsys ceph_subsys_ms
 
@@ -76,6 +78,10 @@ public:
 
   void authenticated_encrypt_update(const ceph::bufferlist& plaintext) override;
   ceph::bufferlist authenticated_encrypt_final() override;
+
+  std::string_view cipher_name() const override {
+    return "AES-128-GCM";
+  };
 };
 
 void AES128GCM_OnWireTxHandler::reset_tx_handler(const uint32_t* first,
@@ -198,6 +204,10 @@ public:
   void reset_rx_handler() override;
   void authenticated_decrypt_update(ceph::bufferlist& bl) override;
   void authenticated_decrypt_update_final(ceph::bufferlist& bl) override;
+
+  std::string_view cipher_name() const override {
+    return "AES-128-GCM";
+  };
 };
 
 void AES128GCM_OnWireRxHandler::reset_rx_handler()

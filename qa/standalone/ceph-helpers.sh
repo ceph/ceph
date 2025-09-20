@@ -1888,7 +1888,6 @@ function repair() {
     local last_scrub=$(get_last_scrub_stamp $pgid)
     ceph pg repair $pgid
     wait_for_scrub $pgid "$last_scrub"
-    sleep 2
 }
 
 function test_repair() {
@@ -1902,7 +1901,7 @@ function test_repair() {
     wait_for_clean || return 1
     repair 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 repair 1.0 || return 1
+    ! TIMEOUT=2 repair 1.0 || return 1
     teardown $dir || return 1
 }
 #######################################################################
@@ -1949,7 +1948,7 @@ function test_pg_scrub() {
     wait_for_clean || return 1
     pg_scrub 1.0 || return 1
     kill_daemons $dir KILL osd || return 1
-    ! TIMEOUT=1 pg_scrub 1.0 || return 1
+    ! TIMEOUT=2 pg_scrub 1.0 || return 1
     teardown $dir || return 1
 }
 
@@ -2089,7 +2088,7 @@ function test_wait_for_scrub() {
     wait_for_scrub $pgid "$last_scrub" || return 1
     kill_daemons $dir KILL osd || return 1
     last_scrub=$(get_last_scrub_stamp $pgid)
-    ! TIMEOUT=1 wait_for_scrub $pgid "$last_scrub" || return 1
+    ! TIMEOUT=2 wait_for_scrub $pgid "$last_scrub" || return 1
     teardown $dir || return 1
 }
 
@@ -2101,7 +2100,6 @@ function test_wait_for_scrub() {
 # @param plugin erasure code plugin
 # @return 0 on success, 1 on error
 #
-
 function erasure_code_plugin_exists() {
     local plugin=$1
     local status
@@ -2116,10 +2114,13 @@ function erasure_code_plugin_exists() {
     local status=$?
     if [ $status -eq 0 ]; then
         ceph osd erasure-code-profile rm TESTPROFILE
-    elif ! echo $s | grep --quiet "$grepstr" ; then
+    elif echo $s | grep --quiet "$grepstr" ; then
+        # expected error when the plugin doesn't exist
         status=1
-        # display why the string was rejected.
+    else
+        # any other error means plugin exists but can't initialize
         echo $s
+        status=0
     fi
     return $status
 }
@@ -2326,6 +2327,37 @@ function test_get_op_scheduler() {
     test $(get_op_scheduler 1) = "mclock_scheduler" || return 1
     teardown $dir || return 1
 }
+
+########################################################################
+##
+# Create a temporary file with random data and return its name. The file
+# should be removed by the caller.
+#
+# Example:
+#   testdata=$(file_with_random_data 1024)
+#
+# @param the size of the file created in bytes. As in most use cases
+#     the size is meaningless, a default (512) is used if not specified
+# @return the name of the file created
+#
+function file_with_random_data() {
+  local size_bytes=${1:-512}
+  local file=$(mktemp)
+  dd if=/dev/urandom of=$file bs=$size_bytes count=1
+  printf '%s' "$file"
+}
+
+function test_file_with_random_data() {
+    local dir=$1
+
+    setup $dir || return 1
+    local file=$(file_with_random_data 4000)
+    test -f $file || return 1
+    test $(stat -c %s $file) = 4000 || return 1
+    rm $file
+    teardown $dir || return 1
+}
+
 
 #######################################################################
 

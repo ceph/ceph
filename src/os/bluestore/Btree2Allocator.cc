@@ -23,7 +23,7 @@ Btree2Allocator::Btree2Allocator(CephContext* _cct,
   double _rweight_factor,
   bool with_cache,
   std::string_view name) :
-    Allocator(name, device_size, block_size),
+    AllocatorBase(name, device_size, block_size),
     myTraits(RANGE_SIZE_BUCKET_COUNT),
     cct(_cct),
     range_count_cap(max_mem / sizeof(range_seg_t))
@@ -65,7 +65,7 @@ int64_t Btree2Allocator::allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   ldout(cct, 10) << __func__ << std::hex
@@ -182,7 +182,7 @@ int64_t Btree2Allocator::_allocate(
   uint64_t want,
   uint64_t unit,
   uint64_t max_alloc_size,
-  int64_t  hint, // unused, for now!
+  int64_t  hint, // unused and likely unneeded
   PExtentVector* extents)
 {
   uint64_t allocated = 0;

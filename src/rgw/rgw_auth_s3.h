@@ -55,24 +55,26 @@ class STSAuthStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
-                            const RGWUserInfo& user_info,
+                            std::unique_ptr<rgw::sal::User> user,
                             std::optional<RGWAccountInfo> account,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const std::string& access_key_id,
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      LocalApplier(cct, user_info, std::move(account), std::move(policies),
-                   subuser, perm_mask, access_key_id));
+      LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
+                   subuser, perm_mask, access_key_id), is_impersonating);
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
   aplptr_t create_apl_role(CephContext* const cct,
                             const req_state* const s,
                             RoleApplier::Role role,
-                            RoleApplier::TokenAttrs token_attrs) const override {
+                            RoleApplier::TokenAttrs token_attrs,
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      rgw::auth::RoleApplier(cct, std::move(role), std::move(token_attrs)));
+      rgw::auth::RoleApplier(cct, driver, std::move(role), std::move(token_attrs)), is_impersonating);
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -176,15 +178,16 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
-                            const RGWUserInfo& user_info,
+                            std::unique_ptr<rgw::sal::User> user,
                             std::optional<RGWAccountInfo> account,
                             std::vector<IAM::Policy> policies,
                             const std::string& subuser,
                             const std::optional<uint32_t>& perm_mask,
-                            const std::string& access_key_id) const override {
+                            const std::string& access_key_id,
+                            bool is_impersonating) const override {
     auto apl = rgw::auth::add_sysreq(cct, driver, s,
-      LocalApplier(cct, user_info, std::move(account), std::move(policies),
-                   subuser, perm_mask, access_key_id));
+      LocalApplier(cct, std::move(user), std::move(account), std::move(policies),
+                   subuser, perm_mask, access_key_id), is_impersonating);
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -746,6 +749,8 @@ get_v2_signature(CephContext*,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
 
 std::string get_canonical_method(const DoutPrefixProvider *dpp, RGWOpType op_type, const req_info& info);
+
+void get_aws_version_and_auth_type(const req_state* s, string& aws_version, string& auth_type);
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */

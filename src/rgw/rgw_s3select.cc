@@ -762,7 +762,9 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
       op_ret = -ERR_INVALID_REQUEST;
     } else {
       //status per amount of processed data
+#ifdef _ARROW_EXIST
       m_aws_response_handler.update_total_bytes_returned(m_s3_parquet_object.get_return_result_size());
+#endif
       m_aws_response_handler.init_stats_response();
       m_aws_response_handler.send_stats_response();
       m_aws_response_handler.init_end_response();
@@ -810,7 +812,7 @@ int RGWSelectObj_ObjStore_S3::parquet_processing(bufferlist& bl, off_t ofs, off_
     }
     ldout(s->cct, 10) << "S3select:append_in_callback = " << append_in_callback << dendl;
     if (requested_buffer.size() < m_request_range) {
-      ldout(s->cct, 10) << "S3select: need another round buffe-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
+      ldout(s->cct, 10) << "S3select: need another round buffer-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
       return 0;
     } else {//buffer is complete
       ldout(s->cct, 10) << "S3select: buffer is complete " << requested_buffer.size() << " request range length:" << m_request_range << dendl;

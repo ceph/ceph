@@ -10,16 +10,15 @@
 #include "osd/osd_types.h"
 
 namespace crimson::osd {
-  class ShardServices;
-  class PglogBasedRecovery;
-};
-
+class ShardServices;
+class PglogBasedRecovery;
 class RecoveryBackend;
 class PGRecovery;
 
 class PGRecoveryListener {
 public:
   virtual crimson::osd::ShardServices& get_shard_services() = 0;
+  virtual DoutPrefixProvider& get_dpp() = 0;
   virtual PGRecovery* get_recovery_handler() = 0;
   virtual epoch_t get_osdmap_epoch() const = 0;
   virtual bool is_primary() const = 0;
@@ -42,4 +41,7 @@ public:
   virtual void set_pglog_based_recovery_op(
     crimson::osd::PglogBasedRecovery *op) = 0;
   virtual void reset_pglog_based_recovery_op() = 0;
+  virtual void schedule_event_after(PGPeeringEventRef evt, float delay) = 0;
 };
+
+}

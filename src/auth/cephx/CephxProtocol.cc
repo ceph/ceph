@@ -526,7 +526,7 @@ bool cephx_verify_authorizer(CephContext *cct, const KeyStore& keys,
     // generate a connection secret
     connection_secret->resize(connection_secret_required_len);
     if (connection_secret_required_len) {
-#ifdef WITH_SEASTAR
+#ifdef WITH_CRIMSON
       std::random_device rd;
       std::generate_n(connection_secret->data(),
 		      connection_secret_required_len,

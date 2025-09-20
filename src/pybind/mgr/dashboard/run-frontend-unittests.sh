@@ -41,6 +41,16 @@ else
   fi
 fi
 
+# The coverage tool embeds an absolute path in the coverage xml file.
+# This causes issues when the suite is run within a container and external
+# tools
+cov_xml="coverage/cobertura-coverage.xml"
+if [ -f "${cov_xml}" -a -n "$REWRITE_COVERAGE_ROOTDIR" ]; then
+  echo "Updating ${cov_xml}"
+  cp "${cov_xml}" "${cov_xml}.orig"
+  xmlstarlet ed --inplace -u /coverage/sources/source -v "${REWRITE_COVERAGE_ROOTDIR}"  "${cov_xml}"
+fi
+
 if [ `uname` != "FreeBSD" ]; then
   deactivate
 fi

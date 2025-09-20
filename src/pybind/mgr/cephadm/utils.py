@@ -24,9 +24,9 @@ class CephadmNoImage(Enum):
 # NOTE: order important here as these are used for upgrade order
 CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
               'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
-GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof']
+GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
-                          'alertmanager', 'grafana', 'loki', 'promtail']
+                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
 RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs']
 
 CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES

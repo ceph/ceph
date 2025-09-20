@@ -50,7 +50,7 @@ chunk), and only then processed.
 
 For each processed chunk, an output message is formatted according to `aws
 specification
-<https://docs.aws.amazon.com/amazons3/latest/api/archive-restobjectselectcontent.html#archive-restobjectselectcontent-responses>`_
+<https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/cfn-resource-specification-format.html>`_
 and sent back to the client. RGW supports the following response:
 ``{:event-type,records} {:content-type,application/octet-stream}
 {:message-type,event}``. For aggregation queries, the last chunk should be

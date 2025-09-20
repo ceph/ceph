@@ -270,6 +270,7 @@ static int do_kernel_list(Formatter *f) {
 #endif
 }
 
+#ifdef WITH_KRBD
 static int get_unsupported_features(librbd::Image &image,
                                     uint64_t *unsupported_features)
 {
@@ -373,6 +374,7 @@ static void print_error_description(const char *poolname,
  done:
   std::cout << "In some cases useful info is found in syslog - try \"dmesg | tail\"." << std::endl;
 }
+#endif
 
 static int do_kernel_map(const char *poolname, const char *nspace_name,
                          const char *imgname, const char *snapname,

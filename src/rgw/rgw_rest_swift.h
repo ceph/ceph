@@ -86,6 +86,7 @@ public:
   RGWStatBucket_ObjStore_SWIFT() {}
   ~RGWStatBucket_ObjStore_SWIFT() override {}
 
+  int get_params(optional_yield y) override { return 0; }
   void send_response() override;
 };
 

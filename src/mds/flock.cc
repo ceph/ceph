@@ -1,10 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-#include <errno.h>
 
-#include "common/debug.h"
-#include "mdstypes.h"
 #include "mds/flock.h"
+#include "common/debug.h"
+#include "common/Formatter.h"
+#include "mdstypes.h"
+
+#include <iostream>
 
 #define dout_subsys ceph_subsys_mds
 
@@ -13,6 +15,14 @@ using std::pair;
 using std::multimap;
 
 static multimap<ceph_filelock, ceph_lock_state_t*> global_waiting_locks;
+
+std::ostream& operator<<(std::ostream& out, const ceph_filelock& l) {
+  out << "start: " << l.start << ", length: " << l.length
+      << ", client: " << l.client << ", owner: " << l.owner
+      << ", pid: " << l.pid << ", type: " << (int)l.type
+      << std::endl;
+  return out;
+}
 
 static void remove_global_waiting(ceph_filelock &fl, ceph_lock_state_t *lock_state)
 {
@@ -37,21 +47,25 @@ ceph_lock_state_t::~ceph_lock_state_t()
   }
 }
 
+void ceph_lock_state_t::encode(ceph::bufferlist& bl) const {
+  using ceph::encode;
+  encode(held_locks, bl);
+  encode(client_held_lock_counts, bl);
+}
+
+void ceph_lock_state_t::decode(ceph::bufferlist::const_iterator& bl) {
+  using ceph::decode;
+  decode(held_locks, bl);
+  decode(client_held_lock_counts, bl);
+}
+
 void ceph_lock_state_t::dump(ceph::Formatter *f) const {
-  f->dump_int("type", type);
+  // do not dump fields which are not persisted:
+  // - type: set in constructor
+  // - waiting_locks: runtime-only field
+  // - client_waiting_lock_counts: runtime-only field
   f->dump_int("held_locks", held_locks.size());
   for (auto &p : held_locks) {
-    f->open_object_section("lock");
-    f->dump_int("start", p.second.start);
-    f->dump_int("length", p.second.length);
-    f->dump_int("client", p.second.client);
-    f->dump_int("owner", p.second.owner);
-    f->dump_int("pid", p.second.pid);
-    f->dump_int("type", p.second.type);
-    f->close_section();
-  }
-  f->dump_int("waiting_locks", waiting_locks.size());
-  for (auto &p : waiting_locks) {
     f->open_object_section("lock");
     f->dump_int("start", p.second.start);
     f->dump_int("length", p.second.length);
@@ -68,17 +82,18 @@ void ceph_lock_state_t::dump(ceph::Formatter *f) const {
     f->dump_int("count", p.second);
     f->close_section();
   }
-  f->dump_int("client_waiting_lock_counts", client_waiting_lock_counts.size());
 }
 
 
-void ceph_lock_state_t::generate_test_instances(std::list<ceph_lock_state_t*>& ls) {
-  ls.push_back(new ceph_lock_state_t(NULL, 0));
-  ls.push_back(new ceph_lock_state_t(NULL, 1));
-  ls.back()->held_locks.insert(std::make_pair(1, ceph_filelock()));
-  ls.back()->waiting_locks.insert(std::make_pair(1, ceph_filelock()));
-  ls.back()->client_held_lock_counts.insert(std::make_pair(1, 1));
-  ls.back()->client_waiting_lock_counts.insert(std::make_pair(1, 1));
+std::list<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
+  std::list<ceph_lock_state_t> ls;
+  ls.push_back(ceph_lock_state_t(NULL, 0));
+  ls.push_back(ceph_lock_state_t(NULL, 1));
+  ls.back().held_locks.insert(std::make_pair(1, ceph_filelock()));
+  ls.back().waiting_locks.insert(std::make_pair(1, ceph_filelock()));
+  ls.back().client_held_lock_counts.insert(std::make_pair(1, 1));
+  ls.back().client_waiting_lock_counts.insert(std::make_pair(1, 1));
+  return ls;
 }
 
 bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const
@@ -641,4 +656,22 @@ ceph_lock_state_t::contains_exclusive_lock(list<multimap<uint64_t,
     if (CEPH_LOCK_EXCL == (*iter)->second.type) return &(*iter)->second;
   }
   return NULL;
+}
+
+std::ostream& operator<<(std::ostream &out, const ceph_lock_state_t &l) {
+  out << "ceph_lock_state_t. held_locks.size()=" << l.held_locks.size()
+      << ", waiting_locks.size()=" << l.waiting_locks.size()
+      << ", client_held_lock_counts -- " << l.client_held_lock_counts
+      << "\n client_waiting_lock_counts -- " << l.client_waiting_lock_counts
+      << "\n held_locks -- ";
+    for (auto iter = l.held_locks.begin();
+         iter != l.held_locks.end();
+         ++iter)
+      out << iter->second;
+    out << "\n waiting_locks -- ";
+    for (auto iter =l.waiting_locks.begin();
+         iter != l.waiting_locks.end();
+         ++iter)
+      out << iter->second << "\n";
+  return out;
 }

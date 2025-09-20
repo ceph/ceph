@@ -4,23 +4,21 @@
     <div class="card tc_task border-0">
       <div class="row no-gutters">
         <div class="col-md-2 text-center">
-          <span [ngClass]="[icons.stack, icons.large2x]"
-                class="text-info">
-            <i [ngClass]="[icons.stack2x, icons.circle]"></i>
-            <i [ngClass]="[icons.stack1x, icons.spinner, icons.spin, icons.inverse]"></i>
+          <span class="text-info">
+            <svg [cdsIcon]="icons.circle"
+                 [size]="icons.size16"
+                 ></svg>
           </span>
         </div>
         <div class="col-md-9">
           <div class="card-body p-1">
             <h6 class="card-title bold">{{ executingTask.description }}</h6>
-
             <div class="mb-1">
               <ngb-progressbar type="info"
                                [value]="executingTask?.progress"
                                [striped]="true"
                                [animated]="true"></ngb-progressbar>
             </div>
-
             <p class="card-text text-muted">
               <small class="date float-start">
                 {{ executingTask.begin_time | cdDate }}
@@ -45,8 +43,9 @@
     <button type="button"
             class="btn btn-light btn-block"
             (click)="removeAll(); $event.stopPropagation()">
-      <i [ngClass]="[icons.trash]"
-         aria-hidden="true"></i>
+      <svg [cdsIcon]="icons.trash"
+           [size]="icons.size16"
+           ></svg>
       &nbsp;
       <ng-container i18n>Clear notifications</ng-container>
     </button>
@@ -58,7 +57,7 @@
       <div class="card tc_notification border-0">
         <div class="row no-gutters">
           <div class="col-md-2 text-center">
-            <span [ngClass]="[icons.stack, icons.large2x,  notification.textClass]">
+            <span [ngClass]="[icons.stack, icons.large,  notification.textClass]">
               <i [ngClass]="[icons.circle, icons.stack2x]"></i>
               <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
             </span>
@@ -69,21 +68,27 @@
                       title="Remove notification"
                       i18n-title
                       (click)="remove(i); $event.stopPropagation()">
-                <i [ngClass]="[icons.trash]"></i>
+                <svg [cdsIcon]="icons.trash"
+                     [size]="icons.size16"
+                     ></svg>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && !notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Silence Alert"
                       i18n-title
                       (click)="silence(notification)">
-                <i [ngClass]="[icons.mute]"></i>
+                <svg [cdsIcon]="icons.mute"
+                     [size]="icons.size16"
+                     ></svg>
               </button>
               <button *ngIf="notification.application === 'Prometheus' && notification.type !== 2 && notification.alertSilenced"
                       class="btn btn-link float-end text-muted mute m-0 p-0"
                       title="Expire Silence"
                       i18n-title
                       (click)="expire(notification)">
-                <i [ngClass]="[icons.bell]"></i>
+                <svg [cdsIcon]="icons.bell"
+                     [size]="icons.size16"
+                     ></svg>
               </button>
 
 

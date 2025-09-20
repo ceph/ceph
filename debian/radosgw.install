@@ -1,4 +1,4 @@
-lib/systemd/system/ceph-radosgw*
+{usr/,}lib/systemd/system/ceph-radosgw*
 usr/bin/ceph-diff-sorted
 usr/bin/radosgw
 usr/bin/radosgw-es

@@ -93,6 +93,7 @@ Administration
     CephFS Top Utility <cephfs-top>
     Scheduled Snapshots <snap-schedule>
     CephFS Snapshot Mirroring <cephfs-mirroring>
+    Purge Queue <purge-queue>
 
 .. raw:: html
 
@@ -144,9 +145,11 @@ CephFS Concepts
     Distributed Metadata Cache <mdcache>
     Dynamic Metadata Management in CephFS <dynamic-metadata-management>
     CephFS IO Path <cephfs-io-path>
+    Case Sensitivity and Normalization <charmap>
     LazyIO <lazyio>
     Directory fragmentation <dirfrags>
     Multiple active MDS daemons <multimds>
+    Snapshots <snapshots>
 
 
 .. raw:: html

@@ -14,7 +14,8 @@
 #include "librbd/io/RefreshImageDispatch.h"
 #include "librbd/io/Utils.h"
 #include "librbd/io/WriteBlockImageDispatch.h"
-#include <boost/variant.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -278,7 +279,7 @@ bool ImageDispatcher<I>::send_dispatch(
     }
   }
 
-  return boost::apply_visitor(
+  return std::visit(
     SendVisitor{image_dispatch, image_dispatch_spec},
     image_dispatch_spec->request);
 }
@@ -286,7 +287,7 @@ bool ImageDispatcher<I>::send_dispatch(
 template <typename I>
 bool ImageDispatcher<I>::preprocess(
     ImageDispatchSpec* image_dispatch_spec) {
-  return boost::apply_visitor(
+  return std::visit(
     PreprocessVisitor{this, image_dispatch_spec},
     image_dispatch_spec->request);
 }

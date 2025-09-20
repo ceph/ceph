@@ -8,6 +8,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <vector>
 
 #include <iosfwd>
 
@@ -24,6 +25,7 @@ extern "C" {
 #include "include/err.h"
 #include "include/encoding.h"
 #include "include/mempool.h"
+#include "include/rados.h" // for CEPH_PG_TYPE_*
 
 namespace ceph {
   class Formatter;
@@ -93,25 +95,12 @@ public:
   CrushWrapper() {
     create();
   }
-  ~CrushWrapper() {
-    if (crush)
-      crush_destroy(crush);
-    choose_args_clear();
-  }
+  ~CrushWrapper();
 
   crush_map *get_crush_map() { return crush; }
 
   /* building */
-  void create() {
-    if (crush)
-      crush_destroy(crush);
-    crush = crush_create();
-    choose_args_clear();
-    ceph_assert(crush);
-    have_rmaps = false;
-
-    set_tunables_default();
-  }
+  void create();
 
   /// true if any buckets that aren't straw2
   bool has_non_straw2_buckets() const;
@@ -1671,7 +1660,7 @@ public:
   }
   void dump_tree(ceph::Formatter *f,
 		 const CrushTreeDumper::name_map_t& ws) const;
-  static void generate_test_instances(std::list<CrushWrapper*>& o);
+  static std::list<CrushWrapper> generate_test_instances();
 
   int get_osd_pool_default_crush_replicated_rule(CephContext *cct);
 

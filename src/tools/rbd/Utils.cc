@@ -11,6 +11,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/escape.h"
+#include "common/Formatter.h"
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <fstream>
@@ -337,11 +338,14 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
                                   SpecValidation spec_validation) {
   std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string namespace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_NAMESPACE_NAME : at::NAMESPACE_NAME);
   std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+
   return get_pool_generic_snapshot_names(vm, mod, spec_arg_index, pool_key,
-                                         pool_name, namespace_name, image_key,
-                                         "image", image_name, snap_name,
+                                         pool_name, namespace_key, namespace_name,
+                                         image_key, "image", image_name, snap_name,
                                          image_name_required, snapshot_presence,
                                          spec_validation);
 }
@@ -351,6 +355,7 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
                                     size_t *spec_arg_index,
                                     const std::string& pool_key,
                                     std::string *pool_name,
+                                    const std::string& namespace_key,
                                     std::string *namespace_name,
                                     const std::string& generic_key,
                                     const std::string& generic_key_desc,
@@ -359,8 +364,6 @@ int get_pool_generic_snapshot_names(const po::variables_map &vm,
                                     bool generic_name_required,
                                     SnapshotPresence snapshot_presence,
                                     SpecValidation spec_validation) {
-  std::string namespace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
-    at::DEST_NAMESPACE_NAME : at::NAMESPACE_NAME);
   std::string snap_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_SNAPSHOT_NAME : at::SNAPSHOT_NAME);
 
@@ -1020,6 +1023,8 @@ std::string mirror_image_state(librbd::mirror_image_state_t state) {
       return "enabled";
     case RBD_MIRROR_IMAGE_DISABLED:
       return "disabled";
+    case RBD_MIRROR_IMAGE_CREATING:
+      return "creating";
     default:
       return "unknown";
   }

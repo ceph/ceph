@@ -7,6 +7,7 @@
 #include "include/neorados/RADOS.hpp"
 
 #include "common/ceph_context.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
@@ -43,6 +44,8 @@
 
 #include "osdc/Striper.h"
 #include <boost/algorithm/string/predicate.hpp>
+
+#include <shared_mutex> // for std::shared_lock
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -1005,11 +1008,19 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     }
 
     // atomically reset the data IOContext to new version
+#ifdef __cpp_lib_atomic_shared_ptr
+    data_io_context.store(ctx);
+#else
     atomic_store(&data_io_context, ctx);
+#endif
   }
 
   IOContext ImageCtx::get_data_io_context() const {
+#ifdef __cpp_lib_atomic_shared_ptr
+    return data_io_context.load();
+#else
     return atomic_load(&data_io_context);
+#endif
   }
 
   IOContext ImageCtx::duplicate_data_io_context() const {

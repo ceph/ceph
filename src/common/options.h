@@ -4,6 +4,7 @@
 #pragma once
 
 #include <chrono>
+#include <iostream> // for std::cerr
 #include <string>
 #include <variant>
 #include <vector>
@@ -411,25 +412,25 @@ struct Option {
   }
 };
 
-constexpr unsigned long long operator"" _min (unsigned long long min) {
+constexpr unsigned long long operator""_min (unsigned long long min) {
   return min * 60;
 }
-constexpr unsigned long long operator"" _hr (unsigned long long hr) {
+constexpr unsigned long long operator""_hr (unsigned long long hr) {
   return hr * 60 * 60;
 }
-constexpr unsigned long long operator"" _day (unsigned long long day) {
+constexpr unsigned long long operator""_day (unsigned long long day) {
   return day * 24 * 60 * 60;
 }
-constexpr unsigned long long operator"" _K (unsigned long long n) {
+constexpr unsigned long long operator""_K (unsigned long long n) {
   return n << 10;
 }
-constexpr unsigned long long operator"" _M (unsigned long long n) {
+constexpr unsigned long long operator""_M (unsigned long long n) {
   return n << 20;
 }
-constexpr unsigned long long operator"" _G (unsigned long long n) {
+constexpr unsigned long long operator""_G (unsigned long long n) {
   return n << 30;
 }
-constexpr unsigned long long operator"" _T (unsigned long long n) {
+constexpr unsigned long long operator""_T (unsigned long long n) {
   return n << 40;
 }
 

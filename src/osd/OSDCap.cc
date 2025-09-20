@@ -445,7 +445,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 	       >> (lit('=') | spaces)
 	       >> estr >> -char_('*'));
 
-    // match := [pool[=]<poolname> [namespace[=]<namespace>]] [object_prefix <prefix>]
+    // match := [pool[=]<poolname>] [namespace[=]<namespace>] [object_prefix <prefix>]
     object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
     pooltag %= (spaces >> lit("tag")
 		>> spaces >> str // application
@@ -478,7 +478,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
       (rwxa)                      [_val = phoenix::construct<OSDCapSpec>(_1)] |
       (class_name >> method_name) [_val = phoenix::construct<OSDCapSpec>(_1, _2)]);
 
-    // profile := profile <name> [pool[=]<pool> [namespace[=]<namespace>]]
+    // profile := profile <name> [pool[=]<pool>] [namespace[=]<namespace>]
     profile_name %= (lit("profile") >> (lit('=') | spaces) >> str);
     profile = (
       (profile_name >> pool_name >> nspace) [_val = phoenix::construct<OSDCapProfile>(_1, _2, _3)] |

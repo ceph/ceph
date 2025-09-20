@@ -3,9 +3,8 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
-import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { NgxPipeFunctionModule } from 'ngx-pipe-function';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
@@ -63,15 +62,19 @@ import {
   NumberModule,
   RadioModule,
   SelectModule,
-  UIShellModule
+  UIShellModule,
+  TreeviewModule,
+  TabsModule
 } from 'carbon-components-angular';
 
 // Icons
 import ChevronDown from '@carbon/icons/es/chevron--down/16';
 import Close from '@carbon/icons/es/close/32';
-import AddFilled from '@carbon/icons/es/add--filled/32';
+import AddFilled from '@carbon/icons/es/add--filled/20';
 import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
+import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
+import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
 
 @NgModule({
   imports: [
@@ -82,10 +85,10 @@ import Reset from '@carbon/icons/es/reset/32';
     NgbNavModule,
     NgbPopoverModule,
     NgbTooltipModule,
-    NgxPipeFunctionModule,
+    PipesModule,
     SharedModule,
     RouterModule,
-    TreeModule,
+    TreeviewModule,
     UIShellModule,
     InputModule,
     GridModule,
@@ -97,7 +100,8 @@ import Reset from '@carbon/icons/es/reset/32';
     NumberModule,
     ModalModule,
     DatePickerModule,
-    ComboBoxModule
+    ComboBoxModule,
+    TabsModule
   ],
   declarations: [
     RbdListComponent,
@@ -140,7 +144,15 @@ import Reset from '@carbon/icons/es/reset/32';
 })
 export class BlockModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([ChevronDown, Close, AddFilled, SubtractFilled, Reset]);
+    this.iconService.registerAll([
+      ChevronDown,
+      Close,
+      AddFilled,
+      SubtractFilled,
+      Reset,
+      ProgressBarRound,
+      SubtractAlt
+    ]);
   }
 }
 

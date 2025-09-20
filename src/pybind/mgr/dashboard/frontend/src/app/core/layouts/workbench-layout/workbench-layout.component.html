@@ -1,4 +1,4 @@
-<block-ui>
+<block-ui name="global">
   <cd-navigation>
     <div class="container-fluid h-100"
          [ngClass]="{'dashboard': (router.url == '/dashboard' || router.url == '/dashboard_3' || router.url == '/multi-cluster/overview'), 'rgw-dashboard': (router.url == '/rgw/overview')}">
@@ -17,4 +17,6 @@
       <cds-placeholder></cds-placeholder>
     </div>
   </cd-navigation>
+  <!--  Toast Notification -->
+  <cd-toast></cd-toast>
 </block-ui>

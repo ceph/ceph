@@ -11,7 +11,7 @@
 #include <list>
 #include <string>
 #include <vector>
-#include <boost/variant/variant.hpp>
+#include <variant>
 
 namespace ceph { class Formatter; }
 
@@ -54,7 +54,7 @@ struct Dependency {
   void decode(__u8 version, bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<Dependency *> &o);
+  static std::list<Dependency> generate_test_instances();
 };
 
 WRITE_CLASS_ENCODER(Dependency);
@@ -294,19 +294,19 @@ struct UnknownAction {
   void dump(Formatter *f) const;
 };
 
-typedef boost::variant<StartThreadAction,
-                       StopThreadAction,
-                       ReadAction,
-                       WriteAction,
-                       DiscardAction,
-                       AioReadAction,
-                       AioWriteAction,
-                       AioDiscardAction,
-                       OpenImageAction,
-                       CloseImageAction,
-                       AioOpenImageAction,
-                       AioCloseImageAction,
-                       UnknownAction> Action;
+typedef std::variant<StartThreadAction,
+		     StopThreadAction,
+		     ReadAction,
+		     WriteAction,
+		     DiscardAction,
+		     AioReadAction,
+		     AioWriteAction,
+		     AioDiscardAction,
+		     OpenImageAction,
+		     CloseImageAction,
+		     AioOpenImageAction,
+		     AioCloseImageAction,
+		     UnknownAction> Action;
 
 class ActionEntry {
 public:
@@ -322,7 +322,7 @@ public:
   void decode_unversioned(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<ActionEntry *> &o);
+  static std::list<ActionEntry> generate_test_instances();
 
 private:
   void decode_versioned(__u8 version, bufferlist::const_iterator &it);

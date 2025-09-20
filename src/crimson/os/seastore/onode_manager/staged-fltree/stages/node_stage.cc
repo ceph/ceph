@@ -41,7 +41,7 @@ node_offset_t NODE_T::size_to_nxt_at(index_t index) const
                  p_fields->get_item_end_offset(index, node_size);
     return FieldType::estimate_insert_one() + ns_oid_view_t(p_end).size();
   } else {
-    ceph_abort("N3 node is not nested");
+    ceph_abort_msg("N3 node is not nested");
   }
 }
 
@@ -49,7 +49,7 @@ template <typename FieldType, node_type_t NODE_TYPE>
 container_range_t NODE_T::get_nxt_container(index_t index) const
 {
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    ceph_abort("N3 internal node doesn't have the right part");
+    ceph_abort_msg("N3 internal node doesn't have the right part");
   } else {
     auto item_start_offset = p_fields->get_item_start_offset(
         index, node_size);
@@ -113,9 +113,9 @@ memory_range_t NODE_T::insert_prefix_at(
                        -(int)size_right);
     return {p_insert_front, p_insert};
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   } else {
-    ceph_abort("impossible");
+    ceph_abort_msg("impossible");
   }
 }
 #define IPA_TEMPLATE(FT, NT, Key)                                         \
@@ -158,7 +158,7 @@ node_offset_t NODE_T::trim_until(
     return 0;
   }
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   } else {
     mut.copy_in_absolute(
         (void*)&node.p_fields->num_keys, num_keys_t(index));
@@ -177,7 +177,7 @@ node_offset_t NODE_T::trim_at(
   assert(!node.is_level_tail());
   assert(index < node.keys());
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   } else {
     extent_len_t node_size = mut.get_length();
     node_offset_t offset = node.p_fields->get_item_start_offset(
@@ -207,7 +207,7 @@ node_offset_t NODE_T::erase_at(
     assert(p_left_bound == node.p_left_bound());
     return FieldType::erase_at(mut, node.fields(), index, p_left_bound);
   } else {
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   }
 }
 
@@ -243,15 +243,15 @@ APPEND_T::Appender(NodeExtentMutable* p_mut, const node_extent_t& node, bool ope
                        node.fields().get_item_end_offset(node.keys() - 1,
                                                          node_size);
     } else if constexpr (FIELD_TYPE == field_type_t::N2) {
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     } else {
-      ceph_abort("impossible path");
+      ceph_abort_msg("impossible path");
     }
     num_keys = node.keys() - 1;
   } else {
     if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
       std::ignore = node_size;
-      ceph_abort("not implemented");
+      ceph_abort_msg("not implemented");
     } else {
       p_append_left = p_start + node.fields().get_key_start_offset(
           node.keys(), node_size);
@@ -283,7 +283,7 @@ void APPEND_T::append(const node_extent_t& src, index_t from, index_t items)
   num_keys += items;
   if constexpr (std::is_same_v<FieldType, internal_fields_3_t>) {
     std::ignore = node_size;
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   } else {
     // append left part forwards
     node_offset_t offset_left_start = src.fields().get_key_start_offset(
@@ -343,9 +343,9 @@ void APPEND_T::append(
     const full_key_t<KT>& key, const value_input_t& value, const value_t*& p_value)
 {
   if constexpr (FIELD_TYPE == field_type_t::N3) {
-    ceph_abort("not implemented");
+    ceph_abort_msg("not implemented");
   } else {
-    ceph_abort("should not happen");
+    ceph_abort_msg("should not happen");
   }
 }
 
@@ -360,7 +360,7 @@ APPEND_T::open_nxt(const key_get_type& partial_key)
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
     FieldType::append_key(*p_mut, partial_key, p_append_right);
   } else {
-    ceph_abort("impossible path");
+    ceph_abort_msg("impossible path");
   }
   return {p_mut, p_append_right};
 }
@@ -376,7 +376,7 @@ APPEND_T::open_nxt(const full_key_t<KT>& key)
   } else if constexpr (FIELD_TYPE == field_type_t::N2) {
     FieldType::append_key(*p_mut, key, p_append_right);
   } else {
-    ceph_abort("impossible path");
+    ceph_abort_msg("impossible path");
   }
   return {p_mut, p_append_right};
 }

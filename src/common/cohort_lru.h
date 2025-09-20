@@ -13,6 +13,12 @@
 #ifndef COHORT_LRU_H
 #define COHORT_LRU_H
 
+#include <algorithm>
+#include <atomic>
+#include <cstdint>
+#include <functional>
+#include <mutex>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/slist.hpp>
 #include <cstdint>

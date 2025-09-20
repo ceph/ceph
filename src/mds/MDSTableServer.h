@@ -15,18 +15,28 @@
 #ifndef CEPH_MDSTABLESERVER_H
 #define CEPH_MDSTABLESERVER_H
 
-#include "MDSTable.h"
-#include "MDSContext.h"
+#include <map>
+#include <set>
 
-#include "messages/MMDSTableRequest.h"
+#include "MDSTable.h"
+#include "mdstypes.h" // for mds_table_pending_t
+#include "mds_table_types.h" // for get_mdstable_name()
+
+#include "common/ref.h" // for cref_t
+
+class MDSContext;
+class MMDSTableRequest;
 
 class MDSTableServer : public MDSTable {
 public:
   friend class C_ServerRecovery;
 
-  MDSTableServer(MDSRank *m, int tab) :
-    MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
-  ~MDSTableServer() override {}
+  MDSTableServer(MDSRank *m, int tab);
+  ~MDSTableServer();
+
+  // required by DencoderImplFeatureful::copy()
+  MDSTableServer(const MDSTableServer &);
+  MDSTableServer &operator=(const MDSTableServer &);
 
   virtual void handle_query(const cref_t<MMDSTableRequest> &m) = 0;
   virtual void _prepare(const bufferlist &bl, uint64_t reqid, mds_rank_t bymds, bufferlist& out) = 0;
@@ -36,36 +46,12 @@ public:
   virtual void _server_update(bufferlist& bl) { ceph_abort(); }
   virtual bool _notify_prep(version_t tid) { return false; };
 
-  void _note_prepare(mds_rank_t mds, uint64_t reqid, bool replay=false) {
-    version++;
-    if (replay)
-      projected_version = version;
-    pending_for_mds[version].mds = mds;
-    pending_for_mds[version].reqid = reqid;
-    pending_for_mds[version].tid = version;
-  }
-  void _note_commit(uint64_t tid, bool replay=false) {
-    version++;
-    if (replay)
-      projected_version = version;
-    pending_for_mds.erase(tid);
-  }
-  void _note_rollback(uint64_t tid, bool replay=false) {
-    version++;
-    if (replay)
-      projected_version = version;
-    pending_for_mds.erase(tid);
-  }
-  void _note_server_update(bufferlist& bl, bool replay=false) {
-    version++;
-    if (replay)
-      projected_version = version;
-  }
+  void _note_prepare(mds_rank_t mds, uint64_t reqid, bool replay=false);
+  void _note_commit(uint64_t tid, bool replay=false);
+  void _note_rollback(uint64_t tid, bool replay=false);
+  void _note_server_update(bufferlist& bl, bool replay=false);
 
-  void reset_state() override {
-    pending_for_mds.clear();
-    ++version;
-  }
+  void reset_state() override;
 
   void handle_request(const cref_t<MMDSTableRequest> &m);
   void do_server_update(bufferlist& bl);
@@ -73,14 +59,8 @@ public:
   virtual void encode_server_state(bufferlist& bl) const = 0;
   virtual void decode_server_state(bufferlist::const_iterator& bl) = 0;
 
-  void encode_state(bufferlist& bl) const override {
-    encode_server_state(bl);
-    encode(pending_for_mds, bl);
-  }
-  void decode_state(bufferlist::const_iterator& bl) override {
-    decode_server_state(bl);
-    decode(pending_for_mds, bl);
-  }
+  void encode_state(bufferlist& bl) const override;
+  void decode_state(bufferlist::const_iterator& bl) override;
 
   // recovery
   void finish_recovery(std::set<mds_rank_t>& active);
@@ -93,13 +73,7 @@ protected:
   bool recovered = false;
   std::set<mds_rank_t> active_clients;
 private:
-  struct notify_info_t {
-    notify_info_t() {}
-    std::set<mds_rank_t> notify_ack_gather;
-    mds_rank_t mds;
-    ref_t<MMDSTableRequest> reply = NULL;
-    MDSContext *onfinish = nullptr;
-  };
+  struct notify_info_t;
 
   friend class C_Prepare;
   friend class C_Commit;

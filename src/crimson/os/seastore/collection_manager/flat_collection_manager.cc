@@ -51,8 +51,11 @@ FlatCollectionManager::get_coll_root(const coll_root_t &coll_root, Transaction &
     cc.t,
     coll_root.get_location(),
     coll_root.get_size()
-  ).si_then([](auto&& e) {
-    return get_root_iertr::make_ready_future<CollectionNodeRef>(std::move(e));
+  ).si_then([](auto maybe_indirect_extent) {
+    assert(!maybe_indirect_extent.is_indirect());
+    assert(!maybe_indirect_extent.is_clone);
+    return get_root_iertr::make_ready_future<CollectionNodeRef>(
+        std::move(maybe_indirect_extent.extent));
   });
 }
 

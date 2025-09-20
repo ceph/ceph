@@ -15,6 +15,7 @@
 #include "common/async/shared_mutex.h"
 #include <future>
 #include <optional>
+#include <shared_mutex> // for std::shared_lock
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/io_context.hpp>
 #include <gtest/gtest.h>

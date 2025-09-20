@@ -13,6 +13,8 @@
 #include "librbd/cache/pwl/AbstractWriteLog.h"
 #include "librbd/plugin/Api.h"
 
+#include <shared_mutex> // for std::shared_lock
+
 #define dout_subsys ceph_subsys_rbd_pwl
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::cache::pwl:ShutdownRequest: " \

@@ -12,13 +12,14 @@
  * 
  */
 
+#include "Migrator.h"
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"
 #include "CDir.h"
 #include "CDentry.h"
-#include "Migrator.h"
 #include "Locker.h"
+#include "RetryMessage.h"
 #include "Server.h"
 
 #include "MDBalancer.h"
@@ -27,6 +28,7 @@
 #include "Mutation.h"
 
 #include "include/filepath.h"
+#include "common/debug.h"
 #include "common/likely.h"
 
 #include "events/EExport.h"
@@ -37,6 +39,19 @@
 #include "msg/Messenger.h"
 
 #include "messages/MClientCaps.h"
+#include "messages/MExportCaps.h"
+#include "messages/MExportCapsAck.h"
+#include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
+#include "messages/MExportDirCancel.h"
+#include "messages/MExportDirDiscover.h"
+#include "messages/MExportDirDiscoverAck.h"
+#include "messages/MExportDirFinish.h"
+#include "messages/MExportDirNotify.h"
+#include "messages/MExportDirNotifyAck.h"
+#include "messages/MExportDirPrep.h"
+#include "messages/MExportDirPrepAck.h"
+#include "messages/MGatherCaps.h"
 
 /*
  * this is what the dir->dir_auth values look like
@@ -67,6 +82,65 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".mig " << __func__ << " "
 
 using namespace std;
+
+struct Migrator::export_state_t {
+  export_state_t() {}
+
+  void set_state(int s) {
+    ceph_assert(s != state);
+    if (state != EXPORT_CANCELLED) {
+	auto& t = state_history.at(state);
+	t.second = double(ceph_clock_now()) - double(t.first);
+    }
+    state = s;
+    state_history[state] = std::pair<utime_t, double>(ceph_clock_now(), 0.0);
+  }
+  utime_t get_start_time(int s) const {
+    ceph_assert(state_history.count(s) > 0);
+    return state_history.at(s).first;
+  }
+  double get_time_spent(int s) const {
+    ceph_assert(state_history.count(s) > 0);
+    const auto& t = state_history.at(s);
+    return s == state ? double(ceph_clock_now()) - double(t.first) : t.second;
+  }
+  double get_freeze_tree_time() const {
+    ceph_assert(state >= EXPORT_DISCOVERING);
+    ceph_assert(state_history.count((int)EXPORT_DISCOVERING) > 0);
+    return double(ceph_clock_now()) - double(state_history.at((int)EXPORT_DISCOVERING).first);
+  };
+
+  int state = EXPORT_CANCELLED;
+  mds_rank_t peer = MDS_RANK_NONE;
+  uint64_t tid = 0;
+  std::set<mds_rank_t> warning_ack_waiting;
+  std::set<mds_rank_t> notify_ack_waiting;
+  std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
+  MutationRef mut;
+  size_t approx_size = 0;
+  // record the start time and time spent of each export state
+  std::map<int, std::pair<utime_t, double> > state_history;
+  // record the clients whose sessions need to be flushed
+  std::set<client_t> export_client_set;
+  // for freeze tree deadlock detection
+  utime_t last_cum_auth_pins_change;
+  int last_cum_auth_pins = 0;
+  int num_remote_waiters = 0; // number of remote authpin waiters
+  std::shared_ptr<export_base_t> parent;
+};
+
+struct Migrator::import_state_t {
+  import_state_t() : mut() {}
+  int state = 0;
+  mds_rank_t peer = 0;
+  uint64_t tid = 0;
+  std::set<mds_rank_t> bystanders;
+  std::list<dirfrag_t> bound_ls;
+  std::list<ScatterLock*> updated_scatterlocks;
+  std::map<client_t,std::pair<Session*,uint64_t> > session_map;
+  std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
+  MutationRef mut;
+};
 
 class MigratorContext : public MDSContext {
 protected:
@@ -622,7 +696,65 @@ void Migrator::show_exporting()
   }
 }
 
+int Migrator::is_exporting(CDir *dir) const {
+  auto it = export_state.find(dir);
+  if (it != export_state.end()) return it->second.state;
+  return 0;
+}
 
+int Migrator::is_importing(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  if (it != import_state.end()) return it->second.state;
+  return 0;
+}
+
+bool Migrator::is_ambiguous_import(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  if (it == import_state.end())
+    return false;
+  if (it->second.state >= IMPORT_LOGGINGSTART &&
+	it->second.state < IMPORT_ABORTING)
+    return true;
+  return false;
+}
+
+int Migrator::get_import_state(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  ceph_assert(it != import_state.end());
+  return it->second.state;
+}
+
+int Migrator::get_import_peer(dirfrag_t df) const {
+  auto it = import_state.find(df);
+  ceph_assert(it != import_state.end());
+  return it->second.peer;
+}
+
+int Migrator::get_export_state(CDir *dir) const {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  return it->second.state;
+}
+
+bool Migrator::export_has_warned(CDir *dir, mds_rank_t who) {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  ceph_assert(it->second.state == EXPORT_WARNING);
+  return (it->second.warning_ack_waiting.count(who) == 0);
+}
+
+bool Migrator::export_has_notified(CDir *dir, mds_rank_t who) const {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  ceph_assert(it->second.state == EXPORT_NOTIFYING);
+  return (it->second.notify_ack_waiting.count(who) == 0);
+}
+
+void Migrator::export_freeze_inc_num_waiters(CDir *dir) {
+  auto it = export_state.find(dir);
+  ceph_assert(it != export_state.end());
+  it->second.num_remote_waiters++;
+}
 
 void Migrator::audit()
 {
@@ -921,7 +1053,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 	dirfrag_size += null_size;
 	continue;
       }
-      if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent_remote()) {
 	dirfrag_size += remote_size;
 	continue;
       }
@@ -1791,6 +1923,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
+    CInode *ref_in = dn->get_linkage()->get_referent_inode();
 
     num_exported++;
     
@@ -1821,6 +1954,16 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
       continue;
     }
 
+    if (dn->get_linkage()->is_referent_remote()) {
+      // referent inode
+      ceph_assert(ref_in);
+      exportbl.append("r", 1);    // referent inode dentry
+      ENCODE_START(2, 1, exportbl);
+      encode_export_inode(ref_in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
+      encode(dn->alternate_name, exportbl);
+      ENCODE_FINISH(exportbl);
+      continue;
+    }
     // primary link
     // -- inode
     exportbl.append("i", 1);    // inode dentry
@@ -1888,6 +2031,10 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
       // subdirs?
       auto&& dirs = in->get_nested_dirfrags();
       subdirs.insert(std::end(subdirs), std::begin(dirs), std::end(dirs));
+    } else if (dn->get_linkage()->is_referent_remote()) { //referent inode ?
+      CInode *ref_in = dn->get_linkage()->get_referent_inode();
+      finish_export_inode(ref_in, peer, peer_imported[ref_in->ino()], finished);
+      // referent inode - no subdirs
     }
 
     mdcache->touch_dentry_bottom(dn); // move dentry to tail of LRU
@@ -1957,10 +2104,10 @@ void Migrator::handle_export_ack(const cref_t<MExportDirAck> &m)
   // this keeps authority().first in sync with subtree auth state in the journal.
   mdcache->adjust_subtree_auth(dir, it->second.peer, mds->get_nodeid());
 
+  ceph_assert(g_conf()->mds_kill_export_at != 10);
   // log export completion, then finish (unfreeze, trigger finish context, etc.)
   mds->mdlog->submit_entry(le, new C_MDS_ExportFinishLogged(this, dir));
   mds->mdlog->flush();
-  ceph_assert(g_conf()->mds_kill_export_at != 10);
 }
 
 void Migrator::export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds)
@@ -2352,7 +2499,7 @@ void Migrator::handle_export_discover(const cref_t<MExportDirDiscover> &m, bool 
     int r = mdcache->path_traverse(null_ref, cf, fpath, flags, &trace);
     if (r > 0) return;
     if (r < 0) {
-      if (r == -CEPHFS_EAGAIN) {
+      if (r == -EAGAIN) {
         dout(5) << "blocking import during quiesce" << dendl;
         import_reverse_discovering(df);
         mds->send_message_mds(make_message<MExportDirDiscoverAck>(df, m->get_tid(), false), from);
@@ -2844,7 +2991,6 @@ void Migrator::import_reverse(CDir *dir)
   dout(7) << *dir << dendl;
 
   import_state_t& stat = import_state[dir->dirfrag()];
-  stat.state = IMPORT_ABORTING;
 
   set<CDir*> bounds;
   mdcache->get_subtree_bounds(dir, bounds);
@@ -2950,10 +3096,14 @@ void Migrator::import_reverse(CDir *dir)
       }
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
+  }
+
+  if (stat.state == IMPORT_LOGGINGSTART || stat.state == IMPORT_ACKING) {
     for (auto& p : stat.session_map) {
       Session *session = p.second.first;
       session->dec_importing();
     }
+    mds->server->close_forced_opened_sessions(stat.session_map);
   }
 	 
   // log our failure
@@ -2962,6 +3112,7 @@ void Migrator::import_reverse(CDir *dir)
   mdcache->trim(num_dentries); // try trimming dentries
 
   // notify bystanders; wait in aborting state
+  stat.state = IMPORT_ABORTING;
   import_notify_abort(dir, bounds);
 }
 
@@ -3054,10 +3205,9 @@ void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
   dout(7) << *dir << dendl;
 
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
-  if (it == import_state.end() ||
-      it->second.state != IMPORT_LOGGINGSTART) {
+  ceph_assert(it != import_state.end());
+  if (it->second.state != IMPORT_LOGGINGSTART) {
     dout(7) << "import " << df << " must have aborted" << dendl;
-    mds->server->finish_force_open_sessions(imported_session_map);
     return;
   }
 
@@ -3291,7 +3441,7 @@ void Migrator::dump_export_states(Formatter *f)
 }
 
 void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
-				   mds_rank_t oldauth, LogSegment *ls,
+				   mds_rank_t oldauth, LogSegmentRef const& ls,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
 { 
@@ -3328,7 +3478,18 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   }
 
   // link before state  -- or not!  -sage
-  if (dn->get_linkage()->get_inode() != in) {
+  if (in->get_remote_ino()) { //referent inode ?
+    dout(20) << __func__ << " linking decoded referent_inode="  << *in << " remote_inode=" << in->get_remote_ino() << dendl;
+    if (dn->get_linkage()->get_referent_inode() != in) {
+      ceph_assert(!dn->get_linkage()->get_referent_inode());
+      dout(20) << __func__ << " null dentry_linkage, linking decode referent_inode, linkage referent_inode=" << dn->get_linkage()->get_referent_inode() << dendl;
+      dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->d_type());
+    } else {
+      dout(20) << __func__ << " non-null dentry_linkage, validating decoded referent_inode against existing" << dendl;
+      ceph_assert(dn->get_linkage()->get_remote_ino() == in->get_remote_ino());
+      ceph_assert(dn->get_linkage()->get_referent_ino() == in->ino());
+    }
+  } else if (dn->get_linkage()->get_inode() != in) {
     ceph_assert(!dn->get_linkage()->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
@@ -3465,7 +3626,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 				mds_rank_t oldauth,
 				CDir *import_root,
 				EImportStart *le,
-				LogSegment *ls,
+				LogSegmentRef const& ls,
 				map<CInode*,map<client_t,Capability::Export> >& peer_exports,
 				list<ScatterLock*>& updated_scatterlocks, int &num_imported)
 {
@@ -3568,6 +3729,21 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       // inode
       ceph_assert(le);
       if (icode == 'i') {
+        DECODE_START(2, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        ceph_assert(!dn->is_projected());
+        decode(dn->alternate_name, blp);
+        DECODE_FINISH(blp);
+      } else {
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+      }
+    }
+    else if (icode == 'R' || icode == 'r') {
+      // remote link with referent inode
+      ceph_assert(le);
+      if (icode == 'r') {
         DECODE_START(2, blp);
         decode_import_inode(dn, blp, oldauth, ls,
                             peer_exports, updated_scatterlocks);
@@ -3801,6 +3977,8 @@ Migrator::Migrator(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {
   max_export_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
   inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
 }
+
+Migrator::~Migrator() noexcept = default;
 
 void Migrator::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {

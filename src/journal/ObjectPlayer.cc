@@ -4,6 +4,7 @@
 #include "journal/ObjectPlayer.h"
 #include "journal/Utils.h"
 #include "common/Timer.h"
+#include "include/rados.h" // for CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
 #include <limits>
 
 #define dout_subsys ceph_subsys_journaler

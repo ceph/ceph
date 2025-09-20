@@ -6,6 +6,8 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RouterTestingModule } from '@angular/router/testing';
+import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
+import { SharedModule } from '~/app/shared/shared.module';
 
 describe('RgwMultisiteSyncPolicyFormComponent', () => {
   let component: RgwMultisiteSyncPolicyFormComponent;
@@ -20,8 +22,10 @@ describe('RgwMultisiteSyncPolicyFormComponent', () => {
         ToastrModule.forRoot(),
         PipesModule,
         ComponentsModule,
+        SharedModule,
         RouterTestingModule
       ],
+      schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
       providers: []
     }).compileComponents();
 

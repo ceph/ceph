@@ -103,12 +103,19 @@ class MockLog : public LoggerSinkSet {
 // ///////////////////////////////////////////////////////////////////////// //
 // ///////////////////////////////////////////////////////////////////////// //
 
+struct erasure_code_profile_conf_t {
+  std::string erasure_code_profile_name{"erasure_code_profile"};
+  std::map<std::string, std::string> erasure_code_profile{};
+};
+
 struct pool_conf_t {
   int pg_num{3};
   int pgp_num{3};
   int size{3};
   int min_size{3};
   std::string name{"rep_pool"};
+  uint8_t type{pg_pool_t::TYPE_REPLICATED};
+  std::optional<erasure_code_profile_conf_t> erasure_code_profile;
 };
 
 using attr_t = std::map<std::string, std::string>;
@@ -133,7 +140,6 @@ struct SnapsetMockData {
   using clone_snaps_cooker = CookedCloneSnaps (*)();
 
   snapid_t seq;
-  std::vector<snapid_t> snaps;	 // descending
   std::vector<snapid_t> clones;	 // ascending
 
   std::map<snapid_t, interval_set<uint64_t>> clone_overlap;  // overlap w/ next
@@ -143,13 +149,11 @@ struct SnapsetMockData {
 
 
   SnapsetMockData(snapid_t seq,
-		  std::vector<snapid_t> snaps,
 		  std::vector<snapid_t> clones,
 		  std::map<snapid_t, interval_set<uint64_t>> clone_overlap,
 		  std::map<snapid_t, uint64_t> clone_size,
 		  std::map<snapid_t, std::vector<snapid_t>> clone_snaps)
       : seq(seq)
-      , snaps(snaps)
       , clones(clones)
       , clone_overlap(clone_overlap)
       , clone_size(clone_size)
@@ -157,11 +161,9 @@ struct SnapsetMockData {
   {}
 
   SnapsetMockData(snapid_t seq,
-		  std::vector<snapid_t> snaps,
 		  std::vector<snapid_t> clones,
 		  clone_snaps_cooker func)
       : seq{seq}
-      , snaps{snaps}
       , clones(clones)
   {
     auto [clone_size_, clone_snaps_, clone_overlap_] = func();
@@ -174,7 +176,6 @@ struct SnapsetMockData {
   {
     SnapSet ss;
     ss.seq = seq;
-    ss.snaps = snaps;
     ss.clones = clones;
     ss.clone_overlap = clone_overlap;
     ss.clone_size = clone_size;
@@ -209,6 +210,13 @@ static inline RealObj crpt_do_nothing(const RealObj& s, int osdn)
   return s;
 }
 
+static inline RealObj crpt_object_hash(const RealObj& s,
+                                       [[maybe_unused]] int osdn) {
+  RealObj ret = s;
+  ret.data.hash = s.data.hash + 1;
+  return ret;
+}
+
 struct SmapEntry {
   ghobject_t ghobj;
   ScrubMap::object smobj;
@@ -229,6 +237,10 @@ struct RealObjsConf {
   std::vector<RealObj> objs;
 };
 
+RealObjsConf make_erasure_code_configuration(int8_t k, int8_t m);
+
+CorruptFuncList make_erasure_code_hash_corruption_functions(int num_osds);
+
 using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 
 // RealObjsConf will be "developed" into the following of per-osd sets,
@@ -237,8 +249,10 @@ using RealObjsConfRef = std::unique_ptr<RealObjsConf>;
 using RealObjsConfList = std::map<int, RealObjsConfRef>;
 
 RealObjsConfList make_real_objs_conf(int64_t pool_id,
-				     const RealObjsConf& blueprint,
-				     std::vector<int32_t> active_osds);
+                                     const RealObjsConf& blueprint,
+                                     std::vector<int32_t> active_osds,
+                                     std::set<pg_shard_t> active_shards,
+                                     bool erasure_coded_pool);
 
 /**
  * create the snap-ids set for all clones appearing in the head
@@ -257,10 +271,10 @@ struct fmt::formatter<ScrubGenerator::RealObj> {
   {
     using namespace ScrubGenerator;
     return fmt::format_to(ctx.out(),
-			  "RealObj(gh:{}, dt:{}, snaps:{})",
+			  "RealObj(gh:{}, dt:{}, clones:{})",
 			  rlo.ghobj,
 			  rlo.data.size,
-			  (rlo.snapset_mock_data ? rlo.snapset_mock_data->snaps
+			  (rlo.snapset_mock_data ? rlo.snapset_mock_data->clones
 						 : std::vector<snapid_t>{}));
   }
 };

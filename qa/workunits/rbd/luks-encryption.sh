@@ -30,6 +30,20 @@ function expect_false() {
   if "$@"; then return 1; else return 0; fi
 }
 
+function wait_for_blockdev_size() {
+    local dev=$1
+    local size=$2
+
+    for s in 0.25 0.5 0.75 1 1.25 1.5 1.75 2 2.25 2.5 2.75 3 3.25 3.5 3.75; do
+        if (( $(sudo blockdev --getsize64 $dev) == $size )); then
+            return 0
+        fi
+        sleep $s
+    done
+
+    return 1
+}
+
 function test_encryption_format() {
   local format=$1
 
@@ -62,7 +76,7 @@ function test_encryption_format() {
   (( $(sudo blockdev --getsize64 $LIBRBD_DEV) < (32 << 20) ))
   expect_false rbd resize --size 32M testimg
   rbd resize --size 32M --encryption-passphrase-file /tmp/passphrase testimg
-  (( $(sudo blockdev --getsize64 $LIBRBD_DEV) == (32 << 20) ))
+  wait_for_blockdev_size $LIBRBD_DEV $((32 << 20))
 
   _sudo rbd device unmap -t nbd $LIBRBD_DEV
   sudo cryptsetup close cryptsetupdev

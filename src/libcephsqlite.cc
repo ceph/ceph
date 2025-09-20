@@ -46,10 +46,17 @@ SQLITE_EXTENSION_INIT1
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
+#include "common/strtol.h" // for strict_strtoll()
 #include "common/version.h"
 
 #include "include/libcephsqlite.h"
 #include "SimpleRADOSStriper.h"
+
+#ifdef WITH_CRIMSON
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/perf_counters_collection.h"
+#endif
 
 #define dout_subsys ceph_subsys_cephsqlite
 #undef dout_prefix
@@ -809,8 +816,8 @@ static void f_perf(sqlite3_context* ctx, int argc, sqlite3_value** argv)
   auto&& appd = getdata(vfs);
   JSONFormatter f(false);
   f.open_object_section("ceph_perf");
-  appd.logger->dump_formatted(&f, false, false);
-  appd.striper_logger->dump_formatted(&f, false, false);
+  appd.logger->dump_formatted(&f, false, select_labeled_t::unlabeled);
+  appd.striper_logger->dump_formatted(&f, false, select_labeled_t::unlabeled);
   f.close_section();
   {
     CachedStackStringStream css;

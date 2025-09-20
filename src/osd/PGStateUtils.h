@@ -3,10 +3,12 @@
 
 #pragma once
 
+#include "include/types.h" // for epoch_t
 #include "include/utime.h"
 #include "common/Formatter.h"
 
 #include <stack>
+#include <tuple>
 #include <vector>
 #include <boost/circular_buffer.hpp>
 

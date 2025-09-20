@@ -84,10 +84,8 @@ To build Ceph, follow this procedure:
 
        ./do_cmake.sh
 
-   ``do_cmake.sh`` by default creates a "debug build" of Ceph, which can be 
-   up to five times slower than a non-debug build. Pass 
-   ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a 
-   non-debug build.
+   See [build types](#build-types).
+
 3. Move into the `build` directory:
 
        cd build
@@ -95,7 +93,7 @@ To build Ceph, follow this procedure:
 
        ninja -j3
 
-   > [IMPORTANT]
+   > [!IMPORTANT]
    >
    > [Ninja](https://ninja-build.org/) is the build system used by the Ceph
    > project to build test builds.  The number of jobs used by `ninja` is 
@@ -126,6 +124,19 @@ To build Ceph, follow this procedure:
 5. Install the vstart cluster:
 
        ninja install
+
+## Build Types
+
+``do_cmake.sh`` by default creates a "debug build" of Ceph (assuming `.git` exists).
+A ``Debug`` build runtime performance may be as little as 20% of that of a non-debug build.
+Pass ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to ``do_cmake.sh`` to create a
+non-debug build.
+The default build type is ``RelWithDebInfo`` once `.git` does not exist.
+
+| CMake mode          | Debug info | Optimizations      | Sanitizers          | Checks                   | Use for           |
+| ------------------- | ---------- | -------------------|-------------------- | -------------------------| ------------------|
+| `Debug`             | Yes        | `-Og`              | None                | `ceph_assert`, `assert`  | gdb, development  |
+| `RelWithDebInfo`    | Yes        | `-O2`, `-DNDEBUG`  | None                | `ceph_assert` only       | production        |
  
 ### CMake Options
 
@@ -177,6 +188,36 @@ The diagnostic colors will be visible when the following command is run:
 Other available values for `DIAGNOSTICS_COLOR` are `auto` (default) and
 `never`.
 
+## Tips and Tricks
+
+   * Use "debug builds" only when needed. Debugging builds are helpful for
+     development, but they can slow down performance. Use
+     `-DCMAKE_BUILD_TYPE=Release` when debugging isn't necessary.
+   * Enable Selective Daemons when testing specific components. Don't start
+     unnecessary daemons.
+   * Preserve Existing Data skip cluster reinitialization between tests by
+     using the `-n` flag.
+   * To manage a vstart cluster, stop daemons using `./stop.sh` and start them
+     with `./vstart.sh --daemon osd.${ID} [--nodaemonize]`. 
+   * Restart the sockets by stopping and restarting the daemons associated with
+     them. This ensures that there are no stale sockets in the cluster.
+   * To track RocksDB performance, set `export ROCKSDB_PERF=true` and start
+     the cluster by using the command `./vstart.sh -n -d -x --bluestore`. 
+   * Build with `vstart-base` using debug flags in cmake, compile, and deploy
+     via `./vstart.sh -d -n --bluestore`.
+   * To containerize, generate configurations with `vstart.sh`, and deploy with
+     Docker, mapping directories and configuring the network.
+   * Manage containers using `docker run`, `stop`, and `rm`. For detailed
+     setups, consult the Ceph-Container repository.
+
+##  Troubleshooting     
+ 
+   * Cluster Fails to Start: Look for errors in the logs under the `out/`
+     directory.
+   * OSD Crashes: Check the OSD logs for errors.
+   * Cluster in a `Health Error` State: Run the `ceph status` command to
+     identify the issue.
+   * RocksDB Errors: Look for RocksDB-related errors in the OSD logs.
 
 ## Building a source tarball
 
@@ -258,6 +299,17 @@ There are many other flags you can give `ctest` for better control
 over manual test execution. To view these options run:
 
 	man ctest
+
+
+### Building Ceph using Containers
+
+Ceph now provides tools to build the code, run unit tests, or build packages
+from within an OCI-style container using Podman or Docker! This allows one to
+build code for distributions other than the one you have on your system, avoids
+the need to install build dependencies for Ceph on your local system and
+provides an opportunity to test builds on platforms that are not yet supported
+by the official build infrastructure. For more details see the [container build
+document](ContainerBuild.md).
 
 
 ## Building the Documentation
