@@ -17,7 +17,7 @@
 
 #include "json_spirit/json_spirit.h"
 
-#include "Formatter.h"
+#include "JSONFormatter.h"
 
 
 

@@ -27,7 +27,7 @@
 #include <memory>
 #include <list>
 
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "include/ceph_assert.h"
 
 class PyFormatter : public ceph::Formatter
