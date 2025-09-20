@@ -796,26 +796,6 @@ done
 
 }
 
-do_rgw_dbstore_conf() {
-    if [ $CEPH_NUM_RGW -gt 1 ]; then
-        echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
-        exit 1
-    fi
-
-    if [ "$new" -eq 1 ]; then
-        prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore"
-    fi
-
-    prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
-    wconf <<EOF
-        rgw backend store = dbstore
-        rgw config store = dbstore
-        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
-        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
-
-EOF
-}
-
 format_conf() {
     local opts=$1
     local indent="        "
@@ -982,22 +962,48 @@ $CCLIENTDEBUG
         ; rgw lc debug interval = 10
         $(format_conf "${extra_conf}")
 EOF
-    #if [ "$rgw_store" == "dbstore" ] ; then
-        #do_rgw_dbstore_conf
+    if [ "$rgw_store" == "dbstore" ] ; then
+        if [ $CEPH_NUM_RGW -gt 1 ]; then
+            echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
+            exit 1
+        fi
+
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore"
+        fi
+
+        prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
+        wconf <<EOF
+        rgw backend store = dbstore
+        rgw config store = dbstore
+        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+
+EOF
+    fi
     if [ "$rgw_store" == "posix" ] ; then
         # use dbstore as the backend and posix as the filter
-        do_rgw_dbstore_conf
         posix_dir="$CEPH_DEV_DIR/rgw/posix"
-        prun mkdir -p $posix_dir/root $posix_dir/lmdb
+        if [ "$new" -eq 1 ]; then
+            prun rm -rf "$posix_dir/root"
+            prun rm -rf "$posix_dir/lmdb"
+            prun rm -rf "$posix_dir/userdb"
+            prun rm -rf "$CEPH_DEV_DIR/rgw/dbstore/config.db"
+        fi
+
+        prun mkdir -p $posix_dir/root $posix_dir/lmdb $posix_dir/userdb "$CEPH_DEV_DIR/rgw/dbstore"
         wconf <<EOF
         rgw backend store = posix
+        rgw config store = dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
         rgw posix base path = $posix_dir/root
+        rgw posix userdb dir = $posix_dir/userdb
         rgw posix database root = $posix_dir/lmdb
 
 EOF
     fi
-	do_rgw_conf
-	wconf << EOF
+    do_rgw_conf
+    wconf << EOF
 [mds]
 $CMDSDEBUG
 $DAEMONOPTS
