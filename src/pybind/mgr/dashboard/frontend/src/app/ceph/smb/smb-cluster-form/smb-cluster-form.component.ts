@@ -51,6 +51,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   orchStatus$: Observable<any>;
   allClustering: string[] = [];
   CLUSTERING = CLUSTERING;
+  AUTHMODE = AUTHMODE;
   selectedLabels: string[] = [];
   selectedHosts: string[] = [];
   action: string;
@@ -130,7 +131,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
             customDnsFormArray.push(new FormControl(dns));
           });
         }
-        if (this.clusterResponse.auth_mode == AUTHMODE.activeDirectory) {
+        if (this.clusterResponse.auth_mode == AUTHMODE.ActiveDirectory) {
           this.domainSettingsObject = this.clusterResponse?.domain_settings;
           this.smbForm.get('domain_settings').setValue(this.domainSettingsObject.realm);
         } else {
@@ -187,13 +188,13 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
         validators: [Validators.required]
       }),
       auth_mode: [
-        AUTHMODE.activeDirectory,
+        AUTHMODE.ActiveDirectory,
         {
           validators: [Validators.required]
         }
       ],
       domain_settings: [null],
-      placement: [{}],
+      placement: [],
       hosts: [[]],
       label: [
         null,
@@ -229,7 +230,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     const userGroupSettingsControl = this.smbForm.get('joinSources') as FormArray;
 
     // User Group Setting should be optional if authMode is "Active Directory"
-    if (authMode === AUTHMODE.activeDirectory) {
+    if (authMode === AUTHMODE.ActiveDirectory) {
       if (userGroupSettingsControl) {
         userGroupSettingsControl.clear();
       }
@@ -285,7 +286,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     }
 
     // Domain Setting should be mandatory if authMode is "Active Directory"
-    if (authMode === AUTHMODE.activeDirectory && !domainSettingsControl.value) {
+    if (authMode === AUTHMODE.ActiveDirectory && !domainSettingsControl.value) {
       domainSettingsControl.setErrors({ required: true });
       this.smbForm.markAllAsTouched();
       return;
@@ -381,7 +382,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
       requestModel.cluster_resource.clustering = rawFormValue.clustering.toLowerCase();
     }
 
-    if (rawFormValue.placement.count) {
+    if (rawFormValue.placement?.count) {
       requestModel.cluster_resource.count = rawFormValue.placement.count;
     }
 
@@ -450,8 +451,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
 
   addPublicAddrs() {
     const control = this.formBuilder.group({
-      address: ['', Validators.required],
-      destination: ['']
+      address: new FormControl('', { validators: [Validators.required] }),
+      destination: new FormControl('')
     });
     this.public_addrs.push(control);
   }
