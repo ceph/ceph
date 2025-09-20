@@ -25,6 +25,7 @@ import {
   TableActionHelper
 } from '~/testing/unit-test-helper';
 import { HostsComponent } from './hosts.component';
+import { TagModule } from 'carbon-components-angular';
 
 class MockShowForceMaintenanceModal {
   showModal = false;
@@ -63,7 +64,8 @@ describe('HostsComponent', () => {
       RouterTestingModule,
       ToastrModule.forRoot(),
       CephModule,
-      CoreModule
+      CoreModule,
+      TagModule
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },

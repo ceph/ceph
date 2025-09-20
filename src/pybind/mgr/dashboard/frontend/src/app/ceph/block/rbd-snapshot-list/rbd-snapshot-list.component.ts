@@ -128,11 +128,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         name: $localize`State`,
         prop: 'is_protected',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            true: { value: $localize`PROTECTED`, class: 'badge-success' },
-            false: { value: $localize`UNPROTECTED`, class: 'badge-info' }
+            true: { value: $localize`PROTECTED`, class: 'tag-success' },
+            false: { value: $localize`UNPROTECTED`, class: 'tag-info' }
           }
         }
       },

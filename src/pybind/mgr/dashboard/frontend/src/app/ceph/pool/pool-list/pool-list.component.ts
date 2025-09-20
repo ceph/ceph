@@ -128,18 +128,18 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         prop: 'data_protection',
         name: $localize`Data Protection`,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-background-gray'
+          class: 'tag-background-gray'
         },
         flexGrow: 1.3
       },
       {
         prop: 'application_metadata',
         name: $localize`Applications`,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-background-primary'
+          class: 'tag-background-primary'
         },
         flexGrow: 1.5
       },
