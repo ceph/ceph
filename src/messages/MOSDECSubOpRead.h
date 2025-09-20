@@ -20,16 +20,28 @@
 
 class MOSDECSubOpRead : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   ECSubRead op;
+  uint64_t cost = 0;
 
+  /**
+    * Calculate the cost of the SubOp read operation for mClock scheduler.
+    *
+    * @param CephContext*
+    * @param pair<int, int>&: subchunk_count and subchunk_size
+    */
+  void compute_cost(CephContext *cct, std::pair<int, int> &subchunk_info) {
+    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      cost = op.cost(subchunk_info);
+    }
+  }
   int get_cost() const override {
-    return 0;
+    return cost;
   }
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -57,6 +69,9 @@ public:
     } else {
       min_epoch = map_epoch;
     }
+    if (header.version >= 4) {
+      decode(cost, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -66,6 +81,9 @@ public:
     encode(op, payload, features);
     encode(min_epoch, payload);
     encode_trace(payload, features);
+    if (header.version >= 4) {
+      encode(cost, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "MOSDECSubOpRead"; }
