@@ -415,6 +415,7 @@ add_catch2_test(${test_name}
 endfunction()
 
 add_catch2_test_rgw(rgw_hex)
+add_catch2_test_rgw(fdb NO_CATCH2_MAIN)
 
 add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
 add_ceph_unittest(unittest_rgw_async_utils)
