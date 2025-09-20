@@ -2224,7 +2224,6 @@ public:
   }
 };
 
-
 class RGWDeleteMultiObj : public RGWOp {
   /**
    * Handles the deletion of an individual object and uses
