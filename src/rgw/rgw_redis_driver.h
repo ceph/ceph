@@ -1,6 +1,7 @@
 #pragma once
 
 #include <aio.h>
+#include <filesystem>
 #include <boost/redis/connection.hpp>
 
 #include "common/async/completion.h"
@@ -10,6 +11,7 @@
 namespace rgw { namespace cache { 
 
 namespace net = boost::asio;
+namespace fs = std::filesystem;
 using boost::redis::config;
 using boost::redis::connection;
 using boost::redis::request;
@@ -19,7 +21,7 @@ using boost::redis::ignore_t;
 class RedisDriver : public CacheDriver {
   public:
     RedisDriver(net::io_context& io_context, Partition& _partition_info) : partition_info(_partition_info),
-								           free_space(_partition_info.size), 
+								           free_space(0), 
 								           outstanding_write_size(0)
     {
       conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
@@ -28,7 +30,10 @@ class RedisDriver : public CacheDriver {
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override {
+      fs::space_info space = fs::space(partition_info.location);
+      return (space.available < partition_info.reserve_size) ? 0 : (space.available - partition_info.reserve_size);
+    }
 
     virtual int initialize(const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override;
