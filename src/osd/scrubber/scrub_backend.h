@@ -47,6 +47,8 @@
 #include <string_view>
 
 #include "common/LogClient.h"
+#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber_common.h"
@@ -260,6 +262,9 @@ struct object_scrub_data_t {
   std::set<pg_shard_t> cur_missing;
   std::set<pg_shard_t> cur_inconsistent;
   bool fix_digest{false};
+
+  // the set of EC shards for which we have valid data CRC
+  shard_id_set available_ec_crc_shards;
 };
 
 
@@ -558,6 +563,19 @@ class ScrubBackend {
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id) const;
   uint32_t generate_zero_buffer_crc(shard_id_t shard_id, int length) const;
+
+  /**
+   * an EC-specific aux, calculating a CRC of the data digest, to be used in
+   * verifying object's data
+   */
+  ceph::bufferptr collect_crc_bytes(
+      const pg_shard_t& shard,
+      uint32_t shard_dt_digest);
+
+  /**
+   * an EC-specific aux, re-creating the EC digests for all shards
+   */
+  void redecode_ec_shards(auth_selection_t& auth_ret);
 };
 
 namespace fmt {
