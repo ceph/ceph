@@ -4523,3 +4523,19 @@ options:
   default: 11
   services: 
     - rgw
+- name: rgw_usage_log_key_transition
+  type: bool
+  level: advanced
+  desc: Hhandle the co-existence of both old and new name-by-user keys
+  long_desc: The new usage log keyed by owner/payer ID has the prefix of "~"
+    for IDs starting with '0'.  This prefix is absent from the old scheme.
+    This option instructs RGW to handle the old keys if they still exist.
+    It should be set false when the old keys no longer exist to avoid
+    performance penalty.
+  fmt_desc: To handle the co-existence of both old and new name-by-user keys
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_usage_log
+  with_legacy: true
