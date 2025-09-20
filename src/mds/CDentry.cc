@@ -85,7 +85,7 @@ const LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 ostream& operator<<(ostream& out, const CDentry& dn)
 {
   filepath path;
-  dn.make_path(path);
+  dn.make_path(path, false, 10);
   
   out << "[dentry " << path;
   
@@ -300,10 +300,11 @@ void CDentry::clear_auth()
   }
 }
 
-void CDentry::make_path_string(string& s, bool projected) const
+void CDentry::make_path_string(string& s, bool projected,
+			       int path_comp_count) const
 {
   if (dir) {
-    dir->inode->make_path_string(s, projected);
+    dir->inode->make_path_string(s, projected, NULL, path_comp_count);
   } else {
     s = "???";
   }
@@ -311,11 +312,34 @@ void CDentry::make_path_string(string& s, bool projected) const
   s.append(name.data(), name.length());
 }
 
-void CDentry::make_path(filepath& fp, bool projected) const
+/* path_comp_count = path components count; default value is -1 which implies
+ * generate entire path.
+ *
+ * XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ */
+void CDentry::make_path(filepath& fp, bool projected,
+		        int path_comp_count) const
 {
-  ceph_assert(dir);
-  dir->inode->make_path(fp, projected);
-  fp.push_dentry(get_name());
+  fp.set_trimmed();
+
+  if (path_comp_count == -1) {
+    ceph_assert(dir);
+    dir->inode->make_path(fp, projected, path_comp_count);
+    fp.push_dentry(get_name());
+  } else if (path_comp_count >= 1) {
+    --path_comp_count;
+
+    ceph_assert(dir);
+    dir->inode->make_path(fp, projected, path_comp_count);
+    fp.push_dentry(get_name());
+  }
 }
 
 /*
