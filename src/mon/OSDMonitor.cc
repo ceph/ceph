@@ -14443,33 +14443,59 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
       err = -EOPNOTSUPP;
       goto reply_no_propose;
-    }
-    TextTable tbl;
-    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+    }  
+    
     std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
-    for (const auto& i : pool_availability) {
-      const auto& p = i.second;
-      double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
-      double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
-      double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
-      tbl << p.pool_name;
-      tbl << timespan_str(make_timespan(p.uptime));
-      tbl << timespan_str(make_timespan(p.downtime));
-      tbl << p.num_failures;
-      tbl << timespan_str(make_timespan(mtbf));
-      tbl << timespan_str(make_timespan(mttr));
-      tbl << score;
-      tbl << p.is_avail;
-      tbl << TextTable::endrow;
+
+    if (f) {
+      f->open_array_section("pools");
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+
+        f->open_object_section("pool");
+        f->dump_string("pool", p.pool_name);
+        f->dump_unsigned("uptime",    p.uptime);
+        f->dump_unsigned("downtime",  p.downtime);
+        f->dump_float("mtbf",      mtbf);
+        f->dump_float("mttr",      mttr);
+        f->dump_unsigned("num_failures", p.num_failures);
+        f->dump_float("score", score);
+        f->dump_bool("available", p.is_avail);
+        f->close_section(); 
+      }
+      f->close_section(); 
+      f->flush(rdata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+        tbl << p.pool_name;
+        tbl << timespan_str(make_timespan(p.uptime));
+        tbl << timespan_str(make_timespan(p.downtime));
+        tbl << p.num_failures;
+        tbl << timespan_str(make_timespan(mtbf));
+        tbl << timespan_str(make_timespan(mttr));
+        tbl << score;
+        tbl << p.is_avail;
+        tbl << TextTable::endrow;
+      }
+      rdata.append(stringify(tbl));
     }
-    rdata.append(stringify(tbl));
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
