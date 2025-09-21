@@ -747,18 +747,7 @@ private:
       return stat;
     }
 
-    using mount_ret = ExtentPlacementManager::mount_ret;
-    mount_ret mount() {
-      ceph_assert(state == state_t::STOP);
-      state = state_t::MOUNT;
-      trimmer->reset();
-      stats = {};
-      register_metrics();
-      return main_cleaner->mount(
-      ).safe_then([this] {
-        return has_cold_tier() ? cold_cleaner->mount() : mount_ertr::now();
-      });
-    }
+    ExtentPlacementManager::mount_ret mount();
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
