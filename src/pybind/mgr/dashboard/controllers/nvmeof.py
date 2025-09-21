@@ -104,6 +104,36 @@ else:
             )
             return gw_log_level
 
+        @ReadPermission
+        @Endpoint('GET', '/stats')
+        @NvmeofCLICommand(
+            "nvmeof gateway get_stats", model.GatewayStatsInfo, alias="nvmeof gw get_stats")
+        @EndpointDoc("Get NVMeoF statistics for the gateway")
+        @convert_to_model(model.GatewayStatsInfo)
+        @handle_nvmeof_error
+        def get_gw_stats(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+            gw_stats = NVMeoFClient(gw_group=gw_group,
+                                    traddr=traddr).stub.get_gateway_stats(
+                NVMeoFClient.pb2.get_gateway_stats_req()
+            )
+            return gw_stats
+
+        @ReadPermission
+        @Endpoint('GET', '/listener_info')
+        @NvmeofCLICommand(
+            "nvmeof gateway listener_info", model.GatewayListenersInfo,
+            alias="nvmeof gw listener_info")
+        @EndpointDoc("Get NVMeoF gateway's listeners info")
+        @convert_to_model(model.GatewayListenersInfo)
+        @handle_nvmeof_error
+        def listener_info(self, nqn: str, gw_group: Optional[str] = None,
+                          traddr: Optional[str] = None):
+            gw_listener_info = NVMeoFClient(gw_group=gw_group,
+                                            traddr=traddr).stub.show_gateway_listeners_info(
+                NVMeoFClient.pb2.show_gateway_listeners_info_req(subsystem_nqn=nqn)
+            )
+            return gw_listener_info
+
     @APIRouter("/nvmeof/spdk", Scope.NVME_OF)
     @APIDoc("NVMe-oF SPDK Management API", "NVMe-oF SPDK")
     class NVMeoFSpdk(RESTController):
