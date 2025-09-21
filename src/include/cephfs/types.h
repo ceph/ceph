@@ -674,11 +674,13 @@ static inline void decode(optmetadata_multiton<Singleton,Allocator>& o, ::ceph::
 
 template<template<typename> class Allocator = std::allocator>
 struct inode_t {
+
   /**
    * ***************
-   * Do not forget to add any new fields to the compare() function.
+   * XXX Do not forget to add any new fields to the compare() function.
    * ***************
    */
+
   using optmetadata_singleton_server_t = optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>;
   using client_range_map = std::map<client_t,client_writeable_range_t,std::less<client_t>,Allocator<std::pair<const client_t,client_writeable_range_t>>>;
 
