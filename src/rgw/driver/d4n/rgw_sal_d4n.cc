@@ -451,6 +451,7 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
     } //end - else
 
     rgw::d4n::BlockDirectory* blockDir = this->filter->get_block_dir();
+    std::vector<std::string> dir_blocks_objNames; 
     int remainder_size = entries.size();
     size_t j = 0, start_j = 0;
     while (remainder_size > 0) {
@@ -467,6 +468,10 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
         }
         blocks[i].cacheObj.bucketName = this->get_bucket_id();
         ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " blocks[i].cacheObj.objName: " << blocks[i].cacheObj.objName << dendl;
+
+        if (return_blocks) {
+          dir_blocks_objNames.push_back(blocks[i].cacheObj.objName);
+        }
         j++;
       }
       auto ret = blockDir->get(dpp, blocks, y);
@@ -475,7 +480,22 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
         return ret;
       }
 
+      unsigned int i = 0;
       for (auto block : blocks) {
+	    if (return_blocks) {
+          if (i >= dir_blocks_objNames.size() || i >= block.cacheObj.objName.size()) {
+	        ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " Unable to construct list of cached blocks." << dendl;
+            return -EINVAL;
+          }
+          if (dir_blocks_objNames[i] == block.cacheObj.objName) {
+	        dir_blocks.insert(std::make_pair(dir_blocks_objNames[i], block));
+          } else {
+	        ldpp_dout(dpp, 0) << "D4NFilterBucket::" << __func__ << " Error constructing list of cached blocks while handling object " << dir_blocks_objNames[i] << dendl;
+            return -EINVAL;
+          }
+        }
+        i++;
+
         if (block.cacheObj.objName.empty()) {
           start_j++;
           continue;
@@ -622,6 +642,176 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   }
 
   return 0;
+}
+
+constexpr int OBJECT_LIST_VAL = 1000;
+constexpr int PIPELINE_MAX = 10000;
+int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
+			    bool delete_children,
+			    optional_yield y)
+{
+  ListParams params;
+  params.list_versions = true;
+  ListResults results;
+  int ret;
+
+  return_blocks = true; 
+  auto blockDir = this->filter->get_block_dir();
+  auto objDir = this->filter->get_obj_dir();
+  std::vector<rgw::d4n::CacheBlock> blocks; 
+  std::vector<rgw::d4n::CacheObj> objects; 
+
+  do {
+    results.objs.clear();
+
+    ret = list(dpp, params, OBJECT_LIST_VAL, results, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (!results.objs.empty() && !delete_children) {
+      ldpp_dout(dpp, 10) << "ERROR: could not remove non-empty bucket " << this->get_name() << dendl;
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& obj : results.objs) { 
+      if (((PIPELINE_MAX - blocks.size()) <= OBJECT_LIST_VAL) || (blocks.size() > (PIPELINE_MAX - 1000))) { 
+	    if ((ret = blockDir->del(dpp, blocks, y) < 0)) {
+	      ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete cached object in block directory, ret=" << ret << dendl;
+	      return ret;
+	    }
+	    blocks.clear();
+      }
+
+      // Handle head objects
+      std::unique_ptr<rgw::sal::Object> c_obj = this->get_object(obj.key);
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): handling object=" << obj.key << dendl;
+
+      rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
+        .objName = c_obj->get_name(),
+        .bucketName = this->get_bucket_id(),
+      };
+
+      rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
+        .cacheObj = object,
+        .blockID = 0,
+        .size = 0,
+      };
+      
+      blocks.push_back(block);
+      objects.push_back(object);
+
+      std::string oid_version;
+      if (c_obj->have_instance()) {
+        oid_version = c_obj->get_instance();
+      } else {
+        oid_version = "null";
+      }
+      off_t lst = obj.meta.size;
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): Obj size=" << lst << dendl;
+      block.cacheObj.objName = "_:" + oid_version + "_" + block.cacheObj.objName;
+      auto it = dir_blocks.find(block.cacheObj.objName);
+      if (it != dir_blocks.end() && it->second.cacheObj.dirty) {
+	    if (!this->filter->get_policy_driver()->get_cache_policy()->invalidate_dirty_object(dpp, get_cache_block_prefix(c_obj.get(), it->second.version))) {
+	      ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to invalidate obj=" << c_obj->get_name() << " in cache" << dendl;
+	      return -EINVAL;
+	    }
+      /* For clean objects in the cache, inline deletes are avoided in favor of lazy deletes that occur through
+       * later eviction calls. */
+      } else {
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): Listing retrieved from backend for object " << c_obj->get_name() << dendl;
+      }
+
+      // Handle versioned head objects
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): versioned oid: " << block.cacheObj.objName << dendl;
+      blocks.push_back(block);
+
+      // Handle data blocks
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): Object size=" << lst << dendl;
+      off_t fst = 0;
+      do {
+        /* The addition of data blocks to the blocks structure may push its size over PIPELINE_MAX, so
+	     * pipelined calls must also made during this loop. */
+	    if (((PIPELINE_MAX - blocks.size()) <= OBJECT_LIST_VAL) || (blocks.size() > (PIPELINE_MAX - 1000))) { 
+	      if ((ret = blockDir->del(dpp, blocks, y) < 0)) {
+	        ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete cached object in block directory, ret=" << ret << dendl;
+	        return ret;
+	      }
+	      blocks.clear();
+	    }
+
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): handling object=" << obj.key << dendl;
+        rgw::d4n::CacheBlock data_block;
+        if (fst >= lst) {
+          break;
+        }
+        off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
+        off_t cur_len = cur_size - fst;
+        data_block.cacheObj.bucketName = this->get_bucket_id();
+        data_block.cacheObj.objName = c_obj->get_oid();
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): data_block=" << data_block.cacheObj.objName << dendl;
+        data_block.size = cur_len;
+        data_block.blockID = fst;
+
+        fst += cur_len;
+        blocks.push_back(data_block); // TODO: How to account for number of data blocks per object in PIPELINE_MAX?
+
+      } while (fst < lst); // end - do
+    }
+
+    /* Use pipelining for batches of ~10k commands since that is the max suggested
+     * in redis docs */
+    if (((PIPELINE_MAX - blocks.size()) <= OBJECT_LIST_VAL) || (blocks.size() > (PIPELINE_MAX - 1000))) { 
+      if ((ret = blockDir->del(dpp, blocks, y) < 0)) {
+        ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete cached object in block directory, ret=" << ret << dendl;
+        return ret;
+      }
+      blocks.clear();
+    }
+    if ((PIPELINE_MAX - objects.size()) <= OBJECT_LIST_VAL) {
+      if ((ret = objDir->del(dpp, objects, y)) < 0) {
+        ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete bucket in bucket directory, ret=" << ret << dendl;
+        return ret;
+      }
+      objects.clear();
+    }
+  } while (results.is_truncated);
+
+  // One more delete to clean up remaining blocks if present
+  if (blocks.size()) {
+    if ((ret = blockDir->del(dpp, blocks, y) < 0)) {
+      ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete cached object in block directory, ret=" << ret << dendl;
+      return ret;
+    }
+  }
+  if (objects.size()) {
+    if ((ret = objDir->del(dpp, objects, y)) < 0) {
+      ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete bucket in bucket directory, ret=" << ret << dendl;
+      return ret;
+    }
+  }
+  if ((ret = this->filter->get_bucket_dir()->del(dpp, this->get_bucket_id(), y)) < 0 && (ret != -ENOENT)) {
+    ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete bucket in bucket directory, ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->remove" << dendl;
+  return next->remove(dpp, delete_children, y);
+}
+
+int D4NFilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  // if the bucket exists in the bucket directory, then there are objects in the local cache
+  int ret;
+  if ((ret = this->filter->get_bucket_dir()->exist_key(dpp, this->get_bucket_id(), y)) < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to retrieve bucket in bucket directory, ret=" << ret << dendl;
+    return ret;
+  } if (ret == 0) {
+    ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->check_empty" << dendl;
+    return next->check_empty(dpp, y);
+  } else {
+    return -ENOTEMPTY;
+  }
 }
 
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(

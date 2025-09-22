@@ -3103,7 +3103,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    //EXPECT_EQ((int)std::get<0>(resp).value(), 0); // TODO: Object entry is not deleted
+    EXPECT_EQ((int)std::get<0>(resp).value(), 0);
     EXPECT_EQ((int)std::get<1>(resp).value(), 0);
     EXPECT_EQ((int)std::get<2>(resp).value(), 0);
     EXPECT_EQ((int)std::get<3>(resp).value(), 0);
@@ -3511,6 +3511,189 @@ TEST_F(D4NFilterFixture, ListObjectVersions)
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
+    driver->shutdown();
+    DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
+{
+  env->cct->_conf->d4n_writecache_enabled = true;
+  const std::string testName = "PutObjectWrite";
+  const std::string testName_1 = "PutObjectWrite_1";
+  const std::string testName_2 = "PutObjectWrite_2";
+  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  std::string instance;
+ 
+  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance] (net::yield_context yield) {
+    init_driver(yield);
+    create_bucket(testName, yield);
+    testBucket->get_info().bucket.bucket_id = bucketName;
+    put_object(testName, yield);
+    put_version_enabled_object(testName_1, instance, yield);
+    put_version_suspended_object(testName_2, yield);
+
+    EXPECT_EQ(testBucket->check_empty(env->dpp, yield), -ENOTEMPTY);
+    std::string version, version_1, version_2; 
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", "version");
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", "version");
+
+      response<std::string, std::string, std::string> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      version = std::get<0>(resp).value();
+      version_1 = std::get<1>(resp).value();
+      version_2 = std::get<2>(resp).value();
+    }
+    
+    EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0");
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0");
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs));
+
+      response<int, int, int,
+               int, int, int > resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+      EXPECT_EQ(std::get<1>(resp).value(), 0);
+      EXPECT_EQ(std::get<2>(resp).value(), 0);
+      EXPECT_EQ(std::get<3>(resp).value(), 0);
+      EXPECT_EQ(std::get<4>(resp).value(), 0);
+      EXPECT_EQ(std::get<5>(resp).value(), 0);
+    }
+
+    std::string attr_val;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "1"); 
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_1 + "/" + version_1;
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "1"); 
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_2 + "/" + version_2;  
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "1"); 
+
+    EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
+
+    conn->cancel();
+    driver->shutdown();
+    DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
+  }, rethrow);
+
+  io.run();
+}
+
+TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
+{
+  env->cct->_conf->d4n_writecache_enabled = true;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
+  const std::string testName = "PutObjectWrite";
+  const std::string testName_1 = "PutObjectWrite_1";
+  const std::string testName_2 = "PutObjectWrite_2";
+  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  std::string instance;
+  std::string version, version_1, version_2; 
+ 
+  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance, &version, &version_1, &version_2] (net::yield_context yield) {
+    init_driver(yield);
+    create_bucket(testName, yield);
+    testBucket->get_info().bucket.bucket_id = bucketName;
+    put_object(testName, yield);
+    put_version_enabled_object(testName_1, instance, yield);
+    put_version_suspended_object(testName_2, yield);
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", "version");
+      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", "version");
+
+      response<std::string, std::string, std::string> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      version = std::get<0>(resp).value();
+      version_1 = std::get<1>(resp).value();
+      version_2 = std::get<2>(resp).value();
+    }
+    
+
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
+  }, rethrow);
+
+  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+
+  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &version, &version_1, &version_2] (net::yield_context yield) {
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
+
+    EXPECT_EQ(testBucket->check_empty(env->dpp, yield), -ENOTEMPTY);
+    EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0");
+      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0");
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs));
+
+      response<int, int, int,
+               int, int, int > resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+      EXPECT_EQ(std::get<1>(resp).value(), 0);
+      EXPECT_EQ(std::get<2>(resp).value(), 0);
+      EXPECT_EQ(std::get<3>(resp).value(), 0);
+      EXPECT_EQ(std::get<4>(resp).value(), 0);
+      EXPECT_EQ(std::get<5>(resp).value(), 0);
+    }
+
+    /* Eviction will eventually lazily delete leftover cache blocks, so simply ensure
+     * they are no longer dirty */
+    std::string attr_val;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "0"); 
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_1 + "/" + version_1;
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "0"); 
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_2 + "/" + version_2;  
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "0"); 
+
+    EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
+
+    conn->cancel();
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
