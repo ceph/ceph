@@ -420,12 +420,12 @@ SnapTrimObjSubEvent::start()
 
   auto all_completed = interruptor::now();
   {
-    // as with PG::submit_executer, we need to build the pg log entries
-    // and submit the transaction atomically
-    co_await interruptor::make_interruptible(pg->submit_lock.lock());
     auto unlocker = seastar::defer([this] {
       pg->submit_lock.unlock();
     });
+    // as with PG::submit_executer, we need to build the pg log entries
+    // and submit the transaction atomically
+    co_await interruptor::make_interruptible(pg->submit_lock.lock());
 
     logger().debug("{}: calling remove_or_update obc={}",
 		   *this, obc_manager.get_obc()->get_oid());

@@ -1064,12 +1064,12 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   const std::error_code e,
   ceph_tid_t rep_tid)
 {
-  // as with submit_executer, need to ensure that log numbering and submission
-  // are atomic
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // as with submit_executer, need to ensure that log numbering and submission
+  // are atomic
+  co_await interruptor::make_interruptible(submit_lock.lock());
   LOG_PREFIX(PG::submit_error_log);
   DEBUGDPP("{} rep_tid: {} error: {}",
 	   *this, *m, rep_tid, e);
@@ -1202,12 +1202,12 @@ PG::submit_executer_fut PG::submit_executer(
   LOG_PREFIX(PG::submit_executer);
   DEBUGDPP("", *this);
 
-  // we need to build the pg log entries and submit the transaction
-  // atomically to ensure log ordering
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // we need to build the pg log entries and submit the transaction
+  // atomically to ensure log ordering
+  co_await interruptor::make_interruptible(submit_lock.lock());
 
   auto [submitted, completed] = co_await std::move(
     ox
