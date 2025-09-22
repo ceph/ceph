@@ -450,6 +450,18 @@ ExtentPlacementManager::open_for_write()
   LOG_PREFIX(ExtentPlacementManager::open_for_write);
   DEBUG("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
+  auto total_writers_num =
+    data_writers_by_gen.size() + md_writers_by_gen.size();
+  if (auto segments = background_process.get_segments_info();
+      segments && // Only valid for SegmentCleaner
+      std::cmp_less(segments->get_num_empty(), total_writers_num)) {
+    ERROR("Not enough EMPTY segments! "
+          "Consider increasing the device size (needed {} got {})",
+          total_writers_num, segments->get_num_empty());
+    // TODO: open_ertr should be expanded to enospc
+    co_await open_ertr::future<>(crimson::ct_error::input_output_error::make());
+  }
+
   DEBUG("opening DATA writers", num_devices);
   for (auto& writer : data_writers_by_gen) {
     if (writer) {
