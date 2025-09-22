@@ -453,6 +453,10 @@ void Elector::handle_nak(MonOpRequestRef op)
 void Elector::begin_peer_ping(int peer)
 {
   dout(20) << __func__ << " with " << peer << dendl;
+  if (peer < 0) {
+    dout(20) << __func__ << " ignoring negative peer " << peer << dendl;
+    return;
+  }
   if (live_pinging.count(peer)) {
     dout(20) << peer << " already in live_pinging ... return " << dendl;
     return;
@@ -492,7 +496,7 @@ void Elector::begin_peer_ping(int peer)
 bool Elector::send_peer_ping(int peer, const utime_t *n)
 {
   dout(10) << __func__ << " to peer " << peer << dendl;
-  if (peer >= ssize(mon->monmap->ranks)) {
+  if (peer < 0 || peer >= ssize(mon->monmap->ranks)) {
     // Monitor no longer exists in the monmap,
     // therefore, we shouldn't ping this monitor
     // since we cannot lookup the address!
@@ -609,6 +613,11 @@ void Elector::handle_ping(MonOpRequestRef op)
   MMonPing *m = static_cast<MMonPing*>(op->get_req());
   int prank = mon->monmap->get_rank(m->get_source_addr());
   dout(20) << __func__ << " from: " << prank << dendl;
+  if (prank < 0) {
+    dout(5) << __func__ << " from unknown addr " << m->get_source_addr()
+           << " mapped to rank " << prank << " (likely removed monitor) - dropping message" << dendl;
+    return;
+  }
   begin_peer_ping(prank);
   assimilate_connection_reports(m->tracker_bl);
   switch(m->op) {
