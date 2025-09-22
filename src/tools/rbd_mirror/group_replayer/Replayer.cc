@@ -419,7 +419,7 @@ void Replayer<I>::validate_local_group_snapshots() {
     // skip validation for primary snapshots
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &local_snap.snapshot_namespace);
-    if (ns != nullptr && ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY) {
+    if (ns != nullptr && ns->is_primary()) {
       continue;
     }
 
@@ -763,8 +763,7 @@ void Replayer<I>::try_create_group_snapshot(
                    << snap->id << dendl;
           create_group_snapshot(*snap, locker);
           continue;
-        } else if (next_remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ||
-            next_remote_snap_ns->state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED) {
+        } else if (next_remote_snap_ns->is_primary()) {
           dout(10) << "found primary remote mirror group snapshot: "
                    << snap->id << dendl;
           create_group_snapshot(*snap, locker);
