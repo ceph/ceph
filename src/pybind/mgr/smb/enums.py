@@ -105,6 +105,13 @@ class LoginAccess(_StrEnum):
         return self
 
 
+class HostAccess(_StrEnum):
+    """Determines if a host should be allowed or denied access to a share."""
+
+    ALLOW = 'allow'
+    DENY = 'deny'
+
+
 class SMBClustering(_StrEnum):
     DEFAULT = 'default'
     ALWAYS = 'always'
