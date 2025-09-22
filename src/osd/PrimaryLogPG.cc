@@ -9003,7 +9003,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     if (ctx->op->may_write() &&
 	get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
       // need to save the error code in the pg log, to detect dup ops,
-      // but do nothing else
+      // but do nothing elses
       ctx->update_log_only = true;
     }
     return result;

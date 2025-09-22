@@ -1,10 +1,11 @@
 #include "osdc/Objecter.h"
 #include "osdc/SplitRead.h"
+#include "osd/osd_types.h"
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << " SplitRead::"
-#define DBG_LVL 20
+#define DBG_LVL 0
 
 namespace {
 inline boost::system::error_code osdcode(int r) {
@@ -12,7 +13,7 @@ inline boost::system::error_code osdcode(int r) {
 }
 }
 
-void ECSplitRead::assemble_buffer(bufferlist *bl_out) {
+void ECSplitRead::assemble_buffer(bufferlist *bl_out, int ops_index) {
 
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
 
@@ -45,24 +46,43 @@ void ECSplitRead::assemble_buffer(bufferlist *bl_out) {
     uint64_t sub_chunk_len = std::min(offset + length, chunk_offset + chunk_size) - sub_chunk_offset;
 
     bufferlist sub_bl;
-    sub_bl.substr_of(sub_reads[shard].bl.front(), shard_offset[shard], sub_chunk_len);
+    sub_bl.substr_of(sub_reads.at(shard).details[ops_index].bl, shard_offset[shard], sub_chunk_len);
     shard_offset[shard] += sub_chunk_len;
     bl_out->append(sub_bl);
   }
 }
 
-void ReplicaSplitRead::assemble_buffer(bufferlist *bl_out)  {
+void ReplicaSplitRead::assemble_buffer(bufferlist *bl_out, int ops_index)  {
   for (auto && [shard, sr] : sub_reads) {
-    bl_out->append(sr.bl.front());
+    bl_out->append(sr.details[ops_index].bl);
   }
 }
 
-void SplitRead::complete() {
-  if (abort) {
-    return;
-  }
-  ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
+void SplitRead::assemble_sparse_buffer(OSDOp &out_osd_op, int ops_index) {
+  bufferlist tmp_bl;
+  extent_map emap;
 
+  for (auto && [shard, sr] : sub_reads) {
+    uint64_t bl_offset = 0;
+    for (auto [offset, length] : *sr.details[ops_index].e) {
+      ldout(cct, DBG_LVL) << __func__
+        << " shard=" << shard << " extent=" << offset << "~" << length << dendl;
+      bufferlist e_bl;
+      e_bl.substr_of(sr.details[ops_index].bl, bl_offset, length);
+      emap.insert(offset, length, e_bl);
+      bl_offset += length;
+    }
+  }
+  extent_set extents_out;
+  for (auto emap_iter = emap.begin(); emap_iter != emap.end(); ++emap_iter ) {
+    extents_out.insert(emap_iter.get_off(), emap_iter.get_len());
+    tmp_bl.append(emap_iter.get_val());
+  }
+  encode(std::move(extents_out).detach(), out_osd_op.outdata);
+  encode(tmp_bl, out_osd_op.outdata);
+}
+
+int SplitRead::assemble_rc() {
   int rc = 0;
   bool rc_zero = false;
 
@@ -79,9 +99,19 @@ void SplitRead::complete() {
   }
 
   if (rc >= 0 && rc_zero) {
-    rc = 0;
+    return 0;
   }
 
+  return rc;
+}
+
+void SplitRead::complete() {
+  if (abort) {
+    return;
+  }
+  ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
+
+  int rc = assemble_rc();
   if (rc >= 0) {
 
     // In a "normal" completion, out_ops is generated in the MOSDOpReply reply
@@ -89,7 +119,6 @@ void SplitRead::complete() {
     // We do not do this if anything failed in the sub-ops, because we are
     // going to re-drive the original op.
     std::vector out_ops(orig_op->ops.begin(), orig_op->ops.end());
-
     bufferlist *bl_out = orig_op->out_bl[0];
 
     // FIXME: This is patch-til-works code.  What were we supposed to do?
@@ -98,61 +127,28 @@ void SplitRead::complete() {
     }
 
     ceph_assert(bl_out != nullptr);
-
-    std::list<bufferlist>::iterator primary_bl_iter;
-    std::list<int>::iterator primary_rval_iter;
-
-    if (primary_shard) {
-      primary_bl_iter = sub_reads[*primary_shard].bl.begin();
-      primary_rval_iter = sub_reads[*primary_shard].rval.begin();
-    }
     for (unsigned i=0; i < out_ops.size(); ++i) {
       auto &out_osd_op = out_ops[i];
       switch (out_osd_op.op.op) {
         case CEPH_OSD_OP_SPARSE_READ: {
-
-          bufferlist tmp_bl;
-          extent_map emap;
-
-          for (auto && [shard, sr] : sub_reads) {
-            uint64_t bl_offset = 0;
-            for (auto [offset, length] : sr.e) {
-              ldout(cct, DBG_LVL) << __func__
-                << " shard=" << shard << " extent=" << offset << "~" << length << dendl;
-              bufferlist e_bl;
-              e_bl.substr_of(sr.bl.front(), bl_offset, length);
-              emap.insert(offset, length, e_bl);
-              bl_offset += length;
-            }
-          }
-          extent_set extents_out;
-          for (auto emap_iter = emap.begin(); emap_iter != emap.end(); ++emap_iter ) {
-            extents_out.insert(emap_iter.get_off(), emap_iter.get_len());
-            tmp_bl.append(emap_iter.get_val());
-          }
-          encode(std::move(extents_out).detach(), out_ops[i].outdata);
-          encode(tmp_bl, out_ops[i].outdata);
+          assemble_sparse_buffer(out_osd_op, i);
           break;
         }
         case CEPH_OSD_OP_READ: {
-          assemble_buffer(&out_osd_op.outdata);
+          assemble_buffer(&out_osd_op.outdata, i);
           break;
         }
         case CEPH_OSD_OP_GETXATTRS:
         case CEPH_OSD_OP_CHECKSUM:
         case CEPH_OSD_OP_GETXATTR: {
-          out_osd_op.outdata = *primary_bl_iter;
-          out_osd_op.rval = *primary_rval_iter;
+          out_osd_op.outdata = sub_reads.at(*primary_shard).details[i].bl;
+          out_osd_op.rval = sub_reads.at(*primary_shard).details[i].rval;
           break;
         }
       default: {
           ceph_abort_msg("Not supported");
           break;
         }
-      }
-      if (primary_shard) {
-        ++primary_bl_iter;
-        ++primary_rval_iter;
       }
     }
 
@@ -168,13 +164,14 @@ void SplitRead::complete() {
 }
 
 constexpr static uint64_t MIN_SHARD_READ_SIZE = 128 * 1024;
+constexpr static uint64_t MIN_SPLIT_SHARDS = 2;
+constexpr static uint64_t MIN_SPLIT_OP_SIZE = MIN_SHARD_READ_SIZE * MIN_SPLIT_SHARDS;
 
 ReplicaSplitRead::ReplicaSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size) :
   SplitRead(op, objecter, cct, pool_size) {
   ceph_osd_op &osd_op = orig_op->ops[0].op;
 
-  // FIXME: This should be configurable.
-  if (osd_op.extent.length < MIN_SHARD_READ_SIZE * 2) {
+  if (osd_op.extent.length < MIN_SPLIT_OP_SIZE) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORT: IO too small" << dendl;
     abort = true;
     return;
@@ -183,7 +180,7 @@ ReplicaSplitRead::ReplicaSplitRead(Objecter::Op *op, Objecter &objecter, CephCon
   primary_shard = shard_id_t(0);
 }
 
-void ReplicaSplitRead::init(OSDOp &op) {
+void ReplicaSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
 
   auto &t = orig_op->target;
 
@@ -200,60 +197,34 @@ void ReplicaSplitRead::init(OSDOp &op) {
     return;
   }
 
-  bool sparse = false;
-  switch (op.op.op) {
-    case CEPH_OSD_OP_SPARSE_READ: {
-        sparse = true;
-      }
-      // Intentional fallthrough.
-    case CEPH_OSD_OP_READ: {
-      if (read_done) {
-        ldout(cct, DBG_LVL) << __func__ <<" ABORT: second read (replica)" << dendl;
-        abort = true;
-        return;
-      }
-      read_done = true;
-      uint64_t offset = op.op.extent.offset;
-      uint64_t length = op.op.extent.length;
-      uint64_t slice_count = std::min(length / MIN_SHARD_READ_SIZE, osds.size());
-      uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
+  uint64_t offset = op.op.extent.offset;
+  uint64_t length = op.op.extent.length;
+  uint64_t slice_count = std::min(length / MIN_SHARD_READ_SIZE, osds.size());
+  uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
 
-      for (unsigned i = 0; i < osds.size() && length > 0; i++) {
+  for (unsigned i = 0; i < osds.size() && length > 0; i++) {
 
-        shard_id_t shard(i);
-        auto &sr = sub_reads[shard];
-        auto bl = &sr.bl.emplace_back();
-        auto rval = &sr.rval.emplace_back();
-        uint64_t len = std::min(length, chunk_size);
-        if (sparse) {
-          sr.rd.sparse_read(offset, len, &sr.e, bl, rval);
-        } else {
-          sr.rd.read(offset, len, &sr.ec, bl);
-        }
-        offset += len;
-        length -= len;
-      }
-      break;
+    shard_id_t shard(i);
+    if (!sub_reads.contains(shard)) {
+      sub_reads.emplace(shard, orig_op->ops.size());
     }
-    case CEPH_OSD_OP_GETXATTRS:
-    case CEPH_OSD_OP_CHECKSUM:
-    case CEPH_OSD_OP_GETXATTR: {
-      shard_id_t shard(*primary_shard);
-      auto &sr = sub_reads[shard];
-      auto bl = &sr.bl.emplace_back();
-      auto ec = &sr.rval.emplace_back();
-      orig_op->copy_op(sr.rd, &op - orig_op->ops.data(), bl, ec);
-      break;
+    auto &sr = sub_reads.at(shard);
+    auto bl = &sr.details[i].bl;
+    auto rval = &sr.details[i].rval;
+    uint64_t len = std::min(length, chunk_size);
+    if (sparse) {
+      sr.details[ops_index].e.emplace();
+      sr.rd.sparse_read(offset, len, &(*sr.details[ops_index].e), bl, rval);
+    } else {
+      sr.rd.read(offset, len, &sr.details[ops_index].ec, bl);
     }
-    default: {
-      ldout(cct, DBG_LVL) << __func__ <<" ABORT: unsupported (replica)" << dendl;
-      abort = true;
-      break;
-    }
+    offset += len;
+    length -= len;
   }
 }
 
-ECSplitRead::ECSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : SplitRead(op, objecter, cct, count) {
+ECSplitRead::ECSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) :
+  SplitRead(op, objecter, cct, count) {
   auto &t = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
 
@@ -274,7 +245,7 @@ ECSplitRead::ECSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct,
   }
 }
 
-void ECSplitRead::init_read(OSDOp &op, bool sparse) {
+void ECSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
   auto &t = orig_op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
 
@@ -283,7 +254,9 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse) {
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
   uint64_t start_chunk = offset / chunk_size;
-  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  // This calculation is wrong for length = 0, but such IOs should not have
+  // reached here!
+  ceph_assert( op.op.extent.length != 0);
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
   unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
@@ -302,22 +275,19 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse) {
       abort = true;
       return;
     }
-    auto &sr = sub_reads[shard];
-    auto bl = &sr.bl.emplace_back();
-    auto rval = &sr.rval.emplace_back();
+    if (!sub_reads.contains(shard)) {
+      sub_reads.emplace(shard, orig_op->ops.size());
+    }
+    auto &d = sub_reads.at(shard).details[ops_index];
     if (sparse) {
-      sr.rd.sparse_read(offset, length, &sr.e, bl, rval);
+      d.e.emplace();
+      sub_reads.at(shard).rd.sparse_read(offset, length, &(*d.e), &d.bl, &d.rval);
     } else {
-      sr.rd.read(offset, length, &sr.ec, bl);
+      sub_reads.at(shard).rd.read(offset, length, &d.ec, &d.bl);
     }
   }
 
-  bool empty_primary_read = false;
-
   if (primary_required && !primary_shard) {
-
-    empty_primary_read = true;
-
     for (unsigned i=0; i < t.acting.size(); ++i) {
       if (t.acting[i] == t.acting_primary) {
         primary_shard.emplace(i);
@@ -331,50 +301,24 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse) {
       return;
     }
   }
-
-  if (empty_primary_read) {
-    shard_id_t shard = *primary_shard;
-    auto &sr = sub_reads[shard];
-    auto bl = &sr.bl.emplace_back();
-    auto rval = &sr.rval.emplace_back();
-    if (sparse) {
-      sr.rd.sparse_read(offset, length, &sr.e, bl, rval);
-    } else {
-      sr.rd.read(offset, length, &sr.ec, bl);
-    }
-  }
 }
 
-void ECSplitRead::init(OSDOp &op) {
+void SplitRead::init(OSDOp &op, int ops_index) {
   switch (op.op.op) {
     case CEPH_OSD_OP_SPARSE_READ: {
-      if (read_done) {
-        ldout(cct, DBG_LVL) << __func__ <<" ABORT: second read (sparse)" << dendl;
-        abort = true;
-        return;
-      }
-      read_done = true;
-      init_read(op, true);
+      init_read(op, true, ops_index);
       break;
     }
     case CEPH_OSD_OP_READ: {
-      if (read_done) {
-        ldout(cct, DBG_LVL) << __func__ <<" ABORT: second read" << dendl;
-        abort = true;
-        return;
-      }
-      read_done = true;
-      init_read(op, false);
+      init_read(op, false, ops_index);
       break;
     }
     case CEPH_OSD_OP_GETXATTRS:
     case CEPH_OSD_OP_CHECKSUM:
     case CEPH_OSD_OP_GETXATTR: {
       shard_id_t shard = *primary_shard;
-      auto &sr = sub_reads[shard];
-      auto bl = &sr.bl.emplace_back();
-      auto ec = &sr.rval.emplace_back();
-      orig_op->copy_op(sr.rd, &op - orig_op->ops.data(), bl, ec);
+      Details &d = sub_reads.at(shard).details[ops_index];
+      orig_op->copy_op(sub_reads.at(shard).rd, ops_index, &d.bl, &d.rval);
       break;
     }
     default: {
@@ -448,8 +392,8 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
   t.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
   objecter._calc_target(&op->target, op);
 
-  for (auto &o : op->ops) {
-    split_read->init(o);
+  for (unsigned i = 0; i < op->ops.size(); ++i) {
+    split_read->init( op->ops[i], i);
   }
 
 
@@ -475,14 +419,13 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
     }
 
     auto sub_op = objecter.prepare_read_op(
-      t.base_oid, t.base_oloc, split_read->sub_reads[shard].rd, op->snapid,
+      t.base_oid, t.base_oloc, split_read->sub_reads.at(shard).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
     sub_op->ec_shard.emplace(shard);
     sub_op->target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
-    sub_read.op = sub_op;
 
-    debug_op_summary("sent_op: ", sub_read.op, cct);
-    objecter._op_submit_with_budget(sub_read.op, sul, ptid, ctx_budget);
+    debug_op_summary("sent_op: ", sub_op, cct);
+    objecter._op_submit_with_budget(sub_op, sul, ptid, ctx_budget);
   }
 
   ceph_assert(split_read->sub_reads.size() > 0);

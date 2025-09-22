@@ -32,16 +32,19 @@ class SplitRead {
   using extent_map = interval_map<uint64_t, ceph::buffer::list, bl_split_merge,
                                   std::map, true>;
 
+  struct Details {
+    bufferlist bl;
+    int rval;
+    boost::system::error_code ec;
+    std::optional<extents_map> e;
+  };
 
   struct SubRead {
     ::ObjectOperation rd;
-    Objecter::Op* op;
-    std::list<bufferlist> bl;
-    std::list<int> rval;
-    extents_map e;
-    boost::system::error_code ec;
+    mini_flat_map<int, Details> details;
     int rc = -EIO;
 
+    SubRead(int count) : details(count) {}
   };
 
   // This structure self-destructs on each IO completions, using a legacy
@@ -58,8 +61,11 @@ class SplitRead {
     }
   };
 
-  virtual void assemble_buffer(bufferlist *bl_out) = 0;
-  virtual void init(OSDOp &op) = 0;
+  void assemble_sparse_buffer(OSDOp &out_osd_op, int ops_index);
+  int assemble_rc();
+  virtual void assemble_buffer(bufferlist *bl_out, int ops_index) = 0;
+  virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
+  void init(OSDOp &op, int ops_index);
 
   Objecter::Op *orig_op;
   Objecter &objecter;
@@ -67,8 +73,8 @@ class SplitRead {
   CephContext *cct;
   bool abort = false; // Last minute abort... We want to keep this to a minimum.
   int flags = 0;
-  bool read_done = false;
   std::optional<shard_id_t> primary_shard;
+  std::map<shard_id_t, std::vector<int>> op_offset_map;
 
  public:
   SplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
@@ -81,9 +87,8 @@ class SplitRead {
 class ECSplitRead : public SplitRead{
  public:
   using SplitRead::SplitRead;
-  void assemble_buffer(bufferlist *bl_out) override;
-  void init_read(OSDOp &op, bool sparse);
-  void init(OSDOp &op) override;
+  void assemble_buffer(bufferlist *bl_out, int ops_index) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index) override;
   ECSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count);
   ~ECSplitRead() {
     complete();
@@ -93,8 +98,8 @@ class ECSplitRead : public SplitRead{
 class ReplicaSplitRead : public SplitRead {
  public:
   using SplitRead::SplitRead;
-  void assemble_buffer(bufferlist *bl_out) override;
-  void init(OSDOp &op) override;
+  void assemble_buffer(bufferlist *bl_out, int ops_index) override;
+  void init_read(OSDOp &op, bool sparse, int ops_index) override;
   ReplicaSplitRead(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size);
   ~ReplicaSplitRead() {
     complete();

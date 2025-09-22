@@ -579,7 +579,7 @@ seastar::future<results_t> RGWIndexWorkload::run(
  *
  * Performs a simple random write workload.
  */
-class RandomWriteWorkload : public StoreBenchWorkload {
+class RandomWriteWorkload final : public StoreBenchWorkload {
   uint64_t prefill_size = 128<<10;
   uint64_t io_size = 4<<10;
   uint64_t size_per_shard = 64<<20;
