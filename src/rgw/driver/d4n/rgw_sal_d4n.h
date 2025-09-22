@@ -113,6 +113,8 @@ class D4NFilterBucket : public FilterBucket {
     };
     D4NFilterDriver* filter;
     bool cache_request{false};
+    bool return_blocks{false}; // indicates whether dir_blocks should be populated
+    std::vector<rgw::d4n::CacheBlock> dir_blocks; // for use in bucket removal
 
   public:
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
@@ -123,6 +125,8 @@ class D4NFilterBucket : public FilterBucket {
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
 		   ListResults& results, optional_yield y) override;
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		       optional_yield y) override;
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y) override;
