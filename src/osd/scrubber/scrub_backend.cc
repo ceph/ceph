@@ -115,6 +115,26 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
 }
 
+std::string ScrubBackend::extract_crcs_from_map(
+    const shard_id_map<bufferlist>& map) {
+  std::string crc_map_string;
+  for (const auto& [srd, bl] : map) {
+    crc_map_string +=
+        fmt::format("[{}: 0x{}]", srd, extract_crc_from_bufferlist(bl));
+  }
+  return crc_map_string;
+}
+
+std::string ScrubBackend::extract_crc_from_bufferlist(
+    const bufferlist& crc_buffer) {
+  std::string crc_string;
+  constexpr size_t digest_length = sizeof(uint32_t);
+  for (size_t i = 0; i < digest_length; i++) {
+    crc_string += fmt::format("{:02x}", crc_buffer[digest_length - i]);
+  }
+  return crc_string;
+}
+
 uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id,
                                  bool hinfo_present,
@@ -139,19 +159,6 @@ uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
   // here is relevant to the error message only.  Return the non-legacy value
   // as it might be more useful in debug.
   return ondisk_size;
-}
-
-uint32_t ScrubBackend::generate_zero_buffer_crc(shard_id_t shard_id,
-                                                int length) const {
-  // Shards can have different lengths.
-  // Lengths of zero buffers need to match the length of the shard.
-  // So we initialise a new buffer to the correct length per shard.
-  bufferlist zero_bl;
-  zero_bl.append_zero(logical_to_ondisk_size(length, shard_id));
-
-  bufferhash zero_data_hash(-1);
-  zero_data_hash << zero_bl;
-  return zero_data_hash.digest();
 }
 
 void ScrubBackend::update_repair_status(bool should_repair)
@@ -442,29 +449,10 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
   /// that is auth eligible.
   /// This creates an issue with 'digest_match' that should be handled.
   std::list<pg_shard_t> shards;
-  shard_id_set available_shards;
 
   for (const auto& [srd, smap] : this_chunk->received_maps) {
     if (srd != m_pg_whoami) {
       shards.push_back(srd);
-    }
-
-    if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
-        smap.objects.contains(ho)) {
-      available_shards.insert(srd.shard);
-
-      uint32_t digest = smap.objects.at(ho).digest;
-      constexpr std::size_t length = sizeof(digest);
-      char crc_bytes[length];
-      for (std::size_t i = 0; i < length; i++) {
-        crc_bytes[i] = digest >> (8 * i) & 0xFF;
-      }
-      ceph::bufferptr b = ceph::buffer::create_page_aligned(
-          m_pg.get_ec_sinfo().get_chunk_size());
-      b.copy_in(0, length, crc_bytes);
-
-      this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
-      this_chunk->m_ec_digest_map[srd.shard].append(b);
     }
   }
   shards.push_front(m_pg_whoami);
@@ -549,71 +537,6 @@ auth_selection_t ScrubBackend::select_auth_object(const hobject_t& ho,
         auth_version = shard_ret.oi.version;
         ret_auth.is_auth_available = true;
       }
-    }
-  }
-
-  if (auth_version != eversion_t() && !m_is_replicated &&
-      m_pg.get_ec_supports_crc_encode_decode() &&
-      available_shards.size() != 0) {
-    if (m_pg.ec_can_decode(available_shards)) {
-      // Decode missing data shards needed to do an encode
-      // Only bother doing this if the number of missing shards is less than the
-      // number of parity shards
-
-      int missing_shards =
-          std::count_if(m_pg.get_ec_sinfo().get_data_shards().begin(),
-                        m_pg.get_ec_sinfo().get_data_shards().end(),
-                        [&available_shards](const auto& shard_id) {
-                          return !available_shards.contains(shard_id);
-                        });
-
-      const int num_redundancy_shards = m_pg.get_ec_sinfo().get_m();
-      if (missing_shards > 0 && missing_shards < num_redundancy_shards) {
-        dout(10) << fmt::format(
-                        "{}: Decoding {} missing shards for pg {} "
-                        "as only received shards were ({}).",
-                        __func__, missing_shards, m_pg_whoami, available_shards)
-                 << dendl;
-        this_chunk->m_ec_digest_map = m_pg.ec_decode_acting_set(
-            this_chunk->m_ec_digest_map, m_pg.get_ec_sinfo().get_chunk_size());
-      } else if (missing_shards != 0) {
-        dout(5) << fmt::format(
-                       "{}: Cannot decode {} shards from pg {} "
-                       "when only shards {} were received. Ignoring.",
-                       __func__, missing_shards, m_pg_whoami, available_shards)
-                << dendl;
-      } else {
-        dout(30) << fmt::format(
-                        "{}: All shards received for pg {}. "
-                        "skipping decoding.",
-                        __func__, m_pg_whoami)
-                 << dendl;
-      }
-
-      bufferlist crc_bl;
-      for (const auto& shard_id : m_pg.get_ec_sinfo().get_data_shards()) {
-        uint32_t zero_data_crc = generate_zero_buffer_crc(
-            shard_id, logical_to_ondisk_size(ret_auth.auth_oi.size, shard_id));
-        for (std::size_t i = 0; i < sizeof(zero_data_crc); i++) {
-          this_chunk->m_ec_digest_map[shard_id].c_str()[i] =
-              this_chunk->m_ec_digest_map[shard_id][i] ^ ((zero_data_crc >> (8 * i)) & 0xff);
-        }
-
-        crc_bl.append(this_chunk->m_ec_digest_map[shard_id]);
-      }
-
-      shard_id_map<bufferlist> encoded_crcs = m_pg.ec_encode_acting_set(crc_bl);
-
-      if (encoded_crcs[shard_id_t(m_pg.get_ec_sinfo().get_k())] !=
-          this_chunk->m_ec_digest_map[shard_id_t(m_pg.get_ec_sinfo().get_k())]) {
-        ret_auth.digest_match = false;
-      }
-    } else {
-      dout(10) << fmt::format(
-                      "{}: Cannot decode missing shards in pg {} "
-                      "when only shards {} were received. Ignoring.",
-                      __func__, m_pg_whoami, available_shards)
-               << dendl;
     }
   }
 
@@ -885,12 +808,162 @@ void ScrubBackend::compare_smaps()
                 });
 }
 
+void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
+                                       const hobject_t& ho) {
+  ceph_assert(!m_is_replicated);
+
+  this_chunk->m_ec_digest_map.clear();
+
+  if (auth_selection.auth_oi.version != eversion_t() &&
+      m_pg.get_ec_supports_crc_encode_decode()) {
+    uint64_t auth_length = this_chunk->received_maps[auth_selection.auth_shard]
+                               .objects.at(ho)
+                               .size;
+
+    shard_id_set available_shards;
+
+    for (const auto& [srd, smap] : this_chunk->received_maps) {
+      if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
+          smap.objects.contains(ho)) {
+        uint64_t shard_length = smap.objects.at(ho).size;
+
+        available_shards.insert(srd.shard);
+
+        uint32_t digest = smap.objects.at(ho).digest;
+
+        // Auth shard should be an ec primary and therefore always equal or
+        // larger. We pad all other shards to the same length before adding
+        // their digest into the ec_digest_map as the parity calculations
+        // require them to be the same length.
+        ceph_assert(auth_length >= shard_length);
+        int padding = auth_length - shard_length;
+        if (padding != 0) {
+          digest = ceph_crc32c_zeros(digest, padding);
+        }
+
+        constexpr std::size_t digest_length = sizeof(digest);
+        char crc_bytes[digest_length];
+        for (std::size_t i = 0; i < digest_length; i++) {
+          crc_bytes[i] = retrieve_byte(digest, i);
+        }
+
+        // Buffers are created as chunk size rather than digest_length to ensure
+        // any ec algorithms can decode them
+        ceph::bufferptr b = ceph::buffer::create_page_aligned(
+            m_pg.get_ec_sinfo().get_chunk_size());
+        b.copy_in(0, digest_length, crc_bytes);
+
+        this_chunk->m_ec_digest_map[srd.shard] = bufferlist{};
+        this_chunk->m_ec_digest_map.at(srd.shard).append(b);
+      }
+    }
+
+    if (available_shards.size() != 0) {
+      if (m_pg.ec_can_decode(available_shards)) {
+        // Decode missing data shards needed to do an encode
+        // Only bother doing this if the number of missing shards is less than
+        // the number of parity shards
+
+        int missing_shards =
+            std::count_if(m_pg.get_ec_sinfo().get_data_shards().begin(),
+                          m_pg.get_ec_sinfo().get_data_shards().end(),
+                          [&available_shards](const auto& shard_id) {
+                            return !available_shards.contains(shard_id);
+                          });
+
+        const int num_redundancy_shards = m_pg.get_ec_sinfo().get_m();
+        if (missing_shards > 0 && missing_shards < num_redundancy_shards) {
+          dout(10) << fmt::format(
+                          "{}: Decoding {} missing shards for pg {} "
+                          "as only received shards were ({}).",
+                          __func__, missing_shards, m_pg_whoami,
+                          available_shards)
+                   << dendl;
+          this_chunk->m_ec_digest_map =
+              m_pg.ec_decode_acting_set(this_chunk->m_ec_digest_map,
+                                        m_pg.get_ec_sinfo().get_chunk_size());
+        } else if (missing_shards != 0) {
+          dout(10) << fmt::format(
+                          "{}: Cannot decode {} shards from pg {} "
+                          "when only shards {} were received. Ignoring.",
+                          __func__, missing_shards, m_pg_whoami,
+                          available_shards)
+                   << dendl;
+        } else {
+          dout(30) << fmt::format(
+                          "{}: All shards received for pg {}. "
+                          "skipping decoding.",
+                          __func__, m_pg_whoami)
+                   << dendl;
+        }
+
+        // Create a crc for a zero buffer the size of the auth shard
+        // Which is the size which CRCs for all shards resemble after padding
+        bufferlist crc_bl;
+        uint32_t zero_data_crc = ceph_crc32c_zeros(
+            -1, logical_to_ondisk_size(auth_selection.auth_oi.size,
+                                       auth_selection.auth_shard.shard));
+
+        for (const auto& shard_id : m_pg.get_ec_sinfo().get_data_shards()) {
+          for (std::size_t i = 0; i < sizeof(zero_data_crc); i++) {
+            this_chunk->m_ec_digest_map.at(shard_id).c_str()[i] =
+                this_chunk->m_ec_digest_map.at(shard_id)[i] ^
+                retrieve_byte(zero_data_crc, i);
+          }
+          crc_bl.append(this_chunk->m_ec_digest_map.at(shard_id));
+        }
+
+        shard_id_map<bufferlist> encoded_crcs =
+            m_pg.ec_encode_acting_set(crc_bl);
+        size_t digest_length = sizeof(zero_data_crc);
+
+        for (std::size_t i = 0; i < digest_length; i++) {
+          this_chunk->m_ec_digest_map.at(shard_id_t(m_pg.get_ec_sinfo().get_k()))
+              .c_str()[i] = this_chunk->m_ec_digest_map.at(shard_id_t(
+                                m_pg.get_ec_sinfo().get_k()))[i] ^
+                            retrieve_byte(zero_data_crc, i);
+        }
+
+        if (!std::equal(
+                encoded_crcs[shard_id_t(m_pg.get_ec_sinfo().get_k())].begin(),
+                std::next(encoded_crcs[shard_id_t(m_pg.get_ec_sinfo().get_k())]
+                              .begin(),
+                          digest_length),
+                this_chunk
+                    ->m_ec_digest_map[shard_id_t(m_pg.get_ec_sinfo().get_k())]
+                    .begin())) {
+          auth_selection.digest_match = false;
+
+          dout(10)
+              << fmt::format(
+                     "{}: {} - Cannot re-encode shards. {} != {}."
+                     " CRC Encoding Result: {}. Actual CRCs: {}",
+                     __func__, ho,
+                     extract_crc_from_bufferlist(
+                         encoded_crcs[shard_id_t(m_pg.get_ec_sinfo().get_k())]),
+                     extract_crc_from_bufferlist(
+                         this_chunk->m_ec_digest_map.at(shard_id_t(
+                             m_pg.get_ec_sinfo().get_k()))),
+                     extract_crcs_from_map(encoded_crcs),
+                     extract_crcs_from_map(this_chunk->m_ec_digest_map))
+              << dendl;
+        }
+      } else {
+        dout(10) << fmt::format(
+                        "{}: Cannot decode missing shards in pg {} "
+                        "when only shards {} were received. Ignoring.",
+                        __func__, m_pg_whoami, available_shards)
+                 << dendl;
+      }
+    }
+  }
+}
+
 std::optional<std::string> ScrubBackend::compare_obj_in_maps(
   const hobject_t& ho)
 {
   // clear per-object data:
   m_current_obj = object_scrub_data_t{};
-  this_chunk->m_ec_digest_map.clear();
 
   stringstream candidates_errors;
   auto auth_res = select_auth_object(ho, candidates_errors);
@@ -898,6 +971,10 @@ std::optional<std::string> ScrubBackend::compare_obj_in_maps(
     // a collection of shard-specific errors detected while
     // finding the best shard to serve as authoritative
     clog.error() << candidates_errors.str();
+  }
+
+  if (!m_is_replicated) {
+    setup_ec_digest_map(auth_res, ho);
   }
 
   inconsistent_obj_wrapper object_error{ho};
@@ -1159,6 +1236,9 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   }
   shard_id_map<bufferlist> digests{digest_size};
 
+  uint64_t auth_length =
+      this_chunk->received_maps[auth_sel.auth_shard].objects.at(ho).size;
+
   for (const auto& [srd, smap] : this_chunk->received_maps) {
 
     if (srd == auth_sel.auth_shard) {
@@ -1188,10 +1268,20 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
         // parity shards Decode the current data shard Add to set<shard_id>
         // incorrectly_decoded_shards if the shard did not decode
 
-        constexpr std::size_t length = sizeof(smap.objects.at(ho).digest);
+        uint32_t digest = smap.objects.at(ho).digest;
+
+        uint64_t shard_length = smap.objects.at(ho).size;
+
+        ceph_assert(auth_length >= shard_length);
+        int padding = auth_length - shard_length;
+        if (padding != 0) {
+          digest = ceph_crc32c_zeros(digest, padding);
+        }
+
+        constexpr std::size_t length = sizeof(digest);
         char crc_bytes[length];
         for (std::size_t i = 0; i < length; i++) {
-          crc_bytes[i] = smap.objects.at(ho).digest >> (8 * i) & 0xFF;
+          crc_bytes[i] = retrieve_byte(digest, i);
         }
         ceph::bufferptr b = ceph::buffer::create_page_aligned(
             m_pg.get_ec_sinfo().get_chunk_size());
@@ -1288,17 +1378,26 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()) {
     set<shard_id_t> incorrectly_decoded_shards;
 
-    if (std::any_of(
-            digests.begin(), digests.end(),
-            [](const std::pair<const shard_id_t, ceph::bufferlist&>& digest) {
-              return digest.second.length() > 0;
-            })) {
+    shard_id_set shards;
+    digests.populate_bitset_set(shards);
+
+    if (!m_pg.ec_can_decode(shards)) {
+      dout(10) << fmt::format(
+                      "{}: {} - Cannot decode from available shards ({})",
+                      __func__, ho, shards)
+               << dendl;
+    } else if (std::any_of(
+                   digests.begin(), digests.end(),
+                   [](const std::pair<const shard_id_t, ceph::bufferlist&>&
+                          digest) { return digest.second.length() > 0; })) {
       // Unseed all buffers in chunks
       for (auto& [srd, bl] : digests) {
-        uint32_t zero_data_crc = generate_zero_buffer_crc(
-            srd, logical_to_ondisk_size(auth_sel.auth_oi.size, srd));
+        uint32_t zero_data_crc = ceph_crc32c_zeros(
+            -1, logical_to_ondisk_size(auth_sel.auth_oi.size,
+                                       auth_sel.auth_shard.shard));
+
         for (uint32_t i = 0; i < sizeof(zero_data_crc); i++) {
-          bl.c_str()[i] = bl[i] ^ ((zero_data_crc >> (8 * i)) & 0xff);
+          bl.c_str()[i] ^= retrieve_byte(zero_data_crc, i);
         }
       }
 
@@ -1314,9 +1413,19 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
           shard_id_map<bufferlist> decoded_map = m_pg.ec_decode_acting_set(
               digests, m_pg.get_ec_sinfo().get_chunk_size());
 
-          if (!std::equal(removed_shard.begin(), removed_shard.end(),
+          if (!std::equal(removed_shard.begin(),
+                          std::next(removed_shard.begin(), sizeof(int32_t)),
                           decoded_map[srd].begin())) {
             incorrectly_decoded_shards.insert(srd);
+
+            dout(10) << fmt::format(
+                            "{}: {}, shard {} - Decoding failed. Expected {}. "
+                            "Got {}. All crcs after decoding: {}",
+                            __func__, ho, srd,
+                            extract_crc_from_bufferlist(removed_shard),
+                            extract_crc_from_bufferlist(decoded_map[srd]),
+                            extract_crcs_from_map(digests))
+                     << dendl;
           }
 
           digests.insert(srd, std::move(removed_shard));
@@ -1324,24 +1433,42 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
       }
     }
 
-    if (incorrectly_decoded_shards.size() == 1) {
+    const size_t num_incorrectly_decoded_shards =
+        incorrectly_decoded_shards.size();
+    ceph_assert(num_incorrectly_decoded_shards <= m_pg.get_ec_sinfo().get_k());
+    if (num_incorrectly_decoded_shards == 1) {
       obj_result.set_data_digest_mismatch();
       this_chunk->m_error_counts.deep_errors++;
-      errstream << m_pg_id << " " << ho << "data digest inconsistent on shard "
-                << *incorrectly_decoded_shards.begin() << "\n";
-    } else if (incorrectly_decoded_shards.size() <
-               m_pg.get_ec_sinfo().get_k()) {
+      errstream << fmt::format("{} {}: data digest inconsistent on shard {}\n",
+                               m_pg_id, ho,
+                               *incorrectly_decoded_shards.begin());
+      dout(10) << fmt::format(
+                      "{}: {} - data digests are inconsistent on shard {}: {}",
+                      __func__, ho, *incorrectly_decoded_shards.begin(),
+                      extract_crcs_from_map(digests))
+               << dendl;
+    } else if (num_incorrectly_decoded_shards > 0 &&
+               num_incorrectly_decoded_shards < m_pg.get_ec_sinfo().get_k()) {
       for (shard_id_t incorrectly_decoded_shard : incorrectly_decoded_shards) {
         obj_result.set_data_digest_mismatch();
         this_chunk->m_error_counts.deep_errors++;
-        errstream << m_pg_id << " " << ho << "data digest inconsistent on shard "
-                  << incorrectly_decoded_shard << "\n";
+        errstream << fmt::format(
+            "{} {}: data digest inconsistent on shard {}\n", m_pg_id, ho,
+            incorrectly_decoded_shard);
       }
-    } else if (incorrectly_decoded_shards.size() ==
-               m_pg.get_ec_sinfo().get_k()) {
+      dout(10) << fmt::format(
+                      "{}: {} - data digests are inconsistent on shards {}: {}",
+                      __func__, ho, incorrectly_decoded_shards,
+                      extract_crcs_from_map(digests))
+               << dendl;
+    } else if (num_incorrectly_decoded_shards == m_pg.get_ec_sinfo().get_k()) {
       obj_result.set_data_digest_mismatch();
       this_chunk->m_error_counts.deep_errors++;
-      errstream << m_pg_id << " " << ho << "data digests are inconsistent\n";
+      errstream << fmt::format("{} {}: data digests are inconsistent\n",
+                               m_pg_id, ho);
+      dout(10) << fmt::format("{}: {} - data digests are inconsistent: {}",
+                              __func__, ho, extract_crcs_from_map(digests))
+               << dendl;
     }
   }
 
