@@ -624,6 +624,39 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   return 0;
 }
 
+int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
+			    bool delete_children,
+			    optional_yield y)
+{
+  ListParams params;
+  ListResults results;
+  cache_request = true; // though not a cache request, this helps limit the scope of the list call to what is in the cache
+  int ret = list(dpp, params, 1000, results, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (const auto& obj : results.objs) { 
+    ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): deleting object " << obj.key << dendl;
+    std::unique_ptr<rgw::sal::Object> c_obj = this->get_object(obj.key);
+    ACLOwner owner{this->get_owner()}; // TODO: Is this ownership derivation correct in this case?
+    std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = c_obj->get_delete_op();
+    del_op->params.obj_owner = owner; 
+    del_op->params.bucket_owner = this->get_owner();
+    del_op->params.versioning_status = this->get_info().versioning_status();
+    del_op->params.marker_version_id = c_obj->get_instance(); 
+    ret = del_op->delete_obj(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
+    if (ret == -ENOENT) {
+      continue;
+    } else if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->remove" << dendl;
+  return next->remove(dpp, delete_children, y);
+}
+
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 				  const std::string& oid,
 				  std::optional<std::string> upload_id,
