@@ -123,6 +123,8 @@ class D4NFilterBucket : public FilterBucket {
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
 		   ListResults& results, optional_yield y) override;
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		       optional_yield y) override;
     virtual int create(const DoutPrefixProvider* dpp,
                        const CreateParams& params,
                        optional_yield y) override;

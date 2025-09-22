@@ -624,6 +624,109 @@ int D4NFilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int
   return 0;
 }
 
+int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
+			    bool delete_children,
+			    optional_yield y)
+{
+  ListParams params;
+  params.list_versions = true;
+  params.allow_unordered = true;
+  ListResults results;
+  int ret;
+
+  cache_request = true; // though not a cache request, this helps limit the scope of the list call to what is in the cache
+  auto blockDir = this->filter->get_block_dir();
+  std::vector<rgw::d4n::CacheBlock> blocks; 
+  std::vector<rgw::d4n::CacheObj> objects; 
+
+  do {
+    results.objs.clear();
+
+    ret = list(dpp, params, 1000, results, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+/* TODO: Do we check for this?
+    if (!results.objs.empty() && !delete_children) {
+      ldpp_dout(dpp, 10) << "ERROR: could not remove non-empty bucket " << this->get_name() <<
+        dendl;
+      return -ENOTEMPTY;
+    }
+*/
+
+    for (const auto& obj : results.objs) { 
+      // Handle head objects
+      std::unique_ptr<rgw::sal::Object> c_obj = this->get_object(obj.key);
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): handling object=" << obj.key << dendl;
+
+      rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
+        .objName = c_obj->get_name(),
+        .bucketName = this->get_bucket_id(),
+        .size = c_obj->get_accounted_size(),
+      };
+
+      rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
+        .cacheObj = object,
+        .blockID = 0,
+        .size = 0,
+      };
+      
+      blocks.push_back(block);
+      objects.push_back(object);
+
+      // Versioned head obj
+      if (c_obj->have_instance()) {
+        block.cacheObj.objName = "_:" + c_obj->get_instance() + "_" + c_obj->get_name();
+      } else {
+        block.cacheObj.objName = "_:null_" + c_obj->get_name();
+      }
+      blocks.push_back(block);
+
+      // Handle data blocks
+      std::string size_str;
+      c_obj->load_obj_state(dpp, y);
+      auto attrs = c_obj->get_attrs();
+      off_t lst = c_obj->get_size();
+      ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): Object size=" << lst << dendl;
+      off_t fst = 0;
+      do {
+        ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): handling object=" << obj.key << dendl;
+        rgw::d4n::CacheBlock data_block;
+        if (fst >= lst) {
+          break;
+        }
+        off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
+        off_t cur_len = cur_size - fst;
+        data_block.cacheObj.bucketName = this->get_bucket_id();
+        data_block.cacheObj.objName = c_obj->get_oid();
+        data_block.size = cur_len;
+        data_block.blockID = fst;
+
+        fst += cur_len;
+        blocks.push_back(data_block);
+      } while (fst < lst);
+    }
+  } while (results.is_truncated);
+
+  // Use pipelining
+  if ((ret = blockDir->del(dpp, blocks, y) < 0)) { // TODO: Do I do this per truncated result or at the end of the list calls?
+    ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete cached object in block directory, ret=" << ret << dendl;
+    return ret;
+  }
+  if ((ret = this->filter->get_bucket_dir()->del(dpp, this->get_bucket_id(), y)) < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete bucket in bucket directory, ret=" << ret << dendl;
+    return ret;
+  }
+  if ((ret = this->filter->get_obj_dir()->del(dpp, objects, y)) < 0) {
+    ldpp_dout(dpp, 10) << "D4NFilterBucket::" << __func__ << "(): Failed to delete bucket in bucket directory, ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << "(): calling next->remove" << dendl;
+  return next->remove(dpp, delete_children, y);
+}
+
 std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 				  const std::string& oid,
 				  std::optional<std::string> upload_id,
