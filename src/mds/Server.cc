@@ -4778,16 +4778,18 @@ bool Server::is_valid_layout(file_layout_t *layout)
 
 bool Server::can_handle_charmap(const MDRequestRef& mdr, CDentry* dn)
 {
-  CDir *dir = dn->get_dir();
-  CInode *diri = dir->get_inode();
-  if (auto* csp = diri->get_charmap()) {
-    dout(20) << __func__ << ": with " << *csp << dendl;
-    auto& client_metadata = mdr->session->info.client_metadata;
-    bool allowed  = client_metadata.features.test(CEPHFS_FEATURE_CHARMAP);
-    if (!allowed) {
-      dout(5) << " client cannot handle charmap" << dendl;
-      respond_to_request(mdr, -EPERM);
-      return false;
+  if (mdr->session) {
+    CDir *dir = dn->get_dir();
+    CInode *diri = dir->get_inode();
+    if (auto* csp = diri->get_charmap()) {
+      dout(20) << __func__ << ": with " << *csp << dendl;
+      auto& client_metadata = mdr->session->info.client_metadata;
+      bool allowed  = client_metadata.features.test(CEPHFS_FEATURE_CHARMAP);
+      if (!allowed) {
+        dout(5) << " client cannot handle charmap" << dendl;
+        respond_to_request(mdr, -EPERM);
+        return false;
+      }
     }
   }
   return true;
