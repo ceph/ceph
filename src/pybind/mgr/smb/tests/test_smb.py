@@ -1032,7 +1032,7 @@ def test_keybridge_config(tmodule):
         dict(scopes=[{'name': 'kmip'}], expected='kmip hostname'),
         dict(
             scopes=[{'name': 'kmip', 'kmip_hosts': ['foo.example.org']}],
-            expected='kmip server port',
+            expected='kmip default port',
         ),
         dict(
             scopes=[
