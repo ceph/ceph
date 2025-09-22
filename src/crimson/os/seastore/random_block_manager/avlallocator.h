@@ -127,6 +127,10 @@ public:
     return rbm_extent_state_t::ALLOCATED;
   }
 
+  rbm_abs_addr get_end() const {
+    return base_addr + total_size;
+  }
+
 private:
   void _add_to_tree(rbm_abs_addr start, size_t size);
 

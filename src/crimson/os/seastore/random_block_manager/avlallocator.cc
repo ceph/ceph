@@ -84,7 +84,7 @@ rbm_abs_addr AvlAllocator::find_block(size_t size)
       return off;
     } 
   }
-  return total_size;
+  return get_end();
 }
 
 extent_len_t AvlAllocator::find_block(
@@ -174,7 +174,7 @@ std::optional<interval_set<rbm_abs_addr>> AvlAllocator::alloc_extent(
   auto try_to_alloc_block = [this, &result, FNAME] (uint64_t alloc_size) -> uint64_t
   {
     rbm_abs_addr start = find_block(alloc_size);
-    if (start != base_addr + total_size) {
+    if (start != get_end()) {
       _remove_from_tree(start, alloc_size);
       DEBUG("allocate addr: {}, allocate size: {}, available size: {}",
 	start, alloc_size, available_size);
@@ -258,7 +258,7 @@ bool AvlAllocator::is_free_extent(rbm_abs_addr start, size_t size)
 {
   rbm_abs_addr end = start + size;
   ceph_assert(size != 0);
-  if (start < base_addr || base_addr + total_size < end) {
+  if (start < base_addr || get_end() < end) {
     return false;
   }
 
