@@ -727,6 +727,10 @@ private:
       return trimmer->get_backend_type();
     }
 
+    const segments_info_t* get_segments_info() const {
+      return main_cleaner->get_segments_info();
+    }
+
     bool has_cold_tier() const {
       return cold_cleaner.get() != nullptr;
     }

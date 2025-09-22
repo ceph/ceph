@@ -1183,6 +1183,8 @@ public:
 
   virtual void set_extent_callback(ExtentCallbackInterface *) = 0;
 
+  virtual const segments_info_t* get_segments_info() const = 0;
+
   virtual store_statfs_t get_stat() const = 0;
 
   virtual void print(std::ostream &, bool is_detailed) const = 0;
@@ -1348,6 +1350,10 @@ public:
 
   void set_extent_callback(ExtentCallbackInterface *cb) final {
     extent_callback = cb;
+  }
+
+  const segments_info_t* get_segments_info() const final {
+   return &segments;
   }
 
   store_statfs_t get_stat() const final {
@@ -1710,6 +1716,10 @@ public:
 
   void set_extent_callback(ExtentCallbackInterface *cb) final {
     extent_callback = cb;
+  }
+
+  const segments_info_t* get_segments_info() const final {
+   return nullptr;
   }
 
   store_statfs_t get_stat() const final {
