@@ -601,6 +601,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
             self.ceph_volume_log_level = 'debug'
+            logger.warning(f"Vivek {self.ceph_volume_log_level}")
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
             self.certificate_duration_days = 0
