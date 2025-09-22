@@ -1108,6 +1108,95 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
+    def test_subvolume_group_create_without_normalization(self):
+        # create group
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # check normalization
+        try:
+            self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, group, "normalization")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENODATA)
+        else:
+            self.fail("expected the 'fs subvolumegroup charmap' command to fail")
+
+    def test_subvolume_group_create_with_normalization(self):
+        # create group
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--normalization", "nfc")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # check normalization
+        normalization = self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, group, "normalization")
+        self.assertEqual(normalization.strip(), "nfc")
+
+    def test_subvolume_group_create_without_case_sensitivity(self):
+        # create group
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # check case sensitivity
+        try:
+            self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, group, "casesensitive")
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENODATA)
+        else:
+            self.fail("expected the 'fs subvolumegroup charmap' command to fail")
+
+    def test_subvolume_group_create_with_case_insensitive(self):
+        # create group
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--casesensitive=0")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # check case sensitivity
+        case_sensitive = self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, group, "casesensitive")
+        self.assertEqual(case_sensitive.strip(), "0")
+
+        # check normalization (it's implicitly enabled by --case-insensitive, with default value 'nfd')
+        normalization = self._fs_cmd("subvolumegroup", "charmap", "get", self.volname, group, "normalization")
+        self.assertEqual(normalization.strip(), "nfd")
+
+    def test_subvolume_group_charmap_inheritance(self):
+        # create group
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "--casesensitive=0", "--normalization=nfc")
+
+        # make sure it exists
+        grouppath = self._get_subvolume_group_path(self.volname, group)
+        self.assertNotEqual(grouppath, None)
+
+        # create subvolume
+        subvolume = self._gen_subvol_name()
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+
+        # make sure it exists
+        subvolpath = self._get_subvolume_path(self.volname, subvolume, group)
+        self.assertNotEqual(subvolpath, None)
+
+        # check case sensitivity
+        case_sensitive = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "casesensitive", group)
+        self.assertEqual(case_sensitive.strip(), "0")
+
+        # check normalization (it's implicitly enabled by --case-insensitive, with default value 'nfd')
+        normalization = self._fs_cmd("subvolume", "charmap", "get", self.volname, subvolume, "normalization", group)
+        self.assertEqual(normalization.strip(), "nfc")
+
     def test_subvolume_group_info(self):
         # tests the 'fs subvolumegroup info' command
 
