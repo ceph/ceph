@@ -688,8 +688,20 @@ cephfs
         subvolume field will automatically be split into
         ``<subvolumegroup>/<subvolume>`` parts for convenience
     provider
-        Optional. One of ``samba-vfs`` or ``kcephfs`` (``kcephfs`` is not yet
-        supported) . Selects how CephFS storage should be provided to the share
+        Optional. Selects how CephFS storage should be provided to the share.
+        The value may be one of ``samba-vfs``, ``samba-vfs/classic``,
+        ``samba-vfs/new`` or ``samba-vfs/proxied``. If unspecified,
+        ``samba-vfs`` is assumed.
+
+        Selecting ``samba-vfs/new`` selects the new Samba VFS plugin to connect to
+        CephFS and ``samba-vfs/proxied`` uses the new VFS plugin but routes the
+        connections through a proxy. Using the proxy allows for a greater number of
+        simultaneous client connections to the share, but it comes at the cost of
+        performance. ``samba-vfs/classic`` uses the older Samba VFS plugin to
+        connect to CephFS. ``samba-vfs`` automatically selects the preferred VFS
+        based implementation, currently ``samba-vfs/proxied``. This option is
+        suitable for the majority of use cases and can be left unspecified for most
+        shares.
 restrict_access
     Optional boolean, defaulting to false. If true the share will only permit
     access by users explicitly listed in ``login_control``.
