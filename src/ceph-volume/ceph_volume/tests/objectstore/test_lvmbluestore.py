@@ -1,4 +1,5 @@
 import pytest
+from argparse import Namespace
 from unittest.mock import patch, Mock, MagicMock, call
 from ceph_volume.objectstore.lvmbluestore import LvmBlueStore
 from ceph_volume.api.lvm import Volume
@@ -8,7 +9,8 @@ from ceph_volume.util import system
 class TestLvmBlueStore:
     @patch('ceph_volume.objectstore.lvmbluestore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
     def setup_method(self, m_create_key):
-        self.lvm_bs = LvmBlueStore([])
+        args = Namespace(dmcrypt_format_opts=None, dmcrypt_open_opts=None)
+        self.lvm_bs = LvmBlueStore(args)
 
     @patch('ceph_volume.conf.cluster', 'ceph')
     @patch('ceph_volume.api.lvm.get_single_lv')
@@ -25,6 +27,7 @@ class TestLvmBlueStore:
                                               lv_tags='',
                                               lv_uuid='fake-uuid')
         self.lvm_bs.encrypted = True
+        self.lvm_bs.with_tpm = 0
         self.lvm_bs.dmcrypt_key = 'fake-dmcrypt-key'
         self.lvm_bs.args = args
         self.lvm_bs.pre_prepare()
@@ -98,6 +101,7 @@ class TestLvmBlueStore:
                                                               lv_uuid='fake-uuid')
         self.lvm_bs.encrypted = True
         self.lvm_bs.dmcrypt_key = 'fake-dmcrypt-key'
+        self.lvm_bs.with_tpm = 0
         self.lvm_bs.args = args
         self.lvm_bs.pre_prepare()
         assert self.lvm_bs.secrets['dmcrypt_key'] == 'fake-dmcrypt-key'
