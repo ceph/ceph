@@ -1017,6 +1017,58 @@ TEST(LibCephFS, FlagO_PATH) {
 }
 #endif /* __linux */
 
+TEST(LibCephFS, StatfsQuota) {
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  const char* quota_dir = "quota_dir";
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, quota_dir, 0777));
+  EXPECT_EQ(0, ceph_setxattr(cmount, quota_dir, "ceph.quota.max_files", "10000", 05, 0));
+
+  const int num_quota_files = 1;
+  char quota_file[256];
+  sprintf(quota_file, "%s/test_statfs_quota_%d", quota_dir, getpid());
+
+  int fd = ceph_open(cmount, quota_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  const int num_reg_files = 5;
+  char regular_file[256];
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    fd = ceph_open(cmount, regular_file, O_CREAT|O_RDWR, 0666);
+    ceph_close(cmount, fd);
+  }
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  struct statvfs quota_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, quota_file, &quota_stvbuf));
+  ASSERT_EQ(num_quota_files+1, quota_stvbuf.f_files); // +1 for dirent quota_dir
+
+  struct statvfs reg_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, "test_statfs_regular_1", &reg_stvbuf));
+  ASSERT_GT(reg_stvbuf.f_files, quota_stvbuf.f_files);
+
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    ASSERT_EQ(0, ceph_unlink(cmount, regular_file));
+  }
+
+  ASSERT_EQ(0, ceph_unlink(cmount, quota_file));
+  ASSERT_EQ(0, ceph_rmdir(cmount, quota_dir));
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

@@ -1851,6 +1851,8 @@ private:
   int _lookup_vino(vinodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
+  int _statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms);
+
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();
 
