@@ -145,6 +145,9 @@ rgw_http_errors rgw_http_s3_errors({
     { ECANCELED, {409, "ConcurrentModification"}},
     { EDQUOT, {507, "InsufficientCapacity"}},
     { ENOSPC, {507, "InsufficientCapacity"}},
+    { ERR_ACLS_NOT_SUPPORTED, {400, "AccessControlListNotSupported"}},
+    { ERR_INVALID_BUCKET_ACL, {400, "InvalidBucketAclWithObjectOwnership"}},
+    { ERR_NO_SUCH_OWNERSHIP_CONTROLS, {404, "OwnershipControlsNotFoundError"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -1118,6 +1121,7 @@ struct perm_state_from_req_state : public perm_state_base {
 		      _s->env,
 		      _s->auth.identity.get(),
 		      _s->bucket.get() ? _s->bucket->get_info() : RGWBucketInfo(),
+		      _s->bucket_object_ownership,
 		      _s->perm_mask,
 		      _s->defer_to_bucket_acls,
 		      _s->bucket_access_conf),
@@ -1625,11 +1629,12 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return true;
   }
 
-  bool ret = object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
-					  nullptr, /* http referrer */
-					  ps->bucket_access_conf &&
-					  ps->bucket_access_conf->ignore_public_acls());
-  if (ret) {
+  // object ACLs don't apply for BucketOwnerEnforced
+  if (ps->bucket_object_ownership != rgw::s3::ObjectOwnership::BucketOwnerEnforced &&
+      object_acl.verify_permission(dpp, *ps->identity, ps->perm_mask, perm,
+                                   nullptr, /* http referrer */
+                                   ps->bucket_access_conf &&
+                                   ps->bucket_access_conf->ignore_public_acls())) {
     ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
     if (granted_by_acl) {
       *granted_by_acl = true;
@@ -1638,7 +1643,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   }
 
   if (!ps->cct->_conf->rgw_enforce_swift_acls)
-    return ret;
+    return false;
 
   if ((perm & (int)ps->perm_mask) != perm)
     return false;
@@ -2072,7 +2077,7 @@ void RGWUserCaps::dump(Formatter *f) const
 list<RGWUserCaps> RGWUserCaps::generate_test_instances()
 {
   list<RGWUserCaps> o;
-  o.push_back(RGWUserCaps{});
+  o.emplace_back();
   RGWUserCaps caps;
   caps.add_cap("read");
   caps.add_cap("write");
@@ -2525,7 +2530,7 @@ list<RGWBucketEnt> RGWBucketEnt::generate_test_instances()
   e.size_rounded = 4096;
   e.count = 1;
   o.push_back(std::move(e));
-  o.push_back(RGWBucketEnt{});
+  o.emplace_back();
   return o;
 }
 
@@ -2546,7 +2551,7 @@ list<rgw_obj> rgw_obj::generate_test_instances()
   rgw_bucket b;
   init_bucket(&b, "tenant", "bucket", "pool", ".index_pool", "marker", "10");
   o.push_back(rgw_obj(b, "object"));
-  o.push_back(rgw_obj{});
+  o.emplace_back();
   return o;
 }
 
@@ -2612,6 +2617,9 @@ void RGWBucketInfo::dump(Formatter *f) const
   if (!empty_sync_policy()) {
     encode_json("sync_policy", *sync_policy, f);
   }
+  if (obj_lock_enabled()) {
+    encode_json("obj_lock", obj_lock, f);
+  }
 }
 
 void RGWBucketInfo::decode_json(JSONObj *obj) {
@@ -2655,6 +2663,9 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   if (!sp.empty()) {
     set_sync_policy(std::move(sp));
   }
+  if (obj_lock_enabled()) {
+    JSONDecoder::decode_json("obj_lock", obj_lock, obj);
+  }
 }
 
 list<RGWUserInfo> RGWUserInfo::generate_test_instances()
@@ -2682,7 +2693,7 @@ list<RGWUserInfo> RGWUserInfo::generate_test_instances()
   i.subusers[u.name] = u;
   o.push_back(std::move(i));
 
-  o.push_back(RGWUserInfo{});
+  o.emplace_back();
   return o;
 }
 
@@ -2975,7 +2986,7 @@ list<RGWSubUser> RGWSubUser::generate_test_instances()
   u.name = "name";
   u.perm_mask = 0xf;
   o.push_back(std::move(u));
-  o.push_back(RGWSubUser{});
+  o.emplace_back();
   return o;
 }
 
@@ -3031,7 +3042,7 @@ list<RGWAccessKey> RGWAccessKey::generate_test_instances()
   k.key = "key";
   k.subuser = "subuser";
   o.push_back(std::move(k));
-  o.push_back(RGWAccessKey{});
+  o.emplace_back();
   return o;
 }
 
@@ -3135,7 +3146,7 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
 std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()
 {
   std::list<RGWAccountInfo> o;
-  o.push_back(RGWAccountInfo{});
+  o.emplace_back();
   auto p = RGWAccountInfo{};
   p.id = "account1";
   p.tenant = "tenant1";
@@ -3171,7 +3182,7 @@ void RGWGroupInfo::decode_json(JSONObj* obj)
 std::list<RGWGroupInfo> RGWGroupInfo::generate_test_instances()
 {
   std::list<RGWGroupInfo> o;
-  o.push_back(RGWGroupInfo{});
+  o.emplace_back();
   auto p = RGWGroupInfo{};
   p.id = "id";
   p.tenant = "tenant";

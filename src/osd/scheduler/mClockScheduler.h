@@ -38,11 +38,10 @@ namespace ceph::osd::scheduler {
  *
  * TODO: explain configs
  */
-class mClockScheduler : public OpScheduler, md_config_obs_t {
+class mClockScheduler : public OpScheduler {
 
   CephContext *cct;
   const unsigned cutoff_priority;
-  MonClient *monc;
 
   ClientRegistry client_registry;
   MclockConfig mclock_conf;
@@ -81,12 +80,10 @@ public:
     std::chrono::duration<Rep,Per> idle_age,
     std::chrono::duration<Rep,Per> erase_age,
     std::chrono::duration<Rep,Per> check_time,
-    MonClient *monc,
     bool init_perfcounter=true)
     : cct(cct),
       cutoff_priority(cutoff_priority),
-      monc(monc),
-      mclock_conf(cct, client_registry, monc, num_shards,
+      mclock_conf(cct, client_registry, num_shards,
 	          is_rotational, shard_id, whoami),
       scheduler(
 	std::bind(&ClientRegistry::get_info,
@@ -96,13 +93,7 @@ public:
 	crimson::dmclock::AtLimit::Wait,
 	cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
   {
-    cct->_conf.add_observer(this);
     ceph_assert(num_shards > 0);
-    mclock_conf.set_osd_capacity_params_from_config();
-    mclock_conf.set_config_defaults_from_profile();
-    client_registry.update_from_config(
-      cct->_conf, mclock_conf.get_capacity_per_shard());
-
     if (init_perfcounter) {
       mclock_conf.init_logger();
     }
@@ -110,15 +101,13 @@ public:
   mClockScheduler(
     CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, unsigned cutoff_priority,
-    MonClient *monc,
     bool init_perfcounter=true) :
     mClockScheduler(
       cct, whoami, num_shards, shard_id, is_rotational, cutoff_priority,
       crimson::dmclock::standard_idle_age,
       crimson::dmclock::standard_erase_age,
       crimson::dmclock::standard_check_time,
-      monc, init_perfcounter) {}
-  ~mClockScheduler() override;
+      init_perfcounter) {}
 
   /// Calculate scaled cost per item
   uint32_t calc_scaled_cost(int cost);
@@ -148,17 +137,10 @@ public:
     ostream << ", cutoff=" << cutoff_priority;
   }
 
-  // Update data associated with the modified mclock config key(s)
-  void update_configuration() final;
-
   // Return the scheduler type
   op_queue_type_t get_type() const final {
     return op_queue_type_t::mClockScheduler;
   }
-
-  std::vector<std::string> get_tracked_keys() const noexcept final;
-  void handle_conf_change(const ConfigProxy& conf,
-			  const std::set<std::string> &changed) final;
 
   double get_cost_per_io() const {
     return mclock_conf.get_cost_per_io();

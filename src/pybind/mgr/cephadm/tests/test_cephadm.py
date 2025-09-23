@@ -2240,8 +2240,7 @@ osd_k2 = osd_v2
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         def check_registry_credentials(url, username, password):
-            assert json.loads(cephadm_module.get_store('registry_credentials')) == {
-                'url': url, 'username': username, 'password': password}
+            assert json.loads(cephadm_module.get_store('registry_credentials')) == {'registry_credentials': [{'url': url, 'username': username, 'password': password}]}
 
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
@@ -2280,7 +2279,7 @@ osd_k2 = osd_v2
             # test bad login where args are valid but login command fails
             _run_cephadm.side_effect = async_side_effect(('{}', 'error', 1))
             code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
-            assert err == 'Host test failed to login to fail-url as fail-user with given password'
+            assert err == 'Host test failed to login to all registries'
             check_registry_credentials('json-url', 'json-user', 'json-pass')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({

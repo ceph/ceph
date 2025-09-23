@@ -761,6 +761,9 @@ Example output:
    cephfs.a.meta 	77s    	0s        	0	     0s	  0s     	1      	1
    cephfs.a.data 	76s    	0s        	0	     0s	  0s     	1      	1
 
+The time values above are rounded for readability. To see the exact second 
+values, use the option ``--format`` with ``json`` or ``json-pretty`` value. 
+
 A pool is considered ``unavailable`` when at least one PG in the pool 
 becomes inactive or there is at least one unfound object in the pool. 
 Otherwise the pool is considered ``available``. Depending on the 
@@ -781,10 +784,19 @@ the Mean Time Between Failures (MTBF) and Mean Time To Recover (MTTR)
 for each pool. The availability score is then calculated by finding 
 the ratio of MTBF to the total time.  
 
-The score is updated every five seconds. This interval is currently 
-not configurable. Any intermittent changes to the pools that 
-occur between this duration but are reset before we recheck the pool 
-status will not be captured by this feature. 
+The score is updated every one second. Transient changes to pools that 
+occur and are reverted between successive updates will not be captured. 
+It is possible to configure this interval with a command of the following 
+form: 
+
+.. prompt:: bash $
+
+   ceph config set mon pool_availability_update_interval 2
+
+This will set the update interval to two seconds. Please note that 
+it is not possible to set this interval less than the config value set
+for ``paxos_propose_interval``. 
+
 
 This feature is on by default. To turn the feature off, e.g. - for an expected 
 downtime, the ``enable_availability_tracking`` config option can be set to ``false``. 

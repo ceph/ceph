@@ -63,6 +63,7 @@
    - osd_op_num_shards_hdd = 1 (was 5)
    - osd_op_num_threads_per_shard_hdd = 5 (was 1)
   For more details see https://tracker.ceph.com/issues/66289.
+* RGW: Added support for S3 Object Ownership to disable object ACLs.
 * MGR: The Ceph Manager's always-on modulues/plugins can now be force-disabled.
   This can be necessary when we wish to prevent the Manager from being
   flooded by module commands when Ceph services are down or degraded.
@@ -173,12 +174,14 @@
   Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
 
 * RADOS: A new command, ``ceph osd pool availability-status``, has been added that allows
-  users to view the availability score for each pool. A pool is considered 
-  `unavailable` if any PG in the pool is not in active state or if there are unfound 
-  objects, otherwise the pool is considered `available`. The score is updated every 
-  five seconds and the feature is enabled by default. A new config option ``enable_availability_tracking``
-  can be used to turn off the feature if required. Another command is added to clear the 
-  availability status for a specific pool, ``ceph osd pool clear-availability-status <pool-name>``. 
+  users to view the availability score for each pool in a cluster. A pool is considered 
+  unavailable if any PG in the pool is not in active state or if there are unfound 
+  objects. Otherwise the pool is considered available. The score is updated every 
+  one second by default. This interval can be changed using the new config option
+  ``pool_availability_update_interval.``. The feature is on by default. A new config option 
+  ``enable_availability_tracking`` can be used to turn off the feature if required. 
+  Another command is added to clear the availability status for a specific pool, 
+  ``ceph osd pool clear-availability-status <pool-name>``. 
   This feature is in tech preview. 
   Related trackers:
    - https://tracker.ceph.com/issues/67777
@@ -762,3 +765,11 @@ Relevant tracker: https://tracker.ceph.com/issues/64777
 when decoding, resulting in Linux codes on the wire, and host codes on the receiver.
 All CEPHFS_E* defines have been removed across Ceph (including the Python binding).
 Relevant tracker: https://tracker.ceph.com/issues/64611
+
+* RGW: Persistent bucket notifications will use queues with multiple shards instead of one queue. Number of shards
+can be configured using the `rgw` option `rgw_bucket_persistent_notif_num_shards`. Note that pre-existing topics will continue to function as is, i.e, they are mapped to only one RADOS object.   
+  
+  For more details, see: 
+  https://docs.ceph.com/en/latest/radosgw/notifications/
+
+Relevant tracker: https://tracker.ceph.com/issues/71677

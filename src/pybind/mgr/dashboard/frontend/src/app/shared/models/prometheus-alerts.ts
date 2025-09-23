@@ -54,6 +54,13 @@ export class AlertmanagerAlert extends CommonAlertmanagerAlert {
   };
   receivers: string[];
   fingerprint: string;
+  alert_count: number;
+  subalerts?: AlertmanagerAlert[];
+}
+
+export class GroupAlertmanagerAlert {
+  alerts: AlertmanagerAlert[];
+  labels?: PrometheusAlertLabels;
 }
 
 export class AlertmanagerNotificationAlert extends CommonAlertmanagerAlert {
@@ -82,4 +89,5 @@ export class PrometheusCustomAlert {
   url: string;
   description: string;
   fingerprint?: string | boolean;
+  severity?: string;
 }

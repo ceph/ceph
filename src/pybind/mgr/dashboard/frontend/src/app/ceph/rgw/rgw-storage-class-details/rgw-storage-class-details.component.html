@@ -7,34 +7,7 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          @if( isTierMatch( TIER_TYPE_DISPLAY.LOCAL )){
-          <tr>
-            <td class="bold"
-                i18n>
-              Zone Group
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  {{ zoneGroupText }}
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.zonegroup_name }}</td>
-          </tr>
-          } @if(isTierMatch( TIER_TYPE_DISPLAY.LOCAL )){
-          <tr>
-            <td class="bold"
-                i18n>
-              Placement Target
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  Placement Target defines the destination and rules for moving objects between
-                  storage tiers.
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.placement_target }}</td>
-          </tr>
-          } @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -75,32 +48,8 @@
               </div>
             </td>
           </tr>
-          <tr>
-            <td class="bold"
-                i18n>
-              Secret key
-              <cd-helper class="text-pre-wrap">
-                <span> {{ targetSecretKeyText }} </span>
-              </cd-helper>
-            </td>
-            <td>
-              <div cdsCol
-                   [columnNumbers]="{ md: 4 }"
-                   class="d-flex">
-                <input
-                  cdsPassword
-                  type="password"
-                  readonly
-                  id="secret"
-                  [value]="selection?.secret"
-                />
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret"></button>
-                <cd-copy-2-clipboard-button source="secret"> </cd-copy-2-clipboard-button>
-              </div>
-            </td>
-          </tr>
+        }
+        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -213,7 +162,7 @@
             </td>
             <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
-          } @if(selection?.acl_mappings.length > 0) {
+          } @if(selection?.acl_mappings?.length > 0) {
           <tr>
             <td class="bold w-25"
                 i18n>ACLs</td>
@@ -234,6 +183,18 @@
             </td>
           </tr>
          }
+          <tr>
+            <td class="bold">
+              Placement Target
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Placement Target defines the destination and rules for moving objects between
+                  storage tiers.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.placement_target }}</td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>

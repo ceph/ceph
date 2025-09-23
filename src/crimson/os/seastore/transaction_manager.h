@@ -14,9 +14,12 @@
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include <seastar/core/future.hh>
+#include <seastar/util/defer.hh>
 
 #include "include/ceph_assert.h"
 #include "include/buffer.h"
+
+#include "crimson/common/coroutine.h"
 
 #include "crimson/osd/exceptions.h"
 
@@ -287,74 +290,62 @@ public:
     extent_len_t partial_len,
     lextent_init_func_t<T> maybe_init = [](T&) {})
   {
+    LOG_PREFIX(TransactionManager::read_pin);
     static_assert(is_logical_type(T::TYPE));
     assert(is_aligned(partial_off, get_block_size()));
     assert(is_aligned(partial_len, get_block_size()));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
 
-    return pin.refresh(
-    ).si_then([this, &t](auto npin) {
-      if (npin.is_indirect()) {
-	return lba_manager->complete_indirect_lba_mapping(
-	  t, std::move(npin));
-      } else {
-	return LBAManager::complete_lba_mapping_iertr::make_ready_future<
-	  LBAMapping>(std::move(npin));
+    pin = co_await pin.refresh();
+
+    if (pin.is_indirect()) {
+      pin = co_await lba_manager->complete_indirect_lba_mapping(
+	t, std::move(pin));
+    }
+
+    extent_len_t direct_partial_off = partial_off;
+    bool is_clone = pin.is_clone();
+    std::optional<indirect_info_t> maybe_indirect_info;
+    if (pin.is_indirect()) {
+      auto intermediate_offset = pin.get_intermediate_offset();
+      direct_partial_off = intermediate_offset + partial_off;
+      maybe_indirect_info = indirect_info_t{
+        intermediate_offset, pin.get_length()};
+    }
+
+    SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
+              t, T::TYPE, pin, partial_off, partial_len, direct_partial_off);
+
+
+    // checking the lba child must be atomic with creating
+    // and linking the absent child
+    auto ret = get_extent_if_linked<T>(t, std::move(pin));
+    TCachedExtentRef<T> extent;
+    if (ret.index() == 1) {
+      extent = co_await std::move(std::get<1>(ret));
+      extent = co_await cache->read_extent_maybe_partial(
+	t, std::move(extent), direct_partial_off, partial_len);
+      if (!extent->is_seen_by_users()) {
+	maybe_init(*extent);
+	extent->set_seen_by_users();
       }
-    }).si_then([&t, this, partial_off, partial_len,
-		maybe_init=std::move(maybe_init)](auto npin) mutable {
-
-      extent_len_t direct_partial_off = partial_off;
-      bool is_clone = npin.is_clone();
-      std::optional<indirect_info_t> maybe_indirect_info;
-      if (npin.is_indirect()) {
-	auto intermediate_offset = npin.get_intermediate_offset();
-	direct_partial_off = intermediate_offset + partial_off;
-	maybe_indirect_info = indirect_info_t{
-	  intermediate_offset, npin.get_length()};
-      }
-
-      LOG_PREFIX(TransactionManager::read_pin);
-      SUBDEBUGT(seastore_tm, "{} {} 0x{:x}~0x{:x} direct_off=0x{:x} ...",
-		t, T::TYPE, npin, partial_off, partial_len, direct_partial_off);
-
-      return [this, &t, npin, direct_partial_off, partial_len,
-	      maybe_init=std::move(maybe_init)]() mutable {
-	// checking the lba child must be atomic with creating
-	// and linking the absent child
-	auto ret = get_extent_if_linked<T>(t, std::move(npin));
-	if (ret.index() == 1) {
-	  return std::get<1>(ret
-	  ).si_then([direct_partial_off, partial_len, this, &t](auto extent) {
-	    return cache->read_extent_maybe_partial(
-	      t, std::move(extent), direct_partial_off, partial_len);
-	  }).si_then([maybe_init=std::move(maybe_init)](auto extent) {
-	    if (!extent->is_seen_by_users()) {
-	      maybe_init(*extent);
-	      extent->set_seen_by_users();
-	    }
-	    return std::move(extent);
-	  });
-	} else {
-	  auto &r = std::get<0>(ret);
-	  return this->pin_to_extent<T>(
-	    t, std::move(r.mapping), std::move(r.child_pos),
-	    direct_partial_off, partial_len,
-	    std::move(maybe_init));
-	}
-      }().si_then([FNAME, maybe_indirect_info, is_clone, &t](TCachedExtentRef<T> ext) {
-	if (maybe_indirect_info.has_value()) {
-	  SUBDEBUGT(seastore_tm, "got indirect +0x{:x}~0x{:x} is_clone={} {}",
-		    t, maybe_indirect_info->intermediate_offset,
-		    maybe_indirect_info->length, is_clone, *ext);
-	} else {
-	  SUBDEBUGT(seastore_tm, "got direct is_clone={} {}",
-		    t, is_clone, *ext);
-	}
-	return maybe_indirect_extent_t<T>{ext, maybe_indirect_info, is_clone};
-      });
-    });
+    } else {
+      auto &r = std::get<0>(ret);
+      extent = co_await this->pin_to_extent<T>(
+	t, std::move(r.mapping), std::move(r.child_pos),
+	direct_partial_off, partial_len,
+	std::move(maybe_init));
+    }
+    if (maybe_indirect_info.has_value()) {
+      SUBDEBUGT(seastore_tm, "got indirect +0x{:x}~0x{:x} is_clone={} {}",
+		t, maybe_indirect_info->intermediate_offset,
+		maybe_indirect_info->length, is_clone, *extent);
+    } else {
+      SUBDEBUGT(seastore_tm, "got direct is_clone={} {}",
+		t, is_clone, *extent);
+    }
+    co_return maybe_indirect_extent_t<T>{extent, maybe_indirect_info, is_clone};
   }
 
   template <typename T>

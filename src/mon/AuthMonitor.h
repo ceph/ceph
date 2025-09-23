@@ -85,11 +85,11 @@ public:
     }
     static std::list<Incremental> generate_test_instances() {
       std::list<Incremental> ls;
-      ls.push_back(Incremental{});
-      ls.push_back(Incremental{});
+      ls.emplace_back();
+      ls.emplace_back();
       ls.back().inc_type = GLOBAL_ID;
       ls.back().max_global_id = 1234;
-      ls.push_back(Incremental{});
+      ls.emplace_back();
       ls.back().inc_type = AUTH_DATA;
       ls.back().auth_type = 12;
       ls.back().auth_data.append("foo");

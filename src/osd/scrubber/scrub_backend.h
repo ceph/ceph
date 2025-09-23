@@ -68,7 +68,7 @@ using digests_fixes_t = std::vector<std::pair<hobject_t, data_omap_digests_t>>;
 using shard_info_map_t = std::map<pg_shard_t, shard_info_wrapper>;
 using shard_to_scrubmap_t = std::map<pg_shard_t, ScrubMap>;
 
-using auth_peers_t = std::vector<std::pair<ScrubMap::object, pg_shard_t>>;
+using auth_peer_t = std::pair<ScrubMap::object, pg_shard_t>;
 
 using wrapped_err_t =
   std::variant<inconsistent_obj_wrapper, inconsistent_snapset_wrapper>;
@@ -217,7 +217,7 @@ struct formatter<shard_as_auth_t> {
 } // namespace fmt
 
 struct auth_selection_t {
-  shard_to_scrubmap_t::iterator auth;  ///< an iter into one of this_chunk->maps
+  shard_to_scrubmap_t::const_iterator auth;  ///< an iter into one of this_chunk->maps
   pg_shard_t auth_shard;               // set to auth->first
   object_info_t auth_oi;
   shard_info_map_t shard_map;
@@ -278,7 +278,7 @@ struct scrub_chunk_t {
   std::map<pg_shard_t, ScrubMap> received_maps;
 
   /// a collection of all objs mentioned in the maps
-  std::set<hobject_t> authoritative_set;
+  std::set<hobject_t> all_chunk_objects;
 
   utime_t started{ceph_clock_now()};
 
@@ -364,7 +364,11 @@ class ScrubBackend {
 
   const omap_stat_t& this_scrub_omapstats() const { return m_omap_stats; }
 
-  int authoritative_peers_count() const { return m_auth_peers.size(); };
+  /**
+   * the number of objects that have an authoritative peer selected for
+   * them (which equates with the number of damaged objects in this chunk)
+   */
+  int authoritative_peers_count() const { return m_auth_peer.size(); }
 
   std::ostream& logger_prefix(std::ostream* _dout, const ScrubBackend* t);
 
@@ -387,8 +391,8 @@ class ScrubBackend {
   /// collecting some scrub-session-wide omap stats
   omap_stat_t m_omap_stats;
 
-  /// Mapping from object with errors to good peers
-  std::map<hobject_t, auth_peers_t> m_auth_peers;
+  /// Mapping: object with errors -> the selected good peer
+  std::map<hobject_t, auth_peer_t> m_auth_peer;
 
   // EC related:
   /// size of the EC digest map, calculated based on the EC configuration
@@ -418,7 +422,7 @@ class ScrubBackend {
   ScrubMap m_cleaned_meta_map{};
 
   /// a reference to the primary map
-  ScrubMap& my_map();
+  const ScrubMap& my_map();
 
   /// shallow/deep error counters
   error_counters_t get_error_counts() const { return this_chunk->m_error_counts; }
@@ -426,7 +430,7 @@ class ScrubBackend {
   /**
    *  merge_to_authoritative_set() updates
    *   - this_chunk->maps[from] with the replicas' scrub-maps;
-   *   - this_chunk->authoritative_set as a union of all the maps' objects;
+   *   - this_chunk->all_chunk_objects as a union of all the maps' objects;
    */
   void merge_to_authoritative_set();
 
@@ -449,7 +453,7 @@ class ScrubBackend {
   std::optional<auth_and_obj_errs_t> for_empty_auth_list(
     std::list<pg_shard_t>&& auths,
     std::set<pg_shard_t>&& obj_errors,
-    shard_to_scrubmap_t::iterator auth,
+    shard_to_scrubmap_t::const_iterator auth,
     const hobject_t& ho,
     std::stringstream& errstream);
 
@@ -469,9 +473,11 @@ class ScrubBackend {
                            bool has_snapset,
                            const pg_shard_t &shard);
 
-  void repair_object(const hobject_t& soid,
-                     const auth_peers_t& ok_peers,
-                     const std::set<pg_shard_t>& bad_peers);
+  void repair_object(
+      const hobject_t& soid,
+      pg_shard_t ok_shard,
+      const ScrubMap::object& ok_object_smap,
+      const std::set<pg_shard_t>& bad_peers);
 
   /**
    * An auxiliary used by select_auth_object() to test a specific shard
@@ -503,7 +509,7 @@ class ScrubBackend {
     std::stringstream& errstream);
 
   void inconsistents(const hobject_t& ho,
-                     ScrubMap::object& auth_object,
+                     const ScrubMap::object& auth_object,
                      object_info_t& auth_oi,  // consider moving to object
                      auth_and_obj_errs_t&& auth_n_errs,
                      std::stringstream& errstream);

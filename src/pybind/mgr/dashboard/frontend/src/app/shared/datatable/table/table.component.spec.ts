@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -44,6 +44,7 @@ describe('TableComponent', () => {
     imports: [
       BrowserAnimationsModule,
       FormsModule,
+      ReactiveFormsModule,
       ComponentsModule,
       RouterTestingModule,
       NgbDropdownModule,
@@ -582,12 +583,75 @@ describe('TableComponent', () => {
       expect(executingElement.nativeElement.textContent.trim()).toBe(`(${state})`);
     };
 
+    const testEditingTemplate = (editing = false) => {
+      component.autoReload = -1;
+
+      const data = createFakeData(10);
+      // add id to every row so that we can use it to save the state.
+      component.data = data.map((item, i) => ({
+        ...item,
+        id: `id-${i}`
+      }));
+      component.localColumns = component.columns = [
+        {
+          prop: 'a',
+          name: 'Name',
+          cellTransformation: CellTemplate.editing,
+          customTemplateConfig: {
+            validators: []
+          }
+        }
+      ];
+
+      // trigger an editing by setting the edit state.
+      if (editing) {
+        component.editCellItem('id-0', component.localColumns[0], '0');
+      }
+
+      component.ngOnInit();
+      component.ngAfterViewInit();
+      fixture.detectChanges();
+
+      if (editing) {
+        const inputElement = fixture.debugElement
+          .query(By.css('[cdstablerow] [cdstabledata]'))
+          .query(By.css('input'));
+        expect(inputElement).not.toBeNull();
+
+        const saveButton = fixture.debugElement
+          .query(By.css('[cdstablerow] [cdstabledata]'))
+          .query(By.css('#cell-inline-save-btn'));
+        expect(saveButton).not.toBeNull();
+
+        const svgElement = saveButton.nativeElement.querySelector('svg');
+        expect(svgElement).not.toBeNull();
+        expect(svgElement.classList.contains('check-icon')).toBeTruthy();
+      } else {
+        const editButton = fixture.debugElement
+          .query(By.css('[cdstablerow] [cdstabledata]'))
+          .query(By.css('#cell-inline-edit-btn'));
+        expect(editButton).not.toBeNull();
+
+        const svgElement = editButton.nativeElement.querySelector('svg');
+        expect(svgElement).not.toBeNull();
+        expect(svgElement.classList.contains('edit-icon')).toBeTruthy();
+      }
+    };
+
     it('should display executing template', () => {
       testExecutingTemplate();
     });
 
     it('should display executing template with custom classes', () => {
       testExecutingTemplate({ valueClass: 'a b', executingClass: 'c d' });
+    });
+
+    it('should display an edit icon on the cell', () => {
+      testEditingTemplate();
+    });
+
+    it('should display input element and save button if editing', () => {
+      testEditingTemplate(true);
     });
   });
 

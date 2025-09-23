@@ -121,7 +121,7 @@ class MonitorDBStore
 
     static std::list<Op> generate_test_instances() {
       std::list<Op> ls;
-      ls.push_back(Op{});
+      ls.emplace_back();
       // we get coverage here from the Transaction instances
       return ls;
     }
@@ -209,8 +209,8 @@ class MonitorDBStore
 
     static std::list<Transaction> generate_test_instances() {
       std::list<Transaction> ls;
-      ls.push_back(Transaction{});
-      ls.push_back(Transaction{});
+      ls.emplace_back();
+      ls.emplace_back();
       ceph::buffer::list bl;
       bl.append("value");
       ls.back().put("prefix", "key", bl);

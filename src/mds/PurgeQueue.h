@@ -15,7 +15,6 @@
 #ifndef PURGE_QUEUE_H_
 #define PURGE_QUEUE_H_
 
-#include "mds/mdstypes.h"
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
 #include "include/cephfs/types.h" // for mds_rank_t

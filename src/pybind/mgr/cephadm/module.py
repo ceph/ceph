@@ -403,6 +403,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='max number of osds that will be drained simultaneously when osds are removed'
         ),
         Option(
+            'max_parallel_osd_upgrades',
+            type='int',
+            default=16,
+            desc='Maximum number of OSD daemons upgraded in parallel.'
+        ),
+        Option(
             'service_discovery_port',
             type='int',
             default=8765,
@@ -537,6 +543,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_node_exporter = ''
             self.container_image_loki = ''
             self.container_image_promtail = ''
+            self.container_image_alloy = ''
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
             self.container_image_snmp_gateway = ''
@@ -586,6 +593,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
+            self.max_parallel_osd_upgrades = 16
             self.device_enhanced_scan = False
             self.inventory_list_all = False
             self.cgroups_split = True
@@ -808,6 +816,35 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 timeout = 60
         return self.event_loop.get_result(coro, timeout)
 
+    def update_host_timeout_error(self, host: str, remove: bool = False) -> None:
+        if 'CEPHADM_HOST_TIMEOUT_ERROR' in self.health_checks:
+            hosts = self.health_checks['CEPHADM_HOST_TIMEOUT_ERROR'].get('detail', [])
+        else:
+            hosts = []
+        if remove and host not in hosts:
+            # If the host being removed isn't in the host list, there's no way we'd be removing
+            # the last host from the list, so no need to worry about clearing the warning
+            return
+        elif remove:
+            hosts.remove(host)
+        elif not remove and host in hosts:
+            # If the host was in the host list we got, the warning must already exist and
+            # include the host, so nothing to be done
+            return
+        else:  # not remove and host is not in list case
+            hosts.append(host)
+
+        if not hosts:
+            self.remove_health_warning('CEPHADM_HOST_TIMEOUT_ERROR')
+        else:
+            self.set_health_warning(
+                'CEPHADM_HOST_TIMEOUT_ERROR',
+                f'SSH command execution failed with TimeoutError for {len(hosts)} hosts',
+                len(hosts),
+                hosts
+            )
+        return
+
     @contextmanager
     def async_timeout_handler(self, host: Optional[str] = '',
                               cmd: Optional[str] = '',
@@ -819,6 +856,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         try:
             yield
         except (asyncio.TimeoutError, concurrent.futures.TimeoutError):
+            # raise health warning for timeout issue
+            if host:
+                self.update_host_timeout_error(host)
             err_str: str = ''
             if cmd:
                 err_str = f'Command "{cmd}" timed out '
@@ -841,6 +881,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 err_str += f'on host {host} '
             err_str += f' - {str(e)}'
             raise OrchestratorError(err_str)
+        else:
+            if host:
+                self.update_host_timeout_error(host, remove=True)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
@@ -931,7 +974,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
+            'container', 'agent', 'snmp-gateway', 'loki', 'promtail', 'alloy',
             'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query', 'mgmt-gateway', 'oauth2-proxy'
         ]
         if forcename:
@@ -1315,18 +1358,28 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             return -errno.EINVAL, "", ("Invalid arguments. Please provide arguments <url> <username> <password> "
                                        "or -i <login credentials json file>")
         elif (url and username and password):
-            registry_json = {'url': url, 'username': username, 'password': password}
+            registry_json = {'registry_credentials': [{'url': url, 'username': username, 'password': password}]}
         else:
             assert isinstance(inbuf, str)
             registry_json = json.loads(inbuf)
-            if "url" not in registry_json or "username" not in registry_json or "password" not in registry_json:
-                return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
-                                           "Please setup json file as\n"
-                                           "{\n"
-                                           " \"url\": \"REGISTRY_URL\",\n"
-                                           " \"username\": \"REGISTRY_USERNAME\",\n"
-                                           " \"password\": \"REGISTRY_PASSWORD\"\n"
-                                           "}\n")
+            registry_creds = registry_json.get('registry_credentials')
+            if not registry_creds:
+                if isinstance(registry_json, dict) and all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in registry_json.items()
+                ):
+                    registry_creds = [registry_json]  # type: ignore[list-item]
+                    registry_json = {'registry_credentials': registry_creds}
+                else:
+                    return -errno.EINVAL, "", "Invalid login credentials json file"
+            for d in registry_creds:
+                if "url" not in d or "username" not in d or "password" not in d:
+                    return -errno.EINVAL, "", ("json provided for custom registry login did not include all necessary fields. "
+                                               "Please setup json file as\n"
+                                               "{\n"
+                                               " \"url\": \"REGISTRY_URL\",\n"
+                                               " \"username\": \"REGISTRY_USERNAME\",\n"
+                                               " \"password\": \"REGISTRY_PASSWORD\"\n"
+                                               "}\n")
 
         # verify login info works by attempting login on random host
         host = None
@@ -1747,6 +1800,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 'nvmeof': self.container_image_nvmeof,
                 'prometheus': self.container_image_prometheus,
                 'promtail': self.container_image_promtail,
+                'alloy': self.container_image_alloy,
                 'snmp-gateway': self.container_image_snmp_gateway,
                 'mgmt-gateway': self.container_image_nginx,
                 'oauth2-proxy': self.container_image_oauth2_proxy,
@@ -3756,6 +3810,7 @@ Then run the following:
                 'ceph-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
                 'promtail': PlacementSpec(host_pattern='*'),
+                'alloy': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
                 'snmp-gateway': PlacementSpec(count=1),
@@ -3899,6 +3954,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_promtail(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_alloy(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

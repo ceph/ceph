@@ -163,6 +163,7 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 // if cannot do all elements of op, do as much as possible (e.g.,
 // delete object where head object is missing)
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
+static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
@@ -262,9 +263,6 @@ struct TopicList {
   /// The next marker to resume listing, or empty
   std::string next_marker;
 };
-
-/** A list of key-value attributes */
-  using Attrs = std::map<std::string, ceph::buffer::list>;
 
 /**
  * @brief Base singleton representing a Store or Filter
@@ -935,7 +933,10 @@ class Bucket {
                                     uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
     /** Get the owner of this bucket */

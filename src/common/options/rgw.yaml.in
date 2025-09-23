@@ -3932,8 +3932,11 @@ options:
   long_desc: For example, to configure synchronized I/O, fcntl-linux.h defines (converted from octal)
     O_SYNC = 1052672
     O_DSYNC = 4096
+    O_DIRECT = 16384
+    O_SYNC | O_DIRECT = 1118208
+    O_DSYNC | O_DIRECT = 65552
     (0 for no modification of the flags)
-  default: 1052672
+  default: 4096
   services:
   - rgw
   with_legacy: true
@@ -4551,3 +4554,14 @@ options:
   services:
   - rgw
   with_legacy: true
+
+- name: rgw_bucket_persistent_notif_num_shards
+  type: uint
+  level: advanced
+  desc: Number of shards for a persistent topic.
+  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
+    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
+  default: 11
+  services: 
+    - rgw
+

@@ -192,19 +192,27 @@ void ExtentPlacementManager::init(
     AsyncCleanerRef &&cleaner,
     AsyncCleanerRef &&cold_cleaner)
 {
+  LOG_PREFIX(ExtentPlacementManager::init);
   writer_refs.clear();
   auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
   dynamic_max_rewrite_generation = hot_tier_generations - 1;
   if (cold_segment_cleaner) {
     dynamic_max_rewrite_generation = hot_tier_generations + cold_tier_generations - 1;
   }
+  DEBUG("dynamic_max_rewrite_generation: {}, "
+        "hot_tier_generations{} , cold_tier_generations {}",
+        dynamic_max_rewrite_generation, hot_tier_generations,
+        cold_tier_generations);
   ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
+    DEBUG("initiating SegmentCleaner");
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
+    DEBUG("num_writers {}", num_writers);
 
+    // DATA
     data_writers_by_gen.resize(num_writers, nullptr);
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
@@ -213,6 +221,7 @@ void ExtentPlacementManager::init(
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
+    // METADATA
     md_writers_by_gen.resize(num_writers, {});
     for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
@@ -226,10 +235,12 @@ void ExtentPlacementManager::init(
       add_device(device);
     }
   } else {
+    DEBUG("initiating RBMCleaner cleaner");
     assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
+    DEBUG("num_writers {}", num_writers);
     data_writers_by_gen.resize(num_writers, nullptr);
     md_writers_by_gen.resize(num_writers, {});
     writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
@@ -243,6 +254,7 @@ void ExtentPlacementManager::init(
   }
 
   if (cold_segment_cleaner) {
+    // Cold DATA Segments
     for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::DATA, gen, *cold_segment_cleaner,
@@ -250,6 +262,7 @@ void ExtentPlacementManager::init(
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
     for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+      // Cold METADATA Segments
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::METADATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
@@ -741,26 +754,18 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::run()
 {
   assert(is_running());
-  return seastar::repeat([this] {
-    if (!is_running()) {
-      log_state("run(exit)");
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
+  while (is_running()) {
+    if (background_should_run()) {
+      log_state("run(background)");
+      co_await do_background_cycle();
+    } else {
+      log_state("run(block)");
+      assert(!blocking_background);
+      blocking_background = seastar::promise<>();
+      co_await blocking_background->get_future();
     }
-    return seastar::futurize_invoke([this] {
-      if (background_should_run()) {
-        log_state("run(background)");
-        return do_background_cycle();
-      } else {
-        log_state("run(block)");
-        ceph_assert(!blocking_background);
-        blocking_background = seastar::promise<>();
-        return blocking_background->get_future();
-      }
-    }).then([] {
-      return seastar::stop_iteration::no;
-    });
-  });
+  }
+  log_state("run(exit)");
 }
 
 /**
@@ -1068,7 +1073,7 @@ RandomBlockOolWriter::do_write(
 
     // TODO : allocate a consecutive address based on a transaction
     if (writes.size() != 0 &&
-        writes.back().offset + writes.back().bp.length() == paddr) {
+	writes.back().offset + writes.back().get_mergeable_length() == paddr) {
       // We can write both the currrent extent and the previous one at once
       // if the extents are located in a row
       if (writes.back().mergeable_bps.size() == 0) {

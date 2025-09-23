@@ -438,6 +438,23 @@ Can also use a JSON file containing the login info formatted as::
        "password":"REGISTRY_PASSWORD"
       }
 
+For multiple registry logins, refer to the format below::
+
+    {
+      "registry_credentials": [
+        {
+          "url": "REGISTRY_URL1",
+          "username": "REGISTRY_USERNAME1",
+          "password": "REGISTRY_PASSWORD1"
+        },
+        {
+          "url": "REGISTRY_URL2",
+          "username": "REGISTRY_USERNAME2",
+          "password": "REGISTRY_PASSWORD2"
+        }
+      ]
+    }
+
 and turn it in with command::
 
       cephadm registry-login --registry-json [JSON FILE]

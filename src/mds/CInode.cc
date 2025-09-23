@@ -4228,7 +4228,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(8, 1, bl);
+    ENCODE_START(9, 1, bl);
     encode(std::tuple{
       oi->ino,
       snapid,
@@ -4281,6 +4281,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(file_i->fscrypt_auth, bl);
     encode(file_i->fscrypt_file, bl);
     encode_nohead(optmdbl, bl);
+    encode(get_subvolume_id(), bl);
     // encode inodestat
     ENCODE_FINISH(bl);
   }
@@ -5506,6 +5507,11 @@ int64_t CInode::get_backtrace_pool() const
     ceph_assert(get_inode()->layout.pool_id != -1);
     return get_inode()->layout.pool_id;
   }
+}
+
+inodeno_t CInode::get_subvolume_id() const {
+  auto snapr = find_snaprealm();
+  return snapr ? snapr->get_subvolume_ino() : inodeno_t(0);
 }
 
 void CInode::queue_export_pin(mds_rank_t export_pin)

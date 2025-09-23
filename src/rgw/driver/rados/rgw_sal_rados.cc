@@ -709,8 +709,10 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, o
                                              y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
+int RadosBucket::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y) {
   // unlink from the owner, but don't update the entrypoint until link()
   int r = this->unlink(dpp, info.owner, y, false);
   if (r < 0) {
@@ -730,13 +732,26 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner
     try {
       auto p = i->second.cbegin();
 
-      RGWAccessControlPolicy acl;
-      decode(acl, p);
+      RGWAccessControlPolicy policy;
+      decode(policy, p);
+      //Get the ACL from the policy
+      RGWAccessControlList& acl = policy.get_acl();
+      ACLOwner& owner = policy.get_owner();
 
-      acl.get_owner().id = new_owner;
+      //Remove grant that is set to old owner
+      acl.remove_canon_user_grant(owner.id);
+
+      //Create a grant and add grant
+      ACLGrant grant;
+      grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
+      acl.add_grant(grant);
+
+      //Update the ACL owner to the new user
+      owner.id = new_owner;
+      owner.display_name = new_owner_name;
 
       bufferlist bl;
-      encode(acl, bl);
+      encode(policy, bl);
 
       i->second = std::move(bl);
     } catch (const buffer::error&) {
@@ -3603,7 +3618,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
   }
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
   if (ret < 0) {
     return ret;
   }
@@ -3634,7 +3649,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   // convert flags to bool params
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
 } // RadosObject::delete_object
 
 int RadosObject::copy_object(const ACLOwner& owner,

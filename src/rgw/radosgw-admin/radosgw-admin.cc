@@ -156,7 +156,7 @@ void usage()
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  dedup stats                      Display dedup statistics from the last run\n";
   cout << "  dedup estimate                   Runs dedup in estimate mode (no changes will be made)\n";
-  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate\n";
   cout << "  dedup abort                      Abort dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
@@ -5902,6 +5902,7 @@ int main(int argc, const char **argv)
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        zonegroup.api_name = zonegroup_new_name;
         ret = writer->rename(dpp(), null_yield, zonegroup, zonegroup_new_name);
 	if (ret < 0) {
 	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -7523,6 +7524,10 @@ int main(int argc, const char **argv)
         }
       }
       bucket_op.marker = marker;
+      if (max_entries_specified)
+        bucket_op.max_entries = max_entries;
+      else
+        bucket_op.max_entries = 0; /* for backward compatibility */
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
@@ -7640,6 +7645,10 @@ int main(int argc, const char **argv)
       bucket_op.set_bucket_name(bucket.name);
     }
     bucket_op.set_fetch_stats(true);
+    if (max_entries_specified)
+      bucket_op.max_entries = max_entries;
+    else
+      bucket_op.max_entries = 0; /* for backward compatibility */
 
     int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
@@ -9217,6 +9226,12 @@ next:
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
       }
       else {
+	if (!yes_i_really_mean_it) {
+	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
+	       << "do you really mean it? (requires --yes-i-really-mean-it)"
+	       << std::endl;
+	  return EINVAL;
+	}
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
 #ifndef FULL_DEDUP_SUPPORT
 	std::cerr << "Only dedup estimate is supported!" << std::endl;
@@ -9490,7 +9505,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+    check_bad_owner_bucket_mapping(driver, user->get_id(),
+                                   user->get_display_name(), user->get_tenant(),
                                    fix, null_yield, dpp());
   }
 
@@ -9739,8 +9755,8 @@ next:
         std::string err_msg;
         int ret = rgw::account::list_users(
             dpp(), driver, op_state, path_prefix, marker,
-            max_entries_specified, max_entries, err_msg,
-            stream_flusher, null_yield);
+            max_entries_specified, max_entries, account_root,
+            err_msg, stream_flusher, null_yield);
         if (ret < 0)  {
           cerr << "ERROR: " << err_msg << std::endl;
           return -ret;
@@ -11915,9 +11931,9 @@ next:
     rgw::notify::rgw_topic_stats stats;
     ret = rgw::notify::get_persistent_queue_stats(
         dpp(), ioctx,
-        topic.dest.persistent_queue, stats, null_yield);
+        topic.dest.get_shard_names(), stats, null_yield);
     if (ret < 0) {
-      cerr << "ERROR: could not get persistent queue: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: could not get persistent queues: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     encode_json("", stats, formatter.get());
@@ -11949,37 +11965,41 @@ next:
     std::string end_marker;
     librados::ObjectReadOperation rop;
     std::vector<cls_queue_entry> queue_entries;
-    bool truncated = true;
+    bool truncated;
     formatter->open_array_section("eventEntries");
-    while (truncated) {
-      bufferlist bl;
-      int rc;
-      cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
-      ioctx.operate(topic.dest.persistent_queue, &rop, nullptr);
-      if (rc < 0 ) {
-        cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
-      rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
-      if (rc < 0) {
-        cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
 
-      std::for_each(queue_entries.cbegin(), 
-        queue_entries.cend(), 
-        [&formatter](const auto& queue_entry) {
-          rgw::notify::event_entry_t event_entry;
-          bufferlist::const_iterator iter{&queue_entry.data};
-          try {
-            event_entry.decode(iter);
-            encode_json("", event_entry, formatter.get());
-          } catch (const buffer::error& e) {
-            cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
-          }
-        });
-      formatter->flush(cout);
-      marker = end_marker;
+    for (const auto& shard_name: topic.dest.get_shard_names()){
+      truncated = true; 
+      marker.clear();
+      while (truncated) {
+        bufferlist bl;
+        int rc;
+        cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
+        ioctx.operate(shard_name, &rop, nullptr);
+        if (rc < 0 ) {
+          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
+        if (rc < 0) {
+          cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        std::for_each(queue_entries.cbegin(), 
+          queue_entries.cend(), 
+          [&formatter](const auto& queue_entry) {
+            rgw::notify::event_entry_t event_entry;
+            bufferlist::const_iterator iter{&queue_entry.data};
+            try {
+              event_entry.decode(iter);
+              encode_json("", event_entry, formatter.get());
+            } catch (const buffer::error& e) {
+              cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
+            }
+          });
+        formatter->flush(cout);
+        marker = end_marker;
+      }
     }
     formatter->close_section();
     formatter->flush(cout);

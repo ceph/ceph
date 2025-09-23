@@ -143,7 +143,7 @@ class TestCephadmService:
 
         # services based on CephadmService shouldn't have get_auth_entity
         with pytest.raises(AttributeError):
-            for daemon_type in ['grafana', 'alertmanager', 'prometheus', 'node-exporter', 'loki', 'promtail']:
+            for daemon_type in ['grafana', 'alertmanager', 'prometheus', 'node-exporter', 'loki', 'promtail', 'alloy']:
                 service_registry.get_service(daemon_type).get_auth_entity("id1", "host")
                 service_registry.get_service(daemon_type).get_auth_entity("id1", "")
                 service_registry.get_service(daemon_type).get_auth_entity("id1")

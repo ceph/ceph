@@ -140,43 +140,98 @@ See also :ref:`multisite`.
 Setting up HTTPS
 ----------------
 
-In order to enable HTTPS for RGW services, apply a spec file following this scheme:
+RGW services, like other cephadm-managed services, support three ways of configuring
+HTTPS certificates, all managed through the cephadm Certificate Manager (certmgr):
+
+- **cephadm-signed (default):**
+  If ``ssl`` is set to true but no certificate is specified, cephadm generates and
+  signs a certificate for the RGW service automatically.
+
+- **inline:**
+  Users can set the ``certificate_source`` to ``inline`` in the spec and
+  embed the certificate and private key directly in the spec using
+  the ``ssl_cert`` and ``ssl_key`` fields.
+
+- **reference:**
+  Users can register their own certificate and key with certmgr and
+  set the ``certificate_source`` to ``reference`` in the spec.
+
+**Option 1: Inline certificate and key**
 
 .. code-block:: yaml
 
   service_type: rgw
   service_id: myrgw
   spec:
-    rgw_frontend_ssl_certificate: | 
-      -----BEGIN PRIVATE KEY-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END PRIVATE KEY-----
-      -----BEGIN CERTIFICATE-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END CERTIFICATE-----
     ssl: true
+    certificate_source: inline
+    ssl_cert: |
+      -----BEGIN CERTIFICATE-----
+      (PEM cert contents here)
+      -----END CERTIFICATE-----
+    ssl_key: |
+      -----BEGIN PRIVATE KEY-----
+      (PEM key contents here)
+      -----END PRIVATE KEY-----
 
-Then apply this yaml document:
+Apply the spec:
 
 .. prompt:: bash #
 
   ceph orch apply -i myrgw.yaml
 
-Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
-indicated by a ``|`` character preserving newline characters.
+.. note::
+
+   The older ``rgw_frontend_ssl_certificate`` field is still supported
+   for backward compatibility, but it is deprecated.
+   New deployments should use ``ssl_cert`` / ``ssl_key`` instead.
+
+**Option 2: Reference to a registered certificate/key**
+
+First, register the certificate and key with certmgr:
+
+.. prompt:: bash #
+
+  ceph orch certmgr cert set --cert-name rgw_ssl_cert --service-name rgw.<service_id> -i $PWD/server_cert.pem
+  ceph orch certmgr key set --key-name rgw_ssl_key  --service-name rgw.<service_id> -i $PWD/server_key
+
+Then use ``reference`` source in the RGW spec:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: reference
+
+Apply the spec:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+**Option 3: cephadm-signed (default)**
+
+If ``ssl: true`` is set but no certificate is provided, cephadm
+will automatically generate and sign a certificate for the RGW service.
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: cephadm-signed
+
+This will deploy RGW with a cephadm-signed certificate.
 
 Setting up HTTPS with Wildcard SANs
 -----------------------------------
 
-To enable HTTPS for RGW services, apply a spec file following this scheme:
+When using cephadm-signed certificates, wildcard Subject Alternative
+Names (SANs) can be optionally included in the generated certificates.
+For RGW services, this can be enabled by applying a spec file such as:
 
 .. code-block:: yaml
 
@@ -187,7 +242,7 @@ To enable HTTPS for RGW services, apply a spec file following this scheme:
     count_per_host: 1
   spec:
     ssl: true
-    generate_cert: true  
+    certificate_source: cephadm-signed
     rgw_frontend_port: 8080
     wildcard_enabled: true  # Enables wildcard SANs in the certificate
     zonegroup_hostnames:

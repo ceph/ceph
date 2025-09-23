@@ -32,7 +32,7 @@ void LogEntryKey::dump(Formatter *f) const
 list<LogEntryKey> LogEntryKey::generate_test_instances()
 {
   list<LogEntryKey> o;
-  o.push_back(LogEntryKey{});
+  o.emplace_back();
   o.push_back(LogEntryKey(entity_name_t::CLIENT(1234), utime_t(1,2), 34));
   return o;
 }
@@ -274,7 +274,7 @@ void LogEntry::dump(Formatter *f) const
 list<LogEntry> LogEntry::generate_test_instances()
 {
   list<LogEntry> o;
-  o.push_back(LogEntry{});
+  o.emplace_back();
   return o;
 }
 
@@ -359,7 +359,7 @@ void LogSummary::dump(Formatter *f) const
 list<LogSummary> LogSummary::generate_test_instances()
 {
   list<LogSummary> o;
-  o.push_back(LogSummary{});
+  o.emplace_back();
   // more!
   return o;
 }

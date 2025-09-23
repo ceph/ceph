@@ -232,9 +232,16 @@ WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
   std::string op_tag;
+  // this represents a remote epoch during multisite sync
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
+  // cls ops include olh_tag so the OLH class code can guard sensitive updates—only proceed if op.olh_tag equals
+  // the OLH’s stored tag. If it doesn’t, the op fails and the caller refreshes state/retries.
+  // for context: in real clusters, out‑of‑order replication or topology changes can recreate/move an OLH
+  // (eg, resharding or certain multisite flows). The tag changes with that new OLH “generation,” so stale
+  // writers carrying the old tag get refused instead of overwriting the new state. A concrete example of failures
+  // tied to OLH attributes shows how wrong attributes/tags cause bad GET behavior, which is why the guard exists.
   std::string olh_tag;
   rgw_zone_set zones_trace;
 
@@ -536,7 +543,7 @@ struct rgw_cls_obj_remove_op {
 
   static std::list<rgw_cls_obj_remove_op> generate_test_instances() {
     std::list<rgw_cls_obj_remove_op> o;
-    o.push_back(rgw_cls_obj_remove_op{});
+    o.emplace_back();
     o.back().keep_attr_prefixes.push_back("keep_attr_prefixes1");
     o.back().keep_attr_prefixes.push_back("keep_attr_prefixes2");
     o.back().keep_attr_prefixes.push_back("keep_attr_prefixes3");
@@ -566,7 +573,7 @@ struct rgw_cls_obj_store_pg_ver_op {
 
   static std::list<rgw_cls_obj_store_pg_ver_op> generate_test_instances() {
     std::list<rgw_cls_obj_store_pg_ver_op> o;
-    o.push_back(rgw_cls_obj_store_pg_ver_op{});
+    o.emplace_back();
     o.back().attr = "attr";
     return o;
   }
@@ -600,7 +607,7 @@ struct rgw_cls_obj_check_attrs_prefix {
 
   static std::list<rgw_cls_obj_check_attrs_prefix> generate_test_instances() {
     std::list<rgw_cls_obj_check_attrs_prefix> o;
-    o.push_back(rgw_cls_obj_check_attrs_prefix{});
+    o.emplace_back();
     o.back().check_prefix = "prefix";
     o.back().fail_if_exist = true;
     return o;
@@ -666,7 +673,7 @@ struct rgw_cls_usage_log_add_op {
 
   static std::list<rgw_cls_usage_log_add_op> generate_test_instances() {
     std::list<rgw_cls_usage_log_add_op> o;
-    o.push_back(rgw_cls_usage_log_add_op{});
+    o.emplace_back();
     return o;
   }
 };
@@ -701,8 +708,8 @@ struct rgw_cls_bi_get_op {
 
   static std::list<rgw_cls_bi_get_op> generate_test_instances() {
     std::list<rgw_cls_bi_get_op> o;
-    o.push_back(rgw_cls_bi_get_op{});
-    o.push_back(rgw_cls_bi_get_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().key.name = "key";
     o.back().key.instance = "instance";
     o.back().type = BIIndexType::Plain;
@@ -734,7 +741,7 @@ struct rgw_cls_bi_get_ret {
 
   static std::list<rgw_cls_bi_get_ret> generate_test_instances() {
     std::list<rgw_cls_bi_get_ret> o;
-    o.push_back(rgw_cls_bi_get_ret{});
+    o.emplace_back();
     o.back().entry.idx = "entry";
     return o;
   }
@@ -764,8 +771,8 @@ struct rgw_cls_bi_put_op {
 
   static std::list<rgw_cls_bi_put_op> generate_test_instances() {
     std::list<rgw_cls_bi_put_op> o;
-    o.push_back(rgw_cls_bi_put_op{});
-    o.push_back(rgw_cls_bi_put_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().entry.idx = "entry";
     return o;
   }
@@ -794,8 +801,8 @@ struct rgw_cls_bi_put_entries_op {
 
   static std::list<rgw_cls_bi_put_entries_op> generate_test_instances() {
     std::list<rgw_cls_bi_put_entries_op> o;
-    o.push_back(rgw_cls_bi_put_entries_op{});
-    o.push_back(rgw_cls_bi_put_entries_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().entries.push_back({.idx = "entry"});
     o.back().check_existing = true;
     return o;
@@ -840,8 +847,8 @@ struct rgw_cls_bi_list_op {
 
   static std::list<rgw_cls_bi_list_op> generate_test_instances() {
     std::list<rgw_cls_bi_list_op> o;
-    o.push_back(rgw_cls_bi_list_op{});
-    o.push_back(rgw_cls_bi_list_op{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().max = 100;
     o.back().name_filter = "name_filter";
     o.back().marker = "marker";
@@ -878,8 +885,8 @@ struct rgw_cls_bi_list_ret {
 
   static std::list<rgw_cls_bi_list_ret> generate_test_instances() {
     std::list<rgw_cls_bi_list_ret> o;
-    o.push_back(rgw_cls_bi_list_ret{});
-    o.push_back(rgw_cls_bi_list_ret{});
+    o.emplace_back();
+    o.emplace_back();
     o.back().entries.push_back(rgw_cls_bi_entry());
     o.back().entries.push_back(rgw_cls_bi_entry());
     o.back().entries.back().idx = "entry";
@@ -933,7 +940,7 @@ struct rgw_cls_usage_log_read_op {
 
   static std::list<rgw_cls_usage_log_read_op> generate_test_instances() {
     std::list<rgw_cls_usage_log_read_op> o;
-    o.push_back(rgw_cls_usage_log_read_op{});
+    o.emplace_back();
     o.back().start_epoch = 1;
     o.back().end_epoch = 2;
     o.back().owner = "owner";
@@ -974,11 +981,11 @@ struct rgw_cls_usage_log_read_ret {
 
   static std::list<rgw_cls_usage_log_read_ret> generate_test_instances() {
     std::list<rgw_cls_usage_log_read_ret> o;
-    o.push_back(rgw_cls_usage_log_read_ret{});
+    o.emplace_back();
     o.back().next_iter = "123";
     o.back().truncated = true;
     o.back().usage.clear();
-    o.push_back(rgw_cls_usage_log_read_ret{});
+    o.emplace_back();
     o.back().usage[rgw_user_bucket("user1", "bucket1")] = rgw_usage_log_entry();
     o.back().usage[rgw_user_bucket("user2", "bucket2")] = rgw_usage_log_entry();
     o.back().truncated = true;
@@ -1400,8 +1407,8 @@ struct cls_rgw_lc_set_entry_op {
 
   static std::list<cls_rgw_lc_set_entry_op> generate_test_instances() {
     std::list<cls_rgw_lc_set_entry_op> ls;
-    ls.push_back(cls_rgw_lc_set_entry_op{});
-    ls.push_back(cls_rgw_lc_set_entry_op{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().entry.bucket = "foo";
     ls.back().entry.start_time = 123;
     ls.back().entry.status = 456;

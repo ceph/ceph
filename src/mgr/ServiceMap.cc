@@ -61,8 +61,8 @@ void ServiceMap::Daemon::dump(Formatter *f) const
 auto ServiceMap::Daemon::generate_test_instances() -> std::list<Daemon>
 {
   std::list<Daemon> ls;
-  ls.push_back(Daemon{});
-  ls.push_back(Daemon{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().gid = 222;
   ls.back().metadata["this"] = "that";
   ls.back().task_status["task1"] = "running";
@@ -199,8 +199,8 @@ void ServiceMap::Service::dump(Formatter *f) const
 auto ServiceMap::Service::generate_test_instances() -> std::list<Service>
 {
   std::list<Service> ls;
-  ls.push_back(Service{});
-  ls.push_back(Service{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().daemons["one"].gid = 1;
   ls.back().daemons["two"].gid = 2;
   return ls;
@@ -240,8 +240,8 @@ void ServiceMap::dump(Formatter *f) const
 std::list<ServiceMap> ServiceMap::generate_test_instances()
 {
   std::list<ServiceMap> ls;
-  ls.push_back(ServiceMap{});
-  ls.push_back(ServiceMap{});
+  ls.emplace_back();
+  ls.emplace_back();
   ls.back().epoch = 123;
   ls.back().services["rgw"].daemons["one"].gid = 123;
   ls.back().services["rgw"].daemons["two"].gid = 344;

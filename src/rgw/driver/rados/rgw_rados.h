@@ -906,7 +906,9 @@ public:
       int delete_obj(optional_yield y,
 		     const DoutPrefixProvider* dpp,
 		     bool log_op,
-		     const bool force); // if head object missing, do a best effort
+		     const bool force, // if head object missing, do a best effort
+		     const bool skip_olh_obj_update // true for all deletes (except the last one) initiated by a multi-object delete op
+        );
     }; // struct RGWRados::Object::Delete
 
     struct Stat {
@@ -1328,7 +1330,8 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 		 const ceph::real_time& expiration_time = ceph::real_time(),
 		 rgw_zone_set *zones_trace = nullptr,
                  bool log_op = true,
-                 const bool force = false); // if head object missing, do a best effort
+                 const bool force = false, // if head object missing, do a best effort
+                 const bool skip_olh_obj_update = false); // true for all deletes (except the last one) initiated by a multi-object delete op
 
   int delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y);
 
@@ -1475,7 +1478,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                           uint64_t olh_epoch, optional_yield y,
 			  uint16_t bilog_flags, bool null_verid,
 			  rgw_zone_set *zones_trace = nullptr,
-			  bool log_op = true, const bool force = false);
+			  bool log_op = true, const bool force = false, const bool skip_olh_obj_update = false);
 
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);

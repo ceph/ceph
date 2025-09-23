@@ -87,8 +87,8 @@ public:
   static std::list<PerfCounterType> generate_test_instances()
   {
     std::list<PerfCounterType> ls;
-    ls.push_back(PerfCounterType{});
-    ls.push_back(PerfCounterType{});
+    ls.emplace_back();
+    ls.emplace_back();
     ls.back().path = "mycounter";
     ls.back().description = "mycounter description";
     ls.back().nick = "mycounter nick";

@@ -138,6 +138,7 @@ from cephadmlib.logging import (
 )
 from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
+from cephadmlib.signals import send_signal_to_container_entrypoint
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
@@ -655,6 +656,9 @@ def create_daemon_dirs(
         elif daemon_type == 'promtail':
             data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/promtail'
+        elif daemon_type == 'alloy':
+            data_dir_root = ident.data_dir(ctx.data_dir)
+            config_dir = 'etc/alloy'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'loki':
@@ -2250,7 +2254,7 @@ def prepare_ssh(
                              'Perhaps the ceph version being bootstrapped does not support it')
 
     if ctx.with_centralized_logging:
-        for t in ['loki', 'promtail']:
+        for t in ['loki', 'alloy']:
             logger.info('Deploying %s service with default placement...' % t)
             try:
                 cli(['orch', 'apply', t])
@@ -2860,19 +2864,45 @@ def command_registry_login(ctx: CephadmContext) -> int:
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
-        if d.get('url') and d.get('username') and d.get('password'):
-            ctx.registry_url = d.get('url')
-            ctx.registry_username = d.get('username')
-            ctx.registry_password = d.get('password')
-            registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
-        else:
-            raise Error('json provided for custom registry login did not include all necessary fields. '
-                        'Please setup json file as\n'
-                        '{\n'
-                        ' "url": "REGISTRY_URL",\n'
-                        ' "username": "REGISTRY_USERNAME",\n'
-                        ' "password": "REGISTRY_PASSWORD"\n'
-                        '}\n')
+        # to support multiple container registries, the command will now accept a list
+        # of dictionaries. For backward compatibility, it will first check for the presence
+        # of the registry_credentials key. If the key is not found, it will fall back to
+        # parsing the old JSON format.
+        example_multi_registry = {
+            'registry_credentials': [
+                {
+                    'url': 'REGISTRY_URL1',
+                    'username': 'REGISTRY_USERNAME1',
+                    'password': 'REGISTRY_PASSWORD1'
+                },
+                {
+                    'url': 'REGISTRY_URL2',
+                    'username': 'REGISTRY_USERNAME2',
+                    'password': 'REGISTRY_PASSWORD2'
+                }
+            ]
+        }
+        registry_creds = d.get('registry_credentials')
+        if not registry_creds:
+            registry_creds = [d]
+        for d in registry_creds:
+            if d.get('url') and d.get('username') and d.get('password'):
+                ctx.registry_url = d.get('url')
+                ctx.registry_username = d.get('username')
+                ctx.registry_password = d.get('password')
+                registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
+            else:
+                raise Error(
+                    'json provided for custom registry login did not include all necessary fields. '
+                    'Please setup json file as\n'
+                    '{\n'
+                    ' "url": "REGISTRY_URL",\n'
+                    ' "username": "REGISTRY_USERNAME",\n'
+                    ' "password": "REGISTRY_PASSWORD"\n'
+                    '}\n'
+                    'or as below for multiple registry login\n'
+                    f'{json.dumps(example_multi_registry, indent=4)}'
+                )
     elif ctx.registry_url and ctx.registry_username and ctx.registry_password:
         registry_login(ctx, ctx.registry_url, ctx.registry_username, ctx.registry_password)
     else:
@@ -3252,6 +3282,17 @@ def command_unit(ctx: CephadmContext) -> int:
         desc='',
     )
     return code
+
+
+@infer_fsid
+def command_signal(ctx: CephadmContext) -> int:
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    container_name = DaemonIdentity.from_name(ctx.fsid, ctx.name).container_name
+
+    return send_signal_to_container_entrypoint(ctx, container_name, ctx.signal_name or ctx.signal_number)
+
 
 ##################################
 
@@ -4848,6 +4889,24 @@ def _get_parser():
         help='cluster FSID')
     _name_opts(parser_unit_install)
 
+    parser_signal = subparsers.add_parser(
+        'signal', help='Send signal to entrypoint of containerized daemon')
+    parser_signal.set_defaults(func=command_signal)
+    signal_group = parser_signal.add_mutually_exclusive_group(required=True)
+    signal_group.add_argument(
+        '--signal-number',
+        help='Signal number to send',)
+    signal_group.add_argument(
+        '--signal-name',
+        help='Signal to send')
+    parser_signal.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_signal.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
+
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
     parser_logs.set_defaults(func=command_logs)
@@ -5009,7 +5068,7 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--with-centralized-logging',
         action='store_true',
-        help='Automatically provision centralized logging (promtail, loki)')
+        help='Automatically provision centralized logging (alloy, loki)')
     parser_bootstrap.add_argument(
         '--apply-spec',
         help='Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)')

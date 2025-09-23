@@ -330,8 +330,8 @@ void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
 auto SnapMapper::object_snaps::generate_test_instances() -> std::list<object_snaps>
 {
   std::list<object_snaps> o;
-  o.push_back(object_snaps{});
-  o.push_back(object_snaps{});
+  o.emplace_back();
+  o.emplace_back();
   o.back().oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
   o.back().snaps.insert(1);
   o.back().snaps.insert(2);

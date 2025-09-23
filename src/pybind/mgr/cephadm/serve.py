@@ -802,6 +802,14 @@ class CephadmServe:
                         )
                         found = True
                         break
+                if not found and ingress_spec.virtual_interface_networks:
+                    for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                        if subnet in ingress_spec.virtual_interface_networks:
+                            logger.debug(
+                                f'{subnet} found in virtual_interface_networks list {list(ingress_spec.virtual_interface_networks)}'
+                            )
+                            found = True
+                            break
                 if not found:
                     self.log.info(
                         f"Filtered out host {host}: Host has no interface available for VIP: {vip}"
@@ -1823,15 +1831,15 @@ class CephadmServe:
         return r
 
     # function responsible for logging single host into custom registry
-    async def _registry_login(self, host: str, registry_json: Dict[str, str]) -> Optional[str]:
+    async def _registry_login(self, host: str, registry_json: Dict[str, list[Dict[str, str]]]) -> Optional[str]:
         self.log.debug(
-            f"Attempting to log host {host} into custom registry @ {registry_json['url']}")
+            f"Attempting to log host {host} into custom registries")
         # want to pass info over stdin rather than through normal list of args
         out, err, code = await self._run_cephadm(
             host, 'mon', 'registry-login',
             ['--registry-json', '-'], stdin=json.dumps(registry_json), error_ok=True)
         if code:
-            return f"Host {host} failed to login to {registry_json['url']} as {registry_json['username']} with given password"
+            return f"Host {host} failed to login to all registries"
         return None
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:

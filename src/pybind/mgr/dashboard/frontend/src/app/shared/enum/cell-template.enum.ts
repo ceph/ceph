@@ -79,5 +79,18 @@ export enum CellTemplate {
   //   ...
   //   cellTransformation: CellTemplate.copy,
   */
-  copy = 'copy'
+  copy = 'copy',
+  /*
+  This template will let you edit the cell value inline. You can pass the validators in the
+  customTemplateConfig.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.editing,
+  //    customTemplateConfig: {
+  //       validators: [Validators.required]
+  //    }
+  //    ...
+  // }
+  */
+  editing = 'editing'
 }

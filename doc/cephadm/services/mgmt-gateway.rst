@@ -7,7 +7,7 @@ Management Gateway
 Deploying mgmt-gateway
 ======================
 
-In Ceph releases beginning with Squid, the ``mgmt-gateway`` service introduces a new design for Ceph applications
+In Ceph releases beginning with Tentacle, the ``mgmt-gateway`` service introduces a new design for Ceph applications
 based on a modular, service-based architecture. This service, managed by cephadm and built on top of nginx
 (an open-source, high-performance web server), acts as the new front-end and single entry point to the
 Ceph cluster. The ``mgmt-gateway`` provides unified access to all Ceph applications, including the Ceph dashboard
