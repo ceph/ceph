@@ -278,6 +278,18 @@ class Batch(object):
             help='Reuse existing OSD ids',
             type=arg_validators.valid_osd_id
         )
+        parser.add_argument(
+            '--dmcrypt-format-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksFormat options (use the same syntax as the cryptsetup CLI)",
+        )
+        parser.add_argument(
+            '--dmcrypt-open-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksOpen options (use the same syntax as the cryptsetup CLI)",
+        )
         self.args = parser.parse_args(argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
@@ -378,6 +390,8 @@ class Batch(object):
             'with_tpm',
             'crush_device_class',
             'no_systemd',
+            'dmcrypt_format_opts',
+            'dmcrypt_open_opts',
         ]
         defaults.update({arg: getattr(self.args, arg) for arg in global_args})
         for osd in plan:
