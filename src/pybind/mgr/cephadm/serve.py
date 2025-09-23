@@ -1156,7 +1156,11 @@ class CephadmServe:
                     # the daemon is written, which we rewrite on redeploy, but not
                     # on reconfig.
                     action = 'redeploy'
-
+                elif dd.daemon_type == 'nfs':
+                    # check what has changed, based on that decide action
+                    only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
+                    if not only_kmip_updated:
+                        action = 'redeploy'
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')

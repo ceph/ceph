@@ -1324,6 +1324,16 @@ class NFSServiceSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  idmap_conf: Optional[Dict[str, Dict[str, str]]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 ssl: bool = False,
+                 ssl_cert: Optional[str] = None,
+                 ssl_key: Optional[str] = None,
+                 ssl_ca_cert: Optional[str] = None,
+                 certificate_source: Optional[str] = None,
+                 custom_sans: Optional[List[str]] = None,
+                 tls_ktls: bool = False,
+                 tls_debug: bool = False,
+                 tls_min_version: Optional[str] = None,
+                 tls_ciphers: Optional[str] = None,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1331,7 +1341,8 @@ class NFSServiceSpec(ServiceSpec):
             placement=placement, unmanaged=unmanaged, preview_only=preview_only,
             config=config, networks=networks, extra_container_args=extra_container_args,
             extra_entrypoint_args=extra_entrypoint_args, custom_configs=custom_configs,
-            ip_addrs=ip_addrs)
+            ip_addrs=ip_addrs, ssl=ssl, ssl_cert=ssl_cert, ssl_key=ssl_key, ssl_ca_cert=ssl_ca_cert,
+            certificate_source=certificate_source, custom_sans=custom_sans)
 
         self.port = port
 
@@ -1348,6 +1359,12 @@ class NFSServiceSpec(ServiceSpec):
         self.idmap_conf = idmap_conf
         self.enable_nlm = enable_nlm
 
+        # TLS fields
+        self.tls_ciphers = tls_ciphers
+        self.tls_ktls = tls_ktls
+        self.tls_debug = tls_debug
+        self.tls_min_version = tls_min_version
+
     def get_port_start(self) -> List[int]:
         if self.port:
             return [self.port]
@@ -1363,6 +1380,21 @@ class NFSServiceSpec(ServiceSpec):
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
+
+        # TLS certificate validation
+        if self.ssl and not self.certificate_source:
+            raise SpecValidationError('If SSL is enabled, a certificate source must be provided.')
+        if self.certificate_source == CertificateSource.INLINE.value:
+            tls_field_names = [
+                'ssl_cert',
+                'ssl_key',
+                'ssl_ca_cert',
+            ]
+            tls_fields = [getattr(self, tls_field) for tls_field in tls_field_names]
+            if any(tls_fields) and not all(tls_fields):
+                raise SpecValidationError(
+                    f'Either none or all of {tls_field_names} attributes must be set'
+                )
 
 
 yaml.add_representer(NFSServiceSpec, ServiceSpec.yaml_representer)

@@ -4,7 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional
+from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
 
@@ -15,8 +15,10 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
-
+from cephadm import utils
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,27 @@ class NFSService(CephService):
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
 
+    @classmethod
+    def get_dependencies(
+        cls,
+        mgr: "CephadmOrchestrator",
+        spec: Optional[ServiceSpec] = None,
+        daemon_type: Optional[str] = None
+    ) -> List[str]:
+        assert spec
+        deps: List[str] = []
+        nfs_spec = cast(NFSServiceSpec, spec)
+        # add dependency of tls fields
+        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
+            deps.append(f'ssl_cert: {str(utils.md5_hash(spec.ssl_cert))}')
+            deps.append(f'ssl_key: {str(utils.md5_hash(spec.ssl_key))}')
+            deps.append(f'ssl_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
+        deps.append(f'tls_ktls: {nfs_spec.tls_ktls}')
+        deps.append(f'tls_debug: {nfs_spec.tls_debug}')
+        deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
+        deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        return sorted(deps)
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
@@ -79,12 +102,11 @@ class NFSService(CephService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
 
+        super().register_for_certificates(daemon_spec)
         daemon_type = daemon_spec.daemon_type
         daemon_id = daemon_spec.daemon_id
         host = daemon_spec.host
         spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-
-        deps: List[str] = []
 
         nodeid = f'{daemon_spec.rank}'
 
@@ -143,6 +165,11 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
+                "tls_add": spec.ssl,
+                "tls_ciphers": spec.tls_ciphers,
+                "tls_min_version": spec.tls_min_version,
+                "tls_ktls": spec.tls_ktls,
+                "tls_debug": spec.tls_debug,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -176,6 +203,13 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
+            if spec.ssl:
+                tls_creds = self.get_certificates(daemon_spec, ca_cert_required=True)
+                config['files'].update({
+                    'tls_cert.pem': tls_creds.cert,
+                    'tls_key.pem': tls_creds.key,
+                    'tls_ca_cert.pem': tls_creds.ca_cert,
+                })
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
@@ -191,7 +225,7 @@ class NFSService(CephService):
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
-        return get_cephadm_config(), deps
+        return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
 
     def create_rados_config_obj(self,
                                 spec: NFSServiceSpec,
