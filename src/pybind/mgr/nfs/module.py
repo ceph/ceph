@@ -134,14 +134,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 port: Optional[int] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
-        ssl_cert = ssl_key = ca_cert = tls_min_version = None
+        ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = None
         ssl = tls_ktls = tls_debug = False
         if inbuf:
             config = yaml.safe_load(inbuf)
             ssl = config.get('ssl')
             ssl_cert = config.get('ssl_cert')
             ssl_key = config.get('ssl_key')
-            ca_cert = config.get('ca_cert')
+            ssl_ca_cert = config.get('ssl_ca_cert')
             tls_min_version = config.get('tls_min_version')
             tls_ktls = config.get('tls_ktls')
             tls_debug = config.get('tls_debug')
@@ -152,7 +152,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
-                                           ca_cert=ca_cert,
+                                           ssl_ca_cert=ssl_ca_cert,
                                            tls_ktls=tls_ktls,
                                            tls_debug=tls_debug,
                                            tls_min_version=tls_min_version)

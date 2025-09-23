@@ -68,7 +68,7 @@ class NFSCluster:
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
-            ca_cert: Optional[str] = None,
+            ssl_ca_cert: Optional[str] = None,
             tls_ktls: bool = False,
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
@@ -109,7 +109,7 @@ class NFSCluster:
                                   ssl=ssl,
                                   ssl_cert=ssl_cert,
                                   ssl_key=ssl_key,
-                                  ca_cert=ca_cert,
+                                  ssl_ca_cert=ssl_ca_cert,
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version)
@@ -134,7 +134,7 @@ class NFSCluster:
                                   ssl=ssl,
                                   ssl_cert=ssl_cert,
                                   ssl_key=ssl_key,
-                                  ca_cert=ca_cert,
+                                  ssl_ca_cert=ssl_ca_cert,
                                   tls_ktls=tls_ktls,
                                   tls_debug=tls_debug,
                                   tls_min_version=tls_min_version)
@@ -164,7 +164,7 @@ class NFSCluster:
             ssl: bool = False,
             ssl_cert: Optional[str] = None,
             ssl_key: Optional[str] = None,
-            ca_cert: Optional[str] = None,
+            ssl_ca_cert: Optional[str] = None,
             tls_ktls: bool = False,
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
@@ -192,7 +192,7 @@ class NFSCluster:
 
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
-                                          ssl, ssl_cert, ssl_key, ca_cert, tls_ktls, tls_debug, tls_min_version)
+                                          ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug, tls_min_version)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:

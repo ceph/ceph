@@ -4,7 +4,7 @@ import logging
 import os
 import subprocess
 import tempfile
-from typing import Dict, Tuple, Any, List, cast, Optional
+from typing import Dict, Tuple, Any, List, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
 
@@ -17,6 +17,9 @@ from .service_registry import register_cephadm_service
 from cephadm import utils
 
 from orchestrator import DaemonDescription, OrchestratorError
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 from cephadm.services.cephadmservice import AuthEntity, CephadmDaemonDeploySpec, CephService
 
@@ -31,6 +34,10 @@ class NFSService(CephService):
     @property
     def needs_monitoring(self) -> bool:
         return True
+
+    @property
+    def ca_cert_name(self) -> str:
+        return f"{self.TYPE}_ca_cert"
 
     def ranked(self, spec: ServiceSpec) -> bool:
         return True
@@ -80,17 +87,19 @@ class NFSService(CephService):
         spec: Optional[ServiceSpec] = None,
         daemon_type: Optional[str] = None
     ) -> List[str]:
+        assert spec
         deps: List[str] = []
         # add dependency of tls fields
-        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ca_cert):
+        if (spec.ssl and spec.ssl_cert and spec.ssl_key and spec.ssl_ca_cert):
             deps.append(f'tls_enable: {spec.ssl}')
             deps.append(f'tls_cert: {str(utils.md5_hash(spec.ssl_cert))}')
             deps.append(f'tls_key: {str(utils.md5_hash(spec.ssl_key))}')
-            deps.append(f'tls_ca_cert: {str(utils.md5_hash(spec.ca_cert))}')
+            deps.append(f'tls_ca_cert: {str(utils.md5_hash(spec.ssl_ca_cert))}')
         return sorted(deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
+        super().register_for_certificates(daemon_spec)
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
         return daemon_spec
 
@@ -141,8 +150,6 @@ class NFSService(CephService):
         if monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
-        add_tls_block = (spec.tls_enable and spec.tls_cert and spec.tls_key and spec.tls_ca_cert)
-
         # generate the ganesha config
         def get_ganesha_conf() -> str:
             context: Dict[str, Any] = {
@@ -161,7 +168,11 @@ class NFSService(CephService):
                 "nfs_idmap_conf": nfs_idmap_conf,
                 "enable_nlm": str(spec.enable_nlm).lower(),
                 "cluster_id": self.mgr._cluster_fsid,
-                "tls_add": spec.tls_enable if add_tls_block else None,
+                "tls_add": spec.ssl,
+                "tls_ciphers": spec.tls_ciphers,
+                "tls_min_version": spec.tls_min_version,
+                "tls_ktls": spec.tls_ktls,
+                "tls_debug": spec.tls_debug
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
@@ -195,11 +206,12 @@ class NFSService(CephService):
                 'ganesha.conf': get_ganesha_conf(),
                 'idmap.conf': get_idmap_conf()
             }
-            if add_tls_block:
-                tls_pair = self.get_certificates(daemon_spec)
-                config['files']['tls_cert.pem'] = tls_pair.cert
-                config['files']['tls_key.pem'] = tls_pair.key
-                config['files']['tls_ca_cert.pem'] = spec.ca_cert
+            if spec.ssl:
+                # Use enhanced generic certificate function to handle CA cert
+                tls_pair_with_ca = self.get_certificates(daemon_spec)
+                config['files']['tls_cert.pem'] = tls_pair_with_ca.cert
+                config['files']['tls_key.pem'] = tls_pair_with_ca.key
+                config['files']['tls_ca_cert.pem'] = tls_pair_with_ca.ca_cert
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,

@@ -46,20 +46,20 @@ RGW {
         name = "client.{{ rgw_user }}";
 }
 
-{% if tls_enable %}
+{% if tls_add %}
 TLS_CONFIG{
-        Enable_TLS = {{ tls_conf.get('tls_enable') }};
+        Enable_TLS = {{ tls_add }};
         TLS_Cert_File = /etc/ganesha/tls/tls_cert.pem;
         TLS_Key_File = /etc/ganesha/tls/tls_key.pem;
         TLS_CA_File = /etc/ganesha/tls/tls_ca_cert.pem;
-	{% if tls_conf.get('tls_ciphers') %}
-        TLS_Ciphers = "{{  tls_conf.get('tls_ciphers') }}";
+	{% if tls_ciphers %}
+        TLS_Ciphers = "{{  tls_ciphers }}";
 	{% endif %}
-	{% if tls_conf.get('tls_min_version') %}
-        TLS_Min_Version = "{{ tls_conf.get('tls_min_version') }}";
+	{% if tls_min_version %}
+        TLS_Min_Version = "{{ tls_min_version }}";
 	{% endif %}
-        Enable_KTLS = {{ tls_config.get('tls_ktls') }};
-        Enable_debug = {{ tls_config.get('tls_debug') }};
+        Enable_KTLS = {{ tls_ktls }};
+        Enable_debug = {{ tls_debug }};
 }
 
 {% endif %}

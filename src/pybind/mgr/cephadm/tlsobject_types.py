@@ -36,6 +36,7 @@ class TLSObjectScope(str, Enum):
 class CertKeyPair(NamedTuple):
     cert: str
     key: str
+    ca_cert: Optional[str] = None
 
     def __bool__(self) -> bool:
         # Treat the pair as truthy only if both cert and key are non-empty
@@ -47,7 +48,7 @@ class TLSObjectTarget(NamedTuple):
     host: Optional[str]
 
 
-EMPTY_TLS_KEYPAIR = CertKeyPair('', '')
+EMPTY_TLS_KEYPAIR = CertKeyPair('', '', '')
 
 
 class TLSObjectProtocol(Protocol):

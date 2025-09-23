@@ -299,6 +299,10 @@ class CephadmService(metaclass=ABCMeta):
         return f"{self.TYPE.replace('-', '_')}_ssl_key"
 
     @property
+    def ca_cert_name(self) -> str:
+        return f"{self.TYPE.replace('-', '_')}_ssl_ca_cert"
+
+    @property
     @abstractmethod
     def TYPE(self) -> str:
         pass
@@ -343,7 +347,9 @@ class CephadmService(metaclass=ABCMeta):
             key_name=self.key_name,
             ips=ips,
             fqdns=fqdns,
-            custom_sans=custom_sans
+            custom_sans=custom_sans,
+            ca_cert_attr='ssl_ca_cert',
+            ca_cert_name=self.ca_cert_name
         )
 
     def get_certificates_generic(
@@ -357,7 +363,9 @@ class CephadmService(metaclass=ABCMeta):
         key_name: str,
         custom_sans: Optional[List[str]] = None,
         ips: Optional[List[str]] = None,
-        fqdns: Optional[List[str]] = None
+        fqdns: Optional[List[str]] = None,
+        ca_cert_attr: Optional[str] = None,
+        ca_cert_name: Optional[str] = None
     ) -> CertKeyPair:
 
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
@@ -368,9 +376,9 @@ class CephadmService(metaclass=ABCMeta):
         logger.debug(f'Getting certificate for {svc_spec.service_name()} using source: {cert_source}')
 
         if cert_source == CertificateSource.INLINE.value:
-            return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name)
+            return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name, ca_cert_attr, ca_cert_name)
         elif cert_source == CertificateSource.REFERENCE.value:
-            return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name)
+            return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
@@ -384,24 +392,38 @@ class CephadmService(metaclass=ABCMeta):
         cert_attr: str,
         key_attr: str,
         cert_name: str,
-        key_name: str
+        key_name: str,
+        ca_cert_attr: Optional[str] = None,
+        ca_cert_name: Optional[str] = None
     ) -> CertKeyPair:
         """
         Fetch and persist the TLS certificate and key for a service spec.
+        Optionally also handles CA certificate if ca_cert_attr and ca_cert_name are provided.
         Returns:
-            A CertKeyPair if both are available; otherwise EMPTY_TLS_KEYPAIR.
+            A CertKeyPair if certificates are available; otherwise EMPTY_TLS_KEYPAIR
         """
         cert = getattr(svc_spec, cert_attr, None)
         key = getattr(svc_spec, key_attr, None)
+        ca_cert = getattr(svc_spec, ca_cert_attr, None) if ca_cert_attr else None
+
+        handle_ca_cert = ca_cert_attr and ca_cert_name
+
         if cert and key:
             service_name = svc_spec.service_name()
             host = daemon_spec.host
             self.mgr.cert_mgr.save_cert(cert_name, cert, service_name, host, user_made=True)
             self.mgr.cert_mgr.save_key(key_name, key, service_name, host, user_made=True)
-            return CertKeyPair(cert=cert, key=key)
+            if handle_ca_cert and ca_cert:
+                assert ca_cert_name
+                self.mgr.cert_mgr.save_cert(ca_cert_name, ca_cert, service_name, host, user_made=True)
+            elif handle_ca_cert:
+                # CA cert is expected but not provided
+                logger.error(f"Cannot get CA cert '{ca_cert_name}' for service '{svc_spec.service_name()}'")
+                return EMPTY_TLS_KEYPAIR
+            return CertKeyPair(cert=cert, key=key, ca_cert=ca_cert)
 
         logger.error(
-            f"Cannot get cert/key '{self.cert_name}/{self.key_name}' for service '{svc_spec.service_name()}'"
+            f"Cannot get cert/key '{cert_name}/{key_name}' for service '{svc_spec.service_name()}'"
         )
         return EMPTY_TLS_KEYPAIR
 
@@ -410,13 +432,24 @@ class CephadmService(metaclass=ABCMeta):
         svc_spec: ServiceSpec,
         fqdns: List[str],
         cert_name: str,
-        key_name: str
+        key_name: str,
+        ca_cert_name: Optional[str] = None
     ) -> CertKeyPair:
         host = fqdns[0] if fqdns else None
         cert = self.mgr.cert_mgr.get_cert(cert_name, svc_spec.service_name(), host)
         key = self.mgr.cert_mgr.get_key(key_name, svc_spec.service_name(), host)
+        ca_cert = self.mgr.cert_mgr.get_cert(ca_cert_name, svc_spec.service_name(), host) if ca_cert_name else None
+
+        # Determine if CA certificate handling is needed
+        handle_ca_cert = ca_cert_name is not None
+
         if cert and key:
-            return CertKeyPair(cert=cert, key=key)
+            if handle_ca_cert and not ca_cert:
+                # CA cert is expected but not found
+                logger.error(f'Failed to get CA cert {ca_cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
+                return EMPTY_TLS_KEYPAIR
+            else:
+                return CertKeyPair(cert=cert, key=key, ca_cert=ca_cert)
         else:
             logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
             return EMPTY_TLS_KEYPAIR
@@ -427,21 +460,22 @@ class CephadmService(metaclass=ABCMeta):
         daemon_spec: CephadmDaemonDeploySpec,
         ips: List[str],
         fqdns: List[str],
-        custom_sans: List[str],
+        custom_sans: List[str]
     ) -> CertKeyPair:
 
         custom_sans = custom_sans or svc_spec.custom_sans or []
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
         tls_pair = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_spec.service_name(), daemon_spec.host)
+
         if tls_pair:
             combined_fqdns = sorted(set(s.lower() for s in fqdns + custom_sans))
             cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(tls_pair.cert)
             if sorted(cert_ips) == sorted(ips) and sorted(cert_fqdns) == sorted(combined_fqdns):
-                # Nothing has changed, use the stored certifiactes
+                # Nothing has changed, use the stored certificates
                 return tls_pair
 
-        # Either there were not certs or ips/fqdns have changed generate new cets
+        # Either there were no certs or ips/fqdns have changed - generate new certs
         tls_pair = self.mgr.cert_mgr.generate_cert(fqdns, ips, custom_sans)
         self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_spec.service_name(), tls_pair, host=daemon_spec.host)
 
@@ -1651,10 +1685,10 @@ class CephExporterService(CephService):
         security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
             exporter_config.update({'https_enabled': True})
-            crt, key = self.get_certificates(daemon_spec)
+            tls = self.get_certificates(daemon_spec)
             exporter_config['files'] = {
-                'ceph-exporter.crt': crt,
-                'ceph-exporter.key': key
+                'ceph-exporter.crt': tls.cert,
+                'ceph-exporter.key': tls.key
             }
 
         daemon_spec.keyring = keyring
@@ -1749,13 +1783,13 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = self.get_certificates(daemon_spec)
+        tls = self.get_certificates(daemon_spec)
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-            'listener.crt': listener_cert,
-            'listener.key': listener_key,
+            'listener.crt': tls.cert,
+            'listener.key': tls.key,
         }
 
         return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
