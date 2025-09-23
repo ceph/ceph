@@ -11966,12 +11966,12 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     bufferlist tbl;
 
     int wanted = left;
-#warning read holes
+
+    // TODO: Incorporate holes into the read
     filer->read_trunc(in->ino, &in->layout, in->snapid,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
 		      &onfinish);
-#warning implement file read here
     client_lock.unlock();
     r = wait_and_copy(onfinish, tbl, wanted);
     client_lock.lock();

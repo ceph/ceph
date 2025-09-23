@@ -859,7 +859,7 @@ FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
 void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
 {
   if (!fscrypt_ctx) {
-#warning need to make sure that we do not skip entire subtree somehow
+    //TODO:Revisit to make sure that we do not skip entire subtree somehow
     return;
   }
 
