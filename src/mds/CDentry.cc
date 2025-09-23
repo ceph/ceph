@@ -254,6 +254,24 @@ void CDentry::make_path_string(string& s, bool projected,
   s.append(name.data(), name.length());
 }
 
+/* path_comp_count = path component count. default value is 10 which implies
+ * generate entire path.
+ *
+ * XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ */
+void CDentry::make_trimmed_path_string(string& s, bool projected,
+				       int path_comp_count) const
+{
+  make_path_string(s, projected, path_comp_count);
+}
+
 /* path_comp_count = path component count. default value is -1 which implies
  * generate entire path.
  */
