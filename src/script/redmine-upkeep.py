@@ -293,6 +293,33 @@ class IssueUpdate:
         new_tags = ", ".join(current_tags)
         self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags)
 
+    def has_open_subtasks(self):
+        """
+        Checks if the issue has any open subtasks.
+        Returns True if open subtasks exist, False otherwise.
+        """
+        self.logger.debug("Checking for open subtasks.")
+        try:
+            if not hasattr(self.issue, 'children'):
+                self.logger.debug("Issue has no subtasks.")
+                return False
+
+            open_subtasks_info = []
+            for subtask in self.issue.children:
+                subtask.refresh() # fetch status
+                if not subtask.status.is_closed:
+                    open_subtasks_info.append(f"#{subtask.id} (status: {subtask.status.name})")
+
+            if open_subtasks_info:
+                self.logger.info(f"Cannot change status. Issue has open subtasks: {', '.join(open_subtasks_info)}.")
+                return True
+            else:
+                self.logger.debug("All subtasks are closed.")
+                return False
+        except redminelib.exceptions.ResourceAttrError:
+            self.logger.debug("Issue has no subtasks (ResourceAttrError on 'children' attribute).")
+            return False
+
     def get_update_payload(self, suppress_mail=True): # Added suppress_mail parameter
         today = datetime.now(timezone.utc).isoformat(timespec='seconds')
         self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP, today)
@@ -525,17 +552,11 @@ class RedmineUpkeep:
         related "Fixed In" field, as they are now considered stale.
         """
         issue_update.logger.debug("Running _transform_clear_stale_merge_commit")
-        try:
-            issue_with_journals = self.R.issue.get(issue_update.issue.id, include=['journals'])
-        except redminelib.exceptions.ResourceNotFoundError:
-            issue_update.logger.warning("Could not fetch issue with journals. Skipping stale merge commit check.")
-            return False
-
         last_pr_id_change = None
         last_merge_commit_set = None
 
         # Journals are ordered oldest to newest, so reverse to find the latest changes first.
-        for journal in reversed(issue_with_journals.journals):
+        for journal in reversed(issue_update.issue.journals):
             if last_pr_id_change and last_merge_commit_set:
                 break
 
@@ -783,6 +804,8 @@ class RedmineUpkeep:
 
         # If PR is merged and it's a backport tracker with 'Pending Backport' status, update to 'Resolved'
         if issue_update.issue.status.id != REDMINE_STATUS_ID_RESOLVED:
+            if issue_update.has_open_subtasks():
+                return False
             issue_update.logger.info(f"Issue status is '{issue_update.issue.status.name}', which is not 'Resolved'.")
             issue_update.logger.info("Updating status to 'Resolved' because its PR is merged.")
             changed = issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
@@ -883,6 +906,9 @@ class RedmineUpkeep:
             issue_update.logger.info(f"Not in 'Pending Backport' status ({issue_update.issue.status.name}). Skipping.")
             return False
 
+        if issue_update.has_open_subtasks():
+            return False
+
         issue_update.logger.info("Issue is a main tracker in 'Pending Backport' status. Checking related backports.")
 
         expected_backport_releases_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
@@ -896,18 +922,10 @@ class RedmineUpkeep:
             issue_update.logger.warning(f"No backport releases specified in custom field {REDMINE_CUSTOM_FIELD_ID_BACKPORT}.")
 
         copied_to_backports_ids = []
-        try:
-            # Fetch the issue again with 'include=relations' to ensure relations are loaded
-            issue_update.logger.debug("Fetching issue relations to find 'copied_to' links.")
-            issue_with_relations = self.R.issue.get(issue_update.issue.id, include=['relations'])
-
-            for relation in issue_with_relations.relations:
-                if relation.relation_type == 'copied_to':
-                    copied_to_backports_ids.append(relation.issue_to_id)
-            issue_update.logger.info(f"Found 'Copied to' issue IDs: {copied_to_backports_ids}")
-        except redminelib.exceptions.ResourceAttrError as e:
-            issue_update.logger.warning(f"Could not fetch relations for issue: {e}. Skipping backport status check.")
-            return False
+        for relation in issue_update.issue.relations:
+            if relation.relation_type == 'copied_to':
+                copied_to_backports_ids.append(relation.issue_to_id)
+        issue_update.logger.info(f"Found 'Copied to' issue IDs: {copied_to_backports_ids}")
 
         if not copied_to_backports_ids and not expected_backport_releases:
             # If no backports are expected and no 'Copied to' issues exist,
@@ -1027,6 +1045,9 @@ class RedmineUpkeep:
             issue_update.logger.info(f"Issue is already closed or 'Pending Backport'. Skipping status update on merge.")
             return False
 
+        if issue_update.has_open_subtasks():
+            return False
+
         issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{issue_update.issue.status.name}'.")
 
         backports_field_value = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
@@ -1079,6 +1100,7 @@ class RedmineUpkeep:
         and sends a single update API call if changes are made.
         """
         self.issues_inspected += 1
+        issue = self.R.issue.get(issue.id, include=['children', 'journals', 'relations'])
         issue_update = IssueUpdate(issue, self.session, self.G)
         issue_update.logger.debug("Beginning transformation processing.")
 
