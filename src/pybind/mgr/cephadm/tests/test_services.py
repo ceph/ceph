@@ -809,9 +809,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
@@ -830,6 +828,12 @@ class TestMonitoring:
                 - name: 'ceph-dashboard'
                   webhook_configs:
                   - url: 'https://host_fqdn:29443/internal/dashboard/api/prometheus_receiver'
+                    http_config:
+                      tls_config:
+                        insecure_skip_verify: false
+                        ca_file: root_cert.pem
+                        cert_file: alertmanager.crt
+                        key_file: alertmanager.key
                 """).lstrip()
 
                 web_config = dedent("""
@@ -891,7 +895,7 @@ class TestMonitoring:
     @patch('cephadm.cert_mgr.CertMgr.get_root_ca', lambda instance: 'cephadm_root_cert')
     @patch("cephadm.services.cephadmservice.CephadmService.get_certificates",
            lambda instance, dspec, ips=None, fqdns=None: CertKeyPair('mycert', 'mykey'))
-    def test_alertmanager_config_security_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
+    def test_alertmanager_config_with_secure_monitoring_stack_enabled(self, _get_fqdn, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
         fqdn = 'host1.test'
@@ -911,9 +915,7 @@ class TestMonitoring:
                   resolve_timeout: 5m
                   http_config:
                     tls_config:
-                      ca_file: root_cert.pem
-                      cert_file: alertmanager.crt
-                      key_file: alertmanager.key
+                      insecure_skip_verify: true
 
                 route:
                   receiver: 'default'
