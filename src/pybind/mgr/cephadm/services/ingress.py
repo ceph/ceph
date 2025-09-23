@@ -10,6 +10,7 @@ from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
+from cephadm.tlsobject_types import TLSCredentials
 
 if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
@@ -270,8 +271,8 @@ class IngressService(CephService):
             config_files['files']['haproxy.pem'] = combined_pem
 
         if spec.monitor_ssl and spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value:
-            stats_cert, stats_key = self.get_stats_certs(spec, daemon_spec, monitor_ips)
-            monitor_ssl_cert = [stats_cert, stats_key]
+            tls_creds = self.get_stats_certs(spec, daemon_spec, monitor_ips)
+            monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
             config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
 
         return config_files, self.get_haproxy_dependencies(self.mgr, spec)
@@ -281,7 +282,7 @@ class IngressService(CephService):
         svc_spec: IngressSpec,
         daemon_spec: CephadmDaemonDeploySpec,
         ips: Optional[List[str]] = None,
-    ) -> Tuple[str, str]:
+    ) -> TLSCredentials:
         return self.get_certificates_generic(
             svc_spec=svc_spec,
             daemon_spec=daemon_spec,
