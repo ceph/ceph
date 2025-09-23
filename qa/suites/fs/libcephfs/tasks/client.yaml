@@ -12,3 +12,4 @@ tasks:
     clients:
       client.0:
         - client/test.sh
+        - client/test_oc_disabled.sh
