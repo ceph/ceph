@@ -1,6 +1,7 @@
 #include "osdc/Objecter.h"
 #include "osdc/SplitRead.h"
 #include "osd/osd_types.h"
+#include <ranges>
 
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
@@ -13,73 +14,103 @@ inline boost::system::error_code osdcode(int r) {
 }
 }
 
-void ECSplitRead::assemble_buffer(bufferlist *bl_out, int ops_index) {
-
-  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
-
-  auto osd_op = orig_op->ops[0].op;
-  uint64_t offset = osd_op.extent.offset;
-  uint64_t length = osd_op.extent.length;
-  unsigned int data_chunk_count = pi->nonprimary_shards.size() + 1;
-  uint64_t stripe_size = pi->get_stripe_width();
-  uint32_t chunk_size = stripe_size / data_chunk_count;
-
-  uint64_t chunk_aligned_off = offset - (offset % chunk_size);
-  uint64_t tmp_len = (offset - chunk_aligned_off) + length;
-  uint64_t chunk_aligned_len = ((tmp_len % chunk_size)
-                    ? (tmp_len - (tmp_len % chunk_size) + chunk_size)
-                    : tmp_len);
-
-  shard_id_t shard((offset / chunk_size) % data_chunk_count);
-
-  mini_flat_map<shard_id_t, uint64_t> shard_offset(data_chunk_count);
-
-  for (uint64_t chunk_offset = chunk_aligned_off;
-       chunk_offset < chunk_aligned_off + chunk_aligned_len;
-       chunk_offset += chunk_size, ++shard) {
-
-    if (unsigned(shard) == data_chunk_count) {
-      shard = 0;
-    }
-
-    uint64_t sub_chunk_offset = std::max(chunk_offset, offset);
-    uint64_t sub_chunk_len = std::min(offset + length, chunk_offset + chunk_size) - sub_chunk_offset;
-
-    bufferlist sub_bl;
-    sub_bl.substr_of(sub_reads.at(shard).details[ops_index].bl, shard_offset[shard], sub_chunk_len);
-    shard_offset[shard] += sub_chunk_len;
-    bl_out->append(sub_bl);
-  }
-}
-
-void ReplicaSplitRead::assemble_buffer(bufferlist *bl_out, int ops_index)  {
-  for (auto && [shard, sr] : sub_reads) {
-    bl_out->append(sr.details[ops_index].bl);
-  }
-}
-
-void SplitRead::assemble_sparse_buffer(OSDOp &out_osd_op, int ops_index) {
-  bufferlist tmp_bl;
-  extent_map emap;
-
-  for (auto && [shard, sr] : sub_reads) {
-    uint64_t bl_offset = 0;
-    for (auto [offset, length] : *sr.details[ops_index].e) {
-      ldout(cct, DBG_LVL) << __func__
-        << " shard=" << shard << " extent=" << offset << "~" << length << dendl;
-      bufferlist e_bl;
-      e_bl.substr_of(sr.details[ops_index].bl, bl_offset, length);
-      emap.insert(offset, length, e_bl);
-      bl_offset += length;
-    }
-  }
+std::pair<SplitRead::extent_set, bufferlist> ECSplitRead::assemble_buffer_sparse_read(int ops_index) {
+  bufferlist bl_out;
   extent_set extents_out;
-  for (auto emap_iter = emap.begin(); emap_iter != emap.end(); ++emap_iter ) {
-    extents_out.insert(emap_iter.get_off(), emap_iter.get_len());
-    tmp_bl.append(emap_iter.get_val());
+
+  mini_flat_map<shard_id_t, extents_map::iterator> extent_sets(sub_reads.size());
+
+  auto &orig_osd_op = orig_op->ops[ops_index].op;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
+  ldout(cct, DBG_LVL) << "assemble_sparse_buffer: start:"
+    << orig_osd_op.extent.offset << "~" << orig_osd_op.extent.length << dendl;
+
+  std::vector<uint64_t> buffer_offset(stripe_view.data_chunk_count);
+
+  for (auto &&chunk_info : stripe_view) {
+    ldout(cct, DBG_LVL) << "assemble_sparse_buffer: " << chunk_info << dendl;
+    auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+
+    if (!extent_sets.contains(chunk_info.shard)) {
+      extent_sets.emplace(chunk_info.shard, details.e->begin());
+    }
+
+    extents_map::iterator &extent_iter = extent_sets.at(chunk_info.shard);
+
+    uint64_t bl_len = 0;
+    while (extent_iter != details.e->end() && extent_iter->first < chunk_info.ro_offset + stripe_view.chunk_size) {
+      auto [off, len] = *extent_iter;
+      ldout(cct, DBG_LVL) << "assemble_sparse_buffer: extent=" << off << "~" <<  len << dendl;
+      extents_out.insert(off, len);
+      bl_len += len;
+      ++extent_iter;
+    }
+
+    if (bl_len != 0) {
+      ldout(cct, DBG_LVL) << "assemble_sparse_buffer: bl_len=" << bl_len << dendl;
+      bufferlist bl;
+      bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], bl_len);
+      bl_out.append(bl);
+
+      buffer_offset[(int)chunk_info.shard] += bl_len;
+    }
   }
-  encode(std::move(extents_out).detach(), out_osd_op.outdata);
-  encode(tmp_bl, out_osd_op.outdata);
+
+  return std::pair(extents_out, bl_out);
+}
+
+std::pair<SplitRead::extent_set, bufferlist> ReplicaSplitRead::assemble_buffer_sparse_read(int ops_index) {
+  extent_set extents_out;
+  bufferlist bl_out;
+
+  for (auto && [shard, sr] : sub_reads) {
+    for (auto [off, len] : *sr.details[ops_index].e) {
+      extents_out.insert(off, len);
+    }
+    bl_out.append(sr.details[ops_index].bl);
+  }
+
+  return std::pair(extents_out, bl_out);
+}
+
+void SplitRead::_assemble_buffer_sparse_read(OSDOp &out_osd_op, int ops_index) {
+  auto [extents, bl] = assemble_buffer_sparse_read(ops_index);
+  encode(std::move(extents).detach(), out_osd_op.outdata);
+  encode(std::move(bl), out_osd_op.outdata);
+}
+
+void ECSplitRead::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
+  auto &orig_osd_op = orig_op->ops[ops_index].op;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
+  ECStripeView stripe_view(orig_osd_op.extent.offset, orig_osd_op.extent.length, pi);
+
+  std::vector<uint64_t> buffer_offset(stripe_view.data_chunk_count);
+
+  for (auto &&chunk_info : stripe_view) {
+    ldout(cct, DBG_LVL) << "ECSplitRead::assemble_buffer_read:" << chunk_info << dendl;
+    auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+    bufferlist bl;
+    bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], chunk_info.length);
+    bl_out.append(bl);
+    buffer_offset[(int)chunk_info.shard] += chunk_info.length;
+  }
+}
+
+void ReplicaSplitRead::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
+  for (auto && [_, sr] : sub_reads) {
+    bl_out.append(sr.details[ops_index].bl);
+  }
+}
+
+void SplitRead::_assemble_buffer_read(OSDOp &out_osd_op, int ops_index) {
+  // bufferlist *bl_out = orig_op->out_bl[ops_index];
+  //
+  // // FIXME: This is patch-til-works code.  What were we supposed to do?
+  // if (bl_out == nullptr) {
+  //   bl_out = &orig_op->ops[0].outdata;
+  // }
+  assemble_buffer_read(out_osd_op.outdata, ops_index);
 }
 
 int SplitRead::assemble_rc() {
@@ -119,23 +150,16 @@ void SplitRead::complete() {
     // We do not do this if anything failed in the sub-ops, because we are
     // going to re-drive the original op.
     std::vector out_ops(orig_op->ops.begin(), orig_op->ops.end());
-    bufferlist *bl_out = orig_op->out_bl[0];
 
-    // FIXME: This is patch-til-works code.  What were we supposed to do?
-    if (bl_out == nullptr) {
-      bl_out = &orig_op->ops[0].outdata;
-    }
-
-    ceph_assert(bl_out != nullptr);
     for (unsigned i=0; i < out_ops.size(); ++i) {
       auto &out_osd_op = out_ops[i];
       switch (out_osd_op.op.op) {
         case CEPH_OSD_OP_SPARSE_READ: {
-          assemble_sparse_buffer(out_osd_op, i);
+          _assemble_buffer_sparse_read(out_osd_op, i);
           break;
         }
         case CEPH_OSD_OP_READ: {
-          assemble_buffer(&out_osd_op.outdata, i);
+          _assemble_buffer_read(out_osd_op, i);
           break;
         }
         case CEPH_OSD_OP_GETXATTRS:
@@ -209,8 +233,8 @@ void ReplicaSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
       sub_reads.emplace(shard, orig_op->ops.size());
     }
     auto &sr = sub_reads.at(shard);
-    auto bl = &sr.details[i].bl;
-    auto rval = &sr.details[i].rval;
+    auto bl = &sr.details[ops_index].bl;
+    auto rval = &sr.details[ops_index].rval;
     uint64_t len = std::min(length, chunk_size);
     if (sparse) {
       sr.details[ops_index].e.emplace();
