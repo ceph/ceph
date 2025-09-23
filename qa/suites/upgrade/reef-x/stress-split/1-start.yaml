@@ -21,6 +21,19 @@ overrides:
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+<<<<<<< HEAD
+=======
+      - Replacing daemon mds
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
+      - filesystem is offline
+      - with fewer MDS than max_mds
+      - CEPHADM_FAILED_DAEMON
+      - pg .* is stuck undersized
+      - HEALTH_WARN .* osds down
+      - MDS_INSUFFICIENT_STANDBY
+      - POOL_FULL
+>>>>>>> d86a5997798 (qa/tests: added messages to the whitelist)
 tasks:
 - install:
     branch: reef
