@@ -140,11 +140,6 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
-  rgw_dedup.cc
-  rgw_dedup_table.cc
-  rgw_dedup_store.cc
-  rgw_dedup_utils.cc
-  rgw_dedup_cluster.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
@@ -236,7 +231,12 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/realm_watcher.cc
           driver/rados/config/store.cc
           driver/rados/config/zone.cc
-          driver/rados/config/zonegroup.cc)
+          driver/rados/config/zonegroup.cc
+          driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_table.cc
+          driver/rados/rgw_dedup_store.cc
+          driver/rados/rgw_dedup_utils.cc
+          driver/rados/rgw_dedup_cluster.cc)
 endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
