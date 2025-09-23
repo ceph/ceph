@@ -1,4 +1,6 @@
 #!/bin/bash -e
+set -x
+git fetch --unshallow
 
 SCRIPTNAME="$(basename "${0}")"
 BASEDIR="$(readlink -f "$(dirname "${0}")")"
