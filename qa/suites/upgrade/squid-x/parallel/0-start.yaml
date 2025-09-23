@@ -52,3 +52,8 @@ overrides:
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
       - PG_DEGRADED
+      - CEPHADM_FAILED_DAEMON
+      - pg .* is stuck undersized
+      - HEALTH_WARN .* osds down
+      - MDS_INSUFFICIENT_STANDBY
+      - POOL_FULL
