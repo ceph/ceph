@@ -35,6 +35,9 @@ import { TableDetailDirective } from '../directives/table-detail.directive';
 import { filter, map } from 'rxjs/operators';
 import { CdSortDirection } from '../../enum/cd-sort-direction';
 import { CdSortPropDir } from '../../models/cd-sort-prop-dir';
+import { EditState } from '../../models/cd-table-editing';
+import { CdFormGroup } from '../../forms/cd-form-group';
+import { FormControl } from '@angular/forms';
 
 const TABLE_LIST_LIMIT = 10;
 type TPaginationInput = { page: number; size: number; filteredData: any[] };
@@ -85,6 +88,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   rowDetailTpl: TemplateRef<any>;
   @ViewChild('tableActionTpl', { static: true })
   tableActionTpl: TemplateRef<any>;
+  @ViewChild('editingTpl', { static: true })
+  editingTpl: TemplateRef<any>;
 
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
@@ -247,6 +252,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    */
   @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
 
+  @Output()
+  editSubmitAction = new EventEmitter<{ [field: string]: string }>();
+
   /**
    * Use this variable to access the selected row(s).
    */
@@ -383,6 +391,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     });
   }
   private previousRows = new Map<string | number, TableItem[]>();
+
+  editingCells = new Set<string>();
+  editStates: EditState = {};
+  formGroup: CdFormGroup = new CdFormGroup({});
 
   constructor(
     // private ngZone: NgZone,
@@ -829,6 +841,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.path = this.pathTpl;
     this.cellTemplates.tooltip = this.tooltipTpl;
     this.cellTemplates.copy = this.copyTpl;
+    this.cellTemplates.editing = this.editingTpl;
   }
 
   useCustomClass(value: any): string {
@@ -1370,5 +1383,34 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       this.selectAllCheckbox = true;
       this.selectAllCheckboxSomeSelected = false;
     }
+  }
+
+  editCellItem(rowId: string, column: CdTableColumn, value: string) {
+    const key = `${rowId}-${column.prop}`;
+    this.formGroup.addControl(key, new FormControl('', column.customTemplateConfig?.validators));
+    this.editingCells.add(key);
+    if (!this.editStates[rowId]) {
+      this.editStates[rowId] = {};
+    }
+    this.formGroup?.get(key).setValue(value);
+    this.editStates[rowId][column.prop] = value;
+  }
+
+  saveCellItem(rowId: string, colProp: string) {
+    if (this.formGroup?.invalid) {
+      this.formGroup.setErrors({ cdSubmitButton: true });
+      return;
+    }
+    this.editSubmitAction.emit(this.editStates[rowId]);
+    this.editingCells.delete(`${rowId}-${colProp}`);
+    delete this.editStates[rowId][colProp];
+  }
+
+  isCellEditing(rowId: string, colProp: string): boolean {
+    return this.editingCells.has(`${rowId}-${colProp}`);
+  }
+
+  valueChange(rowId: string, colProp: string, value: string) {
+    this.editStates[rowId][colProp] = value;
   }
 }
