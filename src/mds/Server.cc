@@ -63,6 +63,7 @@
 
 #include "include/stringify.h"
 #include "include/filepath.h"
+#include "common/strescape.h"
 #include "common/ceph_json.h"
 #include "common/debug.h"
 #include "common/Timer.h"
@@ -10190,7 +10191,10 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << " stray_prior_path = " << t << dendl;
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+        dout(20) << " stray_prior_path = " << get_trimmed_path_str(t) << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;
@@ -10205,8 +10209,11 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << __func__ << " referent stray_prior_path = " << t << dendl;
-        trpi->stray_prior_path = std::move(t);
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	dout(20) << __func__ << " referent stray_prior_path = " << get_trimmed_path_str(t) << dendl;
+	trpi->stray_prior_path = std::move(t);
       }
     }
   }

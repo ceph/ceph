@@ -234,9 +234,11 @@ bool MDSAuthCaps::is_capable(string_view fs_name,
 			     const vector<uint64_t> *caller_gid_list,
 			     unsigned mask,
 			     uid_t new_uid, gid_t new_gid,
-			     const entity_addr_t& addr) const
+			     const entity_addr_t& addr,
+			     string_view trimmed_inode_path) const
 {
-  ldout(g_ceph_context, 10) << __func__ << "fs_name " << fs_name << " inode(path /" << inode_path
+  ldout(g_ceph_context, 10) << __func__ << "fs_name " << fs_name
+		 << " inode(path /" << trimmed_inode_path
 		 << " owner " << inode_uid << ":" << inode_gid
 		 << " mode 0" << std::oct << inode_mode << std::dec
 		 << ") by caller " << caller_uid << ":" << caller_gid
