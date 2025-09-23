@@ -6,7 +6,7 @@
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << " SplitRead::"
-#define DBG_LVL 0
+#define DBG_LVL 20
 
 namespace {
 inline boost::system::error_code osdcode(int r) {
