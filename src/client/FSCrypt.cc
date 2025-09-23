@@ -86,9 +86,8 @@ static int set_str_val(char **pdst, const char *end, char c)
 
 static int b64_encode(char *dst, char * const dst_end, const char *src, const char *end)
 {
+
         char *orig_dst = dst;
-	int olen = 0;
-	int line = 0;
 
 #define SET_DST(c) do { \
 	int __ret = set_str_val(&dst, dst_end, c); \
@@ -117,8 +116,6 @@ static int b64_encode(char *dst, char * const dst_end, const char *src, const ch
 		} else {
 			SET_DST(encode_bits(((a & 3) << 4)));
 		}
-		olen += 4;
-		line += 4;
 	}
 	*dst = '\0';
 	return (dst - orig_dst);
@@ -942,7 +939,7 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
       has_hole = true;
       break;
     }
-#warning is this the way to do it?
+
     uint64_t needed_pos = (pos > off ? pos : off);
     void *data_pos = bl->c_str() + needed_pos - start_block_off;
     if (!has_hole && *(uint64_t *)data_pos == 0) {
