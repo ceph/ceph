@@ -47,6 +47,7 @@
 #include "include/stringify.h"
 #include "include/filepath.h"
 #include "common/errno.h"
+#include "common/strescape.h"
 #include "common/Timer.h"
 #include "common/perf_counters.h"
 #include "include/compat.h"
@@ -9488,7 +9489,10 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << " stray_prior_path = " << t << dendl;
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+        dout(20) << " stray_prior_path = " << get_trimmed_path_str(t) << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;

@@ -22,6 +22,7 @@
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/DecayCounter.h"
+#include "common/strescape.h" // for get_trimmed_path()
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 
@@ -1069,11 +1070,14 @@ int Session::check_access(CInode *in, unsigned mask,
     }
   }
 
+  string trimmed_path = "";
   if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
-    dout(20) << __func__ << " path " << path << dendl;
+    /* Log only 10 final components fo the path to since logging entire
+     * path is not useful and also reduces readability. */
+    dout(20) << __func__ << " path " << get_trimmed_path_str(path) << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
@@ -1089,8 +1093,7 @@ int Session::check_access(CInode *in, unsigned mask,
 
   if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid,
-			    info.inst.addr)) {
+			    new_uid, new_gid, info.inst.addr, trimmed_path)) {
     return -CEPHFS_EACCES;
   }
   return 0;
