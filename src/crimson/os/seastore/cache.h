@@ -1600,6 +1600,7 @@ public:
 
   void boot_done() {
     booting = false;
+    extents_index.clear();
   }
 private:
   void touch_extent_fully(
