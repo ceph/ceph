@@ -6268,11 +6268,10 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
   } else if (name == "ceph.quiesce.block"sv) {
-    bool val;
-    try {
-      val = boost::lexical_cast<bool>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+    std::string errstr;
+    bool val = strict_strtob(value, &errstr);
+    if (!errstr.empty()) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
@@ -6330,7 +6329,13 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 	}
         value = "0";
       }
-      val = boost::lexical_cast<bool>(value);
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
       respond_to_request(mdr, -EINVAL);
@@ -6479,7 +6484,13 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 	}
         value = "0";
       }
-      val = boost::lexical_cast<bool>(value);
+      std::string errstr;
+      val = strict_strtob(value, &errstr);
+      if (!errstr.empty()) {
+        dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
+        respond_to_request(mdr, -EINVAL);
+        return;
+      }
     } catch (boost::bad_lexical_cast const&) {
       dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
       respond_to_request(mdr, -EINVAL);
@@ -6506,11 +6517,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -6538,20 +6545,15 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
 
-    bool val;
-    try {
-      val = boost::lexical_cast<bool>(value);
-    } catch (boost::bad_lexical_cast const&) {
-      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+    std::string errstr;
+    bool val = strict_strtob(value, &errstr);
+    if (!errstr.empty()) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << ": " << errstr << dendl;
       respond_to_request(mdr, -EINVAL);
       return;
     }
@@ -6576,11 +6578,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -6604,11 +6602,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     if (!xlock_policylock(mdr, cur, false, false, std::move(lov)))
       return;
 
-    if (_dir_is_nonempty(mdr, cur)) {
-      respond_to_request(mdr, -ENOTEMPTY);
-      return;
-    }
-    if (cur->snaprealm && cur->snaprealm->srnode.snaps.size()) {
+    if (_dir_is_nonempty(mdr, cur) || _dir_has_snaps(mdr, cur)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;
     }
@@ -8910,6 +8904,16 @@ bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
   }
 
   return false;
+}
+
+bool Server::_dir_has_snaps(const MDRequestRef& mdr, CInode *diri)
+{
+  dout(10) << __func__ << ": " << *diri << dendl;
+  ceph_assert(diri->is_auth());
+  ceph_assert(diri->snaplock.can_read(mdr->get_client()));
+
+  SnapRealm *realm = diri->find_snaprealm();
+  return !realm->get_snaps().empty();
 }
 
 bool Server::_dir_is_nonempty(const MDRequestRef& mdr, CInode *in)
