@@ -803,7 +803,7 @@ NFS_CORE_PARAM {
                 'access_type': None,
                 'squash': None
             }],
-            'sectype': ["krb5p", "krb5i", "sys"],
+            'sectype': ["krb5p", "krb5i", "sys", "mtls", "tls"],
             'fsal': {
                 'name': 'RGW',
                 'user_id': 'nfs.foo.bucket',
@@ -817,7 +817,7 @@ NFS_CORE_PARAM {
         info = conf._get_export_dict(self.cluster_id, "/rgw/bucket")
         assert info["export_id"] == 2
         assert info["path"] == "bucket"
-        assert info["sectype"] == ["krb5p", "krb5i", "sys"]
+        assert info["sectype"] == ["krb5p", "krb5i", "sys", "mtls", "tls"]
 
     def test_update_export_with_ganesha_conf(self):
         self._do_mock_test(self._do_test_update_export_with_ganesha_conf)
