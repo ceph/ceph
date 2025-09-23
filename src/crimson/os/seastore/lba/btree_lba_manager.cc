@@ -171,33 +171,23 @@ BtreeLBAManager::get_cursors(
 {
   LOG_PREFIX(BtreeLBAManager::get_cursors);
   TRACET("{}~0x{:x} ...", c.trans, laddr, length);
-  return seastar::do_with(
-    std::list<LBACursorRef>(),
-    [FNAME, c, laddr, length, &btree](auto& ret)
-  {
-    return LBABtree::iterate_repeat(
-      c,
-      btree.upper_bound_right(c, laddr),
-      [FNAME, c, laddr, length, &ret](auto& pos)
-    {
-      if (pos.is_end() || pos.get_key() >= (laddr + length)) {
-        TRACET("{}~0x{:x} done with {} results, stop at {}",
-               c.trans, laddr, length, ret.size(), pos);
-        return LBABtree::iterate_repeat_ret_inner(
-          interruptible::ready_future_marker{},
-          seastar::stop_iteration::yes);
-      }
-      TRACET("{}~0x{:x} got {}, repeat ...",
-             c.trans, laddr, length, pos);
-      ceph_assert((pos.get_key() + pos.get_val().len) > laddr);
-      ret.emplace_back(pos.get_cursor(c));
-      return LBABtree::iterate_repeat_ret_inner(
-        interruptible::ready_future_marker{},
-        seastar::stop_iteration::no);
-    }).si_then([&ret] {
-      return std::move(ret);
-    });
-  });
+
+  std::list<LBACursorRef> ret;
+
+  auto pos = co_await btree.upper_bound_right(c, laddr);
+  while (true) {
+    if (pos.is_end() || pos.get_key() >= (laddr + length)) {
+      TRACET("{}~0x{:x} done with {} results, stop at {}",
+	     c.trans, laddr, length, ret.size(), pos);
+      break;
+    }
+    TRACET("{}~0x{:x} got {}, repeat ...",
+	   c.trans, laddr, length, pos);
+    ceph_assert((pos.get_key() + pos.get_val().len) > laddr);
+    ret.emplace_back(pos.get_cursor(c));
+    pos = co_await pos.next(c);
+  }
+  co_return ret;
 }
 
 BtreeLBAManager::resolve_indirect_cursor_ret
