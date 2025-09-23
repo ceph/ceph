@@ -111,16 +111,9 @@ BtreeLBAManager::mkfs(
 {
   LOG_PREFIX(BtreeLBAManager::mkfs);
   INFOT("start", t);
-  return cache.get_root(t).si_then([this, &t](auto croot) {
-    assert(croot->is_mutation_pending());
-    croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
-    return mkfs_iertr::now();
-  }).handle_error_interruptible(
-    mkfs_iertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error in BtreeLBAManager::mkfs"
-    }
-  );
+  auto croot = co_await cache.get_root(t);
+  assert(croot->is_mutation_pending());
+  croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
 }
 
 BtreeLBAManager::get_mappings_ret
