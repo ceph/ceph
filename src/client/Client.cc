@@ -13426,9 +13426,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
 
-  filepath fp(name, 0);
   InodeRef in;
-  int rc;
   unsigned mask = statx_to_mask(flags, want);
 
   ldout(cct, 3) << __func__ << " " << name << dendl;
@@ -13436,8 +13434,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   tout(cct) << name << std::endl;
 
   std::scoped_lock lock(client_lock);
-  rc = path_walk(cwd, fp, &in, perms, {.followsym = !(flags & AT_SYMLINK_NOFOLLOW), .mask = mask});
-  if (rc < 0) {
+  if (int rc = path_walk(cwd, filepath(name), &in, perms, {.followsym = !(flags & AT_SYMLINK_NOFOLLOW), .mask = mask}); rc < 0) {
     /* zero out mask, just in case... */
     stx->stx_mask = 0;
     stx->stx_ino = 0;
