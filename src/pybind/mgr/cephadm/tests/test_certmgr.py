@@ -5,7 +5,7 @@ import json
 from tests import mock
 import logging
 
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, CertKeyPair
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSOBJECT_STORE_PREFIX, TLSObjectStore, TLSObjectScope
 from cephadm.module import CephadmOrchestrator
 from cephadm.cert_mgr import CertInfo, CertMgr
@@ -493,7 +493,7 @@ class TestCertMgr(object):
         # Save (simulate cephadm-generated) cert/key at host target
         cm.save_self_signed_cert_key_pair(
             svc,
-            CertKeyPair(CEPHADM_SELF_GENERATED_CERT_1, CEPHADM_SELF_GENERATED_KEY_2048),
+            TLSCredentials(CEPHADM_SELF_GENERATED_CERT_1, CEPHADM_SELF_GENERATED_KEY_2048),
             host=host,
             label=cert_label,
         )

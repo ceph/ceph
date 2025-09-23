@@ -9,7 +9,7 @@ import requests
 from mgr_module import HandleCommandResult
 from .service_registry import register_cephadm_service
 from cephadm.services.service_registry import service_registry
-from cephadm.tlsobject_types import CertKeyPair
+from cephadm.tlsobject_types import TLSCredentials
 
 from orchestrator import DaemonDescription
 from ceph.deployment.service_spec import AlertManagerSpec, GrafanaSpec, ServiceSpec, \
@@ -144,7 +144,7 @@ class GrafanaService(CephadmService):
 
         return ''
 
-    def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> CertKeyPair:
+    def get_grafana_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'grafana_servers']
         return self.get_certificates(daemon_spec, host_ips, host_fqdns)
@@ -286,7 +286,7 @@ class AlertmanagerService(CephadmService):
     def needs_monitoring(self) -> bool:
         return True
 
-    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> CertKeyPair:
+    def get_alertmanager_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'alertmanager_servers']
         return self.get_certificates(daemon_spec, host_ips, host_fqdns)
@@ -492,7 +492,7 @@ class PrometheusService(CephadmService):
             # we shouldn't get here (mon will tell the mgr to respawn), but no
             # harm done if we do.
 
-    def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> CertKeyPair:
+    def get_prometheus_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> TLSCredentials:
         host_ips = [self.mgr.inventory.get_addr(daemon_spec.host)]
         host_fqdns = [self.mgr.get_fqdn(daemon_spec.host), 'prometheus_servers']
         return self.get_certificates(daemon_spec, host_ips, host_fqdns)

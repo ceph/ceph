@@ -6,7 +6,7 @@ from enum import Enum
 from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
 from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
-from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, CertKeyPair
+from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
 
 if TYPE_CHECKING:
@@ -245,7 +245,14 @@ class CertMgr:
         self.cert_store.register_object_name(self.self_signed_cert(service_name, label), TLSObjectScope.HOST)
         self.key_store.register_object_name(self.self_signed_key(service_name, label), TLSObjectScope.HOST)
 
-    def register_cert_key_pair(self, consumer: str, cert_name: str, key_name: str, scope: TLSObjectScope) -> None:
+    def register_cert_key_pair(
+        self,
+        consumer: str,
+        cert_name: str,
+        key_name: str,
+        scope: TLSObjectScope,
+        ca_cert_name: Optional[str] = None
+    ) -> None:
         """
         Registers a certificate/key for a given consumer under a specific scope.
 
@@ -256,6 +263,8 @@ class CertMgr:
         """
         self.register_cert(consumer, cert_name, scope)
         self.register_key(consumer, key_name, scope)
+        if ca_cert_name:
+            self.register_cert(consumer, ca_cert_name, scope)
 
     def register_cert(self, consumer: str, cert_name: str, scope: TLSObjectScope) -> None:
         self._register_tls_object(consumer, cert_name, scope, "certs")
@@ -305,9 +314,10 @@ class CertMgr:
         node_ip: Union[str, List[str]],
         custom_san_list: Optional[List[str]] = None,
         duration_in_days: Optional[int] = None,
-    ) -> CertKeyPair:
+    ) -> TLSCredentials:
         cert, key = self.ssl_certs.generate_cert(host_fqdn, node_ip, custom_san_list=custom_san_list, duration_in_days=duration_in_days)
-        return CertKeyPair(cert=cert, key=key)
+        ca_cert = self.mgr.cert_mgr.get_root_ca()
+        return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def cert_exists(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         cert_obj = self.cert_store.get_tlsobject(cert_name, service_name, host)
@@ -325,12 +335,13 @@ class CertMgr:
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(key_name, service_name, host))
         return key_obj.key if key_obj else None
 
-    def get_self_signed_cert_key_pair(self, service_name: str, hostname: str, label: Optional[str] = None) -> CertKeyPair:
+    def get_self_signed_tls_credentials(self, service_name: str, hostname: str, label: Optional[str] = None) -> TLSCredentials:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(self.self_signed_cert(service_name, label), host=hostname))
         key_obj = cast(PrivKey, self.key_store.get_tlsobject(self.self_signed_key(service_name, label), host=hostname))
         cert = cert_obj.cert if cert_obj else ''
         key = key_obj.key if key_obj else ''
-        return CertKeyPair(cert=cert, key=key)
+        ca_cert = self.mgr.cert_mgr.get_root_ca()
+        return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def save_cert(self, cert_name: str, cert: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
         self.cert_store.save_tlsobject(cert_name, cert, service_name, host, user_made, editable)
@@ -338,11 +349,11 @@ class CertMgr:
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None, user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
 
-    def save_self_signed_cert_key_pair(self, service_name: str, tls_pair: CertKeyPair, host: str, label: Optional[str] = None) -> None:
+    def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str, label: Optional[str] = None) -> None:
         ss_cert_name = self.self_signed_cert(service_name, label)
         ss_key_name = self.self_signed_key(service_name, label)
-        self.cert_store.save_tlsobject(ss_cert_name, tls_pair.cert, host=host, user_made=False)
-        self.key_store.save_tlsobject(ss_key_name, tls_pair.key, host=host, user_made=False)
+        self.cert_store.save_tlsobject(ss_cert_name, tls_creds.cert, host=host, user_made=False)
+        self.key_store.save_tlsobject(ss_key_name, tls_creds.key, host=host, user_made=False)
 
     def rm_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
         return self.cert_store.rm_tlsobject(cert_name, service_name, host)

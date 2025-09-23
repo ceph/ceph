@@ -120,14 +120,14 @@ class MgmtGatewayService(CephadmService):
             'enable_oauth2_proxy': bool(oauth2_proxy_endpoints),
         }
 
-        internal_cert, internal_pkey = self.get_self_signed_certificates_with_label(svc_spec, daemon_spec, INTERNAL_CERT_LABEL)
+        tls_creds = self.get_self_signed_certificates_with_label(svc_spec, daemon_spec, INTERNAL_CERT_LABEL)
         daemon_config = {
             "files": {
                 "nginx.conf": self.mgr.template.render(self.SVC_TEMPLATE_PATH, main_context),
                 "nginx_external_server.conf": self.mgr.template.render(self.EXTERNAL_SVC_TEMPLATE_PATH, server_context),
                 "nginx_internal_server.conf": self.mgr.template.render(self.INTERNAL_SVC_TEMPLATE_PATH, server_context),
-                "nginx_internal.crt": internal_cert,
-                "nginx_internal.key": internal_pkey,
+                "nginx_internal.crt": tls_creds.cert,
+                "nginx_internal.key": tls_creds.key,
                 "ca.crt": self.mgr.cert_mgr.get_root_ca()
             }
         }

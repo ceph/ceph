@@ -56,6 +56,7 @@ class TLSBlock(TypedDict, total=False):
 class RequiresCertificatesEntry(TypedDict):
     user_cert_allowed: bool
     scope: Literal['service', 'host', 'global']
+    requieres_ca_cert: bool
 
 
 class CertificateSource(Enum):
@@ -847,20 +848,21 @@ class ServiceSpec(object):
     REQUIRES_CERTIFICATES: Dict[str, RequiresCertificatesEntry] = {
 
         # Services that support user-provided certificates
-        'rgw': {'user_cert_allowed': True, 'scope': 'service'},
-        'ingress': {'user_cert_allowed': True, 'scope': 'service'},
-        'iscsi': {'user_cert_allowed': True, 'scope': 'service'},
-        'grafana': {'user_cert_allowed': True, 'scope': 'host'},
-        'oauth2-proxy': {'user_cert_allowed': True, 'scope': 'host'},
-        'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global'},
-        'nvmeof': {'user_cert_allowed': True, 'scope': 'service'},
+        'rgw': {'user_cert_allowed': True, 'scope': 'service', 'requieres_ca_cert': False},
+        'ingress': {'user_cert_allowed': True, 'scope': 'service', 'requieres_ca_cert': False},
+        'iscsi': {'user_cert_allowed': True, 'scope': 'service', 'requieres_ca_cert': False},
+        'grafana': {'user_cert_allowed': True, 'scope': 'host', 'requieres_ca_cert': False},
+        'oauth2-proxy': {'user_cert_allowed': True, 'scope': 'host', 'requieres_ca_cert': False},
+        'mgmt-gateway': {'user_cert_allowed': True, 'scope': 'global', 'requieres_ca_cert': False},
+        'nvmeof': {'user_cert_allowed': True, 'scope': 'service', 'requieres_ca_cert': False},
+        'nfs': {'user_cert_allowed': True, 'scope': 'service', 'requieres_ca_cert': True},
 
         # Services that only support cephadm-signed certificates
-        'agent': {'user_cert_allowed': False, 'scope': 'host'},
-        'prometheus': {'user_cert_allowed': False, 'scope': 'host'},
-        'alertmanager': {'user_cert_allowed': False, 'scope': 'host'},
-        'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host'},
-        'node-exporter': {'user_cert_allowed': False, 'scope': 'host'},
+        'agent': {'user_cert_allowed': False, 'scope': 'host', 'requieres_ca_cert': False},
+        'prometheus': {'user_cert_allowed': False, 'scope': 'host', 'requieres_ca_cert': False},
+        'alertmanager': {'user_cert_allowed': False, 'scope': 'host', 'requieres_ca_cert': False},
+        'ceph-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requieres_ca_cert': False},
+        'node-exporter': {'user_cert_allowed': False, 'scope': 'host', 'requieres_ca_cert': False},
         # 'loki'        : {'user_cert_allowed': False, 'scope': 'host'},
         # 'promtail'    : {'user_cert_allowed': False, 'scope': 'host'},
         # 'jaeger-agent': {'user_cert_allowed': False, 'scope': 'host'},
@@ -940,6 +942,7 @@ class ServiceSpec(object):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ip_addrs: Optional[Dict[str, str]] = None,
+                 ssl_ca_cert: Optional[str] = None,
                  ):
 
         #: See :ref:`orchestrator-cli-placement-spec`.
@@ -962,6 +965,7 @@ class ServiceSpec(object):
             self.ssl = ssl
             self.ssl_cert = ssl_cert
             self.ssl_key = ssl_key
+            self.ssl_ca_cert = ssl_ca_cert
             self.custom_sans = custom_sans
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
@@ -1192,6 +1196,7 @@ class ServiceSpec(object):
 
         has_cert = bool(getattr(self, "ssl_cert", None))
         has_key = bool(getattr(self, "ssl_key", None))
+        has_ca_cert = bool(getattr(self, "ssl_ca_cert", None))
         has_cert_src = bool(getattr(self, "certificate_source", None))
 
         # Pairing rule for legacy inline specs
@@ -1210,16 +1215,17 @@ class ServiceSpec(object):
                 self.certificate_source = CertificateSource.CEPHADM_SIGNED.value
 
         # Per-source constraints
-        if (
-            self.certificate_source == CertificateSource.INLINE.value
-            and not (has_cert and has_key)
-        ):
-            raise SpecValidationError(
-                f"When using '{CertificateSource.INLINE.value}' certificate_source, "
-                "both an embedded certificate (ssl_cert) and private key"
-                "(ssl_key) must be provided."
-            )
-
+        if self.certificate_source == CertificateSource.INLINE.value:
+            if not (has_cert and has_key):
+                raise SpecValidationError(
+                    f"When using '{CertificateSource.INLINE.value}' certificate_source, "
+                    "both an embedded certificate (ssl_cert) and private key"
+                    "(ssl_key) must be provided."
+                )
+            if self.REQUIRES_CERTIFICATES[self.service_type].get('requieres_ca_cert', False) and not has_ca_cert:
+                raise SpecValidationError(
+                    f'CA certificate required for {self.service_type} service'
+                )
         if (
             self.certificate_source == CertificateSource.CEPHADM_SIGNED.value
             and (has_cert or has_key)
