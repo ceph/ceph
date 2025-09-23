@@ -10190,7 +10190,23 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << " stray_prior_path = " << t << dendl;
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	size_t n = 0;
+	std::string trimmed_t = "";
+	for (int i = 1; i <= 10; ++i) {
+	  n = t.rfind("/", n - 1);
+	  if (n == std::string::npos) {
+	    trimmed_t = t;
+	    break;
+	  }
+	}
+	if (trimmed_t == ""  &&  t != "") {
+	  trimmed_t = "..." + t.substr(n, -1);
+	}
+
+        dout(20) << " stray_prior_path = " << trimmed_t << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;
@@ -10205,8 +10221,24 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << __func__ << " referent stray_prior_path = " << t << dendl;
-        trpi->stray_prior_path = std::move(t);
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	size_t n = 0;
+	std::string trimmed_t = "";
+	for (int i = 1; i <= 10; ++i) {
+	  n = t.rfind("/", n - 1);
+	  if (n == std::string::npos) {
+	    trimmed_t = t;
+	    break;
+	  }
+	}
+	if (trimmed_t == "" && t != "") {
+	  trimmed_t = "..." + t.substr(n, -1);
+	}
+
+	dout(20) << __func__ << " referent stray_prior_path = " << trimmed_t << dendl;
+	trpi->stray_prior_path = std::move(t);
       }
     }
   }

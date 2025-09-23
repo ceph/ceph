@@ -1122,11 +1122,27 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
     }
   }
 
+  string trimmed_path = "";
   if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
-    dout(20) << __func__ << " path " << path << dendl;
+
+    /* Log only 10 final components fo the path to since logging entire path is
+     * not useful and also reduces readability. */
+    size_t n = 0;
+    for (int i = 1; i <= 10; ++i) {
+      n = path.rfind("/", n - 1);
+      if (n == string::npos) {
+	trimmed_path = path;
+	break;
+      }
+    }
+    if (trimmed_path == "" && path != "") {
+      trimmed_path = "..." + path.substr(n, -1);
+    }
+
+    dout(20) << __func__ << " path " << trimmed_path << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
@@ -1142,8 +1158,7 @@ int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 
   if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid,
-			    info.inst.addr)) {
+			    new_uid, new_gid, info.inst.addr, trimmed_path)) {
     return -EACCES;
   }
   return 0;
