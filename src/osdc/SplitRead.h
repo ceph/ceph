@@ -54,8 +54,12 @@ class SplitRead {
       current_info.ro_offset = start_offset;
       uint64_t chunk = start_offset / chunk_size;
       current_info.length = (chunk + 1) * chunk_size - start_offset;
-      current_info.shard = shard_id_t(chunk % data_chunk_count);
-      current_info.shard_offset = (chunk / data_chunk_count) * chunk_size + start_offset % data_chunk_count;
+
+      // Maybe this is paranoia, as compiler would probably detect that this
+      // / and % could be done in a single op.
+      auto chunk_div = std::lldiv(chunk, data_chunk_count);
+      current_info.shard = shard_id_t(chunk_div.rem);
+      current_info.shard_offset = (chunk_div.quot) * chunk_size + start_offset % chunk_size;
     }
 
     value_type operator*() const {
@@ -161,8 +165,6 @@ class SplitRead {
     }
   };
 
-  void _assemble_buffer_sparse_read(OSDOp &out_osd_op, int ops_index);
-  void _assemble_buffer_read(OSDOp &out_osd_op, int ops_index);
   int assemble_rc();
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) = 0;
