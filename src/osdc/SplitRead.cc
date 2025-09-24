@@ -3,7 +3,7 @@
 #include "osd/osd_types.h"
 
 #define dout_subsys ceph_subsys_objecter
-#define DBG_LVL 20
+#define DBG_LVL 0
 
 namespace {
 inline boost::system::error_code osdcode(int r) {
@@ -72,6 +72,7 @@ void ECSplitRead::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
   ldout(cct, DBG_LVL) << __func__ << " " << orig_osd_op.extent.offset << "~" << orig_osd_op.extent.length << dendl;
 
   for (auto &&chunk_info : stripe_view) {
+    ldout(cct, DBG_LVL) << __func__ << " chunk info " << chunk_info << dendl;
     auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
     bufferlist bl;
     bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], chunk_info.length);

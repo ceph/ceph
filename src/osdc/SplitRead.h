@@ -53,7 +53,7 @@ class SplitRead {
       end_offset = start_offset + total_len;
       current_info.ro_offset = start_offset;
       uint64_t chunk = start_offset / chunk_size;
-      current_info.length = (chunk + 1) * chunk_size - start_offset;
+      current_info.length = std::min(total_len, (chunk + 1) * chunk_size - start_offset);
 
       // Maybe this is paranoia, as compiler would probably detect that this
       // / and % could be done in a single op.
