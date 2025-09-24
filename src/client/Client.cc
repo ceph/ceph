@@ -1890,7 +1890,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     ceph_assert(it != inode_map.end());
     diri = it->second;
     
-    string dname = request->path.last_dentry();
+    auto dname = std::string(request->path.last_dentry());
     
     LeaseStat dlease;
     dlease.duration_ms = 0;
@@ -8019,13 +8019,15 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath,
       if (i < path.depth() - 1) {
 	// dir symlink
 	// replace consumed components of path with symlink dir target
-	if (symlink[0] == '/') {
+	filepath resolved(symlink, diri->ino);
+        for (auto j = i+1; j < path.depth(); ++j) {
+          resolved.push_dentry(path[j]);
+        }
+        path = std::move(resolved);
+	i = 0;
+	if (path.absolute()) {
 	  diri = root;
 	}
-	filepath resolved(std::move(symlink));
-	resolved.append(path.postfixpath(i + 1));
-	path = std::move(resolved);
-	i = 0;
 	continue;
       } else if (extra_options.followsym) {
 	if (symlink[0] == '/') {

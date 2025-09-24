@@ -5079,7 +5079,7 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
   // which frag?
   frag_t fg = (__u32)req->head.args.readdir.frag;
   unsigned req_flags = (__u32)req->head.args.readdir.flags;
-  string offset_str = req->get_path2();
+  auto offset_str = std::string(req->get_path2());
 
   __u32 offset_hash = 0;
   if (!offset_str.empty())
@@ -12018,7 +12018,7 @@ void Server::handle_client_lssnap(const MDRequestRef& mdr)
     max_bytes = (512 << 10) + mds->mdsmap->get_max_xattr_size();
 
   __u64 last_snapid = 0;
-  string offset_str = req->get_path2();
+  auto offset_str = std::string(req->get_path2());
   if (!offset_str.empty())
     last_snapid = realm->resolve_snapname(offset_str, diri->ino());
 
@@ -12671,7 +12671,7 @@ void Server::handle_client_readdir_snapdiff(const MDRequestRef& mdr)
   // which frag?
   frag_t fg = (__u32)req->head.args.snapdiff.frag;
   unsigned req_flags = (__u32)req->head.args.snapdiff.flags;
-  string offset_str = req->get_path2();
+  auto offset_str = std::string(req->get_path2());
 
   __u32 offset_hash = 0;
   if (!offset_str.empty()) {
