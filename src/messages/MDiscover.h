@@ -43,7 +43,7 @@ private:
   snapid_t  get_snapid() const { return snapid; }
 
   const filepath& get_want() const { return want; }
-  const std::string& get_dentry(int n) const { return want[n]; }
+  std::string_view get_dentry(int n) const { return want[n]; }
 
   bool wants_base_dir() const { return want_base_dir; }
   bool is_path_locked() const { return path_locked; }
