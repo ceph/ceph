@@ -234,7 +234,6 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       rop.read(readOp.offset[i] * block_size,
                readOp.length[i] * block_size, &op_info->bufferlist[i],
                nullptr);
-      rop.set_op_flags2(librados::OPERATION_BALANCE_READS);
     }
     auto read_cb = [this, op_info](boost::system::error_code ec, version_t ver,
                                    bufferlist bl) {
@@ -245,8 +244,9 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       }
       finish_io();
     };
+    int flags = librados::OPERATION_BALANCE_READS;
     librados::async_operate(asio.get_executor(), io, oid,
-                            std::move(rop), 0, nullptr, read_cb);
+                            std::move(rop), flags, nullptr, read_cb);
     num_io++;
   };
 
