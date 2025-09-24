@@ -45,6 +45,11 @@
 #include <random>
 #include <regex>
 
+// Darwin or windows fails to define this
+#ifndef O_RSYNC
+#define O_RSYNC 0x0
+#endif
+
 using namespace std;
 
 static std::string generate_random_string(int length = 20) {
