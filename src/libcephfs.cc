@@ -1138,7 +1138,11 @@ extern "C" int ceph_statxat(struct ceph_mount_info *cmount, int dirfd, const cha
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
+#ifdef CEPH_AT_EMPTY_PATH
+  if (flags & ~CEPH_AT_EMPTY_PATH)
+#else
   if (flags & ~CEPH_REQ_FLAG_MASK)
+#endif
     return -EINVAL;
   return cmount->get_client()->statxat(dirfd, relpath, stx, cmount->default_perms,
                                        want, flags);
