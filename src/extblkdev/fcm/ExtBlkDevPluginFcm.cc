@@ -399,6 +399,8 @@ public:
     (*pm)[prefix + "fcm"] = "true";
     (*pm)[prefix + "fcm_partition_physical_size"] = stringify(get_partition_physical_size());
     (*pm)[prefix + "fcm_partition_logical_size"] = stringify(get_partition_logical_size());
+    (*pm)[prefix + "fcm_partition_physical_avail"] = stringify(get_partition_physical_avail());
+    (*pm)[prefix + "fcm_partition_logical_avail"] = stringify(get_partition_logical_avail());
     (*pm)[prefix + "fcm_device_physical_size"] = stringify(get_device_physical_size());
     (*pm)[prefix + "fcm_device_logical_size"] = stringify(get_device_logical_size());
     return 0;
