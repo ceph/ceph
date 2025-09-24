@@ -1613,6 +1613,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
       ).si_then([l_start, len, &object_data, &ret](auto &&pins) {
 	ceph_assert(pins.size() >= 1);
         ceph_assert(pins.front().get_key() <= l_start);
+	auto off = l_start;
 	for (auto &&i: pins) {
 	  if (!(i.get_val().is_zero())) {
 	    laddr_offset_t ret_left = std::max(laddr_offset_t(i.get_key(), 0), l_start);
@@ -1620,12 +1621,17 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
 	      i.get_key() + i.get_length(),
 	      l_start + len);
 	    assert(ret_right > ret_left);
-	    ret.emplace(
-	      std::make_pair(
-		ret_left.get_byte_distance<uint64_t>(
-		  object_data.get_reserved_data_base()),
-		ret_right.get_byte_distance<uint64_t>(ret_left)
-	      ));
+	    if (off == ret_left && !ret.empty()) {
+	      ret.rbegin()->second += ret_right.get_byte_distance<uint64_t>(ret_left);
+	    } else {
+	      ret.emplace(
+		std::make_pair(
+		  ret_left.get_byte_distance<uint64_t>(
+		    object_data.get_reserved_data_base()),
+		  ret_right.get_byte_distance<uint64_t>(ret_left)
+		));
+	    }
+	    off = ret_right;
 	  }
 	}
       });
