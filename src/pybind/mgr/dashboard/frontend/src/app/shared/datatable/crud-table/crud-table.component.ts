@@ -118,15 +118,18 @@ export class CRUDTableComponent implements OnInit {
   }
 
   delete() {
-    const selectedKey = this.selection.first()[this.meta.columnKey];
+    let selectedKeys: string[] = [];
+    this.selection.selected.forEach((item: any) => {
+      selectedKeys.push(item[this.meta.columnKey]);
+    });
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`${this.meta.resource}`,
-      itemNames: [selectedKey],
+      itemNames: selectedKeys,
       submitAction: () => {
         this.taskWrapper
           .wrapTaskAroundCall({
-            task: new FinishedTask('crud-component/id', selectedKey),
-            call: this.dataGatewayService.delete(this.resource, selectedKey)
+            task: new FinishedTask('crud-component/id', selectedKeys),
+            call: this.dataGatewayService.delete(this.resource, selectedKeys)
           })
           .subscribe({
             error: () => {
