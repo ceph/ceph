@@ -708,7 +708,7 @@ else:
                 NVMeoFClient.pb2.namespace_add_host_req(subsystem_nqn=nqn,
                                                         nsid=int(nsid),
                                                         host_nqn=host_nqn,
-                                                        force=str_to_bool(force))
+                                                        force=str_to_bool(force) if force else None)
             )
 
         @ReadPermission
