@@ -140,10 +140,12 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
           << mirroring_disabled << dendl;
   for (auto &fs : mirroring_enabled) {
     m_service_daemon->add_filesystem(fs.fscid, fs.fs_name);
+    m_service_daemon->schedule_health_tick();
     m_listener.handle_mirroring_enabled(FilesystemSpec(fs, fs_metadata_pools.at(fs)));
   }
   for (auto &fs : mirroring_disabled) {
     m_service_daemon->remove_filesystem(fs.fscid);
+    m_service_daemon->schedule_health_tick();
     m_listener.handle_mirroring_disabled(fs);
   }
 
@@ -152,12 +154,14 @@ void ClusterWatcher::handle_fsmap(const cref_t<MFSMap> &m) {
   for (auto &[fs, peers] : peers_added) {
     for (auto &peer : peers) {
       m_service_daemon->add_peer(fs.fscid, peer);
+      m_service_daemon->schedule_health_tick();
       m_listener.handle_peers_added(fs, peer);
     }
   }
   for (auto &[fs, peers] : peers_removed) {
     for (auto &peer : peers) {
       m_service_daemon->remove_peer(fs.fscid, peer);
+      m_service_daemon->schedule_health_tick();
       m_listener.handle_peers_removed(fs, peer);
     }
   }

@@ -79,7 +79,7 @@ public:
   static std::list<DaemonHealthMetric> generate_test_instances() {
     std::list<DaemonHealthMetric> o;
     o.push_back(DaemonHealthMetric(daemon_metric::SLOW_OPS, 1));
-    o.push_back(DaemonHealthMetric(daemon_metric::MIRRORING_FAILURE, 1));
+    o.push_back(DaemonHealthMetric(daemon_metric::MIRRORING_FAILURE, 1, 3));
     o.push_back(DaemonHealthMetric(daemon_metric::PENDING_CREATING_PGS, 1, 2));
     return o;
   }

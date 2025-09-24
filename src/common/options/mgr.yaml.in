@@ -25,7 +25,7 @@ options:
 - name: mgr_stats_period
   type: int
   level: basic
-  desc: Period in seconds of OSD/MDS stats reports to manager
+  desc: Period in seconds of OSD/MDS/cephfs-mirror stats reports to manager
   long_desc: Use this setting to control the granularity of time series data collection
     from daemons.  Adjust upwards if the manager CPU load is too high, or if you simply
     do not require the most up to date performance counter data.

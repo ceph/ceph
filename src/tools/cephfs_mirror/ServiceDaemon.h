@@ -14,7 +14,7 @@
 namespace cephfs {
 namespace mirror {
 
-class ServiceDaemon {
+  class ServiceDaemon {
 public:
   ServiceDaemon(CephContext *cct, RadosRef rados, Messenger* msgr, MonClient* monc);
   ~ServiceDaemon();
@@ -31,7 +31,7 @@ public:
                                   AttributeValue value);
   void add_or_update_peer_attribute(fs_cluster_id_t fscid, const Peer &peer,
                                     std::string_view key, AttributeValue value);
-
+  void schedule_health_tick();
 private:
   struct Filesystem {
     std::string fs_name;
@@ -47,16 +47,18 @@ private:
 
   CephContext *m_cct;
   RadosRef m_rados;
-  SafeTimer *m_timer;
+  SafeTimer *m_timer, *h_timer;
   ceph::mutex m_timer_lock = ceph::make_mutex("cephfs::mirror::ServiceDaemon");
-
+  ceph::mutex h_timer_lock = ceph::make_mutex("cephfs::mirror::ServiceDaemon");
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::service_daemon");
   Context *m_timer_ctx = nullptr;
+  Context *h_timer_ctx = nullptr;
   std::map<fs_cluster_id_t, Filesystem> m_filesystems;
   MgrClient mgrc;
 
   void schedule_update_status();
   void update_status();
+  void health_tick();
   std::vector<DaemonHealthMetric> get_health_metrics();
 };
 
