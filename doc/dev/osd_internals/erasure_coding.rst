@@ -86,3 +86,4 @@ Table of contents
    Jerasure plugin <erasure_coding/jerasure>
    High level design document <erasure_coding/ecbackend>
    Erasure coding enhancements design document <erasure_coding/enhancements>
+   Split reads design document <split_reads>
