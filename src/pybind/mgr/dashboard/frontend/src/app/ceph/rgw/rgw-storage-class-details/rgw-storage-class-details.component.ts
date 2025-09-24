@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, inject, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import {
   ALLOW_READ_THROUGH_TEXT,
@@ -19,8 +19,11 @@ import {
   RESTORE_STORAGE_CLASS_TEXT,
   ZONEGROUP_TEXT,
   ACL,
-  GroupedACLs
+  GroupedACLs,
+  AllZonesResponse
 } from '../models/rgw-storage-class.model';
+import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 @Component({
   selector: 'cd-rgw-storage-class-details',
   templateUrl: './rgw-storage-class-details.component.html',
@@ -30,7 +33,6 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   @Input()
   selection: StorageClassDetails;
   columns: CdTableColumn[] = [];
-  storageDetails: StorageClassDetails;
   allowReadThroughText = ALLOW_READ_THROUGH_TEXT;
   retainHeadObjectText = RETAIN_HEAD_OBJECT_TEXT;
   multipartMinPartText = MULTIPART_MIN_PART_TEXT;
@@ -48,36 +50,49 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
   groupedACLs: GroupedACLs = {};
+  localStorageClassDetails = { zone_name: '', data_pool: '' };
+  loading = false;
+
+  private rgwZoneService = inject(RgwZoneService);
 
   ngOnChanges(changes: SimpleChanges): void {
-    if (changes['selection']) {
-      this.storageDetails = {
-        zonegroup_name: this.selection?.zonegroup_name,
-        placement_targets: this.selection?.placement_targets,
-        access_key: this.selection?.access_key,
-        secret: this.selection?.secret,
-        target_path: this.selection?.target_path,
-        tier_type: this.selection?.tier_type,
-        multipart_min_part_size: this.selection?.multipart_min_part_size,
-        multipart_sync_threshold: this.selection?.multipart_sync_threshold,
-        host_style: this.selection?.host_style,
-        retain_head_object: this.selection?.retain_head_object,
-        allow_read_through: this.selection?.allow_read_through,
-        glacier_restore_days: this.selection?.glacier_restore_days,
-        glacier_restore_tier_type: this.selection?.glacier_restore_tier_type,
-        restore_storage_class: this.selection?.restore_storage_class,
-        read_through_restore_days: this.selection?.read_through_restore_days
-      };
+    if (
+      changes['selection'] &&
+      changes['selection'].currentValue?.tier_type?.toLowerCase() === TIER_TYPE.LOCAL &&
+      changes['selection'].firstChange
+    ) {
+      // The idea here is to not call the API if we already have the zone_name and data_pool
+      // When the details view is expanded and table refreshes data then this API should not be called again
+      const { zone_name, data_pool } = this.localStorageClassDetails;
+      if (!zone_name || !data_pool) {
+        this.getZoneInfo();
+      }
     }
   }
 
   ngOnInit() {
-    this.groupedACLs = this.groupByType(this.selection.acl_mappings);
+    this.groupedACLs = this.groupByType(this.selection?.acl_mappings);
   }
 
   isTierMatch(...types: string[]): boolean {
     const tier_type = this.selection.tier_type?.toLowerCase();
     return types.some((type) => type.toLowerCase() === tier_type);
+  }
+
+  getZoneInfo() {
+    this.loading = true;
+    this.rgwZoneService.getAllZonesInfo().subscribe({
+      next: (data: AllZonesResponse) => {
+        this.localStorageClassDetails = BucketTieringUtils.getZoneInfoHelper(
+          data.zones,
+          this.selection
+        );
+        this.loading = false;
+      },
+      error: () => {
+        this.loading = false;
+      }
+    });
   }
 
   groupByType(acls: ACL[]): GroupedACLs {

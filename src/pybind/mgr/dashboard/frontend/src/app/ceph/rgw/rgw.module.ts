@@ -84,7 +84,8 @@ import {
   ComboBoxModule,
   ToggletipModule,
   IconService,
-  LayoutModule
+  LayoutModule,
+  SkeletonModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -152,7 +153,8 @@ import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notifi
     ToggletipModule,
     RadioModule,
     SelectModule,
-    LayoutModule
+    LayoutModule,
+    SkeletonModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
