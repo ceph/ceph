@@ -1803,7 +1803,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     ceph_assert(it != inode_map.end());
     diri = it->second;
     
-    string dname = request->path.last_dentry();
+    auto dname = std::string(request->path.last_dentry());
     
     LeaseStat dlease;
     dlease.duration_ms = 0;
