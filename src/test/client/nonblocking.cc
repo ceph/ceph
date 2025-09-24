@@ -519,7 +519,7 @@ TEST_F(TestClient, LlreadvLlwritevZeroBytes) {
                                  &bl);
   ASSERT_EQ(rc, 0);
   ssize_t bytes_read = readfinish->wait();
-  ASSERT_EQ(bytes_read, 0);
+  ASSERT_EQ(bytes_read, -EINVAL);
 
   copy_bufferlist_to_iovec(iov_in, 2, &bl, bytes_read);
   ASSERT_EQ(0, strncmp((const char*)iov_in[0].iov_base,
