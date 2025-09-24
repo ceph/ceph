@@ -246,10 +246,10 @@ class ExtBlkDevFcm : public ceph::ExtBlkDevInterface
     return 0;
   }
 
-  static int fcm_get_int_property(const std::string& dev, const std::string& attr)
+  static int fcm_get_int_property(const std::string& devpath, const std::string& attr)
   {
     // fetch integer device attribute from sysfs
-    std::string path=std::string("/sys/block/")+dev+"/device/device/"+attr;
+    std::string path = devpath + "/device/"+attr;
     int fd=::open(path.c_str(), O_RDONLY);
     if(fd<0)
       return -errno;
@@ -297,11 +297,17 @@ public:
     std::set<std::string> raw_devices;
     get_raw_devices(logdevname, &raw_devices);
     for (auto& d : raw_devices) {
-      // get vendor and device id of underlying hardware, compare with FCM ids
-      if(fcm_get_int_property(d, "vendor") == 0x1014 &&
-	 fcm_get_int_property(d, "device") == 0x0634){
-	fcm_devices.push_back(fcm_dev(d));
-	dout(1) << __func__ << " Found FCM vendor/device id on " << d << dendl;
+      std::string devpath = "/sys/block/" + d + "/device/";
+      uint32_t vendor;
+      uint32_t device;
+      if (scan_device_and_vendor(devpath, vendor, device) == 0) {
+        dout(10) << __func__ << "found device=" << device
+                 << " vendor=" << vendor << " at " << devpath << dendl;
+        // get vendor and device id of underlying hardware, compare with FCM ids
+        if (vendor == 0x1014 && device == 0x0634) {
+          fcm_devices.push_back(fcm_dev(d));
+          dout(1) << __func__ << " Found FCM vendor/device id on " << d << dendl;
+        }
       }
     }
     if(fcm_devices.empty()){
@@ -328,6 +334,40 @@ public:
     }
     return 0;
   }
+  /*
+    Scans provided directory for entries ?/device/device and ?/device/vendor.
+
+    For example for "nvme0n1" device the required files are in:
+    /sys/block/nvme0n1/device/nvme0/device/device and
+    /sys/block/nvme0n1/device/nvme0/device/vendor
+  */
+  int scan_device_and_vendor( const std::string& e,
+                              uint32_t& vendor,
+                              uint32_t& device) {
+    DIR *dir;
+    struct dirent *entry;
+    dir = opendir(e.c_str());
+    if (dir == nullptr) {
+      return -1;
+    }
+    int result = -1;
+    while ((entry = readdir(dir)) != nullptr) {
+      int vendor_i;
+      int device_i = fcm_get_int_property(e + entry->d_name, "device");
+      if (device_i >= 0) {
+        vendor_i = fcm_get_int_property(e + entry->d_name, "vendor");
+      }
+      if (vendor_i >= 0 && device_i >= 0) {
+        device = device_i;
+        vendor = vendor_i;
+        result = 0;
+        break;
+      }
+    }
+    closedir(dir);
+    return result;
+  }
+
   virtual const std::string& get_devname() const {return logdevname;}
   int get_state(ExtBlkDevState& state)
   {
