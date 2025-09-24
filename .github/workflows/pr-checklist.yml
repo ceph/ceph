@@ -16,4 +16,4 @@ jobs:
         shell: bash
       - name: Action
         id: checklist
-        uses: ceph/ceph-pr-checklist-action@b15031f5d7e2a825b7e5b2fd4f76ae3a9e8aaaf3
+        uses: ceph/ceph-pr-checklist-action@bbb22324f4542fe8ca98c9be74b3aa4365eec38b
