@@ -155,6 +155,7 @@ void RGWZoneParams::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("gc_pool", gc_pool, obj);
   JSONDecoder::decode_json("lc_pool", lc_pool, obj);
   JSONDecoder::decode_json("log_pool", log_pool, obj);
+  JSONDecoder::decode_json("logging_pool", log_pool, obj); // Todo: Find a better name
   JSONDecoder::decode_json("intent_log_pool", intent_log_pool, obj);
   JSONDecoder::decode_json("roles_pool", roles_pool, obj);
   JSONDecoder::decode_json("reshard_pool", reshard_pool, obj);
@@ -185,6 +186,7 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("gc_pool", gc_pool, f);
   encode_json("lc_pool", lc_pool, f);
   encode_json("log_pool", log_pool, f);
+  encode_json("logging_pool", log_pool, f);
   encode_json("intent_log_pool", intent_log_pool, f);
   encode_json("usage_log_pool", usage_log_pool, f);
   encode_json("roles_pool", roles_pool, f);
@@ -245,6 +247,7 @@ void add_zone_pools(const RGWZoneParams& info,
   pools.insert(info.dedup_pool);
   pools.insert(info.gc_pool);
   pools.insert(info.log_pool);
+  pools.insert(info.logging_pool);
   pools.insert(info.intent_log_pool);
   pools.insert(info.usage_log_pool);
   pools.insert(info.user_keys_pool);
@@ -836,6 +839,7 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   info.otp_pool = fix_zone_pool_dup(pools, info.name, ".rgw.otp", info.otp_pool);
   info.oidc_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:oidc", info.oidc_pool);
   info.notif_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:notif", info.notif_pool);
+  info.logging_pool = fix_zone_pool_dup(pools, info.name, ".rgw.log:logging", info.logging_pool);
   info.topics_pool =
       fix_zone_pool_dup(pools, info.name, ".rgw.meta:topics", info.topics_pool);
   info.account_pool = fix_zone_pool_dup(pools, info.name, ".rgw.meta:accounts", info.account_pool);

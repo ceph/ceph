@@ -71,6 +71,40 @@ int cls_queue_list_entries_inner(IoCtx& io_ctx, const string& oid, vector<cls_qu
   return 0;
 }
 
+
+int cls_queue_list_entries_start(librados::ObjectReadOperation& op, bufferlist *out,
+                                 int* prval, const std::string& marker, uint32_t max)
+{
+  bufferlist in;
+  cls_queue_list_op list_op;
+  list_op.start_marker = marker;
+  list_op.max = max;
+  encode(list_op, in);
+
+  op.exec(QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out, prval);
+  return 0;
+}
+
+int cls_queue_list_entries_finish(const bufferlist& out,
+                                  std::vector<cls_queue_entry>& entries,
+                                  bool *truncated, std::string& next_marker)
+{
+  cls_queue_list_ret ret;
+
+  auto iter = out.cbegin();
+  try {
+    decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entries = std::move(ret.entries);
+  *truncated = ret.is_truncated;
+
+  next_marker = std::move(ret.next_marker);
+  return 0;
+}
+
 int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max,
                             vector<cls_queue_entry>& entries,
                             bool *truncated, string& next_marker)

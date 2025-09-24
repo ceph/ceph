@@ -102,7 +102,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool quota_threads,
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
-                 bool run_notification_thread,
+						     bool run_notification_thread,
 						     bool use_cache,
 						     bool use_gc,
 						     bool background_tasks,
@@ -125,6 +125,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
+                .set_run_bucket_logging_thread(run_notification_thread) //NITHYA : FIXFIX
 	              .init_begin(cct, dpp, background_tasks, site_config, cfgstore) < 0) {
       delete driver;
       return nullptr;
@@ -159,6 +160,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
                 .set_run_notification_thread(run_notification_thread)
+                .set_run_bucket_logging_thread(run_notification_thread) // NITHYA : FIX!
 	              .init_begin(cct, dpp, background_tasks, site_config, cfgstore) < 0) {
       delete driver;
       return nullptr;
