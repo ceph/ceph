@@ -10667,7 +10667,7 @@ void MDCache::discover_path(CDir *base,
   }
 
   if ((path_locked && want_path.depth() == 1) ||
-      !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
+      !base->is_waiting_for_dentry(want_path[0], snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
     d.pin_base(base->inode);

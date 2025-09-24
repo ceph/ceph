@@ -173,7 +173,7 @@ public:
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_alternate_name(std::string an) { alternate_name = an; }
-  void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
+  void set_string2(const char *s) { path2.set_string(std::string_view(s)); }
   void set_caller_perms(const UserPerm& _perms) {
     perms = _perms;
     head.caller_uid = perms.uid();

@@ -215,7 +215,7 @@ public:
   void set_retry_attempt(int a) { head.ext_num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
+  void set_string2(const char *s) { path2.set_string(std::string_view(s)); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_gid_list(int count, const gid_t *gids) {
@@ -252,9 +252,9 @@ public:
   unsigned get_owner_gid() const { return head.owner_gid; }
   const std::vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
-  const std::string& get_path() const { return path.get_path(); }
+  std::string_view get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
-  const std::string& get_path2() const { return path2.get_path(); }
+  std::string_view get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
   std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
 
