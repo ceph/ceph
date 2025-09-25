@@ -253,48 +253,36 @@ public:
     uint64_t offset, size_t len, void *buffer_ptr);
 
   stat_device_ret stat_device() final {
-    return seastar::file_stat(device_path, seastar::follow_symlink::yes
+    auto stat = co_await seastar::file_stat(
+      device_path, seastar::follow_symlink::yes
     ).handle_exception([](auto e) -> stat_device_ret {
       return crimson::ct_error::input_output_error::make();
-    }).then([this](auto stat) {
-      return seastar::open_file_dma(
-	device_path,
-	seastar::open_flags::rw | seastar::open_flags::dsync
-      ).then([this, stat](auto file) mutable {
-	return seastar::do_with(
-	  file, stat,
-	  [this](auto &file, auto &stat) mutable 
-	{
-	  return file.size().then([this, &stat, &file](auto size) mutable {
-	    stat.size = size;
-	    return identify_namespace(file
-	    ).safe_then([&stat] (auto id_namespace_data) mutable {
-	      // LBA format provides LBA size which is power of 2. LBA is the
-	      // minimum size of read and write.
-	      stat.block_size = (1 << id_namespace_data.lbaf[0].lbads);
-	      if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
-		stat.block_size = RBM_SUPERBLOCK_SIZE;
-	      } 
-	      return read_ertr::now();
-	    }).handle_error(crimson::ct_error::input_output_error::handle(
-	      [&stat]() mutable {
-	      if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
-                stat.block_size = RBM_SUPERBLOCK_SIZE;
-              }
-	      return read_ertr::now();
-	    }), crimson::ct_error::pass_further_all{});
-	  }).safe_then([&file, &stat]() mutable {
-	    return file.close(
-	    ).then([&stat] {
-	      return stat_device_ret(
-		read_ertr::ready_future_marker{},
-		stat
-	      );
-	    });
-	  });
-	});
-      });
     });
+
+    auto file = co_await seastar::open_file_dma(device_path,
+	seastar::open_flags::rw | seastar::open_flags::dsync);
+
+    auto size = co_await file.size();
+    stat.size = size;
+    std::optional<nvme_identify_namespace_data_t> id_ns_data =
+      co_await identify_namespace(file
+      ).safe_then([] (auto id_namespace_data) mutable {
+	return std::optional<nvme_identify_namespace_data_t>(id_namespace_data);
+      }).handle_error(crimson::ct_error::input_output_error::handle([]{
+	return std::nullopt;
+      }));
+
+    if (id_ns_data) {
+      // LBA format provides LBA size which is power of 2. LBA is the
+      // minimum size of read and write.
+      stat.block_size = (1 << (*id_ns_data).lbaf[0].lbads);
+    } 
+    if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
+      stat.block_size = RBM_SUPERBLOCK_SIZE;
+    } 
+
+    co_await file.close();
+    co_return std::move(stat);
   }
 
   std::string get_device_path() const final {
