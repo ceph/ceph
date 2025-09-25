@@ -1124,6 +1124,23 @@ int reflect_period(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   for (auto& [zonegroup_id, zonegroup] : info.period_map.zonegroups) {
+    // read the existing zonegroup
+    RGWZoneGroup existing_zg;
+    std::unique_ptr<sal::ZoneGroupWriter> writer;
+    r = cfgstore->read_zonegroup_by_id(dpp, y, zonegroup_id, existing_zg, &writer);
+    if (r == 0) {
+      // if the name changed, call rename() instead of create
+      if (existing_zg.name != zonegroup.name) {
+        RGWZoneGroup new_zg = zonegroup; // copy because zonegroup is const
+        std::string new_name = std::move(new_zg.name);
+        new_zg.name = std::move(existing_zg.name); // rename() expects old name
+        r = writer->rename(dpp, y, new_zg, new_name);
+        if (r < 0) {
+          ldpp_dout(dpp, -1) << __func__ << " failed to remove old zonegroup name "
+              << existing_zg.name << " with " << cpp_strerror(r) << dendl;
+        }
+      }
+    }
     r = cfgstore->create_zonegroup(dpp, y, exclusive, zonegroup, nullptr);
     if (r < 0) {
       ldpp_dout(dpp, -1) << __func__ << " failed to store zonegroup id="
@@ -1281,6 +1298,7 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
       ldpp_dout(dpp, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
     }
+
     // set as current period
     r = realm_set_current_period(dpp, y, cfgstore, realm_writer, realm, info);
     if (r < 0) {
