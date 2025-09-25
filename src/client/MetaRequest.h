@@ -7,7 +7,7 @@
 
 #include "include/types.h"
 #include "include/xlist.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "mds/mdstypes.h"
 #include "DentryRef.h"
 #include "InodeRef.h"

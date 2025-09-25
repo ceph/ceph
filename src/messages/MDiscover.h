@@ -17,7 +17,7 @@
 #ifndef CEPH_MDISCOVER_H
 #define CEPH_MDISCOVER_H
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "messages/MMDSOp.h"
 
 #include <string>
