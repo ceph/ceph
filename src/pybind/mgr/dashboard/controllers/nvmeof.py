@@ -195,15 +195,20 @@ else:
             "Create a new NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "enable_ha": Param(bool, "Enable high availability", True, None),
                 "max_namespaces": Param(int, "Maximum number of namespaces", True, 4096),
-                "enable_ha": Param(bool, "Enable high availability"),
+                "no_group_append": Param(int, "Do not append gateway group name to the NQN",
+                                         True, False),
+                "serial_number": Param(int, "Subsystem serial number", True, None),
+                "dhchap_key": Param(int, "Subsystem DH-HMAC-CHAP key", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
             },
         )
         @convert_to_model(model.SubsystemStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, enable_ha: Optional[bool] = True,
-                   max_namespaces: Optional[int] = 4096, no_group_append: Optional[bool] = True,
+                   max_namespaces: Optional[int] = 4096, no_group_append: Optional[bool] = False,
                    serial_number: Optional[str] = None, dhchap_key: Optional[str] = None,
                    gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.create_subsystem(

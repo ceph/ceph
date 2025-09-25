@@ -8790,7 +8790,8 @@ paths:
             schema:
               properties:
                 dhchap_key:
-                  type: string
+                  description: Subsystem DH-HMAC-CHAP key
+                  type: integer
                 enable_ha:
                   default: true
                   description: Enable high availability
@@ -8803,14 +8804,17 @@ paths:
                   description: Maximum number of namespaces
                   type: integer
                 no_group_append:
-                  default: true
-                  type: boolean
+                  default: false
+                  description: Do not append gateway group name to the NQN
+                  type: integer
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
                 serial_number:
+                  description: Subsystem serial number
                   type: integer
                 traddr:
+                  description: NVMeoF gateway address
                   type: string
               required:
               - nqn
