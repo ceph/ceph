@@ -1497,7 +1497,8 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
   //running the loaded script 
   try {
     boost::system::error_code ec;
-    response<bool,std::string> resp; //the response RESP3 should contain a tuple of <bool status, string result>
+    //response<bool,std::string> resp; //the response RESP3 should contain a tuple of <bool status, string result>
+    response<bool> resp; //LUA script returns only bool status, the string result is removed to avoid RESP3 related issues.
     request req;
 
     unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
@@ -1559,17 +1560,18 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       // the response contain whether the transaction was successful or not <bool status, string result>
       // Extract values
 	bool status = std::get<0>(resp).value();
-	std::string result = std::get<1>(resp).value();
-
+	//std::string result = std::get<1>(resp).value();
+#if 0
       //could be compile-time error or no matching script.
       if (result.starts_with("ERR") || result.starts_with("NOSCRIPT") || result.starts_with("WRONGTYPE")) {
 	 ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with result =" << result << dendl;
          return -EINVAL;
       }
-
-      if(status == 0) {
+#endif
+      if(status == false) {
 	//the transaction had failed, it was rolled back.
-	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << "  " << result << dendl;
+	//ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << "  " << result << dendl;
+	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this <<  dendl;
 	return -EINVAL;
       }
 

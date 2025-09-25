@@ -674,6 +674,8 @@ std::unique_ptr<MultipartUpload> D4NFilterBucket::get_multipart_upload(
 
 void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
 {
+  //check if m_d4n_trx is initialized
+  if(!m_d4n_trx) {
   //create D4NTransaction object and pass the Directory* objects to it
     m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(driver->get_connection());
     m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(driver->get_connection());
@@ -687,8 +689,9 @@ void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
     m_objDir->set_redis_pool(driver->get_redis_pool());
     m_blockDir->set_redis_pool(driver->get_redis_pool());
     m_bucketDir->set_redis_pool(driver->get_redis_pool());
-
+  }
     //start transaction
+    m_d4n_trx->clear_temp_keys();
     m_d4n_trx->start_trx();
     ldpp_dout(dpp, 0) << "D4NFilterObject::d4n_init_transaction " << m_d4n_trx.get() << dendl;	
 }
@@ -751,6 +754,9 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
+  int end_transaction_rc = 0;
+  rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
   bool write_to_cache = g_conf()->d4n_writecache_enabled;
   bool dirty{false};
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->get_read_op());
@@ -938,6 +944,9 @@ int D4NFilterObject::load_obj_state(const DoutPrefixProvider *dpp, optional_yiel
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags)
 {
+  int end_transaction_rc = 0;
+  rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
   rgw::d4n::CacheBlock block;
@@ -1651,6 +1660,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,  uint32_t flags)
 {
+  int end_transaction_rc = 0;
+  rgw::sal::D4NTransactionMng _scoped(this, dpp, end_transaction_rc);
+
   Attrs update;
   update[(std::string)attr_name] = attr_val;
   std::string head_oid_in_cache;
@@ -2433,6 +2445,9 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 {
   // TODO: Send delete request to cache nodes with remote copies
 
+  int end_transaction_rc = 0;
+  rgw::sal::D4NTransactionMng _scoped(source, dpp, end_transaction_rc);
+
   rgw::sal::Attrs attrs;
   std::string head_oid_in_cache;
   rgw::d4n::CacheBlock block;
@@ -2815,6 +2830,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
+  int end_transaction_rc = 0;
+  rgw::sal::D4NTransactionMng _scoped(object, dpp, end_transaction_rc);
+
   bool dirty = false;
   std::unordered_set<std::string> hostsList = {};
   std::string objEtag = etag;

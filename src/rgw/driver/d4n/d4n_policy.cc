@@ -598,7 +598,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     rgw::sal::Attrs obj_attrs;
     bool invalid = false;
     // end_transaction_rc is used to indicate whether the transaction was successful or not.
-    int end_transaction_rc = 0;
+    //int end_transaction_rc = 0;
   
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "" << __LINE__ << "(): Before acquiring cleaning-lock" << dendl;
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
@@ -685,7 +685,8 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
 	}
       } else {
 	//upon invalid state(should write to backend), we need to start a transaction
-	rgw::sal::D4NTransactionMng _scoped(objDir, dpp, end_transaction_rc);
+	//rgw::sal::D4NTransactionMng _scoped(objDir, dpp, end_transaction_rc);//causing transaction to abort
+	//TODO the transaction-id should be genearted per each cycle, it should get the connection from pool
 
 	rgw_user c_rgw_user = e->user; 
 	//writing data to the backend
