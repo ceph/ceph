@@ -31,6 +31,7 @@ endif()
 add_subdirectory(pybind)
 add_subdirectory(dokan)
 add_subdirectory(libcephfs)
+add_subdirectory(filepath)
 
 # Not available on Windows for the time being.
 if(NOT WIN32)
