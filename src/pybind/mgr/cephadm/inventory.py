@@ -44,6 +44,7 @@ NODE_PROXY_CACHE_PREFIX = 'node_proxy'
 class HostCacheStatus(enum.Enum):
     stray = 'stray'
     host = 'host'
+    additional_host_entry = 'additional_host_entry'
     devices = 'devices'
 
 
@@ -815,13 +816,18 @@ class HostCache():
         # type: () -> None
         for k, v in self.mgr.get_store_prefix(HOST_CACHE_PREFIX).items():
             host = k[len(HOST_CACHE_PREFIX):]
-            if self._get_host_cache_entry_status(host) != HostCacheStatus.host:
-                if self._get_host_cache_entry_status(host) == HostCacheStatus.devices:
+            entry_type = self._get_host_cache_entry_status(host)
+            if entry_type != HostCacheStatus.host:
+                if (
+                    entry_type == HostCacheStatus.devices
+                    or entry_type == HostCacheStatus.additional_host_entry
+                ):
                     continue
                 self.mgr.log.warning('removing stray HostCache host record %s' % (
                     host))
                 self.mgr.set_store(k, None)
             try:
+                host, v = self._combine_potential_split_entry(host, v)
                 j = json.loads(v)
                 if 'last_device_update' in j:
                     self.last_device_update[host] = str_to_datetime(j['last_device_update'])
@@ -884,7 +890,15 @@ class HostCache():
         # <hostname>.devices.<integer> where <hostname> is
         # in out inventory. If neither case applies, it is stray
         if host in self.mgr.inventory:
+            # legacy entry "mgr/cephadm/host.<hostname>"
             return HostCacheStatus.host
+        elif ';' in host and host.split(';', 1)[0] in self.mgr.inventory:
+            # new entry style that allows multiple entries per host
+            # "mgr/cephadm/host.<hostname>;<entry-id>"
+            if host.split(';', 1)[1] == '0':
+                return HostCacheStatus.host
+            else:
+                return HostCacheStatus.additional_host_entry
         try:
             # try stripping off the ".devices.<integer>" and see if we get
             # a host name that matches our inventory
@@ -892,6 +906,76 @@ class HostCache():
             return HostCacheStatus.devices if actual_host in self.mgr.inventory else HostCacheStatus.stray
         except Exception:
             return HostCacheStatus.stray
+
+    def _combine_potential_split_entry(self, hostname: str, entry_content: str) -> Tuple[str, str]:
+        # HostCache load function should have filtered out "additional"
+        # host entries "mgr/cephadm/host.<hostname>;<entry-id>" where entry-id > 0 as
+        # well as device entries "mgr/cephadm/host.<hostname>/devices.<entry-id>"
+        # if we're here, the entry should be either "mgr/cephadm/host.<hostname>"
+        # or "mgr/cephadm/host.<hostname>;0"
+        if ';' not in hostname:
+            # old style, just one entry for this host
+            return hostname, entry_content
+        else:
+            # new style of entry that allows splitting the host entry
+            hostname = hostname.split(';', 1)[0]
+            entries = [entry_content]
+            found_content = True
+            entry_id_to_check = 1
+            while found_content:
+                next_entry_name = HOST_CACHE_PREFIX + hostname + f';{entry_id_to_check}'
+                next_entry_content = self.mgr.get_store(next_entry_name)
+                if next_entry_content:
+                    entries.append(next_entry_content)
+                    entry_id_to_check += 1
+                else:
+                    found_content = False
+            return hostname, ''.join(entries)
+
+    def _potentially_split_and_save_host_entry(self, hostname: str, entry_content: str) -> None:
+        cache_size: int = self.mgr.get_foreign_ceph_option('mon', 'mon_config_key_max_entry_size')
+        if not cache_size:
+            self.mgr.set_store(HOST_CACHE_PREFIX + hostname + ';0', entry_content)
+            return
+
+        def byte_len(s: str) -> int:
+            return len(s.encode('utf-8'))
+
+        entries: List[str] = []
+        required_entry_count = math.ceil(byte_len(entry_content) / cache_size)
+        chars_per_entry: int = math.floor(len(entry_content) / (required_entry_count))
+        for i in range(required_entry_count):
+            if i == (required_entry_count - 1):
+                entry = entry_content[i * chars_per_entry:len(entry_content)]
+                entries.append(entry)
+            else:
+                entry = entry_content[i * chars_per_entry:(i + 1) * chars_per_entry]
+                entries.append(entry)
+
+        for i in range(len(entries)):
+            self.mgr.set_store(HOST_CACHE_PREFIX + hostname + f';{i}', entries[i])
+
+        # it is possible that we now have less entries than we did previously if
+        # the user has moved daemons off of this host or the mon config key store
+        # entry max size has been raised. Make sure to clean up any extra entries
+        # if they are present
+        self._cleanup_potential_split_host_entries(hostname, starting_entry_id=len(entries))
+
+    def _cleanup_potential_split_host_entries(self, hostname: str, starting_entry_id: int = 0) -> None:
+        # cover case of old format that didn't allow splitting entries
+        self.mgr.set_store(HOST_CACHE_PREFIX + hostname, None)
+
+        # cover case of new format that could have multiple entries per host
+        found_content = True
+        entry_id_to_check = starting_entry_id
+        while found_content:
+            next_entry_name = HOST_CACHE_PREFIX + hostname + f';{entry_id_to_check}'
+            next_entry_content = self.mgr.get_store(next_entry_name)
+            if next_entry_content:
+                self.mgr.set_store(next_entry_name, None)
+                entry_id_to_check += 1
+            else:
+                found_content = False
 
     def update_host_daemons(self, host, dm):
         # type: (str, Dict[str, orchestrator.DaemonDescription]) -> None
@@ -1088,7 +1172,7 @@ class HostCache():
         if host in self.devices:
             self.save_host_devices(host)
 
-        self.mgr.set_store(HOST_CACHE_PREFIX + host, json.dumps(j))
+        self._potentially_split_and_save_host_entry(host, json.dumps(j))
 
     def save_host_devices(self, host: str) -> None:
         if host not in self.devices or not self.devices[host]:
@@ -1186,7 +1270,7 @@ class HostCache():
             del self.scheduled_daemon_actions[host]
         if host in self.last_client_files:
             del self.last_client_files[host]
-        self.mgr.set_store(HOST_CACHE_PREFIX + host, None)
+        self._cleanup_potential_split_host_entries(host)
 
     def get_hosts(self):
         # type: () -> List[str]
