@@ -9355,7 +9355,8 @@ paths:
                   type: boolean
                 disable_auto_resize:
                   default: false
-                  type: integer
+                  description: Disable auto resize
+                  type: string
                 force:
                   default: false
                   description: Force create namespace even it image is used by other
@@ -9371,6 +9372,8 @@ paths:
                   default: false
                   description: Namespace will be visible only for the allowed hosts
                   type: boolean
+                nsid:
+                  type: string
                 rbd_image_name:
                   description: RBD image name
                   type: string
@@ -9383,12 +9386,13 @@ paths:
                   type: string
                 read_only:
                   default: false
-                  type: boolean
+                  description: Read only namespace
+                  type: string
                 size:
-                  default: 1024
                   description: RBD image size
                   type: integer
                 traddr:
+                  description: Target gateway address
                   type: string
                 trash_image:
                   default: false
