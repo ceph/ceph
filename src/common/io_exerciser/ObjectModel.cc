@@ -222,22 +222,3 @@ void ObjectModel::applyIoOp(IoOp& op) {
       break;
   }
 }
-
-void ObjectModel::encode(ceph::buffer::list& bl) const {
-  ENCODE_START(1, 1, bl);
-  encode(primary_created, bl);
-  if (primary_created) {
-    encode(primary_contents, bl);
-  }
-  ENCODE_FINISH(bl);
-}
-
-void ObjectModel::decode(ceph::buffer::list::const_iterator& bl) {
-  DECODE_START(1, bl);
-  DECODE_OLDEST(1);
-  decode(primary_created, bl);
-  if (primary_created) {
-    decode(primary_contents, bl);
-  }
-  DECODE_FINISH(bl);
-}

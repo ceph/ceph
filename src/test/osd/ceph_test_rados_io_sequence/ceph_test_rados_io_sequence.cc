@@ -1313,13 +1313,6 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
   } else {
     const std::string pool = spo.select();
 
-    bufferlist inbl, outbl;
-    auto formatter = std::make_unique<JSONFormatter>(false);
-
-    JSONParser p;
-    bool success = p.parse(outbl.c_str(), outbl.length());
-    ceph_assert(success);
-
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), rng(),
         1,  // 1 thread

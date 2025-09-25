@@ -22,7 +22,7 @@ void Model::set_secondary_oid(const std::string& new_oid) {
 void Model::swap_primary_secondary_oid() {
     std::string old_primary;
     old_primary = get_primary_oid();
-    set_primary_oid(Model::get_secondary_oid());
+    set_primary_oid(get_secondary_oid());
     set_secondary_oid(old_primary);
 }
 
