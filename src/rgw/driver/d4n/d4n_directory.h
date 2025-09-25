@@ -202,31 +202,49 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+class DirectoryConnection {
+public:
+  DirectoryConnection(boost::asio::io_context& io_context) : io_context(io_context) {}
+  int initialize(const DoutPrefixProvider *dpp);
+  void shutdown();
+  template <typename... Types>
+  void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+          int index,
+          boost::system::error_code& ec,
+          const boost::redis::request& req,
+          boost::redis::response<Types...>& resp,
+          optional_yield y);
+  void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+          int index,
+          boost::system::error_code& ec,
+          const boost::redis::request& req,
+          boost::redis::generic_response& resp,
+          optional_yield y);
+  template <typename... Types>
+  void redis_exec(const DoutPrefixProvider* dpp,
+                  std::string& key,
+                  boost::system::error_code& ec,
+                  const boost::redis::request& req,
+                  boost::redis::response<Types...>& resp, optional_yield y);
+  int findClient(const DoutPrefixProvider* dpp, std::string key);
+private:
+  boost::asio::io_context& io_context;
+  std::shared_ptr<MultiRedisPoolManager> redis_pool_manager{nullptr};
+  std::vector<std::shared_ptr<connection>> connections;
+  std::vector<std::string> hosts;
+  std::vector<std::string> ports;
+
+  std::pair<std::vector<std::string>, std::vector<std::string>> parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address);
+};
+
 class Directory {
   public:
-	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
-    	void set_redis_pool(std::shared_ptr<RedisPool> pool) {
-      	redis_pool = pool;
-    }
-    void set_redis_pool_manager(std::shared_ptr<MultiRedisPoolManager> pool_manager) {
-      	redis_pool_manager = pool_manager;
-    }
     Directory() {}
-    std::shared_ptr<MultiRedisPoolManager> connectClient(const DoutPrefixProvider* dpp,
-                                                                boost::asio::io_context& io_context,
-                                                                const std::vector<std::string>& hosts,
-                                                                const std::vector<std::string>& ports,
-                                                                size_t connection_pool_size);
-    int findClient(const DoutPrefixProvider* dpp, std::string key);
-  protected:
-    std::shared_ptr<MultiRedisPoolManager> redis_pool_manager{nullptr};
-  private:
-    std::pair<std::vector<std::string>, std::vector<int>> parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address);
 };
 
 class Pipeline {
   public:
-    Pipeline(std::vector<std::shared_ptr<connection>>& connections, std::shared_ptr<MultiRedisPoolManager> redis_pool_manager) : connections(connections), redis_pool_manager(redis_pool_manager) {}
+    Pipeline(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
     void start() { pipeline_mode = true; }
     //executes all commands and sets pipeline mode to false
     int execute(const DoutPrefixProvider* dpp, optional_yield y);
@@ -237,15 +255,14 @@ class Pipeline {
     }
 
   private:
-    std::vector<std::shared_ptr<connection>>& connections;
-    std::shared_ptr<MultiRedisPoolManager> redis_pool_manager{nullptr};
+    std::shared_ptr<DirectoryConnection> dir_conn;
     std::unordered_map<int, request> requests;
     bool pipeline_mode{false};
 };
 
 class BucketDirectory: public Directory {
   public:
-    BucketDirectory(std::vector<std::shared_ptr<connection>>& connections) : connections(connections) {}
+    BucketDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
     int zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline=nullptr);
     int zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y);
     int zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y);
@@ -253,12 +270,12 @@ class BucketDirectory: public Directory {
     int zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y);
 
   private:
-    std::vector<std::shared_ptr<connection>>& connections;
+    std::shared_ptr<DirectoryConnection> dir_conn;
 };
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(std::vector<std::shared_ptr<connection>>& connections) : connections(connections) {}
+    ObjectDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
@@ -277,15 +294,15 @@ class ObjectDirectory: public Directory {
     int incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
   private:
-    std::vector<std::shared_ptr<connection>> connections;
+    std::shared_ptr<DirectoryConnection> dir_conn;
 
     std::string build_index(CacheObj* object);
 };
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(std::vector<std::shared_ptr<connection>>& connections) : connections(connections) {}
-    
+    BlockDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
+
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 
     //Pipelined version of set
@@ -307,7 +324,7 @@ class BlockDirectory: public Directory {
     int zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y);
 
   private:
-    std::vector<std::shared_ptr<connection>> connections;
+    std::shared_ptr<DirectoryConnection> dir_conn;
     std::string build_index(CacheBlock* block);
 
     template<SeqContainer Container>
