@@ -1358,6 +1358,23 @@ test_empty_group()
   check_daemon_running "${secondary_cluster}"
 }
 
+# test removal of a non existing group
+declare -a test_remove_non_existing_group_1=("${CLUSTER2}" ${pool0} "group_blabla")
+
+test_remove_non_existing_group_scenarios=1
+
+test_remove_non_existing_group()
+{
+  local primary_cluster=$1
+  local pool=$2
+  local non_existing_group=$3
+
+  # command fails with the following message now
+  # rbd: remove error: (2) No such file or directory
+  # 2025-09-26T14:21:54.194+0530 7f94208f3d00 -1 librbd::api::Group: remove: error getting the group id: (2) No such file or directory
+  expect_failure "error getting the group id" rbd --cluster=${primary_cluster} group remove ${pool}/${non_existing_group}
+}
+
 #check that omap keys have been correctly deleted
 declare -a test_empty_group_omap_keys_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
 
@@ -3732,6 +3749,7 @@ run_all_tests()
 {
   run_test_all_scenarios test_empty_group
   run_test_all_scenarios test_empty_groups
+  run_test_all_scenarios test_remove_non_existing_group
   # This next test requires support for dynamic groups TODO
   # run_test_all_scenarios test_mirrored_group_remove_all_images
   # This next test also requires dynamic groups - TODO enable
