@@ -395,8 +395,9 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   std::string group_id;
   int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY,
 				 std::string(group_name), &group_id);
-  if (r < 0 && r != -ENOENT) {
-    lderr(cct) << "error getting id of group" << dendl;
+  if (r < 0) {
+    lderr(cct) << "error getting the group id: "
+               << cpp_strerror(r) << dendl;
     return r;
   }
 
@@ -417,7 +418,7 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
   }
 
   r = Mirror<I>::group_disable(io_ctx, group_name, false);
-  if (r < 0 && r != -EOPNOTSUPP) {
+  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
     lderr(cct) << "failed to disable mirroring: " << cpp_strerror(r) << dendl;
     return r;
   }
