@@ -60,7 +60,7 @@ ServiceDaemon::~ServiceDaemon() {
     }
     std::scoped_lock h_lock(h_timer_lock);
     if (h_timer_ctx != nullptr) {
-      dout(5) << ": canceling timer task=" << h_timer_ctx << dendl;
+      dout(5) << ": canceling health timer task=" << h_timer_ctx << dendl;
       h_timer->cancel_event(h_timer_ctx);
     }
     m_timer->shutdown();
@@ -233,17 +233,16 @@ void ServiceDaemon::update_status() {
 std::vector<DaemonHealthMetric> ServiceDaemon::get_health_metrics() {
 
   std::vector<DaemonHealthMetric> health_metrics;
-  health_metrics.emplace_back(daemon_metric::MIRRORING_FAILURE, 1, 2);
+  health_metrics.emplace_back(daemon_metric::MIRRORING_FAILURE, 1);
   return health_metrics;
 }
 
 void ServiceDaemon::schedule_health_tick()
 {
-  std::scoped_lock h_lock(h_timer_lock);
   if (h_timer_ctx != nullptr) {
     return;
   }
-  h_timer_ctx = new LambdaContext([this] {
+  h_timer_ctx = new LambdaContext([this](int) {
     h_timer_ctx = nullptr;
     health_tick();
   });
@@ -253,7 +252,9 @@ void ServiceDaemon::schedule_health_tick()
 
 void ServiceDaemon::health_tick()
 {
+  dout(20) << dendl;
   mgrc.update_daemon_health(get_health_metrics());
+  schedule_health_tick();
 }
 
 } // namespace mirror

@@ -290,6 +290,9 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
+  std::scoped_lock h_lock(m_service_daemon->get_health_timer_lock());
+  m_service_daemon->schedule_health_tick();
+
   std::string labels = ceph::perf_counters::key_create("cephfs_mirror");
   PerfCountersBuilder plb(m_cct, labels, l_cephfs_mirror_first, l_cephfs_mirror_last);
 

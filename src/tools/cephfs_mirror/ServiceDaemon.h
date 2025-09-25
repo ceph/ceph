@@ -32,6 +32,9 @@ public:
   void add_or_update_peer_attribute(fs_cluster_id_t fscid, const Peer &peer,
                                     std::string_view key, AttributeValue value);
   void schedule_health_tick();
+  ceph::mutex& get_health_timer_lock() {
+    return h_timer_lock;
+  }
 private:
   struct Filesystem {
     std::string fs_name;
@@ -58,8 +61,8 @@ private:
 
   void schedule_update_status();
   void update_status();
-  void health_tick();
   std::vector<DaemonHealthMetric> get_health_metrics();
+  void health_tick();
 };
 
 } // namespace mirror
