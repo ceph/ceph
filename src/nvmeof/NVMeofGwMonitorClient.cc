@@ -12,6 +12,7 @@
  */
 
 #include <boost/algorithm/string/replace.hpp>
+#include <fmt/format.h>
 
 #include "common/errno.h"
 #include "common/signal.h"
@@ -254,8 +255,8 @@ void NVMeofGwMonitorClient::send_beacon()
   // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
   bool include_diff = HAVE_FEATURE(cluster_features, NVMEOF_BEACON_DIFF);
 
-  dout(10) << "Cluster features: 0x" << std::hex << cluster_features << std::dec
-            << ", NVMEOF_BEACON_DIFF supported: " << (include_diff ? "yes" : "no") << dendl;
+  dout(10) << fmt::format("Cluster features: 0x{:x}, NVMEOF_BEACON_DIFF supported: {}",
+                          cluster_features, include_diff ? "yes" : "no") << dendl;
 
   // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(
@@ -517,12 +518,12 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
   // print connection features for all incoming messages and update cluster features
   if (m->get_connection()) {
     uint64_t features = m->get_connection()->get_features();
-    dout(4) << "Monitor connection features: 0x" << std::hex << features << std::dec << dendl;
+    dout(4) << fmt::format("Monitor connection features: 0x{:x}", features) << dendl;
     
     // Update cluster features with the union of all seen features
     // This ensures we track the highest level of features supported by the cluster
     cluster_features |= features;
-    dout(10) << "Updated cluster features: 0x" << std::hex << cluster_features << std::dec << dendl;
+    dout(10) << fmt::format("Updated cluster features: 0x{:x}", cluster_features) << dendl;
   }
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
