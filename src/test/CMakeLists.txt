@@ -990,6 +990,12 @@ target_link_libraries(unittest_rbd_replay
   )
 endif(WITH_RBD)
 
+# unittest_filepath
+add_executable(unittest_filepath
+  test_filepath.cc)
+add_ceph_unittest(unittest_filepath)
+target_link_libraries(unittest_filepath ceph-common)
+
 # unittest_ipaddr
 add_executable(unittest_ipaddr
   test_ipaddr.cc)
