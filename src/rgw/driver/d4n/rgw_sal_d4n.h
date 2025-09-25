@@ -123,8 +123,8 @@ class D4NFilterBucket : public FilterBucket {
 									     
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
       FilterBucket(std::move(_next)),
-      filter(_filter) {d4n_init_transaction(nullptr);}
-    virtual ~D4NFilterBucket() {finalize_transaction(nullptr, end_trx_rc);}
+      filter(_filter){d4n_init_transaction(nullptr);}
+    virtual ~D4NFilterBucket() {}//{finalize_transaction(nullptr, end_trx_rc);}
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max,
@@ -243,7 +243,7 @@ class D4NFilterObject : public FilterObject {
 											       driver(_driver) {d4n_init_transaction(nullptr);}
     D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _driver) : FilterObject(_o),
 								    driver(_driver) {d4n_init_transaction(nullptr);}
-    virtual ~D4NFilterObject() {finalize_transaction(nullptr, end_trx_rc);};
+    virtual ~D4NFilterObject() {}// {finalize_transaction(nullptr, end_trx_rc);};
 
     virtual int copy_object(const ACLOwner& owner,
                               const rgw_user& remote_user,
@@ -337,8 +337,10 @@ class D4NTransactionMng {
     void dismiss() { dismissed = true; }
     //TODO howto add optional_yield y to the destructor?
     ~D4NTransactionMng() {
-      if (filter_obj) filter_obj->finalize_transaction(dpp, result_code);
-      if (obj_dir) obj_dir->m_d4n_trx->end_trx(dpp, obj_dir->get_connection(),null_yield);
+      //TODO is it possible for filter_obj to be null?
+      if (filter_obj) filter_obj->finalize_transaction(dpp, result_code);//called D4NFilterObject methods
+      else
+      if (obj_dir) obj_dir->m_d4n_trx->end_trx(dpp, obj_dir->get_connection(),null_yield);//called by the cleaning thread
     }
 };
 
