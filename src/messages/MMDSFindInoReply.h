@@ -16,7 +16,7 @@
 #ifndef CEPH_MDSFINDINOREPLY_H
 #define CEPH_MDSFINDINOREPLY_H
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "messages/MMDSOp.h"
 
 class MMDSFindInoReply final : public MMDSOp {

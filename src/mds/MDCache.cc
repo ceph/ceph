@@ -48,7 +48,7 @@
 #include "Mutation.h"
 
 #include "include/ceph_fs.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "include/util.h"
 
 #include "messages/MCacheExpire.h"
