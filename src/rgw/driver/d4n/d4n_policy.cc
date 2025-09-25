@@ -7,48 +7,6 @@
 
 namespace rgw { namespace d4n {
 
-// initiate a call to async_exec() on the connection's executor
-struct initiate_exec {
-  std::shared_ptr<boost::redis::connection> conn;
-
-  using executor_type = boost::redis::connection::executor_type;
-  executor_type get_executor() const noexcept { return conn->get_executor(); }
-
-  template <typename Handler, typename Response>
-  void operator()(Handler handler, const boost::redis::request& req, Response& resp)
-  {
-    auto h = asio::consign(std::move(handler), conn);
-    return asio::dispatch(get_executor(),
-        [c=conn, &req, &resp, h=std::move(h)] () mutable {
-          c->async_exec(req, resp, std::move(h));
-        });
-  }
-};
-
-template <typename Response, typename CompletionToken>
-auto async_exec(std::shared_ptr<connection> conn,
-                const boost::redis::request& req,
-                Response& resp, CompletionToken&& token)
-{
-  return asio::async_initiate<CompletionToken,
-         void(boost::system::error_code, std::size_t)>(
-      initiate_exec{std::move(conn)}, token, req, resp);
-}
-
-template <typename... Types>
-static inline void redis_exec(std::shared_ptr<connection> conn,
-                boost::system::error_code& ec,
-                const boost::redis::request& req,
-                boost::redis::response<Types...>& resp, optional_yield y)
-{
-  if (y) {
-    auto yield = y.get_yield_context();
-    async_exec(std::move(conn), req, resp, yield[ec]);
-  } else {
-    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
-  }
-}
-
 int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
   response<int, int, int, int> resp;
   static auto obj_callback = [this](
@@ -81,13 +39,14 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
     > resp;
     request req;
     req.push("MULTI");
-    req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), /* New cache node will always have the minimum average weight */
+    std::string key = "lfuda";
+    req.push("HSET", key, "minLocalWeights_sum", std::to_string(weightSum), /* New cache node will always have the minimum average weight */
               "minLocalWeights_size", std::to_string(entries_map.size()), 
               "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
-    req.push("HSETNX", "lfuda", "age", age); /* Only set maximum age if it doesn't exist */
+    req.push("HSETNX", key, "age", age); /* Only set maximum age if it doesn't exist */
     req.push("EXEC");
-  
-    redis_exec(connections[0], ec, req, resp, y);
+
+    dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -106,13 +65,13 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
 
 int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
   response< std::optional<std::string> > resp;
-
+  std::string key = "lfuda";
   try { 
     boost::system::error_code ec;
     request req;
-    req.push("HGET", "lfuda", "age");
+    req.push("HGET", key, "age");
       
-    redis_exec(connections[0], ec, req, resp, y);
+    dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -127,9 +86,9 @@ int LFUDAPolicy::age_sync(const DoutPrefixProvider* dpp, optional_yield y) {
       boost::system::error_code ec;
       response<ignore_t> ret;
       request req;
-      req.push("HSET", "lfuda", "age", age);
+      req.push("HSET", key, "age", age);
 
-      redis_exec(connections[0], ec, req, ret, y);
+      dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -152,9 +111,10 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     try { 
       boost::system::error_code ec;
       request req;
-      req.push("HMGET", "lfuda", "minLocalWeights_sum", "minLocalWeights_size");
-	
-      redis_exec(connections[0], ec, req, resp, y);
+      std::string key = "lfuda";
+      req.push("HMGET", key, "minLocalWeights_sum", "minLocalWeights_size");
+
+      dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
       if (ec) {
 	ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -174,11 +134,12 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
 	boost::system::error_code ec;
 	response<ignore_t> resp;
 	request req;
-	req.push("HSET", "lfuda", "minLocalWeights_sum", std::to_string(weightSum), 
-                  "minLocalWeights_size", std::to_string(entries_map.size()), 
+        std::string key = "lfuda";
+	req.push("HSET", key, "minLocalWeights_sum", std::to_string(weightSum),
+                  "minLocalWeights_size", std::to_string(entries_map.size()),
                   "minLocalWeights_address", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
 
-	redis_exec(connections[0], ec, req, resp, y);
+	dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
 	if (ec) {
 	  ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;
@@ -197,10 +158,11 @@ int LFUDAPolicy::local_weight_sync(const DoutPrefixProvider* dpp, optional_yield
     boost::system::error_code ec;
     response<ignore_t> resp;
     request req;
-    req.push("HSET", dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, "avgLocalWeight_sum", std::to_string(weightSum), 
+    std::string key = dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address;
+    req.push("HSET", key, "avgLocalWeight_sum", std::to_string(weightSum),
               "avgLocalWeight_size", std::to_string(entries_map.size()));
 
-    redis_exec(connections[0], ec, req, resp, y);
+    dir_conn->redis_exec(dpp, key, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "() ERROR: " << ec.what() << dendl;

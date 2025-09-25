@@ -153,10 +153,10 @@ class LFUDAPolicy : public CachePolicy {
 
     int age = 1, weightSum = 0, postedSum = 0;
     optional_yield y = null_yield;
-    std::vector<std::shared_ptr<connection>>& connections;
-    BlockDirectory* blockDir;
-    ObjectDirectory* objDir;
-    BucketDirectory* bucketDir;
+    std::shared_ptr<rgw::d4n::DirectoryConnection> dir_conn;
+    std::unique_ptr<rgw::d4n::ObjectDirectory> objDir;
+    std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
+    std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     rgw::cache::CacheDriver* cacheDriver;
     std::optional<asio::steady_timer> rthread_timer;
     rgw::sal::Driver* driver;
@@ -182,20 +182,17 @@ class LFUDAPolicy : public CachePolicy {
     int delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y);
 
   public:
-    LFUDAPolicy(std::vector<std::shared_ptr<connection>>& connections, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(),
+    LFUDAPolicy(std::shared_ptr<rgw::d4n::DirectoryConnection> dir_conn, rgw::cache::CacheDriver* cacheDriver, optional_yield y) : CachePolicy(),
                                                                                                              y(y),
-													     connections(connections),
+													     dir_conn(dir_conn),
 													     cacheDriver(cacheDriver)
     {
-      blockDir = new BlockDirectory{connections};
-      objDir = new ObjectDirectory{connections};
-      bucketDir = new BucketDirectory{connections};
+      blockDir = std::make_unique<rgw::d4n::BlockDirectory>(dir_conn);
+      objDir = std::make_unique<rgw::d4n::ObjectDirectory>(dir_conn);
+      bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(dir_conn);
     }
     ~LFUDAPolicy() {
       rthread_stop();
-      delete bucketDir;
-      delete blockDir;
-      delete objDir;
       quit = true;
       cond.notify_all();
       if (tc.joinable()) { tc.join(); }
@@ -259,10 +256,10 @@ class PolicyDriver {
     CachePolicy* cachePolicy;
 
   public:
-    PolicyDriver(std::vector<std::shared_ptr<connection>>& connections, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName)
+    PolicyDriver(std::shared_ptr<rgw::d4n::DirectoryConnection> dir_conn, rgw::cache::CacheDriver* cacheDriver, const std::string& _policyName, optional_yield y) : policyName(_policyName)
     {
       if (policyName == "lfuda") {
-	cachePolicy = new LFUDAPolicy(connections, cacheDriver, y);
+	cachePolicy = new LFUDAPolicy(dir_conn, cacheDriver, y);
       } else if (policyName == "lru") {
 	cachePolicy = new LRUPolicy(cacheDriver);
       }
