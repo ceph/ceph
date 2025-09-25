@@ -296,6 +296,9 @@ public:
     // determine device name for underlying hardware
     std::set<std::string> raw_devices;
     get_raw_devices(logdevname, &raw_devices);
+    if (raw_devices.size() > 1) {
+      ceph_abort("Device " + logdevname_a + " consist of "+ raw_devices.size() + " devices: " + raw_devices);
+    }
     for (auto& d : raw_devices) {
       std::string devpath = "/sys/block/" + d + "/device/";
       uint32_t vendor;
