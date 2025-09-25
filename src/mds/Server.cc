@@ -64,7 +64,7 @@
 #include "events/EPurged.h"
 
 #include "include/stringify.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "common/strescape.h"
 #include "common/ceph_json.h"
 #include "common/debug.h"
