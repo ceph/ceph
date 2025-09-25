@@ -410,26 +410,26 @@
              let-value="data.value"
              let-row="data.row"
              let-column="data.column">
-  @if (isCellEditing(row?.id, column?.prop)) {
+  @if (isCellEditing(row?.[identifier], column?.prop)) {
   <form [formGroup]="formGroup"
         #formDir="ngForm">
     <div cdsRow>
       <div cdsCol>
-        <cds-text-label [invalid]="formGroup.controls[row?.id + '-' + column?.prop]?.invalid && formGroup.controls[row?.id + '-' + column?.prop]?.dirty"
+        <cds-text-label [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty"
                         [invalidText]="errorTpl">
           <input type="text"
                  cdsText
                  size="sm"
-                 [id]="row?.id + '-' + column?.prop"
-                 [formControlName]="row?.id + '-' + column?.prop"
-                 (input)="valueChange(row?.id, column?.prop, $event.target.value)"
-                 [invalid]="formGroup.controls[row?.id + '-' + column?.prop]?.invalid && formGroup.controls[row?.id + '-' + column?.prop]?.dirty">
+                 [id]="row?.[identifier] + '-' + column?.prop"
+                 [formControlName]="row?.[identifier] + '-' + column?.prop"
+                 (input)="valueChange(row?.[identifier], column?.prop, $event.target.value)"
+                 [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty">
         </cds-text-label>
         <ng-template #errorTpl>
-          <span *ngIf="formGroup?.showError(row?.id + '-' + column?.prop, formDir, 'required')">
+          <span *ngIf="formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'required')">
             <ng-container i18n>This field is required.</ng-container>
           </span>
-          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(row?.id + '-' + column?.prop, formDir, 'pattern')">
+          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'pattern')">
             <ng-container i18n>The field format is invalid.</ng-container>
           </span>
         </ng-template>
@@ -441,7 +441,7 @@
                 size="sm"
                 id="cell-inline-save-btn"
                 type="button"
-                (click)="saveCellItem(row?.id, column?.prop)">
+                (click)="saveCellItem(row, column?.prop)">
           <cd-icon type="check"></cd-icon>
         </button>
       </div>
@@ -459,7 +459,7 @@
       <button cdsButton="ghost"
               size="sm"
               id="cell-inline-edit-btn"
-              (click)="editCellItem(row?.id, column, value)">
+              (click)="editCellItem(row[identifier], column, value)">
         <cd-icon type="edit"></cd-icon>
       </button>
     </div>
