@@ -170,7 +170,6 @@ const routes: Routes = [
       },
       {
         path: 'services',
-        component: ServicesComponent,
         canActivate: [ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
@@ -184,19 +183,23 @@ const routes: Routes = [
         },
         children: [
           {
+            path: '',
+            component: ServicesComponent
+          },
+          {
             path: URLVerbs.CREATE,
             component: ServiceFormComponent,
-            outlet: 'modal'
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.CREATE}/:type`,
             component: ServiceFormComponent,
-            outlet: 'modal'
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.EDIT}/:type/:name`,
             component: ServiceFormComponent,
-            outlet: 'modal'
+            data: { breadcrumbs: ActionLabels.CREATE }
           }
         ]
       },

@@ -89,7 +89,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
     private taskWrapperService: TaskWrapperService,
     private router: Router,
     private settingsService: SettingsService,
-    private cdsModalService: ModalCdsService
+    private cdsModalService: ModalCdsService,
+    private urlBuilder: URLBuilderService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -97,8 +98,8 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
       {
         permission: 'create',
         icon: Icons.add,
-        click: () => this.openModal(),
-        name: this.actionLabels.CREATE,
+        routerLink: () => this.urlBuilder.getCreate(),
+        name: `${this.actionLabels.CREATE} service`,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
         // disable: (selection: CdTableSelection) => this.getDisable('create', selection)
       },

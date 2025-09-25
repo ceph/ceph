@@ -20,8 +20,6 @@ import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
-import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
-import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import {
   ActionLabelsI18n,
   TimerServiceInterval,
@@ -72,7 +70,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   resource: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
-  hosts: any;
+  hosts: Host[] = [];
   labels: string[];
   labelClick = new Subject<string>();
   labelFocus = new Subject<string>();
@@ -129,13 +127,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`service`;
-    this.hosts = {
-      options: [],
-      messages: new SelectMessages({
-        empty: $localize`There are no hosts.`,
-        filter: $localize`Filter hosts`
-      })
-    };
     this.createForm();
   }
 
@@ -639,14 +630,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       this.serviceTypes = _.difference(resp, this.hiddenServices).sort();
     });
     this.hostService.getAllHosts().subscribe((resp: Host[]) => {
-      const options: SelectOption[] = [];
-      _.forEach(resp, (host: Host) => {
-        if (_.get(host, 'sources.orchestrator', false)) {
-          const option = new SelectOption(false, _.get(host, 'hostname'), '');
-          options.push(option);
-        }
-      });
-      this.hosts.options = [...options];
+      this.hosts = resp;
     });
     this.hostService.getLabels().subscribe((resp: string[]) => {
       this.labels = resp;
@@ -1125,17 +1109,23 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     );
   };
 
-  fileUpload(files: FileList, controlName: string) {
-    const file: File = files[0];
-    const reader = new FileReader();
-    reader.addEventListener('load', (event: ProgressEvent<FileReader>) => {
-      const control: AbstractControl = this.serviceForm.get(controlName);
-      control.setValue(event.target.result);
-      control.markAsDirty();
-      control.markAsTouched();
-      control.updateValueAndValidity();
-    });
-    reader.readAsText(file, 'utf8');
+  fileUpload(event: Set<Object>, controlName: string) {
+    const file: File = event?.values()?.next()?.value?.file;
+    const control: AbstractControl = this.serviceForm.get(controlName);
+
+    if (file) {
+      const reader = new FileReader();
+      reader.addEventListener('load', (event: ProgressEvent<FileReader>) => {
+        control.setValue(event.target.result);
+        control.markAsDirty();
+        control.markAsTouched();
+        control.updateValueAndValidity();
+      });
+      reader.readAsText(file, 'utf8');
+    } else {
+      // Clicking the "X" on the uploaded file emits an empty event
+      control.setValue('');
+    }
   }
 
   prePopulateId() {
@@ -1369,6 +1359,21 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     });
     this.bsModalRef.componentInstance.submitAction.subscribe(() => {
       this.setRgwFields();
+    });
+  }
+
+  get isPrefixedNamedService(): boolean {
+    return (
+      this.serviceForm.controls.service_type?.value &&
+      ['mds', 'rgw', 'nfs', 'iscsi', 'nvmeof', 'smb', 'ingress'].includes(
+        this.serviceForm.controls.service_type?.value
+      )
+    );
+  }
+
+  get hostsNames(): string[] {
+    return this.hosts?.map((host: Host) => {
+      return host.hostname;
     });
   }
 }
