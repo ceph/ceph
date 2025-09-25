@@ -41,7 +41,7 @@
 #include <string_view>
 #include <vector>
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "mds/mdstypes.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"

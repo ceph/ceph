@@ -29,7 +29,7 @@
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/elist.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 
 #include "Capability.h"
 #include "LogSegmentRef.h"
