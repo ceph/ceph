@@ -224,16 +224,20 @@ class CephfsConnectionPool(object):
 
     def cleanup_connections(self) -> None:
         with self.lock:
-            logger.info("scanning for idle connections..")
+            logger.debug("scanning for idle connections..")
             idle_conns = []
             for fs_name, connections in self.connections.items():
                 logger.debug(f'fs_name ({fs_name}) connections ({connections})')
                 for connection in connections:
                     if connection.is_connection_idle(CephfsConnectionPool.CONNECTION_IDLE_INTERVAL):
                         idle_conns.append((fs_name, connection))
-            logger.info(f'cleaning up connections: {idle_conns}')
-            for idle_conn in idle_conns:
-                self._del_connection(idle_conn[0], idle_conn[1])
+            # Log only if there are idle connections to clean up
+            if len(idle_conns) > 0:
+                logger.info(f'cleaning up connections: {idle_conns}')
+                for idle_conn in idle_conns:
+                    self._del_connection(idle_conn[0], idle_conn[1])
+            else:
+                logger.debug("No idle connections to clean up.")
 
     def get_fs_handle(self, fs_name: str) -> "cephfs.LibCephFS":
         with self.lock:
