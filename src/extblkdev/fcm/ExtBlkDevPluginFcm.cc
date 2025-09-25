@@ -428,6 +428,10 @@ public:
     if (r != 0) {
       delete fcm;
       return r;
+    } else {
+      if (!cct->_conf->bdev_enable_discard) {
+        derr << "FCM device in use, but bdev_enable_discard not enabled. Free space will leak." << dendl;
+      }
     }
     ext_blk_dev.reset(fcm);
     return 0;
