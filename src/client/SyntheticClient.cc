@@ -26,7 +26,7 @@
 #include "osdc/Filer.h"
 
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "common/perf_counters.h"
 
 #include <sys/types.h>
