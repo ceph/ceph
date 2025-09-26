@@ -440,12 +440,20 @@ struct shard_extent_set_t {
   }
 };
 
-inline uint64_t align_next(uint64_t val) {
-  return p2roundup(val, EC_ALIGN_SIZE);
+inline uint64_t align_next(uint64_t val,
+                           uint64_t align = EC_ALIGN_SIZE) {
+  if ((align & (align - 1)) == 0) {
+    return p2roundup(val, align);
+  }
+  return (val + align - 1) / align * align;
 }
 
-inline uint64_t align_prev(uint64_t val) {
-  return p2align(val, EC_ALIGN_SIZE);
+inline uint64_t align_prev(uint64_t val,
+                           uint64_t align = EC_ALIGN_SIZE) {
+  if ((align & (align - 1)) == 0) {
+    return p2align(val, align);
+  }
+  return val / align * align;
 }
 
 class stripe_info_t {
@@ -611,6 +619,12 @@ public:
   }
 
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard) const {
+    if (!supports_partial_writes()) {
+      if (size == std::numeric_limits<uint64_t>::max()) {
+        return size;
+      }
+      return (size + get_stripe_width() - 1)/ get_stripe_width() * get_chunk_size();
+    }
     uint64_t remainder = size % get_stripe_width();
     uint64_t shard_size = (size - remainder) / k;
     raw_shard_id_t raw_shard = get_raw_shard(shard);
@@ -1047,6 +1061,7 @@ public:
   bool contains(std::optional<shard_extent_set_t> const &other) const;
   bool contains(shard_extent_set_t const &other) const;
   void pad_and_rebuild_to_ec_align();
+  void pad_and_rebuild_to_alignment(uint64_t alignment);
   uint64_t size();
   void clear();
   uint64_t get_start_offset() const { return start_offset; }
