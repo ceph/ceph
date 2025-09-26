@@ -127,6 +127,9 @@ constexpr std::string_view usage[] = {
     "\t Run parallel test to multiple objects. First object is tested with",
     "\t default settings, other objects are tested with random settings",
     "",
+    "ceph_test_rados_io_sequence --object_copy <oid>",
+    "\t Specify a second object to be used in copy operations",
+    "",
     "Advanced usage:",
     "",
     "ceph_test_rados_io_sequence --blocksize <b> --km <k,m> --plugin <p>",
@@ -158,6 +161,8 @@ constexpr std::string_view usage[] = {
     "\t are specified with unit of blocksize. Supported commands:",
     "\t\t create <len>",
     "\t\t remove",
+    "\t\t swap",
+    "\t\t copy",
     "\t\t read|write|failedwrite <off> <len>",
     "\t\t read2|write2|failedwrite2 <off> <len> <off> <len>",
     "\t\t read3|write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
@@ -181,7 +186,9 @@ po::options_description get_options_description() {
       "pool,p", po::value<std::string>(), "existing pool name")(
       "profile", po::value<std::string>(), "existing profile name")(
       "object,o", po::value<std::string>()->default_value("test"),
-      "object name")("plugin", po::value<PluginString>(), "EC plugin")(
+      "primary object name")(
+      "object_copy", po::value<std::string>()->default_value("test_copy"), "secondary object name")(
+      "plugin", po::value<PluginString>(), "EC plugin")(
       "chunksize,c", po::value<Size>(), "chunk size (default 4096)")(
       "km", po::value<Pair>(), "k,m EC pool profile (default 2,2)")(
       "technique", po::value<std::string>(), "EC profile technique")(
@@ -195,7 +202,7 @@ po::options_description get_options_description() {
       "threads,t", po::value<int>(),
       "number of threads of I/O per object (default 1)")(
       "parallel,p", po::value<int>()->default_value(1),
-      "number of objects to exercise in parallel")(
+      "number of objects (or object pairs) to exercise in parallel")(
       "testrecovery",
       "Inject errors during sequences to test recovery processes of OSDs")(
       "checkconsistency",
@@ -1011,7 +1018,7 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
 }
 
 ceph::io_sequence::tester::TestObject::TestObject(
-    const std::string oid, librados::Rados& rados,
+    const std::string primary_oid, const std::string secondary_oid, librados::Rados& rados,
     boost::asio::io_context& asio, SelectBlockSize& sbs, SelectErasurePool& spo,
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     ceph::util::random_number_generator<int>& rng, ceph::mutex& lock,
@@ -1021,7 +1028,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
       testrecovery(testrecovery), checkconsistency(checkconsistency) {
   if (dryrun) {
     exerciser_model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        oid, sbs.select(), rng());
+        primary_oid, secondary_oid, sbs.select(), rng());
   } else {
     const std::string pool = spo.select();
     if (!dryrun) {
@@ -1040,30 +1047,11 @@ ceph::io_sequence::tester::TestObject::TestObject(
     bufferlist inbl, outbl;
     auto formatter = std::make_unique<JSONFormatter>(false);
 
-    std::optional<std::vector<int>> cached_shard_order = std::nullopt;
-
-    if (!spo.get_allow_pool_autoscaling() && !spo.get_allow_pool_balancer() &&
-        !spo.get_allow_pool_deep_scrubbing() &&
-        !spo.get_allow_pool_scrubbing()) {
-      ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, oid, ""};
-      int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", inbl,
-                                &outbl, formatter.get());
-      ceph_assert(rc == 0);
-
-      JSONParser p;
-      bool success = p.parse(outbl.c_str(), outbl.length());
-      ceph_assert(success);
-
-      ceph::messaging::osd::OSDMapReply reply{};
-      reply.decode_json(&p);
-      cached_shard_order = reply.acting;
-    }
-
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, oid, cached_shard_order, sbs.select(), rng(),
+        rados, asio, pool, primary_oid, secondary_oid, sbs.select(), rng(),
         threads, lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());
-    dout(0) << "= " << oid << " pool=" << pool << " threads=" << threads
+    dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
   }
@@ -1082,7 +1070,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
 
   op = seq->next();
   done = false;
-  dout(0) << "== " << exerciser_model->get_oid() << " " << curseq << " "
+  dout(0) << "== " << exerciser_model->get_primary_oid() << " " << curseq << " "
           << seq->get_name_with_seqseed() << " ==" << dendl;
 }
 
@@ -1093,11 +1081,11 @@ bool ceph::io_sequence::tester::TestObject::readyForIo() {
 bool ceph::io_sequence::tester::TestObject::next() {
   if (!done) {
     if (verbose) {
-      dout(0) << exerciser_model->get_oid() << " Step " << seq->get_step()
+      dout(0) << exerciser_model->get_primary_oid() << " Step " << seq->get_step()
               << ": " << op->to_string(exerciser_model->get_block_size())
               << dendl;
     } else {
-      dout(5) << exerciser_model->get_oid() << " Step " << seq->get_step()
+      dout(5) << exerciser_model->get_primary_oid() << " Step " << seq->get_step()
               << ": " << op->to_string(exerciser_model->get_block_size())
               << dendl;
     }
@@ -1106,7 +1094,7 @@ bool ceph::io_sequence::tester::TestObject::next() {
       curseq = seq->getNextSupportedSequenceId();
       if (curseq >= seq_range.second) {
         done = true;
-        dout(0) << exerciser_model->get_oid()
+        dout(0) << exerciser_model->get_primary_oid()
                 << " Number of IOs = " << exerciser_model->get_num_io()
                 << dendl;
       } else {
@@ -1119,7 +1107,7 @@ bool ceph::io_sequence::tester::TestObject::next() {
               curseq, obj_size_range, seqseed.value_or(rng()), checkconsistency);
         }
 
-        dout(0) << "== " << exerciser_model->get_oid() << " " << curseq << " "
+        dout(0) << "== " << exerciser_model->get_primary_oid() << " " << curseq << " "
                 << seq->get_name_with_seqseed() << " ==" << dendl;
         op = seq->next();
       }
@@ -1168,8 +1156,9 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   if (vm.contains("seqseed")) {
     seqseed = vm["seqseed"].as<int>();
   }
-  num_objects = vm["parallel"].as<int>();
-  object_name = vm["object"].as<std::string>();
+  num_object_pairs = vm["parallel"].as<int>();
+  primary_object_name = vm["object"].as<std::string>();
+  secondary_object_name = vm["object_copy"].as<std::string>();
   interactive = vm.contains("interactive");
   testrecovery = vm.contains("testrecovery");
   checkconsistency = vm.contains("checkconsistency");
@@ -1179,7 +1168,7 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
 
-  if (testrecovery && (num_objects > 1)) {
+  if (testrecovery && (num_object_pairs > 1)) {
     throw std::invalid_argument("testrecovery option not allowed if parallel is"
                                 " specified, except when parallel=1 is used");
   }
@@ -1320,27 +1309,12 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
 
   if (dryrun) {
     model = std::make_unique<ceph::io_exerciser::ObjectModel>(
-        object_name, sbs.select(), rng());
+        primary_object_name, secondary_object_name, sbs.select(), rng());
   } else {
     const std::string pool = spo.select();
 
-    bufferlist inbl, outbl;
-    auto formatter = std::make_unique<JSONFormatter>(false);
-
-    ceph::messaging::osd::OSDMapRequest osd_map_request{pool, object_name, ""};
-    int rc = send_mon_command(osd_map_request, rados, "OSDMapRequest", inbl,
-                              &outbl, formatter.get());
-    ceph_assert(rc == 0);
-
-    JSONParser p;
-    bool success = p.parse(outbl.c_str(), outbl.length());
-    ceph_assert(success);
-
-    ceph::messaging::osd::OSDMapReply osd_map_reply{};
-    osd_map_reply.decode_json(&p);
-
     model = std::make_unique<ceph::io_exerciser::RadosIo>(
-        rados, asio, pool, object_name, osd_map_reply.acting, sbs.select(), rng(),
+        rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), rng(),
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
         spo.get_allow_pool_ec_optimizations());
@@ -1354,6 +1328,10 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t duration = get_numeric_token();
       dout(0) << "Sleep " << duration << dendl;
       sleep(duration);
+    } else if (op == "swap") {
+      ioop = ceph::io_exerciser::SwapOp::generate();
+    } else if (op == "copy") {
+      ioop = ceph::io_exerciser::CopyOp::generate();
     } else if (op == "create") {
       ioop = ceph::io_exerciser::CreateOp::generate(get_numeric_token());
     } else if (op == "remove" || op == "delete") {
@@ -1463,7 +1441,7 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
               << dendl;
     }
     if (ioop) {
-      dout(0) << ioop->to_string(model->get_block_size()) << dendl;
+      dout(0) << model->get_primary_oid() << " " << ioop->to_string(model->get_block_size()) << dendl;
       model->applyIoOp(*ioop);
       done = ioop->getOpType() == ceph::io_exerciser::OpType::Done;
       if (!done) {
@@ -1481,17 +1459,20 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
   std::vector<std::shared_ptr<ceph::io_sequence::tester::TestObject>>
       test_objects;
 
-  for (int obj = 0; obj < num_objects; obj++) {
-    std::string name;
+  for (int obj = 0; obj < num_object_pairs; obj++) {
+    std::string primary_name;
+    std::string secondary_name;
     if (obj == 0) {
-      name = object_name;
+      primary_name = primary_object_name;
+      secondary_name = secondary_object_name;
     } else {
-      name = object_name + std::to_string(obj);
+      primary_name = primary_object_name + std::to_string(obj);
+      secondary_name = secondary_object_name + std::to_string(obj);
     }
     try {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
-              name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
+              primary_name, secondary_name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
               dryrun, verbose, seqseed, testrecovery, checkconsistency));
     }
     catch (const std::runtime_error &e) {
