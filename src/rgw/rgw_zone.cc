@@ -1054,6 +1054,19 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
           << " with " << cpp_strerror(r) << dendl;
       return r;
     }
+
+    r = cfgstore->update_latest_epoch(dpp, y, period->id, period->epoch);
+    if (r == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    ldpp_dout(dpp, -1) << "already have epoch >= " << period->get_epoch()
+        << " for period " << period->get_id() << dendl;
+    return 0;
+    }
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << "Error updating latest epoch for period " << period->get_id() <<
+      ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   // update the realm's current_period
@@ -1298,6 +1311,18 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
       ldpp_dout(dpp, 0) << "failed to create new period: " << cpp_strerror(-r) << dendl;
       return r;
     }
+    r = cfgstore->update_latest_epoch(dpp, y, info.id, info.epoch);
+    if (r == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
+        << " for period " << info.get_id() << dendl;
+    return 0;
+    }
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "Error updating latest epoch for period " << info.get_id() <<
+      ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
 
     // set as current period
     r = realm_set_current_period(dpp, y, cfgstore, realm_writer, realm, info);
@@ -1330,6 +1355,18 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
     ldpp_dout(dpp, 0) << "failed to store period: " << cpp_strerror(r) << dendl;
     return r;
   }
+  r = cfgstore->update_latest_epoch(dpp, y, info.id, info.epoch);
+  if (r == -EEXIST) {
+  // already have this epoch (or a more recent one)
+  ldpp_dout(dpp, 0) << "already have epoch >= " << info.get_epoch()
+      << " for period " << info.get_id() << dendl;
+  }
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "Error updating latest epoch for period " << info.get_id() <<
+    ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
   r = reflect_period(dpp, y, cfgstore, info);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "failed to update local objects: " << cpp_strerror(r) << dendl;

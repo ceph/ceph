@@ -2085,11 +2085,24 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
         << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period.get_id(), period.get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period.get_epoch()
+        << " for period " << period.get_id() << std::endl;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   ret = rgw::reflect_period(dpp(), null_yield, cfgstore, period);
   if (ret < 0) {
     cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
+
   (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
   return ret;
 }
@@ -2204,6 +2217,19 @@ static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
   if (ret < 0) {
     cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
   }
+
+  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period->get_id(), period->get_epoch());
+  if (ret == -EEXIST) {
+    // already have this epoch (or a more recent one)
+    cerr << "already have epoch >= " << period->get_epoch()
+        << " for period " << period->get_id() << std::endl;
+    return 0;
+  }
+  if (ret < 0) {
+    cerr << "Error updating latest epoch for period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+
   return 0;
 }
 
