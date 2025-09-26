@@ -2023,7 +2023,7 @@ do_rgw()
 
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
+        RGWDEBUG="--debug-rgw=20 --debug-rgw-lifecycle=20 --debug-ms=1"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
