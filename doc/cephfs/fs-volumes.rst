@@ -605,6 +605,15 @@ otherwise fail (if the snapshot did not exist).
 
 .. note:: if the last snapshot within a snapshot retained subvolume is removed, the subvolume is also removed
 
+Fetching Path of a Snapshot of a Subvolume
+------------------------------------------
+Use a command of the following form to fetch the absolute path of a snapshot of
+a subvolume:
+
+.. prompt:: base #
+
+    ceph fs subvolume snapshot getpath <volname> <subvol_name> <snap_name> [<group_name>]
+
 Listing the Snapshots of a Subvolume
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
