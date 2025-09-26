@@ -29,6 +29,7 @@ void GroupGetInfoRequest<I>::send() {
   if (m_group_name.empty() && m_group_id.empty()) {
     lderr(cct) << "both group name and group id cannot be empty" << dendl;
     finish(-EINVAL);
+    return;
   }
 
   if (m_group_id.empty()) {
