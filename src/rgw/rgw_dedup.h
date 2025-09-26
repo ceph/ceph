@@ -179,11 +179,17 @@ namespace rgw::dedup {
                            remapper_t *remapper);
 
 #ifdef FULL_DEDUP_SUPPORT
-    int calc_object_blake3(const disk_record_t *p_rec, uint8_t *p_hash);
+    int calc_object_blake3(const RGWObjManifest &manifest,
+                           disk_record_t *p_rec,
+                           uint8_t *p_hash,
+                           blake3_hasher *p_pre_calc_hmac = nullptr);
+    int split_head_object(disk_record_t *p_rec,
+                          md5_stats_t *p_stats,
+                          uint8_t *p_hash);
+
     int add_obj_attrs_to_record(rgw_bucket            *p_rb,
                                 disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
-                                dedup_table_t         *p_table,
                                 md5_stats_t           *p_stats); /* IN-OUT */
 
     int read_object_attribute(dedup_table_t    *p_table,
@@ -194,8 +200,12 @@ namespace rgw::dedup {
                               md5_stats_t      *p_stats /* IN-OUT */,
                               disk_block_seq_t *p_disk,
                               remapper_t       *remapper);
+    bool check_and_set_strong_hash(disk_record_t *p_src_rec,
+                                   disk_record_t *p_tgt_rec,
+                                   const dedup_table_t::value_t *p_src_val,
+                                   md5_stats_t *p_stats);
     int try_deduping_record(dedup_table_t       *p_table,
-                            const disk_record_t *p_rec,
+                            disk_record_t       *p_rec,
                             disk_block_id_t      block_id,
                             record_id_t          rec_id,
                             md5_shard_t          md5_shard,
@@ -210,10 +220,10 @@ namespace rgw::dedup {
     int free_tail_objs_by_manifest(const std::string &ref_tag,
                                    const std::string &oid,
                                    RGWObjManifest    &tgt_manifest);
-    int dedup_object(const disk_record_t *p_src_rec,
-                     const disk_record_t *p_tgt_rec,
-                     md5_stats_t         *p_stats,
-                     bool                 is_shared_manifest_src);
+    int dedup_object(disk_record_t *p_src_rec,
+                     disk_record_t *p_tgt_rec,
+                     md5_stats_t   *p_stats,
+                     bool           is_shared_manifest_src);
 #endif
     int  remove_slabs(unsigned worker_id, unsigned md5_shard, uint32_t slab_count);
     int  init_rados_access_handles(bool init_pool);
