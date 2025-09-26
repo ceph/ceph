@@ -1089,11 +1089,15 @@ ObjectContextRef OpsExecuter::prepare_clone(
   clone_obs.oi.copy_user_bits(initial_obs.oi);
   clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
-  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
+  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(coid);
+  std::lock_guard<std::mutex> lock(clone_mutex);
+  if (prepared_clones_global.count(coid)) {
+    return clone_obc;
+  }
   ceph_assert(!existed);
-
   clone_obc->set_clone_state(std::move(clone_obs));
   clone_obc->ssc = obc->ssc;
+  prepared_clones_global.insert(coid);
   return clone_obc;
 }
 
@@ -1520,5 +1524,8 @@ PgOpsExecuter::execute_op(OSDOp& osd_op)
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
 }
+
+std::mutex OpsExecuter::clone_mutex;
+std::set<hobject_t> OpsExecuter::prepared_clones_global;
 
 } // namespace crimson::osd

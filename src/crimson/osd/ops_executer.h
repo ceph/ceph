@@ -207,6 +207,11 @@ private:
     ObjectContextRef clone_obc;
   };
   std::unique_ptr<CloningContext> cloning_ctx;
+  std::set<hobject_t> prepared_clones;
+
+  // Global lock for clone preparation
+  static std::mutex clone_mutex;
+  static std::set<hobject_t> prepared_clones_global;
 
   /**
    * prepare_cloning_ctx
