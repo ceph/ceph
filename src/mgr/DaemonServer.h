@@ -323,6 +323,13 @@ public:
                     const cmdmap_t& cmdmap,
                     Formatter *f,
                     std::ostream& ss);
+private:
+  utime_t last_period_check;
+  int64_t baseline_stats_period;
+  int64_t changed_stats_period;
+
+  void try_adjust_stats_period();
+  void adjust_stats_period(int64_t new_period, const std::string& reason);
 };
 
 #endif
