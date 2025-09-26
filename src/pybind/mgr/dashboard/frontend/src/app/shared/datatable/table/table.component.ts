@@ -253,7 +253,10 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
 
   @Output()
-  editSubmitAction = new EventEmitter<{ [field: string]: string }>();
+  editSubmitAction = new EventEmitter<{
+    state: { [field: string]: string };
+    row: any;
+  }>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -1396,14 +1399,17 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.editStates[rowId][column.prop] = value;
   }
 
-  saveCellItem(rowId: string, colProp: string) {
+  saveCellItem(row: any, colProp: string) {
     if (this.formGroup?.invalid) {
       this.formGroup.setErrors({ cdSubmitButton: true });
       return;
     }
-    this.editSubmitAction.emit(this.editStates[rowId]);
-    this.editingCells.delete(`${rowId}-${colProp}`);
-    delete this.editStates[rowId][colProp];
+    this.editSubmitAction.emit({
+      state: this.editStates[row[this.identifier]],
+      row: row
+    });
+    this.editingCells.delete(`${row[this.identifier]}-${colProp}`);
+    delete this.editStates[row[this.identifier]][colProp];
   }
 
   isCellEditing(rowId: string, colProp: string): boolean {
