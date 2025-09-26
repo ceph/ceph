@@ -22,6 +22,7 @@
 #include <string>
 
 #include "include/ceph_features.h" // for CEPH_FEATURE_*
+#include "include/types.h" // for operator<<(std::map)
 #include "include/util.h"
 #include "include/utime.h"
 #include "common/Formatter.h"
