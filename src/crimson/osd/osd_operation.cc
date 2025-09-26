@@ -14,6 +14,7 @@ namespace {
   }
 }
 
+using namespace crimson::osd::scheduler;
 namespace crimson::osd {
 
 void OSDOperationRegistry::do_stop()
@@ -149,21 +150,53 @@ void OSDOperationRegistry::visit_ops_in_flight(std::function<void(const ClientRe
   }
 }
 
+
 OperationThrottler::OperationThrottler(ConfigProxy &conf)
-  : scheduler(crimson::osd::scheduler::make_scheduler(conf))
 {
   conf.add_observer(this);
+}
+
+void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &conf, bool is_rotational, int whoami, MonClient *monc)
+{
+  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::smp::count,
+            seastar::this_shard_id(), is_rotational, true, monc);
   update_from_config(conf);
 }
 
-void OperationThrottler::wake()
-{
+seastar::future<> OperationThrottler::wake_set() {
+  WorkItem work_item;
   while (available() && !scheduler->empty()) {
-    auto item = scheduler->dequeue();
-    item.wake.set_value();
-    ++in_progress;
-    --pending;
+    work_item = scheduler->dequeue();
+    if (auto when_ready = std::get_if<double>(&work_item)) {
+      ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
+      auto now = ceph::real_clock::now();
+      auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
+      if (wait_duration.count() > 0) {
+        logger().info("No items ready. Retrying wake() in {} ms", wait_duration.count());
+        co_await seastar::sleep(wait_duration);
+      } else {
+	logger().debug("when_ready timestamp is in the past. Skipping wait.");
+      }
+      continue;
+    }
+    if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
+      logger().debug("Waking up a work item");
+      item->wake.set_value();
+      ++in_progress;
+      --pending;
+      logger().debug("Updated counters: in_progress={}, pending={}", in_progress, pending);
+    } else {
+      logger().debug("Unexpected variant in WorkItem — neither time nor item");
+    }
   }
+  co_return;
+}
+
+void OperationThrottler::wake() {
+  // Attempt to wakeup pending operation if resources are available.
+  // The mclock scheduler might return delay if item is not ready
+  // to process
+  std::ignore = wake_set();
 }
 
 void OperationThrottler::release_throttle()
