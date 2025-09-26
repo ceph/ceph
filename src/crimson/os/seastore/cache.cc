@@ -20,6 +20,7 @@
 #include "crimson/os/seastore/collection_manager/collection_flat_node.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager/seastore.h"
 #include "crimson/os/seastore/backref/backref_tree_node.h"
+#include "crimson/os/seastore/omap_manager/log/log_node.h"
 #include "test/crimson/seastore/test_block.h"
 
 using std::string_view;
@@ -174,7 +175,8 @@ void Cache::register_metrics()
     {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
     {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
     {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
-    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")}
+    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")},
+    {extent_types_t::LOG_NODE,        sm::label_instance("ext", "LOG_NODE")}
   };
   assert(labels_by_ext.size() == (std::size_t)extent_types_t::NONE);
 
@@ -1122,6 +1124,9 @@ CachedExtentRef Cache::alloc_new_non_data_extent_by_type(
     return CachedExtentRef();
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
+  case extent_types_t::LOG_NODE:
+     return alloc_new_non_data_extent<log_manager::LogNode>(
+       t, length, hint, gen);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -2356,6 +2361,10 @@ Cache::_get_absent_extent_by_type(
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     ret = CachedExtent::make_cached_extent_ref<TestBlockPhysical>(length);
     break;
+  case extent_types_t::LOG_NODE:
+    ret = CachedExtent::make_cached_extent_ref<
+      log_manager::LogNode>(length);
+    break;
   case extent_types_t::NONE:
     ceph_assert(0 == "NONE is an invalid extent type");
     break;
@@ -2474,6 +2483,12 @@ Cache::do_get_caching_extent_by_type(
     });
   case extent_types_t::TEST_BLOCK_PHYSICAL:
     return do_get_caching_extent<TestBlockPhysical>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::LOG_NODE:
+    return do_get_caching_extent<log_manager::LogNode>(
       offset, length, std::move(extent_init_func), std::move(on_cache), p_src
     ).safe_then([](auto extent) {
       return CachedExtentRef(extent.detach(), false /* add_ref */);
