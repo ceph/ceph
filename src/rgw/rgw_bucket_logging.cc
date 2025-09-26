@@ -481,7 +481,7 @@ int log_record(rgw::sal::Driver* driver,
   int ret = rgw_parse_url_bucket(conf.target_bucket, s->bucket_tenant, target_tenant_name, target_bucket_name);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to parse logging bucket name '" << conf.target_bucket << "', ret = " << ret << dendl;
-    set_journal_err(fmt::format("Faild to parse logging bucket name '{}'", conf.target_bucket));
+    set_journal_err(fmt::format("Failed to parse logging bucket name '{}'", conf.target_bucket));
     return ret;
   }
   const rgw_bucket target_bucket_id(target_tenant_name, target_bucket_name);
@@ -490,7 +490,7 @@ int log_record(rgw::sal::Driver* driver,
                                &target_bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to load logging bucket '" << target_bucket_id << "'. ret = " << ret << dendl;
-    set_journal_err(fmt::format("Faild to load logging bucket '{}'", target_bucket_id.bucket_id));
+    set_journal_err(fmt::format("Failed to load logging bucket '{}'", target_bucket_id.bucket_id));
     return ret;
   }
 
@@ -534,13 +534,13 @@ int log_record(rgw::sal::Driver* driver,
     } else {
       ldpp_dout(dpp, 1) << "ERROR: failed to create first time logging object of logging bucket '" <<
         target_bucket_id << "' and prefix '" << conf.target_prefix << "'. ret = " << ret << dendl;
-      set_journal_err(fmt::format("Faild create first time logging object of logging bucket '{}'", target_bucket->get_name()));
+      set_journal_err(fmt::format("Failed to create first time logging object of logging bucket '{}'", target_bucket->get_name()));
       return ret;
     }
   } else {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
       target_bucket_id << "'. ret = " << ret << dendl;
-      set_journal_err(fmt::format("Faild to get name of logging object of logging bucket '{}'", target_bucket->get_name()));
+      set_journal_err(fmt::format("Failed to get name of logging object of logging bucket '{}'", target_bucket->get_name()));
     return ret;
   }
 
@@ -630,7 +630,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret = get_owner_quota_info(dpp, y, driver, target_bucket->get_owner(), user_quota); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get quota of owner of logging bucket '" <<
       target_bucket_id << "' failed. ret = " << ret << dendl;
-    set_journal_err(fmt::format("Faild to get quota of owner of logging bucket '{}'", target_bucket->get_name()));
+    set_journal_err(fmt::format("Failed to get quota of owner of logging bucket '{}'", target_bucket->get_name()));
     return ret;
   }
   // start with system default quota
