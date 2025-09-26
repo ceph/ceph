@@ -527,6 +527,7 @@ set(libcommon_files
   osdc/Striper.cc
   osdc/Objecter.cc
   osdc/error_code.cc
+  osdc/SplitRead.cc
   librbd/Features.cc
   librbd/io/IoOperations.cc
   ${mds_files})
