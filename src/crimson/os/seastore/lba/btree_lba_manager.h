@@ -62,6 +62,19 @@ public:
   mkfs_ret mkfs(
     Transaction &t) final;
 
+  get_cursors_ret get_cursors(
+    Transaction &t,
+    laddr_t offset, extent_len_t length) final;
+
+  get_cursor_ret get_cursor(
+    Transaction &t,
+    laddr_t offset,
+    bool search_containing = false) final;
+
+  get_cursor_ret get_cursor(
+    Transaction &t,
+    LogicalChildNode &extent) final;
+
   get_mappings_ret get_mappings(
     Transaction &t,
     laddr_t offset, extent_len_t length) final;
@@ -620,19 +633,17 @@ private:
     });
   }
 
-  using _get_cursor_ret = get_mapping_iertr::future<LBACursorRef>;
-  _get_cursor_ret get_cursor(
+  get_cursor_ret get_cursor(
     op_context_t c,
     LBABtree& btree,
     laddr_t offset);
 
-  _get_cursor_ret get_containing_cursor(
+  get_cursor_ret get_containing_cursor(
     op_context_t c,
     LBABtree &btree,
     laddr_t laddr);
 
-  using _get_cursors_ret = get_mappings_iertr::future<std::list<LBACursorRef>>;
-  _get_cursors_ret get_cursors(
+  get_cursors_ret get_cursors(
     op_context_t c,
     LBABtree& btree,
     laddr_t offset,
