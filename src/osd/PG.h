@@ -1264,7 +1264,7 @@ protected:
 
 
 public:
-  int pg_stat_adjust(osd_stat_t *new_stat);
+  int64_t get_pg_stat_adjustment();
   bool is_degraded() const { return recovery_state.is_degraded(); }
 protected:
   bool delete_needs_sleep = false;

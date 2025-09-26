@@ -6984,12 +6984,15 @@ protected:
       dumped_osds.insert(qi.id);
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
     int64_t kb = 0, kb_used = 0, kb_used_data = 0, kb_used_omap = 0,
-      kb_used_meta = 0, kb_avail = 0;
+      kb_used_meta = 0, kb_avail = 0, kb_used_raw = 0, kb_avail_raw = 0;
     double util = 0;
     if (get_bucket_utilization(qi.id, &kb, &kb_used, &kb_used_data,
-			       &kb_used_omap, &kb_used_meta, &kb_avail))
-      if (kb_used && kb)
-        util = 100.0 * (double)kb_used / (double)kb;
+			       &kb_used_omap, &kb_used_meta, &kb_avail,
+			       &kb_used_raw, &kb_avail_raw)) {
+      auto kb_raw = kb_used_raw + kb_avail_raw;
+      if (kb_raw)
+        util = 100.0 * (double)kb_used_raw / (double)kb_raw;
+    }
 
     double var = 1.0;
     if (average_util)
@@ -6999,7 +7002,8 @@ protected:
 
     dump_item(qi, reweight, kb, kb_used,
 	      kb_used_data, kb_used_omap, kb_used_meta,
-	      kb_avail, util, var, num_pgs, f);
+	      kb_avail, util, kb_used_raw, kb_avail_raw,
+	      var, num_pgs, f);
 
     if (!qi.is_bucket() && reweight > 0) {
       if (min_var < 0 || var < min_var)
@@ -7023,6 +7027,8 @@ protected:
 			 int64_t kb_used_meta,
 			 int64_t kb_avail,
 			 double& util,
+			 int64_t kb_used_raw,
+			 int64_t kb_avail_raw,
 			 double& var,
 			 const size_t num_pgs,
 			 F *f) = 0;
@@ -7039,9 +7045,10 @@ protected:
           !should_dump(i))
 	continue;
       int64_t kb_i, kb_used_i, kb_used_data_i, kb_used_omap_i, kb_used_meta_i,
-	kb_avail_i;
+	kb_avail_i, kb_used_raw_i, kb_avail_raw_i;
       if (get_osd_utilization(i, &kb_i, &kb_used_i, &kb_used_data_i,
-			      &kb_used_omap_i, &kb_used_meta_i, &kb_avail_i)) {
+			      &kb_used_omap_i, &kb_used_meta_i, &kb_avail_i,
+			      &kb_used_raw_i, &kb_avail_raw_i)) {
 	kb += kb_i;
 	kb_used += kb_used_i;
       }
@@ -7053,15 +7060,19 @@ protected:
 			   int64_t* kb_used_data,
 			   int64_t* kb_used_omap,
 			   int64_t* kb_used_meta,
-			   int64_t* kb_avail) const {
+			   int64_t* kb_avail,
+			   int64_t* kb_used_raw,
+			   int64_t* kb_avail_raw) const {
     const osd_stat_t *p = pgmap.get_osd_stat(id);
     if (!p) return false;
     *kb = p->statfs.kb();
-    *kb_used = p->statfs.kb_used_raw();
+    *kb_used = p->statfs.kb_used();
     *kb_used_data = p->statfs.kb_used_data();
     *kb_used_omap = p->statfs.kb_used_omap();
     *kb_used_meta = p->statfs.kb_used_internal_metadata();
     *kb_avail = p->statfs.kb_avail();
+    *kb_used_raw = p->statfs.kb_used_raw();
+    *kb_avail_raw = p->statfs.kb_avail_raw();
     
     return true;
   }
@@ -7070,7 +7081,10 @@ protected:
 			      int64_t* kb_used_data,
 			      int64_t* kb_used_omap,
 			      int64_t* kb_used_meta,
-			      int64_t* kb_avail) const {
+			      int64_t* kb_avail,
+			      int64_t* kb_used_raw,
+			      int64_t* kb_avail_raw
+			      ) const {
     if (id >= 0) {
       if (osdmap->is_out(id) || !should_dump(id)) {
         *kb = 0;
@@ -7079,10 +7093,13 @@ protected:
 	*kb_used_omap = 0;
 	*kb_used_meta = 0;
         *kb_avail = 0;
+        *kb_used_raw = 0;
+        *kb_avail_raw = 0;
         return true;
       }
       return get_osd_utilization(id, kb, kb_used, kb_used_data,
-				 kb_used_omap, kb_used_meta, kb_avail);
+				 kb_used_omap, kb_used_meta, kb_avail,
+				 kb_used_raw, kb_avail_raw);
     }
 
     *kb = 0;
@@ -7091,14 +7108,18 @@ protected:
     *kb_used_omap = 0;
     *kb_used_meta = 0;
     *kb_avail = 0;
+    *kb_used_raw = 0;
+    *kb_avail_raw = 0;
 
     for (int k = osdmap->crush->get_bucket_size(id) - 1; k >= 0; k--) {
       int item = osdmap->crush->get_bucket_item(id, k);
       int64_t kb_i = 0, kb_used_i = 0, kb_used_data_i = 0,
-	kb_used_omap_i = 0, kb_used_meta_i = 0, kb_avail_i = 0;
+	kb_used_omap_i = 0, kb_used_meta_i = 0, kb_avail_i = 0,
+	kb_used_raw_i = 0, kb_avail_raw_i = 0;
       if (!get_bucket_utilization(item, &kb_i, &kb_used_i,
 				  &kb_used_data_i, &kb_used_omap_i,
-				  &kb_used_meta_i, &kb_avail_i))
+				  &kb_used_meta_i, &kb_avail_i,
+				  &kb_used_raw_i, &kb_avail_raw_i))
 	return false;
       *kb += kb_i;
       *kb_used += kb_used_i;
@@ -7106,6 +7127,8 @@ protected:
       *kb_used_omap += kb_used_omap_i;
       *kb_used_meta += kb_used_meta_i;
       *kb_avail += kb_avail_i;
+      *kb_used_raw += kb_used_raw_i;
+      *kb_avail_raw += kb_avail_raw_i;
     }
     return true;
   }
@@ -7140,12 +7163,14 @@ public:
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
-    tbl->define_column("RAW USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("USE", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("DATA", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("OMAP", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("META", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("%USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("RAW USE", TextTable::LEFT, TextTable::RIGHT);
+    tbl->define_column("RAW AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("VAR", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PGS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
@@ -7161,12 +7186,14 @@ public:
 	 << ""
 	 << "" << "TOTAL"
 	 << byte_u_t(sum.statfs.total)
-	 << byte_u_t(sum.statfs.get_used_raw())
+	 << byte_u_t(sum.statfs.get_used())
 	 << byte_u_t(sum.statfs.allocated)
 	 << byte_u_t(sum.statfs.omap_allocated)
 	 << byte_u_t(sum.statfs.internal_metadata)
 	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
+	 << byte_u_t(sum.statfs.get_used_raw())
+	 << byte_u_t(sum.statfs.get_avail_raw())
 	 << ""
 	 << TextTable::endrow;
   }
@@ -7188,6 +7215,8 @@ protected:
 			 int64_t kb_used_meta,
 			 int64_t kb_avail,
 			 double& util,
+			 int64_t kb_used_raw,
+			 int64_t kb_avail_raw,
 			 double& var,
 			 const size_t num_pgs,
 			 TextTable *tbl) override {
@@ -7205,6 +7234,8 @@ protected:
 	 << byte_u_t(kb_used_meta << 10)
 	 << byte_u_t(kb_avail << 10)
 	 << lowprecision_t(util)
+	 << byte_u_t(kb_used_raw << 10)
+	 << byte_u_t(kb_avail_raw << 10)
 	 << lowprecision_t(var);
 
     if (qi.is_bucket()) {
@@ -7291,6 +7322,8 @@ protected:
 		 int64_t kb_used_meta,
 		 int64_t kb_avail,
 		 double& util,
+		 int64_t kb_used_raw, //FIXME
+		 int64_t kb_avail_raw,
 		 double& var,
 		 const size_t num_pgs,
 		 Formatter *f) override {
@@ -7304,6 +7337,8 @@ protected:
     f->dump_int("kb_used_meta", kb_used_meta);
     f->dump_int("kb_avail", kb_avail);
     f->dump_float("utilization", util);
+    f->dump_int("kb_used_raw", kb_used_raw);
+    f->dump_int("kb_avail_raw", kb_avail_raw);
     f->dump_float("var", var);
     f->dump_unsigned("pgs", num_pgs);
     if (!qi.is_bucket()) {
@@ -7326,12 +7361,14 @@ public:
     auto& s = sum.statfs;
 
     f->dump_int("total_kb", s.kb());
-    f->dump_int("total_kb_used", s.kb_used_raw());
+    f->dump_int("total_kb_used", s.kb_used());
     f->dump_int("total_kb_used_data", s.kb_used_data());
     f->dump_int("total_kb_used_omap", s.kb_used_omap());
     f->dump_int("total_kb_used_meta", s.kb_used_internal_metadata());
     f->dump_int("total_kb_avail", s.kb_avail());
     f->dump_float("average_utilization", average_util);
+    f->dump_int("total_kb_used_raw", s.kb_used_raw());
+    f->dump_int("total_kb_avail_raw", s.kb_avail_raw());
     f->dump_float("min_var", min_var);
     f->dump_float("max_var", max_var);
     f->dump_float("dev", dev());
