@@ -4807,6 +4807,19 @@ void RGWListMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+
+  // Add multipart abort headers if the multipart upload has a corresponding abort rule
+  ceph::real_time mtime;
+  ceph::real_time abort_date;
+  string rule_id;
+  bool exist_multipart_abort = get_s3_multipart_abort_header(s, mtime, abort_date, rule_id);
+  if (exist_multipart_abort)
+  {
+    dump_time_header(s, "x-amz-abort-date", abort_date);
+    dump_header_if_nonempty(s, "x-amz-abort-rule-id", rule_id);
+  }
+  
+
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
   end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
