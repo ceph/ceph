@@ -135,6 +135,7 @@ void cls_rgw_bucket_set_tag_timeout(librados::ObjectWriteOperation& op,
 void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  bool absolute,
                                  const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats,
+                                 const std::map<std::string, rgw_bucket_category_stats>& storage_class_stats,
                                  const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats = nullptr);
 
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
