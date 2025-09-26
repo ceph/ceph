@@ -28,3 +28,9 @@ leak:^PyUnicode_New
 # python3.9, 3.10, 3.11
 leak:^PyMem_Malloc
 # python3.12 doesn't leak anything
+# python3.13
+leak:^PyModule_ExecDef
+
+# following suppression mirrors qa/valgrind.supp
+# ignore ec plugin factory (FIXME SOMEDAY)
+leak:^ceph::ErasureCodePluginRegistry::load
