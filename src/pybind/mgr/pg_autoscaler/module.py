@@ -527,6 +527,13 @@ class PgAutoscaler(MgrModule):
         ))
         return final_ratio, pool_pg_target, final_pg_target
 
+    def get_dynamic_threshold(final_pg_num: int, default_threshold: float) -> float:
+        if abs(final_pg_num - 512) <= 64 or abs(final_pg_num - 1024) <= 128:
+            return 1.0
+        elif abs(final_pg_num - 2048) <= 256:
+            return 2.0
+        return default_threshold
+
     def _get_pool_pg_targets(
             self,
             osdmap: OSDMap,
@@ -615,12 +622,21 @@ class PgAutoscaler(MgrModule):
                 continue
 
             adjust = False
-            if (final_pg_target > p['pg_num_target'] * threshold or
-                    final_pg_target < p['pg_num_target'] / threshold) and \
-                    final_ratio >= 0.0 and \
-                    final_ratio <= 1.0 and \
-                    p['pg_autoscale_mode'] == 'on':
-                adjust = True
+
+            dynamic_threshold = get_dynamic_threshold(final_pg_target, threshold)
+            if (final_pg_target > p['pg_num_target'] * dynamic_threshold or
+                final_pg_target < p['pg_num_target'] / dynamic_threshold) and \
+                final_ratio >= 0.0 and \
+                final_ratio <= 1.0 and \
+                p['pg_autoscale_mode'] == 'on':
+                    adjust = True
+            else:
+                if final_pg_target != p['pg_num_target']:
+                    self.log.warning("pool %s won't scale because recommended PG_NUM target"
+                                     " value varies from current PG_NUM value by"
+                                     " more than '%f' scaling threshold",
+                                     pool_name,
+                                     dynamic_threshold)
 
             assert pool_pg_target is not None
             ret.append({
