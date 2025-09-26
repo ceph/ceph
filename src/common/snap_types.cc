@@ -65,6 +65,7 @@ void SnapRealmInfoNew::encode(ceph::buffer::list& bl) const
   encode(info, bl);
   encode(last_modified, bl);
   encode(change_attr, bl);
+  encode(flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -75,6 +76,7 @@ void SnapRealmInfoNew::decode(ceph::buffer::list::const_iterator& bl)
   decode(info, bl);
   decode(last_modified, bl);
   decode(change_attr, bl);
+  decode(flags, bl);
   DECODE_FINISH(bl);
 }
 
@@ -83,16 +85,17 @@ void SnapRealmInfoNew::dump(ceph::Formatter *f) const
   info.dump(f);
   f->dump_stream("last_modified") << last_modified;
   f->dump_unsigned("change_attr", change_attr);
+  f->dump_bool("is_snapdir_visible", flags & SNAPDIR_VISIBILITY);
 }
 
 std::list<SnapRealmInfoNew> SnapRealmInfoNew::generate_test_instances()
 {
   std::list<SnapRealmInfoNew> o;
   o.emplace_back();
-  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0));
-  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1));
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 0, 1));
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 0), utime_t(), 1, 1));
   o.back().info.my_snaps.push_back(10);
-  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 5), utime_t(), 2));
+  o.push_back(SnapRealmInfoNew(SnapRealmInfo(1, 10, 10, 5), utime_t(), 2, 1));
   o.back().info.my_snaps.push_back(10);
   o.back().info.prior_parent_snaps.push_back(3);
   o.back().info.prior_parent_snaps.push_back(5);
