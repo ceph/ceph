@@ -116,6 +116,74 @@ BtreeLBAManager::mkfs(
   croot->get_root().lba_root = LBABtree::mkfs(croot, get_context(t));
 }
 
+BtreeLBAManager::get_cursors_ret
+BtreeLBAManager::get_cursors(
+  Transaction &t,
+  laddr_t laddr,
+  extent_len_t length)
+{
+  LOG_PREFIX(BtreeLBAManager::get_cursors);
+  TRACET("{}~0x{:x} ...", t, laddr, length);
+  auto c = get_context(t);
+
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  co_return co_await get_cursors(c, btree, laddr, length);
+}
+
+BtreeLBAManager::get_cursor_ret
+BtreeLBAManager::get_cursor(
+  Transaction &t,
+  laddr_t laddr,
+  bool search_containing)
+{
+  LOG_PREFIX(BtreeLBAManager::get_cursor);
+  TRACET("{} ... search_containing={}", t, laddr, search_containing);
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+
+  if (search_containing) {
+    auto ret = co_await get_containing_cursor(c, btree, laddr);
+    assert(ret->contains(laddr));
+    co_return ret;
+  } else {
+    auto ret = co_await get_cursor(c, btree, laddr);
+    assert(laddr == ret->get_laddr());
+    co_return ret;
+  }
+}
+
+BtreeLBAManager::get_cursor_ret
+BtreeLBAManager::get_cursor(
+  Transaction &t,
+  LogicalChildNode &extent)
+{
+  LOG_PREFIX(BtreeLBAManager::get_cursor);
+  TRACET("{}", t, extent);
+#ifndef NDEBUG
+  if (extent.is_mutation_pending()) {
+    auto &prior = static_cast<LogicalChildNode&>(
+      *extent.get_prior_instance());
+    assert(prior.peek_parent_node()->is_valid());
+  } else {
+    assert(extent.peek_parent_node()->is_valid());
+  }
+#endif
+  auto c = get_context(t);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+
+  auto leaf = co_await extent.get_parent_node(c.trans, c.cache);
+
+  if (leaf->is_pending()) {
+    TRACET("find pending extent {} for {}",
+	   c.trans, (void*)leaf.get(), extent);
+  }
+#ifndef NDEBUG
+  auto it = leaf->lower_bound(extent.get_laddr());
+  assert(it != leaf->end() && it.get_key() == extent.get_laddr());
+#endif
+  co_return btree.get_cursor(c, leaf, extent.get_laddr());
+}
+
 BtreeLBAManager::get_mappings_ret
 BtreeLBAManager::get_mappings(
   Transaction &t,
@@ -147,7 +215,7 @@ BtreeLBAManager::get_mappings(
   co_return ret;
 }
 
-BtreeLBAManager::_get_cursors_ret
+BtreeLBAManager::get_cursors_ret
 BtreeLBAManager::get_cursors(
   op_context_t c,
   LBABtree& btree,
@@ -464,7 +532,7 @@ BtreeLBAManager::clone_mapping(
   );
 }
 
-BtreeLBAManager::_get_cursor_ret
+BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_cursor(
   op_context_t c,
   LBABtree& btree,
@@ -474,13 +542,13 @@ BtreeLBAManager::get_cursor(
   TRACET("{} ...", c.trans, laddr);
   return btree.lower_bound(
     c, laddr
-  ).si_then([FNAME, c, laddr](auto iter) -> _get_cursor_ret {
+  ).si_then([FNAME, c, laddr](auto iter) -> get_cursor_ret {
     if (iter.is_end() || iter.get_key() != laddr) {
       ERRORT("{} doesn't exist", c.trans, laddr);
       return crimson::ct_error::enoent::make();
     }
     TRACET("{} got value {}", c.trans, laddr, iter.get_val());
-    return _get_cursor_ret(
+    return get_cursor_ret(
       interruptible::ready_future_marker{},
       iter.get_cursor(c));
   });
@@ -1137,7 +1205,7 @@ BtreeLBAManager::_update_mapping(
     });
 }
 
-BtreeLBAManager::_get_cursor_ret
+BtreeLBAManager::get_cursor_ret
 BtreeLBAManager::get_containing_cursor(
   op_context_t c,
   LBABtree &btree,
@@ -1147,7 +1215,7 @@ BtreeLBAManager::get_containing_cursor(
   TRACET("{}", c.trans, laddr);
   return btree.upper_bound_right(c, laddr
   ).si_then([c, laddr, FNAME](LBABtree::iterator iter)
-	    -> _get_cursor_ret {
+	    -> get_cursor_ret {
     if (iter.is_end() ||
 	iter.get_key() > laddr ||
 	iter.get_key() + iter.get_val().len <=laddr) {

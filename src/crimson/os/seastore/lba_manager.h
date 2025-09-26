@@ -35,6 +35,23 @@ public:
     Transaction &t
   ) = 0;
 
+  using get_cursors_iertr = base_iertr;
+  using get_cursors_ret = get_cursors_iertr::future<std::list<LBACursorRef>>;
+  virtual get_cursors_ret get_cursors(
+    Transaction &t,
+    laddr_t offset, extent_len_t length) = 0;
+
+  using get_cursor_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  using get_cursor_ret = get_cursor_iertr::future<LBACursorRef>;
+  virtual get_cursor_ret get_cursor(
+    Transaction &t,
+    laddr_t offset,
+    bool search_containing = false) = 0;
+  virtual get_cursor_ret get_cursor(
+    Transaction &t,
+    LogicalChildNode &extent) = 0;
+
   /**
    * Fetches mappings for laddr_t in range [offset, offset + len)
    *
