@@ -1677,11 +1677,11 @@ class TestMonitoring:
                   grpc_listen_port: 8080
 
                 common:
-                  path_prefix: /tmp/loki
+                  path_prefix: /loki
                   storage:
                     filesystem:
-                      chunks_directory: /tmp/loki/chunks
-                      rules_directory: /tmp/loki/rules
+                      chunks_directory: /loki/chunks
+                      rules_directory: /loki/rules
                   replication_factor: 1
                   ring:
                     instance_addr: 127.0.0.1
