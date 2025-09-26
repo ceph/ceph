@@ -10,6 +10,8 @@ export interface StorageClass {
   endpoint?: string;
   region?: string;
   zonegroup_name?: string;
+  zone_name?: string;
+  data_pool?: string;
 }
 
 export interface TierTarget {
@@ -41,8 +43,9 @@ export interface StorageClassDetails {
   multipart_sync_threshold: number;
   host_style: string;
   allow_read_through: boolean;
+  storage_class: string;
   zonegroup_name?: string;
-  placement_targets?: string;
+  placement_target?: string;
   glacier_restore_days?: number;
   glacier_restore_tier_type?: string;
   read_through_restore_days?: number;
@@ -50,12 +53,43 @@ export interface StorageClassDetails {
   retain_head_object?: boolean;
   acls?: ACL[];
   acl_mappings?: ACL[];
+  zone_name?: string;
+  data_pool?: string;
 }
 
 export interface ZoneGroup {
   name: string;
   id: string;
   placement_targets?: Target[];
+  zones?: string[];
+}
+
+export interface ZoneRequest {
+  zone_name: string;
+  placement_target: string;
+  storage_class: string;
+  data_pool: string;
+}
+export interface StorageClassPool {
+  data_pool: string;
+}
+
+export interface PlacementPool {
+  key: string;
+  val: {
+    storage_classes: {
+      [storage_class: string]: StorageClassPool;
+    };
+  };
+}
+
+export interface Zone {
+  name: string;
+  placement_pools: PlacementPool[];
+}
+
+export interface AllZonesResponse {
+  zones: Zone[];
 }
 
 export interface ACL {
@@ -102,10 +136,10 @@ export interface RequestModel {
 }
 
 export interface PlacementTarget {
-  placement_id: string;
+  placement_id?: string;
   tags?: string[];
   tier_type?: TIER_TYPE;
-  tier_config_rm: TierConfigRm;
+  tier_config_rm?: TierConfigRm;
   tier_config?: {
     endpoint: string;
     access_key: string;
@@ -126,6 +160,8 @@ export interface PlacementTarget {
   storage_class?: string;
   name?: string;
   tier_targets?: TierTarget[];
+  data_pool?: string;
+  placement_target?: string;
 }
 
 export interface TierConfigRm {
@@ -309,4 +345,8 @@ export const AclHelperText: AclMaps = {
     source: $localize`The URI identifying the source group or user.`,
     destination: $localize`The URI identifying the destination group or user.`
   }
+};
+
+export const POOL = {
+  PATH: '/pool/create'
 };

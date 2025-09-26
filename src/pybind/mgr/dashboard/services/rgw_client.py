@@ -2440,11 +2440,44 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
 
-    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str,
-                  default: str = '', master: str = '', endpoints: str = '',
-                  access_key: str = '', secret_key: str = '', placement_target: str = '',
-                  data_pool: str = '', index_pool: str = '', data_extra_pool: str = '',
-                  storage_class: str = '', data_pool_class: str = '', compression: str = ''):
+    def add_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
+                               data_pool: str, compression: str):
+        rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
+                                          '--placement-id', placement_target,
+                                          '--storage-class', storage_class,
+                                          '--data-pool', data_pool]
+        if compression:
+            rgw_zone_add_storage_class_cmd.extend(['--compression', compression])
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to add storage class {} to zone {}'.format(storage_class, zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def edit_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
+                                data_pool: str, compression: str):
+        edit_placement_target_cmd = ['zone', 'placement', 'modify', '--rgw-zone', zone_name,
+                                     '--placement-id', placement_target,
+                                     '--storage-class', storage_class,
+                                     '--data-pool', data_pool]
+        if compression:
+            edit_placement_target_cmd.extend(['--compression', compression])
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(edit_placement_target_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg=f'Unable to modify storage class \
+                                         {storage_class} to zone {zone_name}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
+                  master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
+                  placement_target: str = '', data_pool: str = '', index_pool: str = '',
+                  data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
+                  compression: str = ''):
         if new_zone_name != zone_name:
             rgw_zone_rename_cmd = ['zone', 'rename', '--rgw-zone',
                                    zone_name, '--zone-new-name', new_zone_name]

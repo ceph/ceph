@@ -22,8 +22,6 @@
           [invalid]="storageClassForm.showError('storageClassType', formDir, 'required')"
           [invalidText]="storageError"
         >
-          <option value=""
-                  i18n>-- Select Storage Class --</option>
           <option *ngFor="let opt of storageClassOptions"
                   [value]="opt.value"
                   i18n>
@@ -39,37 +37,10 @@
       </div>
       <div class="form-item form-item-append"
            cdsRow>
-        <!-- Storage Class Name -->
-        <div cdsCol>
-          <cds-text-label
-            labelInputID="storage_class"
-            i18n
-            [disabled]="editing"
-            [invalid]="
-              storageClassForm.controls.storage_class.invalid &&
-              storageClassForm.controls.storage_class.dirty
-            "
-            [invalidText]="storageClassError"
-          >
-            Storage Class name
-            <input
-              cdsText
-              type="text"
-              formControlName="storage_class"
-              [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"
-            />
-          </cds-text-label>
-          <ng-template #storageClassError>
-            @if (storageClassForm.showError('storage_class', formDir, 'required')) {
-            <span class="invalid-feedback"
-                  i18n>This field is required.</span>
-            }
-          </ng-template>
-        </div>
-        <!-- Zone Group / Region -->
+        <!-- Zonegroup -->
         <div cdsCol>
           <cds-select
-            label="Zone Group / Region"
+            label="Zone Group Name"
             i18n-label
             formControlName="zonegroup"
             id="zonegroup"
@@ -93,8 +64,76 @@
             }
           </ng-template>
         </div>
+        @if( isTierMatch(TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+          <div cdsCol>
+            <ng-container *ngTemplateOutlet="storageClassField"></ng-container>
+          </div>
+        }
+        @if( isTierMatch(TIER_TYPE.LOCAL )){
+        <div cdsCol>
+          <cds-select
+            label="Zone"
+            i18n-label
+            formControlName="zone"
+            id="zone"
+            [invalid]="storageClassForm.showError('zone', formDir, 'required')"
+            [invalidText]="zoneError"
+          >
+            <option [value]="''"
+                    i18n>--Select--</option>
+            <option *ngFor="let zone of zones"
+                    [value]="zone?.name"
+                    [selected]="zone.name === storageClassForm.getValue('zone')"
+                    i18n>
+              {{ zone.name }}
+            </option>
+          </cds-select>
+          <ng-template #zoneError>
+            <span
+              class="invalid-feedback"
+              *ngIf="storageClassForm.showError('zone', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+        }
       </div>
-      @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
+      @if( isTierMatch(TIER_TYPE.LOCAL )){
+        <ng-container *ngTemplateOutlet="storageClassField"></ng-container>
+        <div class="form-item">
+        <cd-alert-panel type="info"
+                        [showTitle]="false"
+                        spacingClass="mb-2"
+                        (action)="navigateCreatePool()">
+          <span i18n>To create a new pool click <a [routerLink]="[POOL.PATH]">here</a></span>
+        </cd-alert-panel>
+        <cds-select
+          label="Pool"
+          i18n-label
+          formControlName="pool"
+          id="pool"
+          [invalid]="storageClassForm.showError('pool', formDir, 'required')"
+          [invalidText]="poolError"
+        >
+          <option [value]="''"
+                  i18n>--Select--</option>
+          <option *ngFor="let pool of rgwPools"
+                  [value]="pool.pool_name"
+                  i18n>
+            {{ pool.pool_name }}
+          </option>
+        </cds-select>
+        <ng-template #poolError>
+          <span
+            class="invalid-feedback"
+            *ngIf="storageClassForm.showError('pool', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+      } @if( isTierMatch( TIER_TYPE.CLOUD_TIER, TIER_TYPE.GLACIER )){
       <div>
         <div class="form-item form-item-append"
              cdsRow>
@@ -543,8 +582,6 @@
                       "
                       [invalidText]="placementError"
                     >
-                      <option [value]="''"
-                              i18n>--Select--</option>
                       @for (placementTarget of placementTargets; track placementTarget) {
                       <option
                         [value]="placementTarget"
@@ -585,3 +622,24 @@
     </form>
   </ng-container>
 </div>
+
+<ng-template #storageClassField
+             [formGroup]="storageClassForm">
+  <cds-text-label labelInputID="storage_class"
+                  i18n
+                  [disabled]="editing"
+                  [invalid]="storageClassForm.controls.storage_class.invalid && storageClassForm.controls.storage_class.dirty"
+                  [invalidText]="storageClassError"
+                  >Name
+    <input cdsText
+           type="text"
+           id="storage_class"
+           formControlName="storage_class"
+           [invalid]="storageClassForm.showError('storage_class', formDir, 'required')"/>
+  </cds-text-label>
+  <ng-template #storageClassError>
+    <span class="invalid-feedback"
+          *ngIf="storageClassForm.showError('storage_class', formDir, 'required')"
+          i18n>This field is required.</span>
+  </ng-template>
+</ng-template>
