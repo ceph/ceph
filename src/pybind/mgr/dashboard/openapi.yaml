@@ -9302,6 +9302,12 @@ paths:
         schema:
           type: string
       - allowEmptyValue: true
+        description: NVMeoF Namespace ID to filter by
+        in: query
+        name: nsid
+        schema:
+          type: string
+      - allowEmptyValue: true
         description: NVMeoF gateway group
         in: query
         name: gw_group
