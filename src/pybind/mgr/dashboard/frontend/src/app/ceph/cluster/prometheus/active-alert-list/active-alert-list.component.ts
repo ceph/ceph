@@ -24,10 +24,12 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
+  innerColumns: CdTableColumn[];
   tableActions: CdTableAction[];
   permission: Permission;
   selection = new CdTableSelection();
   icons = Icons;
+  expandedInnerRow: any;
 
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
@@ -54,16 +56,10 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
 
   ngOnInit() {
     super.ngOnInit();
-    this.columns = [
+    this.innerColumns = [
       {
-        name: $localize`Name`,
-        prop: 'labels.alertname',
-        cellClass: 'fw-bold',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Summary`,
-        prop: 'annotations.summary',
+        name: $localize`Description`,
+        prop: 'annotations.description',
         flexGrow: 3
       },
       {
@@ -96,6 +92,25 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         prop: 'startsAt',
         cellTransformation: CellTemplate.timeAgo,
         flexGrow: 1
+      }
+    ];
+    this.columns = [
+      {
+        name: $localize`Name`,
+        prop: 'labels.alertname',
+        cellClass: 'fw-bold',
+        flexGrow: 2
+      },
+      {
+        name: $localize`Summary`,
+        prop: 'annotations.summary',
+        flexGrow: 3
+      },
+      ...this.innerColumns.slice(1),
+      {
+        name: $localize`Occurrence`,
+        prop: 'alert_count',
+        flexGrow: 1
       },
       {
         name: $localize`URL`,
@@ -105,7 +120,11 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         cellTemplate: this.externalLinkTpl
       }
     ];
-    this.prometheusAlertService.getAlerts(true);
+    this.prometheusAlertService.getGroupedAlerts(true);
+  }
+
+  setExpandedInnerRow(row: any) {
+    this.expandedInnerRow = row;
   }
 
   updateSelection(selection: CdTableSelection) {

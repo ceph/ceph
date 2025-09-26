@@ -6,7 +6,8 @@ import { PrometheusService } from '../api/prometheus.service';
 import {
   AlertmanagerAlert,
   PrometheusCustomAlert,
-  PrometheusRule
+  PrometheusRule,
+  GroupAlertmanagerAlert
 } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { BehaviorSubject } from 'rxjs';
@@ -28,9 +29,9 @@ export class PrometheusAlertService {
     private prometheusService: PrometheusService
   ) {}
 
-  getAlerts(clusterFilteredAlerts?: boolean) {
+  getGroupedAlerts(clusterFilteredAlerts = false) {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts(clusterFilteredAlerts).subscribe(
+      this.prometheusService.getGroupedAlerts(clusterFilteredAlerts).subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
           if ([404, 504].includes(resp.status)) {
@@ -57,13 +58,23 @@ export class PrometheusAlertService {
     });
   }
 
-  refresh(clusterFilteredAlerts?: boolean) {
-    this.getAlerts(clusterFilteredAlerts);
+  refresh() {
+    this.getGroupedAlerts(true);
   }
 
-  private handleAlerts(alerts: AlertmanagerAlert[]) {
+  private handleAlerts(alertGroups: GroupAlertmanagerAlert[]) {
+    const alerts: AlertmanagerAlert[] = alertGroups
+      .map((g) => {
+        if (!g.alerts.length) return null;
+        if (g.alerts.length === 1) return { ...g.alerts[0], alert_count: 1 };
+        return { ...g.alerts[0], alert_count: g.alerts.length, subalerts: g.alerts };
+      })
+      .filter(Boolean) as AlertmanagerAlert[];
+
     if (this.canAlertsBeNotified) {
-      this.notifyOnAlertChanges(alerts, this.alerts);
+      const allSubalerts = alertGroups.flatMap((g) => g.alerts);
+      const oldAlerts = this.alerts.flatMap((a) => (a.subalerts ? a.subalerts : a));
+      this.notifyOnAlertChanges(allSubalerts, oldAlerts);
     }
     this.activeAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,

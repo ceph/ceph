@@ -92,7 +92,7 @@ describe('NavigationComponent', () => {
     spyOn(TestBed.inject(SummaryService), 'subscribe').and.callFake(() =>
       of({ health: { status: 'HEALTH_OK' } })
     );
-    spyOn(TestBed.inject(PrometheusAlertService), 'getAlerts').and.callFake(() => of([]));
+    spyOn(TestBed.inject(PrometheusAlertService), 'getGroupedAlerts').and.callFake(() => of([]));
     fixture = TestBed.createComponent(NavigationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
