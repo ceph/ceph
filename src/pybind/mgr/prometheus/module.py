@@ -1012,12 +1012,14 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     @profile_method()
     def get_osd_blocklisted_entries(self) -> None:
-        r = self.mon_command({
+        _, out, _ = self.mon_command({
             'prefix': 'osd blocklist ls',
             'format': 'json'
         })
-        blocklist_entries = r[2].split(' ')
-        blocklist_count = blocklist_entries[1]
+        combined_blocklists = json.loads(out)
+        blocklist = combined_blocklists[0]
+        range_blocklist = combined_blocklists[1]
+        blocklist_count = len(blocklist) + len(range_blocklist)
         for stat in OSD_BLOCKLIST:
             self.metrics['cluster_{}'.format(stat)].set(int(blocklist_count))
 
