@@ -1,7 +1,6 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { CrushRuleService } from '~/app/shared/api/crush-rule.service';
@@ -32,7 +31,6 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
 
   constructor(
     private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
     private taskWrapper: TaskWrapperService,
     private crushRuleService: CrushRuleService,
     public actionLabels: ActionLabelsI18n
@@ -103,7 +101,7 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
           this.form.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
           this.submitAction.emit(rule);
         }
       });

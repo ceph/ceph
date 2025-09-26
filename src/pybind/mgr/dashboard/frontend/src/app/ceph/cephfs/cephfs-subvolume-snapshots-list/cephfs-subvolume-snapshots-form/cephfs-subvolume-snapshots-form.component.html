@@ -1,17 +1,13 @@
-<cds-modal size="lg"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
+<cd-modal size="lg"
+          [open]="open"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
 
-  <ng-container *cdFormLoading="loading">
-    <form name="snapshotForm"
-          #formDir="ngForm"
-          [formGroup]="snapshotForm"
-          novalidate>
-      <div cdsModalContent>
+  <ng-container class="modal-content">
+    <ng-container *cdFormLoading="loading">
+      <form name="snapshotForm"
+            #formDir="ngForm"
+            [formGroup]="snapshotForm"
+            novalidate>
         <div class="form-item">
           <cds-text-label label="Name"
                           for="snapshotName"
@@ -81,13 +77,14 @@
                     [value]="subVolume.name">{{ subVolume.name }}</option>
           </cds-select>
         </div>
-      </div>
-
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="snapshotForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-                            [modalForm]="true"></cd-form-button-panel>
-
-    </form>
+      </form>
+    </ng-container>
   </ng-container>
-</cds-modal>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="snapshotForm"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

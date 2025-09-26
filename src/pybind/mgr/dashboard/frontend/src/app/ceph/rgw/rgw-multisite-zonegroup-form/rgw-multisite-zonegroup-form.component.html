@@ -1,13 +1,10 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} Zone Group</ng-container>
+<cd-modal title="{{ action | titlecase }} Zone Group">
 
   <ng-container class="modal-content">
     <form name="multisiteZonegroupForm"
           #formDir="ngForm"
           [formGroup]="multisiteZonegroupForm"
           novalidate>
-    <div class="modal-body">
       <div class="form-group row">
         <label class="cd-col-form-label"
                for="selectedRealm"
@@ -197,12 +194,13 @@
           <ng-container i18n>Add placement target</ng-container>
         </button>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="submit()"
-                            [form]="multisiteZonegroupForm"
-                            [submitText]="(action | titlecase) + ' ' + 'Zone Group'"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="multisiteZonegroupForm"
+                          [modalForm]="true"
+                          [submitText]="(action | titlecase) + ' ' + 'Zone Group'"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

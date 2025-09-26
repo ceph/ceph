@@ -1,7 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { AbstractControl, UntypedFormControl } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 
 import { IscsiService } from '~/app/shared/api/iscsi.service';
@@ -13,22 +13,23 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
   templateUrl: './iscsi-target-image-settings-modal.component.html',
   styleUrls: ['./iscsi-target-image-settings-modal.component.scss']
 })
-export class IscsiTargetImageSettingsModalComponent implements OnInit {
-  image: string;
-  imagesSettings: any;
-  api_version: number;
-  disk_default_controls: any;
-  disk_controls_limits: any;
-  backstores: any;
-  control: AbstractControl;
-
+export class IscsiTargetImageSettingsModalComponent extends BaseModal implements OnInit {
   settingsForm: CdFormGroup;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public iscsiService: IscsiService,
-    public actionLabels: ActionLabelsI18n
-  ) {}
+    public actionLabels: ActionLabelsI18n,
+
+    @Optional() @Inject('imagesSettings') public imagesSettings: any,
+    @Optional() @Inject('image') public image: any,
+    @Optional() @Inject('api_version') public api_version: any,
+    @Optional() @Inject('disk_default_controls') public disk_default_controls: any,
+    @Optional() @Inject('disk_controls_limits') public disk_controls_limits: any,
+    @Optional() @Inject('backstores') public backstores: any,
+    @Optional() @Inject('control') public control: AbstractControl
+  ) {
+    super();
+  }
 
   ngOnInit() {
     const fg: Record<string, UntypedFormControl> = {
@@ -82,6 +83,6 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     this.imagesSettings[this.image][backstore] = settings;
     this.imagesSettings = { ...this.imagesSettings };
     this.control.updateValueAndValidity({ emitEvent: false });
-    this.activeModal.close();
+    this.closeModal();
   }
 }

@@ -1,6 +1,5 @@
 import { Component, EventEmitter, OnInit, Output, ViewChild } from '@angular/core';
 
-import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { Permissions } from '~/app/shared/models/permissions';
@@ -14,7 +13,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { Icons } from '~/app/shared/enum/icons.enum';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { ENCRYPTION_TYPE } from '../models/rgw-bucket-encryption';
@@ -23,6 +21,7 @@ import {
   VaultConfig,
   encryptionDatafromAPI
 } from '~/app/shared/models/rgw-encryption-config-keys';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-rgw-configuration-page',
@@ -48,18 +47,16 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
   authMethods: string[];
   secretEngines: string[];
   tableActions: CdTableAction[];
-  bsModalRef: NgbModalRef;
   filteredEncryptionConfigValues: {};
   excludeProps: any[] = [];
   disableCreate = true;
   allEncryptionValues: any;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
     public authStorageService: AuthStorageService,
-    private modalService: ModalService
+    private modalService: ModalCdsService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -120,17 +117,13 @@ export class RgwConfigurationPageComponent extends ListWithDetails implements On
         selectedEncryptionConfigValues: this.selection.first(),
         table: this.table
       };
-      this.bsModalRef = this.modalService.show(RgwConfigModalComponent, initialState, {
-        size: 'lg'
-      });
+      this.modalService.show(RgwConfigModalComponent, initialState);
     } else {
       const initialState = {
         action: 'create',
         allEncryptionConfigValues: this.allEncryptionValues
       };
-      this.bsModalRef = this.modalService.show(RgwConfigModalComponent, initialState, {
-        size: 'lg'
-      });
+      this.modalService.show(RgwConfigModalComponent, initialState);
     }
   }
 

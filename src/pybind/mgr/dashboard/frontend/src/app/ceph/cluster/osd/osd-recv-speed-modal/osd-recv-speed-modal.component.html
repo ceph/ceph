@@ -1,13 +1,11 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title"
-                i18n>OSD Recovery Priority</ng-container>
+<cd-modal title="OSD Recovery Priority">
 
   <ng-container class="modal-content">
     <form #formDir="ngForm"
           [formGroup]="osdRecvSpeedForm"
           novalidate
           cdFormScope="osd">
-      <div class="modal-body">
+
         <!-- Priority -->
         <div class="form-group row">
           <label class="cd-col-form-label required"
@@ -80,13 +78,14 @@
                   i18n>The entered value is too low! It must not be lower than {{ attr.value.minValue }}.</span>
           </div>
         </div>
-      </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="submitAction()"
-                              [form]="osdRecvSpeedForm"
-                              [submitText]="actionLabels.UPDATE"
-                              [showSubmit]="permissions.configOpt.update"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submitAction()"
+                          [form]="osdRecvSpeedForm"
+                          [modalForm]="true"
+                          [submitText]="actionLabels.UPDATE"
+                          [showSubmit]="permissions.configOpt.update"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

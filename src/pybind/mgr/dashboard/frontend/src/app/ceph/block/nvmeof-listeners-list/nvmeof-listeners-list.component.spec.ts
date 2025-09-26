@@ -6,9 +6,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { of } from 'rxjs';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const mockListeners = [
   {
@@ -47,7 +47,7 @@ describe('NvmeofListenersListComponent', () => {
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalService, useClass: MockModalService },
+        { provide: ModalCdsService, useClass: MockModalService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
       ]
     }).compileComponents();

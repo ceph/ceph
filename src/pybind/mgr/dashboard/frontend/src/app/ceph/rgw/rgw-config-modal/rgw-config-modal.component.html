@@ -1,12 +1,9 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">{{ action | titlecase }} RGW Encryption Configurations</ng-container>
+<cd-modal title="{{ action | titlecase }} RGW Encryption Configurations">
 
   <ng-container class="modal-content">
     <form name="configForm"
           #frm="ngForm"
           [formGroup]="configForm">
-    <div class="modal-body">
       <div class="form-group row">
         <label class="cd-col-form-label required"
                for="encryptionType"
@@ -353,12 +350,13 @@
           </div>
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                            [submitText]="actionLabels.SUBMIT"
-                            [form]="configForm"></cd-form-button-panel>
-    </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                          [submitText]="actionLabels.SUBMIT"
+                          [modalForm]="true"
+                          [form]="configForm"></cd-form-button-panel>
   </ng-container>
 </cd-modal>
