@@ -2891,7 +2891,9 @@ int D4NFilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-            prefix_map_t& processed_prefixes)
+            prefix_map_t& processed_prefixes,
+            const char *if_match,
+            const char *if_nomatch)
 {
   //call next->complete to complete writing the object to the backend store
   auto ret = next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
