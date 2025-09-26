@@ -49,6 +49,7 @@
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
@@ -92,7 +93,6 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;

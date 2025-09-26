@@ -14,6 +14,9 @@
 
 #include "snap.h"
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
 
 #include <ostream>
 #include <sstream>

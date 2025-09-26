@@ -13,7 +13,6 @@
  */
 
 #include "DamageTable.h"
-#include "BatchOp.h"
 
 #include "common/debug.h"
 #include "common/errno.h" // for cpp_strerror()

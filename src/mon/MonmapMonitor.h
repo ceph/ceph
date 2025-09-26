@@ -24,8 +24,6 @@
 #include <string>
 
 #include "include/buffer_fwd.h"
-#include "include/types.h"
-#include "msg/Messenger.h"
 
 #include "PaxosService.h"
 #include "MonMap.h"
