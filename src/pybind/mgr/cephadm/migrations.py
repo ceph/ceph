@@ -8,7 +8,7 @@ from cephadm.schedule import HostAssignment
 from cephadm.utils import SpecialHostLabels
 import rados
 from mgr_util import parse_combined_pem_file, get_cert_issuer_info
-from cephadm.tlsobject_types import CertKeyPair
+from cephadm.tlsobject_types import TLSCredentials
 
 from mgr_module import NFS_POOL_NAME
 from orchestrator import OrchestratorError, DaemonDescription
@@ -459,7 +459,7 @@ class Migrations:
                 if org == 'Ceph':
                     logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as cephadm-signed certs)')
                     self.mgr.cert_mgr.register_self_signed_cert_key_pair('grafana')
-                    self.mgr.cert_mgr.save_self_signed_cert_key_pair('grafana', CertKeyPair(grafana_cert, grafana_key), host=hostname)
+                    self.mgr.cert_mgr.save_self_signed_cert_key_pair('grafana', TLSCredentials(grafana_cert, grafana_key), host=hostname)
                 else:
                     logger.info(f'Migrating {grafana_daemon.name()}/{hostname} cert/key to cert store (as custom-certs)')
                     grafana_cephadm_signed_certs = False

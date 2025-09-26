@@ -30,6 +30,18 @@ class NvmeofService(CephService):
     def needs_monitoring(self) -> bool:
         return True
 
+    @property
+    def client_cert_name(self) -> str:
+        return 'nvmeof_client_cert'
+
+    @property
+    def client_key_name(self) -> str:
+        return 'nvmeof_client_key'
+
+    @property
+    def ca_cert_name(self) -> str:
+        return 'nvmeof_root_ca_cert'
+
     def config(self, spec: NvmeofServiceSpec) -> None:  # type: ignore
         assert self.TYPE == spec.service_type
         # Looking at src/pybind/mgr/cephadm/services/iscsi.py
@@ -58,48 +70,42 @@ class NvmeofService(CephService):
             self.mgr.log.info(f"TLS for nvmeof service {svc_name} is disabled.")
             return
 
-        host = daemon_spec.host
-
         # Attach server-side certificates
-        tls_pair = self.get_certificates(daemon_spec)
+        tls_creds = self.get_certificates(daemon_spec)
         daemon_spec.extra_files.update({
-            'server_cert': tls_pair.cert,
-            'server_key': tls_pair.key,
+            'server_cert': tls_creds.cert,
+            'server_key': tls_creds.key,
         })
 
         # If mTLS is not enabled, we're done
         if not spec.enable_auth:
             return
 
-        client_cert = client_key = root_ca_cert = None
-
+        tls_creds = None
         if spec.certificate_source == CertificateSource.CEPHADM_SIGNED.value:
-            client_tls_pair = self.get_self_signed_certificates_with_label(
+            tls_creds = self.get_self_signed_certificates_with_label(
                 spec, daemon_spec, NVMEOF_CLIENT_CERT_LABEL
             )
-            client_cert = client_tls_pair.cert
-            client_key = client_tls_pair.key
-            root_ca_cert = self.mgr.cert_mgr.get_root_ca()
+        elif spec.certificate_source in [CertificateSource.REFERENCE.value, CertificateSource.INLINE.value]:
+            tls_creds = self.get_certificates_generic(
+                svc_spec=spec,
+                daemon_spec=daemon_spec,
+                cert_source_attr='certificate_source',
+                cert_attr='client_cert',
+                cert_name=self.client_cert_name,
+                key_attr='client_key',
+                key_name=self.client_key_name,
+                ca_cert_attr='root_ca_cert',
+                ca_cert_name=self.ca_cert_name
+            )
 
-        elif spec.certificate_source == CertificateSource.REFERENCE.value:
-            client_cert = self.mgr.cert_mgr.get_cert('nvmeof_client_cert', service_name=svc_name, host=host)
-            client_key = self.mgr.cert_mgr.get_key('nvmeof_client_key', service_name=svc_name, host=host)
-            root_ca_cert = self.mgr.cert_mgr.get_cert('nvmeof_root_ca_cert', service_name=svc_name, host=host)
-
-        elif spec.certificate_source == CertificateSource.INLINE.value:
-            assert spec.client_cert and spec.client_key and spec.root_ca_cert  # for mypy
-            client_cert, client_key, root_ca_cert = spec.client_cert, spec.client_key, spec.root_ca_cert
-            self.mgr.cert_mgr.save_cert('nvmeof_client_cert', client_cert, svc_name, daemon_spec.host, user_made=True)
-            self.mgr.cert_mgr.save_key('nvmeof_client_key', client_key, svc_name, daemon_spec.host, user_made=True)
-            self.mgr.cert_mgr.save_cert('nvmeof_root_ca_cert', root_ca_cert, svc_name, daemon_spec.host, user_made=True)
-
-        if not all([client_cert, client_key, root_ca_cert]):
+        if not (tls_creds and tls_creds.cert and tls_creds.key and tls_creds.ca_cert):
             raise OrchestratorError("mTLS is enabled, but or more of client_cert, client_key, or root_ca_cert is missing or was not set correctly.")
 
         daemon_spec.extra_files.update({
-            'client_cert': client_cert,
-            'client_key': client_key,
-            'root_ca_cert': root_ca_cert,
+            'client_cert': tls_creds.cert,
+            'client_key': tls_creds.key,
+            'root_ca_cert': tls_creds.ca_cert,
         })
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
@@ -332,7 +338,7 @@ class NvmeofService(CephService):
 
         self.mgr.cert_mgr.rm_self_signed_cert_key_pair(service_name, daemon.hostname, label=NVMEOF_CLIENT_CERT_LABEL)
         if spec.enable_auth and spec.certificate_source == CertificateSource.INLINE.value:
-            for entry in ['nvmeof_client_cert', 'nvmeof_client_key', 'nvmeof_root_ca_cert']:
+            for entry in [self.client_cert_name, self.client_key_name, self.ca_cert_name]:
                 if 'cert' in entry:
                     self.mgr.cert_mgr.rm_cert(entry, spec.service_name(), daemon.hostname)
                 elif 'key' in entry:
