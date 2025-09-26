@@ -71,6 +71,16 @@ class CertificateSource(Enum):
     CEPHADM_SIGNED = "cephadm-signed"
 
 
+class MonitorCertSource(Enum):
+    """
+    - REUSE_SERVICE_CERT: Use Service cert for monitoring
+    """
+    INLINE = CertificateSource.INLINE.value
+    REFERENCE = CertificateSource.REFERENCE.value
+    CEPHADM_SIGNED = CertificateSource.CEPHADM_SIGNED.value
+    REUSE_SERVICE_CERT = "reuse_service_cert"
+
+
 def handle_type_error(method: FuncT) -> FuncT:
     @wraps(method)
     def inner(cls: Any, *args: Any, **kwargs: Any) -> Any:
@@ -2151,6 +2161,12 @@ class IngressSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  health_check_interval: Optional[str] = None,
+                 monitor_ssl: bool = False,
+                 monitor_ssl_cert: Optional[str] = None,
+                 monitor_ssl_key: Optional[str] = None,
+                 monitor_cert_source: Optional[str] = MonitorCertSource.REUSE_SERVICE_CERT.value,
+                 monitor_networks: Optional[List[str]] = None,
+                 monitor_ip_addrs: Optional[Dict[str, str]] = None,
                  ):
         assert service_type == 'ingress'
 
@@ -2188,6 +2204,13 @@ class IngressSpec(ServiceSpec):
         self.enable_haproxy_protocol = enable_haproxy_protocol
         self.health_check_interval = health_check_interval.strip(
         ) if health_check_interval else None
+        self.enable_stats = enable_stats
+        self.monitor_ssl = monitor_ssl
+        self.monitor_ssl_cert = monitor_ssl_cert
+        self.monitor_ssl_key = monitor_ssl_key
+        self.monitor_cert_source = monitor_cert_source
+        self.monitor_networks = monitor_networks
+        self.monitor_ip_addrs = monitor_ip_addrs
 
     def get_port_start(self) -> List[int]:
         ports = []
@@ -2225,6 +2248,18 @@ class IngressSpec(ServiceSpec):
                 raise SpecValidationError(
                     f'Cannot add ingress: Invalid health_check_interval specified. '
                     f'Valid units are: {valid_units}')
+
+        # validate SSL parametes
+        if self.monitor_ssl:
+            if not self.ssl:
+                raise SpecValidationError(
+                    'To enable SSL for stats, SSL must also be enabled on the frontend.'
+                )
+            if self.monitor_ssl_cert and bool(self.monitor_ssl_cert) != bool(self.monitor_ssl_key):
+                raise SpecValidationError(
+                    'To enable monitor_ssl, both monitor_ssl_cert and monitor_ssl_key '
+                    'must be provided.'
+                )
 
 
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)

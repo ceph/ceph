@@ -409,13 +409,30 @@ Service specs are YAML blocks with the following properties:
       use_keepalived_multicast: <bool>          # optional: Default is False.
       vrrp_interface_network: <string>/<string> # optional: ex: 192.168.20.0/24
       health_check_interval: <string>           # optional: Default is 2s.
+      ssl: true
+      certificate_source: inline                # optional: Default is cephadm-signed
       ssl_cert: |                               # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
         -----END CERTIFICATE-----
+      ssl_key: |
         -----BEGIN PRIVATE KEY-----
         ...
         -----END PRIVATE KEY-----
+      enable_stats: true
+      monitor_ssl: <bool>
+      monitor_cert_source: inline                       # optional: default is reuse_service_cert
+      monitor_ssl_cert: |                               # optional: SSL certificate and key
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+      monitor_ssl_key: |
+        -----BEGIN PRIVATE KEY-----
+        ...
+        -----END PRIVATE KEY-----
+      monitor_networks: [..]
+      monitor_ip_addrs:
+        host: <ip>
 
 .. code-block:: yaml
 
@@ -467,9 +484,20 @@ where the properties of this service specification are:
     A list of networks to identify which ethernet interface to use for the virtual IP.
 * ``frontend_port``
     The port used to access the ingress service.
-* ``ssl_cert``:
-    SSL certificate, if SSL is to be enabled. This must contain the both the certificate and
-    private key blocks in .pem format.
+* ``ssl``
+    To enable SSL for ingress service.
+* ``certificate_source``
+    The certificate source can be one of the following: 'inline', 'reference', or 'cephadm-signed'.
+    - If set to 'inline', the YAML configuration must include ssl_cert and ssl_key.
+    - If set to 'reference', the certificate and key must already exist in the certificate store.
+    - If set to 'cephadm-signed', Cephadm will automatically generate the certificate and key.
+    By default, the source is set to 'cephadm-signed'.
+* ``ssl_cert``
+    SSL certificate, if SSL is enabled and ``certificate_source`` is not 'cephadm-signed'.
+    This should have the certificate .pem format.
+* ``ssl_key``
+    SSL key, if SSL is enabled and ``certificate_source`` is not 'cephadm-signed'.
+    This should have the key .pem format.
 * ``use_keepalived_multicast``
     Default is False. By default, cephadm will deploy keepalived config to use unicast IPs,
     using the IPs of the hosts. The IPs chosen will be the same IPs cephadm uses to connect
@@ -488,6 +516,29 @@ where the properties of this service specification are:
 * ``health_check_interval``
     Default is 2 seconds. This parameter can be used to set the interval between health checks
     for the haproxy with the backend servers.
+* ``enable_stats``
+    Default is False, must be set to enable haproxy stats.
+* ``monitor_ssl``
+    To enable ssl for monitoring. SSL for monitoring can be enabled only when service SSL is enabled.
+* ``monitor_cert_source``
+    The monitor certificate source can be one of the following: 'reuse_service_cert', 'inline', 'reference', or 'cephadm-signed'.
+    - If set to 'reuse_service_cert', then the service certs will be used.
+    - If set to 'inline', the YAML configuration must include ssl_cert and ssl_key.
+    - If set to 'reference', the certificate and key must already exist in the certificate store.
+    - If set to 'cephadm-signed', Cephadm will automatically generate the certificate and key.
+    By default, the source is set to 'reuse_service_cert'.
+* ``monitor_ssl_cert``
+    Monitor SSL certificate, if monitor SSL is enabled and ``monitor_cert_source``
+    is not 'cephadm-signed'. This should have the certificate .pem format.
+* ``monitor_ssl_key``
+    Monitor SSL key, if monitor SSL is enabled and ``monitor_cert_source`` is not
+    'cephadm-signed'. This should have the key .pem format.
+* ``monitor_ip_addrs``
+    If ``monitor_ip_addrs`` is provided and the specified IP address is assigned to the host,
+    that IP address will be used. If IP address is not present, then 'monitor_networks' will be checked.
+* ``monitor_networks``
+    If ``monitor_networks`` is specified, an IP address that matches one of the specified
+    networks will be used. If IP not present, then default host ip will be used.
 
 .. _ingress-virtual-ip:
 
