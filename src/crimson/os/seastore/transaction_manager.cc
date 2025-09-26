@@ -1039,8 +1039,8 @@ TransactionManagerRef make_transaction_manager(
     // see CircularBoundedJournal::get_records_start()
     roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
 		 ->get_shard_journal_start() + primary_device->get_block_size();
-    ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
-    ceph_assert_always((std::size_t)roll_size + roll_start <=
+    ceph_assert(roll_size <= DEVICE_OFF_MAX);
+    ceph_assert((std::size_t)roll_size + roll_start <=
                        primary_device->get_available_size());
   }
   ceph_assert(roll_size % primary_device->get_block_size() == 0);
