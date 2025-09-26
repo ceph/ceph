@@ -4883,41 +4883,22 @@ int main(int argc, const char **argv)
       break;
     case OPT::PERIOD_PULL:
       {
-        boost::optional<RGWRESTConn> conn;
-        RGWRESTConn *remote_conn = nullptr;
         if (url.empty()) {
-          // load current period for endpoints
-          RGWRealm realm;
-          int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                    realm_id, realm_name, realm);
-          if (ret < 0 ) {
-            cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          period_id = realm.current_period;
-
-          RGWPeriod current_period;
-          ret = cfgstore->read_period(dpp(), null_yield, period_id,
-                                      std::nullopt, current_period);
-          if (ret < 0) {
-            cerr << "failed to load current period: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          if (remote.empty()) {
-            // use realm master zone as remote
-            remote = current_period.get_master_zone().id;
-          }
-          conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), current_period.get_map(), remote);
-          if (!conn) {
-            cerr << "failed to find a zone or zonegroup for remote "
-                << remote << std::endl;
-            return -ENOENT;
-          }
-          remote_conn = &*conn;
+          cerr << "A --url must be provided." << std::endl;
+          return EINVAL;
         }
+        // load realm for current period
+        RGWRealm realm;
+        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
+                                  realm_id, realm_name, realm);
+        if (ret < 0 ) {
+          cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        period_id = realm.current_period;
 
         RGWPeriod period;
-        int ret = do_period_pull(cfgstore.get(), remote_conn, url,
+        ret = do_period_pull(cfgstore.get(), nullptr, url,
                                  opt_region, access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
