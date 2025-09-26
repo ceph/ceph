@@ -30,6 +30,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   selection = new CdTableSelection();
   icons = Icons;
   expandedInnerRow: any;
+  multilineTextKeys = ['description', 'impact', 'fix'];
 
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
