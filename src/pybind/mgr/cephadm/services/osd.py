@@ -111,6 +111,7 @@ class OSDService(CephService):
         osds_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
+                '--log-level', self.mgr.ceph_volume_log_level,
                 '--',
                 'lvm', 'list',
                 '--format', 'json',
@@ -160,6 +161,7 @@ class OSDService(CephService):
         raw_elems: dict = await CephadmServe(self.mgr)._run_cephadm_json(
             host, 'osd', 'ceph-volume',
             [
+                '--log-level', self.mgr.ceph_volume_log_level,
                 '--',
                 'raw', 'list',
                 '--format', 'json',
@@ -314,7 +316,7 @@ class OSDService(CephService):
 
                 # get preview data from ceph-volume
                 for cmd in cmds:
-                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume --log-level,{self.mgr.ceph_volume_log_level}, -- {cmd}'):
                         out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
@@ -383,7 +385,7 @@ class OSDService(CephService):
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
         out, err, code = await CephadmServe(self.mgr)._run_cephadm(
-            host, 'osd', 'ceph-volume',
+            host, 'osd', 'ceph-volume','--log-level', self.mgr.ceph_volume_log_level,
             _cmd,
             env_vars=env_vars,
             stdin=j,
@@ -563,7 +565,7 @@ class RemoveUtil(object):
     def zap_osd(self, osd: "OSD") -> str:
         "Zaps all devices that are associated with an OSD"
         if osd.hostname is not None:
-            cmd = ['--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
+            cmd = ['--log-level', self.mgr.ceph_volume_log_level, '--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
             if osd.replace_block:
                 cmd.append('--replace-block')
             if osd.replace_db:
