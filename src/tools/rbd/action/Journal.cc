@@ -5,7 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "common/Cond.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/safe_io.h"

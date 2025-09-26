@@ -19,6 +19,7 @@
 #include <iostream>
 #include <map>
 
+#include "common/XMLFormatter.h"
 #include "include/types.h"
 
 #include "rgw_cors_s3.h"

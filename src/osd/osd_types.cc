@@ -42,7 +42,7 @@ extern "C" {
 }
 
 #include "common/ceph_context.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/StackStringStream.h"
 #include "include/utime_fmt.h"
 #include "OSDMap.h"

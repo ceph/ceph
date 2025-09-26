@@ -114,6 +114,7 @@ e 12v
 #include "include/buffer.h"
 #include "msg/msg_types.h"
 #include "include/Context.h"
+#include "common/JSONFormatter.h"
 #include "common/perf_counters.h"
 #include <errno.h>
 
