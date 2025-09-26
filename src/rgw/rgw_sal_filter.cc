@@ -869,9 +869,11 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
-  return next->chown(dpp, new_owner, y);
+int FilterBucket::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y) {
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
