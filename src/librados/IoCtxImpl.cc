@@ -88,25 +88,28 @@ struct CB_notify_Finish {
 
 struct CB_aio_linger_cancel {
   Objecter *objecter;
-  Objecter::LingerOp *linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
 
-  CB_aio_linger_cancel(Objecter *_objecter, Objecter::LingerOp *_linger_op)
-    : objecter(_objecter), linger_op(_linger_op)
+  CB_aio_linger_cancel(Objecter *_objecter,
+                       boost::intrusive_ptr<Objecter::LingerOp> op)
+    : objecter(_objecter), linger_op(std::move(op))
   {
   }
 
   void operator()() {
-    objecter->linger_cancel(linger_op);
+    objecter->linger_cancel(linger_op.get());
   }
 };
 
 struct C_aio_linger_Complete : public Context {
   AioCompletionImpl *c;
-  Objecter::LingerOp *linger_op;
+  boost::intrusive_ptr<Objecter::LingerOp> linger_op;
   bool cancel;
 
-  C_aio_linger_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op, bool _cancel)
-    : c(_c), linger_op(_linger_op), cancel(_cancel)
+  C_aio_linger_Complete(AioCompletionImpl *_c,
+                        boost::intrusive_ptr<Objecter::LingerOp> op,
+                        bool _cancel)
+    : c(_c), linger_op(std::move(op)), cancel(_cancel)
   {
     c->get();
   }
@@ -115,7 +118,7 @@ struct C_aio_linger_Complete : public Context {
     if (cancel || r < 0)
       boost::asio::defer(c->io->client->finish_strand,
 			 CB_aio_linger_cancel(c->io->objecter,
-					      linger_op));
+					      std::move(linger_op)));
 
     c->lock.lock();
     c->rval = r;
@@ -136,8 +139,9 @@ struct C_aio_notify_Complete : public C_aio_linger_Complete {
   bool finished = false;
   int ret_val = 0;
 
-  C_aio_notify_Complete(AioCompletionImpl *_c, Objecter::LingerOp *_linger_op)
-    : C_aio_linger_Complete(_c, _linger_op, false) {
+  C_aio_notify_Complete(AioCompletionImpl *_c,
+                        boost::intrusive_ptr<Objecter::LingerOp> op)
+    : C_aio_linger_Complete(_c, std::move(op), false) {
   }
 
   void handle_ack(int r) {
