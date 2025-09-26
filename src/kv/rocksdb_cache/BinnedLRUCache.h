@@ -15,10 +15,11 @@
 #include <boost/circular_buffer.hpp>
 
 #include "ShardedCache.h"
-#include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_context.h"
+#include "common/admin_socket.h"
 
+class RocksDBStore;
 namespace rocksdb_cache {
 
 // LRU cache implementation
@@ -49,6 +50,8 @@ namespace rocksdb_cache {
 
 std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
     CephContext *c,
+    RocksDBStore* store,
+    const std::string& name,
     size_t capacity,
     int num_shard_bits = -1,
     bool strict_capacity_limit = false,
@@ -172,7 +175,9 @@ class BinnedLRUHandleTable {
 // A single shard of sharded cache.
 class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
  public:
-  BinnedLRUCacheShard(CephContext *c, size_t capacity, bool strict_capacity_limit,
+  BinnedLRUCacheShard(CephContext *c, RocksDBStore* store,
+    const std::string& shard_name,
+    size_t capacity, bool strict_capacity_limit,
                 double high_pri_pool_ratio);
   virtual ~BinnedLRUCacheShard();
 
@@ -245,6 +250,8 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
  private:
   CephContext *cct;
+  RocksDBStore* store;
+  std::string shard_name;
   void LRU_Remove(BinnedLRUHandle* e);
   void LRU_Insert(BinnedLRUHandle* e);
 
@@ -262,13 +269,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
   // holding the mutex_
   void EvictFromLRU(size_t charge, BinnedLRUHandle*& deleted);
 
-  void FreeDeleted(BinnedLRUHandle* deleted) {
-    while (deleted) {
-      auto* entry = deleted;
-      deleted = deleted->next;
-      entry->Free();
-    }
-  }
+  void FreeDeleted(BinnedLRUHandle* deleted);
 
   // Initialized before use.
   size_t capacity_;
@@ -324,7 +325,7 @@ class alignas(CACHE_LINE_SIZE) BinnedLRUCacheShard : public CacheShard {
 
 class BinnedLRUCache : public ShardedCache {
  public:
-  BinnedLRUCache(CephContext *c, size_t capacity, int num_shard_bits,
+  BinnedLRUCache(CephContext *c, RocksDBStore* store, const std::string& name, size_t capacity, int num_shard_bits,
       bool strict_capacity_limit, double high_pri_pool_ratio);
   virtual ~BinnedLRUCache();
   virtual const char* Name() const override { return "BinnedLRUCache"; }
@@ -364,6 +365,8 @@ class BinnedLRUCache : public ShardedCache {
 
  private:
   CephContext *cct;
+  RocksDBStore* store;
+  std::string name;
   BinnedLRUCacheShard* shards_;
   int num_shards_ = 0;
 };
