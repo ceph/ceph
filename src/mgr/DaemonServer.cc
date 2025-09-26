@@ -791,11 +791,14 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
         update_task_status(key, *m->task_status);
         daemon->last_service_beacon = now;
       }
-      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
-        // only OSD and MON send health_checks to me now
-        daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
-        dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
-                 << dendl;
+      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon() ||
+	  m->get_connection()->peer_is_client()) { //FIXME: peer_is_cephfs_mirror() to avoid any client
+	if (m->get_connection()->peer_is_client() && daemon->service_daemon) {
+	  dout(0) << __func__ << " jos: inside check" << dendl;
+	  daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
+	  dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
+		   << dendl;
+	}
       }
     }
   }
@@ -2696,7 +2699,8 @@ void DaemonServer::_prune_pending_service_map()
 void DaemonServer::send_report()
 {
   if (!pgmap_ready) {
-    if (ceph_clock_now() - started_at > g_conf().get_val<int64_t>("mgr_stats_period") * 4.0) {
+    //if (ceph_clock_now() - started_at > g_conf().get_val<int64_t>("mgr_stats_period") * 4.0) {
+    if (ceph_clock_now() - started_at > 1 * 4.0) {
       pgmap_ready = true;
       reported_osds.clear();
       dout(1) << "Giving up on OSDs that haven't reported yet, sending "
@@ -2750,10 +2754,16 @@ void DaemonServer::send_report()
     });
 
   std::map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
-  for (auto service : {"osd", "mon"} ) {
+  for (auto service : {"osd", "mon", "cephfs-mirror"} ) {
     auto daemons = daemon_state.get_by_service(service);
+    if (daemons.size()) {
+      dout(0)<< __func__ << daemons.size() << " daemons for " << std::string(service) << " service"  << dendl;
+    } else {
+      dout(0)<< __func__ << "0 daemons for " << std::string(service) << " service" << dendl;
+    }
     for (const auto& [key,state] : daemons) {
       std::lock_guard l{state->lock};
+      dout(0)<< __func__ << " daemon_health_metrics size: " << state->daemon_health_metrics.size() << dendl;
       for (const auto& metric : state->daemon_health_metrics) {
         auto acc = accumulated.find(metric.get_type());
         if (acc == accumulated.end()) {
@@ -2765,6 +2775,13 @@ void DaemonServer::send_report()
 		 << std::dec << dendl;
             continue;
           }
+	  //if (std::string(service) == "cephfs-mirror") {
+	    dout(0)<< __func__ << " " << key
+		   << " sent me a health metric: "
+		   << std::hex << static_cast<uint8_t>(metric.get_type())
+		   << std::dec << dendl;
+	    //}
+
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }
@@ -2772,6 +2789,7 @@ void DaemonServer::send_report()
       }
     }
   }
+
   for (const auto& acc : accumulated) {
     acc.second->summarize(m->health_checks);
   }

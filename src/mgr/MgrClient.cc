@@ -417,6 +417,9 @@ void MgrClient::_send_report()
     report->task_status = task_status;
     task_dirty_status = false;
   }
+  ldout(cct, 20) << "jos: daemon name: " << report->daemon_name
+		 << daemon_health_metrics
+		 << dendl;
 
   report->daemon_health_metrics = std::move(daemon_health_metrics);
 
@@ -657,5 +660,6 @@ void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
   std::lock_guard l(lock);
   daemon_health_metrics = std::move(metrics);
+  ldout(cct,1) << "jos: assigned to daemon_health_metrics " << daemon_health_metrics << dendl;
 }
 

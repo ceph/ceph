@@ -40,11 +40,14 @@ struct AttributeDumpVisitor {
 
 } // anonymous namespace
 
-ServiceDaemon::ServiceDaemon(CephContext *cct, RadosRef rados)
+  ServiceDaemon::ServiceDaemon(CephContext *cct, RadosRef rados, Messenger* msgr, MonClient* monc)
   : m_cct(cct),
     m_rados(rados),
-    m_timer(new SafeTimer(cct, m_timer_lock, true)) {
+    m_timer(new SafeTimer(cct, m_timer_lock, true)),
+    h_timer(new SafeTimer(cct, h_timer_lock, true)),
+    mgrc(cct, msgr, &monc->monmap) {
   m_timer->init();
+  h_timer->init();
 }
 
 ServiceDaemon::~ServiceDaemon() {
@@ -55,10 +58,16 @@ ServiceDaemon::~ServiceDaemon() {
       dout(5) << ": canceling timer task=" << m_timer_ctx << dendl;
       m_timer->cancel_event(m_timer_ctx);
     }
+    std::scoped_lock h_lock(h_timer_lock);
+    if (h_timer_ctx != nullptr) {
+      dout(5) << ": canceling health timer task=" << h_timer_ctx << dendl;
+      h_timer->cancel_event(h_timer_ctx);
+    }
     m_timer->shutdown();
+    h_timer->shutdown();
   }
-
   delete m_timer;
+  delete h_timer;
 }
 
 int ServiceDaemon::init() {
@@ -77,6 +86,7 @@ int ServiceDaemon::init() {
   if (r < 0) {
     return r;
   }
+
   return 0;
 }
 
@@ -181,8 +191,6 @@ void ServiceDaemon::schedule_update_status() {
 }
 
 void ServiceDaemon::update_status() {
-  dout(20) << ": " << m_filesystems.size() << " filesystem(s)" << dendl;
-
   ceph::JSONFormatter f;
   {
     std::scoped_lock locker(m_lock);
@@ -220,6 +228,33 @@ void ServiceDaemon::update_status() {
     derr << ": failed to update service daemon status: " << cpp_strerror(r)
          << dendl;
   }
+}
+
+std::vector<DaemonHealthMetric> ServiceDaemon::get_health_metrics() {
+
+  std::vector<DaemonHealthMetric> health_metrics;
+  health_metrics.emplace_back(daemon_metric::MIRRORING_FAILURE, 1);
+  return health_metrics;
+}
+
+void ServiceDaemon::schedule_health_tick()
+{
+  if (h_timer_ctx != nullptr) {
+    return;
+  }
+  h_timer_ctx = new LambdaContext([this](int) {
+    h_timer_ctx = nullptr;
+    health_tick();
+  });
+  h_timer->add_event_after(m_cct->_conf.get_val<std::chrono::seconds>("cephfs_mirror_tick_interval"),
+			   h_timer_ctx);
+}
+
+void ServiceDaemon::health_tick()
+{
+  dout(20) << dendl;
+  mgrc.update_daemon_health(get_health_metrics());
+  schedule_health_tick();
 }
 
 } // namespace mirror

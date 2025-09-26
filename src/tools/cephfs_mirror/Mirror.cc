@@ -278,7 +278,7 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
-  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local);
+  m_service_daemon = std::make_unique<ServiceDaemon>(m_cct, m_local, m_msgr, m_monc);
   r = m_service_daemon->init();
   if (r < 0) {
     derr << ": error registering service daemon: " << cpp_strerror(r) << dendl;
@@ -289,6 +289,9 @@ int Mirror::init(std::string &reason) {
   if (r < 0) {
     return r;
   }
+
+  std::scoped_lock h_lock(m_service_daemon->get_health_timer_lock());
+  m_service_daemon->schedule_health_tick();
 
   std::string labels = ceph::perf_counters::key_create("cephfs_mirror");
   PerfCountersBuilder plb(m_cct, labels, l_cephfs_mirror_first, l_cephfs_mirror_last);
