@@ -1407,7 +1407,7 @@ options:
   level: advanced
   desc: Calculate and store availablity score for each pool in the 
     cluster at regular intervals
-  default: true
+  default: false
   services :
   - mon
   flags:
