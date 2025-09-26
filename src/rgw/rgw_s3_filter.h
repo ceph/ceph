@@ -3,8 +3,10 @@
 
 #pragma once
 
-#include "rgw_tools.h"
+#include <string>
 #include <boost/container/flat_map.hpp>
+
+#include "include/types.h"
 
 class XMLObj;
 

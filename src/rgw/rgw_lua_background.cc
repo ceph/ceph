@@ -1,4 +1,4 @@
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 #include "rgw_lua_background.h"
 #include "rgw_lua.h"
 #include "rgw_lua_utils.h"

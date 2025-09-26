@@ -3,9 +3,9 @@
 
 #pragma once
 
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 
 class Context;
