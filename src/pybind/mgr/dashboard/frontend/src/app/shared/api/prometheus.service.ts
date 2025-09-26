@@ -154,10 +154,16 @@ export class PrometheusService {
   }
 
   getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
-    return this.getPrometheusQueryData({ params: query }).pipe(
-      map((result: PromqlGuageMetric) => result),
-      catchError(() => of({ result: [] } as PromqlGuageMetric))
-    );
+    let result$: Observable<PromqlGuageMetric> = of({ result: [] } as PromqlGuageMetric);
+
+    this.ifPrometheusConfigured(() => {
+      result$ = this.getPrometheusQueryData({ params: query }).pipe(
+        map((result: PromqlGuageMetric) => result),
+        catchError(() => of({ result: [] } as PromqlGuageMetric))
+      );
+    });
+
+    return result$;
   }
 
   formatGuageMetric(data: string): number {
