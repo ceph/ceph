@@ -9226,7 +9226,7 @@ void Server::_rmdir_rollback_finish(const MDRequestRef& mdr, metareqid_t reqid, 
  */
 bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
 {
-  dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
+  dout(10) << __func__ << " " << *in << dendl;
   ceph_assert(in->is_auth());
 
   if (in->filelock.is_cached())
@@ -9239,7 +9239,7 @@ bool Server::_dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *in)
     // is the frag obviously non-empty?
     if (dir->is_auth()) {
       if (dir->get_projected_fnode()->fragstat.size()) {
-	dout(10) << "dir_is_nonempty_unlocked dirstat has " 
+	dout(10) << __func__ << " dirstat has "
 		 << dir->get_projected_fnode()->fragstat.size() << " items " << *dir << dendl;
 	return true;
       }
@@ -10190,7 +10190,23 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << " stray_prior_path = " << t << dendl;
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	size_t n = 0;
+	std::string trimmed_t = "";
+	for (int i = 1; i <= 10; ++i) {
+	  n = t.rfind("/", n - 1);
+	  if (n == std::string::npos) {
+	    trimmed_t = t;
+	    break;
+	  }
+	}
+	if (trimmed_t == ""  &&  t != "") {
+	  trimmed_t = "..." + t.substr(n, -1);
+	}
+
+        dout(20) << " stray_prior_path = " << trimmed_t << dendl;
         tpi->stray_prior_path = std::move(t);
       }
       tpi->nlink--;
@@ -10205,8 +10221,24 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        dout(20) << __func__ << " referent stray_prior_path = " << t << dendl;
-        trpi->stray_prior_path = std::move(t);
+
+	/* Log only 10 final components fo the path to since logging entire
+	 * path is not useful and also reduces readability. */
+	size_t n = 0;
+	std::string trimmed_t = "";
+	for (int i = 1; i <= 10; ++i) {
+	  n = t.rfind("/", n - 1);
+	  if (n == std::string::npos) {
+	    trimmed_t = t;
+	    break;
+	  }
+	}
+	if (trimmed_t == "" && t != "") {
+	  trimmed_t = "..." + t.substr(n, -1);
+	}
+
+	dout(20) << __func__ << " referent stray_prior_path = " << trimmed_t << dendl;
+	trpi->stray_prior_path = std::move(t);
       }
     }
   }
