@@ -114,6 +114,7 @@ NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
 SMB_METADATA = ('smb_version', 'volume',
                 'subvolume_group', 'subvolume', 'netbiosname', 'share')
+CEPHADM_METADATA = ('daemon_type', 'daemon_id', 'daemon_name', 'hostname');
 
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
@@ -802,6 +803,21 @@ class Module(MgrModule, OrchestratorClientMixin):
             'smb_metadata',
             'SMB Metadata',
             SMB_METADATA
+        )
+
+        # Add metrics for cephadm-managed containers
+        metrics['cephadm_container_cpu_percentage'] = Metric(
+            'gauge',
+            'cephadm_container_cpu_percentage',
+            'CPU percentage used by cephadm-managed containers',
+            CEPHADM_METADATA
+        )
+
+        metrics['cephadm_container_memory_bytes'] = Metric(
+            'gauge',
+            'cephadm_container_memory_bytes',
+            'Memory usage in bytes by cephadm-managed containers',
+            CEPHADM_METADATA
         )
 
         for flag in OSD_FLAGS:
@@ -1708,6 +1724,40 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
+    def get_cephadm_container_metrics(self) -> None:
+        """
+        Populate cephadm_container_cpu_percentage and cephadm_container_memory_bytes
+        from the orchestrator.
+        """
+        if not self.orch_is_available():
+            return
+
+        try:
+            daemons = raise_if_exception(self.list_daemons())
+            for daemon in daemons:
+                # Only consider daemons running in containers
+                if getattr(daemon, "container_id", None):
+                    print(daemon);
+                    cpu = getattr(daemon, "cpu_percentage", None)
+                    mem = getattr(daemon, "memory_usage", None)
+                    cpu_val = None
+                    if cpu is not None:
+                        try:
+                            cpu_val = float(str(cpu).strip().rstrip('%'))
+                            self.metrics['cephadm_container_cpu_percentage'].set(
+                            cpu_val,
+                            (str(daemon.daemon_type), str(daemon.daemon_id), str(daemon.daemon_name), str(daemon.hostname))
+                        )
+                        except Exception as e:
+                            self.log.error(f"Could not parse cpu_percentage '{cpu}': {e}")
+                    if mem is not None:
+                        self.metrics['cephadm_container_memory_bytes'].set(
+                            mem,
+                            (str(daemon.daemon_type), str(daemon.daemon_id), str(daemon.daemon_name), str(daemon.hostname))
+                        )
+        except Exception as e:
+            self.log.error(f"Failed to collect cephadm container metrics: {e}")
+
     def get_perf_counters(self) -> None:
         """
         Get the perf counters for all daemons
@@ -1840,6 +1890,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
         self.get_smb_metadata()
+        self.get_cephadm_container_metrics()
 
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
