@@ -47,6 +47,9 @@
 
 using namespace std;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation="
+
 static std::string generate_random_string(int length = 20) {
   std::random_device rd;
   std::mt19937 gen(rd());
@@ -4372,8 +4375,8 @@ TEST(LibCephFS, UnmountHangAfterOpenatFilePath) {
 
   char c_rel_path[PATH_MAX];
   char c_path[PATH_MAX];
-  sprintf(c_rel_path, "created_file_%d", mypid);
-  sprintf(c_path, "%s/%s", c_dir, c_rel_path);
+  snprintf(c_rel_path, sizeof c_rel_path, "created_file_%d", mypid);
+  snprintf(c_path, sizeof c_path, "%s/%s", c_dir, c_rel_path);
   int file_fd = ceph_openat(cmount, dir_fd, c_rel_path, O_RDONLY | O_CREAT, 0777);
   ASSERT_GT(file_fd, 0);
   int fd = ceph_openat(cmount, file_fd, ".", O_RDONLY, 0777);
@@ -4524,3 +4527,5 @@ TEST(LibCephFS, ConcurrentWriteAndFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+#pragma GCC diagnostic pop
