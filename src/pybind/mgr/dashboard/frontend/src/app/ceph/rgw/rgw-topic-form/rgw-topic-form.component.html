@@ -9,7 +9,7 @@
       {{ action | titlecase }} {{ resource | upperFirst }}
       <cd-help-text>
         <span i18n>
-            Configure the push endpoint parameters to send notifications. On successful creation, you'll receive the topic's unique Amazon Resource Name
+             An event in S3 is a notification that something has happened to an object or bucket
         </span>
       </cd-help-text>
     </div>
@@ -552,7 +552,7 @@
     <div class="card-footer">
       <cd-form-button-panel (submitActionEvent)="submitAction()"
                             [form]="topicForm"
-                            [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                            [submitText]="(action | titlecase) + ' ' + (btnLabel | upperFirst)"
                             wrappingClass="text-right"></cd-form-button-panel>
     </div>
   </form>

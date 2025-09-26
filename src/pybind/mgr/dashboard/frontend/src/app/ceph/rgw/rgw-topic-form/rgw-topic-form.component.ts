@@ -49,6 +49,7 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
   topicId: string;
   hostProtocols: typeof Endpoint = Endpoint;
   key: string = '';
+  btnLabel: string;
   protocolPlaceholders: Record<string, string> = {
     HTTP: URL_FORMAT_PLACEHOLDERS.http,
     AMQP: URL_FORMAT_PLACEHOLDERS.amqp,
@@ -67,7 +68,8 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
     super();
     this.editing = this.router.url.startsWith(`/rgw/topic/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = $localize`topic`;
+    this.resource = $localize`Notification Destination(Topic)`;
+    this.btnLabel = $localize`Notification Destination`;
   }
 
   ngAfterViewChecked(): void {
