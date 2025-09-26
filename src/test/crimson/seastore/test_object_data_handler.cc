@@ -36,8 +36,30 @@ public:
   bool is_alive() const final {
     return true;
   }
+  void swap_layout(Transaction &t, Onode& other) final {
+    static_cast<TestOnode&>(other).with_mutable_layout(
+      t,
+      [this](auto &o_mlayout) {
+      std::swap(layout.object_data, o_mlayout.object_data);
+      std::swap(layout.omap_root, o_mlayout.omap_root);
+      std::swap(layout.log_root, o_mlayout.log_root);
+      std::swap(layout.xattr_root, o_mlayout.xattr_root);
+    });
+  }
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
+
+  void set_need_cow(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      mlayout.need_cow = true;
+    });
+  }
+
+  void unset_need_cow(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      mlayout.need_cow = false;
+    });
+  }
 
   void update_onode_size(Transaction &t, uint32_t size) final {
     with_mutable_layout(t, [size](onode_layout_t &mlayout) {
