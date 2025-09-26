@@ -19,6 +19,7 @@
 #include "include/compat.h"
 
 #include "include/stringify.h"
+#include "include/ceph_features.h"
 #include "global/global_context.h"
 #include "global/signal_handler.h"
 
@@ -28,6 +29,7 @@
 #include "NVMeofGwMonitorClient.h"
 #include "NVMeofGwClient.h"
 #include "NVMeofGwMonitorGroupClient.h"
+#include "nvmeof/NVMeofGwUtils.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
@@ -41,6 +43,8 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   last_map_time(std::chrono::steady_clock::now()),
   reset_timestamp(std::chrono::steady_clock::now()),
   start_time(last_map_time),
+  cluster_features(0),
+  poolctx(),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
@@ -211,7 +215,7 @@ void NVMeofGwMonitorClient::send_beacon()
 {
   ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
   gw_availability_t gw_availability = gw_availability_t::GW_CREATED;
-  BeaconSubsystems subs;
+  BeaconSubsystems current_subsystems;
   NVMeofGwClient gw_client(
      grpc::CreateChannel(gateway_address, gw_creds()));
   subsystems_info gw_subsystems;
@@ -231,26 +235,45 @@ void NVMeofGwMonitorClient::send_beacon()
         BeaconListener bls = { ls.adrfam(), ls.traddr(), ls.trsvcid() };
         bsub.listeners.push_back(bls);
       }
-      subs.push_back(bsub);
+      current_subsystems.push_back(bsub);
     }
   }
+
+  // Determine change descriptors by comparing with previous beacon's subsystems
+  BeaconSubsystems subs = current_subsystems;
+  determine_subsystem_changes(prev_beacon_subsystems, subs);
 
   auto group_key = std::make_pair(pool, group);
   NvmeGwClientState old_gw_state;
   // if already got gateway state in the map
   if (first_beacon == false && get_gw_state("old map", map, group_key, name, old_gw_state))
     gw_availability = ok ? gw_availability_t::GW_AVAILABLE : gw_availability_t::GW_UNAVAILABLE;
-  dout(10) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
+  dout(1) << "sending beacon as gid " << monc.get_global_id() << " availability " << (int)gw_availability <<
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
+
+  // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
+  bool include_diff = HAVE_FEATURE(cluster_features, NVMEOF_BEACON_DIFF);
+
+  dout(10) << "Cluster features: 0x" << std::hex << cluster_features << std::dec
+            << ", NVMEOF_BEACON_DIFF supported: " << (include_diff ? "yes" : "no") << dendl;
+
+  // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(
       name,
       pool,
       group,
-      subs,
+      include_diff ? subs : current_subsystems,
       gw_availability,
       osdmap_epoch,
-      gwmap_epoch);
+      gwmap_epoch,
+      beacon_sequence,
+      include_diff  // Pass the feature flag directly to constructor
+  );
+  dout(10) << "sending beacon with diff support: " << (include_diff ? "enabled" : "disabled") << dendl;
+  
   monc.send_mon_message(std::move(m));
+  ++beacon_sequence;
+  prev_beacon_subsystems = std::move(current_subsystems);
 }
 
 void NVMeofGwMonitorClient::disconnect_panic()
@@ -352,6 +375,22 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
   // ensure that the gateway state has not vanished
   ceph_assert(got_new_gw_state || !got_old_gw_state);
 
+  // Check if the last_beacon_seq_number in the received map doesn't match our last sent beacon_sequence
+  // beacon_sequence is incremented after sending, so we compare with (beacon_sequence - 1)
+  {
+    std::lock_guard bl(beacon_lock);
+    if (got_new_gw_state && new_gw_state.last_beacon_seq_ooo) {
+        //new_gw_state.last_beacon_seq_number != (beacon_sequence - 1)) {
+      dout(4) << "Beacon sequence mismatch detected. Expected: " << (beacon_sequence - 1)
+               << ", received: " << new_gw_state.last_beacon_seq_number
+               << ". Truncating previous subsystems list." << dendl;
+      beacon_sequence = new_gw_state.last_beacon_seq_number + 1;
+      prev_beacon_subsystems.clear();
+      dout(4) << "OOO map received, Ignore it" << dendl;
+      return;
+    }
+  }
+
   if (!got_old_gw_state) {
     if (!got_new_gw_state) {
       dout(10) << "Can not find new gw state" << dendl;
@@ -386,10 +425,29 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
     }
   }
 
+  // Combined subsystems
+  const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
+  GwSubsystems combined_subsystems = new_gw_state.subsystems;
+  for (const auto& nqn_state_pair: old_gw_state.subsystems) {
+    const auto& nqn = nqn_state_pair.first;
+    auto& old_nqn_state = nqn_state_pair.second;
+
+    // The monitor might remove active subsystems from the new distributed GwSubsystems.
+    // In such cases, ensure an INACCESSIBLE state is generated for subsystems
+    // that were present in the old state but are now missing.
+    if (new_gw_state.subsystems.find(nqn) == new_gw_state.subsystems.end()) {
+      ana_state_t all_disabled(old_nqn_state.ana_state.size(), initial_ana_state);
+      dout(4) << "set all groups to Inacccessible stat for " << nqn << dendl;
+      NqnState    nqn_state(nqn, all_disabled);
+
+      combined_subsystems.insert({nqn, nqn_state});
+    }
+  }
+
   // Gather all state changes
   ana_info ai;
   epoch_t max_blocklist_epoch = 0;
-  for (const auto& nqn_state_pair: new_gw_state.subsystems) {
+  for (const auto& nqn_state_pair: combined_subsystems) {
     auto& sub = nqn_state_pair.second;
     const auto& nqn = nqn_state_pair.first;
     nqn_ana_states nas;
@@ -403,7 +461,6 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
        sub.ana_state.size();
 
     for (NvmeAnaGrpId  ana_grp_index = 0; ana_grp_index < ana_state_size; ana_grp_index++) {
-      const auto initial_ana_state = std::make_pair(gw_exported_states_per_group_t::GW_EXPORTED_INACCESSIBLE_STATE, (epoch_t)0);
       auto new_group_state = (ana_grp_index < sub.ana_state.size()) ?
 	sub.ana_state[ana_grp_index] :
 	initial_ana_state;
@@ -456,6 +513,17 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
 {
   std::lock_guard l(lock);
   dout(10) << "got map type " << m->get_type() << dendl;
+
+  // print connection features for all incoming messages and update cluster features
+  if (m->get_connection()) {
+    uint64_t features = m->get_connection()->get_features();
+    dout(4) << "Monitor connection features: 0x" << std::hex << features << std::dec << dendl;
+    
+    // Update cluster features with the union of all seen features
+    // This ensures we track the highest level of features supported by the cluster
+    cluster_features |= features;
+    dout(10) << "Updated cluster features: 0x" << std::hex << cluster_features << std::dec << dendl;
+  }
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
     handle_nvmeof_gw_map(ref_cast<MNVMeofGwMap>(m));
