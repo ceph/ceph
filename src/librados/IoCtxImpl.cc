@@ -1745,8 +1745,11 @@ int librados::IoCtxImpl::notify_ack(
 
 int librados::IoCtxImpl::watch_check(uint64_t cookie)
 {
-  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  auto r = objecter->linger_check(linger_op);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
+  auto r = objecter->linger_check(linger_op.get());
   if (r)
     return 1 + std::chrono::duration_cast<
       std::chrono::milliseconds>(*r).count();
@@ -1756,7 +1759,11 @@ int librados::IoCtxImpl::watch_check(uint64_t cookie)
 
 int librados::IoCtxImpl::unwatch(uint64_t cookie)
 {
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
+
   C_SaferCond onfinish;
   version_t ver = 0;
 
@@ -1766,7 +1773,7 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
   objecter->mutate(linger_op->target.base_oid, oloc, wr,
 		   snapc, ceph::real_clock::now(), extra_op_flags,
 		   &onfinish, &ver);
-  objecter->linger_cancel(linger_op);
+  objecter->linger_cancel(linger_op.get());
 
   int r = onfinish.wait();
   set_sync_op_version(ver);
@@ -1776,7 +1783,10 @@ int librados::IoCtxImpl::unwatch(uint64_t cookie)
 int librados::IoCtxImpl::aio_unwatch(uint64_t cookie, AioCompletionImpl *c)
 {
   c->io = this;
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  boost::intrusive_ptr linger_op = objecter->linger_by_cookie(cookie);
+  if (!linger_op) {
+    return -ENOTCONN;
+  }
   Context *oncomplete = new C_aio_linger_Complete(c, linger_op, true);
 
   ::ObjectOperation wr;
