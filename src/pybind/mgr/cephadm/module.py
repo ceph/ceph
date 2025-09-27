@@ -2595,26 +2595,26 @@ Then run the following:
                 result.append(dd)
         return result
 
-    def perform_service_action(self, action: str, service_name: str) -> List[str]:
+    def perform_service_action(self, action: str, service_name: str, force: bool = True) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         if not dds:
             raise OrchestratorError(f'No daemons exist under service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
         self.log.info('%s service %s' % (action.capitalize(), service_name))
         return [
-            self._schedule_daemon_action(dd.name(), action)
+            self._schedule_daemon_action(dd.name(), action, force=force)
             for dd in dds
         ]
 
     @handle_orch_error
-    def service_action(self, action: str, service_name: str) -> List[str]:
+    def service_action(self, action: str, service_name: str, force: bool = True) -> List[str]:
         if service_name not in self.spec_store.all_specs.keys():
             raise OrchestratorError(f'Invalid service name "{service_name}".'
                                     + ' View currently running services using "ceph orch ls"')
-        if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
+        if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd'] and not force:
             return [f'Stopping entire {service_name} service is prohibited.']
 
-        return self.perform_service_action(action, service_name)
+        return self.perform_service_action(action, service_name, force=force)
 
     def _rotate_daemon_key(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         self.log.info(f'Rotating authentication key for {daemon_spec.name()}')
@@ -2728,7 +2728,7 @@ Then run the following:
             })
 
     @handle_orch_error
-    def daemon_action(self, action: str, daemon_name: str, image: Optional[str] = None, force: bool = False) -> str:
+    def daemon_action(self, action: str, daemon_name: str, image: Optional[str] = None, force: bool = True) -> str:
         d = self.cache.get_daemon(daemon_name)
         assert d.daemon_type is not None
         assert d.daemon_id is not None
@@ -2754,7 +2754,7 @@ Then run the following:
         self._daemon_action_set_image(action, image, d.daemon_type, d.daemon_id)
 
         self.log.info(f'Schedule {action} daemon {daemon_name}')
-        return self._schedule_daemon_action(daemon_name, action)
+        return self._schedule_daemon_action(daemon_name, action, force)
 
     def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
         return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
@@ -2767,7 +2767,7 @@ Then run the following:
             self.cache.get_daemons_by_type('mgr')).container_image_digests
         return digests if digests else []
 
-    def _schedule_daemon_action(self, daemon_name: str, action: str) -> str:
+    def _schedule_daemon_action(self, daemon_name: str, action: str, force: bool = True) -> str:
         dd = self.cache.get_daemon(daemon_name)
         assert dd.daemon_type is not None
         assert dd.daemon_id is not None
@@ -2776,7 +2776,7 @@ Then run the following:
                 and not self.mgr_service.mgr_map_has_standby():
             raise OrchestratorError(
                 f'Unable to schedule redeploy for {daemon_name}: No standby MGRs')
-        self.cache.schedule_daemon_action(dd.hostname, dd.name(), action)
+        self.cache.schedule_daemon_action(dd.hostname, dd.name(), action, force)
         self.cache.save_host(dd.hostname)
         msg = "Scheduled to {} {} on host '{}'".format(action, daemon_name, dd.hostname)
         self._kick_serve_loop()
@@ -4354,3 +4354,72 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+
+    @handle_orch_error
+    def list_daemon_actions(self) -> List[Tuple[str, str, str, bool]]:
+        """
+        List scheduled daemon actions
+        Returns:
+            List of tuples containing (host, daemon_name, action, is_forced)
+        """
+        result = []
+        for host, daemon_name, action in self.cache.get_all_scheduled_actions():
+            is_forced = self.cache.is_force_action(host, daemon_name)
+            result.append((host, daemon_name, action, is_forced))
+        return result
+
+    @handle_orch_error
+    def cancel_daemon_action(self, daemon_name: str) -> bool:
+        """
+        Cancel a scheduled daemon action
+        """
+        for host, daemons, _ in self.cache.get_all_scheduled_actions():
+            if daemon_name in daemons:
+                self.cache.rm_scheduled_daemon_action(host, daemon_name)
+                self.cache.clear_force_action(host, daemon_name)
+                self.cache.save_host(host)
+                return True
+        return False
+
+    @handle_orch_error
+    def cancel_service_actions(self, service_name: str) -> str:
+        """
+        Cancel all scheduled actions for a service
+        """
+        count = 0
+        daemons = self.cache.get_daemons_by_service(service_name)
+        daemon_names = [d.name() for d in daemons]
+
+        for host, daemon_name, action in self.cache.get_all_scheduled_actions():
+            if daemon_name in daemon_names:
+                self.cache.rm_scheduled_daemon_action(host, daemon_name)
+                self.cache.clear_force_action(host, daemon_name)
+                self.cache.save_host(host)
+                count += 1
+
+        if count == 0:
+            return f"No scheduled actions found for service {service_name}"
+        return f"Canceled {count} scheduled action(s) for service {service_name}"
+
+    @handle_orch_error
+    def rm_daemon_action(self, host: str, daemon_name: str) -> bool:
+        """
+        Remove a scheduled daemon action directly given the host and daemon_name
+        """
+        if self.cache.rm_scheduled_daemon_action(host, daemon_name):
+            self.cache.clear_force_action(host, daemon_name)
+            self.cache.save_host(host)
+            return True
+        return False
+
+    @handle_orch_error
+    def force_daemon_action(self, daemon_name: str, force: bool = True) -> bool:
+        """
+        Mark a daemon action as forced or not forced
+        """
+        for host, daemon, _ in self.cache.get_all_scheduled_actions():
+            if daemon_name == daemon:
+                self.cache.set_force_action(host, daemon_name, force)
+                self.cache.save_host(host)
+                return True
+        return False
