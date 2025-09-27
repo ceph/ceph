@@ -40,7 +40,7 @@
 #include <string_view>
 #include <vector>
 
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "mds/mdstypes.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
@@ -251,9 +251,9 @@ public:
   unsigned get_owner_gid() const { return head.owner_gid; }
   const std::vector<uint64_t>& get_caller_gid_list() const { return gid_list; }
 
-  const std::string& get_path() const { return path.get_path(); }
+  std::string_view get_path() const { return path.get_path(); }
   const filepath& get_filepath() const { return path; }
-  const std::string& get_path2() const { return path2.get_path(); }
+  std::string_view get_path2() const { return path2.get_path(); }
   const filepath& get_filepath2() const { return path2; }
   std::string_view get_alternate_name() const { return std::string_view(alternate_name); }
 
