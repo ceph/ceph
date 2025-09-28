@@ -1379,7 +1379,7 @@ if allComparisonsSuccessful == true then
 	log_message("allComparisonsSuccessful is true, renaming all write keys")
 	rename_all_write_keys()
 --	return {true, "Processing complete - commit transaction"}
-	return true
+	return "true"
 else
 -- the transaction should be rolled back, all temp keys should be deleted
 	log_message("allComparisonsSuccessful is false")
@@ -1387,7 +1387,7 @@ else
 	deleteKeysWithSuffix("_temp_test_write")
 	deleteKeysWithSuffix("_temp_read") 
 --	return {false, "Processing failed - rolling back"}
-	return false
+	return "false"
 end
 
 
@@ -1497,8 +1497,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
   //running the loaded script 
   try {
     boost::system::error_code ec;
-    //response<bool,std::string> resp; //the response RESP3 should contain a tuple of <bool status, string result>
-    response<bool> resp; //LUA script returns only bool status, the string result is removed to avoid RESP3 related issues.
+    response<std::string> resp; //NOTE: the LUA script(contained in lua_script_end_trx) returns a string "true" or "false", the boolean type as a response seems to be buggy.
     request req;
 
     unsigned int num_keys = m_temp_read_keys.size() + m_temp_write_keys.size() + m_temp_test_write_keys.size();
@@ -1537,7 +1536,7 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
     //error handling
       if (ec) {
 	std::ostringstream err_msg;
-	err_msg	<< "Directory::end_trx the end-trx script had failed this = " << this ;
+	err_msg	<< "end-trx LUA script had failed this = " << this ;
 
 	//system level error
 	if (ec.category() == boost::system::system_category()) {
@@ -1545,11 +1544,39 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
                   		<< " (errno=" << ec.value() << dendl; 
 	//boost redis error
     	} else if (ec.category().name() == std::string("boost.redis")) {
-        		ldout(g_ceph_context,0) << err_msg.str() << " Redis error: " << ec.message()
-                  		<< " (boost.redis code=" << ec.value() << dendl;
+			std::string error_msg = ec.message();
+			// LUA script compilation errors
+    			if (error_msg.find("ERR Error compiling script") != std::string::npos) {
+        			ldout(g_ceph_context, 0) << "Directory::end_trx LUA script compilation error: "
+                                 << error_msg << dendl;
+        			return -EINVAL; // the loaded script is corrupted
+    			}
+
+    			// LUA Script not found
+    			if (error_msg.find("NOSCRIPT") != std::string::npos) {
+        			ldout(g_ceph_context, 0) << "Directory::end_trx LUA script not found, reloading..." << dendl;
+        			m_evalsha_end_trx.clear(); // Force script reload
+        			return -EINVAL; // the SHA of the loaded script is not found, it should be reloaded. 
+    	   	 	}	
+
+    			// Wrong data type operations
+    			if (error_msg.find("WRONGTYPE") != std::string::npos) {
+        			ldout(g_ceph_context, 0) << "Directory::end_trx Redis key type mismatch: "
+                                 << error_msg << dendl;
+        			return -EINVAL; // the input arguments to the script are not correct. 
+       	 	   	}	
+
+    			// Memory/timeout errors
+    			if (error_msg.find("OOM") != std::string::npos ||
+        			error_msg.find("BUSY") != std::string::npos) {
+        				ldout(g_ceph_context, 0) << "Directory::end_trx Redis resource error: "
+                                 	<< error_msg << dendl;
+        			return -EINVAL; // maybe temporary error, the transaction could be retried. 
+       	 		}		
+
 
    	} else {//TODO what are the other error categories?
-        		ldout(g_ceph_context,0) << err_msg.str() << " Other error: " << ec.message()
+        		ldout(g_ceph_context,0) << "Directory::end_trx " << err_msg.str() << " Other error: " << ec.message()
                   		<< " (category=" << ec.category().name()
                   		<< ", value=" << ec.value() << dendl;
     	}
@@ -1557,24 +1584,22 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 	return -ec.value();
       }
 
-      // the response contain whether the transaction was successful or not <bool status, string result>
-      // Extract values
-	bool status = std::get<0>(resp).value();
-	//std::string result = std::get<1>(resp).value();
-#if 0
-      //could be compile-time error or no matching script.
-      if (result.starts_with("ERR") || result.starts_with("NOSCRIPT") || result.starts_with("WRONGTYPE")) {
-	 ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with result =" << result << dendl;
-         return -EINVAL;
+      // the response contains a boolean indicating whether the transaction was successful
+      // Extract boolean value from boost::system::result with debugging
+      auto result = std::get<0>(resp);
+      ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: result.has_value()=" << result.has_value()
+                                << " result.has_error()=" << result.has_error() << dendl;
+      if (result.has_error()) {
+        ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: Redis result has error, returning -EINVAL" << dendl;
+        return -EINVAL;
       }
-#endif
-      if(status == false) {
+      std::string status = result.value();
+      ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: LUA script returned status=" << status << dendl;
+      if(status == "false") {//TODO consider returning a specific error code per type of failure. (i.e , read conflict, write conflict, etc)
 	//the transaction had failed, it was rolled back.
-	//ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << "  " << result << dendl;
-	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this <<  dendl;
+	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << " status= " << status <<  dendl;
 	return -EINVAL;
       }
-
 
     } catch (std::exception &e) {
       ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with exception = " << e.what() << dendl;

@@ -598,7 +598,7 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp)
     rgw::sal::Attrs obj_attrs;
     bool invalid = false;
     // end_transaction_rc is used to indicate whether the transaction was successful or not.
-    //int end_transaction_rc = 0;
+    int end_transaction_rc = 0;
   
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "" << __LINE__ << "(): Before acquiring cleaning-lock" << dendl;
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
