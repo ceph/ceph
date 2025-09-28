@@ -8391,7 +8391,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     if (mds->damage_table.is_dirfrag_damaged(curdir)) {
       dout(4) << "traverse: stopped lookup at dirfrag "
               << *curdir << "/" << path[depth] << " snap=" << snapid << dendl;
-      return -CEPHFS_EIO;
+      return -EIO;
     }
 
 #ifdef MDS_VERIFY_FRAGSTAT
