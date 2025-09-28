@@ -431,9 +431,6 @@ else:
                     subsystem_nqn=nqn, nsid=int(nsid))
             )
 
-        @NvmeofCLICommand(
-            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
-        )
         @EndpointDoc(
             "Create a new NVMeoF namespace",
             parameters={
@@ -463,6 +460,48 @@ else:
         @convert_to_model(model.NamespaceCreation)
         @handle_nvmeof_error
         def create(
+            self,
+            nqn: str,
+            rbd_image_name: str,
+            rbd_pool: str = "rbd",
+            nsid: Optional[str] = None,
+            create_image: Optional[bool] = False,
+            size: Optional[int] = None,
+            rbd_image_size: Optional[int] = None,
+            trash_image: Optional[bool] = False,
+            block_size: int = 512,
+            load_balancing_group: Optional[int] = None,
+            force: Optional[bool] = False,
+            no_auto_visible: Optional[bool] = False,
+            disable_auto_resize: Optional[bool] = False,
+            read_only: Optional[bool] = False,
+            gw_group: Optional[str] = None,
+            traddr: Optional[str] = None,
+        ):
+            return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add(
+                NVMeoFClient.pb2.namespace_add_req(
+                    subsystem_nqn=nqn,
+                    nsid=int(nsid) if nsid else None,
+                    rbd_image_name=rbd_image_name,
+                    rbd_pool_name=rbd_pool,
+                    block_size=block_size,
+                    create_image=create_image,
+                    size=rbd_image_size or size,
+                    trash_image=trash_image,
+                    anagrpid=load_balancing_group,
+                    force=force,
+                    no_auto_visible=no_auto_visible,
+                    disable_auto_resize=disable_auto_resize,
+                    read_only=read_only
+                )
+            )
+
+        @NvmeofCLICommand(
+            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
+        )
+        @convert_to_model(model.NamespaceCreation)
+        @handle_nvmeof_error
+        def create_cli(
             self,
             nqn: str,
             rbd_image_name: str,
@@ -591,9 +630,6 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/resize')
-        @NvmeofCLICommand(
-            "nvmeof namespace resize", model=model.RequestStatus, alias="nvmeof ns resize"
-        )
         @EndpointDoc(
             "resize the specified NVMeoF namespace",
             parameters={
@@ -623,7 +659,8 @@ else:
                 )
             )
 
-        @NvmeofCLICommand("nvmeof ns resize", model=model.RequestStatus)
+        @NvmeofCLICommand("nvmeof namespace resize", model=model.RequestStatus,
+                          alias="nvmeof ns resize")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def resize_cli(
