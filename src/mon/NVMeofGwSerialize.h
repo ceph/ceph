@@ -318,7 +318,7 @@ inline  void decode(
 inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = 1;
   if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
-     version = 2;
+     version = BEACON_SUBSYS_VERSION_ENHANCED;
   }
   ENCODE_START(version, version, bl);
   encode(state.group_id, bl);
