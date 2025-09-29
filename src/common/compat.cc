@@ -368,7 +368,7 @@ ssize_t preadv(int fd, const struct iovec *iov, int iov_cnt) {
     if (r < 0)
       return r;
     read += r;
-    if (r < iov[i].iov_len)
+    if ((unsigned)r < iov[i].iov_len)
       break;
   }
 
@@ -383,7 +383,7 @@ ssize_t writev(int fd, const struct iovec *iov, int iov_cnt) {
     if (r < 0)
       return r;
     written += r;
-    if (r < iov[i].iov_len)
+    if ((unsigned)r < iov[i].iov_len)
       break;
   }
 
