@@ -458,8 +458,7 @@ ExtentPlacementManager::open_for_write()
     ERROR("Not enough EMPTY segments! "
           "Consider increasing the device size (needed {} got {})",
           total_writers_num, segments->get_num_empty());
-    // TODO: open_ertr should be expanded to enospc
-    co_await open_ertr::future<>(crimson::ct_error::input_output_error::make());
+    co_await open_ertr::future<>(crimson::ct_error::enospc::make());
   }
 
   DEBUG("opening DATA writers", num_devices);

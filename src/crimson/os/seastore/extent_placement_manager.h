@@ -35,7 +35,8 @@ public:
 
   virtual writer_stats_t get_stats() const = 0;
 
-  using open_ertr = base_ertr;
+  using open_ertr = base_ertr::extend<
+    crimson::ct_error::enospc>;
   virtual open_ertr::future<> open() = 0;
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
