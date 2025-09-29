@@ -43,19 +43,17 @@ int send_mon_command(S& s, librados::Rados& rados, const char* name,
 }  // namespace
 
 RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
-                 const std::string& pool, const std::string& oid,
-                 const std::optional<std::vector<int>>& cached_shard_order,
+                 const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
                  bool ec_optimizations)
-    : Model(oid, block_size),
+    : Model(primary_oid, secondary_oid, block_size),
       rados(rados),
       asio(asio),
-      om(std::make_unique<ObjectModel>(oid, block_size, seed)),
+      om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed)),
       db(data_generation::DataGenerator::create_generator(
           data_generation::GenerationType::HeaderedSeededRandom, *om)),
       pool(pool),
-      cached_shard_order(cached_shard_order),
       threads(threads),
       lock(lock),
       cond(cond),
@@ -125,6 +123,10 @@ void RadosIo::applyIoOp(IoOp& op) {
       wait_for_io(0);
       break;
 
+    case OpType::Swap:
+      swap_primary_secondary_oid();
+      break;
+
     case OpType::Create: {
       start_io();
       uint64_t opSize = static_cast<CreateOp&>(op).size;
@@ -138,7 +140,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio.get_executor(), io, oid,
+      librados::async_operate(asio.get_executor(), io, primary_oid,
                               std::move(wop), 0, nullptr, create_cb);
       break;
     }
@@ -153,7 +155,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio.get_executor(), io, oid, std::move(wop), 0,
+      librados::async_operate(asio.get_executor(), io, primary_oid, std::move(wop), 0,
                               nullptr, truncate_cb);
       break;
     }
@@ -167,7 +169,7 @@ void RadosIo::applyIoOp(IoOp& op) {
         ceph_assert(ec == boost::system::errc::success);
         finish_io();
       };
-      librados::async_operate(asio.get_executor(), io, oid,
+      librados::async_operate(asio.get_executor(), io, primary_oid,
                               std::move(wop), 0, nullptr, remove_cb);
       break;
     }
@@ -176,7 +178,7 @@ void RadosIo::applyIoOp(IoOp& op) {
       start_io();
       ceph_assert(cc);
       bool is_consistent =
-        cc->single_read_and_check_consistency(oid, block_size, 0, 0);
+        cc->single_read_and_check_consistency(primary_oid, block_size, 0, 0);
       if (!is_consistent) {
         std::stringstream strstream;
         cc->print_results(strstream);
@@ -184,6 +186,19 @@ void RadosIo::applyIoOp(IoOp& op) {
       }
       ceph_assert(is_consistent);
       finish_io();
+    }
+
+    case OpType::Copy: {
+      start_io();
+      auto op_info = std::make_shared<AsyncOpInfo<0>>();
+      librados::ObjectWriteOperation wop;
+      wop.copy_from(primary_oid.c_str(), io, io.get_last_version(), 0);
+      auto write_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, secondary_oid,
+                              std::move(wop), 0, nullptr, write_cb);
       break;
     }
 
@@ -244,7 +259,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       }
       finish_io();
     };
-    librados::async_operate(asio.get_executor(), io, oid,
+    librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(rop), 0, nullptr, read_cb);
     num_io++;
   };
@@ -264,7 +279,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       ceph_assert(ec == boost::system::errc::success);
       finish_io();
     };
-    librados::async_operate(asio.get_executor(), io, oid,
+    librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(wop), 0, nullptr, write_cb);
     num_io++;
   };
@@ -285,7 +300,7 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       ceph_assert(ec != boost::system::errc::success);
       finish_io();
     };
-    librados::async_operate(asio.get_executor(), io, oid,
+    librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(wop), 0, nullptr, write_cb);
     num_io++;
   };
@@ -368,7 +383,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
   int osd = -1;
   std::vector<int> shard_order;
 
-  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, get_oid(), ""};
+  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool, get_primary_oid(), ""};
   int rc = send_mon_command(osdMapRequest, rados, "OSDMapRequest", osdmap_inbl,
                             &osdmap_outbl, formatter.get());
   ceph_assert(rc == 0);
@@ -389,7 +404,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
 
       if (errorOp.type == 0) {
         ceph::messaging::osd::InjectECErrorRequest<InjectOpType::ReadEIO>
-            injectErrorRequest{pool,         oid,          errorOp.shard,
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
         int rc = send_osd_command(osd, injectErrorRequest, rados,
                                   "InjectECErrorRequest", inject_inbl,
@@ -398,7 +413,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
       } else if (errorOp.type == 1) {
         ceph::messaging::osd::InjectECErrorRequest<
             InjectOpType::ReadMissingShard>
-            injectErrorRequest{pool,         oid,          errorOp.shard,
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
         int rc = send_osd_command(osd, injectErrorRequest, rados,
                                   "InjectECErrorRequest", inject_inbl,
@@ -415,7 +430,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
       if (errorOp.type == 0) {
         ceph::messaging::osd::InjectECErrorRequest<
             InjectOpType::WriteFailAndRollback>
-            injectErrorRequest{pool,         oid,          errorOp.shard,
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
         int rc = send_osd_command(osd, injectErrorRequest, rados,
                                   "InjectECErrorRequest", inject_inbl,
@@ -423,7 +438,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
         ceph_assert(rc == 0);
       } else if (errorOp.type == 3) {
         ceph::messaging::osd::InjectECErrorRequest<InjectOpType::WriteOSDAbort>
-            injectErrorRequest{pool,         oid,          errorOp.shard,
+            injectErrorRequest{pool,         primary_oid,          errorOp.shard,
                                errorOp.type, errorOp.when, errorOp.duration};
         int rc = send_osd_command(osd, injectErrorRequest, rados,
                                   "InjectECErrorRequest", inject_inbl,
@@ -445,7 +460,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
 
       if (errorOp.type == 0) {
         ceph::messaging::osd::InjectECClearErrorRequest<InjectOpType::ReadEIO>
-            clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", inject_inbl,
                                   &inject_outbl, formatter.get());
@@ -453,7 +468,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
       } else if (errorOp.type == 1) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::ReadMissingShard>
-            clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", inject_inbl,
                                   &inject_outbl, formatter.get());
@@ -471,7 +486,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
       if (errorOp.type == 0) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::WriteFailAndRollback>
-            clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", inject_inbl,
                                   &inject_outbl, formatter.get());
@@ -479,7 +494,7 @@ void RadosIo::applyInjectOp(IoOp& op) {
       } else if (errorOp.type == 3) {
         ceph::messaging::osd::InjectECClearErrorRequest<
             InjectOpType::WriteOSDAbort>
-            clearErrorInject{pool, oid, errorOp.shard, errorOp.type};
+            clearErrorInject{pool, primary_oid, errorOp.shard, errorOp.type};
         int rc = send_osd_command(osd, clearErrorInject, rados,
                                   "InjectECClearErrorRequest", inject_inbl,
                                   &inject_outbl, formatter.get());
