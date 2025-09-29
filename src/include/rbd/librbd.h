@@ -299,8 +299,8 @@ typedef struct {
 } rbd_group_spec_t;
 
 typedef enum {
-  RBD_GROUP_SNAP_STATE_INCOMPLETE,
-  RBD_GROUP_SNAP_STATE_COMPLETE
+  RBD_GROUP_SNAP_STATE_CREATING,
+  RBD_GROUP_SNAP_STATE_CREATED
 } rbd_group_snap_state_t;
 
 typedef enum {
@@ -357,11 +357,17 @@ typedef struct {
   uint64_t last_copied_object_number;
 } rbd_snap_mirror_namespace_t;
 
+typedef enum {
+  RBD_MIRROR_GROUP_SNAP_SYNC_UNKNOWN    = 0,
+  RBD_MIRROR_GROUP_SNAP_SYNC_INPROGRESS = 1,
+  RBD_MIRROR_GROUP_SNAP_SYNC_COMPLETE   = 2,
+} rbd_snap_mirror_sync_state_t;
+
 typedef struct {
   rbd_snap_mirror_state_t state;
   size_t mirror_peer_uuids_count;
   char* mirror_peer_uuids;
-  bool complete;
+  rbd_snap_mirror_sync_state_t complete;
   char* primary_mirror_uuid;
   char* primary_snap_id;
 } rbd_group_snap_mirror_namespace_t;
