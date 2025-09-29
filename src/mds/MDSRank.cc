@@ -2049,8 +2049,9 @@ void MDSRank::rejoin_done()
 
   // funny case: is our cache empty?  no subtrees?
   if (!mdcache->is_subtrees()) {
-    if (whoami == 0) {
-      // The root should always have a subtree!
+    if (whoami == 0 && mdlog->get_num_events() > 1) {
+      // The root should always have a subtree except when
+      // the mdlog contains only the ELid event
       clog->error() << "No subtrees found for root MDS rank!";
       damaged();
       ceph_assert(mdcache->is_subtrees());
