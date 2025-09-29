@@ -91,6 +91,8 @@ export enum CellTemplate {
   //    }
   //    ...
   // }
+  Also need to pass forceIdentifer=true and also a unique identifier prop like
+  identifier="uid" to the table in some cases to avoid issues.
   */
   editing = 'editing'
 }

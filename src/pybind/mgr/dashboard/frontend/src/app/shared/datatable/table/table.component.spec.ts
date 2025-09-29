@@ -608,6 +608,7 @@ describe('TableComponent', () => {
         component.editCellItem('id-0', component.localColumns[0], '0');
       }
 
+      component.identifier = 'id';
       component.ngOnInit();
       component.ngAfterViewInit();
       fixture.detectChanges();
