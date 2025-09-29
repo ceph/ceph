@@ -664,7 +664,7 @@ void logback_generations::operator ()(sys::error_code ec,
 				      bufferlist&& bl) {
   co_spawn(rados.get_executor(),
 	   handle_notify(ec, notify_id, cookie, notifier_id, std::move(bl)),
-	   asio::detached);
+	   async::use_blocked);
 }
 
 asio::awaitable<void>
