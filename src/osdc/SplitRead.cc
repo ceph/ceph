@@ -13,7 +13,7 @@ inline boost::system::error_code osdcode(int r) {
 
 constexpr static uint64_t kReplicaMinShardReadSize = 128 * 1024;
 constexpr static uint64_t kReplicaMinShardReads = 2;
-constexpr static uint64_t kReplicaMinSplitOpSize = kReplicaMinShardReadSize * kReplicaMinShardReads;
+constexpr static uint64_t kReplicaMinReadSize = kReplicaMinShardReadSize * kReplicaMinShardReads;
 
 #undef dout_prefix
 #define dout_prefix *_dout << " ECSplitRead::"
@@ -190,7 +190,7 @@ ReplicaSplitRead::ReplicaSplitRead(Objecter::Op *op, Objecter &objecter, CephCon
   SplitRead(op, objecter, cct, pool_size) {
   ceph_osd_op &osd_op = orig_op->ops[0].op;
 
-  if (osd_op.extent.length < kReplicaMinSplitOpSize) {
+  if (osd_op.extent.length < kReplicaMinReadSize) {
     ldout(cct, DBG_LVL) << __func__ <<" ABORT: IO too small" << dendl;
     abort = true;
     return;
@@ -323,6 +323,39 @@ void SplitRead::complete() {
   }
 }
 
+static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
+
+  // Reject if
+  if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0 ) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: Client rejects balanced read" << dendl;
+    return false;
+  }
+
+  uint64_t suitable_read_found = false;
+  for (auto & o : op->ops) {
+    switch (o.op.op) {
+      case CEPH_OSD_OP_READ:
+      case CEPH_OSD_OP_SPARSE_READ: {
+        if (is_erasure || o.op.extent.length >= kReplicaMinReadSize) {
+          suitable_read_found = true;
+        }
+        break;
+      }
+      case CEPH_OSD_OP_GETXATTRS:
+      case CEPH_OSD_OP_CHECKSUM:
+      case CEPH_OSD_OP_GETXATTR: {
+        break; // Do not block validate.
+      }
+      default: {
+        ldout(cct, DBG_LVL) << __func__ <<" REJECT: unsupported op" << dendl;
+        return false;
+      }
+    }
+  }
+
+  return suitable_read_found;
+}
+
 void SplitRead::init(OSDOp &op, int ops_index) {
   switch (op.op.op) {
     case CEPH_OSD_OP_SPARSE_READ: {
@@ -382,17 +415,16 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
 
   debug_op_summary("orig_op: ", op, cct);
 
-  // Ignore non-erasure IO or if balanced reads were not enabled.
-  if ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0) {
-    ldout(cct, DBG_LVL) << __func__ <<" REJECTED" << dendl;
-    return false;
-  }
-
   // In EC, the "original" op never supports balanced reads and indeed setting
   // it will misdirect IO in the OSD. The following logic will determine if a
   // direct read is actually possible.
   if (pi->is_erasure()) {
     t.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
+  }
+
+  // Extremely light-weight "do not execute this op".
+  if (!validate(op, pi->is_erasure(), cct)) {
+    return false;
   }
 
   std::shared_ptr<SplitRead> split_read;
