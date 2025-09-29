@@ -1306,6 +1306,30 @@ recommended amount, run a command of the following form:
 For more information, see :ref:`choosing-number-of-placement-groups` and
 :ref:`pg-autoscaler`.
 
+POOL_MIN_SIZE_TOO_LOW
+_____________________
+
+One or more pools have a ``min_size`` value that is too low, which means 
+the minimum number of OSD daemons per Placement Group required by that pool 
+is too low. 
+For replica pools, ``min_size`` should be greater than 1, and for erasure
+pools, ``min_size`` should be greater than or equal to k + 1.
+
+This warning alerts about the increased risk of data loss when using values
+this low.
+
+For detailed information about which pools are affected, 
+run the following command:
+
+.. prompt:: bash $
+
+   ceph health detail
+
+To manually set the min_size of a pool, run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd pool set <pool-name> min_size <min-size>
 
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
