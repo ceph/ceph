@@ -47,6 +47,8 @@ public:
   bool need_skip_handle_cache() const { return op_info.need_skip_handle_cache(); }
   bool need_skip_promote() const { return op_info.need_skip_promote(); }
   bool allows_returnvec() const { return op_info.allows_returnvec(); }
+  bool balance_read() const { return op_info.balance_read(); }
+  void set_balance_read() { return op_info.set_balance_read(); }
 
   std::vector<OpInfo::ClassInfo> classes() const {
     return op_info.get_classes();
