@@ -22,7 +22,6 @@ std::pair<SplitRead::extent_set, bufferlist> ECSplitRead::assemble_buffer_sparse
   bufferlist bl_out;
   extent_set extents_out;
 
-  mini_flat_map<shard_id_t, extents_map::iterator> extent_sets(sub_reads.size());
 
   auto &orig_osd_op = orig_op->ops[ops_index].op;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(orig_op->target.base_oloc.pool);
@@ -31,16 +30,17 @@ std::pair<SplitRead::extent_set, bufferlist> ECSplitRead::assemble_buffer_sparse
     << orig_osd_op.extent.offset << "~" << orig_osd_op.extent.length << dendl;
 
   std::vector<uint64_t> buffer_offset(stripe_view.data_chunk_count);
+  mini_flat_map<shard_id_t, extents_map::iterator> map_iterators(stripe_view.data_chunk_count);
 
   for (auto &&chunk_info : stripe_view) {
     ldout(cct, DBG_LVL) << __func__ << " chunk: " << chunk_info << dendl;
     auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
 
-    if (!extent_sets.contains(chunk_info.shard)) {
-      extent_sets.emplace(chunk_info.shard, details.e->begin());
+    if (!map_iterators.contains(chunk_info.shard)) {
+      map_iterators.emplace(chunk_info.shard, details.e->begin());
     }
 
-    extents_map::iterator &extent_iter = extent_sets.at(chunk_info.shard);
+    extents_map::iterator &extent_iter = map_iterators.at(chunk_info.shard);
 
     uint64_t bl_len = 0;
     while (extent_iter != details.e->end() && extent_iter->first < chunk_info.ro_offset + stripe_view.chunk_size) {
@@ -95,7 +95,9 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t end_chunk = (offset + op.op.extent.length - 1) / chunk_size;
 
   unsigned count = std::min(data_chunk_count, end_chunk - start_chunk + 1);
-  bool primary_required = count > 1 || orig_op->objver;
+  //FIXME: This is not quite right - the ops.size() > 1 does not necessarily mean
+  // that the primary is required - it could be two reads to the same shard.
+  bool primary_required = count > 1 || orig_op->objver || orig_op->ops.size() > 1;
   abort = false;
 
   int first_shard = start_chunk % data_chunk_count;
@@ -127,6 +129,7 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
     for (unsigned i=0; i < t.acting.size(); ++i) {
       if (t.acting[i] == t.acting_primary) {
         primary_shard.emplace(i);
+        sub_reads.emplace(*primary_shard, orig_op->ops.size());
       }
     }
 
@@ -193,6 +196,9 @@ ReplicaSplitRead::ReplicaSplitRead(Objecter::Op *op, Objecter &objecter, CephCon
     return;
   }
 
+  // This may not actually be the primary, but since all shards are kept current
+  // in replica, it does not actually matter which we choose here. Choose 0 since
+  // there will always be a read to this shard.
   primary_shard = shard_id_t(0);
 }
 
@@ -409,7 +415,6 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
   for (unsigned i = 0; i < op->ops.size(); ++i) {
     split_read->init( op->ops[i], i);
   }
-
 
   if (split_read->sub_reads.size() == 1 &&
     (!split_read->primary_shard || split_read->sub_reads.contains(*split_read->primary_shard))) {
