@@ -21,6 +21,7 @@
 
 #include "include/stringify.h"
 #include "common/BackTrace.h"
+#include "common/JSONFormatter.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"

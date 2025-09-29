@@ -15,7 +15,7 @@
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "client/Inode.h"

@@ -42,6 +42,7 @@
 #include <seastar/core/thread.hh>
 #include <seastar/util/defer.hh>
 
+#include "common/JSONFormatter.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/coroutine.h"
 #include "crimson/common/log.h"

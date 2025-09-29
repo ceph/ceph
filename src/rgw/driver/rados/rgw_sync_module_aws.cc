@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 
 #include "rgw_common.h"
 #include "rgw_coroutine.h"

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <map>
 
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include <common/errno.h>
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"

@@ -14,6 +14,7 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/stringify.h"
 #include "os/Transaction.h"

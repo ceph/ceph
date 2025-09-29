@@ -44,6 +44,7 @@
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/pick_address.h"
 #include "common/TextTable.h"
 #include "crush/CrushWrapper.h"
