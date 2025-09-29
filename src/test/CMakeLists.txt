@@ -1013,6 +1013,12 @@ add_executable(unittest_not_before_queue
 add_ceph_unittest(unittest_not_before_queue)
 target_link_libraries(unittest_not_before_queue ceph-common)
 
+# unittest_mode_collector
+add_executable(unittest_mode_collector
+  test_mode_collector.cc)
+add_ceph_unittest(unittest_mode_collector)
+target_link_libraries(unittest_mode_collector ceph-common)
+
 if(NOT WIN32)
 # unittest_on_exit
 add_executable(unittest_on_exit
