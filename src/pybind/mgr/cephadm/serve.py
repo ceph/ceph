@@ -122,6 +122,9 @@ class CephadmServe:
 
                     if self.mgr.db_ready():
                         self.mgr.version_tracker.add_bootstrap_cluster_version()
+                    else:
+                        self.mgr.log.debug('Version Tracker, Cluster bootstrap version "' +  self.mgr._version + '" could not be added during serve: mgr db not ready')
+                        self.mgr.log.debug('Version Tracker, note: bootstrap version may already be added')
                         
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue

@@ -107,7 +107,7 @@ from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
 from .ceph_volume import CephVolume
-from .version_tracker import VersionTracker
+from .version_tracker import VersionTracker, SCHEMA, SCHEMA_VERSIONED
 
 try:
     import asyncssh
@@ -160,41 +160,9 @@ def host_exists(hostname_position: int = 1) -> Callable:
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                           metaclass=CLICommandMeta):
 
-    SCHEMA = [
-        '''
-        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
-            cluster_version_id INTEGER PRIMARY KEY, 
-            cluster_version TEXT NOT NULL,
-            creation_time TEXT NOT NULL
-        );
-        ''',
-        '''
-        CREATE TABLE IF NOT EXISTS VersionAssociation(
-            id INTEGER PRIMARY KEY,
-            cluster_version_id INTEGER NOT NULL,
-            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
-        );
-        '''
-    ]
+    SCHEMA = SCHEMA
 
-    SCHEMA_VERSIONED = [
-        [
-            '''
-            CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
-                cluster_version_id INTEGER PRIMARY KEY, 
-                cluster_version TEXT NOT NULL,
-                creation_time TEXT NOT NULL
-            );
-            ''',
-            '''
-            CREATE TABLE IF NOT EXISTS VersionAssociation(
-                id INTEGER PRIMARY KEY,
-                cluster_version_id INTEGER NOT NULL,
-                FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
-            );
-            '''
-        ]
-    ]
+    SCHEMA_VERSIONED = SCHEMA_VERSIONED
 
     _STORE_HOST_PREFIX = "host"
 
@@ -4338,3 +4306,4 @@ Then run the following:
         Delete cluster versions stored in history
         '''
         return self.version_tracker.remove_cluster_version_history(time_stamp)
+    
