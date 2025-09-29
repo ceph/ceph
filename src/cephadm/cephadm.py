@@ -2252,7 +2252,7 @@ def prepare_ssh(
                 ctx.error_code = -errno.EINVAL
                 logger.error(f'Failed to apply service type {t}. '
                              'Perhaps the ceph version being bootstrapped does not support it')
-        logger.info('Deploying mgmt-gateway service with default placement...' % t)
+        logger.info('Deploying mgmt-gateway service with default placement...')
         cli(['orch', 'apply', 'mgmt-gateway'])
 
     if ctx.with_centralized_logging:
