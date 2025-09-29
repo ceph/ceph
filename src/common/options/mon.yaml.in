@@ -570,6 +570,19 @@ options:
   see_also:
   - osd_pool_default_size
   - osd_pool_default_min_size
+- name: mon_warn_on_pool_min_size_too_low
+  type: bool
+  level: advanced
+  desc: Issue a health warning if any pool has a minimum size that is too low
+  fmt_desc: Raise ``HEALTH_WARN`` if any pool has a minimum size that is too low.
+  long_desc: Issue a health warning if any pool has a minimum number of osds per pg 
+    that is too low. A replicated pool must have ``min_size`` > 1. An erasure pool 
+    must have ``min_size`` >= k+1.
+  default: true
+  services:
+  - mon
+  see_also:
+  - osd_pool_default_min_size
 - name: mon_warn_on_osd_down_out_interval_zero
   type: bool
   level: advanced

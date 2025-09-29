@@ -294,6 +294,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 .. confval:: mon_warn_on_slow_ping_ratio
 .. confval:: mon_warn_on_slow_ping_time
 .. confval:: mon_warn_on_pool_no_redundancy
+.. confval:: mon_warn_on_pool_min_size_too_low
 .. confval:: mon_cache_target_full_warn_ratio
 .. confval:: mon_health_to_clog
 .. confval:: mon_health_to_clog_tick_interval
