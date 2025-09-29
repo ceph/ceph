@@ -962,7 +962,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
     break;
     case FS_IOC_GET_ENCRYPTION_POLICY_EX_RESTRICTED:
     case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
-      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << " FS_IOC_GET_ENCRYPTION_POLICY_EX buffer:\n" << fscrypt_hex_str(in_buf, in_bufsz) << dendl;
+      generic_dout(10) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << dendl;
 
       struct fscrypt_get_policy_ex_arg out_arg;
       if (out_bufsz < sizeof(out_arg.policy)) {
