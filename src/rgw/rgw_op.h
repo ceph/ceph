@@ -2069,6 +2069,8 @@ protected:
   std::optional<rgw::cksum::Cksum> cksum;
   std::optional<std::string> armored_cksum;
   off_t ofs = 0;
+  const char *if_match{nullptr};
+  const char *if_nomatch{nullptr};
 
 public:
   RGWCompleteMultipart() {}

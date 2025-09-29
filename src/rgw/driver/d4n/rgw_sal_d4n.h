@@ -355,7 +355,9 @@ public:
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-            prefix_map_t& processed_prefixes) override;
+            prefix_map_t& processed_prefixes,
+            const char *if_match = nullptr,
+            const char *if_nomatch = nullptr) override;
 };
 
 } } // namespace rgw::sal
