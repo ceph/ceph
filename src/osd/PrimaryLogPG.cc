@@ -15867,8 +15867,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
   snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
-  auto &in_flight = context<Trimming>().in_flight;
-  ceph_assert(in_flight.empty());
+  auto &in_flight_ops = context<Trimming>().in_flight_ops;
+  ceph_assert(in_flight_ops == 0);
 
   ceph_assert(pg->is_primary() && pg->is_active());
   if (!context< SnapTrimmer >().can_trim()) {
@@ -15924,7 +15924,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight.empty(), object, snap_to_trim, &ctx);
+    int error = pg->trim_object(in_flight_ops == 0, object, snap_to_trim, &ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
@@ -15933,7 +15933,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 	pg->state_set(PG_STATE_SNAPTRIM_ERROR);
 	ldout(pg->cct, 10) << "Snaptrim error=" << error << dendl;
       }
-      if (!in_flight.empty()) {
+      if (in_flight_ops != 0) {
 	ldout(pg->cct, 10) << "letting the ones we already started finish" << dendl;
 	return transit< WaitRepops >();
       }
@@ -15945,12 +15945,12 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       return transit< NotTrimming >();
     }
 
-    in_flight.insert(object);
+    in_flight_ops++;
     ctx->register_on_success(
-      [pg, object, &in_flight]() {
-	ceph_assert(in_flight.find(object) != in_flight.end());
-	in_flight.erase(object);
-	if (in_flight.empty()) {
+      [pg, object, &in_flight_ops]() {
+        ceph_assert(in_flight_ops != 0);
+	in_flight_ops--;
+	if (in_flight_ops == 0) {
 	  if (pg->state_test(PG_STATE_SNAPTRIM_ERROR)) {
 	    pg->snap_trimmer_machine.process_event(Reset());
 	  } else {
