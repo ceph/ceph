@@ -539,7 +539,10 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
           unmanaged: false,
           service_id: 'foo',
           cluster_id: 'cluster_foo',
-          config_uri: 'rados://.smb/foo/scc.toml'
+          config_uri: 'rados://.smb/foo/scc.toml',
+          custom_dns: null,
+          join_sources: undefined,
+          user_sources: undefined
         });
       });
     });

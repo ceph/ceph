@@ -1213,7 +1213,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
             (serviceSpec['features'] = serviceSpec['features'] || []).push(feature);
           }
         }
-        serviceSpec['custom_dns'] = values['custom_dns']?.trim();
+        serviceSpec['custom_dns'] = values['custom_dns'];
         serviceSpec['join_sources'] = values['join_sources']?.trim();
         serviceSpec['user_sources'] = values['user_sources']?.trim();
         serviceSpec['include_ceph_users'] = values['include_ceph_users']?.trim();

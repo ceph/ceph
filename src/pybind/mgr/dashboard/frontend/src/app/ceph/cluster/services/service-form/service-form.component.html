@@ -556,24 +556,12 @@
             </div>
           </div>
 
-          <div class="form-group row">
-            <label class="cd-col-form-label"
-                   for="custom_dns">
-              <span i18n>Custom DNS</span>
-              <cd-helper i18n>
-                <span>Comma separated list of DNSs.</span>
-                <br>
-                <span>A list of IP addresses that will be used as the DNS servers for a Samba container.</span>
-              </cd-helper>
-            </label>
-            <div class="cd-col-form-input">
-              <input id="custom_dns"
-                     class="form-control"
-                     type="text"
-                     formControlName="custom_dns"
-                     placeholder="192.168.76.204"
-                     i18n-placeholder>
-            </div>
+          <div class="form-item">
+            <cd-text-label-list formControlName="custom_dns"
+                                label="Custom DNS"
+                                helperText="IP addresses that will be used as the DNS servers for a Samba container."
+                                placeholder="192.168.76.204">
+            </cd-text-label-list>
           </div>
 
           <div class="form-group row">
