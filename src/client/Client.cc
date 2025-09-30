@@ -6990,10 +6990,7 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
 
   populate_metadata(mount_root.empty() ? "/" : mount_root);
 
-  filepath fp(CEPH_INO_ROOT);
-  if (!mount_root.empty()) {
-    fp = filepath(mount_root.c_str());
-  }
+  auto fp = filepath(mount_root, CEPH_INO_ROOT);
   while (true) {
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_GETATTR);
     req->set_filepath(fp);
