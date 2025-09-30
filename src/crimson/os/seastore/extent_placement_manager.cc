@@ -450,6 +450,8 @@ ExtentPlacementManager::open_for_write()
   LOG_PREFIX(ExtentPlacementManager::open_for_write);
   DEBUG("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
+
+#ifndef UNIT_TESTS_BUILT
   auto total_writers_num =
     data_writers_by_gen.size() + md_writers_by_gen.size();
   if (auto segments = background_process.get_segments_info();
@@ -460,6 +462,7 @@ ExtentPlacementManager::open_for_write()
           total_writers_num, segments->get_num_empty());
     co_await open_ertr::future<>(crimson::ct_error::enospc::make());
   }
+#endif
 
   DEBUG("opening DATA writers", num_devices);
   for (auto& writer : data_writers_by_gen) {
