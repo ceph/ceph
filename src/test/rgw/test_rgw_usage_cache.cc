@@ -268,6 +268,23 @@ TEST_F(TestRGWUsageCache, StressTest) {
   const int num_users = 1000;
   const int num_buckets = 500;
   
+  // Create a new config with longer TTL for stress testing
+  rgw::UsageCache::Config stress_config;
+  stress_config.db_path = test_db_path;
+  stress_config.max_db_size = 1 << 20;
+  stress_config.max_readers = 10;
+  stress_config.ttl = std::chrono::seconds(1800);  // 30 minutes for stress test
+  
+  // Recreate cache with longer TTL
+  cache.reset();
+  
+  if (g_test_context) {
+    cache = std::make_unique<rgw::UsageCache>(g_test_context, stress_config);
+  } else {
+    cache = std::make_unique<rgw::UsageCache>(stress_config);
+  }
+  ASSERT_EQ(0, cache->init());
+
   // Add many users
   for (int i = 0; i < num_users; ++i) {
     std::string user_id = "stress_user_" + std::to_string(i);
