@@ -5625,7 +5625,7 @@ options:
 - name: bluestore_slow_ops_warn_lifetime
   type: uint
   level: advanced
-  desc: Set the duration aftr which BlueStore slow ops warnings clear after being raised by
+  desc: Set the duration after which BlueStore slow ops warnings clear after being raised by
     exceeding the `bluestore_slow_ops_warn_threshold`.  This is not the same as `osd_op_complaint_time`, which is about RADOS ops at the
     OSD level.
   default: 86400
