@@ -2326,14 +2326,14 @@ def test_object_acl():
     before_set_acl = bucket2.get_acl(k)
     assert(len(before_set_acl.acl.grants) == 1)
 
-    #set object acl on primary and wait for sync.
-    bucket.set_canned_acl('public-read', key_name=k)
-    log.debug('set acl=%s', bucket.name)
+    #set object acl on secondary and wait for sync.
+    bucket2.set_canned_acl('public-read', key_name=k)
+    log.debug('set acl=%s', bucket2.name)
     zonegroup_data_checkpoint(zonegroup_conns)
-    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket2.name)
 
-    #check object secondary after setacl
-    bucket2 = get_bucket(secondary, bucket.name)
+    #check object on primary after setacl
+    bucket2 = get_bucket(primary, bucket.name)
     after_set_acl = bucket2.get_acl(k)
     assert(len(after_set_acl.acl.grants) == 2) # read grant added on AllUsers
 

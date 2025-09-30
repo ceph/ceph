@@ -2863,8 +2863,10 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   /* Temporarily set target */
   state.obj = target;
   set_atomic(true);
-  state.attrset[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
+
+  Attrs mattr;
+  mattr[attr_name] = attr_val;
+  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags);
   /* Restore target */
   state.obj = save;
 
