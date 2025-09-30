@@ -191,6 +191,7 @@ public:
   base_iertr::future<LBAMapping> next();
 
 private:
+  friend class LBAManager;
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
   friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
