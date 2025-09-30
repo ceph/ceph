@@ -27,12 +27,12 @@ import { ComponentsModule } from '../components.module';
   ]
 })
 export class TextLabelListComponent implements ControlValueAccessor {
-  @Input()
-  label: string = '';
-  @Input()
-  helperText: string = '';
-  @Input()
-  placeholder: string = '';
+  // Label for the text list.
+  @Input() label: string = '';
+  // Optional helper text that appears under the label.
+  @Input() helperText: string = '';
+  // Value displayed if no item is present.
+  @Input() placeholder: string = '';
 
   values: string[] = [''];
   disabled: boolean = false;
