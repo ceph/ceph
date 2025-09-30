@@ -8,6 +8,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
+import { AlertState } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -31,6 +32,21 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   icons = Icons;
   expandedInnerRow: any;
   multilineTextKeys = ['description', 'impact', 'fix'];
+
+  filters: CdTableColumn[] = [
+    {
+      name: $localize`State`,
+      prop: 'status.state',
+      filterOptions: [$localize`All`, $localize`Active`, $localize`Suppressed`],
+      filterInitValue: $localize`Active`,
+      filterPredicate: (row, value) => {
+        if (value === 'Active') return row.status?.state === AlertState.ACTIVE;
+        else if (value === 'Suppressed') return row.status?.state === AlertState.SUPPRESSED;
+        if (value === 'All') return true;
+        return false;
+      }
+    }
+  ];
 
   constructor(
     // NotificationsComponent will refresh all alerts every 5s (No need to do it here as well)
