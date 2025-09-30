@@ -409,6 +409,37 @@ TransactionManager::_remove(
   }
 }
 
+using resolve_cursor_to_mapping_iertr = base_iertr;
+resolve_cursor_to_mapping_iertr::future<LBAMapping>
+TransactionManager::resolve_cursor_to_mapping(
+  Transaction &t,
+  LBACursorRef cursor)
+{
+  if (cursor->is_end() || !cursor->is_indirect()) {
+    co_return LBAMapping::create_direct(std::move(cursor));
+  }
+
+  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
+  assert(cursor->val->checksum == 0);
+
+  auto direct_cursors = co_await lba_manager->get_cursors(
+    t,
+    cursor->get_intermediate_key(),
+    cursor->get_length()
+  );
+
+  ceph_assert(direct_cursors.size() == 1);
+  auto& direct_cursor = direct_cursors.front();
+  auto intermediate_key = cursor->get_intermediate_key();
+  assert(!direct_cursor->is_indirect());
+  assert(direct_cursor->get_laddr() <= intermediate_key);
+  assert(direct_cursor->get_laddr() + direct_cursor->get_length()
+	 >= intermediate_key + cursor->get_length());
+  co_return LBAMapping::create_indirect(
+    std::move(direct_cursor),
+    std::move(cursor));
+}
+
 TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
