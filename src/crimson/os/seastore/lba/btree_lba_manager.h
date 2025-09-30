@@ -614,17 +614,6 @@ private:
     LBABtree::iterator iter,
     std::vector<alloc_mapping_info_t> &alloc_infos);
 
-  ref_ret _incref_extent(
-    Transaction &t,
-    laddr_t addr,
-    int delta) {
-    ceph_assert(delta > 0);
-    return update_refcount(t, addr, delta
-    ).si_then([](auto res) {
-      return ref_update_result_t(std::move(res), std::nullopt);
-    });
-  }
-
   get_cursor_ret get_cursor(
     op_context_t c,
     LBABtree& btree,
