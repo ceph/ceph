@@ -729,6 +729,7 @@ private:
     }
 
     const segments_info_t* get_segments_info() const {
+      assert(main_cleaner);
       return main_cleaner->get_segments_info();
     }
 
