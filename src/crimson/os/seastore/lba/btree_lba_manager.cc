@@ -891,41 +891,34 @@ BtreeLBAManager::update_mapping(
   assert(!addr.is_null());
   assert(mapping.is_viewable());
   assert(!mapping.is_indirect());
-  return seastar::do_with(
-    std::move(mapping),
-    [&t, this, prev_len, prev_addr, len, FNAME,
-    laddr, addr, checksum, &nextent](auto &mapping) {
-    auto &cursor = mapping.get_effective_cursor();
-    return _update_mapping(
-      t,
-      cursor,
-      [prev_addr, addr, prev_len, len, checksum](
-	const lba_map_val_t &in) {
-	assert(!addr.is_null());
-	lba_map_val_t ret = in;
-	ceph_assert(in.pladdr.is_paddr());
-	ceph_assert(in.pladdr.get_paddr() == prev_addr);
-	ceph_assert(in.len == prev_len);
-	ret.pladdr = addr;
-	ret.len = len;
-	ret.checksum = checksum;
-	return ret;
-      },
-      &nextent
-    ).si_then([&t, laddr, prev_addr, prev_len, addr, len, checksum, FNAME](auto res) {
-	assert(res.is_alive_mapping());
-	DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
-	       t, laddr, prev_addr, prev_len, addr, len, checksum, res.get_cursor());
-	return update_mapping_iertr::make_ready_future<
-	  extent_ref_count_t>(res.get_cursor().get_refcount());
-      },
-      update_mapping_iertr::pass_further{},
-      /* ENOENT in particular should be impossible */
-      crimson::ct_error::assert_all{
-	"Invalid error in BtreeLBAManager::update_mapping"
-      }
-    );
-  });
+  auto &cursor = mapping.get_effective_cursor();
+  auto res = co_await _update_mapping(
+    t,
+    cursor,
+    [prev_addr, addr, prev_len, len, checksum](
+      const lba_map_val_t &in) {
+      assert(!addr.is_null());
+      lba_map_val_t ret = in;
+      ceph_assert(in.pladdr.is_paddr());
+      ceph_assert(in.pladdr.get_paddr() == prev_addr);
+      ceph_assert(in.len == prev_len);
+      ret.pladdr = addr;
+      ret.len = len;
+      ret.checksum = checksum;
+      return ret;
+    },
+    &nextent
+  ).handle_error_interruptible(
+    update_mapping_iertr::pass_further{},
+    /* ENOENT in particular should be impossible */
+    crimson::ct_error::assert_all{
+      "Invalid error in BtreeLBAManager::update_mapping"
+    }
+  );
+  assert(res.is_alive_mapping());
+  DEBUGT("laddr={}, paddr {}~0x{:x} => {}~0x{:x}, crc=0x{:x} done -- {}",
+	 t, laddr, prev_addr, prev_len, addr, len, checksum, res.get_cursor());
+  co_return res.get_cursor().get_refcount();
 }
 
 BtreeLBAManager::update_mappings_ret
