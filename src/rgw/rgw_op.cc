@@ -4154,9 +4154,6 @@ void RGWDeleteBucket::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
 
-  rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
-  rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
-
   // Add usage counter update here, right before return
   if (op_ret >= 0) {
     auto* usage_counters = rgw::get_usage_perf_counters();
