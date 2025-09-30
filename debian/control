@@ -414,29 +414,22 @@ Description: debugging symbols for ceph-mon
 
 Package: ceph-osd
 Architecture: linux-any
-Depends: ceph-base (= ${binary:Version}),
+Depends: ceph-osd-classic (= ${binary:Version}) | ceph-osd-crimson (= ${binary:Version}),
          sudo,
-         ${misc:Depends},
          ${python3:Depends},
+         ${misc:Depends},
          ${shlibs:Depends},
-         libprotobuf23 <pkg.ceph.crimson>,
-Replaces: ceph (<< 10),
-          ceph-test (<< 12.2.2-14),
-          ceph-osd (<< 17.0.0)
-Breaks: ceph (<< 10),
-        ceph-test (<< 12.2.2-14),
-        ceph-osd (<< 17.0.0)
-Recommends: ceph-volume (= ${binary:Version}),
-            nvme-cli,
-            smartmontools,
-Description: OSD server for the ceph storage system
+Recommends: ceph-osd-classic (= ${binary:Version})
+Description: OSD server for the ceph storage system - shared components
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
  block and file system storage.
  .
- This package contains the Object Storage Daemon for the Ceph storage system.
- It is responsible for storing objects on a local file system
- and providing access to them over the network.
+ This package contains components shared between classic and crimson OSD implementations.
+ It ensures a Ceph OSD implementation is installed. By default,
+ it installs the classic OSD implementation (ceph-osd-classic). Users can
+ substitute with the experimental Crimson implementation (ceph-osd-crimson)
+ for improved performance and scalability.
 
 Package: ceph-osd-dbg
 Architecture: linux-any
@@ -450,6 +443,80 @@ Description: debugging symbols for ceph-osd
  block and file system storage.
  .
  This package contains the debugging symbols for ceph-osd.
+
+Package: ceph-osd-classic
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Replaces: ceph (<< 10),
+          ceph-test (<< 12.2.2-14),
+          ceph-osd (<< 20.1.1)
+Breaks: ceph (<< 10),
+        ceph-test (<< 12.2.2-14),
+        ceph-osd (<< 20.1.1)
+Recommends: ceph-volume (= ${binary:Version}),
+            nvme-cli,
+            smartmontools,
+Description: Classic OSD server for the ceph storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the classic Object Storage Daemon and
+ classic-specific components for the Ceph storage system. It is
+ responsible for storing objects on a local file system and providing
+ access to them over the network.
+
+Package: ceph-osd-classic-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-osd-classic (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-osd-classic
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-osd-classic.
+
+Package: ceph-osd-crimson
+Build-Profiles: <pkg.ceph.crimson>
+Architecture: any
+Depends: ceph-base (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+         libprotobuf23,
+Recommends: ceph-volume (= ${binary:Version}),
+            nvme-cli,
+            smartmontools,
+Description: Crimson OSD server for the ceph storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ Crimson is the next generation of ceph-osd daemon featuring enhanced
+ performance on fast network and storage devices.
+ .
+ This package contains the Crimson Object Storage Daemon and
+ crimson-specific components for the Ceph storage system. It is
+ responsible for storing objects on a local file system and providing
+ access to them over the network.
+
+Package: ceph-osd-crimson-dbg
+Build-Profiles: <pkg.ceph.crimson>
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-osd-crimson (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-osd-crimson
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-osd-crimson.
 
 Package: ceph-volume
 Architecture: all
