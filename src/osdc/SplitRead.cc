@@ -98,7 +98,6 @@ void ECSplitRead::init_read(OSDOp &op, bool sparse, int ops_index) {
   //FIXME: This is not quite right - the ops.size() > 1 does not necessarily mean
   // that the primary is required - it could be two reads to the same shard.
   bool primary_required = count > 1 || orig_op->objver || orig_op->ops.size() > 1;
-  abort = false;
 
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
@@ -325,7 +324,6 @@ void SplitRead::complete() {
 
 static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
 
-  // Reject if
   if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0 ) {
     ldout(cct, DBG_LVL) << __func__ <<" REJECT: Client rejects balanced read" << dendl;
     return false;
@@ -415,6 +413,8 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
 
   debug_op_summary("orig_op: ", op, cct);
 
+  bool validated = validate(op, pi->is_erasure(), cct);
+
   // In EC, the "original" op never supports balanced reads and indeed setting
   // it will misdirect IO in the OSD. The following logic will determine if a
   // direct read is actually possible.
@@ -422,8 +422,7 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
     t.flags &= ~CEPH_OSD_FLAG_BALANCE_READS;
   }
 
-  // Extremely light-weight "do not execute this op".
-  if (!validate(op, pi->is_erasure(), cct)) {
+  if (!validated) {
     return false;
   }
 
@@ -446,10 +445,12 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
 
   for (unsigned i = 0; i < op->ops.size(); ++i) {
     split_read->init( op->ops[i], i);
+    if (split_read->abort) {
+      break;
+    }
   }
 
-  if (split_read->sub_reads.size() == 1 &&
-    (!split_read->primary_shard || split_read->sub_reads.contains(*split_read->primary_shard))) {
+  if (split_read->sub_reads.size() == 1 && split_read->primary_shard && pi->is_erasure()) {
     ldout(cct, DBG_LVL) << __func__ <<" single-read to primary or replica, ignore. " << dendl;
     split_read->abort = true;
   }

@@ -3093,7 +3093,7 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
-      // therefoere has to be done in primaryfirst order.
+      // therefore has to be done in primaryfirst order.
       std::vector<int> pg_temp = t->acting;
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
@@ -3170,8 +3170,10 @@ int Objecter::_calc_target(op_target_t *t, const Op *op, bool any_change)
 	ceph_assert(best >= 0);
 	osd = t->acting[best];
       }
+      ceph_assert(!op || !op->ec_shard);
       t->osd = osd;
     } else if (!ec_direct) {
+      ceph_assert(!op || !op->ec_shard);
       t->osd = acting_primary;
     }
   }
@@ -3494,6 +3496,9 @@ void Objecter::_send_op(Op *op)
 
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
+  }
+  if (op->ec_shard) {
+    ceph_assert(op->target.osd == op->target.acting[(int)*op->ec_shard]);
   }
   op->session->con->send_message(m);
 }
