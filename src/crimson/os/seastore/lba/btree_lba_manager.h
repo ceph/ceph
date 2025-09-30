@@ -218,26 +218,18 @@ public:
   ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) final {
-    return update_refcount(t, addr, -1
-    ).si_then([this, &t](auto res) {
-      ceph_assert(res.refcount == 0);
-      if (res.addr.is_paddr()) {
-	return ref_iertr::make_ready_future<
-	  ref_update_result_t>(ref_update_result_t{
-	    std::move(res), std::nullopt});
-      }
-      return update_refcount(t, res.key, -1
-      ).si_then([indirect_result=std::move(res)](auto direct_result) mutable {
-	return indirect_result.mapping.refresh(
-	).si_then([direct_result=std::move(direct_result),
-		   indirect_result=std::move(indirect_result)](auto) {
-	  return ref_iertr::make_ready_future<
-	    ref_update_result_t>(ref_update_result_t{
-	      std::move(indirect_result),
-	      std::move(direct_result)});
-	});
-      });
-    });
+    auto result = co_await update_refcount(t, addr, -1);
+    ceph_assert(result.refcount == 0);
+    if (result.addr.is_paddr()) {
+      co_return ref_update_result_t{std::move(result), std::nullopt};
+    }
+
+    auto direct_result = co_await update_refcount(t, result.key, -1);
+    result.mapping = co_await result.mapping.refresh();
+    co_return ref_update_result_t{
+      std::move(result),
+      std::move(direct_result)
+    };
   }
 
   ref_ret remove_indirect_mapping_only(
