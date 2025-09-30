@@ -875,13 +875,13 @@ BtreeLBAManager::rewrite_extent(
 BtreeLBAManager::update_mapping_ret
 BtreeLBAManager::update_mapping(
   Transaction& t,
-  LBAMapping mapping,
+  LBACursorRef cursor,
   extent_len_t prev_len,
   paddr_t prev_addr,
   LogicalChildNode& nextent)
 {
   LOG_PREFIX(BtreeLBAManager::update_mapping);
-  auto laddr = mapping.get_key();
+  auto laddr = cursor->get_laddr();
   auto addr = nextent.get_paddr();
   auto len = nextent.get_length();
   auto checksum = nextent.get_last_committed_crc();
@@ -889,12 +889,9 @@ BtreeLBAManager::update_mapping(
          t, laddr, prev_addr, prev_len, addr, len, checksum);
   assert(laddr == nextent.get_laddr());
   assert(!addr.is_null());
-  assert(mapping.is_viewable());
-  assert(!mapping.is_indirect());
-  auto &cursor = mapping.get_effective_cursor();
   auto res = co_await _update_mapping(
     t,
-    cursor,
+    *cursor,
     [prev_addr, addr, prev_len, len, checksum](
       const lba_map_val_t &in) {
       assert(!addr.is_null());
