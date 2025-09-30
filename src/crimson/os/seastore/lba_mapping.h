@@ -193,6 +193,7 @@ public:
   base_iertr::future<LBAMapping> next();
 
 private:
+  friend class LBAManager;
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
   friend class ::transaction_manager_test_t;

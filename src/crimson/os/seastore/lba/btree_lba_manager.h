@@ -351,7 +351,7 @@ public:
 
   update_mapping_ret update_mapping(
     Transaction& t,
-    LBAMapping mapping,
+    LBACursorRef cursor,
     extent_len_t prev_len,
     paddr_t prev_addr,
     LogicalChildNode&) final;
