@@ -22,35 +22,40 @@ between FDB's types! If you have a user type to add, this is the place!
  
 #include "include/buffer.h"
 
+#include "fdb/fdb.h"
+
 #include <span>
 #include <cstdint>
 #include <string_view>
 
 // Hook into zpp_bit's system-- we'll need to clarify the relationship between libfdb's 
-// extensions and the underlying serializer's:
+// extensions and the underlying serializer's, but for the most part if you are after
+// storing your types as data in FDB, you probably want to go through zpp_bits.
+
 // This is where "list" (aka bufferlist) lives:
 namespace ceph::buffer {
 
-// Note that "list" here is therefore "ceph::buffer::list":
-constexpr auto serialize(auto& ar, list& bl)
+// Note that "list" here is "ceph::buffer::list":
+constexpr auto serialize(auto& ar, const list& bl)
 {
  // It would be nice to figure out how to do this with less copying, but the
- // mysteries of buffer::list are mysterious:
+ // mysterious mysteries of buffer::list are mysterious:
+ return ar(bl.to_str());
+}
+
+constexpr auto serialize(auto& ar, list& bl)
+{
+ // Likewise, not really sure there's a way to avoid the extra copy
+ // here-- my bet is that we can provide an operator or other function 
+ // to zpp_bits and eliminate the extra hop:
 
  std::string o;
  auto r = ar(o);
-
+ 
  bl.clear();
  bl.append(o);
 
  return r;
-}
-
-constexpr auto serialize(auto& ar, const list& bl)
-{
- // Likewise, not really sure there's a way to avoid the extra copy
- // here:
- return ar(bl.to_str());
 }
 
 } // namespace ceph::buffer

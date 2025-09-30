@@ -76,12 +76,11 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
 
- // ceph::buffer::list -> span<uint8_t> -> std::string
  {
   ceph::buffer::list n;
   n.append(msg);
 
-  std::span<const std::uint8_t> x;
+  std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
 
   std::string o;
@@ -90,12 +89,11 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
- // buffer::list -> span<uint8_t> -> buffer::list 
  {
  ceph::buffer::list n;
  n.append(msg);
 
- std::span<const std::uint8_t> x;
+ std::vector<std::uint8_t> x;
  x = ceph::libfdb::to::convert(n);
 
  ceph::buffer::list o;
@@ -164,18 +162,26 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
 TEST_CASE("standard container FDB conversions") {
 
- std::map<int, std::string> kvs {
+ const std::map<int, std::string> kvs {
    { 0, "hello" },
    { 1, "world" }
  };
 
- std::vector<std::uint8_t> buffer;
+ CHECK(2 == kvs.size());
+ CHECK("hello" == kvs.at(0));
+ CHECK("world" == kvs.at(1));
 
+ std::vector<std::uint8_t> buffer = ceph::libfdb::to::convert(kvs);
 
- ceph::libfdb::to::convert(kvs, buffer);
+ std::map<int, std::string> kvs_out;
  ceph::libfdb::from::convert(buffer, kvs_out);
- 
-...TODO 
+
+ CHECK(2 == kvs_out.size());
+ CHECK("hello" == kvs_out.at(0));
+ CHECK("world" == kvs_out.at(1));
+
+ // ...all the above to basically say:
+ CHECK(kvs == kvs_out);
 }
 
 // Adapted from Catch2 documentation:
