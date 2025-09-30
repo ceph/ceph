@@ -219,16 +219,19 @@ public:
     LBAMapping mapping) = 0;
 
   /**
-   * Increments ref count on extent
-   *
-   * @return returns resulting refcount
+   * Update ref count on mapping
    */
-  virtual ref_ret incref_extent(
+  virtual base_iertr::future<LBACursorRef> update_mapping_refcount(
     Transaction &t,
-    laddr_t addr) = 0;
-  virtual ref_ret incref_extent(
+    LBACursorRef cursor,
+    int delta) = 0;
+  ref_iertr::future<> update_mapping_refcount(
     Transaction &t,
-    LBAMapping mapping) = 0;
+    laddr_t addr,
+    int delta) {
+    auto cursor = co_await get_cursor(t, addr);
+    co_await update_mapping_refcount(t, cursor, delta);
+  }
 
   struct remap_entry_t {
     extent_len_t offset;

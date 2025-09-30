@@ -286,28 +286,19 @@ public:
     });
   }
 
-  ref_ret incref_extent(
+  base_iertr::future<LBACursorRef> update_mapping_refcount(
     Transaction &t,
-    laddr_t addr) final {
-    return update_refcount(t, addr, 1
-    ).si_then([](auto res) {
-      return ref_update_result_t(std::move(res), std::nullopt);
-    });
-  }
-
-  ref_ret incref_extent(
-    Transaction &t,
-    LBAMapping mapping) final {
-    assert(mapping.is_viewable());
-    return seastar::do_with(
-      std::move(mapping),
-      [&t, this](auto &mapping) {
-      auto &cursor = mapping.get_effective_cursor();
-      return update_refcount(t, &cursor, 1
-      ).si_then([](auto res) {
-	return ref_update_result_t(std::move(res), std::nullopt);
-      });
-    });
+    LBACursorRef cursor,
+    int delta) final {
+    auto result = co_await update_refcount(t, cursor.get(), delta
+    ).handle_error_interruptible(
+      base_iertr::pass_further{},
+      /* ENOENT in particular should be impossible */
+      crimson::ct_error::assert_all{
+	"Invalid enoent in BtreeLBAManager::incref_extent"
+      }
+    );
+    co_return result.mapping.direct_cursor;
   }
 
   remap_ret remap_mappings(
