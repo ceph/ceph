@@ -15,6 +15,7 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/transaction_manager.h"
 #include "os/ObjectStore.h" // for ObjectStore::omap_iter_seek_t
+#include "crimson/os/seastore/onode.h"
 
 
 //TODO: calculate the max key and value sizes the current layout supports,
@@ -74,6 +75,7 @@ public:
     std::optional<bufferlist>>;
   virtual omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key) = 0;
 
@@ -90,6 +92,7 @@ public:
   using omap_set_key_ret = omap_set_key_iertr::future<>;
   virtual omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key,
     const ceph::bufferlist &value) = 0;
@@ -98,6 +101,7 @@ public:
   using omap_set_keys_ret = omap_set_keys_iertr::future<>;
   virtual omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     std::map<std::string, ceph::bufferlist>&& keys) = 0;
 
@@ -112,8 +116,17 @@ public:
   using omap_rm_key_ret = omap_rm_key_iertr::future<>;
   virtual omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key) = 0;
+
+  using omap_rm_keys_iertr = base_iertr;
+  using omap_rm_keys_ret = omap_rm_keys_iertr::future<>;
+  virtual omap_rm_keys_ret omap_rm_keys(
+    omap_root_t& root,
+    Onode& onode,
+    Transaction& t,
+    std::set<std::string>& keys) = 0;
 
   /**
    * omap_iterate
@@ -133,6 +146,7 @@ public:
    using omap_iterate_ret = omap_iterate_iertr::future<ObjectStore::omap_iter_ret_t>;
    virtual omap_iterate_ret omap_iterate(
      const omap_root_t &omap_root,
+      Onode &onode,
      Transaction &t,
      ObjectStore::omap_iter_seek_t &start_from,
      omap_iterate_cb_t callback
@@ -212,6 +226,7 @@ public:
   using omap_list_ret = omap_list_iertr::future<omap_list_bare_ret>;
   virtual omap_list_ret omap_list(
     const omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
@@ -229,6 +244,7 @@ public:
   using omap_rm_key_range_ret = omap_rm_key_range_iertr::future<>;
   virtual omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &first,
     const std::string &last,
@@ -242,7 +258,7 @@ public:
    */
   using omap_clear_iertr = base_iertr;
   using omap_clear_ret = omap_clear_iertr::future<>;
-  virtual omap_clear_ret omap_clear(omap_root_t &omap_root, Transaction &t) = 0;
+  virtual omap_clear_ret omap_clear(omap_root_t &omap_root, Onode &onode, Transaction &t) = 0;
 
   virtual ~OMapManager() {}
 };

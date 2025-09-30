@@ -428,6 +428,7 @@ public:
     omaptree_get_value_ret omaptree_get_value(
       Transaction& t,
       omap_root_t&& root,
+      Onode& onode,
       std::string_view key) const;
 
     using omaptree_list_bare_ret = OMapManager::omap_list_bare_ret;
@@ -435,6 +436,7 @@ public:
     omaptree_list_ret omaptree_list(
       Transaction& t,
       omap_root_t&& root,
+      Onode& onode,
       const std::optional<std::string>& start,
       OMapManager::omap_list_config_t config) const;
 
@@ -442,6 +444,7 @@ public:
     omaptree_iterate_ret omaptree_iterate(
       Transaction& t,
       omap_root_t&& root,
+      Onode& onode,
       ObjectStore::omap_iter_seek_t &start_from,
       omap_iterate_cb_t callback
       );
@@ -449,12 +452,14 @@ public:
     base_iertr::future<omap_values_t> omaptree_get_values(
       Transaction& t,
       omap_root_t&& root,
+      Onode& onode,
       const omap_keys_t& keys) const;
 
     using omap_values_paged_t = std::tuple<bool, omap_values_t>;
     base_iertr::future<omap_values_paged_t> omaptree_get_values(
       Transaction& t,
       omap_root_t&& root,
+      Onode& onode,
       const std::optional<std::string>& start) const;
 
     using omaptree_set_keys_iertr = base_iertr::extend<
@@ -492,11 +497,13 @@ public:
 
     base_iertr::future<omap_root_t> omaptree_do_clear(
       Transaction& t,
-      omap_root_t&& root);
+      omap_root_t&& root,
+      Onode& onode);
 
     base_iertr::future<> omaptree_clear_no_onode(
       Transaction& t,
-      omap_root_t&& root);
+      omap_root_t&& root,
+      Onode& onode);
 
     base_iertr::future<> omaptree_clear(
       Transaction& t,

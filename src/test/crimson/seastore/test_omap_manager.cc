@@ -22,7 +22,6 @@ namespace {
     return crimson::get_logger(ceph_subsys_test);
   }
 }
-
 const int STR_LEN = 50;
 
 std::string rand_name(const int len)
@@ -45,17 +44,45 @@ bufferlist rand_buffer(const int len) {
   return bl;
 }
 
+class TestOnode final : public Onode {
+  onode_layout_t layout;
+public:
+  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr, hobject_t()) {}
+  bool is_alive() const final {
+    return true;
+  }
+  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  ~TestOnode() final = default;
+
+  const onode_layout_t &get_layout() const final {
+    return layout;
+  }
+  void update_onode_size(Transaction &t, uint32_t size) final {}
+  void update_omap_root(Transaction &t, omap_root_t &oroot) final {}
+  void update_log_root(Transaction &t, omap_root_t &lroot) final {}
+  void update_xattr_root(Transaction &t, omap_root_t &xroot) final {}
+  void update_object_data(Transaction &t, object_data_t &odata) final {}
+  void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) final {}
+  void clear_object_info(Transaction &t) final {}
+  void update_snapset(Transaction &t, ceph::bufferlist &ss_bl) final {}
+  void clear_snapset(Transaction &t) final {}
+};
+
 struct omap_manager_test_t :
   public seastar_test_suite_t,
   TMTestState {
 
   OMapManagerRef omap_manager;
+  OnodeRef onode;
 
   omap_manager_test_t() {}
 
   seastar::future<> set_up_fut() final {
     return tm_setup().then([this] {
       omap_manager = omap_manager::create_omap_manager(*tm);
+      onode = new TestOnode(
+	(16<<20),
+	(16<<20));
       return seastar::now();
     });
   }
@@ -78,7 +105,7 @@ struct omap_manager_test_t :
     with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_set_key(omap_root, t, key, val);
+	return omap_manager->omap_set_key(omap_root, *onode, t, key, val);
       }).unsafe_get();
     test_omap_mappings[key] = val;
   }
@@ -127,7 +154,7 @@ struct omap_manager_test_t :
     with_trans_intr(
       t,
       [&, this](auto &t) {
-        return omap_manager->omap_set_keys(omap_root, t, std::move(kvs));
+        return omap_manager->omap_set_keys(omap_root, *onode, t, std::move(kvs));
       }).unsafe_get();
 
     return keys;
@@ -140,7 +167,7 @@ struct omap_manager_test_t :
     auto ret = with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_get_value(omap_root, t, key);
+	return omap_manager->omap_get_value(omap_root, *onode, t, key);
       }).unsafe_get();
     auto iter = test_omap_mappings.find(key);
     if (iter == test_omap_mappings.end()) {
@@ -160,7 +187,7 @@ struct omap_manager_test_t :
     with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_rm_key(omap_root, t, key);
+	return omap_manager->omap_rm_key(omap_root, *onode, t, key);
       }).unsafe_get();
     test_omap_mappings.erase(test_omap_mappings.find(key));
   }
@@ -179,7 +206,7 @@ struct omap_manager_test_t :
       t,
       [&, this](auto &t) {
       return omap_manager->omap_rm_key_range(
-	omap_root, t, first, last, config);
+	omap_root, *onode, t, first, last, config);
     }).unsafe_get();
 
     std::vector<std::string> keys;
@@ -226,7 +253,7 @@ struct omap_manager_test_t :
     auto [complete, results] = with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_list(omap_root, t, first, last, config);
+	return omap_manager->omap_list(omap_root, *onode, t, first, last, config);
       }).unsafe_get();
 
     test_omap_t::iterator it, lit;
@@ -314,7 +341,7 @@ struct omap_manager_test_t :
     auto ret = with_trans_intr(
       t,
       [&, this](auto &t) {
-        return omap_manager->omap_iterate(omap_root, t, start_from, callback);
+        return omap_manager->omap_iterate(omap_root, *onode, t, start_from, callback);
       }).unsafe_get();
 
     EXPECT_EQ(ret, ObjectStore::omap_iter_ret_t::STOP);
@@ -326,7 +353,7 @@ struct omap_manager_test_t :
     with_trans_intr(
       t,
       [&, this](auto &t) {
-	return omap_manager->omap_clear(omap_root, t);
+	return omap_manager->omap_clear(omap_root, *onode, t);
       }).unsafe_get();
     EXPECT_EQ(omap_root.get_location(), L_ADDR_NULL);
   }
@@ -339,7 +366,7 @@ struct omap_manager_test_t :
     std::optional<std::string> null_key = std::nullopt;
     auto [complete, omap_list] = with_trans_intr(t, [&, this](auto &t) {
       return omap_manager->omap_list(
-        omap_root, t, null_key, null_key, config); /* from start to end */
+        omap_root, *onode, t, null_key, null_key, config); /* from start to end */
     }).unsafe_get();
 
     if (omap_list.size() != test_omap_mappings.size()) { return false; }

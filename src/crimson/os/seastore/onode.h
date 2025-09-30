@@ -57,6 +57,8 @@ struct onode_layout_t {
 } __attribute__((packed));
 
 class Transaction;
+class OMapManager;
+class TransactionManager;
 
 /**
  * Onode
@@ -74,6 +76,8 @@ protected:
   const uint32_t default_metadata_offset = 0;
   const uint32_t default_metadata_range = 0;
   const hobject_t hobj;
+  // use shared_ptr here to avoid invalid application of ‘sizeof’ to incomplete type
+  std::shared_ptr<OMapManager> mgr; 
 public:
   Onode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj)
     : default_metadata_offset(ddr),
@@ -109,6 +113,7 @@ public:
   const omap_root_le_t& get_root(omap_type_t type) const {
     return get_layout().get_root(type);
   }
+  std::shared_ptr<OMapManager> get_manager(TransactionManager& tm);
   friend std::ostream& operator<<(std::ostream &out, const Onode &rhs);
 };
 

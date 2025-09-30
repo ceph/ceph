@@ -71,26 +71,31 @@ public:
 
   omap_get_value_ret omap_get_value(
     const omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key) final;
 
   omap_set_key_ret omap_set_key(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key, const ceph::bufferlist &value) final;
 
   omap_set_keys_ret omap_set_keys(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     std::map<std::string, ceph::bufferlist>&& keys) final;
 
   omap_rm_key_ret omap_rm_key(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &key) final;
 
   omap_rm_key_range_ret omap_rm_key_range(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::string &first,
     const std::string &last,
@@ -98,12 +103,14 @@ public:
 
   omap_iterate_ret omap_iterate(
     const omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     ObjectStore::omap_iter_seek_t &start_from,
     omap_iterate_cb_t callback) final;
 
   omap_list_ret omap_list(
     const omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t,
     const std::optional<std::string> &first,
     const std::optional<std::string> &last,
@@ -111,7 +118,14 @@ public:
 
   omap_clear_ret omap_clear(
     omap_root_t &omap_root,
+    Onode &onode,
     Transaction &t) final;
+
+  omap_rm_keys_ret omap_rm_keys(
+    omap_root_t &omap_root,
+    Onode &onode,
+    Transaction &t,
+    std::set<std::string>& keys) final;
 };
 using BtreeOMapManagerRef = std::unique_ptr<BtreeOMapManager>;
 
