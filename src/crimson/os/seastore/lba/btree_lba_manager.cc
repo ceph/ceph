@@ -427,17 +427,21 @@ BtreeLBAManager::clone_mapping(
   LBAMapping pos,
   LBAMapping mapping,
   laddr_t laddr,
+  extent_len_t offset,
+  extent_len_t len,
   bool updateref)
 {
   LOG_PREFIX(BtreeLBAManager::clone_mapping);
   assert(pos.is_viewable());
   assert(mapping.is_viewable());
-  DEBUGT("pos={}, mapping={}, laddr={}, updateref={}",
-    t, pos, mapping, laddr, updateref);
+  DEBUGT("pos={}, mapping={}, laddr={}, {}~{} updateref={}",
+    t, pos, mapping, laddr, offset, len, updateref);
+  assert(offset + len <= mapping.get_length());
   struct state_t {
     LBAMapping pos;
     LBAMapping mapping;
     laddr_t laddr;
+    extent_len_t offset;
     extent_len_t len;
   };
   auto c = get_context(t);
@@ -464,11 +468,10 @@ BtreeLBAManager::clone_mapping(
       return update_refcount_iertr::make_ready_future<
 	LBAMapping>(std::move(mapping));
     }
-  }).si_then([c, this, pos=std::move(pos),
-		      laddr](auto mapping) mutable {
-    auto len = mapping.get_length();
+  }).si_then([c, this, pos=std::move(pos), len,
+	      offset, laddr](auto mapping) mutable {
     return seastar::do_with(
-      state_t{std::move(pos), std::move(mapping), laddr, len},
+      state_t{std::move(pos), std::move(mapping), laddr, offset, len},
       [this, c](auto &state) {
       return with_btree<LBABtree>(
 	cache,
@@ -479,17 +482,15 @@ BtreeLBAManager::clone_mapping(
 	).si_then([&state, c, &btree]() mutable {
 	  auto &cursor = state.pos.get_effective_cursor();
 	  assert(state.laddr + state.len <= cursor.key);
+          auto inter_key = state.mapping.is_indirect()
+            ? state.mapping.get_intermediate_key()
+            : state.mapping.get_key();
+          inter_key = (inter_key + state.offset).checked_to_laddr();
 	  return btree.insert(
 	    c,
 	    btree.make_partial_iter(c, cursor),
 	    state.laddr,
-	    lba_map_val_t{
-	      state.len,
-	      state.mapping.is_indirect()
-		? state.mapping.get_intermediate_key()
-		: state.mapping.get_key(),
-	      EXTENT_DEFAULT_REF_COUNT,
-	      0});
+            lba_map_val_t{state.len, inter_key, EXTENT_DEFAULT_REF_COUNT, 0});
 	}).si_then([c, &state](auto p) {
 	  auto &[iter, inserted] = p;
 	  auto &leaf_node = *iter.get_leaf_node();
