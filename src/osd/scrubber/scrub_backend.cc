@@ -1,5 +1,5 @@
 // -*- m_mode_desc:C++; tab-width:8; c-basic-offset:2; indent-tabs-m_mode_desc:t
-// -*- vim: ts=2 sw=2 smarttab
+// -*- vim: ts=2 sw=2 sts=2 expandtab
 
 #include "./scrub_backend.h"
 
