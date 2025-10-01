@@ -53,7 +53,7 @@ catch(const fdb_exception& e)
 
 namespace rgw::d4n {
 
-int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, bool multi)
+int FDB_BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, bool multi)
 try
 {
  return wrap_fdb_exception(dpp, [&&]() {
@@ -87,7 +87,7 @@ catch(const fdb_exception& e)
  return log_error(dpp, "{}", e.what()), -1;
 }
 
-int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y, bool multi)
+int FDB_BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y, bool multi)
 try
 {
  bucket_entries e; 
@@ -115,7 +115,7 @@ catch(const fdb_exception& e)
  return -1;
 }
 
-int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y)
+int FDB_BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y)
 try
 {
  // JFW: I think the idea is that we get back the keys found in search range... might take a little fiddling in our case.
@@ -146,7 +146,7 @@ catch(const fdb_exception& e)
  return -1;
 }
 
-int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& bucket_id, uint64_t cursor, const std::string& pattern, uint64_t count, std::vector<std::string>& members, uint64_t next_cursor, optional_yield y)
+int FDB_BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& bucket_id, uint64_t cursor, const std::string& pattern, uint64_t count, std::vector<std::string>& members, uint64_t next_cursor, optional_yield y)
 {
  // JFW: this will be hopefully not /too/ bad... I need to get an understanding of what's going on with the cursors here. I guess if we need to match a pattern
  // against every key, this will be pretty expensive.... I don't think FDB has anything like that built in...
@@ -164,14 +164,14 @@ int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& buc
     redis_exec(conn, ec, req, resp, y);
 
     if (ec) {
-      ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      ldpp_dout(dpp, 0) << "FDB_BucketDirectory::" << __func__ << "() ERROR: " << ec.what() << dendl;
       return -ec.value();
     }
 
     std::vector<boost::redis::resp3::basic_node<std::__cxx11::basic_string<char> > > root_array;
     if (resp.has_value()) {
       root_array = resp.value();
-      ldpp_dout(dpp, 20) << "BucketDirectory::" << __func__ << "() aggregate size is: " << root_array.size() << dendl;
+      ldpp_dout(dpp, 20) << "FDB_BucketDirectory::" << __func__ << "() aggregate size is: " << root_array.size() << dendl;
       auto size = root_array.size();
       if (size >= 2) {
         //Nothing of interest at index 0, index 1 has the next cursor value
@@ -180,21 +180,21 @@ int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& buc
         //skip the first 3 values to get the actual member, score
         for (uint64_t i = 3; i < size; i = i+2) {
           members.emplace_back(root_array[i].value);
-          ldpp_dout(dpp, 20) << "BucketDirectory::" << __func__ << "() member is: " << root_array[i].value << dendl;
+          ldpp_dout(dpp, 20) << "FDB_BucketDirectory::" << __func__ << "() member is: " << root_array[i].value << dendl;
         }
       }
     } else {
       return -ENOENT;
     }
   } catch (std::exception &e) {
-    ldpp_dout(dpp, 0) << "BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
+    ldpp_dout(dpp, 0) << "FDB_BucketDirectory::" << __func__ << "() ERROR: " << e.what() << dendl;
     return -EINVAL;
   }
 */
   return 0;
 }
 
-int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y)
+int FDB_BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y)
 try
 {
  // JFW: This one's a little odd, but I believe what we do is get the bucket and then return the index value that /inner value/ "member" is found at in the

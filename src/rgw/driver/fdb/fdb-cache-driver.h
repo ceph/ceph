@@ -43,7 +43,7 @@ struct FDB_CacheDriver : CacheDriver
     Partition get_current_partition_info(const DoutPrefixProvider* dpp) override;
     uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
 
-    void shutdown() override;
+    void shutdown();
   
     int restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataCallback obj_func, BlockDataCallback block_func) override;
 };

@@ -343,9 +343,17 @@ if(D4N_USE_FDB_SINK)
 	driver/fdb)
  
  list(APPEND librgw_common_srcs
-    driver/fdb/sal_d4n_fdb.cc
+    driver/fdb/sal_d4n-fdb.cc
 	driver/fdb/fdb-cache-driver.cc)
+
+ target_include_directories(zpp_bits INTERFACE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
+ target_link_libraries(rgw_common PRIVATE zpp_bits)
+
 endif(D4N_USE_FDB_SINK)
+
+if(!D4N_USE_FDB_SINK)
+ message(FATAL_ERROR "JFW FOOOOO")
+endif()
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"

@@ -5,7 +5,13 @@
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 
-#include "drivers/shared/d4n_data.h"
+// I had split this out into another header-- and we should
+// probably still do that... #include "drivers/shared/d4n_data.h"
+// ...unfortunately, I hadn't realized there was active work on this also, so
+// things are changing out from under me already!
+
+#include "driver/d4n/rgw_sal_d4n.h"
+
 
 /* JFW: I've mostly just copied this wholesale from D4N-- I suspect it will need significant re-imagining as the Redis-isms infuse quite
 a way into the fabric of the library. */
@@ -17,6 +23,8 @@ namespace rgw::d4n {
 namespace net = boost::asio;
 namespace redis = boost::redis;
 namespace lfdb = ceph::libfdb;
+
+lfdb::database_handle global_fdb_dbh;
 
 class FDB_BucketDirectory: public Directory 
 {
@@ -40,7 +48,7 @@ class FDB_ObjectDirectory: public Directory
     lfdb::database_handle dbh;
   
   public:
-    ObjectDirectory(lfdb::database_handle dbh) 
+    FDB_ObjectDirectory(lfdb::database_handle dbh) 
      : dbh(dbh) 
     {}
 
@@ -69,7 +77,7 @@ class FDB_BlockDirectory : public Directory
    lfdb::database_handle dbh;
 
   public:
-    BlockDirectory(lfdb::database_handle dbh) 
+    FDB_BlockDirectory(lfdb::database_handle dbh) 
      : dbh(dbh) 
     {}
     
