@@ -68,7 +68,8 @@ using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
  */
 class SegmentedOolWriter : public ExtentOolWriter {
 public:
-  SegmentedOolWriter(data_category_t category,
+  SegmentedOolWriter(unsigned int store_index,
+                     data_category_t category,
                      rewrite_gen_t gen,
                      SegmentProvider &sp,
                      SegmentSeqAllocator &ssa);
@@ -82,7 +83,7 @@ public:
   }
 
   open_ertr::future<> open() final {
-    return record_submitter.open(false).discard_result();
+    return record_submitter.open(store_index, false).discard_result();
   }
 
   alloc_write_iertr::future<> alloc_write_ool_extents(
@@ -121,6 +122,7 @@ private:
     std::list<LogicalCachedExtentRef> &&extents,
     bool with_atomic_roll_segment=false);
 
+  unsigned int store_index;
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
   seastar::gate write_guard;
@@ -268,10 +270,12 @@ class ExtentPlacementManager {
 public:
   ExtentPlacementManager(
     rewrite_gen_t hot_tier_generations,
-    rewrite_gen_t cold_tier_generations)
+    rewrite_gen_t cold_tier_generations,
+    unsigned int store_index)
     : hot_tier_generations(hot_tier_generations),
       cold_tier_generations(cold_tier_generations),
       dynamic_max_rewrite_generation(cold_tier_generations),
+      store_index(store_index),
       ool_segment_seq_allocator(
           std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
@@ -330,7 +334,7 @@ public:
       crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
   mount_ret mount() {
-    return background_process.mount();
+    return background_process.mount(store_index);
   }
 
   using open_ertr = ExtentOolWriter::open_ertr;
@@ -759,12 +763,12 @@ private:
     }
 
     using mount_ret = ExtentPlacementManager::mount_ret;
-    mount_ret mount() {
+    mount_ret mount(unsigned int store_index) {
       ceph_assert(state == state_t::STOP);
       state = state_t::MOUNT;
       trimmer->reset();
       stats = {};
-      register_metrics();
+      register_metrics(store_index);
       return main_cleaner->mount(
       ).safe_then([this] {
         return has_cold_tier() ? cold_cleaner->mount() : mount_ertr::now();
@@ -1078,7 +1082,7 @@ private:
 
     seastar::future<> do_background_cycle();
 
-    void register_metrics();
+    void register_metrics(unsigned int store_index);
 
     struct {
       uint64_t io_blocking_num = 0;
@@ -1124,6 +1128,7 @@ private:
   const rewrite_gen_t cold_tier_generations = NULL_GENERATION;
   rewrite_gen_t dynamic_max_rewrite_generation = NULL_GENERATION;
   BackgroundProcess background_process;
+  unsigned int store_index = 0;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;

@@ -29,13 +29,14 @@ SET_SUBSYS(seastore_cache);
 namespace crimson::os::seastore {
 
 Cache::Cache(
-  ExtentPlacementManager &epm)
+  ExtentPlacementManager &epm,
+  unsigned int store_index)
   : epm(epm),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
        "seastore_cachepin_size_pershard")))
 {
-  register_metrics();
+  register_metrics(store_index);
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
 
@@ -130,7 +131,7 @@ void Cache::dump_contents()
   DEBUG("exit");
 }
 
-void Cache::register_metrics()
+void Cache::register_metrics(unsigned int store_index)
 {
   LOG_PREFIX(Cache::register_metrics);
   DEBUG("");
@@ -147,37 +148,42 @@ void Cache::register_metrics()
   namespace sm = seastar::metrics;
   using src_t = Transaction::src_t;
 
-  std::map<src_t, sm::label_instance> labels_by_src {
-    {src_t::MUTATE, sm::label_instance("src", "MUTATE")},
-    {src_t::READ, sm::label_instance("src", "READ")},
-    {src_t::TRIM_DIRTY, sm::label_instance("src", "TRIM_DIRTY")},
-    {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
-    {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
-    {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
+  std::map<src_t, std::vector<sm::label_instance>> labels_by_src {
+    {src_t::MUTATE, {sm::label_instance("src", "MUTATE")}},
+    {src_t::READ, {sm::label_instance("src", "READ")}},
+    {src_t::TRIM_DIRTY, {sm::label_instance("src", "TRIM_DIRTY")}},
+    {src_t::TRIM_ALLOC, {sm::label_instance("src", "TRIM_ALLOC")}},
+    {src_t::CLEANER_MAIN, {sm::label_instance("src", "CLEANER_MAIN")}},
+    {src_t::CLEANER_COLD, {sm::label_instance("src", "CLEANER_COLD")}},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
-  std::map<extent_types_t, sm::label_instance> labels_by_ext {
-    {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
-    {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
-    {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
-    {extent_types_t::DINK_LADDR_LEAF,     sm::label_instance("ext", "DINK_LADDR_LEAF")},
-    {extent_types_t::ROOT_META,           sm::label_instance("ext", "ROOT_META")},
-    {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
-    {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
-    {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
-    {extent_types_t::COLL_BLOCK,          sm::label_instance("ext", "COLL_BLOCK")},
-    {extent_types_t::OBJECT_DATA_BLOCK,   sm::label_instance("ext", "OBJECT_DATA_BLOCK")},
-    {extent_types_t::RETIRED_PLACEHOLDER, sm::label_instance("ext", "RETIRED_PLACEHOLDER")},
-    {extent_types_t::ALLOC_INFO,      	  sm::label_instance("ext", "ALLOC_INFO")},
-    {extent_types_t::JOURNAL_TAIL,        sm::label_instance("ext", "JOURNAL_TAIL")},
-    {extent_types_t::TEST_BLOCK,          sm::label_instance("ext", "TEST_BLOCK")},
-    {extent_types_t::TEST_BLOCK_PHYSICAL, sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")},
-    {extent_types_t::BACKREF_INTERNAL,    sm::label_instance("ext", "BACKREF_INTERNAL")},
-    {extent_types_t::BACKREF_LEAF,        sm::label_instance("ext", "BACKREF_LEAF")}
+  std::map<extent_types_t, std::vector<sm::label_instance>> labels_by_ext {
+    {extent_types_t::ROOT,                {sm::label_instance("ext", "ROOT")}},
+    {extent_types_t::LADDR_INTERNAL,      {sm::label_instance("ext", "LADDR_INTERNAL")}},
+    {extent_types_t::LADDR_LEAF,          {sm::label_instance("ext", "LADDR_LEAF")}},
+    {extent_types_t::DINK_LADDR_LEAF,     {sm::label_instance("ext", "DINK_LADDR_LEAF")}},
+    {extent_types_t::ROOT_META,           {sm::label_instance("ext", "ROOT_META")}},
+    {extent_types_t::OMAP_INNER,          {sm::label_instance("ext", "OMAP_INNER")}},
+    {extent_types_t::OMAP_LEAF,           {sm::label_instance("ext", "OMAP_LEAF")}},
+    {extent_types_t::ONODE_BLOCK_STAGED,  {sm::label_instance("ext", "ONODE_BLOCK_STAGED")}},
+    {extent_types_t::COLL_BLOCK,          {sm::label_instance("ext", "COLL_BLOCK")}},
+    {extent_types_t::OBJECT_DATA_BLOCK,   {sm::label_instance("ext", "OBJECT_DATA_BLOCK")}},
+    {extent_types_t::RETIRED_PLACEHOLDER, {sm::label_instance("ext", "RETIRED_PLACEHOLDER")}},
+    {extent_types_t::ALLOC_INFO,      	  {sm::label_instance("ext", "ALLOC_INFO")}},
+    {extent_types_t::JOURNAL_TAIL,        {sm::label_instance("ext", "JOURNAL_TAIL")}},
+    {extent_types_t::TEST_BLOCK,          {sm::label_instance("ext", "TEST_BLOCK")}},
+    {extent_types_t::TEST_BLOCK_PHYSICAL, {sm::label_instance("ext", "TEST_BLOCK_PHYSICAL")}},
+    {extent_types_t::BACKREF_INTERNAL,    {sm::label_instance("ext", "BACKREF_INTERNAL")}},
+    {extent_types_t::BACKREF_LEAF,        {sm::label_instance("ext", "BACKREF_LEAF")}}
   };
   assert(labels_by_ext.size() == (std::size_t)extent_types_t::NONE);
-
+  for (auto& [src, src_label] : labels_by_src) {
+    src_label.push_back(sm::label_instance("shard_store_index", std::to_string(store_index)));
+  }
+  for (auto& [ext, ext_label] : labels_by_ext) {
+    ext_label.push_back(sm::label_instance("shard_store_index", std::to_string(store_index)));
+  }
   /*
    * trans_created
    */
@@ -206,34 +212,40 @@ void Cache::register_metrics()
         [this] {
           return stats.access.get_cache_access();
         },
-        sm::description("total number of cache accesses")
+        sm::description("total number of cache accesses"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "cache_hit",
         [this] {
           return stats.access.get_cache_hit();
         },
-        sm::description("total number of cache hits")
+        sm::description("total number of cache hits"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "refresh_parent_total",
         cursor_stats.num_refresh_parent_total,
-        sm::description("total number of refreshed cursors")
+        sm::description("total number of refreshed cursors"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "refresh_invalid_parent",
         cursor_stats.num_refresh_invalid_parent,
-        sm::description("total number of refreshed cursors with invalid parents")
+        sm::description("total number of refreshed cursors with invalid parents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "refresh_unviewable_parent",
         cursor_stats.num_refresh_unviewable_parent,
-        sm::description("total number of refreshed cursors with unviewable parents")
+        sm::description("total number of refreshed cursors with unviewable parents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "refresh_modified_viewable_parent",
         cursor_stats.num_refresh_modified_viewable_parent,
-        sm::description("total number of refreshed cursors with viewable but modified parents")
+        sm::description("total number of refreshed cursors with viewable but modified parents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
   );
@@ -257,6 +269,8 @@ void Cache::register_metrics()
       auto& efforts = get_by_src(stats.invalidated_efforts_by_src, src);
       for (auto& [ext, ext_label] : labels_by_ext) {
         auto& counter = get_by_ext(efforts.num_trans_invalidated, ext);
+        std::vector<sm::label_instance> merged_labels = src_label;
+        merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
         metrics.add_group(
           "cache",
           {
@@ -264,7 +278,7 @@ void Cache::register_metrics()
               "trans_invalidated_by_extent",
               counter,
               sm::description("total number of transactions invalidated by extents"),
-              {src_label, ext_label}
+              merged_labels
             ),
           }
         );
@@ -273,6 +287,8 @@ void Cache::register_metrics()
       if (src == src_t::READ) {
         // read transaction won't have non-read efforts
         auto read_effort_label = effort_label("READ");
+        std::vector<sm::label_instance> merged_labels = src_label;
+        merged_labels.push_back(read_effort_label);
         metrics.add_group(
           "cache",
           {
@@ -280,13 +296,13 @@ void Cache::register_metrics()
               "invalidated_extents",
               efforts.read.num,
               sm::description("extents of invalidated transactions"),
-              {src_label, read_effort_label}
+              merged_labels
             ),
             sm::make_counter(
               "invalidated_extent_bytes",
               efforts.read.bytes,
               sm::description("extent bytes of invalidated transactions"),
-              {src_label, read_effort_label}
+              merged_labels
             ),
           }
         );
@@ -309,6 +325,8 @@ void Cache::register_metrics()
             return efforts.fresh_ool_written;
           }
         }();
+        std::vector<sm::label_instance> merged_labels = src_label;
+        merged_labels.push_back(effort_label(effort_name));
         metrics.add_group(
           "cache",
           {
@@ -316,13 +334,13 @@ void Cache::register_metrics()
               "invalidated_extents",
               effort.num,
               sm::description("extents of invalidated transactions"),
-              {src_label, effort_label(effort_name)}
+              merged_labels
             ),
             sm::make_counter(
               "invalidated_extent_bytes",
               effort.bytes,
               sm::description("extent bytes of invalidated transactions"),
-              {src_label, effort_label(effort_name)}
+              merged_labels
             ),
           }
         );
@@ -428,7 +446,10 @@ void Cache::register_metrics()
             return efforts.fresh_ool_by_ext;
           }
         }();
+        std::vector<sm::label_instance> merged_labels = src_label;
+        merged_labels.push_back(effort_label(effort_name));
         for (auto& [ext, ext_label] : labels_by_ext) {
+          merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
           auto& effort = get_by_ext(effort_by_ext, ext);
           metrics.add_group(
             "cache",
@@ -437,13 +458,13 @@ void Cache::register_metrics()
                 "committed_extents",
                 effort.num,
                 sm::description("extents of committed transactions"),
-                {src_label, effort_label(effort_name), ext_label}
+                merged_labels
               ),
               sm::make_counter(
                 "committed_extent_bytes",
                 effort.bytes,
                 sm::description("extent bytes of committed transactions"),
-                {src_label, effort_label(effort_name), ext_label}
+                merged_labels
               ),
             }
           );
@@ -452,6 +473,8 @@ void Cache::register_metrics()
 
       auto& delta_by_ext = efforts.delta_bytes_by_ext;
       for (auto& [ext, ext_label] : labels_by_ext) {
+        std::vector<sm::label_instance> merged_labels = src_label;
+        merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
         auto& value = get_by_ext(delta_by_ext, ext);
         metrics.add_group(
           "cache",
@@ -460,7 +483,7 @@ void Cache::register_metrics()
               "committed_delta_bytes",
               value,
               sm::description("delta bytes of committed transactions"),
-              {src_label, ext_label}
+              merged_labels
             ),
           }
         );
@@ -474,17 +497,20 @@ void Cache::register_metrics()
         sm::make_counter(
           "trans_read_successful",
           stats.success_read_efforts.num_trans,
-          sm::description("total number of successful read transactions")
+          sm::description("total number of successful read transactions"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
         sm::make_counter(
           "successful_read_extents",
           stats.success_read_efforts.read.num,
-          sm::description("extents of successful read transactions")
+          sm::description("extents of successful read transactions"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
         sm::make_counter(
           "successful_read_extent_bytes",
           stats.success_read_efforts.read.bytes,
-          sm::description("extent bytes of successful read transactions")
+          sm::description("extent bytes of successful read transactions"),
+          {sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
       }
     );
@@ -503,31 +529,35 @@ void Cache::register_metrics()
         [this] {
           return extents_index.size();
         },
-        sm::description("total number of cached extents")
+        sm::description("total number of cached extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "cached_extent_bytes",
         [this] {
           return extents_index.get_bytes();
         },
-        sm::description("total bytes of cached extents")
+        sm::description("total bytes of cached extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "dirty_extents",
         [this] {
           return dirty.size();
         },
-        sm::description("total number of dirty extents")
+        sm::description("total number of dirty extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "dirty_extent_bytes",
         stats.dirty_bytes,
-        sm::description("total bytes of dirty extents")
+        sm::description("total bytes of dirty extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
   );
 
-  pinboard->register_metrics();
+  pinboard->register_metrics(store_index);
 
   /**
    * tree stats
@@ -537,7 +567,7 @@ void Cache::register_metrics()
   auto omap_label = tree_label("OMAP");
   auto lba_label = tree_label("LBA");
   auto backref_label = tree_label("BACKREF");
-  auto register_tree_metrics = [&labels_by_src, &onode_label, &omap_label, this](
+  auto register_tree_metrics = [&labels_by_src, &onode_label, &omap_label, store_index, this](
       const sm::label_instance& tree_label,
       uint64_t& tree_depth,
       int64_t& tree_extents_num,
@@ -550,13 +580,13 @@ void Cache::register_metrics()
           "tree_depth",
           tree_depth,
           sm::description("the depth of tree"),
-          {tree_label}
+          {tree_label, sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
 	sm::make_counter(
 	  "tree_extents_num",
 	  tree_extents_num,
 	  sm::description("num of extents of the tree"),
-	  {tree_label}
+	  {tree_label, sm::label_instance("shard_store_index", std::to_string(store_index))}
 	)
       }
     );
@@ -573,6 +603,8 @@ void Cache::register_metrics()
       }
       auto& committed_efforts = get_by_src(committed_tree_efforts, src);
       auto& invalidated_efforts = get_by_src(invalidated_tree_efforts, src);
+      std::vector<sm::label_instance> merged_labels = {tree_label}; // Copy src_label
+      merged_labels.insert(merged_labels.end(), src_label.begin(), src_label.end());
       metrics.add_group(
         "cache",
         {
@@ -580,37 +612,37 @@ void Cache::register_metrics()
             "tree_inserts_committed",
             committed_efforts.num_inserts,
             sm::description("total number of committed insert operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
           sm::make_counter(
             "tree_erases_committed",
             committed_efforts.num_erases,
             sm::description("total number of committed erase operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
           sm::make_counter(
             "tree_updates_committed",
             committed_efforts.num_updates,
             sm::description("total number of committed update operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
           sm::make_counter(
             "tree_inserts_invalidated",
             invalidated_efforts.num_inserts,
             sm::description("total number of invalidated insert operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
           sm::make_counter(
             "tree_erases_invalidated",
             invalidated_efforts.num_erases,
             sm::description("total number of invalidated erase operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
           sm::make_counter(
             "tree_updates_invalidated",
             invalidated_efforts.num_updates,
             sm::description("total number of invalidated update operations"),
-            {tree_label, src_label}
+            merged_labels
           ),
         }
       );
@@ -675,7 +707,8 @@ void Cache::register_metrics()
             "trans_srcs_invalidated",
             stats.trans_conflicts_by_srcs[srcs_index - 1],
             sm::description("total number conflicted transactions by src pair"),
-            {srcs_label(oss.str())}
+            {srcs_label(oss.str()),
+             sm::label_instance("shard_store_index", std::to_string(store_index))}
           ),
         }
       );
@@ -695,7 +728,8 @@ void Cache::register_metrics()
           "trans_srcs_invalidated",
           stats.trans_conflicts_by_unknown[srcs_index - 1],
           sm::description("total number conflicted transactions by src pair"),
-          {srcs_label(oss.str())}
+          {srcs_label(oss.str()),
+           sm::label_instance("shard_store_index", std::to_string(store_index))}
         ),
       }
     );
@@ -712,24 +746,28 @@ void Cache::register_metrics()
         [this] {
           return stats.trim_rewrites.get_num_rewrites();
         },
-        sm::description("total number of rewrite-dirty extents")
+        sm::description("total number of rewrite-dirty extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "version_sum_dirty",
         stats.trim_rewrites.dirty_version,
-        sm::description("sum of the version from rewrite-dirty extents")
+        sm::description("sum of the version from rewrite-dirty extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "version_count_reclaim",
         [this] {
           return stats.reclaim_rewrites.get_num_rewrites();
         },
-        sm::description("total number of rewrite-reclaim extents")
+        sm::description("total number of rewrite-reclaim extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
       sm::make_counter(
         "version_sum_reclaim",
         stats.reclaim_rewrites.dirty_version,
-        sm::description("sum of the version from rewrite-reclaim extents")
+        sm::description("sum of the version from rewrite-reclaim extents"),
+        {sm::label_instance("shard_store_index", std::to_string(store_index))}
       ),
     }
   );
