@@ -259,7 +259,7 @@ void ProtocolV1::prepare_send_message(uint64_t features, Message *m,
   // encode and copy out of *m
   // in write_message we update header.seq and need recalc crc
   // so skip calc header in encode function.
-  m->encode(features, messenger->crcflags, true);
+  m->encode(features, messenger->crcflags, true, cct);
 
   bl.append(m->get_payload());
   bl.append(m->get_middle());
