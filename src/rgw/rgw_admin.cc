@@ -9037,7 +9037,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+    check_bad_owner_bucket_mapping(driver, user->get_id(),
+                                   user->get_display_name(), user->get_tenant(),
                                    fix, null_yield, dpp());
   }
 
