@@ -169,11 +169,13 @@ ECTransaction::WritePlanObj::WritePlanObj(
     ECUtil::shard_extent_set_t read_mask(sinfo.get_k_plus_m());
 
     if (!sinfo.supports_partial_writes()) {
-      for (shard_id_t shard; shard < sinfo.get_k_plus_m(); ++shard) {
+      for (auto shard : sinfo.get_all_shards()) {
         will_write[shard].insert(write_superset);
       }
       will_write.align(sinfo.get_chunk_size());
-      reads = will_write;
+      for (auto shard : sinfo.get_data_shards()) {
+        reads[shard] = will_write.at(shard);
+      }
       sinfo.ro_size_to_read_mask(sinfo.ro_offset_to_next_stripe_ro_offset(orig_size), read_mask);
       reads.intersection_of(read_mask);
       do_parity_delta_write = false;
