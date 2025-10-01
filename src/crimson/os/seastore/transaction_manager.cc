@@ -245,11 +245,13 @@ TransactionManager::_remove_indirect_mapping_only(
   Transaction &t,
   LBAMapping mapping)
 {
-  return lba_manager->remove_indirect_mapping_only(
-    t, std::move(mapping)
-  ).si_then([](auto result) {
-    return std::move(result.result.mapping);
-  });
+  assert(mapping.is_indirect());
+  auto ret_cursor = co_await lba_manager->update_mapping_refcount(
+    t, std::move(mapping.indirect_cursor), -1
+  );
+  co_return co_await resolve_cursor_to_mapping(
+    t,
+    ret_cursor);
 }
 
 TransactionManager::ref_iertr::future<

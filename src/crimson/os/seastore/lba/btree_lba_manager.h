@@ -232,23 +232,6 @@ public:
     };
   }
 
-  ref_ret remove_indirect_mapping_only(
-    Transaction &t,
-    LBAMapping mapping) final {
-    assert(mapping.is_viewable());
-    assert(mapping.is_indirect());
-    return seastar::do_with(
-      std::move(mapping),
-      [&t, this](auto &mapping) {
-      return update_refcount(t, mapping.indirect_cursor.get(), -1
-      ).si_then([](auto res) {
-	return ref_iertr::make_ready_future<
-	  ref_update_result_t>(ref_update_result_t{
-	    std::move(res), std::nullopt});
-      });
-    });
-  }
-
   ref_ret remove_mapping(
     Transaction &t,
     LBAMapping mapping) final {
