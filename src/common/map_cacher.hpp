@@ -218,23 +218,34 @@ public:
     ) {
     std::set<K> to_get;
     std::map<K, V> _got;
-    for (auto i = keys_to_get.begin();
-	 i != keys_to_get.end();
-	 ++i) {
-      VPtr val = in_progress.lookup(*i);
-      if (val) {
-	if (*val)
-	  got->insert(make_pair(*i, val->get()));
-	//else: value cached is empty, key doesn't exist
-      } else {
-	to_get.insert(*i);
+    int r;
+    if (in_progress.empty()) {
+      // no cached keys, use original key list
+      r = driver->get_keys(keys_to_get, &_got);
+    } else {
+      for (auto& k : keys_to_get) {
+        VPtr val = in_progress.lookup(k);
+        if (val) {
+	  if (*val)
+	    got->emplace_hint(got->cend(), make_pair(k, val->get()));
+	  //else: value cached is empty, key doesn't exist
+        } else {
+	  to_get.emplace_hint(to_get.cend(), k);
+        }
       }
+      r = driver->get_keys(to_get, &_got);
     }
-    int r = driver->get_keys(to_get, &_got);
     if (r < 0)
       return r;
-    for (auto i = _got.begin(); i != _got.end(); ++i) {
-      got->insert(*i);
+    if (got->empty()) {
+      std::swap(*got, _got);
+    } else {
+      auto hint = got->cend();
+      // enumerate in reverse order to better match emplace_hint sematics,
+      // which requires hint to point to a position next to insert one.
+      for(auto it = _got.rbegin(); it != _got.rend(); it++) {
+        hint = got->emplace_hint(hint, *it);
+      }
     }
     return 0;
   } ///< @return error value, 0 on success
