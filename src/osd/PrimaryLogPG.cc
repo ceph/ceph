@@ -420,8 +420,7 @@ void PrimaryLogPG::on_local_recover(
       snaps.insert(p->second.begin(), p->second.end());
       dout(20) << " snaps " << snaps << dendl;
       snap_mapper.add_oid(
-	recovery_info.soid,
-	snaps,
+	SnapMapper::object_snaps(recovery_info.soid, snaps),
 	&_t);
     } else {
       derr << __func__ << " " << hoid << " had no clone_snaps" << dendl;

@@ -343,8 +343,7 @@ void PG::update_object_snap_mapping(
     ceph_abort();
   }
   snap_mapper.add_oid(
-    soid,
-    snaps,
+    SnapMapper::object_snaps(soid, snaps),
     &_t);
 }
 

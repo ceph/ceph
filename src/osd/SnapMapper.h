@@ -130,8 +130,11 @@ public:
   struct object_snaps {
     hobject_t oid;
     std::set<snapid_t> snaps;
-    object_snaps(hobject_t oid, const std::set<snapid_t> &snaps)
-      : oid(oid), snaps(snaps) {}
+    object_snaps(hobject_t oid, const std::set<snapid_t> &_snaps)
+      : oid(oid), snaps(_snaps) {}
+    object_snaps(hobject_t oid, const std::vector<snapid_t> &_snaps)
+      : oid(oid), snaps(_snaps.begin(), _snaps.end()) {
+    }
     object_snaps() {}
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &bp);
@@ -334,16 +337,14 @@ private:
 
   /// Update snaps for oid, empty new_snaps removes the mapping
   int update_snaps(
-    const hobject_t &oid,       ///< [in] oid to update
-    const std::set<snapid_t> &new_snaps, ///< [in] new snap std::set
+    const object_snaps& new_snaps,       ///< [in] oid + new snaps
     const std::set<snapid_t> *old_snaps, ///< [in] old snaps (for debugging)
     MapCacher::Transaction<std::string, ceph::buffer::list> *t ///< [out] transaction
     ); ///@ return error, 0 on success
 
   /// Add mapping for oid, must not already be mapped
   void add_oid(
-    const hobject_t &oid,       ///< [in] oid to add
-    const std::set<snapid_t>& new_snaps, ///< [in] snaps
+    const object_snaps& new_snaps, ///< [in] oid + new snaps
     MapCacher::Transaction<std::string, ceph::buffer::list> *t ///< [out] transaction
     );
 
