@@ -768,6 +768,7 @@ def load(data: Simplified) -> List[SMBResource]:
 
 
 def _password_convert(pvalue: str, operation: ConversionOp) -> str:
+    # foo!
     if operation == (PasswordFilter.NONE, PasswordFilter.BASE64):
         pvalue = base64.b64encode(pvalue.encode("utf8")).decode("utf8")
     elif operation == (PasswordFilter.NONE, PasswordFilter.HIDDEN):
