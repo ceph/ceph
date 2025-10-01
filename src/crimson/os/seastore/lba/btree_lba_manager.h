@@ -493,21 +493,6 @@ private:
     }
   }
 
-  ref_update_result_t get_ref_update_result(
-    update_mapping_ret_bare_t &result,
-    std::optional<update_mapping_ret_bare_t> direct_result) {
-    mapping_update_result_t primary_r = get_mapping_update_result(result);
-
-    if (direct_result) {
-      // only removing indirect mapping can have direct_result
-      assert(result.is_removed_mapping());
-      assert(result.get_removed_mapping().map_value.pladdr.is_laddr());
-      auto direct_r = get_mapping_update_result(*direct_result);
-      return ref_update_result_t{std::move(primary_r), std::move(direct_r)};
-    }
-    return ref_update_result_t{std::move(primary_r), std::nullopt};
-  }
-
   using update_refcount_iertr = ref_iertr;
   using update_refcount_ret = update_refcount_iertr::future<
     mapping_update_result_t>;
