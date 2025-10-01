@@ -20,6 +20,14 @@ class FSCryptTestCase(CephFSTestCase):
     def setUp(self):
         super().setUp()
 
+        self.get_ceph_cmd_result(
+                'auth', 'caps', "client.0",
+                'mds', 'allow *',
+                'mon', 'allow *',
+                 'osd', 'allow *')
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
+
         self.protector = ''.join(random.choice(string.ascii_letters) for _ in range(8))
         self.key_file = "/tmp/key"
         self.path = "dir/"
@@ -367,6 +375,14 @@ class TestFSCryptVolumes(CephFSTestCase):
 
     def setUp(self):
         super().setUp()
+
+        self.get_ceph_cmd_result(
+                'auth', 'caps', "client.0",
+                'mds', 'allow *',
+                'mon', 'allow *',
+                 'osd', 'allow *')
+        self.mount_a.umount_wait()
+        self.mount_a.mount_wait()
 
         self.protector = ''.join(random.choice(string.ascii_letters) for _ in range(8))
         self.key_file = "/tmp/key_volume"
