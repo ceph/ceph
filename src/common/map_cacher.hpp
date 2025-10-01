@@ -192,7 +192,7 @@ public:
       vptrs.insert(ip);
     }
     t->set_keys(keys);
-    t->add_callback(new TransHolder(vptrs));
+    t->add_callback(new TransHolder(std::move(vptrs)));
   }
 
   /// Adds operation removing keys to Transaction
@@ -208,7 +208,7 @@ public:
       vptrs.insert(ip);
     }
     t->remove_keys(keys);
-    t->add_callback(new TransHolder(vptrs));
+    t->add_callback(new TransHolder(std::move(vptrs)));
   }
 
   /// Gets keys, uses cached values for unstable keys
