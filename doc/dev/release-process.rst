@@ -92,7 +92,7 @@ Notify the "Build Lead" that the release branch is ready.
 
 We'll use a stable/regular 19.2.2 release of Squid as an example throughout this document.
 
-1. Browse to https://jenkins.ceph.com/view/all/job/ceph/build?delay=0sec
+1. Browse to https://jenkins.ceph.com/view/all/job/ceph-release-pipeline/build?delay=0sec
 2. Log in with GitHub OAuth
 3. Set the parameters as necessary::
 
@@ -117,6 +117,9 @@ NOTE: if for some reason the build has to be restarted (for example if one distr
     +-------------------+--------------------------------------------------+
     | squid (19.X.X)    | ``jammy centos9 windows bookworm``               |
     +-------------------+--------------------------------------------------+
+    | tentacle (20.X.X) | ``jammy centos9 noble windows bookworm rocky10`` |
+    +-------------------+--------------------------------------------------+
+
 
 5. Click ``Build``.
 
