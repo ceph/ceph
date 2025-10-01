@@ -802,9 +802,12 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             continue
 
         # If the mapper device is a logical volume it gets excluded
-        if is_mapper_device(diskname):
-            if lvm.get_device_lvs(diskname):
+        try:
+            if UdevData(diskname).is_lvm:
                 continue
+        except RuntimeError as e:
+            logger.debug("get_devices(): device {} couldn't be found.".format(diskname))
+            continue
 
         # all facts that have no defaults
         # (<name>, <path relative to _sys_block_path>)
