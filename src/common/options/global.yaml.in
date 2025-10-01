@@ -1504,6 +1504,11 @@ options:
   level: advanced
   default: 8192
   with_legacy: true
+- name: ms_msg_pgstats_verbose
+  type: bool
+  level: advanced
+  default: false
+  with_legacy: true
 - name: inject_early_sigterm
   type: bool
   level: dev
