@@ -517,6 +517,54 @@ VERSION_CODENAME=hpec nimda
             """,
             ("hpec", "33", "hpec nimda"),
         ),
+        (
+            """# Fallback: unknown distro with comma-separated ID_LIKE
+ID="custom-rhel"
+ID_LIKE="rhel,centos,fedora"
+VERSION_ID="8"
+            """,
+            ("rhel", "8", None),
+        ),
+        (
+            """# Fallback: unknown distro with space-separated ID_LIKE
+ID="custom-rhel"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="8"
+            """,
+            ("rhel", "8", None),
+        ),
+        (
+            """# Fallback: picks first known distro from mixed ID_LIKE
+ID="custom-distro"
+ID_LIKE="unknown-distro,centos,fedora"
+VERSION_ID="8"
+            """,
+            ("centos", "8", None),
+        ),
+        (
+            """# No fallback: unknown distro with unknown ID_LIKE values
+ID="unknown-distro"
+ID_LIKE="also-unknown another-unknown"
+VERSION_ID="1.0"
+            """,
+            ("unknown-distro", "1.0", None),
+        ),
+        (
+            """# No fallback: unknown distro with empty ID_LIKE
+ID="unknown-distro"
+ID_LIKE=""
+VERSION_ID="1.0"
+            """,
+            ("unknown-distro", "1.0", None),
+        ),
+        (
+            """# No fallback: known distro stays unchanged
+ID="rocky"
+ID_LIKE="rhel centos fedora"
+VERSION_ID="8.5"
+            """,
+            ("rocky", "8.5", None),
+        ),
     ],
 )
 def test_get_distro(monkeypatch, content, expected):
