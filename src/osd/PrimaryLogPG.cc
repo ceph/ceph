@@ -4725,12 +4725,10 @@ int PrimaryLogPG::trim_object(
 
   set<snapid_t> new_snaps;
   const OSDMapRef& osdmap = get_osdmap();
-  for (set<snapid_t>::iterator i = old_snaps.begin();
-       i != old_snaps.end();
-       ++i) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
-	*i != snap_to_trim) {
-      new_snaps.insert(*i);
+  for (auto& s : old_snaps) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s) &&
+	s != snap_to_trim) {
+      new_snaps.emplace_hint(new_snaps.cend(), s);
     }
   }
 
