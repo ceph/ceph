@@ -286,8 +286,8 @@
   <ng-container *ngFor="let alert of prometheusAlertService.alerts; let i = index;  trackBy: trackByFn">
     <div [ngClass]="['border-'+alertClass[alert.labels.severity]]"
          *ngIf="alert.status.state === 'active' &&
-         alert.labels.severity === alertType ||
-         !alertType">
+         (alert.labels.severity === alertType ||
+         !alertType)">
       <div class="card tc_alerts border-0 pt-3">
         <div class="row no-gutters ps-2">
           <div class="col-sm-1 text-center">
@@ -307,6 +307,7 @@
                        [title]="alert.startsAt | cdDate"
                        i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
                 <small class="alert_count"
+                       *ngIf="alert.alert_count > 1"
                        [title]="alert.alert_count"
                        i18n>Total occurrences: {{ alert.alert_count }}</small>
               </p>
