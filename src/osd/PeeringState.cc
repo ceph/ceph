@@ -331,20 +331,13 @@ void PeeringState::apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
   // knowledge of partial_writes
   const auto & [fromversion, toversion] = pwlc;
   if (toversion > info.last_update) {
-    if (fromversion <= info.last_update) {
-      if (info.last_complete == info.last_update) {
-	psdout(10) << "osd." << shard << " has last_complete"
-		   << "=last_update " << info.last_update
-		   << " pwlc can advance both to " << toversion
-		   << dendl;
-	info.last_complete = toversion;
-      } else {
-	psdout(10) << "osd." << shard << " has last_complete "
-		   << info.last_complete << " and last_update "
-		   << info.last_update
-		   << " pwlc can advance last_update to " << toversion
-		   << dendl;
-      }
+    if ((fromversion <= info.last_update) &&
+	(info.last_complete == info.last_update)) {
+      psdout(10) << "osd." << shard << " has last_complete"
+		 << "=last_update " << info.last_update
+		 << " pwlc can advance both to " << toversion
+		 << dendl;
+      info.last_complete = toversion;
       info.last_update = toversion;
       if (log1 && toversion > log1->head) {
 	log1->head = toversion;
