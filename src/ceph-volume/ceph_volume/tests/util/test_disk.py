@@ -256,7 +256,11 @@ class TestGetDevices(object):
     def test_sda_block_is_found(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert len(result.keys()) == 1
         assert result[sda_path]['human_readable_size'] == '0.00 B'
         assert result[sda_path]['model'] == ''
@@ -266,7 +270,11 @@ class TestGetDevices(object):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         fake_filesystem.create_file('/sys/block/sda/size', contents = '1024')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['human_readable_size'] == '512.00 KB'
 
@@ -275,7 +283,11 @@ class TestGetDevices(object):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         fake_filesystem.create_file('/sys/block/sda/queue/hw_sector_size', contents = '1024')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['sectorsize'] == '1024'
 
@@ -283,7 +295,11 @@ class TestGetDevices(object):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         fake_filesystem.create_file('/sys/block/sda/queue/logical_block_size', contents = '99')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert result[sda_path]['sectorsize'] == '99'
 
     def test_sda_sectorsize_does_not_fallback(self, patched_get_block_devs_sysfs, fake_filesystem):
@@ -291,14 +307,22 @@ class TestGetDevices(object):
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         fake_filesystem.create_file('/sys/block/sda/queue/logical_block_size', contents = '99')
         fake_filesystem.create_file('/sys/block/sda/queue/hw_sector_size', contents = '1024')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert result[sda_path]['sectorsize'] == '99'
 
     def test_is_rotational(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         fake_filesystem.create_file('/sys/block/sda/queue/rotational', contents = '1')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert result[sda_path]['rotational'] == '1'
 
     def test_is_ceph_rbd(self, patched_get_block_devs_sysfs, fake_filesystem):
@@ -313,7 +337,11 @@ class TestGetDevices(object):
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk', sda_path]]
         for actuator in range(0, fake_actuator_nb):
             fake_filesystem.create_dir(f'/sys/block/sda/queue/independent_access_ranges/{actuator}')
-        result = disk.get_devices()
+        with patch("ceph_volume.util.disk.UdevData") as MockUdevData:
+            mock_instance = MagicMock()
+            mock_instance.is_lvm = False
+            MockUdevData.return_value = mock_instance
+            result = disk.get_devices()
         assert result[sda_path]['actuators'] == fake_actuator_nb
 
 
