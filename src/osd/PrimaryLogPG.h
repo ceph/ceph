@@ -1576,7 +1576,7 @@ public:
   void handle_backoff(OpRequestRef& op);
 
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
-		  OpContextUPtr *ctxp);
+		  OpContextUPtr *ctxp, OSDMap::removed_snaps_queue_ctx_t *rsq_ctx);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;

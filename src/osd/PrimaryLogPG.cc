@@ -3498,6 +3498,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
   // snap
   SnapSet& ss = obc->ssc->snapset;
   const OSDMapRef& osdmap = get_osdmap();
+  OSDMap::removed_snaps_queue_ctx_t rsq_ctx;
   for (vector<snapid_t>::const_reverse_iterator p = ss.clones.rbegin();
       p != ss.clones.rend();
       ++p) {
@@ -3506,7 +3507,7 @@ int PrimaryLogPG::get_manifest_ref_count(ObjectContextRef obc, std::string& fp_o
     ObjectContextRef obc_g = nullptr;
     hobject_t clone_oid = obc->obs.oi.soid;
     clone_oid.snap = *p;
-    if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p)) {
+    if (osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *p, &rsq_ctx)) {
       return -EBUSY;
     }
     if (is_unreadable_object(clone_oid)) {
@@ -4680,7 +4681,8 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
 
 int PrimaryLogPG::trim_object(
   bool first, const hobject_t &coid, snapid_t snap_to_trim,
-  PrimaryLogPG::OpContextUPtr *ctxp)
+  PrimaryLogPG::OpContextUPtr *ctxp,
+  OSDMap::removed_snaps_queue_ctx_t *rsq_ctx)
 {
   *ctxp = NULL;
 
@@ -4726,8 +4728,8 @@ int PrimaryLogPG::trim_object(
   set<snapid_t> new_snaps;
   const OSDMapRef& osdmap = get_osdmap();
   for (auto& s : old_snaps) {
-    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s) &&
-	s != snap_to_trim) {
+    if (s != snap_to_trim &&
+        osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), s, rsq_ctx)) {
       new_snaps.emplace_hint(new_snaps.cend(), s);
     }
   }
@@ -15918,11 +15920,13 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     return transit< NotTrimming >();
   }
 
+  OSDMap::removed_snaps_queue_ctx_t rsq_ctx;
   for (auto &&object: *to_trim) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight_ops == 0, object, snap_to_trim, &ctx);
+
+    int error = pg->trim_object(in_flight_ops == 0, object, snap_to_trim, &ctx, &rsq_ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
