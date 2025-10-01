@@ -29,7 +29,7 @@ public:
              const ConfigValues& values);
   ~AlienStore() final;
 
-  seastar::future<> start() final;
+  seastar::future<uint32_t> start() final;
   seastar::future<> stop() final;
   mount_ertr::future<> mount() final;
   seastar::future<> umount() final;
@@ -48,7 +48,6 @@ public:
 						 const ghobject_t& oid,
 						 interval_set<uint64_t>& m,
 						 uint32_t op_flags = 0) final;
-					      
 
   get_attr_errorator::future<ceph::bufferlist> get_attr(
     CollectionRef c,
@@ -118,7 +117,11 @@ public:
     uint64_t len,
     uint32_t op_flags) final;
 
-  FuturizedStore::Shard& get_sharded_store() final {
+  BackendStore get_backend_store(store_index_t store_index) final {
+    return BackendStore(*this, GLOBAL_STORE, store_index);
+  }
+
+  FuturizedStore::Shard& get_sharded_store(store_index_t store_index = 0) final {
     return *this;
   }
 
