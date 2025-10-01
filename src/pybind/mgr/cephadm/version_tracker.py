@@ -75,17 +75,17 @@ class VersionTracker:
         '''
 
         if not self.mgr.db_ready():
-            self.mgr.log.debug('Version Tracker, Cluster version ' + version + ' could not be added: mgr db not ready')
+            self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" could not be added: mgr db not ready')
             return False
         
         with self.mgr._db_lock, self.mgr.db:
             try:
                 self.mgr.db.execute(SQL_QUERY, (version, time))
             except sqlite3.Error as error:
-                self.mgr.log.debug('Version Tracker, Cluster version ' + version + ' could not be added: ' + str(error))
+                self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" could not be added: ' + str(error))
                 return False
         
-        self.mgr.log.debug('Version Tracker, Cluster version ' + version + ' added successfully')
+        self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" added successfully')
         
         return True
 
