@@ -230,7 +230,8 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
-  auto mapping = co_await lba_manager->get_mapping(t, offset);
+  auto cursor = co_await lba_manager->get_cursor(t, offset);
+  auto mapping = co_await resolve_cursor_to_mapping(t, std::move(cursor));
   auto result = co_await _remove(t, std::move(mapping));
   co_return result.result.refcount;
 }
