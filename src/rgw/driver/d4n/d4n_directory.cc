@@ -372,9 +372,8 @@ int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& buc
   return 0;
 }
 
-void D4NTransaction::create_rw_temp_keys(std::string key)
+void D4NTransaction::create_rw_temp_keys(const std::string key)
 {
-	//TODO get_trx_id( ) could be called here, upon transaction start
   if(trxState == TrxState::STARTED) {
     m_original_key = key;
     // in case the content of m_original_key was changed(by other transaction),the temp keys are deleted on end-transaction phase.
@@ -412,9 +411,8 @@ std::string D4NTransaction::create_unique_temp_keys(std::string key)
 
 int ObjectDirectory::exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y) 
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP, y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   response<int> resp;
 
@@ -441,9 +439,8 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
 {
   /* For existing keys, call get method beforehand. 
      Sets completely overwrite existing values. */
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   std::string endpoint;
   std::list<std::string> redisValues;
@@ -506,11 +503,10 @@ int ObjectDirectory::set(const DoutPrefixProvider* dpp, CacheObj* object, option
   return 0;
 }
 
-int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y) 
+int ObjectDirectory::get(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   std::vector<std::string> fields;
   ldpp_dout(dpp, 10) << "ObjectDirectory::" << __func__ << "(): index is: " << key << dendl;
@@ -637,10 +633,8 @@ int ObjectDirectory::del(const DoutPrefixProvider* dpp, CacheObj* object, option
 int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& field, std::string& value, optional_yield y)
 {//TODO what should be done here? (temp-read and temp-write)
   int ret = -1;
-  if(m_d4n_trx)
-    m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp, conn, key, D4NTransaction::redis_operation_type::READ_OP, y);
+  RedisTransactionHandling trx_handler_read(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler_read.get_redis_key();
 
   if ((ret = exist_key(dpp, object, y))) {
     try {
@@ -675,7 +669,8 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
 	}
       }
 
-      m_d4n_trx->is_trx_started(dpp, conn, key, D4NTransaction::redis_operation_type::WRITE_OP, y);
+      RedisTransactionHandling trx_handler_write(this, dpp, conn, object, D4NTransaction::redis_operation_type::WRITE_OP, y);
+      key = trx_handler_write.get_redis_key();
 
       boost::system::error_code ec;
       response<ignore_t> resp;
@@ -705,9 +700,8 @@ int ObjectDirectory::update_field(const DoutPrefixProvider* dpp, CacheObj* objec
 
 int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
 
   try {
@@ -743,9 +737,8 @@ int ObjectDirectory::zadd(const DoutPrefixProvider* dpp, CacheObj* object, doubl
 
 int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int start, int stop, std::vector<std::string>& members, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -777,9 +770,8 @@ int ObjectDirectory::zrange(const DoutPrefixProvider* dpp, CacheObj* object, int
 
 int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& start, const std::string& stop, std::vector<std::string>& members, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -806,9 +798,8 @@ int ObjectDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, 
 
 int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::WRITE_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -838,9 +829,8 @@ int ObjectDirectory::zrem(const DoutPrefixProvider* dpp, CacheObj* object, const
 
 int ObjectDirectory::zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* object, double min, double max, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::WRITE_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -899,9 +889,8 @@ int ObjectDirectory::incr(const DoutPrefixProvider* dpp, CacheObj* object, optio
 
 int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(object);
-  m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, object, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
   try {
     boost::system::error_code ec;
     request req;
@@ -928,9 +917,10 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
 {
   // TODO to validate that cloned key do not exists
   //running the loaded script 
+  int rc =0;
   try {//this should be done only once, the first time the transaction is started. 
 	boost::system::error_code ec;
-	response<std::string> resp;
+	response<int> resp; //-1 if the source key does not exist, 0 if the key is cloned successfully. -2 key destination already exists.
 	request req;
 	//TODO the key should clone only once, and the key should be deleted upon end transaction.
 	req.push("EVALSHA", m_evalsha_clone_key, "2", key_source, key_destination);
@@ -944,12 +934,14 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
 	    return -ec.value();
 	}
 
+	rc = std::get<0>(resp).value();
+
 	} catch (std::exception &e) {
 		ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
 		return -EINVAL;
 	}
 
-  return 0;
+  return rc;
 }
 
 void D4NTransaction::clear_temp_keys()
@@ -964,20 +956,22 @@ void D4NTransaction::clear_temp_keys()
   m_temp_test_write_keys.clear();
 }
 
-bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y)
-{//TODO this method could reuse the ObjectDirectory::is_trx_started, sould placed on the base class.
+bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y)
+{
 	if(trxState != TrxState::STARTED) {
 		return false;
 	}
 
-	init_trx(dpp,conn,y);
+	create_clone_lua_script(dpp,conn,y);//load the script if not loaded yet.
 
+	//TODO: in case the clone_key does not succeed, how to handle it? if there is not key to clone, it should not be an error.
 	if(op == redis_operation_type::READ_OP){
+	  //TODO: in case the clone_key_for_transaction failed, how to handle it? no temp key is created.
 	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
 	  if (rc != 0 ) {
 	    //if the key is not exists, it should not be cloned.
 	    //TODO to handle the case where the clone key already exists.(it should not happend since the key is unique for each transaction).
-	    ldpp_dout(dpp, 0) << "Directory::is_trx_started failed to clone key for read operation" << dendl;
+	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key failed to clone key for read operation" << dendl;
 	    return false;
 	  }
 
@@ -987,15 +981,16 @@ bool D4NTransaction::is_trx_started(const DoutPrefixProvider* dpp,std::shared_pt
 	}
 	else if(op == redis_operation_type::WRITE_OP){
 	  //upon end transaction, the m_temp_key_write should be renamed to the original key.
-	  ldpp_dout(dpp, 0) << "Directory::is_trx_started cloning " << m_original_key << " into " << m_temp_key_write << dendl;
+	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_write << dendl;
 
+	  //TODO: in case the clone_key_for_transaction failed, how to handle it? no temp key is created.
 	  clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
 	  //m_temp_write_keys stores the temp key that is used for write operations. a single transaction can have multiple write keys.
 	  m_temp_write_keys.insert(m_temp_key_write);
 
 	  //upon end transaction, the m_temp_key_test_write should be compared to the originl key.
-	  ldpp_dout(dpp, 0) << "Directory::is_trx_started cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
-	  clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
+	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
+	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
 	  // the same as m_temp_write_keys, but for test write operations.
 	  m_temp_test_write_keys.insert(m_temp_key_test_write);
 	 
@@ -1017,11 +1012,8 @@ std::string BlockDirectory::build_index(CacheBlock* block)
 
 int BlockDirectory::exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
 {
-  if(m_d4n_trx)
-    m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  if(m_d4n_trx)
-    m_d4n_trx->is_trx_started(dpp,conn,key, D4NTransaction::redis_operation_type::READ_OP, y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   response<int> resp;
 
@@ -1136,7 +1128,7 @@ int D4NTransaction::get_clone_script(const DoutPrefixProvider* dpp,std::shared_p
   return 0;
 }
 
-int D4NTransaction::init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
+int D4NTransaction::create_clone_lua_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
 {
 	 //TODO a singletone pattern should be used to load the lua script only once per process lifetime.
 	
@@ -1875,11 +1867,10 @@ int BlockDirectory::get(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
   return 0;
 }
 
-int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y) 
+int BlockDirectory::get(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   std::vector<std::string> fields;
   ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
@@ -2139,9 +2130,8 @@ int BlockDirectory::del(const DoutPrefixProvider* dpp, CacheBlock* block, option
 int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& field, std::string& value, optional_yield y)
 {
   int ret = -1;
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler_read(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler_read.get_redis_key();
 
   if ((ret = exist_key(dpp, block, y))) {
     try {
@@ -2176,7 +2166,8 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
 	}
       }
 
-      m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::WRITE_OP,y);
+      RedisTransactionHandling trx_handler_write(this, dpp, conn, block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+      key = trx_handler_write.get_redis_key();
       boost::system::error_code ec;
       response<ignore_t> resp;
       request req;
@@ -2205,9 +2196,8 @@ int BlockDirectory::update_field(const DoutPrefixProvider* dpp, CacheBlock* bloc
 
 int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block, std::string& value, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler_read(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler_read.get_redis_key();
   //TODO this might be cloned already, thus it should be checked whether the key is cloned or not.
   
   try {
@@ -2250,7 +2240,8 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
   value = result;
     }
 
-    m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::WRITE_OP,y);
+    RedisTransactionHandling trx_handler_write(this, dpp, conn, block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+    key = trx_handler_write.get_redis_key();
 
     {
       boost::system::error_code ec;
@@ -2275,9 +2266,8 @@ int BlockDirectory::remove_host(const DoutPrefixProvider* dpp, CacheBlock* block
 
 int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, double score, const std::string& member, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::WRITE_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -2307,9 +2297,8 @@ int BlockDirectory::zadd(const DoutPrefixProvider* dpp, CacheBlock* block, doubl
 
 int BlockDirectory::zrange(const DoutPrefixProvider* dpp, CacheBlock* block, int start, int stop, std::vector<std::string>& members, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -2341,9 +2330,8 @@ int BlockDirectory::zrange(const DoutPrefixProvider* dpp, CacheBlock* block, int
 
 int BlockDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheBlock* block, int start, int stop, std::vector<std::string>& members, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::READ_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::READ_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;
@@ -2375,9 +2363,8 @@ int BlockDirectory::zrevrange(const DoutPrefixProvider* dpp, CacheBlock* block, 
 
 int BlockDirectory::zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y)
 {
-  m_d4n_trx->get_trx_id(dpp,conn,y);
-  std::string key = build_index(block);
-  m_d4n_trx->is_trx_started(dpp,conn,key,D4NTransaction::redis_operation_type::WRITE_OP,y);
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  std::string key = trx_handler.get_redis_key();
 
   try {
     boost::system::error_code ec;

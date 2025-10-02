@@ -166,12 +166,13 @@ public:
 
     std::string m_trx_id;
     void start_trx();
-    int init_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
+    int create_clone_lua_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
     int end_trx(const DoutPrefixProvider* dpp,std::shared_ptr<connection> , optional_yield y);
     int get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y);
-    bool is_trx_started(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
+    bool set_transaction_key(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,std::string &key,redis_operation_type op, optional_yield y);
     std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
     std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
+    bool is_transaction_active() const { return trxState == TrxState::STARTED;}
 
     void create_rw_temp_keys(std::string key);
     std::string create_unique_temp_keys(std::string key);
@@ -255,11 +256,11 @@ class ObjectDirectory: public Directory {
     int zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y);
     //Return value is the incremented value, else return error
     int incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
+    std::string build_index(CacheObj* object);
 
   private:
     std::shared_ptr<connection> conn;
 
-    std::string build_index(CacheObj* object);
 };
 
 class BlockDirectory: public Directory {
@@ -287,13 +288,114 @@ class BlockDirectory: public Directory {
     int zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y);
 
     std::shared_ptr<connection> get_connection() {return conn;}	
+    std::string build_index(CacheBlock* block);
 
   private:
     std::shared_ptr<connection> conn;
-    std::string build_index(CacheBlock* block);
 
     template<SeqContainer Container>
     int set_values(const DoutPrefixProvider* dpp, CacheBlock& block, Container& redisValues, optional_yield y);
 };
+
+  class RedisTransactionHandling {
+	//purpose: upon redis operation, transaction-id is allocated, clone keys are created for read/write operations.
+	//this object is created/destroyed per each redis operation.
+  public:
+      // Constructor for ObjectDirectory
+      RedisTransactionHandling(ObjectDirectory* obj_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           CacheObj* object,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(obj_dir), m_block_dir(nullptr), m_object(object), m_block(nullptr)
+      {
+          initialize_transaction(dpp, conn, op_type, y);
+      }
+
+      // Constructor for BlockDirectory
+      RedisTransactionHandling(BlockDirectory* block_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           CacheBlock* block,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(nullptr), m_block_dir(block_dir), m_object(nullptr), m_block(block)
+      {
+          initialize_transaction(dpp, conn, op_type, y);
+      }
+
+      std::string build_temp_key() const {
+	  //purpose: build the temp key, the key is unique per transaction (multiple redis operations). [ start --> end ]
+          if (m_obj_dir && m_object) {
+              return m_obj_dir->build_index(m_object);
+          } else if (m_block_dir && m_block) {
+              return m_block_dir->build_index(m_block);
+          }
+          return "";
+      }
+
+      // transaction validity
+      bool is_valid() const { return m_is_valid; }
+
+      // Get the Redis key to use for operations (transaction key if valid, original key otherwise)
+      std::string get_redis_key() const {
+          if (m_is_valid && !m_temp_key.empty()) {
+              return m_temp_key;  // Use transaction key
+          }
+          // Fall back to original key
+          return build_temp_key();
+      }
+
+  private:
+      ObjectDirectory* m_obj_dir;
+      BlockDirectory* m_block_dir;
+      CacheObj* m_object;
+      CacheBlock* m_block;
+      bool m_is_valid = false;
+      std::string m_temp_key;
+
+      void initialize_transaction(const DoutPrefixProvider* dpp,
+                                std::shared_ptr<connection> conn,
+                                D4NTransaction::redis_operation_type op_type,
+                                optional_yield y)
+      {
+          D4NTransaction* d4n_trx = nullptr;
+
+          // Get the transaction object from the appropriate directory
+          if (m_obj_dir) {
+              d4n_trx = m_obj_dir->m_d4n_trx;
+          } else if (m_block_dir) {
+              d4n_trx = m_block_dir->m_d4n_trx;
+          }
+
+          if (!d4n_trx) {
+              m_is_valid = false;
+              return;
+          }
+
+          try {
+              // Get transaction ID(once per request)
+              d4n_trx->get_trx_id(dpp, conn, y);
+
+              // Build the key using the directory's build_index method
+              std::string key = build_temp_key();
+              if (key.empty()) {
+                  m_is_valid = false;
+                  return;
+              }
+
+              // clone the key for read/write operations
+              // Note: set_transaction_key modifies 'key' to the transaction key
+              m_is_valid = d4n_trx->set_transaction_key(dpp, conn, key, op_type, y);
+	      if (m_is_valid) {
+		  m_temp_key = key; // key is now the transaction key (modified by set_transaction_key)
+	      }
+
+          } catch (const std::exception& e) {
+              m_is_valid = false;
+          }
+      }
+  };
 
 } } // namespace rgw::d4n
