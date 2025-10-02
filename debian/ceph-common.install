@@ -21,6 +21,7 @@ usr/bin/radosgw-admin
 usr/bin/rgw-gap-list
 usr/bin/rgw-gap-list-comparator
 usr/bin/rgw-orphan-list
+usr/bin/rgw-policy-check
 usr/bin/rgw-restore-bucket-index
 usr/bin/rbd
 usr/bin/rbdmap
