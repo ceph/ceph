@@ -150,25 +150,8 @@
 %{!?python3_pkgversion: %global python3_pkgversion 3}
 %{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
-%if 0%{with crimson}
+%if 0%{?rhel} < 10
 %{!?gts_version: %global gts_version 13}
-%else
-%if 0%{?rhel} == 8
-%{!?gts_version: %global gts_version 11}
-%endif
-%endif
-
-# gcc-toolset-13 seems to trigger a linker bug resulting in a segfault in SafeTimer
-# and perhaps elsewhere.  For now, let's just disable it.  See
-# ceph bug https://tracker.ceph.com/issues/63867
-# and
-# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
-# for details.
-#
-# Also disable lto on systems that do not support symver attribute
-# See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200 for details
-%if 0%{?gts_version} == 13 || (0%{?rhel} && 0%{?rhel} < 9)  || ( 0%{?suse_version} && 0%{?suse_version} <= 1500 )
-%define _lto_cflags %{nil}
 %endif
 
 %if ! 0%{?suse_version}
@@ -205,10 +188,6 @@
 %if 0%{gts_version} == 13
 %if 0%{?enable_devtoolset13:1}
 %enable_devtoolset13
-%endif
-%else
-%if 0%{?enable_devtoolset11:1}
-%enable_devtoolset11
 %endif
 %endif
 %endif
@@ -260,19 +239,17 @@ BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
 BuildRequires:	git
 BuildRequires:	grpc-devel
-%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
-BuildRequires:	gcc-c++ >= 11
-%endif
-%if 0%{?suse_version} == 1500
-BuildRequires: gcc11-c++
-%endif
-%if 0%{?gts_version} > 0
-BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++
-%if 0%{?gts_version} >= 12
-BuildRequires:	gcc-toolset-%{gts_version}-runtime
+# Before 13.3, an lto bug resulted in a segfault in SafeTimer and perhaps
+# elsewhere. Require the fixed version so we can reenable lto. See
+# ceph bug https://tracker.ceph.com/issues/63867
+# and
+# gcc bug https://bugzilla.redhat.com/show_bug.cgi?id=2241339
+# for details.
+%if 0%{?gts_version} == 0
+BuildRequires:	gcc-c++ >= 13.3
 %else
-BuildRequires:	gcc-toolset-%{gts_version}-build
-%endif
+BuildRequires:	gcc-toolset-%{gts_version}-gcc-c++ >= 13.3
+BuildRequires:	gcc-toolset-%{gts_version}-runtime
 BuildRequires:	gcc-toolset-%{gts_version}-libatomic-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel} == 9 || 0%{?openEuler}
@@ -400,12 +377,7 @@ BuildRequires:  libasan
 BuildRequires:  protobuf-devel
 BuildRequires:  protobuf-compiler
 %if 0%{?gts_version} > 0
-%if 0%{?gts_version} >= 12
 BuildRequires:  gcc-toolset-%{gts_version}-gcc-plugin-annobin
-%else
-BuildRequires:  gcc-toolset-%{gts_version}-annobin
-BuildRequires:  gcc-toolset-%{gts_version}-annobin-plugin-gcc
-%endif
 BuildRequires:  gcc-toolset-%{gts_version}-libubsan-devel
 BuildRequires:  gcc-toolset-%{gts_version}-libasan-devel
 %endif
@@ -523,8 +495,8 @@ BuildRequires:  libcryptopp-devel
 BuildRequires:  libnuma-devel
 %endif
 %endif
-%if 0%{?rhel} >= 8
-BuildRequires:  /usr/bin/pathfix.py
+%if 0%{?rhel} >= 9
+BuildRequires: python-rpm-macros
 %endif
 
 %description
@@ -1631,8 +1603,7 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
 %if 0%{?rhel} >= 8 || 0%{?openEuler}
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_bindir}/*
-pathfix.py -pni "%{__python3} %{py3_shbang_opts}" %{buildroot}%{_sbindir}/*
+%{py3_shebang_fix} %{buildroot}%{_bindir}/* %{buildroot}%{_sbindir}/*
 %endif
 
 #set up placeholder directories
