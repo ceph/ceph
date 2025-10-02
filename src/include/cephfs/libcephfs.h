@@ -2008,14 +2008,13 @@ int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
  * @param cmount the ceph mount handle to use.
  * @param key_data key data
  * @param key_len key data length
- * @param kid to hold the returned key identifier
+ * @param out_keyid to hold the hashed key identifier, FSCRYPT_KEY_IDENTIFIER_SIZE bytes in length
  * @param user user id
  * @returns zero on success, other returns a negative error code.
  */
 int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
                          const char *key_data, int key_len,
-			 struct ceph_fscrypt_key_identifier *kid,
-			 int user);
+                         char* out_keyid, int user);
 
 /**
  * Remove fscrypt encryption key from the in-memory key manager

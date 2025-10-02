@@ -1015,15 +1015,15 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      ceph_fscrypt_key_identifier kid;
-      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, &kid, ctx->uid);
+      char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, keyid, ctx->uid);
       if (r < 0) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to create a new key: r=" << r << dendl;
         fuse_reply_err(req, -r);
         break;
       }
 
-      memcpy(&arg->key_spec.u.identifier, &kid.raw, 16);
+      memcpy(&arg->key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
       break;
     }
