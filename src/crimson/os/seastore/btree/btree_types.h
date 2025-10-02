@@ -258,6 +258,9 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   bool is_indirect() const {
     return !is_end() && val->pladdr.is_laddr();
   }
+  bool is_direct() const {
+    return !is_end() && val->pladdr.is_paddr();
+  }
   laddr_t get_laddr() const {
     return key;
   }
