@@ -1093,6 +1093,56 @@ class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
         self.mount_a.run_shell(['rmdir', TestSnapSchedulesSnapdir.TEST_DIRECTORY])
 
 
+class TestSnapSchedulesFetchForeignConfig(TestSnapSchedulesHelper):
+    def test_fetch_for_mds_max_snaps_per_dir(self):
+        """Test the correctness of snap directory name"""
+        dir_path = TestSnapSchedulesHelper.TEST_DIRECTORY
+        sdn = self.get_snap_dir_name()
+
+        self.mount_a.run_shell(['mkdir', '-p', dir_path])
+
+        # set a schedule on the dir
+        self.fs_snap_schedule_cmd('add', path=dir_path, snap_schedule='1m')
+
+        self.config_set('mds', 'mds_max_snaps_per_dir', 10)
+
+        time.sleep(11*60)  # wait for 9 snaps to be retained
+
+        snap_path = f"{dir_path}/{sdn}"
+        snapshots = self.mount_a.ls(path=snap_path)
+        fs_count = len(snapshots)
+
+        self.assertTrue(fs_count == 9)
+
+        self.config_set('mds', 'mds_max_snaps_per_dir', 8)
+
+        time.sleep(1*60 + 10)  # wait for max_snaps_per_dir limit to be breached
+
+        snap_path = f"{dir_path}/{sdn}"
+        snapshots = self.mount_a.ls(path=snap_path)
+        fs_count = len(snapshots)
+
+        self.assertTrue(fs_count == 7)
+
+        self.config_set('mds', 'mds_max_snaps_per_dir', 10)
+
+        time.sleep(2*60 + 10)  # wait for more snaps to be created
+
+        snap_path = f"{dir_path}/{sdn}"
+        snapshots = self.mount_a.ls(path=snap_path)
+        fs_count = len(snapshots)
+
+        self.assertTrue(fs_count == 9)
+
+        # remove snapshot schedule
+        self.fs_snap_schedule_cmd('remove', path=dir_path)
+
+        # remove all scheduled snapshots
+        self.remove_snapshots(dir_path, sdn)
+
+        self.mount_a.run_shell(['rmdir', dir_path])
+
+
 """
 Note that the class TestSnapSchedulesMandatoryFSArgument tests snap-schedule
 commands only for multi-fs scenario. Commands for a single default fs should
