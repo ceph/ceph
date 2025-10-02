@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserved.
  *
