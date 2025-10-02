@@ -547,7 +547,7 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
     DEBUG("removing old osdmap epoch {}", superblock.get_oldest_map());
     meta_coll->remove_map(t, superblock.get_oldest_map());
     meta_coll->remove_inc_map(t, superblock.get_oldest_map());
-    superblock.maps.erase(superblock.get_oldest_map());
+    superblock.erase_oldest_maps();
   }
 
   // we should not trim past osdmaps.cached_key_lower_bound()
