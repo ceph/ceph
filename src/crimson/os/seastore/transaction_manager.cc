@@ -350,41 +350,33 @@ TransactionManager::_remove_direct_mapping(
   LOG_PREFIX(TransactionManager::_remove_direct_mapping);
   auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
   if (ret.index() == 1) {
-    return std::move(std::get<1>(ret)
-    ).si_then([&t, mapping, this, FNAME](auto extent) {
-      return lba_manager->remove_mapping(t, std::move(mapping)
-      ).si_then([this, FNAME, &t, extent](auto result) {
-        auto &primary_result = result.result;
-        ceph_assert(primary_result.refcount == 0);
-        ceph_assert(primary_result.addr.is_paddr());
-        ceph_assert(!primary_result.addr.get_paddr().is_zero());
-        ceph_assert(extent);
-        cache->retire_extent(t, extent);
-        DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-               t, primary_result.addr, primary_result.length,
-               primary_result.refcount, primary_result.key);
-        return ref_iertr::make_ready_future<
-          _remove_mapping_result_t>(std::move(result));
-      });
-    });
+    auto extent = co_await std::move(std::get<1>(ret));
+    auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
+    auto &primary_result = result.result;
+    ceph_assert(primary_result.refcount == 0);
+    ceph_assert(primary_result.addr.is_paddr());
+    ceph_assert(!primary_result.addr.get_paddr().is_zero());
+    ceph_assert(extent);
+    cache->retire_extent(t, extent);
+    DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+	   t, primary_result.addr, primary_result.length,
+	   primary_result.refcount, primary_result.key);
+    co_return result;
   } else {
     auto unlinked_child = std::move(std::get<0>(ret));
     auto retired_placeholder = cache->retire_absent_extent_addr(
       t, mapping.get_key(), mapping.get_val(), mapping.get_length()
     )->template cast<RetiredExtentPlaceholder>();
     unlinked_child.child_pos.link_child(retired_placeholder.get());
-    return lba_manager->remove_mapping(t, std::move(mapping)
-    ).si_then([&t, FNAME](auto result) mutable {
-      auto &primary_result = result.result;
-      ceph_assert(primary_result.refcount == 0);
-      ceph_assert(primary_result.addr.is_paddr());
-      ceph_assert(!primary_result.addr.get_paddr().is_zero());
-      DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
-             t, primary_result.addr, primary_result.length,
-             primary_result.refcount, primary_result.key);
-      return ref_iertr::make_ready_future<
-        _remove_mapping_result_t>(std::move(result));
-    });
+    auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
+    auto &primary_result = result.result;
+    ceph_assert(primary_result.refcount == 0);
+    ceph_assert(primary_result.addr.is_paddr());
+    ceph_assert(!primary_result.addr.get_paddr().is_zero());
+    DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
+	   t, primary_result.addr, primary_result.length,
+	   primary_result.refcount, primary_result.key);
+    co_return result;
   }
 }
 
