@@ -148,7 +148,7 @@ TEST(FSEnt, DirCreate)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testdir->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -165,7 +165,7 @@ TEST(FSEnt, DirBase)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testdir->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -280,7 +280,7 @@ TEST(FSEnt, DirBase)
 
 TEST(FSEnt, DirAddDir)
 {
-  bool existed;
+  bool existed{false};
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
   std::unique_ptr<Directory> testdir = std::make_unique<Directory>(dirname, root.get(), env->cct.get());
@@ -314,7 +314,7 @@ TEST(FSEnt, DirAddDir)
 
 TEST(FSEnt, DirRename)
 {
-  bool existed;
+  bool existed{false};
   std::string dirname = get_test_name();
   sf::path tp{base_path / dirname};
   std::unique_ptr<Directory> testdir = std::make_unique<Directory>(dirname, root.get(), env->cct.get());
@@ -357,7 +357,7 @@ TEST(FSEnt, FileCreateReal)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testfile.create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -374,7 +374,7 @@ TEST(FSEnt, FileCreateTemp)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testfile.create(env->dpp, &existed, true);
   EXPECT_EQ(ret, 0);
   EXPECT_FALSE(existed);
@@ -396,7 +396,7 @@ TEST(FSEnt, FileBase)
   EXPECT_FALSE(sf::exists(tp));
   EXPECT_EQ(testfile->get_fd(), -1);
 
-  bool existed;
+  bool existed{false};
   int ret = testfile->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -530,7 +530,7 @@ TEST(FSEnt, SymlinkBase)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testlink->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -562,7 +562,7 @@ TEST(FSEnt, MPDirBase)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testdir->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
@@ -680,7 +680,7 @@ TEST(FSEnt, MPDirTemp)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testdir->create(env->dpp, &existed, true);
 
   EXPECT_EQ(ret, 0);
@@ -771,7 +771,7 @@ TEST(FSEnt, VerDirBase)
 
   EXPECT_FALSE(sf::exists(tp));
 
-  bool existed;
+  bool existed{false};
   int ret = testdir->create(env->dpp, &existed);
 
   EXPECT_EQ(ret, 0);
