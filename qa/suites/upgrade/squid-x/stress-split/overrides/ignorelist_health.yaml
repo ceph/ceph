@@ -18,3 +18,5 @@ overrides:
       - \(MON_DOWN\)
       - noscrub
       - nodeep-scrub
+      - running out of quota
+      - pool\(s\) full
