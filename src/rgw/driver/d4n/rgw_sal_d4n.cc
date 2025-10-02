@@ -132,6 +132,7 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
 #endif
 void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 {
+  if(!m_d4n_trx) {
 	//create D4NTransaction object and pass the Directory* objects to it
 	m_objDir = std::make_unique<rgw::d4n::ObjectDirectory>(this->filter->get_connection());
 	m_blockDir = std::make_unique<rgw::d4n::BlockDirectory>(this->filter->get_connection());
@@ -144,10 +145,12 @@ void D4NFilterBucket::d4n_init_transaction(const DoutPrefixProvider* dpp)
 	m_blockDir->set_redis_pool(this->filter->get_redis_pool());
 	m_bucketDir->set_redis_pool(this->filter->get_redis_pool());
 
-	//start transaction
-	m_d4n_trx->start_trx();
-
-	ldout(g_ceph_context, 0) << "D4NFilterBucket::d4n_init_transaction  D4NTransaction = " << m_d4n_trx.get() << dendl; 
+	if(m_d4n_trx->is_transaction_active() == false) {
+		m_d4n_trx->clear_temp_keys();
+		//start transaction
+		m_d4n_trx->start_trx();
+	}
+  }
 }
 
 void D4NFilterBucket::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
@@ -689,11 +692,12 @@ void D4NFilterObject::d4n_init_transaction(const DoutPrefixProvider* dpp)
     m_objDir->set_redis_pool(driver->get_redis_pool());
     m_blockDir->set_redis_pool(driver->get_redis_pool());
     m_bucketDir->set_redis_pool(driver->get_redis_pool());
+
+    if(m_d4n_trx->is_transaction_active() == false) {
+      m_d4n_trx->clear_temp_keys();
+      m_d4n_trx->start_trx();
+    }
   }
-    //start transaction
-    m_d4n_trx->clear_temp_keys();
-    m_d4n_trx->start_trx();
-    ldpp_dout(dpp, 0) << "D4NFilterObject::d4n_init_transaction " << m_d4n_trx.get() << dendl;	
 }
 
 void D4NFilterObject::finalize_transaction(const DoutPrefixProvider* dpp, int& result_code)
