@@ -47,6 +47,16 @@ function(build_opentelemetry)
     list(APPEND opentelemetry_CMAKE_ARGS -DBoost_INCLUDE_DIR=${CMAKE_BINARY_DIR}/boost/include)
   endif()
 
+  # Check if CMake version is >= 4.0.0
+  if(CMAKE_VERSION VERSION_GREATER_EQUAL "4.0.0")
+    # Use CMAKE_POLICY_VERSION_MINIMUM if set, otherwise default to 3.5
+    if(DEFINED CMAKE_POLICY_VERSION_MINIMUM)
+      list(APPEND opentelemetry_CMAKE_ARGS -DCMAKE_POLICY_VERSION_MINIMUM=${CMAKE_POLICY_VERSION_MINIMUM})
+    else()
+      list(APPEND opentelemetry_CMAKE_ARGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5)
+    endif()
+  endif()
+
   include(ExternalProject)
   ExternalProject_Add(opentelemetry-cpp
     SOURCE_DIR ${opentelemetry_SOURCE_DIR}
