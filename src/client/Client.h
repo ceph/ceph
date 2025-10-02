@@ -382,7 +382,7 @@ public:
   }
 
   /* fscrypt */
-  int add_fscrypt_key(const char *key_data, int key_len, ceph_fscrypt_key_identifier *kid, int user = 0);
+  int add_fscrypt_key(const char *key_data, int key_len, char* keyid, int user = 0);
   int remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user = 0);
   int get_fscrypt_key_status(fscrypt_get_key_status_arg* arg);
 

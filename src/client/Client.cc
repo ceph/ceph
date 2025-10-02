@@ -7325,11 +7325,11 @@ void Client::abort_conn()
 
 int Client::fscrypt_dummy_encryption() {
     // get add key
-    char key[20];
+    char key[FSCRYPT_KEY_IDENTIFIER_SIZE];
     memset(key, 0, sizeof(key));
-    ceph_fscrypt_key_identifier kid;
 
-    int r = add_fscrypt_key(key, FSCRYPT_KEY_IDENTIFIER_SIZE, &kid);
+    char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+    int r = add_fscrypt_key(key, sizeof(key), keyid);
     if (r < 0) {
       goto err;
     }
@@ -7342,7 +7342,7 @@ int Client::fscrypt_dummy_encryption() {
     policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
     policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
     policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-    memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+    memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     r = ll_set_fscrypt_policy_v2(root.get(), policy);
     if (r < 0) {
       goto err;
@@ -7354,7 +7354,7 @@ int Client::fscrypt_dummy_encryption() {
     fscrypt_key_specifier key_spec;
     key_spec.type = FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER;
     key_spec.__reserved = 0;
-    memcpy(key_spec.u.identifier, kid.raw, 16);
+    memcpy(key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
     arg.removal_status_flags = 0;
     arg.key_spec = key_spec;
     r = remove_fscrypt_key(&arg);
@@ -18321,7 +18321,7 @@ void Client::set_uuid(const std::string& uuid)
 }
 
 int Client::add_fscrypt_key(const char *key_data, int key_len,
-                            ceph_fscrypt_key_identifier *kid, int user)
+                            char* keyid, int user)
 {
   auto& key_store = fscrypt->get_key_store();
 
@@ -18334,8 +18334,8 @@ int Client::add_fscrypt_key(const char *key_data, int key_len,
   }
 
   auto& k = kh->get_key();
-  if (kid) {
-    *kid = k->get_identifier();
+  if (keyid) {
+    memcpy(keyid, &k->get_identifier().raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
   }
 
   return 0;

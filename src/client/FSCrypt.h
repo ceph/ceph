@@ -68,8 +68,7 @@ int fscrypt_calc_hkdf(char hkdf_context,
 
 
 struct ceph_fscrypt_key_identifier {
-#define FSCRYPT_KEY_IDENTIFIER_LEN 16
-  char raw[FSCRYPT_KEY_IDENTIFIER_LEN];
+  char raw[FSCRYPT_KEY_IDENTIFIER_SIZE];
 
   int init(const char *k, int klen);
   int init(const struct fscrypt_key_specifier& k);

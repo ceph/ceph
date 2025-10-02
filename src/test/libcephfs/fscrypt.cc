@@ -71,9 +71,8 @@ int do_fscrypt_mount(struct ceph_mount_info *cmount, const char *root)
     return r;
   }
 
-  struct ceph_fscrypt_key_identifier kid;
-
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 0);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 0);
   if (r < 0) {
     std::clog << __func__ << "() ceph_mount add_fscrypt_key r=" << r << std::endl;
     return r;
@@ -88,22 +87,22 @@ string get_unique_dir_name()
   return string("ceph_test_libcephfs_fscrypt.") + stringify(mypid) + "." + stringify(rand());
 }
 
-void generate_remove_key_arg(ceph_fscrypt_key_identifier kid, fscrypt_remove_key_arg* arg){
+void generate_remove_key_arg(char *keyid, fscrypt_remove_key_arg* arg){
   fscrypt_key_specifier key_spec;
   key_spec.type = FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER;
   key_spec.__reserved = 0;
-  memcpy(key_spec.u.identifier, kid.raw, 16);
+  memcpy(key_spec.u.identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
   arg->removal_status_flags = 0;
   arg->key_spec = key_spec;
 }
 
-void populate_policy(struct ceph_fscrypt_key_identifier kid, struct fscrypt_policy_v2* policy) {
+void populate_policy(char *keyid, struct fscrypt_policy_v2* policy) {
   memset(policy, 0, sizeof(*policy));
   policy->version = 2;
   policy->contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy->filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
   policy->flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-  memcpy(policy->master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  memcpy(policy->master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 }
 
 int init_mount(struct ceph_mount_info** cmount){
@@ -195,9 +194,8 @@ int fscrypt_encrypt(const string& dir_path)
 
   ceph_close(cmount, key_fd);
 
-  struct ceph_fscrypt_key_identifier kid;
-
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 0);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 0);
   if (r < 0) {
     std::clog << __func__ << "(): ceph_add_fscrypt_key() r=" << r << std::endl;
     return r;
@@ -208,7 +206,7 @@ int fscrypt_encrypt(const string& dir_path)
   policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
   policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
   if (fd < 0) {
@@ -266,17 +264,15 @@ out:
 }
 
 TEST(FSCrypt, MultipleUnlockLockClaims) {
-  struct ceph_fscrypt_key_identifier kid;
-  struct ceph_fscrypt_key_identifier kid2;
-
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1091);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1091);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid2, 1299);
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
   ASSERT_EQ(0, r);
   if (r < 0) {
     std::clog << __func__ << "() 1ceph_mount add_fscrypt_key r=" << r << std::endl;
@@ -284,7 +280,7 @@ TEST(FSCrypt, MultipleUnlockLockClaims) {
 
   //remove user 1 of 2, should return 0, but 0x2 status_flag
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -292,7 +288,7 @@ TEST(FSCrypt, MultipleUnlockLockClaims) {
 
    //remove suser 2 of 2, ret 0, 0x0 status_flag
   fscrypt_remove_key_arg arg2;
-  generate_remove_key_arg(kid2, &arg2);
+  generate_remove_key_arg(keyid, &arg2);
 
   r = ceph_remove_fscrypt_key(cmount, &arg2, 1091);
   ASSERT_EQ(0, r);
@@ -301,17 +297,16 @@ TEST(FSCrypt, MultipleUnlockLockClaims) {
 }
 
 TEST(FSCrypt, UnlockKeyUserDNE) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1091);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1091);
   ASSERT_EQ(0, r);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -320,17 +315,16 @@ TEST(FSCrypt, UnlockKeyUserDNE) {
 }
 
 TEST(FSCrypt, UnlockKeyDNE) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
   ASSERT_EQ(0, r);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -342,20 +336,19 @@ TEST(FSCrypt, UnlockKeyDNE) {
   ceph_shutdown(cmount);
 }
 
-#warning key_remove todo: 'EINVAL: invalid key specifier type, or reserved bits were set' case
+//#warning key_remove todo: 'EINVAL: invalid key specifier type, or reserved bits were set' case
 
 TEST(FSCrypt, SetPolicyEmptyDir) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
   ASSERT_EQ(0, r);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -364,8 +357,6 @@ TEST(FSCrypt, SetPolicyEmptyDir) {
 }
 
 TEST(FSCrypt, SetPolicyNotEmptyDir) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -382,10 +373,11 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
 
   int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
   ASSERT_EQ(-ENOTEMPTY, r);
@@ -394,7 +386,7 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
   ASSERT_EQ(0, ceph_rmdir(cmount, dir2_path.c_str()));
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -405,8 +397,6 @@ TEST(FSCrypt, SetPolicyNotEmptyDir) {
 }
 
 TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -416,10 +406,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(0, r);
@@ -432,8 +423,6 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicy) {
 }
 
 TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -443,10 +432,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(0, r);
@@ -455,11 +445,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
   for (int i = 0; i < (int)sizeof(fscrypt_key2); ++i) {
     fscrypt_key2[i] = (char)rand();
   }
-  struct ceph_fscrypt_key_identifier kid2;
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key2, sizeof(fscrypt_key2), &kid2, 1299);
+  char keyid2[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key2, sizeof(fscrypt_key2), keyid2, 1299);
 
   struct fscrypt_policy_v2 policy2;
-  populate_policy(kid2, &policy2);
+  populate_policy(keyid2, &policy2);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy2);
   ASSERT_EQ(-EEXIST, r);
@@ -470,15 +460,15 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicy) {
 
 TEST(FSCrypt, SetPolicyNonDir) {
   //can be file, symlink, device file etc
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
   //setup policy
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  memset(keyid, 0, sizeof(keyid));
+  populate_policy(keyid, &policy);
 
   //file
   string file_path = "file1";
@@ -512,8 +502,6 @@ TEST(FSCrypt, SetPolicyNonDir) {
 }
 
 TEST(FSCrypt, SetPolicyNotSupported) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -523,7 +511,8 @@ TEST(FSCrypt, SetPolicyNotSupported) {
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
   policy.version = 2;
@@ -531,7 +520,7 @@ TEST(FSCrypt, SetPolicyNotSupported) {
   policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
   memset(policy.__reserved, 0, sizeof(policy.__reserved));
-  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-EINVAL, r);
@@ -541,7 +530,7 @@ TEST(FSCrypt, SetPolicyNotSupported) {
   policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
   policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
   memset(policy.__reserved, 0, sizeof(policy.__reserved));
-  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+  memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-EINVAL, r);
@@ -552,8 +541,6 @@ TEST(FSCrypt, SetPolicyNotSupported) {
 
 
 TEST(FSCrypt, LockedListDir) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -564,10 +551,11 @@ TEST(FSCrypt, LockedListDir) {
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -588,7 +576,7 @@ TEST(FSCrypt, LockedListDir) {
     }
   }
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -618,8 +606,6 @@ done:
 }
 
 TEST(FSCrypt, ReadLockedDir) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -630,10 +616,11 @@ TEST(FSCrypt, ReadLockedDir) {
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -654,7 +641,7 @@ TEST(FSCrypt, ReadLockedDir) {
     }
   }
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -681,8 +668,6 @@ read:
 }
 
 TEST(FSCrypt, WriteLockedDir) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -694,10 +679,11 @@ TEST(FSCrypt, WriteLockedDir) {
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -718,7 +704,7 @@ TEST(FSCrypt, WriteLockedDir) {
     }
   }
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -747,8 +733,6 @@ write:
 }
 
 TEST(FSCrypt, LockedCreateSnap) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -759,10 +743,11 @@ TEST(FSCrypt, LockedCreateSnap) {
   string file_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -776,7 +761,7 @@ TEST(FSCrypt, LockedCreateSnap) {
   ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -790,8 +775,6 @@ TEST(FSCrypt, LockedCreateSnap) {
 }
 
 TEST(FSCrypt, RenameLockedSource) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -802,10 +785,11 @@ TEST(FSCrypt, RenameLockedSource) {
   string src_path = "dir1/file5";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -827,7 +811,7 @@ TEST(FSCrypt, RenameLockedSource) {
   }
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -854,8 +838,6 @@ TEST(FSCrypt, RenameLockedSource) {
 }
 
 TEST(FSCrypt, RenameLockedDest) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -867,10 +849,11 @@ TEST(FSCrypt, RenameLockedDest) {
   string dest_path = "dir1/file_dest";
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
 
@@ -882,7 +865,7 @@ TEST(FSCrypt, RenameLockedDest) {
   ceph_close(cmount, fd2);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -896,8 +879,6 @@ TEST(FSCrypt, RenameLockedDest) {
 }
 
 TEST(FSCrypt, RemoveBusyFile) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -907,10 +888,11 @@ TEST(FSCrypt, RemoveBusyFile) {
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ceph_close(cmount, fd);
@@ -925,7 +907,7 @@ TEST(FSCrypt, RemoveBusyFile) {
   ASSERT_EQ(32, r);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -935,7 +917,7 @@ TEST(FSCrypt, RemoveBusyFile) {
   ASSERT_EQ(0, ceph_unlink(cmount, path.c_str()));
 
   //actually remove the key
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
@@ -946,8 +928,6 @@ TEST(FSCrypt, RemoveBusyFile) {
 }
 
 TEST(FSCrypt, RemoveBusyCreate) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -956,10 +936,11 @@ TEST(FSCrypt, RemoveBusyCreate) {
   ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ceph_close(cmount, fd);
@@ -974,7 +955,7 @@ TEST(FSCrypt, RemoveBusyCreate) {
   ASSERT_EQ(32, r);
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -994,7 +975,7 @@ TEST(FSCrypt, RemoveBusyCreate) {
   ASSERT_EQ(0, ceph_unlink(cmount, path.c_str()));
 
   //actually remove the key
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
@@ -1009,7 +990,6 @@ TEST(FSCrypt, RemoveBusyCreate) {
 // if this test fails, it means that these ops has been impleneted AND we must reject these ops for encrypted files
 // see https://www.kernel.org/doc/html/v4.18/filesystems/fscrypt.html Access Semantics section
 TEST(FSCrypt, FallocateNotImplemented) {
-  struct ceph_fscrypt_key_identifier kid;
   struct ceph_mount_info *cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -1019,9 +999,10 @@ TEST(FSCrypt, FallocateNotImplemented) {
   ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
 
   int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ceph_close(cmount, fd);
@@ -1053,8 +1034,6 @@ TEST(FSCrypt, FallocateNotImplemented) {
 }
 
 TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -1064,10 +1043,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
 
   int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
 
@@ -1085,7 +1065,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
   ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);
@@ -1096,8 +1076,6 @@ TEST(FSCrypt, SetPolicyAlreadyExistSamePolicyNotEmpty) {
 }
 
 TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
-  struct ceph_fscrypt_key_identifier kid;
-
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
@@ -1107,10 +1085,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
 
   int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
 
   struct fscrypt_policy_v2 policy;
-  populate_policy(kid, &policy);
+  populate_policy(keyid, &policy);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
 
@@ -1125,11 +1104,11 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   for (int i = 0; i < (int)sizeof(fscrypt_key2); ++i) {
     fscrypt_key2[i] = (char)rand();
   }
-  struct ceph_fscrypt_key_identifier kid2;
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key2, sizeof(fscrypt_key2), &kid2, 1299);
+  char keyid2[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key2, sizeof(fscrypt_key2), keyid2, 1299);
 
   struct fscrypt_policy_v2 policy2;
-  populate_policy(kid2, &policy2);
+  populate_policy(keyid2, &policy2);
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy2);
 
@@ -1138,7 +1117,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
   fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
+  generate_remove_key_arg(keyid, &arg);
 
   r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
   ASSERT_EQ(0, r);

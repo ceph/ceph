@@ -168,9 +168,8 @@ public:
 
       close(key_fd);
 
-      struct ceph_fscrypt_key_identifier kid;
-
-      r = add_fscrypt_key(fse->key, sizeof(fse->key), &kid);
+      char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+      r = add_fscrypt_key(fse->key, sizeof(fse->key), keyid);
       if (r < 0) {
         std::clog << __func__ << "(): add_fscrypt_key() r=" << r << std::endl;
         throw std::runtime_error("add_fscrypt_key() returned error");
@@ -181,7 +180,7 @@ public:
       policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
       policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
       policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-      memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+      memcpy(policy.master_key_identifier, keyid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
       int fd = open(fse->name.c_str(), O_DIRECTORY, myperm, 0);
       if (fd < 0) {
@@ -216,9 +215,8 @@ public:
         return r;
       }
 
-      struct ceph_fscrypt_key_identifier kid;
-
-      r = add_fscrypt_key(fse->key, sizeof(fse->key), &kid);
+      char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+      r = add_fscrypt_key(fse->key, sizeof(fse->key), keyid);
       if (r < 0) {
         std::clog << __func__ << "() ceph_mount add_fscrypt_key r=" << r << std::endl;
         return r;
