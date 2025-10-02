@@ -206,17 +206,22 @@ TransactionManager::ref_ret TransactionManager::remove(
 {
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, *ref);
-  auto mapping = co_await lba_manager->get_mapping(t, *ref);
-  auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
-  assert(!result.direct_result);
-  auto &primary_result = result.result;
-  if (primary_result.refcount == 0) {
+  auto cursor = co_await lba_manager->get_cursor(t, *ref);
+  assert(cursor->is_direct());
+  extent_ref_count_t refcount = cursor->get_refcount();
+  auto laddr = cursor->get_laddr();
+  auto length = cursor->get_length();
+  assert(refcount > 0);
+  --refcount;
+  co_await lba_manager->update_mapping_refcount(
+    t, std::move(cursor), -1);
+  if (refcount == 0) {
     cache->retire_extent(t, ref);
   }
   DEBUGT("removed {}~0x{:x} refcount={} -- {}",
-	 t, primary_result.addr, primary_result.length,
-	 primary_result.refcount, *ref);
-  co_return primary_result.refcount;
+	 t, laddr, length,
+	 refcount, *ref);
+  co_return refcount;
 }
 
 TransactionManager::ref_ret TransactionManager::remove(
