@@ -497,23 +497,6 @@ int MemStore::omap_get_header(
   return 0;
 }
 
-int MemStore::omap_get_keys(
-  CollectionHandle& ch,              ///< [in] Collection containing oid
-  const ghobject_t &oid, ///< [in] Object containing omap
-  std::set<std::string> *keys      ///< [out] Keys defined on oid
-  )
-{
-  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-  ObjectRef o = c->get_object(oid);
-  if (!o)
-    return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  for (auto p = o->omap.begin(); p != o->omap.end(); ++p)
-    keys->insert(p->first);
-  return 0;
-}
-
 int MemStore::omap_get_values(
   CollectionHandle& ch,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap

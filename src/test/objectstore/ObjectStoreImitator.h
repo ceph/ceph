@@ -319,12 +319,6 @@ public:
                       ) override {
     return 0;
   }
-  int omap_get_keys(CollectionHandle &c,   ///< [in] Collection containing oid
-                    const ghobject_t &oid, ///< [in] Object containing omap
-                    std::set<std::string> *keys ///< [out] Keys defined on oid
-                    ) override {
-    return 0;
-  }
   int omap_get_values(CollectionHandle &c,   ///< [in] Collection containing oid
                       const ghobject_t &oid, ///< [in] Object containing omap
                       const std::set<std::string> &keys, ///< [in] Keys to get
