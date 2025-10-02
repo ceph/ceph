@@ -7819,14 +7819,14 @@ next:
 
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(object);
 
-    RGWObjState *state;
-
-    ret = obj->get_obj_state(dpp(), &state, null_yield);
+    ret = obj->load_obj_state(dpp(), null_yield);
     if (ret < 0) {
       return -ret;
     }
 
-    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), *state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
+    RGWObjState& state = static_cast<rgw::sal::RadosObject*>(obj.get())->get_state();
+
+    ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->bucket_index_read_olh_log(dpp(), bucket->get_info(), state, obj->get_obj(), 0, &log, &is_truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed reading olh: " << cpp_strerror(-ret) << std::endl;
       return -ret;
