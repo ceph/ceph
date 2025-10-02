@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- mode:python; tab-width:4; indent-tabs-mode:nil -*-
 # vim: ts=4 sw=4 expandtab
+
 #
 """
 Copyright (C) 2015 Red Hat
