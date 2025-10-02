@@ -13,7 +13,7 @@ COPY \
     install-deps.sh \
     run-make-check.sh \
     src/script/buildcontainer-setup.sh \
-    ${CEPH_CTR_SRC}
+    ${CEPH_CTR_SRC}/
 
 
 FROM $DISTRO
