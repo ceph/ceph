@@ -13731,59 +13731,6 @@ int BlueStore::omap_get_header(
   return r;
 }
 
-int BlueStore::omap_get_keys(
-  CollectionHandle &c_,              ///< [in] Collection containing oid
-  const ghobject_t &oid, ///< [in] Object containing omap
-  set<string> *keys      ///< [out] Keys defined on oid
-  )
-{
-  Collection *c = static_cast<Collection *>(c_.get());
-  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  auto start1 = mono_clock::now();
-  std::shared_lock l(c->lock);
-  int r = 0;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  if (!o->onode.has_omap())
-    goto out;
-  o->flush();
-  {
-    const string& prefix = o->get_omap_prefix();
-    string head, tail;
-    o->get_omap_key(string(), &head);
-    o->get_omap_tail(&tail);
-    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, KeyValueDB::IteratorBounds{head, tail});
-    it->lower_bound(head);
-    while (it->valid()) {
-      if (it->key() >= tail) {
-	dout(30) << __func__ << "  reached tail" << dendl;
-	break;
-      }
-      string user_key;
-      o->decode_omap_key(it->key(), &user_key);
-      dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
-	       << " -> " << user_key << dendl;
-      keys->insert(user_key);
-      it->next();
-    }
-  }
- out:
-  c->store->log_latency(
-    __func__,
-    l_bluestore_omap_get_keys_lat,
-    mono_clock::now() - start1,
-    c->store->cct->_conf->bluestore_log_omap_iterator_age);
-
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
-	   << dendl;
-  return r;
-}
-
 int BlueStore::omap_get_values(
   CollectionHandle &c_,        ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
