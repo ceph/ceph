@@ -305,6 +305,7 @@ public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
   {
+    DEFAULT_W = "6";
   }
 
   bool check_w(std::ostream *ss) const override;
