@@ -7729,7 +7729,10 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, InodeRef *end
   return rc;
 }
 
-int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options)
+int Client::path_walk(InodeRef dirinode, const filepath& origpath,
+		      walk_dentry_result* result, const UserPerm& perms,
+		      const PathWalk_ExtraOptions& extra_options,
+		      std::string trimmed_path)
 {
   int rc = 0;
   filepath path = origpath;
@@ -7753,7 +7756,11 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
   int symlinks = 0;
   unsigned i = 0;
 
-  ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << path << dendl;
+  if (trimmed_path == "") {
+    std::string trimmed_path = path.get_trimmed_path();
+  }
+
+  ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << trimmed_path << dendl;
 
   if (path.depth() == 0) {
     /* diri/dname can also be used as a filepath; or target */
@@ -7767,7 +7774,7 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     int caps = 0;
     dname = path[i];
     ldout(cct, 10) << " " << i << " " << *diri << " " << dname << dendl;
-    ldout(cct, 20) << "  (path is " << path << ")" << dendl;
+    ldout(cct, 20) << "  (path is " << trimmed_path << ")" << dendl;
     InodeRef next;
     if (!diri.get()->is_dir()) {
       ldout(cct, 20) << diri.get() << " is not a dir inode, name " << dname.c_str() << dendl;
@@ -15471,11 +15478,12 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 
 int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms)
 {
-  ldout(cct, 8) << "_rmdir(" << dir->ino << " " << name << " uid "
+  std::string trimmed_path = filepath(name).get_trimmed_path();
+  ldout(cct, 8) << "_rmdir(" << dir->ino << " " << trimmed_path << " uid "
 		<< perms.uid() << " gid " << perms.gid() << ")" << dendl;
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dir, filepath(name), &wdr, perms, {.followsym = false}); rc < 0) {
+  if (int rc = path_walk(dir, filepath(name), &wdr, perms, {.followsym = false}, trimmed_path); rc < 0) {
     return rc;
   }
 

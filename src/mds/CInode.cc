@@ -177,7 +177,7 @@ int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
 ostream& operator<<(ostream& out, const CInode& in)
 {
   string path;
-  in.make_path_string(path, true);
+  in.make_trimmed_path_string(path);
 
   out << "[inode " << in.ino();
   out << " [" 
@@ -1095,15 +1095,29 @@ bool CInode::is_projected_ancestor_of(const CInode *other) const
  * use_parent is NULL and projected is true, the primary parent's projected
  * inode is used all the way up the path chain. Otherwise the primary parent
  * stable inode is used.
+ *
+ * path_comp_count = path components count. default value is -1, which implies
+ * generate full path.
  */
-void CInode::make_path_string(string& s, bool projected, const CDentry *use_parent) const
+void CInode::make_path_string(string& s, bool projected,
+			      const CDentry *use_parent,
+			      int path_comp_count) const
 {
   if (!use_parent) {
     use_parent = projected ? get_projected_parent_dn() : parent;
   }
 
   if (use_parent) {
-    use_parent->make_path_string(s, projected);
+    if (path_comp_count == -1) {
+      use_parent->make_path_string(s, projected, path_comp_count);
+    } else if (path_comp_count >= 1) {
+      --path_comp_count;
+      use_parent->make_path_string(s, projected, path_comp_count);
+    } else if (path_comp_count == 0) {
+      // this indicates that path has been shortened.
+      s = "...";
+      return;
+    }
   } else if (is_root()) {
     s = "";
   } else if (is_mdsdir()) {
@@ -1120,12 +1134,31 @@ void CInode::make_path_string(string& s, bool projected, const CDentry *use_pare
   }
 }
 
-void CInode::make_path(filepath& fp, bool projected) const
+/* XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ *
+ * path_comp_count = path components count. default value is 10, which implies
+ * generate full path.
+ */
+void CInode::make_trimmed_path_string(string& s, bool projected,
+				      const CDentry* use_parent,
+				      int path_comp_count) const
+{
+  make_path_string(s, projected, use_parent, path_comp_count);
+}
+
+void CInode::make_path(filepath& fp, bool projected, int path_comp_count) const
 {
   const CDentry *use_parent = projected ? get_projected_parent_dn() : parent;
   if (use_parent) {
     ceph_assert(!is_base());
-    use_parent->make_path(fp, projected);
+    use_parent->make_path(fp, projected, path_comp_count);
   } else {
     fp = filepath(ino());
   }
@@ -2695,7 +2728,7 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
 
       if (pi->dirstat.nfiles < 0 || pi->dirstat.nsubdirs < 0) {
         std::string path;
-        make_path_string(path);
+	make_trimmed_path_string(path);
 	clog->error() << "Inconsistent statistics detected: fragstat on inode "
                       << ino() << " (" << path << "), inode has " << pi->dirstat;
 	ceph_assert(!"bad/negative fragstat" == g_conf()->mds_verify_scatter);
@@ -5001,7 +5034,7 @@ next:
 
       if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
         std::string path;
-        in->make_path_string(path);
+	in->make_trimmed_path_string(path);
         in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
                                        << "(" << path << "), rewriting it";
         in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
