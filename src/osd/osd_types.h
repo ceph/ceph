@@ -985,6 +985,19 @@ inline std::ostream& operator<<(std::ostream& out, const eversion_t& e) {
   return out << e.epoch << "'" << e.version;
 }
 
+namespace std {
+template <>
+struct hash<eversion_t> {
+  size_t operator()(const eversion_t& ev) const noexcept
+  {
+    // Combine epoch and version with a simple shift-based mix
+    // This is fast and works well when differences are small
+    return (size_t)ev.epoch ^ ((size_t)ev.version << 8 |
+			       (size_t)ev.version >> (sizeof(size_t) * 8 - 8));
+  }
+};
+}  // namespace std
+
 /**
  * objectstore_perf_stat_t
  *
