@@ -139,7 +139,7 @@ describe('NavigationComponent', () => {
           '.tc_submenuitem_rgw_daemons',
           '.tc_submenuitem_rgw_users',
           '.tc_submenuitem_rgw_buckets',
-          '.tc_submenuitem_rgw_topics'
+          '.tc_submenuitem_rgw_notification'
         ]
       ]
     ];
@@ -188,7 +188,7 @@ describe('NavigationComponent', () => {
           '.tc_submenuitem_rgw_daemons',
           '.tc_submenuitem_rgw_users',
           '.tc_submenuitem_rgw_buckets',
-          '.tc_submenuitem_rgw_topics'
+          '.tc_submenuitem_rgw_notification'
         ]
       ]
     ];
@@ -248,9 +248,9 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_block_iscsi': 'iSCSI',
         '.tc_submenuitem_block_nvme': 'NVMe/TCP',
         '.tc_submenuitem_rgw_overview': 'Overview',
-        '.tc_submenuitem_rgw_users': 'Users',
+        '.tc_submenuitem_rgw_users': 'User management',
         '.tc_submenuitem_rgw_buckets': 'Buckets',
-        '.tc_submenuitem_rgw_topics': 'Topics',
+        '.tc_submenuitem_rgw_notification': 'Notification destination',
         '.tc_submenuitem_rgw_multi-site': 'Multi-site',
         '.tc_submenuitem_rgw_daemons': 'Gateways',
         '.tc_submenuitem_rgw_nfs': 'NFS',

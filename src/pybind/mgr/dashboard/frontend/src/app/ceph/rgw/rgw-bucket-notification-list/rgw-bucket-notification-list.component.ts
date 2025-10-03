@@ -73,8 +73,8 @@ export class RgwBucketNotificationListComponent extends ListWithDetails implemen
         flexGrow: 2
       },
       {
-        name: $localize`Topic`,
-        prop: 'Topic',
+        name: $localize`Destination`,
+        prop: 'Destination',
         flexGrow: 1,
         cellTransformation: CellTemplate.copy
       },
