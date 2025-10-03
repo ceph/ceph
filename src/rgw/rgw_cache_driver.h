@@ -32,7 +32,7 @@ struct Partition {
   std::string name;
   std::string type;
   std::string location;
-  uint64_t size;
+  uint64_t reserve_size;
 };
 
 class CacheDriver {
