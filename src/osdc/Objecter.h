@@ -2813,6 +2813,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
+  void op_post_submit(Op *op);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);
