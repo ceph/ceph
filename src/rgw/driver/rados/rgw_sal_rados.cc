@@ -36,11 +36,13 @@
 #include "rgw_asio_thread.h"
 
 #include "cls/rgw/cls_rgw_client.h"
+#include "cls/queue/cls_queue_client.h"
 
 #include "rgw_acl.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_bucket.h"
 #include "rgw_bucket_logging.h"
+#include "rgw_bucketlogging.h"
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
 #include "rgw_lc_tier.h"
@@ -1146,7 +1148,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
     const DoutPrefixProvider *dpp,
     RGWObjVersionTracker* objv_tracker) {
   rgw_pool data_pool;
-  const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
+  const auto obj_name_oid = rgw::bucketlogging::object_name_oid(this, prefix);
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), rgw_obj{get_key(), obj_name_oid}, &data_pool)) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when getting logging object name" << dendl;
@@ -1189,7 +1191,7 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
   }
   bufferlist bl;
   bl.append(obj_name);
-  const int ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+  int ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
                                data_pool,
                                obj_name_oid,
                                bl,
@@ -1198,12 +1200,74 @@ int RadosBucket::set_logging_object_name(const std::string& obj_name,
                                ceph::real_time::clock::now(),
                                y,
                                no_change_attrs());
-  if (ret == -EEXIST) {
-    ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid << "' with logging object name:'" << obj_name  << "'. ret = " << ret << dendl;
-  } else if (ret == -ECANCELED) {
-    ldpp_dout(dpp, 20) << "INFO: race detected in updating logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
-  } else if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+  if (ret < 0) {
+    if (ret == -EEXIST) {
+      ldpp_dout(dpp, 20) << "INFO: race detected in initializing '" << obj_name_oid
+                         << "' with logging object name:'" << obj_name
+                         << "'. ret = " << ret << dendl;
+    } else if (ret == -ECANCELED) {
+     ldpp_dout(dpp, 20) << "INFO: race detected in updating logging object name '"
+                        << obj_name << "' at '" << obj_name_oid << "'. ret = " 
+                        << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 1) << "ERROR: failed to set logging object name '" << obj_name << "' at '" << obj_name_oid << "'. ret = " << ret << dendl;
+    }
+    return ret;
+  }
+
+  auto ioctx_logging = store->getRados()->get_logging_pool_ctx();
+
+  {
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    std::string queue_name = "bucket_logging_commit_queues";
+    cls_queue_init(op, queue_name, 1024 * 1024 * 4);
+    ret = rgw_rados_operate(dpp, ioctx_logging, queue_name, std::move(op), y); 
+    if (ret < 0 && ret != -EEXIST) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create logging queues object:" 
+	                << queue_name << ". ret = " << ret << dendl;
+      return ret;
+    }
+    // Add entry to the queue
+    librados::ObjectWriteOperation op1;
+    rgw::bucket_logging::commit_log_entry_t q_entry;
+    q_entry.logging_obj_name = obj_name_oid;
+    bufferlist bl;
+    encode(q_entry, bl);
+    std::vector<buffer::list> bl_data_vec{std::move(bl)};
+    cls_queue_enqueue(op1, 0, bl_data_vec);
+    ret = rgw_rados_operate(dpp, ioctx_logging, queue_name, std::move(op1), y); 
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to enqueue logging object:" 
+	                << queue_name << ". ret = " << ret << dendl;
+      return ret;
+    }
+  }
+  {
+    librados::ObjectWriteOperation op;
+    op.create(true);
+    std::string queue_name = obj_name_oid;
+    cls_queue_init(op, queue_name, 1024 * 1024 * 4);
+    ret = rgw_rados_operate(dpp, ioctx_logging, queue_name, std::move(op), y); 
+    if (ret < 0 && ret != -EEXIST) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to create logging queues object:" 
+	                << queue_name << ". ret = " << ret << dendl;
+      return ret;
+    }
+    // Add entry to the queue
+    librados::ObjectWriteOperation op1;
+    rgw::bucket_logging::commit_log_entry_t q_entry;
+    q_entry.logging_obj_name = obj_name;
+    bufferlist bl;
+    encode(q_entry, bl);
+    std::vector<buffer::list> bl_data_vec{std::move(bl)};
+    cls_queue_enqueue(op1, 0, bl_data_vec);
+    ret = rgw_rados_operate(dpp, ioctx_logging, queue_name, std::move(op1), y); 
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to enqueue logging object:" 
+	                << queue_name << ". ret = " << ret << dendl;
+      return ret;
+    }
   }
   return ret;
 }
@@ -1234,8 +1298,11 @@ std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::strin
 
 int RadosBucket::remove_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) {
   rgw_pool data_pool;
-  const rgw_obj head_obj{get_key(), obj_name};
+  rgw_obj head_obj{get_key(), obj_name};
   const auto placement_rule = get_placement_rule();
+
+  //NITHYA : Hack! TODO: figure out if the pool is EC
+  head_obj.set_in_extra_data(true);
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
@@ -1256,8 +1323,10 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
     const DoutPrefixProvider *dpp,
     const std::string& prefix,
     std::string* last_committed) {
+
+  rgw_pool extra_data_pool;
   rgw_pool data_pool;
-  const rgw_obj head_obj{get_key(), obj_name};
+  rgw_obj head_obj{get_key(), obj_name};
   const auto placement_rule = get_placement_rule();
 
   if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &data_pool)) {
@@ -1265,6 +1334,18 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
       "' when committing logging object"  << dendl;
     return -EIO;
   }
+  //NITHYA : Hack!
+  head_obj.set_in_extra_data(true);
+
+  if (!store->getRados()->get_obj_data_pool(placement_rule, head_obj, &extra_data_pool)) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
+      "' when committing logging object"  << dendl;
+    return -EIO;
+  }
+
+  //NITHYA : Hack! Undo.
+  head_obj.set_in_extra_data(false);
+
   const auto obj_name_oid = bucketlogging::object_name_oid(this, prefix);
   if (last_committed) {
     if (const int ret = get_committed_logging_object(store,
@@ -1289,7 +1370,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   ceph::real_time mtime;
   bufferlist bl_data;
   if (auto ret = rgw_get_system_obj(store->svc()->sysobj,
-                     data_pool,
+                     extra_data_pool,
                      temp_obj_name,
                      bl_data,
                      nullptr,
@@ -1319,6 +1400,33 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
         ldpp_dout(dpp, 1) << "ERROR: failed to commit empty logging object '" << temp_obj_name << "'. error: " << ret << dendl;
       }
       return ret;
+    }
+  } else {
+    ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+                               data_pool,
+                               temp_obj_name,
+                               bl_data,
+                               true,
+                               nullptr,
+                               mtime,
+                               y,
+                               &obj_attrs);
+
+    if (ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to write logging data when committing object '" << temp_obj_name
+	  << ". error: " << ret << dendl;
+	return ret;
+    }
+
+    ret = rgw_delete_system_obj(dpp, store->svc()->sysobj,
+				extra_data_pool,
+				temp_obj_name,
+				nullptr,
+				y); 
+    if (ret < 0  && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to delete logging data when "
+			<< "committing object '" << temp_obj_name
+		        << ". error: " << ret << dendl;
     }
   }
 
@@ -1434,13 +1542,17 @@ int RadosBucket::write_logging_object(const std::string& obj_name,
   const auto temp_obj_name = to_temp_object_name(this, obj_name);
   rgw_pool data_pool;
   rgw_obj obj{get_key(), obj_name};
+
+  //NITHYA : Hack!
+  obj.set_in_extra_data(true);
+
   if (!store->getRados()->get_obj_data_pool(get_placement_rule(), obj, &data_pool)) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get data pool for bucket '" << get_key() <<
       "' when writing logging object" << dendl;
     return -EIO;
   }
   librados::IoCtx io_ctx;
-  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx); ret < 0) {
+  if (const auto ret = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), data_pool, io_ctx, true); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get IO context for logging object from data pool:" << data_pool.to_str() << dendl;
     return -EIO;
   }
