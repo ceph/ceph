@@ -20,9 +20,14 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
-#include "rgw_ssd_driver.h"
-#include "rgw_redis_driver.h"
 
+#include "driver/ssd/rgw_ssd_driver.h"
+#include "driver/redis/rgw_redis_driver.h"
+
+#include "driver/ssd/rgw_ssd_driver.h"
+#include "driver/redis/rgw_redis_driver.h"
+
+#include "driver/shared/d4n_data.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
@@ -37,17 +42,21 @@ namespace rgw::d4n {
   class PolicyDriver;
 }
 
-namespace rgw { namespace sal {
+namespace rgw::sal {
 
 inline std::string get_cache_block_prefix(rgw::sal::Object* object, const std::string& version)
-{
+{ 
   return fmt::format("{}{}{}{}{}", url_encode(object->get_bucket()->get_bucket_id(), true), CACHE_DELIM, url_encode(version, true), CACHE_DELIM, url_encode(object->get_name(), true));
 }
-
+  
 inline std::string get_key_in_cache(const std::string& prefix, const std::string& offset, const std::string& len)
 {
   return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
-}
+} 
+  
+} // namespace rgw::sal
+
+namespace rgw::sal {
 
 using boost::redis::connection;
 
@@ -360,4 +369,4 @@ public:
             const char *if_nomatch = nullptr) override;
 };
 
-} } // namespace rgw::sal
+} // namespace rgw::sal
