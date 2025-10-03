@@ -40,7 +40,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             client_addr: Optional[List[str]] = None,
             squash: str = 'none',
             sectype: Optional[List[str]] = None,
-            cmount_path: Optional[str] = "/"
+            cmount_path: Optional[str] = "/",
+            delegations: Optional[str] = "none"
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         earmark_resolver = CephFSEarmarkResolver(self)
@@ -55,7 +56,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             addr=client_addr,
             sectype=sectype,
             cmount_path=cmount_path,
-            earmark_resolver=earmark_resolver
+            earmark_resolver=earmark_resolver,
+            delegations=delegations
         )
 
     @CLICommand('nfs export create rgw', perm='rw')

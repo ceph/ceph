@@ -28,6 +28,8 @@ from .ganesha_conf import (
     GaneshaConfParser,
     RGWFSAL,
     RawBlock,
+    CephBlock,
+    NFSV4Block,
     format_block)
 from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
@@ -216,24 +218,87 @@ class AppliedExportResults:
                               " to be created/updated"
         return self.status
 
+# what this module understands and is able to parse
+# NOTE: only non-nested blocks here.
+GANESHA_CONF_OPTIONAL_BLOCKS = ["ceph", "nfsv4"]
+GANESHA_CONF_VALID_BLOCKS = GANESHA_CONF_OPTIONAL_BLOCKS.append("export")
+
+class GaneshaExport:
+    def __init__(self,
+                 export: Export,
+                 **optional_blocks):
+        self.export = export
+        self.optional_blocks = optional_blocks
+
+    # frequently uesd properties so that much of the code that now
+    # has moved to using this class can still continue to acess via
+    # export.{path,pseudo,...}.
+    @property
+    def path(self):
+        return self.export.path
+
+    @property
+    def pseudo(self):
+        return self.export.pseudo
+
+    @property
+    def export_id(self):
+        return self.export.export_id
+
+    @property
+    def cluster_id(self):
+        return self.export.cluster_id
+
+    @property
+    def fsal(self):
+        return self.export.fsal
+
+    @property
+    def delegations(self):
+        return self.export.delegations
+
+    def to_dict(self, full=False) -> Dict[str, Any]:
+        export_dict = self.export.to_dict()
+        if not full or not self.optional_blocks:
+            return export_dict
+        ge_dict = {'export': export_dict}
+        for key, block in self.optional_blocks.items():
+            assert key in GANESHA_CONF_OPTIONAL_BLOCKS
+            ge_dict[key] = block.to_dict()
+        return ge_dict
+
+    def to_export_block(self):
+        block_str = format_block(self.export.to_export_block())
+        for key, block in self.optional_blocks.items():
+            assert key in GANESHA_CONF_OPTIONAL_BLOCKS
+            if key == "ceph":
+                block_str += format_block(block.to_ceph_block())
+            if key == "nfsv4":
+                block_str += format_block(block.to_nfsv4_block())
+        return block_str
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, GaneshaExport):
+            return False
+        return self.to_dict(full=true) == other.to_dict(full=true)
 
 class ExportMgr:
     def __init__(
             self,
             mgr: 'Module',
-            export_ls: Optional[Dict[str, List[Export]]] = None
+            export_ls: Optional[Dict[str, List[GaneshaExport]]] = None
     ) -> None:
         self.mgr = mgr
         self.rados_pool = POOL_NAME
-        self._exports: Optional[Dict[str, List[Export]]] = export_ls
+        self._exports: Optional[Dict[str, List[GaneshaExport]]] = export_ls
 
     @property
-    def exports(self) -> Dict[str, List[Export]]:
+    def exports(self) -> Dict[str, List[GaneshaExport]]:
         if self._exports is None:
             self._exports = {}
             log.info("Begin export parsing")
             for cluster_id in known_cluster_ids(self.mgr):
-                self.export_conf_objs = []  # type: List[Export]
+                self.export_conf_objs = []  # type: List[GaneshaExport]
                 self._read_raw_config(cluster_id)
                 self._exports[cluster_id] = self.export_conf_objs
                 log.info("Exports parsed successfully %s", self.exports.items())
@@ -243,7 +308,7 @@ class ExportMgr:
             self,
             cluster_id: str,
             pseudo_path: str
-    ) -> Optional[Export]:
+    ) -> Optional[GaneshaExport]:
         try:
             for ex in self.exports[cluster_id]:
                 if ex.pseudo == pseudo_path:
@@ -257,7 +322,7 @@ class ExportMgr:
             self,
             cluster_id: str,
             export_id: int
-    ) -> Optional[Export]:
+    ) -> Optional[GaneshaExport]:
         try:
             for ex in self.exports[cluster_id]:
                 if ex.export_id == export_id:
@@ -267,27 +332,27 @@ class ExportMgr:
             log.info(f'no exports for cluster {cluster_id}')
             return None
 
-    def _delete_export_user(self, export: Export) -> None:
-        if isinstance(export.fsal, CephFSFSAL):
-            assert export.fsal.user_id
+    def _delete_export_user(self, ganesha_export: GaneshaExport) -> None:
+        if isinstance(ganesha_export.fsal, CephFSFSAL):
+            assert ganesha_export.fsal.user_id
             self.mgr.check_mon_command({
                 'prefix': 'auth rm',
-                'entity': 'client.{}'.format(export.fsal.user_id),
+                'entity': 'client.{}'.format(ganesha_export.fsal.user_id),
             })
             log.info("Deleted export user %s", export.fsal.user_id)
-        elif isinstance(export.fsal, RGWFSAL):
+        elif isinstance(ganesha_export.fsal, RGWFSAL):
             # do nothing; we're using the bucket owner creds.
             pass
 
-    def _create_rgw_export_user(self, export: Export) -> None:
-        rgwfsal = cast(RGWFSAL, export.fsal)
+    def _create_rgw_export_user(self, ganesha_export: GaneshaExport) -> None:
+        rgwfsal = cast(RGWFSAL, ganesha_export.fsal)
         if not rgwfsal.user_id:
-            assert export.path
+            assert ganesha_export.path
             ret, out, err = self.mgr.tool_exec(
-                ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path]
+                ['radosgw-admin', 'bucket', 'stats', '--bucket', ganesha_export.path]
             )
             if ret:
-                raise NFSException(f'Failed to fetch owner for bucket {export.path}')
+                raise NFSException(f'Failed to fetch owner for bucket {ganesha_export.path}')
             j = json.loads(out)
             owner = j.get('owner', '')
             rgwfsal.user_id = owner
@@ -297,23 +362,23 @@ class ExportMgr:
         ])
         if ret:
             raise NFSException(
-                f'Failed to fetch key for bucket {export.path} owner {rgwfsal.user_id}'
+                f'Failed to fetch key for bucket {ganesha_export.path} owner {rgwfsal.user_id}'
             )
         j = json.loads(out)
 
         # FIXME: make this more tolerate of unexpected output?
         rgwfsal.access_key_id = j['keys'][0]['access_key']
         rgwfsal.secret_access_key = j['keys'][0]['secret_key']
-        log.debug("Successfully fetched user %s for RGW path %s", rgwfsal.user_id, export.path)
+        log.debug("Successfully fetched user %s for RGW path %s", rgwfsal.user_id, ganesha_export.path)
 
-    def _ensure_cephfs_export_user(self, export: Export) -> None:
-        fsal = cast(CephFSFSAL, export.fsal)
+    def _ensure_cephfs_export_user(self, ganesha_export: GaneshaExport) -> None:
+        fsal = cast(CephFSFSAL, ganesha_export.fsal)
         assert fsal.fs_name
         assert fsal.cmount_path
 
-        fsal.user_id = f"nfs.{get_user_id(export.cluster_id, fsal.fs_name, fsal.cmount_path)}"
+        fsal.user_id = f"nfs.{get_user_id(ganesha_export.cluster_id, fsal.fs_name, fsal.cmount_path)}"
         fsal.cephx_key = self._create_user_key(
-            export.cluster_id, fsal.user_id, fsal.cmount_path, fsal.fs_name
+            ganesha_export.cluster_id, fsal.user_id, fsal.cmount_path, fsal.fs_name
         )
         log.debug(f"Established user {fsal.user_id} for cephfs {fsal.fs_name}")
 
@@ -327,6 +392,28 @@ class ExportMgr:
                 break
         return nid
 
+    def prepare_opt_block_from_raw_config(self, raw_config_parsed: Dict) -> Dict[str,Any]:
+        opt_blocks = {}
+        for block_name in GANESHA_CONF_OPTIONAL_BLOCKS:
+            _block = raw_config_parsed.get(block_name.upper(), None)
+            if _block:
+                if block_name == "ceph":
+                    opt_blocks[block_name] = CephBlock.from_ceph_block(block)
+                elif block_name == "nfsv4":
+                    opt_blocks[block_name] = NFSV4Block.from_nfsv4_block(block)
+        return opt_blocks
+
+    def prepare_opt_block_from_dict(self, opt_dict: Dict) -> Dict[str,Any]:
+        opt_blocks = {}
+        for block_name in GANESHA_CONF_OPTIONAL_BLOCKS:
+            dct = opt_dict.get(block_name, None)
+            if dct:
+                if block_name == "ceph":
+                    opt_blocks[block_name] = CephBlock.from_dict(dct)
+                elif block_name == "nfsv4":
+                    opt_blocks[block_name] = NFSV4Block.from_dict(dct)
+        return opt_blocks
+
     def _read_raw_config(self, rados_namespace: str) -> None:
         with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
             ioctx.set_namespace(rados_namespace)
@@ -338,43 +425,55 @@ class ExportMgr:
                     log.debug("read export configuration from rados "
                               "object %s/%s/%s", self.rados_pool,
                               rados_namespace, obj.key)
-                    self.export_conf_objs.append(Export.from_export_block(
-                        GaneshaConfParser(raw_config).parse()[0], rados_namespace))
+                    log.debug(f'raw_config: {raw_config}')
+                    raw_config_parsed = GaneshaConfParser(raw_config).parse()
+                    log.debug(f'raw_config_parsed: {raw_config_parsed}')
+                    # mandatory export block
+                    export_block = raw_config_parsed['EXPORT']
+                    # optional blocks
+                    opt_blocks = self.prepare_opt_block_from_raw_config(raw_config_parsed)
+                    self.export_conf_objs.append(
+                            GaneshaExport(Export.from_export_block(export_block, rados_namespace),
+                                          **opt_blocks))
 
-    def _save_export(self, cluster_id: str, export: Export) -> None:
-        self.exports[cluster_id].append(export)
+    def _save_export(self, cluster_id: str, ganesha_export: GaneshaExport) -> None:
+        log.debug('in _save_export')
+        self.exports[cluster_id].append(ganesha_export)
+        block_str = ganesha_export.to_export_block()
+        log.debug(f'_save_export block_str: {block_str}')
         self._rados(cluster_id).write_obj(
-            format_block(export.to_export_block()),
-            export_obj_name(export.export_id),
-            conf_obj_name(export.cluster_id)
+            block_str,
+            export_obj_name(ganesha_export.export_id),
+            conf_obj_name(ganesha_export.cluster_id)
         )
 
     def _delete_export(
             self,
             cluster_id: str,
             pseudo_path: Optional[str],
-            export_obj: Optional[Export] = None
+            ganesha_export_obj: Optional[GaneshaExport] = None
     ) -> None:
         try:
-            if export_obj:
-                export: Optional[Export] = export_obj
+            if ganesha_export_obj:
+                ganesha_export: Optional[GaneshaExport] = ganesha_export_obj
             else:
                 assert pseudo_path
-                export = self._fetch_export(cluster_id, pseudo_path)
+                ganesha_export = self._fetch_export(cluster_id, pseudo_path)
 
-            if export:
+            if ganesha_export:
                 exports_count = 0
-                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
-                    exports_count = self.get_export_count_with_same_fsal(export.fsal.cmount_path,  # type: ignore
-                                                                         cluster_id, export.fsal.fs_name)  # type: ignore
+                if ganesha_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+                    exports_count = self.get_export_count_with_same_fsal(
+                        ganesha_export.fsal.cmount_path,  # type: ignore
+                        cluster_id, ganesha_export.fsal.fs_name)  # type: ignore
                     if exports_count == 1:
-                        self._delete_export_user(export)
+                        self._delete_export_user(ganesha_export)
                 if pseudo_path:
                     self._rados(cluster_id).remove_obj(
-                        export_obj_name(export.export_id), conf_obj_name(cluster_id))
-                self.exports[cluster_id].remove(export)
-                if export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
-                    self._delete_export_user(export)
+                        export_obj_name(ganesha_export.export_id), conf_obj_name(cluster_id))
+                self.exports[cluster_id].remove(ganesha_export)
+                if ganesha_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
+                    self._delete_export_user(ganehsa_export)
                 if not self.exports[cluster_id]:
                     del self.exports[cluster_id]
                     log.debug("Deleted all exports for cluster %s", cluster_id)
@@ -388,26 +487,34 @@ class ExportMgr:
         try:
             with self.mgr.rados.open_ioctx(self.rados_pool) as ioctx:
                 ioctx.set_namespace(cluster_id)
-                export = Export.from_export_block(
-                    GaneshaConfParser(
-                        ioctx.read(export_obj_name(ex_id)).decode("utf-8")
-                    ).parse()[0],
-                    cluster_id
-                )
-                return export
+                raw_config = ioctx.read(export_obj_name(ex_id)).decode("utf-8")
+                log.debug(f'raw_config: {raw_config}')
+                raw_config_parsed = GaneshaConfParser(raw_config).parse()
+                log.debug(f'raw_config_parsed: {raw_config_parsed}')
+                # mandatory export block
+                export_block = raw_config_parsed['EXPORT']
+                # optional blocks
+                opt_blocks = self.prepare_opt_block_from_raw_config(raw_config_parsed)
+                ganesha_export = GaneshaExport(Export.from_export_block(export_block, rados_namespace),
+                                               **opt_block)
+                log.debug(f'export: {ganesha_export}')
+                return ganesha_export
         except ObjectNotFound:
             log.exception("Export ID: %s not found", ex_id)
         return None
 
-    def _update_export(self, cluster_id: str, export: Export,
+    def _update_export(self, cluster_id: str, ganesha_export: GaneshaExport,
                        need_nfs_service_restart: bool) -> None:
-        self.exports[cluster_id].append(export)
+        log.debug(f'in _update_export: service restart: {need_nfs_service_restart}')
+        self.exports[cluster_id].append(ganesha_export)
+        block_str = ganesha_export.to_export_block()
+        log.debug(f'_update_export block_str: {block_str}')
         self._rados(cluster_id).update_obj(
-            format_block(export.to_export_block()),
-            export_obj_name(export.export_id), conf_obj_name(export.cluster_id),
+            block_str,
+            export_obj_name(ganesha_export.export_id), conf_obj_name(ganesha_export.cluster_id),
             should_notify=not need_nfs_service_restart)
         if need_nfs_service_restart:
-            restart_nfs_service(self.mgr, export.cluster_id)
+            restart_nfs_service(self.mgr, ganesha_export.cluster_id)
 
     def _validate_cluster_id(self, cluster_id: str) -> None:
         """Raise an exception if cluster_id is not valid."""
@@ -461,22 +568,22 @@ class ExportMgr:
 
     def delete_all_exports(self, cluster_id: str) -> None:
         try:
-            export_list = list(self.exports[cluster_id])
+            ganesha_export_list = list(self.exports[cluster_id])
         except KeyError:
             log.info("No exports to delete")
             return
-        for export in export_list:
+        for ganesha_export in ganesha_export_list:
             try:
                 self._delete_export(cluster_id=cluster_id, pseudo_path=None,
-                                    export_obj=export)
+                                    ganesha_export_obj=ganesha_export)
             except Exception as e:
-                raise NFSException(f"Failed to delete export {export.export_id}: {e}")
+                raise NFSException(f"Failed to delete export {ganesha_export.export_id}: {e}")
         log.info("All exports successfully deleted for cluster id: %s", cluster_id)
 
     def list_all_exports(self) -> List[Dict[str, Any]]:
         r = []
         for cluster_id, ls in self.exports.items():
-            r.extend([e.to_dict() for e in ls])
+            r.extend([ge.to_dict() for ge in ls])
         return r
 
     def list_exports(self,
@@ -485,10 +592,10 @@ class ExportMgr:
         self._validate_cluster_id(cluster_id)
         try:
             if detailed:
-                result_d = [export.to_dict() for export in self.exports[cluster_id]]
+                result_d = [ganesha_export.to_dict() for ganesha_export in self.exports[cluster_id]]
                 return result_d
             else:
-                result_ps = [export.pseudo for export in self.exports[cluster_id]]
+                result_ps = [ganesha_export.pseudo for ganesha_export in self.exports[cluster_id]]
                 return result_ps
 
         except KeyError:
@@ -499,9 +606,9 @@ class ExportMgr:
             raise ErrorResponse.wrap(e)
 
     def _get_export_dict(self, cluster_id: str, pseudo_path: str) -> Optional[Dict[str, Any]]:
-        export = self._fetch_export(cluster_id, pseudo_path)
-        if export:
-            return export.to_dict()
+        ganesha_export = self._fetch_export(cluster_id, pseudo_path)
+        if ganesha_export:
+            return ganesha_export.to_dict(full=True)
         log.warning(f"No {pseudo_path} export to show for {cluster_id}")
         return None
 
@@ -524,16 +631,16 @@ class ExportMgr:
             cluster_id: str,
             export_id: int
     ) -> Optional[Dict[str, Any]]:
-        export = self._fetch_export_id(cluster_id, export_id)
-        return export.to_dict() if export else None
+        ganesha_export = self._fetch_export_id(cluster_id, export_id)
+        return ganesha_export.to_dict() if ganesha_export else None
 
     def get_export_by_pseudo(
             self,
             cluster_id: str,
             pseudo_path: str
     ) -> Optional[Dict[str, Any]]:
-        export = self._fetch_export(cluster_id, pseudo_path)
-        return export.to_dict() if export else None
+        ganesha_export = self._fetch_export(cluster_id, pseudo_path)
+        return ganesha_export.to_dict() if ganesha_export else None
 
     # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
     # Do not change interface without updating the Dashboard code
@@ -562,6 +669,9 @@ class ExportMgr:
             j = json.loads(export_config)
         except ValueError:
             # okay, not JSON.  is it an EXPORT block?
+            # including CEPH block when passing an EXPORT block
+            # is not currently supported (use export json for that).
+            # TODO: add this support.
             try:
                 blocks = GaneshaConfParser(export_config).parse()
                 exports = [
@@ -578,9 +688,26 @@ class ExportMgr:
 
     def _change_export(self, cluster_id: str, export: Dict,
                        earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> Dict[str, Any]:
+        # if the export json has a "export" key, extract it and treat the rest of the
+        # dict as optional (blocks), otherwise, the dict is a export without optional
+        # blocks (backward compat).
+        msg = f'export: {export}'
+        log.debug(msg)
+
+        opt_dict = {}
+        if "export" in export.keys():
+            export_dict = export.pop("export")
+            opt_dict = export
+        else:
+            export_dict = export
+
+        msg = f'export_dict: {export_dict}'
+        log.debug(msg)
+        msg = f'opt_dict: {opt_dict}'
+        log.debug(msg)
         try:
-            return self._apply_export(cluster_id, export, earmark_resolver)
-        except NotImplementedError:
+            return self._apply_export(cluster_id, export_dict, earmark_resolver, opt_dict)
+        except NotImplementedError as e:
             # in theory, the NotImplementedError here may be raised by a hook back to
             # an orchestration module. If the orchestration module supports it the NFS
             # servers may be restarted. If not supported the expectation is that an
@@ -588,7 +715,7 @@ class ExportMgr:
             # indicate to the user that manual intervention may be needed now that the
             # configuration changes have been applied.
             return {
-                "pseudo": export['pseudo'],
+                "pseudo": export_dict['pseudo'],
                 "state": "warning",
                 "msg": "changes applied (Manual restart of NFS Pods required)",
             }
@@ -596,7 +723,7 @@ class ExportMgr:
             msg = f'Failed to apply export: {ex}'
             log.exception(msg)
             return {"state": "error", "msg": msg, "exception": ex,
-                    "pseudo": export['pseudo']}
+                    "pseudo": export_dict['pseudo']}
 
     def _update_user_id(
             self,
@@ -681,8 +808,7 @@ class ExportMgr:
                                 cluster_id: str,
                                 ex_id: int,
                                 ex_dict: Dict[str, Any],
-                                earmark_resolver: Optional[CephFSEarmarkResolver] = None
-                                ) -> Export:
+                                earmark_resolver: Optional[CephFSEarmarkResolver] = None) -> Export:
         pseudo_path = ex_dict.get("pseudo")
         if not pseudo_path:
             raise NFSInvalidOperation("export must specify pseudo path")
@@ -741,7 +867,8 @@ class ExportMgr:
                              clients: list = [],
                              sectype: Optional[List[str]] = None,
                              cmount_path: Optional[str] = "/",
-                             earmark_resolver: Optional[CephFSEarmarkResolver] = None
+                             earmark_resolver: Optional[CephFSEarmarkResolver] = None,
+                             delegations: Optional[str] = "none"
                              ) -> Dict[str, Any]:
 
         validate_cephfs_path(self.mgr, fs_name, path)
@@ -766,6 +893,7 @@ class ExportMgr:
                     },
                     "clients": clients,
                     "sectype": sectype,
+                    "delegations": delegations
                 },
                 earmark_resolver
             )
@@ -794,8 +922,7 @@ class ExportMgr:
                           sectype: Optional[List[str]] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
-        if not bucket and not user_id:
-            raise ErrorResponse("Must specify either bucket or user_id")
+
 
         if not self._fetch_export(cluster_id, pseudo_path):
             export = self.create_export_from_dict(
@@ -831,8 +958,8 @@ class ExportMgr:
             self,
             cluster_id: str,
             new_export_dict: Dict,
-            earmark_resolver: Optional[CephFSEarmarkResolver] = None
-    ) -> Dict[str, str]:
+            earmark_resolver: Optional[CephFSEarmarkResolver] = None,
+            opt_dict: Optional[Dict] = {}) -> Dict[str, str]:
         for k in ['path', 'pseudo']:
             if k not in new_export_dict:
                 raise NFSInvalidOperation(f'Export missing required field {k}')
@@ -874,28 +1001,35 @@ class ExportMgr:
             new_export_dict,
             earmark_resolver
         )
+        log.debug(f'opt_dict: {opt_dict}')
+        opt_blocks = self.prepare_opt_block_from_dict(opt_dict)
+        log.debug(f'opt_blocks: {opt_blocks}')
+        # use @ganesha_export in place of @new_export here onwards
+        ganesha_export = GaneshaExport(new_export, **opt_blocks)
 
         if not old_export:
             if new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:  # only for RGW
                 self._create_rgw_export_user(new_export)
-            self._save_export(cluster_id, new_export)
+            self._save_export(cluster_id, ganesha_export)
             return {"pseudo": new_export.pseudo, "state": "added"}
 
         need_nfs_service_restart = True
-        if old_export.fsal.name != new_export.fsal.name:
+        if old_export.fsal.name != ganesha_export.fsal.name:
             raise NFSInvalidOperation('FSAL change not allowed')
-        if old_export.pseudo != new_export.pseudo:
+        if old_export.pseudo != ganesha_export.pseudo:
             log.debug('export %s pseudo %s -> %s',
-                      new_export.export_id, old_export.pseudo, new_export.pseudo)
+                      ganesha_export.export_id, old_export.pseudo, ganesha_export.pseudo)
 
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
             old_fsal = cast(CephFSFSAL, old_export.fsal)
-            new_fsal = cast(CephFSFSAL, new_export.fsal)
-            self._ensure_cephfs_export_user(new_export)
+            new_fsal = cast(CephFSFSAL, ganesha_export.fsal)
+            self._ensure_cephfs_export_user(ganesha_export)
             need_nfs_service_restart = not (old_fsal.user_id == new_fsal.user_id
                                             and old_fsal.fs_name == new_fsal.fs_name
                                             and old_export.path == new_export.path
-                                            and old_export.pseudo == new_export.pseudo)
+                                            and old_export.pseudo == new_export.pseudo
+                                            and old_export.optional_blocks == ganesha_export.optional_blocks
+                                            and old_export.delegations == ganesha_export.delegations)
 
         if old_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:
             old_rgw_fsal = cast(RGWFSAL, old_export.fsal)
@@ -908,9 +1042,10 @@ class ExportMgr:
             elif old_rgw_fsal.secret_access_key != new_rgw_fsal.secret_access_key:
                 raise NFSInvalidOperation('secret_access_key change is not allowed')
 
+
         self.exports[cluster_id].remove(old_export)
 
-        self._update_export(cluster_id, new_export, need_nfs_service_restart)
+        self._update_export(cluster_id, ganesha_export, need_nfs_service_restart)
 
         return {"pseudo": new_export.pseudo, "state": "updated"}
 
