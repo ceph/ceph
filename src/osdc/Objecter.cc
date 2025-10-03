@@ -3081,7 +3081,18 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
     t->pg_num_mask = pg_num_mask;
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
-    if (pi->is_erasure()) {
+    if (t->force_shard) {
+      t->osd = t->acting[int(*t->force_shard)];
+      // In some redrive scenarios, the acting set can change. Fail the IO
+      // and retry.
+      if (!osdmap->exists(t->osd)) {
+        t->osd = -1;
+        return RECALC_OP_TARGET_POOL_DNE;
+      }
+      if (pi->is_erasure()) {
+        spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, *t->force_shard));
+      }
+    } else if (pi->is_erasure()) {
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
@@ -3110,7 +3121,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 		   << " acting " << t->acting
 		   << " primary " << acting_primary << dendl;
     t->used_replica = false;
-    if ((t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
+    if (!t->force_shard && (t->flags & (CEPH_OSD_FLAG_BALANCE_READS |
                      CEPH_OSD_FLAG_LOCALIZE_READS)) &&
         !is_write && pi->is_replicated() && t->acting.size() > 1) {
       int osd;
@@ -3147,7 +3158,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
 	osd = t->acting[best];
       }
       t->osd = osd;
-    } else {
+    } else if (!t->force_shard) {
       t->osd = acting_primary;
     }
   }
@@ -3710,7 +3721,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
   }
 
-  if (rc == -EAGAIN) {
+  if (rc == -EAGAIN && !op->target.force_shard) {
     ldout(cct, 7) << " got -EAGAIN, resubmitting" << dendl;
     if (op->has_completion())
       num_in_flight--;
