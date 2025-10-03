@@ -214,6 +214,7 @@ private:
   librados::IoCtx m_remote_io_ctx;
 
   std::string m_local_mirror_uuid;
+  std::string m_remote_fsid;
 
   RemotePoolMeta m_remote_pool_meta;
   std::unique_ptr<remote_pool_poller::Listener> m_remote_pool_poller_listener;
