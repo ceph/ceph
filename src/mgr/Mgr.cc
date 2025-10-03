@@ -37,6 +37,7 @@
 
 #include "MgrContext.h"
 #include "DaemonServer.h"
+#include "JSONCommand.h"
 #include "PyModule.h"
 #include "Mgr.h"
 
