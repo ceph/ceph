@@ -281,6 +281,7 @@ bool ECBackend::_handle_message(
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
+    reply->pgid.reset_shard(op->op.from.shard);
     get_parent()->send_message_osd_cluster(
       reply, _op->get_req()->get_connection());
     return true;
