@@ -160,6 +160,11 @@ struct ObjectOperation {
 
   }
 
+  OSDOp& copy_op(OSDOp& op) {
+    ops.emplace_back(op);
+    return ops.back();
+  }
+
   OSDOp& add_op(int op) {
     ops.emplace_back();
     ops.back().op.op = op;
@@ -2117,6 +2122,26 @@ public:
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
+    }
+
+    void copy_op(::ObjectOperation &other, unsigned index, bufferlist *bl, int *rval) {
+      ceph_assert(index < ops.size());
+
+      other.copy_op(ops[index]);
+      unsigned p = other.ops.size() - 1;
+      ceph_assert(out_bl.size() == ops.size());
+      ceph_assert(out_rval.size() == ops.size());
+      ceph_assert(out_ec.size() == ops.size());
+      ceph_assert(out_handler.size() == ops.size());
+
+      other.out_bl.resize(p + 1);
+      other.out_rval.resize(p + 1);
+      other.out_ec.resize(p + 1);
+      other.out_handler.resize(p + 1);
+
+      other.out_bl[p] = bl;
+      other.out_rval[p] = rval;
+      // We don't copy the out handler here - it must be run by the copied-from op.
     }
 
   private:
