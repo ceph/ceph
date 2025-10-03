@@ -237,8 +237,6 @@ void RGWSI_Notify::finalize_watch(boost::asio::yield_context yield)
         });
   }
   throttle.wait();
-
-  watchers.clear();
 }
 
 int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
@@ -303,8 +301,12 @@ void RGWSI_Notify::shutdown()
       });
   context.run();
 
+  // wait for any racing C_ReinitWatch calls on the finisher thread
+  // before destroying the RGWWatchers
   finisher.wait_for_empty();
   finisher.stop();
+
+  watchers.clear();
 
   finalized = true;
 }
