@@ -610,6 +610,11 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      return -EOPNOTSUPP;
    }
 
+   virtual std::pair<uint64_t, uint64_t> extent_to_shard_extent(
+       uint64_t off, uint64_t len) {
+     return std::pair(off, len);
+   }
+
    virtual void objects_read_async(
      const hobject_t &hoid,
      uint64_t object_size,
