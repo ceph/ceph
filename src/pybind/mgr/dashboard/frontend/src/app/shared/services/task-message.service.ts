@@ -621,7 +621,7 @@ export class TaskMessageService {
   }
 
   smbUsersgroups(metadata: { usersGroupsId: string }) {
-    return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
+    return $localize`SMB standalone access resource '${metadata.usersGroupsId}'`;
   }
 
   topic(metadata: any) {
