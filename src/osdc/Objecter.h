@@ -2726,6 +2726,8 @@ private:
 				   const std::string& ns);
   int64_t get_object_pg_hash_position(int64_t pool, const std::string& key,
 				      const std::string& ns);
+  int get_object_osd_position(int64_t pool, const std::string& name,
+                              const std::string& key, const std::string& ns);
 
   // messages
  public:
