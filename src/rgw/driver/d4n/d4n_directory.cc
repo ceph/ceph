@@ -921,6 +921,8 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
   try {//this should be done only once, the first time the transaction is started. 
 	boost::system::error_code ec;
 	response<int> resp; //-1 if the source key does not exist, 0 if the key is cloned successfully. -2 key destination already exists.
+			    //the source may not exist, in the case the object is new.
+			    //in case there are multiple calls with the same source key, the destination key should be the same, and the key should be cloned only once.
 	request req;
 	//TODO the key should clone only once, and the key should be deleted upon end transaction.
 	req.push("EVALSHA", m_evalsha_clone_key, "2", key_source, key_destination);
@@ -946,6 +948,7 @@ int D4NTransaction::clone_key_for_transaction(std::string key_source, std::strin
 
 void D4NTransaction::clear_temp_keys()
 {
+  m_trx_id.clear();
   m_original_key.clear();
   m_temp_key_read.clear();
   m_temp_key_write.clear();
@@ -964,15 +967,13 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 
 	create_clone_lua_script(dpp,conn,y);//load the script if not loaded yet.
 
-	//TODO: in case the clone_key does not succeed, how to handle it? if there is not key to clone, it should not be an error.
 	if(op == redis_operation_type::READ_OP){
-	  //TODO: in case the clone_key_for_transaction failed, how to handle it? no temp key is created.
+	  //-1 if the source key does not exist, 0 if the key is cloned successfully. -2 key destination already exists.
 	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
-	  if (rc != 0 ) {
-	    //if the key is not exists, it should not be cloned.
-	    //TODO to handle the case where the clone key already exists.(it should not happend since the key is unique for each transaction).
-	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key failed to clone key for read operation" << dendl;
-	    return false;
+	  if(rc == -1 || rc == -2){
+	    //if the key is not exists, no need to clone it.
+	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key : no cloning for source key rc = " << rc << dendl;
+	    return true;
 	  }
 
 	  //m_temp_read_keys stores the temp key that is used for read operations. a single transaction can have multiple read keys.
@@ -980,17 +981,38 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 	  key = m_temp_key_read;
 	}
 	else if(op == redis_operation_type::WRITE_OP){
-	  //upon end transaction, the m_temp_key_write should be renamed to the original key.
 	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_write << dendl;
 
-	  //TODO: in case the clone_key_for_transaction failed, how to handle it? no temp key is created.
-	  clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
+	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
+	  if(rc == -2){
+	    //if the destination key already exists, no need to clone it.
+	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key : no cloning for source key rc = " << rc << dendl;
+	    key = m_temp_key_write;
+	    m_temp_write_keys.insert(m_temp_key_write);//upon end-transaction, the test-write key is compare with this m_temp_key_write
+	    return true;
+	  }
+
+	  if(rc == -1){
+		//the source key does not exist.
+	    	ldpp_dout(dpp, 0) << "Directory::set_transaction_key : source key does not exist for  " << dendl;
+	    	//in this case, the original key does not exist, because it is a new object.
+		//the temp-key (transaction write key) will store the data, and upon end-transaction, the temp-key will be renamed to the original key.
+		key = m_temp_key_write;
+	  	m_temp_write_keys.insert(m_temp_key_write);//upon end-transaction, the test-write key is compare with this m_temp_key_write
+		return true;
+	  }
+
 	  //m_temp_write_keys stores the temp key that is used for write operations. a single transaction can have multiple write keys.
 	  m_temp_write_keys.insert(m_temp_key_write);
 
 	  //upon end transaction, the m_temp_key_test_write should be compared to the originl key.
 	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
-	  auto rc = clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
+	  rc = clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
+	  if(rc != 0){	
+		  // at this point, m_original_key exists, so the clone operation should be successful.
+		  ldpp_dout(dpp, 0) << "Directory::set_transaction_key : failed to clone the original key into test write key rc = " << rc << dendl;
+		  return false;
+	  }
 	  // the same as m_temp_write_keys, but for test write operations.
 	  m_temp_test_write_keys.insert(m_temp_key_test_write);
 	 
