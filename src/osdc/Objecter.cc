@@ -3542,6 +3542,82 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
+bs::error_code Objecter::handle_osd_op_reply2(Op *op, vector<OSDOp> &out_ops) {
+
+  ceph_assert(op->ops.size() == op->out_bl.size());
+  ceph_assert(op->ops.size() == op->out_rval.size());
+  ceph_assert(op->ops.size() == op->out_ec.size());
+  ceph_assert(op->ops.size() == op->out_handler.size());
+  auto pb = op->out_bl.begin();
+  auto pr = op->out_rval.begin();
+  auto pe = op->out_ec.begin();
+  auto ph = op->out_handler.begin();
+  ceph_assert(op->out_bl.size() == op->out_rval.size());
+  ceph_assert(op->out_bl.size() == op->out_handler.size());
+  auto p = out_ops.begin();
+  // Propagates handler error to Op::completion. In the event of
+  // multiple handler errors, the most recent wins.
+  bs::error_code handler_error;
+  // Holds OSD error code, so handlers downstream of a failing op are
+  // made aware of it.
+  bs::error_code first_osd_error;
+  for (unsigned i = 0;
+       p != out_ops.end() && pb != op->out_bl.end();
+       ++i, ++p, ++pb, ++pr, ++pe, ++ph) {
+    ldout(cct, 10) << " op " << i << " rval " << p->rval
+		   << " len " << p->outdata.length() << dendl;
+    // Track when we get an OSD error and supply it to subsequent
+    // handlers so they won't attempt to operate on data that isn't
+    // there.
+    if (!first_osd_error && (p->rval < 0)) {
+      first_osd_error = bs::error_code(-p->rval, osd_category());
+    }
+    if (*pb)
+      **pb = p->outdata;
+    // set rval before running handlers so that handlers
+    // can change it if e.g. decoding fails
+    if (*pr)
+      **pr = ceph_to_hostos_errno(p->rval);
+    if (*pe)
+      **pe = p->rval < 0 ? bs::error_code(-p->rval, osd_category()) :
+	bs::error_code();
+    if (*ph) {
+      try {
+	bs::error_code e;
+	if (first_osd_error) {
+	  e = first_osd_error;
+	} else if (p->rval < 0) {
+	  e = bs::error_code(-p->rval, osd_category());
+	}
+	std::move((*ph))(e, p->rval, p->outdata);
+      } catch (const bs::system_error& e) {
+	ldout(cct, 10) << "ERROR: tid " << op->tid << ": handler function threw "
+		       << e.what() << dendl;
+	handler_error = e.code();
+	if (*pe) {
+	  **pe = e.code();
+	}
+	if (*pr && **pr == 0) {
+	  **pr = ceph::from_error_code(e.code());
+	}
+      } catch (const std::exception& e) {
+	ldout(cct, 0) << "ERROR: tid " << op->tid << ": handler function threw "
+		      << e.what() << dendl;
+	handler_error = osdc_errc::handler_failed;
+	if (*pe) {
+	  **pe = osdc_errc::handler_failed;
+	}
+	if (*pr && **pr == 0) {
+	  **pr = -EIO;
+	}
+      }
+    }
+  }
+
+  return handler_error;
+}
+
+
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
@@ -3712,75 +3788,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
-  ceph_assert(op->ops.size() == op->out_bl.size());
-  ceph_assert(op->ops.size() == op->out_rval.size());
-  ceph_assert(op->ops.size() == op->out_ec.size());
-  ceph_assert(op->ops.size() == op->out_handler.size());
-  auto pb = op->out_bl.begin();
-  auto pr = op->out_rval.begin();
-  auto pe = op->out_ec.begin();
-  auto ph = op->out_handler.begin();
-  ceph_assert(op->out_bl.size() == op->out_rval.size());
-  ceph_assert(op->out_bl.size() == op->out_handler.size());
-  auto p = out_ops.begin();
-  // Propagates handler error to Op::completion. In the event of
-  // multiple handler errors, the most recent wins.
-  bs::error_code handler_error;
-  // Holds OSD error code, so handlers downstream of a failing op are
-  // made aware of it.
-  bs::error_code first_osd_error;
-  for (unsigned i = 0;
-       p != out_ops.end() && pb != op->out_bl.end();
-       ++i, ++p, ++pb, ++pr, ++pe, ++ph) {
-    ldout(cct, 10) << " op " << i << " rval " << p->rval
-		   << " len " << p->outdata.length() << dendl;
-    // Track when we get an OSD error and supply it to subsequent
-    // handlers so they won't attempt to operate on data that isn't
-    // there.
-    if (!first_osd_error && (p->rval < 0)) {
-      first_osd_error = bs::error_code(-p->rval, osd_category());
-    }
-    if (*pb)
-      **pb = p->outdata;
-    // set rval before running handlers so that handlers
-    // can change it if e.g. decoding fails
-    if (*pr)
-      **pr = ceph_to_hostos_errno(p->rval);
-    if (*pe)
-      **pe = p->rval < 0 ? bs::error_code(-p->rval, osd_category()) :
-	bs::error_code();
-    if (*ph) {
-      try {
-	bs::error_code e;
-	if (first_osd_error) {
-	  e = first_osd_error;
-	} else if (p->rval < 0) {
-	  e = bs::error_code(-p->rval, osd_category());
-	}
-	std::move((*ph))(e, p->rval, p->outdata);
-      } catch (const bs::system_error& e) {
-	ldout(cct, 10) << "ERROR: tid " << op->tid << ": handler function threw "
-		       << e.what() << dendl;
-	handler_error = e.code();
-	if (*pe) {
-	  **pe = e.code();
-	}
-	if (*pr && **pr == 0) {
-	  **pr = ceph::from_error_code(e.code());
-	}
-      } catch (const std::exception& e) {
-	ldout(cct, 0) << "ERROR: tid " << op->tid << ": handler function threw "
-		      << e.what() << dendl;
-	handler_error = osdc_errc::handler_failed;
-	if (*pe) {
-	  **pe = osdc_errc::handler_failed;
-	}
-	if (*pr && **pr == 0) {
-	  **pr = -EIO;
-	}
-      }
-    }
-  }
+  bs::error_code handler_error = handle_osd_op_reply2(op, out_ops);
 
   // NOTE: we assume that since we only request ONDISK ever we will
   // only ever get back one (type of) ack ever.
