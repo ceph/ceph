@@ -21,10 +21,15 @@ options:
     stripe for erasure coded pools. Every object of size S
     will be stored as N stripes, with each data chunk
     receiving ``stripe unit`` bytes. Each stripe of ``N *
-    stripe unit`` bytes will be encoded/decoded
-    individually. This option can is overridden by the
-    ``stripe_unit`` setting in an erasure code profile.
-  default: 4_K
+    stripe unit`` bytes will be encoded/decoded individually. 
+    A value of 0 causes the code to select either a 4KB or 16KB
+    stripe_unit depending on whether ``allow_ec_optimizations`` 
+    is enabled.  If enabled, ``stripe unit`` is set to 16KB, otherwise it 
+    is set to 4KB. This option can be overridden by the ``stripe_unit``
+    setting in an erasure code profile.
+  long_desc: A value of 0 causes the code to select either a 4KB or 16KB stripe_unit 
+    depending on whether allow_ec_optimizations is enabled.
+  default: 0
   services:
   - mon
 - name: osd_pool_default_crimson
