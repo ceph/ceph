@@ -173,18 +173,51 @@ RBMDevice::mount_ret RBMDevice::do_shard_mount()
       assert(st.block_size > 0);
       super.block_size = st.block_size;
       return read_rbm_superblock(RBM_START_ADDRESS
-      ).safe_then([this](auto s) {
-	LOG_PREFIX(RBMDevice::do_shard_mount);
-	shard_info = s.shard_infos[seastar::this_shard_id()];
-	INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
-	s.validate();
-	return seastar::now();
+      ).safe_then([this](auto s) ->mount_ertr::future<> {
+        LOG_PREFIX(RBMDevice::do_shard_mount);
+        if(seastar::this_shard_id() + seastar::smp::count * store_index >= s.shard_num) {
+          INFO("{} shard_id {} out of range {}",
+            device_id_printer_t{get_device_id()},
+            seastar::this_shard_id() + seastar::smp::count * store_index,
+            s.shard_num);
+          shard_status = false;
+          return mount_ertr::now();
+        }
+        shard_info = s.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+        INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
+        s.validate();
+        return mount_ertr::now();
       });
     });
   }).handle_error(
     mount_ertr::pass_further{},
     crimson::ct_error::assert_all{
     "Invalid error mount in RBMDevice::do_shard_mount"}
+  );
+}
+
+read_ertr::future<unsigned int> RBMDevice::get_shard_nums()
+{
+  return open(get_device_path(),
+    seastar::open_flags::rw | seastar::open_flags::dsync
+  ).safe_then([this] {
+    return stat_device(
+    ).handle_error(
+      mount_ertr::pass_further{},
+      crimson::ct_error::assert_all{
+      "Invalid error stat_device in RBMDevice::get_shard_nums"}
+    ).safe_then([this](auto st) {
+      assert(st.block_size > 0);
+      super.block_size = st.block_size;
+      return read_rbm_superblock(RBM_START_ADDRESS
+      ).safe_then([this](auto sb) {
+        return read_ertr::make_ready_future<unsigned int>(sb.shard_num);
+      });
+    });
+  }).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in RBMDevice::get_shard_nums"
+    }
   );
 }
 
