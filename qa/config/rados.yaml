@@ -11,3 +11,4 @@ overrides:
         osd mclock profile: high_recovery_ops
       mon:
         mon scrub interval: 300
+        debug mon: 30
