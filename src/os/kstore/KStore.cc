@@ -1564,54 +1564,6 @@ out:
 
 // omap reads
 
-int KStore::omap_get(
-  CollectionHandle& ch,                ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
-  )
-{
-  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-  std::shared_lock l{c->lock};
-  int r = 0;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  if (!o->onode.omap_head)
-    goto out;
-  o->flush();
-  {
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
-    string head, tail;
-    get_omap_header(o->onode.omap_head, &head);
-    get_omap_tail(o->onode.omap_head, &tail);
-    it->lower_bound(head);
-    while (it->valid()) {
-      if (it->key() == head) {
-	dout(30) << __func__ << "  got header" << dendl;
-	*header = it->value();
-      } else if (it->key() >= tail) {
-	dout(30) << __func__ << "  reached tail" << dendl;
-	break;
-      } else {
-	string user_key;
-	decode_omap_key(it->key(), &user_key);
-	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
-		 << " -> " << user_key << dendl;
-	ceph_assert(it->key() < tail);
-	(*out)[user_key] = it->value();
-      }
-      it->next();
-    }
-  }
- out:
-  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
-  return r;
-}
-
 int KStore::omap_get_header(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
