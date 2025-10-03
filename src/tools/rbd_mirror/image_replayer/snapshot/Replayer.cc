@@ -150,9 +150,19 @@ void Replayer<I>::init(Context* on_finish) {
 
   ceph_assert(m_state == STATE_INIT);
 
+  std::string fsid;
+  librados::Rados rados(m_state_builder->remote_image_ctx->md_ctx);
+  int r = rados.cluster_fsid(&fsid);
+  if (r < 0) {
+    derr << "failed to retrieve remote cluster fsid: " << cpp_strerror(r)
+	 << dendl;
+    return;
+  }
+
   RemotePoolMeta remote_pool_meta;
-  int r = m_pool_meta_cache->get_remote_pool_meta(
-    m_state_builder->remote_image_ctx->md_ctx.get_id(), &remote_pool_meta);
+  r = m_pool_meta_cache->get_remote_pool_meta(
+    fsid, m_state_builder->remote_image_ctx->md_ctx.get_id(),
+    &remote_pool_meta);
   if (r < 0 || remote_pool_meta.mirror_peer_uuid.empty()) {
     derr << "failed to retrieve mirror peer uuid from remote pool" << dendl;
     m_state = STATE_COMPLETE;
