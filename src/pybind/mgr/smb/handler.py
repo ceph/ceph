@@ -707,22 +707,42 @@ def _generate_share(
         }[cephfs.provider.expand()]
     except KeyError:
         raise ValueError(f'unsupported provider: {cephfs.provider}')
+    modules = ["acl_xattr", "ceph_snapshots"]
+
+    if qos := cephfs.qos:
+        vfs_rl = "aio_ratelimit"
+        modules.extend([vfs_rl, ceph_vfs])
+    else:
+        modules.append(ceph_vfs)
+
     cfg = {
-        # smb.conf options
-        'options': {
-            'path': path,
-            "vfs objects": f"acl_xattr ceph_snapshots {ceph_vfs}",
-            'acl_xattr:security_acl_name': 'user.NTACL',
-            f'{ceph_vfs}:config_file': '/etc/ceph/ceph.conf',
-            f'{ceph_vfs}:filesystem': cephfs.volume,
-            f'{ceph_vfs}:user_id': cephx_entity,
-            'read only': ynbool(share.readonly),
-            'browseable': ynbool(share.browseable),
-            'kernel share modes': 'no',
-            'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
-            'smbd profiling share': 'yes',
+        "options": {
+            "path": path,
+            "vfs objects": " ".join(modules),
+            "acl_xattr:security_acl_name": "user.NTACL",
+            f"{ceph_vfs}:config_file": "/etc/ceph/ceph.conf",
+            f"{ceph_vfs}:filesystem": cephfs.volume,
+            f"{ceph_vfs}:user_id": cephx_entity,
+            "read only": ynbool(share.readonly),
+            "browseable": ynbool(share.browseable),
+            "kernel share modes": "no",
+            "x:ceph:id": f"{share.cluster_id}.{share.share_id}",
+            "smbd profiling share": "yes",
         }
     }
+
+    if qos:
+        opts = cfg["options"]
+        for field in (
+            "read_iops_limit",
+            "read_bw_limit",
+            "read_delay_max",
+            "write_iops_limit",
+            "write_bw_limit",
+            "write_delay_max",
+        ):
+            if value := getattr(qos, field):
+                opts[f"{vfs_rl}:{field}"] = str(value)
     if share.comment is not None:
         cfg['options']['comment'] = share.comment
 
