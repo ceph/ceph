@@ -683,6 +683,11 @@ public:
             ErasureCodeInterface::FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT) != 0;
   }
 
+  bool supports_direct_reads() const {
+    return (plugin_flags &
+            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) != 0;
+  }
+
   uint64_t get_stripe_width() const {
     return stripe_width;
   }
