@@ -118,11 +118,11 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         name: $localize`Type`,
         prop: 'human_readable_type',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            hdd: { value: 'HDD', class: 'badge-hdd' },
-            ssd: { value: 'SSD', class: 'badge-ssd' }
+            hdd: { value: 'HDD', class: 'tag-hdd' },
+            ssd: { value: 'SSD', class: 'tag-ssd' }
           }
         }
       },
@@ -153,9 +153,9 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         name: $localize`OSDs`,
         prop: 'osd_ids',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-dark',
+          class: 'tag-dark',
           prefix: 'osd.'
         }
       }
