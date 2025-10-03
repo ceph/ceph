@@ -158,6 +158,12 @@ public:
 	NONE,READ_OP,WRITE_OP
     };
 
+    enum class CloneStatus {
+	SUCCESS = 0,           // Key cloned successfully
+	SOURCE_NOT_EXIST = -1, // Source key does not exist
+	DEST_ALREADY_EXIST = -2 // Destination key already exists
+    };
+
     enum class TrxState {
 			NONE,
 			STARTED,
@@ -177,7 +183,7 @@ public:
     void create_rw_temp_keys(std::string key);
     std::string create_unique_temp_keys(std::string key);
   
-    int clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
+    CloneStatus clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y);
     void clear_temp_keys();
     std::string m_evalsha_clone_key;
     std::string m_evalsha_end_trx;
