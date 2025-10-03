@@ -934,6 +934,18 @@ private:
   bool older_is_consistent(const inode_t &other) const;
 };
 
+template<template<typename> class Allocator>
+inline bool operator==(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return l.size() == r.size() && memcmp(l.data(), r.data(), l.size()) == 0;
+}
+
+template<template<typename> class Allocator>
+inline bool operator!=(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return l.size() != r.size() || memcmp(l.data(), r.data(), l.size()) != 0;
+}
+
 // These methods may be moved back to mdstypes.cc when we have pmr
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
@@ -1178,6 +1190,9 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
         backtrace_version != other.backtrace_version ||
+	fscrypt_auth != other.fscrypt_auth ||
+	fscrypt_file != other.fscrypt_file ||
+	fscrypt_last_block != other.fscrypt_last_block ||
 	remote_ino != other.remote_ino ||
 	referent_inodes != other.referent_inodes) {
       *divergent = true;
