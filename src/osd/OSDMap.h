@@ -1375,12 +1375,29 @@ public:
 					    const pg_t pg,
 					    const shard_id_t shard) const;
 
-  bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
-    auto p = removed_snaps_queue.find(pool);
-    if (p == removed_snaps_queue.end()) {
-      return false;
+  struct removed_snaps_queue_ctx_t {
+    const OSDMap* map = nullptr;
+    int64_t pool = -1;
+    const snap_interval_set_t* pool_interval = nullptr;
+  };
+  bool in_removed_snaps_queue(int64_t pool, snapid_t snap,
+                              removed_snaps_queue_ctx_t* ctx = nullptr) const {
+    const snap_interval_set_t* pool_interval = nullptr;
+
+    if (ctx && ctx->pool == pool && ctx->map == this) {
+      pool_interval = ctx->pool_interval;
+    } else {
+      auto p = removed_snaps_queue.find(pool);
+      if (p != removed_snaps_queue.end()) {
+        pool_interval = &(p->second);
+      }
     }
-    return p->second.contains(snap);
+    if (ctx) {
+      ctx->map = this;
+      ctx->pool = pool;
+      ctx->pool_interval = pool_interval;
+    }
+    return pool_interval ? pool_interval->contains(snap) : false;
   }
 
   const mempool::osdmap::map<int64_t,snap_interval_set_t>&

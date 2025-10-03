@@ -353,7 +353,7 @@ int SnapMapper::get_snaps(const hobject_t &oid, object_snaps *out) const
 {
   auto snaps = get_snaps_common(oid);
   if (snaps) {
-    *out = *snaps;
+    std::swap(*out, *snaps);
     return 0;
   }
   switch (auto e = snaps.error(); e.code) {
@@ -540,16 +540,16 @@ void SnapMapper::update_bits(
   }
 
 int SnapMapper::update_snaps(
-  const hobject_t &oid,
-  const set<snapid_t> &new_snaps,
+  const object_snaps& obj_snaps,
   const set<snapid_t> *old_snaps_check,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << *this << __func__ << " " << oid << " " << new_snaps
+  auto& oid = obj_snaps.oid;
+  dout(20) << *this << __func__ << " " << oid << " " << obj_snaps.snaps
 	   << " was " << (old_snaps_check ? *old_snaps_check : set<snapid_t>())
 	   << dendl;
   ceph_assert(check(oid));
-  if (new_snaps.empty())
+  if (obj_snaps.snaps.empty())
     return remove_oid(oid, t);
 
   object_snaps out;
@@ -560,14 +560,13 @@ int SnapMapper::update_snaps(
   if (old_snaps_check)
     ceph_assert(out.snaps == *old_snaps_check);
 
-  object_snaps in(oid, new_snaps);
-  set_snaps(oid, in, t);
+  set_snaps(oid, obj_snaps, t);
 
   set<string> to_remove;
   for (set<snapid_t>::iterator i = out.snaps.begin();
        i != out.snaps.end();
        ++i) {
-    if (!new_snaps.count(*i)) {
+    if (!obj_snaps.snaps.count(*i)) {
       to_remove.insert(to_raw_key(make_pair(*i, oid)));
     }
   }
@@ -581,12 +580,12 @@ int SnapMapper::update_snaps(
 }
 
 void SnapMapper::add_oid(
-  const hobject_t &oid,
-  const set<snapid_t>& snaps,
+  const object_snaps& obj_snaps,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)
 {
-  dout(20) << __func__ << " " << oid << " " << snaps << dendl;
-  ceph_assert(!snaps.empty());
+  auto& oid = obj_snaps.oid;
+  dout(20) << __func__ << " " << oid << " " << obj_snaps.snaps << dendl;
+  ceph_assert(!obj_snaps.snaps.empty());
   ceph_assert(check(oid));
   {
     object_snaps out;
@@ -599,14 +598,11 @@ void SnapMapper::add_oid(
     }
   }
 
-  object_snaps _snaps(oid, snaps);
-  set_snaps(oid, _snaps, t);
+  set_snaps(oid, obj_snaps, t);
 
   map<string, ceph::buffer::list> to_add;
-  for (set<snapid_t>::iterator i = snaps.begin();
-       i != snaps.end();
-       ++i) {
-    to_add.insert(to_raw(make_pair(*i, oid)));
+  for (auto& s : obj_snaps.snaps) {
+    to_add.insert(to_raw(make_pair(s, oid)));
   }
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (auto& i : to_add) {
@@ -809,17 +805,13 @@ void SnapMapper::update_snap_map(
       dout(20) << *this << __func__ << " decode snaps failure on " << i << dendl;
       snaps.clear();
     }
-    std::set<snapid_t> _snaps(snaps.begin(), snaps.end());
-
     if (i.is_clone() || i.is_promote()) {
       add_oid(
-        i.soid,
-        _snaps,
+	object_snaps(i.soid, snaps),
         _t);
     } else if (i.is_modify()) {
       int r = update_snaps(
-        i.soid,
-        _snaps,
+	object_snaps(i.soid, snaps),
         0,
         _t);
       ceph_assert(r == 0);

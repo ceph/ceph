@@ -133,6 +133,7 @@ class ContainerContext : public Context {
   T obj;
 public:
   ContainerContext(T &obj) : obj(obj) {}
+  ContainerContext(T&& obj) : obj(std::move(obj)) {}
   void finish(int r) override {}
 };
 template <typename T>
