@@ -55,3 +55,7 @@ ELSE:
             unsigned short int d_reclen
             unsigned char d_type
             char d_name[256]
+
+cdef extern from "../../include/platform_errno.h":
+    ctypedef signed int int32_t;
+    int32_t ceph_to_hostos_errno(int32_t e)
