@@ -11,7 +11,6 @@ add_library(radostest STATIC
 target_link_libraries(radostest PUBLIC
   GTest::GTest
   ceph-common
-  json_spirit
   ${GSSAPI_LIBRARIES} ${EXTRALIBS})
 add_library(radostest-cxx STATIC
   testcase_cxx.cc
