@@ -530,7 +530,7 @@ public:
 
   virtual void dump(ceph::Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
+  void encode(uint64_t features, int crcflags, bool skip_header_crc = false, CephContext *cct = nullptr);
 };
 
 extern Message *decode_message(CephContext *cct,
