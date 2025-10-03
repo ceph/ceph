@@ -1009,34 +1009,29 @@ int ECBackend::objects_read_sync(
     bufferlist *bl) {
 
   if (!sinfo.supports_direct_reads()) {
-  return -EOPNOTSUPP;
-}
-
-  int r = _objects_read_sync(hoid, off, len, op_flags, bl);
-
-  if (r < 0) {
-    dout(20) << __func__ << " r=" << r
-          << " hoid=" << hoid
-          << " off=" << off
-          << " len=" << len
-          << " op_flags=" << op_flags
-          << " primary=" << switcher->is_primary()
-          << " shard=" << (off / sinfo.get_chunk_size()) % sinfo.get_k()
-          << dendl;
-  } else {
-    return r;
+    return -EOPNOTSUPP;
   }
 
-  // The above returns errors largely only interesting for tracing. Here we
-  // simplify this down to:
-  // Primary returns EIO, which causes an async read to be executed immediately.
-  // A non-primary returns EAGAIN which forces the client to resent to the
-  // primary.
-  if (switcher->is_primary()) {
-    return -EIO;
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EIO;  // Permission denied (cos its missing)
   }
 
-  return -EAGAIN;
+  auto [shard_offset, shard_len] = extent_to_shard_extent(off, len);
+
+
+  dout(20) << __func__ << " Submitting sync read: "
+      << " hoid=" << hoid
+      << " shard_offset=" << shard_offset
+      << " shard_len=" << shard_len
+      << " op_flags=" << op_flags
+      << " primary=" << switcher->is_primary()
+      << dendl;
+
+
+  return switcher->store->read(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+          shard_offset,
+          shard_len, *bl, op_flags);
 }
 
 std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
@@ -1061,37 +1056,6 @@ std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, ui
   }
 
   return std::pair(shard_offset, shard_len);
-}
-
-// NOTE: Return codes from this function are largely nonsense and translated
-//       to more useful values before returning to client.
-int ECBackend::_objects_read_sync(
-    const hobject_t &hoid,
-    uint64_t off,
-    uint64_t len,
-    uint32_t op_flags,
-    bufferlist *bl) {
-
-  if (get_parent()->get_local_missing().is_missing(hoid)) {
-    return -EACCES;  // Permission denied (cos its missing)
-  }
-
-  auto [shard_offset, shard_len] = extent_to_shard_extent(off, len);
-
-
-  dout(20) << __func__ << " Submitting sync read: "
-      << " hoid=" << hoid
-      << " shard_offset=" << shard_offset
-      << " shard_len=" << shard_len
-      << " op_flags=" << op_flags
-      << " primary=" << switcher->is_primary()
-      << dendl;
-
-
-  return switcher->store->read(switcher->ch,
-          ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-          shard_offset,
-          shard_len, *bl, op_flags);
 }
 
 int ECBackend::objects_readv_sync(const hobject_t &hoid,

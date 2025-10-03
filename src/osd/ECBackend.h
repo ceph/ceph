@@ -140,6 +140,11 @@ class ECBackend : public ECCommon {
 
   std::pair<uint64_t, uint64_t> extent_to_shard_extent(uint64_t off, uint64_t len);
 
+  int objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl);
+
   /**
    * Async read mechanism
    *
