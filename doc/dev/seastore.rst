@@ -256,6 +256,22 @@ addresses with segment cleaning handled in the background.
 
 See crimson/os/seastore/transaction_manager.h
 
+osd shards change upon restart
+-------------------------------
+One osd may have multiple store shards, and also one osd shard may share store shard with other osd shard.
+you can assign crimson-smp number upon osd restart.
+e.g. if original crimson-smp is 3,
+
+restart assign crimson-smp to 5, then
+osd shard0   | osd shard1   | osd shard2   | osd shard3         | osd shard4 |
+store shard0 | store shard1 | store shard2 | share store shard0 | share store shard1 |
+restart assign crimson-smp to 2, then
+osd shard0   | osd shard1   |
+store shard0 | store shard1 |
+store shard2 |
+using ./bin/ceph daemon osd.0 dump_store_shards to check store assignment.
+
+
 Next Steps
 ==========
 
