@@ -11,8 +11,8 @@ upgrade-tasks:
           - ceph config set global log_to_journald false --force
           - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types mgr
           - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
-          - ceph versions | jq -e '.mgr | length == 1'
-          - ceph versions | jq -e '.mgr | keys' | grep $sha1
-          - ceph versions | jq -e '.overall | length == 2'
-          - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 2'
+          - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | length == 1'; do sleep 2; done"
+          - time timeout 60 bash -c "until ceph versions | jq -e '.mgr | keys' | grep $sha1; do sleep 2; done"
+          - time timeout 60 bash -c "until ceph versions | jq -e '.overall | length == 2'; do sleep 2; done"
+          - time timeout 60 bash -c "until ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 2'; do sleep 2; done"
           - ceph orch ps
