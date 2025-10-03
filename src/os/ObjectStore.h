@@ -721,13 +721,6 @@ public:
     bool allow_eio = false ///< [in] don't assert on eio
     ) = 0;
 
-  /// Get keys defined on oid
-  virtual int omap_get_keys(
-    CollectionHandle &c,   ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    std::set<std::string> *keys      ///< [out] Keys defined on oid
-    ) = 0;
-
   /// Get key values
   virtual int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
