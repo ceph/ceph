@@ -34,6 +34,10 @@
 #include "include/ceph_assert.h"
 #include "common/ceph_mutex.h"
 
+#ifdef DEBUG_GATHER
+#include "include/types.h" // for operator<<(std::set)
+#endif
+
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 
 /*
