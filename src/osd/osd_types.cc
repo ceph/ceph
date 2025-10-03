@@ -631,6 +631,8 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     } else {
       statfs.internally_reserved = 0;
     }
+    statfs.total_raw = kb << 10;
+    statfs.avail_raw = kb_avail << 10;
     statfs.allocated = kb_used_data << 10;
     statfs.omap_allocated = kb_used_omap << 10;
     statfs.internal_metadata = kb_used_meta << 10;
@@ -3371,8 +3373,10 @@ bool store_statfs_t::operator==(const store_statfs_t& other) const
 {
   return total == other.total
     && available == other.available
-    && allocated == other.allocated
     && internally_reserved == other.internally_reserved
+    && total_raw == other.total_raw
+    && avail_raw == other.avail_raw
+    && allocated == other.allocated
     && data_stored == other.data_stored
     && data_compressed == other.data_compressed
     && data_compressed_allocated == other.data_compressed_allocated
@@ -3386,6 +3390,8 @@ void store_statfs_t::dump(Formatter *f) const
   f->dump_int("total", total);
   f->dump_int("available", available);
   f->dump_int("internally_reserved", internally_reserved);
+  f->dump_int("total_raw", total_raw);
+  f->dump_int("avail_raw", avail_raw);
   f->dump_int("allocated", allocated);
   f->dump_int("data_stored", data_stored);
   f->dump_int("data_compressed", data_compressed);
@@ -3395,12 +3401,59 @@ void store_statfs_t::dump(Formatter *f) const
   f->dump_int("internal_metadata", internal_metadata);
 }
 
+void store_statfs_t::encode(ceph::buffer::list &bl) const
+{
+  ENCODE_START(2, 1, bl);
+  encode(total, bl);
+  encode(available, bl);
+  encode(internally_reserved, bl);
+
+  encode(allocated, bl);
+  encode(data_stored, bl);
+  encode(data_compressed, bl);
+  encode(data_compressed_allocated, bl);
+  encode(data_compressed_original, bl);
+  encode(omap_allocated, bl);
+  encode(internal_metadata, bl);
+
+  // since struct_v == 2
+  encode(total_raw, bl);
+  encode(avail_raw, bl);
+  ENCODE_FINISH(bl);
+}
+void store_statfs_t::decode(ceph::buffer::list::const_iterator &bl)
+{
+  DECODE_START(2, bl);
+  decode(total, bl);
+  decode(available, bl);
+  decode(internally_reserved, bl);
+
+  decode(allocated, bl);
+  decode(data_stored, bl);
+  decode(data_compressed, bl);
+  decode(data_compressed_allocated, bl);
+  decode(data_compressed_original, bl);
+  decode(omap_allocated, bl);
+  decode(internal_metadata, bl);
+
+  if (struct_v >= 2) {
+    decode(total_raw, bl);
+    decode(avail_raw, bl);
+  } else {
+    total_raw = total;
+    avail_raw = available;
+  }
+  DECODE_FINISH(bl);
+}
+
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
       << "store_statfs(0x" << s.available
       << "/0x"  << s.internally_reserved
       << "/0x"  << s.total
+      << ", raw 0x" << s.avail_raw
+      << "/0x"  << s.total_raw
       << ", data 0x" << s.data_stored
       << "/0x"  << s.allocated
       << ", compress 0x" << s.data_compressed
@@ -3421,6 +3474,8 @@ list<store_statfs_t> store_statfs_t::generate_test_instances()
   a.total = 234;
   a.available = 123;
   a.internally_reserved = 33;
+  a.total_raw = 234;
+  a.avail_raw = 123;
   a.allocated = 32;
   a.data_stored = 44;
   a.data_compressed = 21;

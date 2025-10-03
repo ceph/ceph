@@ -146,7 +146,7 @@ public:
   }
   int get_devices(std::set<std::string> *ls) const override;
 
-  int get_ebd_state(ExtBlkDevState &state) const override;
+  int get_ebd_statfs(store_statfs_t& statfs) const override;
 
   int read(uint64_t off, uint64_t len, ceph::buffer::list *pbl,
 	   IOContext *ioc,
