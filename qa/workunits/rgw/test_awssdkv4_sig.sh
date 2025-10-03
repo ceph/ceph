@@ -6,7 +6,7 @@
 # $RGW_HTTP_ENDPOINT_URL needs to be set to the endpoint of the RGW
 #
 # Example when ceph source is cloned into $HOME and a vstart cluster is already running with a radosgw:
-# $ PATH=~/ceph/build/bin/:$PATH CEPH_ROOT=~/ceph RGW_HTTP_ENDPOINT=http://localhost:8000 ~/ceph/qa/workunits/rgw/test_awssdkv4_sig.sh
+# $ PATH=~/ceph/build/bin/:$PATH CEPH_ROOT=~/ceph RGW_HTTP_ENDPOINT_URL=http://localhost:8000 ~/ceph/qa/workunits/rgw/test_awssdkv4_sig.sh
 #
 
 set -x
