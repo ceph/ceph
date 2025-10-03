@@ -103,6 +103,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_IGNORE_REDIRECT: return "ignore_redirect";
   case CEPH_OSD_FLAG_RETURNVEC: return "returnvec";
   case CEPH_OSD_FLAG_SUPPORTSPOOLEIO: return "supports_pool_eio";
+  case CEPH_OSD_FLAG_EC_DIRECT_READ: return "ec_direct_read";
   default: return "???";
   }
 }
