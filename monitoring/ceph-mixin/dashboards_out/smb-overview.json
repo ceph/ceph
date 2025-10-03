@@ -977,7 +977,9 @@
    "style": "dark",
    "schemaVersion": 41,
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview",
+      "protocol"
    ],
    "templating": {
       "list": [
@@ -1084,7 +1086,7 @@
    },
    "timepicker": {},
    "timezone": "",
-   "title": "SMB Overview",
+   "title": "Ceph SMB - Overview",
    "uid": "feem6ehrmi2o0b",
    "version": 1
 }
