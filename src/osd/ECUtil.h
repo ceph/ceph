@@ -766,9 +766,10 @@ public:
     return ((len + stripe_width - 1) / stripe_width) * chunk_size;
   }
 
-  uint64_t chunk_aligned_shard_offset_to_ro_offset(uint64_t offset) const {
-    ceph_assert(offset % chunk_size == 0);
-    return (offset / chunk_size) * stripe_width;
+  uint64_t shard_offset_to_ro_offset(shard_id_t shard, uint64_t offset) const {
+    raw_shard_id_t raw_shard = get_raw_shard(shard);
+    auto result = std::lldiv(offset, chunk_size);
+    return result.quot * stripe_width + (int)raw_shard * chunk_size + result.rem;
   }
 
   std::pair<uint64_t, uint64_t> chunk_aligned_ro_range_to_shard_ro_range(
