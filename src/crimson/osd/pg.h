@@ -675,7 +675,7 @@ public:
     bool transaction_applied,
     ObjectStore::Transaction &txn,
     bool async = false);
-  void replica_clear_repop_obc(
+  void clear_repop_obc(
     const std::vector<pg_log_entry_t> &logv);
   void handle_rep_op_reply(const MOSDRepOpReply& m);
   interruptible_future<> do_update_log_missing(

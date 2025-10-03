@@ -1377,7 +1377,7 @@ void PG::log_operation(
 
   if (!is_primary()) { // && !is_ec_pg()
     DEBUGDPP("on replica, clearing obc", *this);
-    replica_clear_repop_obc(logv);
+    clear_repop_obc(logv);
   }
   if (!logv.empty()) {
     scrubber.on_log_update(logv.rbegin()->version);
@@ -1391,9 +1391,9 @@ void PG::log_operation(
                            false);
 }
 
-void PG::replica_clear_repop_obc(
+void PG::clear_repop_obc(
   const std::vector<pg_log_entry_t> &logv) {
-  LOG_PREFIX(PG::replica_clear_repop_obc);
+  LOG_PREFIX(PG::clear_repop_obc);
   DEBUGDPP("clearing obc for {} log entries", *this, logv.size());
   for (auto &&e: logv) {
     DEBUGDPP("clearing entry for {} from: {} to: {}",
