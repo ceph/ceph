@@ -20,9 +20,9 @@ namespace rocksdb_cache {
 ShardedCache::ShardedCache(size_t capacity, int num_shard_bits,
                            bool strict_capacity_limit)
     : num_shard_bits_(num_shard_bits),
-      capacity_(capacity),
       strict_capacity_limit_(strict_capacity_limit),
-      last_id_(1) {}
+      last_id_(1),
+      capacity_(capacity) {}
 
 void ShardedCache::SetCapacity(size_t capacity) {
   int num_shards = 1 << num_shard_bits_;
