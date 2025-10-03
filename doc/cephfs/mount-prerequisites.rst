@@ -2,12 +2,14 @@ Mount CephFS: Prerequisites
 ===========================
 
 You can use CephFS by mounting the file system on a machine or by using
-:ref:`cephfs-shell <cephfs-shell>`. A system mount can be performed using `the
-kernel driver`_ as well as `the FUSE driver`_. Both have their own advantages
-and disadvantages. Read the following section to understand more about both of
-these ways to mount CephFS.
+:ref:`cephfs-shell <cephfs-shell>`. A system mount can be performed using
+:ref:`the kernel driver <cephfs_mount_using_kernel_driver>` as well as
+:ref:`the FUSE driver <cephfs_mount_using_fuse>`. Both have their own
+advantages and disadvantages. Read the following section to understand
+more about both of these ways to mount CephFS.
 
-For Windows CephFS mounts, please check the `ceph-dokan`_ page.
+For Windows CephFS mounts, please check the :ref:`ceph-dokan <ceph-dokan>`
+page.
 
 Which CephFS Client?
 --------------------
@@ -68,7 +70,3 @@ Ceph MON resides.
    individually, please check respective mount documents.
 
 .. _Client Authentication: ../client-auth
-.. _cephfs-shell: ..cephfs-shell
-.. _the kernel driver: ../mount-using-kernel-driver
-.. _the FUSE driver: ../mount-using-fuse
-.. _ceph-dokan: ../ceph-dokan

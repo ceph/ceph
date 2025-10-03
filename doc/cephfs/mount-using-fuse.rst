@@ -5,7 +5,7 @@
 ========================
 
 `ceph-fuse`_ can be used as an alternative to the :ref:`CephFS kernel
-driver<cephfs-mount-using-kernel-driver>` to mount CephFS file systems.
+driver<cephfs_mount_using_kernel_driver>` to mount CephFS file systems.
 `ceph-fuse`_ mounts are made in userspace. This means that `ceph-fuse`_ mounts
 are less performant than kernel driver mounts, but they are easier to manage
 and easier to upgrade.
@@ -25,7 +25,7 @@ mounts, as listed on the `Mount CephFS: Prerequisites`_ page.
 
 Synopsis
 ========
-This is the general form of the command for mounting CephFS via FUSE: 
+This is the general form of the command for mounting CephFS via FUSE:
 
 .. prompt:: bash #
 
