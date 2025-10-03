@@ -2748,6 +2748,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
