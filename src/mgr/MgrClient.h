@@ -18,13 +18,13 @@
 #include "msg/Connection.h"
 #include "msg/Dispatcher.h"
 #include "mon/MgrMap.h"
-#include "mgr/DaemonHealthMetric.h"
 
 #include "mgr/MetricTypes.h"
 
 #include "common/Timer.h"
 #include "common/CommandTable.h"
 
+class DaemonHealthMetric;
 class MMgrMap;
 class MMgrConfigure;
 class MMgrClose;
@@ -108,6 +108,7 @@ protected:
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
+  ~MgrClient() noexcept;
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
 

@@ -37,6 +37,7 @@
 #include <sys/mount.h>
 #endif
 
+#include "mgr/DaemonHealthMetric.h" // for enum daemon_metric
 #include "osd/PG.h"
 #include "osd/scrubber/scrub_machine.h"
 #include "osd/scrubber/pg_scrubber.h"
