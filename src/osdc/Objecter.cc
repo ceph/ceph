@@ -2319,6 +2319,13 @@ void Objecter::resend_mon_ops()
 
 // read | write ---------------------------
 
+
+void Objecter::op_post_submit(Op* op) {
+  boost::asio::post(service, [this, op]() {
+    op_submit(op);
+  });
+}
+
 void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
 {
   shunique_lock rl(rwlock, ceph::acquire_shared);
