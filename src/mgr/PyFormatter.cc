@@ -17,6 +17,13 @@
 
 #include "PyFormatter.h"
 #include <fstream>
+#include "common/debug.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mgr
+#undef dout_prefix
+#define dout_prefix *_dout << __func__ << " "
+
 
 #define LARGE_SIZE 1024
 
@@ -129,17 +136,4 @@ void PyFormatter::finish_pending_streams()
   }
 
   pending_streams.clear();
-}
-
-PyObject* PyJSONFormatter::get()
-{
-  if(json_formatter::stack_size()) {
-    close_section();
-  }
-  ceph_assert(!json_formatter::stack_size());
-  std::ostringstream ss;
-  flush(ss);
-  std::string s = ss.str();
-  PyObject* obj = PyBytes_FromStringAndSize(std::move(s.c_str()), s.size());
-  return obj;
 }

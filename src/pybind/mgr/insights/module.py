@@ -270,8 +270,8 @@ class Module(MgrModule):
         report["config"] = config
         health_check_details.extend(health_details)
 
-        osd_map = self.get("osd_map")
-        del osd_map['pg_temp']
+        osd_map = self.get("osd_map", mutable=True)
+        osd_map.pop("pg_temp", None)
         self._apply_osd_stats(osd_map)
         report["osd_dump"] = osd_map
 

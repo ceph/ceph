@@ -1924,7 +1924,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.setup_tls_config(server_addr, server_port)
                     return
             except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
+                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n'
                                    'Falling back to default configuration')
 
         # In any error fallback to plain http mode
