@@ -2063,6 +2063,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    op->set_balance_read();
   } else {
     // normal case; must be primary
     if (!is_primary()) {
