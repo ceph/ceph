@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
 /*
  * This file is open source software, licensed to you under the terms
  * of the Apache License, Version 2.0 (the "License").  See the NOTICE file
