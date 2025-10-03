@@ -8,6 +8,41 @@ if TYPE_CHECKING:
     from .module import CephadmOrchestrator
 
 
+SCHEMA = [
+    '''
+    CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+        cluster_version_id INTEGER PRIMARY KEY, 
+        cluster_version TEXT NOT NULL,
+        creation_time TEXT NOT NULL
+    );
+    ''',
+    '''
+    CREATE TABLE IF NOT EXISTS VersionAssociation(
+        id INTEGER PRIMARY KEY,
+        cluster_version_id INTEGER NOT NULL,
+        FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+    );
+    '''
+]
+
+SCHEMA_VERSIONED = [
+    [
+        '''
+        CREATE TABLE IF NOT EXISTS ClusterVersionInfo(
+            cluster_version_id INTEGER PRIMARY KEY, 
+            cluster_version TEXT NOT NULL,
+            creation_time TEXT NOT NULL
+        );
+        ''',
+        '''
+        CREATE TABLE IF NOT EXISTS VersionAssociation(
+            id INTEGER PRIMARY KEY,
+            cluster_version_id INTEGER NOT NULL,
+            FOREIGN KEY (cluster_version_id) REFERENCES ClusterVersionInfo(cluster_version_id) 
+        );
+        '''
+    ]
+]
 
 class VersionTracker:
 
@@ -166,3 +201,4 @@ class VersionTracker:
                         return -errno.EIO, '', str(error)
                     
         return 0, 'Cluster Version History Deletion Successful', ''
+    
