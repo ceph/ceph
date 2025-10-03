@@ -439,7 +439,7 @@ const routes: Routes = [
   },
   {
     path: 'topic',
-    data: { breadcrumbs: 'Topic' },
+    data: { breadcrumbs: 'Event' },
     children: [
       { path: '', component: RgwTopicListComponent },
       {

@@ -1,5 +1,7 @@
   <ng-container>
   <cd-table #table
+            headerTitle="Event Destination"
+            headerDescription="An event destination allows users to configure supported external services (such as Kafka and AMQP) to receive event messages whenever changes occur to a bucket or its objects."
             [autoReload]="false"
             [data]="topics$ | async"
             [columns]="columns"
