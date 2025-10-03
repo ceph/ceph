@@ -16,7 +16,10 @@ import {
   ListModule,
   ToggletipModule,
   IconModule,
-  IconService
+  IconService,
+  SelectModule,
+  NumberModule,
+  FileUploaderModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -115,7 +118,10 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ModalModule,
     ListModule,
     ToggletipModule,
-    IconModule
+    IconModule,
+    SelectModule,
+    NumberModule,
+    FileUploaderModule
   ],
   declarations: [
     MonitorComponent,
