@@ -2047,16 +2047,22 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // check for op with rwordered and rebalance or localize reads
-  if ((m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) || m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->rwordered()) {
+  if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
     dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+  if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    if (is_primary() || is_nonprimary()) {
+      op->set_ec_direct_read();
+    } else {
+      osd->handle_misdirected_op(this, op);
+      return;
+    }
+  } else if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+                                CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
