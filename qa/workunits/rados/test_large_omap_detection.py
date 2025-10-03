@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 # -*- mode:python -*-
-# vim: ts=4 sw=4 smarttab expandtab
+# vim: ts=4 sw=4 expandtab
 #
 # Copyright (C) 2017 Red Hat <contact@redhat.com>
 #

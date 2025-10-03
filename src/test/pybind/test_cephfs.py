@@ -1,4 +1,4 @@
-# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+# vim: expandtab shiftwidth=4 softtabstop=4
 import collections
 collections.Callable = collections.abc.Callable
 from assertions import assert_raises, assert_equal, assert_not_equal, assert_greater
