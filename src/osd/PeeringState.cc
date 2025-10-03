@@ -1549,17 +1549,21 @@ bool PeeringState::needs_backfill() const
 }
 
 /**
-* Returns whether a particular object can be safely read on this replica
+* Returns whether a particular object can be safely read
 */
-bool PeeringState::can_serve_replica_read(const hobject_t &hoid)
+bool PeeringState::can_serve_read(const hobject_t &hoid)
 {
   ceph_assert(!is_primary());
+  std::string_view storage_object = "replica";
+  if (pool.info.is_erasure()) {
+    storage_object = "shard";
+  }
   if (!pg_log.get_log().has_write_since(
       hoid, pg_committed_to)) {
-    psdout(20) << "can be safely read on this replica" << dendl;
+    psdout(20) << "can be safely read on this " << storage_object << dendl;
     return true;
   } else {
-    psdout(20) << "can't read object on this replica" << dendl;
+    psdout(20) << "can't read object on this " << storage_object << dendl;
     return false;
   }
 }

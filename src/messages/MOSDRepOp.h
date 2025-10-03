@@ -65,7 +65,7 @@ public:
    * Because updates <= pg_committed_to cannot become divergent, replicas
    * may safely serve reads on objects which do not have more recent updates.
    *
-   * See PeeringState::pg_committed_to, PeeringState::can_serve_replica_read
+   * See PeeringState::pg_committed_to, PeeringState::can_serve_read
    *
    * Historical note: Prior to early 2024, this field was named
    * min_last_complete_ondisk.  The replica, however, only actually relied on
