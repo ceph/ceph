@@ -1093,6 +1093,41 @@ int ECBackend::_objects_read_sync(
           shard_len, *bl, op_flags);
 }
 
+int ECBackend::objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl) {
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EACCES;  // Permission denied (cos its missing)
+  }
+
+  // Not using extent set, since we need the one used by readv.
+
+  auto shard = get_parent()->whoami_shard().shard;
+  interval_set im(std::move(m));
+  m.clear(); // Make m safe to write to again.
+  auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
+  if (r >= 0) {
+    uint64_t chunk_size = sinfo.get_chunk_size();
+    for (auto [off, len] : im) {
+      uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
+      uint64_t to_next_chunk = ((off / chunk_size) + 1) * chunk_size - off;
+      uint64_t ro_len = std::min(to_next_chunk, len);
+      while (len > 0 ) {
+        dout(20) << __func__ << " shard=" << shard << " extent=" << off << "~" << len <<  ">" << ro_offset << "~" << ro_len << dendl;
+        m.emplace(ro_offset, ro_len);
+        len -= ro_len;
+        ro_offset += ro_len + sinfo.get_stripe_width() - chunk_size;
+        ro_len = std::min(len, chunk_size);
+      }
+    }
+  } else {
+    return r;
+  }
+
+  return 0;
+}
+
 void ECBackend::objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
