@@ -16,6 +16,7 @@
 #include "Monitor.h"
 
 #include "common/Timer.h"
+#include "include/Context.h"
 #include "MonitorDBStore.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonPing.h"

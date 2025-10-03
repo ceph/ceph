@@ -112,14 +112,13 @@ public:
         "\\\"key\\\": \\\"" + peer.key + "\\\""
       "}";
 
-    bufferlist in_bl;
     ASSERT_EQ(0, m_cluster->mon_command(
       "{"
         "\"prefix\": \"config-key set\","
         "\"key\": \"" RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) +
           "/" + peer.uuid + "\","
         "\"val\": \"" + json + "\"" +
-      "}", in_bl, nullptr, nullptr));
+      "}", {}, nullptr, nullptr));
   }
 
   void check_peers() {

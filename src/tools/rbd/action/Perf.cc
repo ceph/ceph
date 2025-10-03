@@ -4,6 +4,8 @@
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
+#include "include/byte_u_t.h"
+#include "include/si_u_t.h"
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/ceph_json.h"
@@ -120,10 +122,9 @@ int query_iostats(librados::Rados& rados, const std::string& pool_spec,
       "format": "json"
     }")";
 
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string outs;
-  int r = rados.mgr_command(cmd, in_bl, &out_bl, &outs);
+  int r = rados.mgr_command(std::move(cmd), {}, &out_bl, &outs);
   if (r == -EOPNOTSUPP) {
     err_os << "rbd: 'rbd_support' mgr module is not enabled."
            << std::endl << std::endl

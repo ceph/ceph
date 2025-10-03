@@ -24,12 +24,15 @@
 #include "FSCommands.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 #include "OSDMonitor.h"
+#include "Paxos.h"
 
 #include "common/strtol.h"
 #include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/cmdparse.h"
+#include "messages/MMDSBeacon.h"
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
@@ -38,6 +41,8 @@
 #include "messages/MGenericMessage.h"
 
 #include "include/ceph_assert.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "mds/cephfs_features.h"
@@ -1396,6 +1401,10 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   return blocklist_epoch != 0;
 }
 
+bool MDSMonitor::is_leader() const {
+  return mon.is_leader();
+}
+
 mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostream &ss)
 {
   // Try parsing as a role
@@ -2019,6 +2028,8 @@ void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::Transa
 
 int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
 {
+  using ceph::decode;
+
   bufferlist bl;
   int r = mon.store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
   if (r) {
@@ -2027,7 +2038,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   }
 
   auto it = bl.cbegin();
-  ceph::decode(m, it);
+  decode(m, it);
   return 0;
 }
 

@@ -14,10 +14,11 @@
 
 #pragma once
 
-#include "include/encoding.h"
+#include "include/encoding_map.h"
 #include "include/types.h"
 
 #include <iosfwd>
+#include <list>
 #include <map>
 #include <set>
 

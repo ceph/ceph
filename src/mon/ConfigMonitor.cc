@@ -3,9 +3,11 @@
 
 #include "mon/ConfigMonitor.h"
 #include "mon/Monitor.h"
+#include "mon/MonMap.h"
 #include "mon/KVMonitor.h"
 #include "mon/MgrMonitor.h"
 #include "mon/OSDMonitor.h"
+#include "mon/Paxos.h"
 #include "messages/MConfig.h"
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"

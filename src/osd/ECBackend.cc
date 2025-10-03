@@ -607,7 +607,7 @@ void ECBackend::handle_sub_write_reply(
         get_parent()->whoami()) + "\"] }";
     vector<std::string> vcmd{cmd};
     dout(0) << __func__ << " Error inject - marking OSD down" << dendl;
-    get_parent()->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+    get_parent()->start_mon_command(std::move(vcmd), {}, nullptr, nullptr, nullptr);
   }
 
   if (op->pending_commits == 0) {
