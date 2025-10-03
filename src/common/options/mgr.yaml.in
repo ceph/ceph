@@ -33,6 +33,31 @@ options:
   services:
   - mgr
   - common
+- name: mgr_stats_period_autotune
+  type: bool
+  level: basic
+  desc: Automatically adjust mgr_stats_period based on Manager message queue depth
+  long_desc: When enabled, the Manager monitors its incoming message queue and automatically
+    increases mgr_stats_period when the queue backs up beyond the configured threshold,
+    reducing daemon reporting frequency to prevent Manager overload. The period is
+    gradually decreased back to the original value when the queue depth recovers.
+    This prevents performance degradation during high cluster activity without requiring
+    manual intervention. When disabled, mgr_stats_period remains at the manually
+    configured value.
+  default: true
+  services:
+  - mgr
+- name: mgr_stats_period_autotune_queue_threshold
+  type: int
+  level: advanced
+  desc: Message queue depth that triggers automatic increase of mgr_stats_period
+  long_desc: When mgr_stats_period_autotune is enabled, the Manager will increase
+    the stats reporting period if the incoming message queue exceeds this threshold.
+    Higher values make the system less sensitive to temporary queue spikes but may
+    allow longer periods of Manager overload.
+  default: 100
+  services:
+  - mgr
 - name: mgr_client_bytes
   type: size
   level: dev
