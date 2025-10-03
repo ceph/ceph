@@ -1,11 +1,8 @@
-<cds-modal size="sm"
-           [open]="open"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
-  </cds-modal-header>
+<cd-modal size="sm"
+          [open]="open"
+          title="{{ actionDescription | titlecase }} {{ itemDescription }}">
 
-  <section cdsModalContent>
+  <ng-container class="modal-content">
     <form name="deletionForm"
           #formDir="ngForm"
           [formGroup]="deletionForm"
@@ -71,19 +68,14 @@
         </div>
       </div>
     </form>
-  </section>
-  <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
-                        (backActionEvent)="backAction ? callBackAction() : hideModal()"
-                        [form]="deletionForm"
-                        [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
-                        [modalForm]="true"
-                        [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>
+  </ng-container>
 
-</cds-modal>
-
-<ng-template #deletionHeading>
-  <h3 cdsModalHeaderHeading
-      i18n>
-    {{ actionDescription | titlecase }} {{ itemDescription }}
-  </h3>
-</ng-template>
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="callSubmitAction()"
+                          (backActionEvent)="backAction ? callBackAction() : hideModal()"
+                          [form]="deletionForm"
+                          [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
+                          [modalForm]="true"
+                          [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

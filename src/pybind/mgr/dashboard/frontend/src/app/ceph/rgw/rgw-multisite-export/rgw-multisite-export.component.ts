@@ -1,33 +1,34 @@
-import { AfterViewChecked, ChangeDetectorRef, Component, OnInit } from '@angular/core';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { AfterViewChecked, ChangeDetectorRef, Component, Inject, OnInit, Optional } from '@angular/core';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm } from '../models/rgw-multisite';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-export',
   templateUrl: './rgw-multisite-export.component.html',
   styleUrls: ['./rgw-multisite-export.component.scss']
 })
-export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
+export class RgwMultisiteExportComponent extends BaseModal implements OnInit, AfterViewChecked {
   exportTokenForm: CdFormGroup;
   realms: any;
   realmList: RgwRealm[];
-  multisiteInfo: any;
   tokenValid = false;
   loading = true;
   icons = Icons;
 
   constructor(
-    public activeModal: NgbActiveModal,
     public rgwRealmService: RgwRealmService,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
-    private readonly changeDetectorRef: ChangeDetectorRef
+    private readonly changeDetectorRef: ChangeDetectorRef,
+
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: any
   ) {
+    super();
     this.createForm();
   }
 
@@ -36,7 +37,7 @@ export class RgwMultisiteExportComponent implements OnInit, AfterViewChecked {
   }
 
   onSubmit() {
-    this.activeModal.close();
+    this.closeModal();
   }
 
   ngOnInit(): void {

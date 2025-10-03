@@ -1,6 +1,4 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container i18n="form title"
-                class="modal-title">Export Multi-site Realm Token</ng-container>
+<cd-modal title="Export Multi-site Realm Token">
 
   <ng-container class="modal-content">
     <form name="exportTokenForm"
@@ -13,8 +11,7 @@
          [size]="icons.size24"
          class="cds-info-color"></svg>
   </span>
-    <div class="modal-body"
-         *ngIf="!loading">
+    <ng-container *ngIf="!loading">
       <cd-alert-panel *ngIf="!tokenValid"
                       type="warning"
                       class="mx-3"
@@ -58,12 +55,15 @@
           <hr *ngIf="realms.length > 1">
         </div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <cd-back-button class="m-2 float-end"
-                      aria-label="Close"
-                      (backAction)="activeModal.close()"></cd-back-button>
-    </div>
+    </ng-container>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel [modalForm]="true"
+                          aria-label="Close"
+                          (backAction)="closeModal()"
+                          cancelText="Close"
+                          [showSubmit]="false"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

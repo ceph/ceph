@@ -1,18 +1,22 @@
-<div [ngClass]="pageURL ? 'modal' : ''">
-  <div [ngClass]="pageURL ? 'modal-dialog' : ''">
-    <div class="modal-content content-theme">
-      <div class="modal-header">
-        <h4 class="modal-title float-start">
-          <ng-content select=".modal-title"></ng-content>
-        </h4>
-        <button type="button"
-                class="btn-close float-end"
-                aria-label="Close"
-                (click)="close()">
-        </button>
-      </div>
+<cds-modal
+  [size]="size"
+  [open]="open"
+  [hasScrollingContent]="hasScrollingContent"
+  (overlaySelected)="closeModal()">
 
-      <ng-content select=".modal-content"></ng-content>
-    </div>
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>{{ title }}
+    </h3>
+
+    <cd-help-text
+      [formAllFieldsRequired]="true"
+      *ngIf="formAllFieldsRequired"></cd-help-text>
+  </cds-modal-header>
+
+  <div cdsModalContent>
+    <ng-content select=".modal-content"></ng-content>
   </div>
-</div>
+
+  <ng-content select=".modal-footer"></ng-content>
+</cds-modal>

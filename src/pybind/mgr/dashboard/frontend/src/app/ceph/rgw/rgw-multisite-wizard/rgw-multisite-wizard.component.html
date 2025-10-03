@@ -1,15 +1,9 @@
 
-<cds-modal size="lg"
-           [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        data-testid="rgw-multisite-wizard-header"
-        i18n>Set up Multi-site Replication</h3>
-  </cds-modal-header>
+<cd-modal size="lg"
+          [open]="open"
+          title="Set up Multi-site Replication">
 
-  <div cdsModalContent>
+  <ng-container class="modal-content">
     <div cdsRow>
       <div cdsCol
            [columnNumbers]="{'lg': 2, 'md': 2, 'sm': 2}"
@@ -285,32 +279,33 @@
         </form>
       </div>
     </div>
-  </div>
-  <cds-modal-footer>
-    <button cdsButton="secondary"
-            name="skip-cluster-selection"
-            aria-label="Skip"
-            (click)="onSkip()"
-            *ngIf="stepTitles[currentStep.stepIndex]['label'] === 'Select Cluster' && multisiteSetupForm.get('configType').value === 'newRealm'"
-            i18n>Skip</button>
-    <button cdsButton="secondary"
-            (click)="onPreviousStep()"
-            [attr.aria-label]="showCancelButtonLabel()"
-            i18n>{{ showCancelButtonLabel() }}</button>
-    <button cdsButton="primary"
-            (click)="onNextStep()"
-            aria-label="Next"
-            [disabled]="loading"
-            i18n>{{ showSubmitButtonLabel() }}
-      <cds-loading [isActive]="loading"
-                   [overlay]="false"
-                   size="sm"
-                   *ngIf="loading">
-      </cds-loading>
-    </button>
-  </cds-modal-footer>
-</cds-modal>
-
+  </ng-container>
+  <ng-container class="modal-footer">
+    <cds-modal-footer>
+      <button cdsButton="secondary"
+              name="skip-cluster-selection"
+              aria-label="Skip"
+              (click)="onSkip()"
+              *ngIf="stepTitles[currentStep.stepIndex]['label'] === 'Select Cluster' && multisiteSetupForm.get('configType').value === 'newRealm'"
+              i18n>Skip</button>
+      <button cdsButton="secondary"
+              (click)="onPreviousStep()"
+              [attr.aria-label]="showCancelButtonLabel()"
+              i18n>{{ showCancelButtonLabel() }}</button>
+      <button cdsButton="primary"
+              (click)="onNextStep()"
+              aria-label="Next"
+              [disabled]="loading"
+              i18n>{{ showSubmitButtonLabel() }}
+        <cds-loading [isActive]="loading"
+                     [overlay]="false"
+                     size="sm"
+                     *ngIf="loading">
+        </cds-loading>
+      </button>
+    </cds-modal-footer>
+  </ng-container>
+</cd-modal>
 
 <ng-template #nonMultiClusterTemplate>
   <ng-container *ngIf="!loading; else loadingTemplate">

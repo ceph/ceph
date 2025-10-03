@@ -1,6 +1,6 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, Inject, OnInit, Optional, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -14,13 +14,14 @@ import { HostService } from '~/app/shared/api/host.service';
 import { SelectOption } from '~/app/shared/components/select/select-option.model';
 import { Observable, Subject, merge } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-multisite-import',
   templateUrl: './rgw-multisite-import.component.html',
   styleUrls: ['./rgw-multisite-import.component.scss']
 })
-export class RgwMultisiteImportComponent implements OnInit {
+export class RgwMultisiteImportComponent extends BaseModal implements OnInit {
   readonly endpoints = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{2,4}$/;
   readonly ipv4Rgx = /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
   readonly ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
@@ -28,7 +29,6 @@ export class RgwMultisiteImportComponent implements OnInit {
   typeahead: NgbTypeahead;
 
   importTokenForm: CdFormGroup;
-  multisiteInfo: object[] = [];
   zoneList: RgwZone[] = [];
   zoneNames: string[];
   hosts: any;
@@ -37,13 +37,15 @@ export class RgwMultisiteImportComponent implements OnInit {
   labelFocus = new Subject<string>();
 
   constructor(
-    public activeModal: NgbActiveModal,
     public hostService: HostService,
 
     public rgwRealmService: RgwRealmService,
     public actionLabels: ActionLabelsI18n,
-    public notificationService: NotificationService
+    public notificationService: NotificationService,
+
+    @Optional() @Inject('multisiteInfo') public multisiteInfo: object[] = []
   ) {
+    super();
     this.hosts = {
       options: [],
       messages: new SelectMessages({
@@ -138,7 +140,7 @@ export class RgwMultisiteImportComponent implements OnInit {
             NotificationType.success,
             $localize`Realm token import successfull`
           );
-          this.activeModal.close();
+          this.closeModal();
         },
         () => {
           this.importTokenForm.setErrors({ cdSubmitButton: true });

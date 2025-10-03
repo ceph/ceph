@@ -1,15 +1,8 @@
-<cds-modal size="md"
-           [open]="open"
-           (overlaySelected)="closeModal()"
-           [hasScrollingContent]="true">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        *ngIf="titleText">
-      {{ titleText }}
-    </h3>
-  </cds-modal-header>
-    <div cdsModalContent
-         data-testid="modal-content">
+<cd-modal size="md"
+          [open]="open"
+          title="{{ titleText ? titleText : '' }}">
+    <ng-container class="modal-content"
+                  data-testid="modal-content">
       <form [formGroup]="formGroup"
             #formDir="ngForm"
             novalidate>
@@ -96,9 +89,12 @@
         </div>
       </ng-container>
     </form>
-  </div>
-  <cd-form-button-panel (submitActionEvent)="onSubmitForm(formGroup.value)"
-                        [form]="formGroup"
-                        [submitText]="submitButtonText"
-                        [modalForm]="true"></cd-form-button-panel>
-</cds-modal>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="onSubmitForm(formGroup.value)"
+                          [form]="formGroup"
+                          [submitText]="submitButtonText"
+                          [modalForm]="true"></cd-form-button-panel>
+  </ng-container>
+</cd-modal>

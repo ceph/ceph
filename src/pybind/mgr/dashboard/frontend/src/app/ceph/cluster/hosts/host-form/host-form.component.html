@@ -1,16 +1,12 @@
-<cds-modal size="md"
-           [open]="open"
-           [hasScrollingContent]="true">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
-  <ng-container *cdFormLoading="loading">
-  <form name="hostForm"
-        #formDir="ngForm"
-        [formGroup]="hostForm"
-        novalidate>
-    <div cdsModalContent>
+<cd-modal size="md"
+          title="{{ action | titlecase }} {{ resource | upperFirst }}">
+
+  <ng-container class="modal-content">
+    <ng-container *cdFormLoading="loading">
+    <form name="hostForm"
+          #formDir="ngForm"
+          [formGroup]="hostForm"
+          novalidate>
       <!-- Hostname -->
       <div class="form-item">
         <cds-text-label for="hostname"
@@ -96,12 +92,15 @@
                       i18n>Maintenance Mode
         </cds-checkbox>
       </div>
-    </div>
+    </form>
+    </ng-container>
+  </ng-container>
+
+  <ng-container class="modal-footer">
     <cd-form-button-panel (submitActionEvent)="submit()"
                           [form]="hostForm"
                           [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
                           [modalForm]="true">
     </cd-form-button-panel>
-  </form>
-</ng-container>
-</cds-modal>
+  </ng-container>
+</cd-modal>

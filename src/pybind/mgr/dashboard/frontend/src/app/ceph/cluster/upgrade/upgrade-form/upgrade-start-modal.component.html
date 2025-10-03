@@ -1,7 +1,4 @@
-<cd-modal [modalRef]="activeModal">
-  <ng-container class="modal-title">
-    <ng-container i18n>Upgrade Cluster</ng-container>&nbsp;
-  </ng-container>
+<cd-modal title="Upgrade Cluster">
 
   <ng-container class="modal-content">
     <form name="upgradeForm"
@@ -9,7 +6,6 @@
           #formDir="ngForm"
           [formGroup]="upgradeForm"
           novalidate>
-      <div class="modal-body">
         <cd-alert-panel type="warning"
                         spacingClass="mb-3"
                         *ngIf="showImageField"
@@ -77,13 +73,13 @@
                   i18n>This field is required!</span>
           </div>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="startUpgrade()"
-                              [form]="upgradeForm"
-                              [submitText]="actionLabels.START_UPGRADE"></cd-form-button-panel>
-      </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="startUpgrade()"
+                          [form]="upgradeForm"
+                          [modalForm]="true"
+                          [submitText]="actionLabels.START_UPGRADE"></cd-form-button-panel>
   </ng-container>
 </cd-modal>
