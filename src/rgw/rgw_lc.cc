@@ -1175,8 +1175,8 @@ public:
 
       ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
                         << " " << oc.wq->thr_name() << dendl;
-      *exp_time = real_clock::now();
-      return true;
+
+      // go on to compare mtime, size, etc
     }
 
     auto& mtime = o.meta.mtime;
