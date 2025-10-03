@@ -219,6 +219,7 @@ namespace rgw::sal {
   }
 
   int DBBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 bool reset,
                                  RGWBucketEnt* ent)
   {
     return 0;
