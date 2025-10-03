@@ -35,7 +35,8 @@ public:
 
   virtual writer_stats_t get_stats() const = 0;
 
-  using open_ertr = base_ertr;
+  using open_ertr = base_ertr::extend<
+    crimson::ct_error::enospc>;
   virtual open_ertr::future<> open() = 0;
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
@@ -738,6 +739,11 @@ private:
       return trimmer->get_backend_type();
     }
 
+    const segments_info_t* get_segments_info() const {
+      assert(main_cleaner);
+      return main_cleaner->get_segments_info();
+    }
+
     bool has_cold_tier() const {
       return cold_cleaner.get() != nullptr;
     }
@@ -758,18 +764,7 @@ private:
       return stat;
     }
 
-    using mount_ret = ExtentPlacementManager::mount_ret;
-    mount_ret mount() {
-      ceph_assert(state == state_t::STOP);
-      state = state_t::MOUNT;
-      trimmer->reset();
-      stats = {};
-      register_metrics();
-      return main_cleaner->mount(
-      ).safe_then([this] {
-        return has_cold_tier() ? cold_cleaner->mount() : mount_ertr::now();
-      });
-    }
+    ExtentPlacementManager::mount_ret mount();
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
@@ -1086,6 +1081,8 @@ private:
       uint64_t io_blocked_count = 0;
       uint64_t io_blocked_count_trim = 0;
       uint64_t io_blocked_count_clean = 0;
+      uint64_t io_retried_blocked_count_trim = 0;
+      uint64_t io_retried_blocked_count_clean = 0;
       uint64_t io_blocked_sum = 0;
       uint64_t io_blocked_time = 0;
     } stats;
