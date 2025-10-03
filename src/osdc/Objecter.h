@@ -1883,6 +1883,7 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
+    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
 
     epoch_t last_force_resend = 0;
 
@@ -2053,8 +2054,6 @@ public:
     ZTracer::Trace trace;
     std::uint64_t subsystem = 0;
     const jspan_context* otel_trace = nullptr;
-
-    std::optional<shard_id_t> ec_shard;
 
     static bool has_completion(decltype(onfinish)& f) {
       return std::visit([](auto&& arg) { return bool(arg);}, f);

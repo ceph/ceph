@@ -384,6 +384,8 @@ namespace {
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
   auto &t = op->target;
   ldout(cct, DBG_LVL) << str
+    << " osd=" << t.osd
+    << " shard=" << (t.force_shard ? *t.force_shard : shard_id_t(-1))
     << " balance_reads=" << ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
     << " ops.size()=" << op->ops.size()
     << " needs_version=" << (op->objver?"true":"false");
@@ -411,6 +413,11 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
   auto &t = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
 
+  if (!pi) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: No Pool" << dendl;return false;
+    return false;
+  }
+
   debug_op_summary("orig_op: ", op, cct);
 
   bool validated = validate(op, pi->is_erasure(), cct);
@@ -435,7 +442,7 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
   }
 
   if (split_read->abort) {
-    ldout(cct, DBG_LVL) << __func__ <<" ABORTED 1" << dendl;
+    ldout(cct, DBG_LVL) << __func__ <<" ABORTED 1" << dendl;return false;
     return false;
   }
 
@@ -473,7 +480,7 @@ bool SplitRead::create(Objecter::Op *op, Objecter &objecter,
     auto sub_op = objecter.prepare_read_op(
       t.base_oid, t.base_oloc, split_read->sub_reads.at(shard).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
-    sub_op->ec_shard.emplace(shard);
+    sub_op->target.force_shard.emplace(shard);
     sub_op->target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
 
     debug_op_summary("sent_op: ", sub_op, cct);
