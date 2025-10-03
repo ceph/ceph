@@ -552,7 +552,7 @@ common::intrusive_timer &PrimaryLogPG::get_pg_timer()
   return osd->pg_timer;
 }
 
-void PrimaryLogPG::replica_clear_repop_obc(
+void PrimaryLogPG::clear_repop_obc(
   const vector<pg_log_entry_t> &logv,
   ObjectStore::Transaction &t)
 {
