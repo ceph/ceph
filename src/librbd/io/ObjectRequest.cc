@@ -19,7 +19,7 @@
 #include "librbd/asio/Utils.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/CopyupRequest.h"
-#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/Utils.h"
 
 #include <boost/optional.hpp>
@@ -990,11 +990,11 @@ void ObjectListSnapsRequest<I>::list_from_parent() {
    auto list_snaps_flags = (
      m_list_snaps_flags | LIST_SNAPS_FLAG_IGNORE_ZEROED_EXTENTS);
 
-  ImageListSnapsRequest<I> req(
-    *image_ctx->parent, aio_comp, std::move(parent_extents), m_image_area,
-    {0, image_ctx->parent->snap_id}, list_snaps_flags, &m_parent_snapshot_delta,
-    this->m_trace);
-  req.send();
+  auto req = io::ImageDispatchSpec::create_list_snaps(
+    *image_ctx->parent, io::IMAGE_DISPATCH_LAYER_NONE, aio_comp,
+    std::move(parent_extents), m_image_area, {0, image_ctx->parent->snap_id},
+    list_snaps_flags, &m_parent_snapshot_delta, this->m_trace);
+  req->send();
 }
 
 template <typename I>
