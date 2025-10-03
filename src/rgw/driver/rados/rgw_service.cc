@@ -3,7 +3,6 @@
 
 #include "rgw_service.h"
 
-#include "services/svc_finisher.h"
 #include "services/svc_bi_rados.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
@@ -55,7 +54,6 @@ int RGWServices_Def::init(CephContext *cct,
 			  optional_yield y,
                           const DoutPrefixProvider *dpp)
 {
-  finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
@@ -80,7 +78,6 @@ int RGWServices_Def::init(CephContext *cct,
   }
 
   async_processor->start();
-  finisher->init();
   bi_rados->init(zone.get(), driver->getRados()->get_rados_handle(),
 		 bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
@@ -113,21 +110,14 @@ int RGWServices_Def::init(CephContext *cct,
 
   can_shutdown = true;
 
-  int r = finisher->start(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start finisher service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
+  int r = 0;
   if (!raw) {
     r = notify->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
       return r;
     }
-  }
 
-  if (!raw) {
     r = zone->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
@@ -245,7 +235,6 @@ void RGWServices_Def::shutdown()
   bi_rados->shutdown();
   bucket_sync_sobj->shutdown();
   bucket_sobj->shutdown();
-  finisher->shutdown();
 
   sysobj->shutdown();
   sysobj_core->shutdown();
@@ -271,7 +260,6 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
     return r;
   }
 
-  finisher = _svc.finisher.get();
   bi_rados = _svc.bi_rados.get();
   bi = bi_rados;
   bilog_rados = _svc.bilog_rados.get();
