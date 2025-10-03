@@ -706,14 +706,6 @@ public:
   }
 
   /// OMAP
-  /// Get omap contents
-  virtual int omap_get(
-    CollectionHandle &c,     ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    ceph::buffer::list *header,      ///< [out] omap header
-    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value std::map
-    ) = 0;
-
   /// Get omap header
   virtual int omap_get_header(
     CollectionHandle &c,     ///< [in] Collection containing oid

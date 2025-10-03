@@ -188,6 +188,20 @@ public:
     : StoreTestBase(GetParam())
   {}
   void doCompressionTest();
+  int omap_get(ObjectStore::CollectionHandle& c_,
+               const ghobject_t& oid,
+               bufferlist* header,
+               map<string, string>* out) {
+    int r = store->omap_get_header(c_, oid, header);
+    r = r < 0 ? r : store->omap_iterate(
+      c_, oid,
+      ObjectStore::omap_iter_seek_t::min_lower_bound(),
+      [out](std::string_view key, std::string_view value) mutable {
+	out->emplace(key, value);
+	return ObjectStore::omap_iter_ret_t::NEXT;
+      });
+    return r;
+  }
 };
 
 class StoreTestDeferredSetup : public StoreTest {
@@ -481,8 +495,8 @@ public:
       generator gen{3.85 + 0.1 * o / object_count, 1 - double(o) / object_count};
 
       bufferlist omap_header;
-      map<string, bufferlist> omap_set;
-      r = store->omap_get(ch, hoid, &omap_header, &omap_set);
+      map<string, string> omap_set;
+      r = omap_get(ch, hoid, &omap_header, &omap_set);
       ASSERT_EQ(r, 0);
       size_t omap_count = 1 + gen() * 20;
       bool do_omap_header = gen() > 0.5;
@@ -496,7 +510,7 @@ public:
 	std::string name = generate_monotonic_name(omap_count, i, 3.66 + 0.22 * o / object_count, 0.5);
 	std::string val_gen = gen_string(100, gen);
 	ASSERT_EQ(it->first, name);
-	ASSERT_EQ(it->second.to_str(), val_gen);
+	ASSERT_EQ(it->second, val_gen);
 	++it;
       }
     }
@@ -3748,8 +3762,8 @@ TEST_P(StoreTest, OmapSimple) {
   // get header, keys
   {
     bufferlist h;
-    map<string,bufferlist> r;
-    store->omap_get(ch, hoid, &h, &r);
+    map<string, string> r;
+    omap_get(ch, hoid, &h, &r);
     ASSERT_TRUE(bl_eq(header, h));
     ASSERT_EQ(r.size(), km.size());
     cout << "r: " << r << std::endl;
@@ -3818,9 +3832,9 @@ TEST_P(StoreTest, OmapCloneTest) {
     ASSERT_EQ(r, 0);
   }
   {
-    map<string,bufferlist> r;
+    map<string, string> r;
     bufferlist h;
-    store->omap_get(ch, hoid2, &h, &r);
+    omap_get(ch, hoid2, &h, &r);
     ASSERT_TRUE(bl_eq(header, h));
     ASSERT_EQ(r.size(), km.size());
   }
@@ -6050,17 +6064,18 @@ TEST_P(StoreTest, OMapTest) {
     }
     ObjectStore::Transaction t;
     bufferlist bl;
-    map<string, bufferlist> cur_attrs;
-    r = store->omap_get(ch, hoid, &bl, &cur_attrs);
+    map<string, string> cur_attrs;
+    r = omap_get(ch, hoid, &bl, &cur_attrs);
     ASSERT_EQ(r, 0);
     for (map<string, bufferlist>::iterator j = attrs.begin();
 	 j != attrs.end();
 	 ++j) {
-      bool correct = cur_attrs.count(j->first) && string(cur_attrs[j->first].c_str()) == string(j->second.c_str());
+      bool correct = cur_attrs.count(j->first) && cur_attrs[j->first] == j->second.to_str();
       if (!correct) {
-	std::cout << j->first << " is present in cur_attrs " << cur_attrs.count(j->first) << " times " << std::endl;
+	std::cout << j->first << " is present in cur_attrs " << cur_attrs.count(j->first) << " times "
+	          << std::endl;
 	if (cur_attrs.count(j->first) > 0) {
-	  std::cout << j->second.c_str() << " : " << cur_attrs[j->first].c_str() << std::endl;
+	  std::cout << j->second.to_str() << " : " << cur_attrs[j->first] << std::endl;
 	}
       }
       ASSERT_EQ(correct, true);
@@ -6087,17 +6102,17 @@ TEST_P(StoreTest, OMapTest) {
     }
     ObjectStore::Transaction t;
     bufferlist bl;
-    map<string, bufferlist> cur_attrs;
-    r = store->omap_get(ch, hoid, &bl, &cur_attrs);
+    map<string, string> cur_attrs;
+    r = omap_get(ch, hoid, &bl, &cur_attrs);
     ASSERT_EQ(r, 0);
     for (map<string, bufferlist>::iterator j = attrs.begin();
 	 j != attrs.end();
 	 ++j) {
-      bool correct = cur_attrs.count(j->first) && string(cur_attrs[j->first].c_str()) == string(j->second.c_str());
+      bool correct = cur_attrs.count(j->first) && cur_attrs[j->first] == j->second.to_str();
       if (!correct) {
 	std::cout << j->first << " is present in cur_attrs " << cur_attrs.count(j->first) << " times " << std::endl;
 	if (cur_attrs.count(j->first) > 0) {
-	  std::cout << j->second.c_str() << " : " << cur_attrs[j->first].c_str() << std::endl;
+	  std::cout << j->second.to_str() << " : " << cur_attrs[j->first] << std::endl;
 	}
       }
       ASSERT_EQ(correct, true);
@@ -6131,8 +6146,8 @@ TEST_P(StoreTest, OMapTest) {
     ASSERT_EQ(r, 0);
 
     bufferlist bl3;
-    map<string, bufferlist> cur_attrs;
-    r = store->omap_get(ch, hoid, &bl3, &cur_attrs);
+    map<string, string> cur_attrs;
+    r = omap_get(ch, hoid, &bl3, &cur_attrs);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl_eq(bl1, bl3));
@@ -6164,8 +6179,8 @@ TEST_P(StoreTest, OMapTest) {
     }
     {
       bufferlist hdr;
-      map<string,bufferlist> m;
-      store->omap_get(ch, hoid, &hdr, &m);
+      map<string,string> m;
+      omap_get(ch, hoid, &hdr, &m);
       ASSERT_EQ(6u, hdr.length());
       ASSERT_TRUE(m.count("2"));
       ASSERT_TRUE(!m.count("3"));
@@ -6183,8 +6198,8 @@ TEST_P(StoreTest, OMapTest) {
     }
     {
       bufferlist hdr;
-      map<string,bufferlist> m;
-      store->omap_get(ch, hoid, &hdr, &m);
+      map<string, string> m;
+      omap_get(ch, hoid, &hdr, &m);
       ASSERT_EQ(0u, hdr.length());
       ASSERT_EQ(0u, m.size());
     }
@@ -6237,7 +6252,7 @@ TEST_P(StoreTest, OMapIterator) {
         const bool correct = attrs.count(key) && (value == attrs[key].to_str());
         if (!correct) {
           if (attrs.count(key) > 0) {
-            std::cout << "key " << key << "in omap , " << value << " : " << attrs[key].c_str() << std::endl;
+            std::cout << "key " << key << "in omap , " << value << " : " << attrs[key].to_str() << std::endl;
           }
           else {
             std::cout << "key " << key << "should not exists in omap" << std::endl;
@@ -11846,9 +11861,9 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
     r = queue_transaction(store, ch, std::move(t));
   }
   {
-    map<string,bufferlist> res;
+    map<string, string> res;
     bufferlist h;
-    r = store->omap_get(ch, hoid, &h, &res);
+    r = omap_get(ch, hoid, &h, &res);
     ASSERT_EQ(r, 0);
     ASSERT_TRUE(bl_eq(h, expected_header));
     ASSERT_EQ(res.size(), 1);
@@ -11865,9 +11880,9 @@ TEST_P(StoreTestOmapUpgrade, WithOmapHeader) {
   store->mount();
   ch = store->open_collection(cid);
   {
-    map<string,bufferlist> res;
+    map<string, string> res;
     bufferlist h;
-    r = store->omap_get(ch, hoid, &h, &res);
+    r = omap_get(ch, hoid, &h, &res);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res.begin()->first, "key1");
@@ -11951,9 +11966,9 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
     r = queue_transaction(store, ch, std::move(t));
   }
   {
-    map<string,bufferlist> res;
+    map<string, string> res;
     bufferlist h;
-    r = store->omap_get(ch, hoid, &h, &res);
+    r = omap_get(ch, hoid, &h, &res);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(h.length(), 0);
     ASSERT_EQ(res.size(), 1);
@@ -11970,9 +11985,9 @@ TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
   store->mount();
   ch = store->open_collection(cid);
   {
-    map<string,bufferlist> res;
+    map<string, string> res;
     bufferlist h;
-    r = store->omap_get(ch, hoid, &h, &res);
+    r = omap_get(ch, hoid, &h, &res);
     ASSERT_EQ(r, 0);
     ASSERT_EQ(res.size(), 1);
     ASSERT_EQ(res.begin()->first, "key1");
@@ -12024,7 +12039,7 @@ TEST_P(StoreTestOmapUpgrade, LargeLegacyToPG) {
   SetVal(g_conf(), "bluestore_debug_legacy_omap", "false");
   SetVal(g_conf(), "bluestore_fsck_error_on_no_per_pool_omap", "true");
   g_conf().apply_changes(nullptr);
-  ASSERT_EQ(store->fsck(false), 1001);
+  ASSERT_EQ(store->fsck(false), object_count + 1);
   ASSERT_EQ(store->quick_fix(), 0);
   store->mount();
   ch = store->open_collection(cid);
