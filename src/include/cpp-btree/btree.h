@@ -1326,8 +1326,10 @@ class btree {
     deallocate(node_type::InternalSize(), node);
   }
   void delete_leaf_node(node_type *node) {
-    node->destroy(mutable_allocator());
-    deallocate(node_type::LeafSize(node->max_count()), node);
+    if (node != EmptyNode()) {
+      node->destroy(mutable_allocator());
+      deallocate(node_type::LeafSize(node->max_count()), node);
+    }
   }
 
   // Rebalances or splits the node iter points to.
