@@ -117,7 +117,9 @@ int pipe_cloexec(int pipefd[2], int flags)
   if (pipe(pipefd) == -1)
     return -1;
 
-  #ifndef _WIN32
+#  ifdef _WIN32
+  return 0;
+#  else
   /*
    * The old-fashioned, race-condition prone way that we have to fall
    * back on if pipe2 does not exist.
@@ -129,14 +131,15 @@ int pipe_cloexec(int pipefd[2], int flags)
   if (fcntl(pipefd[1], F_SETFD, FD_CLOEXEC) < 0) {
     goto fail;
   }
-  #endif
 
   return 0;
+
 fail:
   int save_errno = errno;
   VOID_TEMP_FAILURE_RETRY(close(pipefd[0]));
   VOID_TEMP_FAILURE_RETRY(close(pipefd[1]));
   return (errno = save_errno, -1);
+#  endif
 #endif
 }
 
@@ -150,16 +153,17 @@ int socket_cloexec(int domain, int type, int protocol)
   if (fd == -1)
     return -1;
 
-  #ifndef _WIN32
+#  ifdef _WIN32
+  return fd;
+#  else
   if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)
     goto fail;
-  #endif
-
   return fd;
 fail:
   int save_errno = errno;
   VOID_TEMP_FAILURE_RETRY(close(fd));
   return (errno = save_errno, -1);
+#  endif
 #endif
 }
 
@@ -201,16 +205,18 @@ int accept_cloexec(int sockfd, struct sockaddr* addr, socklen_t* addrlen)
   if (fd == -1)
     return -1;
 
-  #ifndef _WIN32
+#  ifdef _WIN32
+  return fd;
+#  else
   if (fcntl(fd, F_SETFD, FD_CLOEXEC) < 0)
     goto fail;
-  #endif
 
   return fd;
 fail:
   int save_errno = errno;
   VOID_TEMP_FAILURE_RETRY(close(fd));
   return (errno = save_errno, -1);
+#  endif
 #endif
 }
 
@@ -362,7 +368,7 @@ ssize_t preadv(int fd, const struct iovec *iov, int iov_cnt) {
     if (r < 0)
       return r;
     read += r;
-    if (r < iov[i].iov_len)
+    if ((unsigned)r < iov[i].iov_len)
       break;
   }
 
@@ -377,7 +383,7 @@ ssize_t writev(int fd, const struct iovec *iov, int iov_cnt) {
     if (r < 0)
       return r;
     written += r;
-    if (r < iov[i].iov_len)
+    if ((unsigned)r < iov[i].iov_len)
       break;
   }
 
