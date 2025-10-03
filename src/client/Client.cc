@@ -9539,7 +9539,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
   Dir *dir = diri->dir;
 
   if (!dir) {
-    ldout(cct, 10) << " dir is empty" << dendl;
+    ldout(cct, 10) << __func__ << " dir is empty" << dendl;
     dirp->set_end();
     return 0;
   }
@@ -9777,9 +9777,9 @@ int Client::_readdir_r_cb(int op,
       dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
-    int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
-    if (err != -EAGAIN)
-      return err;
+    int retval = _readdir_cache_cb(dirp, cb, p, caps, getref);
+    if (retval != -EAGAIN)
+      return retval;
   }
 
   while (1) {
@@ -15512,7 +15512,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool che
   int res = make_request(req, perms);
 
   trim_cache();
-  ldout(cct, 8) << "rmdir(" << wdr.getpath() << ") = " << res << dendl;
+  ldout(cct, 8) << "_rmdir(" << wdr.getpath() << ") = " << res << dendl;
   return res;
 }
 
