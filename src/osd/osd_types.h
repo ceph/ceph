@@ -1055,6 +1055,8 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
 #define PG_STATE_LAGGY              (1ULL << 33) // PG is laggy/unreabable due to slow/delayed pings
 #define PG_STATE_WAIT               (1ULL << 34) // PG is waiting for prior intervals' readable period to expire
+#define PG_STATE_MIGRATION_WAIT     (1ULL << 35) // PG is waiting to start migration to a new pool
+#define PG_STATE_MIGRATING          (1ULL << 36) // PG is migrating
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
@@ -1644,6 +1646,18 @@ public:
                                      ///< user does not specify any expected value
   bool fast_read = false;            ///< whether turn on fast read on the pool or not
   shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
+
+  // Pool migration
+  int64_t migration_src = -1; ///< pool we are migrating from
+  int64_t migration_target = -1; ///< pool we are migrating to
+  std::set<pg_t> migrating_pgs; ///< PGs currently migrating. Any higher value PGs have completed migration
+
+  void clear_migrating_pgs() { migrating_pgs.clear(); }
+
+  bool is_migrating() { return migration_src >= 0 || migration_target >= 0; }
+  bool is_migration_src() { return migration_src >= 0; }
+  bool is_migration_target() { return migration_target >= 0; }
+
   pool_opts_t opts; ///< options
 
   typedef enum {
