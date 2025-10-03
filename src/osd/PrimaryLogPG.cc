@@ -5894,6 +5894,13 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
+
+    if (ctx->op->ec_direct_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+
+        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
     ctx->pending_async_reads.push_back(
       make_pair(
         boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
@@ -5905,6 +5912,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
