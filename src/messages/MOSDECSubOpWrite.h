@@ -20,16 +20,27 @@
 
 class MOSDECSubOpWrite : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   spg_t pgid;
   epoch_t map_epoch = 0, min_epoch = 0;
   ECSubWrite op;
+  uint64_t cost = 0;
 
+  /**
+   * Set the cost of SubOp Write for mClock scheduler.
+   * For the WeightedPriorityQueue, retain a cost of '0'
+   * to preserve the legacy behavior.
+   */
+  void set_cost(CephContext *cct, uint64_t _cost) {
+    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      cost = _cost;
+    }
+  }
   int get_cost() const override {
-    return 0;
+    return cost;
   }
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -62,6 +73,9 @@ public:
     } else {
       min_epoch = map_epoch;
     }
+    if (header.version >= 3) {
+      decode(cost, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -71,6 +85,9 @@ public:
     op.encode(payload, data, features);
     encode(min_epoch, payload);
     encode_trace(payload, features);
+    if (header.version >= 3) {
+      encode(cost, payload);
+    }
   }
 
   std::string_view get_type_name() const override { return "MOSDECSubOpWrite"; }
