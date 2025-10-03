@@ -1010,6 +1010,30 @@ int ECBackend::objects_read_sync(
   return -EOPNOTSUPP;
 }
 
+std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
+  // sync reads are supported for sub-chunk reads where no reconstruct is
+  // required.
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t start_chunk = off / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off + len - 1) / chunk_size;
+  uint64_t shard_offset, shard_len;
+  shard_id_t shard = get_parent()->whoami_shard().shard;
+  raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
+
+  if (end_chunk == start_chunk) {
+    shard_offset = sinfo.ro_offset_to_shard_offset(off, raw_shard);
+    shard_len = len;
+  } else {
+    ECUtil::shard_extent_set_t full_read(sinfo.get_k_plus_m());
+    sinfo.ro_range_to_shard_extent_set(off, len, full_read);
+    shard_offset = full_read[shard].range_start();
+    shard_len = full_read[shard].range_end() - shard_offset;
+  }
+
+  return std::pair(shard_offset, shard_len);
+}
+
 void ECBackend::objects_read_async(
     const hobject_t &hoid,
     uint64_t object_size,
