@@ -75,6 +75,7 @@ import json
 import logging
 import os
 import pathlib
+import platform
 import re
 import shlex
 import shutil
@@ -293,6 +294,16 @@ def _hash_sources(bsize=4096):
     return f"sha256:{hh.hexdigest()}"
 
 
+@ftcache
+def _host_arch():
+    arch = platform.machine().lower()
+    aliases = {
+        'x86_64': 'amd64',
+        'aarch64': 'arm64',
+    }
+    return aliases.get(arch, arch)
+
+
 class Steps(StrEnum):
     DNF_CACHE = "dnfcache"
     BUILD_CONTAINER = "build-container"
@@ -362,11 +373,18 @@ class Context:
         return f"{base}:{self.target_tag()}"
 
     def target_tag(self):
+        tag = self.cli.tag or ''
         suffix = ""
-        if self.cli.tag and self.cli.tag.startswith("+"):
+        if tag.startswith('@'):
+            suffix = f".{tag[1:]}" if tag[1:] else ""
+            srchash = _hash_sources().split(':')[-1]
+            arch = _host_arch()
+            distro = self.cli.distro
+            return f"fp0-{srchash}.{arch}.{distro}{suffix}"
+        elif tag.startswith("+"):
             suffix = f".{self.cli.tag[1:]}"
-        elif self.cli.tag:
-            return self.cli.tag
+        elif tag:
+            return tag
         branch = self.cli.current_branch
         if not branch:
             try:
