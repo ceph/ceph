@@ -110,8 +110,7 @@ int RGWServices_Def::init(CephContext *cct,
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), driver->getRados()->get_rados_handle(),
-	       finisher.get());
+  notify->init(zone.get(), driver->getRados()->get_rados_handle());
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
 	     sync_modules.get(), bucket_sync_sobj.get());
