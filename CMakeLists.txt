@@ -519,13 +519,12 @@ endif()
 option(WITH_CATCH2 "Enable Catch2 unit tests" ON)
 option(WITH_SYSTEM_CATCH2 "Enable Catch2 unit tests (require system packages)" OFF)
 
-if(WITH_CATCH2)
+if (WITH_CATCH2 AND WITH_SYSTEM_CATCH2)
+  find_package(Catch2 REQUIRED)
+    message("-- Enabled Catch2 support")
+elseif(WITH_CATCH2)
   # Save pre-existing definitions (if any):
   set(ORIG_CPM_LOCAL_PACKAGES_ONLY ${CPM_USE_LOCAL_PACKAGES_ONLY})
-
-    if(WITH_SYSTEM_CATCH2)
-   set(CPM_LOCAL_PACKAGES_ONLY ON)
-  endif()
 
   include(${CMAKE_MODULE_PATH}/CPM.cmake)
   CPMAddPackage("gh:catchorg/Catch2@3.8.1")
