@@ -95,8 +95,7 @@ int RGWServices_Def::init(CephContext *cct,
   config_key_rados->init(driver->getRados()->get_rados_handle());
   mdlog->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(),
 	      cls.get(), async_processor.get());
-  notify->init(zone.get(), driver->getRados()->get_rados_handle(),
-	       finisher.get());
+  notify->init(zone.get(), driver->getRados()->get_rados_handle());
   zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
 	     sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(driver->getRados()->get_rados_handle(), zone.get());
