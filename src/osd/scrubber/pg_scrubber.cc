@@ -1381,9 +1381,13 @@ int PgScrubber::build_scrub_map_chunk(ScrubMap& map,
     if (pos.ls.empty()) {
       break;
     }
-    m_pg->_scan_rollback_obs(rollback_obs);
     pos.pos = 0;
-    return -EINPROGRESS;
+    if (m_pg->_scan_rollback_obs(rollback_obs)) {
+      // we had to perform some real work (queue a transaction
+      // to discard obsolete rollback versions of objects in the
+      // selected range). Let's reschedule the scrub.
+      return -EINPROGRESS;
+    }
   }
 
   // scan objects
