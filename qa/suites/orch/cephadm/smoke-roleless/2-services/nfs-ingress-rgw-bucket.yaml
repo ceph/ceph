@@ -7,7 +7,7 @@ tasks:
       - ceph orch device ls --refresh
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
@@ -16,7 +16,7 @@ tasks:
       - ceph orch apply rgw foorgw --port 8800
       - ceph nfs cluster create foo --ingress --virtual-ip {{VIP0}}/{{VIPPREFIXLEN}}
 
-- vip.exec:
+- exec:
     host.a:
       - dnf install -y python3-boto3 || apt install -y python3-boto3
       - /home/ubuntu/cephtest/cephadm shell radosgw-admin user create --uid foouser --display-name foo > /tmp/user.json
@@ -49,7 +49,7 @@ tasks:
 
 ## export and mount
 
-- vip.exec:
+- template.exec:
     host.a:
       - mkdir /mnt/foo
       - sleep 5
@@ -79,7 +79,7 @@ tasks:
       print(data.getvalue())
       assert data.getvalue().decode() == 'test\n'
 
-- vip.exec:
+- exec:
     host.a:
       - umount /mnt/foo
 
