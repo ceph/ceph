@@ -362,9 +362,19 @@ void PoolReplayer<I>::init(const std::string& site_name) {
     m_remote_pool_poller.reset();
     return;
   }
+
+  std::string fsid;
+  librados::Rados rados(m_remote_io_ctx);
+  r = rados.cluster_fsid(&fsid);
+  if (r < 0) {
+    derr << "failed to retrieve remote cluster fsid: " << cpp_strerror(r)
+	 << dendl;
+    return;
+  }
+
   ceph_assert(!m_remote_pool_meta.mirror_uuid.empty());
   m_pool_meta_cache->set_remote_pool_meta(
-    m_remote_io_ctx.get_id(), m_remote_pool_meta);
+    fsid, m_remote_io_ctx.get_id(), m_remote_pool_meta);
   m_pool_meta_cache->set_local_pool_meta(
     m_local_io_ctx.get_id(), {m_local_mirror_uuid});
 
@@ -414,7 +424,12 @@ void PoolReplayer<I>::shut_down() {
     m_remote_pool_poller->shut_down(&ctx);
     ctx.wait();
 
-    m_pool_meta_cache->remove_remote_pool_meta(m_remote_io_ctx.get_id());
+    std::string fsid;
+    librados::Rados rados(m_remote_io_ctx);
+    rados.cluster_fsid(&fsid);
+
+    m_pool_meta_cache->remove_remote_pool_meta(fsid,
+                                               m_remote_io_ctx.get_id());
     m_pool_meta_cache->remove_local_pool_meta(m_local_io_ctx.get_id());
   }
   m_remote_pool_poller.reset();
