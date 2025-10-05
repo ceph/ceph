@@ -344,7 +344,7 @@ namespace rgw::dedup {
       return ret;
     }
 
-    ret = ioctx.application_enable("rgw_dedup", false);
+    ret = ioctx.application_enable("rgw", false);
     if (ret == 0) {
       ldpp_dout(dpp, 10) << __func__ << "::pool " << dedup_pool.name
                          << " was associated with dedup app" << dendl;
@@ -1499,22 +1499,23 @@ namespace rgw::dedup {
                                                    const rgw_bucket_dir_entry &entry,
                                                    worker_stats_t             *p_worker_stats /*IN-OUT*/)
   {
-    // ceph store full blocks so need to round up and multiply by block_size
-    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
-    // count all objects including too small and non default storage_class objs
-    p_worker_stats->ingress_obj++;
-    p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
-
     parsed_etag_t parsed_etag;
     if (unlikely(!parse_etag_string(entry.meta.etag, &parsed_etag))) {
       p_worker_stats->ingress_corrupted_etag++;
-      ldpp_dout(dpp, 1) << __func__ << "::ERROR: corrupted etag" << dendl;
+      ldpp_dout(dpp, 1) << __func__ << "::ERROR: corrupted etag:" << entry.meta.etag
+                        << "::" << p_bucket->get_name() << "/" << entry.key.name << dendl;
       return -EINVAL;
     }
 
     if (unlikely((cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>()))) {
       show_ingress_bucket_idx_obj(dpp, parsed_etag, p_bucket->get_name(), entry.key.name);
     }
+
+    // ceph store full blocks so need to round up and multiply by block_size
+    uint64_t ondisk_byte_size = calc_on_disk_byte_size(entry.meta.size);
+    // count all objects including too small and non default storage_class objs
+    p_worker_stats->ingress_obj++;
+    p_worker_stats->ingress_obj_bytes += ondisk_byte_size;
 
     // We limit dedup to objects from the same storage_class
     // TBD:
