@@ -505,6 +505,38 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_lc_counters_cache
+  type: bool
+  level: advanced
+  desc: Enable per-bucket lifecycle performance counters cache
+  long_desc: When enabled, RGW will create and update per-bucket lifecycle performance
+    counters and expose them via admin socket perf dump.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Target size for lifecycle counters cache
+  long_desc: Maximum number of per-bucket LC counter entries to maintain in cache
+  default: 10000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_lc_counters_batch_size
+  type: uint
+  level: advanced
+  desc: Batch size for flushing LC per-bucket counters
+  long_desc: LC per-bucket counters are flushed to cache every N objects processed.
+    Lower values provide more frequent updates, higher values reduce overhead.
+  default: 5000
+  min: 1
+  services:
+  - rgw
+  see_also:
+  - rgw_lc_counters_cache
+  with_legacy: true
 - name: rgw_restore_debug_interval
   type: int
   level: dev
