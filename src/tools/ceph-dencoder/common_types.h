@@ -74,6 +74,7 @@ TYPE(SloppyCRCMap)
 #include "common/snap_types.h"
 TYPE(SnapContext)
 TYPE(SnapRealmInfo)
+TYPE(SnapRealmInfoNew)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
