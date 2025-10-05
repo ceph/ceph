@@ -191,6 +191,73 @@ Cache sizing can depend on a number of factors. These factors include:
 
 To help calculate the Ceph Object Gateway's memory usage of a cache, it should be noted that each cache entry, encompassing all of the op metrics, is 1360 bytes. This is an estimate and subject to change if metrics are added or removed from the op metrics list.
 
+Lifecycle Metrics
+=================
+
+The following metrics related to lifecycle (LC) processing are tracked per bucket by the Ceph Object Gateway.
+
+.. list-table:: Ceph Object Gateway Lifecycle Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - start_time
+     - Counter
+     - LC processing start timestamp (Unix epoch seconds)
+   * - end_time
+     - Counter
+     - LC processing end timestamp (Unix epoch seconds)
+   * - objects_scanned
+     - Counter
+     - Total objects scanned for lifecycle rules in current run
+   * - objects_pending
+     - Counter
+     - Objects currently pending lifecycle processing
+
+Lifecycle metrics are labeled counters tracked per-bucket in the ``rgw_lc_per_bucket`` section.
+
+Information about lifecycle metrics can be seen in the ``rgw_lc_per_bucket`` section from the output of the ``counter schema`` command.
+
+To view lifecycle metrics in the Ceph Object Gateway go to the ``rgw_lc_per_bucket`` section from the output of the ``counter dump`` command::
+
+    "rgw_lc_per_bucket": [
+        {
+            "labels": {
+                "bucket": "mybucket"
+            },
+            "counters": {
+                "start_time": 1728139406,
+                "end_time": 0,
+                "objects_scanned": 15000,
+                "objects_pending": 2300
+            }
+        },
+        ...
+    ]
+
+Lifecycle Counter Cache
+^^^^^^^^^^^^^^^^^^^^^^^
+
+To track lifecycle metrics per bucket, set :confval:`rgw_lc_counters_cache` to ``true``. The default value is ``false``.
+
+Lifecycle metrics are stored as labeled performance counters in memory. All counters are lost when the Ceph Object Gateway restarts or crashes.
+
+Lifecycle Counter Cache Size & Eviction
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The :confval:`rgw_lc_counters_cache_size` option can be used to set number of entries in the cache.
+
+Counters are evicted from the cache once the number of counters in the cache are greater than the cache size config variable. When the number of cached counters exceeds this value, the least recently used (LRU) counters are evicted.
+
+Lifecycle Counter Batching
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To minimize performance impact, lifecycle counter updates are batched. The :confval:`rgw_lc_counters_batch_size` option controls how often counter updates are flushed to the cache.
+
+Lower values provide more frequent updates but with slightly higher overhead. Higher values reduce overhead but updates appear less frequently.
+
 Sending Metrics to Prometheus
 =============================
 
