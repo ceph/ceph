@@ -1457,6 +1457,10 @@ public:
 
     void set_max(uint64_t max_) {
       max = max_;
+      if (cct->_conf->bluestore_cache_meta_evict_in_autotune) {
+        std::lock_guard l(lock);
+        _trim_some();
+      }
     }
 
     uint64_t _get_num() {

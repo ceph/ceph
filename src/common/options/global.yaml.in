@@ -5032,6 +5032,18 @@ options:
   see_also:
   - bluestore_cache_size
   - bluestore_cache_meta_ratio
+- name: bluestore_cache_meta_evict_in_autotune
+  type: bool
+  level: advanced
+  desc: Controls eviction of onodes from cache shards as part of autotune.
+    When enabled (true), right after autotune memory allocation run onode cache tries to adapt.
+    Depending on `bluestore_cache_meta_evict_limit` either some or all excess onodes are evicted.
+    When disabled (false), cluster inactivity makes cache to keep its onode elements.
+  default: true
+  see_also:
+  - bluestore_cache_meta_evict_limit
+  - bluestore_cache_autotune
+  with_legacy: true
 - name: bluestore_cache_autotune_interval
   type: float
   level: dev
