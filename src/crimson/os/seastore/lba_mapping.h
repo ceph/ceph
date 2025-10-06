@@ -8,6 +8,14 @@
 #include "crimson/os/seastore/lba/lba_btree_node.h"
 #include "crimson/os/seastore/logical_child_node.h"
 
+class transaction_manager_test_t;
+class btree_lba_manager_test;
+class tm_single_device_intergrity_check_test_t;
+class tm_single_device_test_t;
+class tm_multi_device_test_t;
+class tm_multi_tier_device_test_t;
+class tm_random_block_device_test_t;
+
 namespace crimson::os::seastore {
 
 namespace lba {
@@ -126,12 +134,6 @@ public:
     return direct_cursor->get_length();
   }
 
-  paddr_t get_val() const {
-    assert(is_linked_direct());
-    assert(!direct_cursor->is_end());
-    return direct_cursor->get_paddr();
-  }
-
   checksum_t get_checksum() const {
     assert(is_linked_direct());
     assert(!direct_cursor->is_end());
@@ -197,7 +199,20 @@ public:
 private:
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
+  friend class ::transaction_manager_test_t;
+  friend class ::btree_lba_manager_test;
+  friend class ::tm_single_device_intergrity_check_test_t;
+  friend class ::tm_single_device_test_t;
+  friend class ::tm_multi_device_test_t;
+  friend class ::tm_multi_tier_device_test_t;
+  friend class ::tm_random_block_device_test_t;
   friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
+
+  paddr_t get_val() const {
+    assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
+    return direct_cursor->get_paddr();
+  }
 
   LBACursor& get_effective_cursor() {
     if (is_indirect()) {
