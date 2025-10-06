@@ -84,10 +84,14 @@ for i in $(seq 20 -1 11); do
 done
 ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
 ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
+ARGS+=" -DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR
-if type cmake3 > /dev/null 2>&1 ; then
+# Use the newer cmake version if available, otherwise fall back to cmake3
+if type cmake > /dev/null 2>&1 && cmake --version | grep -q "3\.2[2-9]\|3\.[3-9][0-9]" ; then
+    CMAKE=cmake
+elif type cmake3 > /dev/null 2>&1 ; then
     CMAKE=cmake3
 else
     CMAKE=cmake
@@ -103,6 +107,12 @@ erasure code dir = lib
 EOF
 
 echo done.
+
+# Create symlink to compile_commands.json in the root directory for IDE support
+if [ -f compile_commands.json ]; then
+    ln -sf "$(pwd)/compile_commands.json" "$CEPH_GIT_DIR/compile_commands.json"
+    echo "Created symlink to compile_commands.json in project root"
+fi
 
 if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
     if [ -d ../.git ]; then
