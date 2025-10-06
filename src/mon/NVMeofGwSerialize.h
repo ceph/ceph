@@ -13,17 +13,14 @@
 #ifndef MON_NVMEOFGWSERIALIZE_H_
 #define MON_NVMEOFGWSERIALIZE_H_
 
+#include "mon/NVMeofGwBeaconConstants.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define MODULE_PREFFIX "nvmeofgw "
 #define dout_prefix *_dout << MODULE_PREFFIX << __PRETTY_FUNCTION__ << " "
 #define MAX_SUPPORTED_ANA_GROUPS 16
-
-// Local version constants that match MNVMeofGwBeacon.h
-// We can't include that header here due to circular dependencies
-#define BEACON_SUBSYS_VERSION_LEGACY 1      // Legacy beacon format (no diff support)
-#define BEACON_SUBSYS_VERSION_ENHANCED 2    // Enhanced beacon format (with diff support)
 
 inline std::ostream& operator<<(
   std::ostream& os, const gw_exported_states_per_group_t value) {
@@ -318,7 +315,7 @@ inline  void decode(
 inline void encode(const NvmeGwClientState& state,  ceph::bufferlist &bl, uint64_t features) {
   uint8_t version = 1;
   if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
-     version = BEACON_SUBSYS_VERSION_ENHANCED;
+     version = BEACON_VERSION_ENHANCED;
   }
   ENCODE_START(version, version, bl);
   encode(state.group_id, bl);
@@ -823,7 +820,7 @@ inline void decode(NvmeGwTimers& md, ceph::buffer::list::const_iterator &bl) {
 }
 
 inline void encode(const BeaconNamespace& ns,  ceph::bufferlist &bl) {
-  ENCODE_START(BEACON_SUBSYS_VERSION_LEGACY, BEACON_SUBSYS_VERSION_LEGACY, bl);
+  ENCODE_START(BEACON_VERSION_LEGACY, BEACON_VERSION_LEGACY, bl);
   encode(ns.anagrpid, bl);
   encode(ns.nonce, bl);
   ENCODE_FINISH(bl);
@@ -837,7 +834,7 @@ inline void decode(BeaconNamespace& ns, ceph::buffer::list::const_iterator &bl) 
 }
 
 inline void encode(const BeaconListener& ls,  ceph::bufferlist &bl) {
-  ENCODE_START(BEACON_SUBSYS_VERSION_LEGACY, BEACON_SUBSYS_VERSION_LEGACY, bl);
+  ENCODE_START(BEACON_VERSION_LEGACY, BEACON_VERSION_LEGACY, bl);
   encode(ls.address_family, bl);
   encode(ls.address, bl);
   encode(ls.svcid, bl);
@@ -853,12 +850,12 @@ inline void decode(BeaconListener& ls, ceph::buffer::list::const_iterator &bl) {
 }
 
 inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t features) {
-  uint8_t version = BEACON_SUBSYS_VERSION_LEGACY;  // Default to legacy version
+  uint8_t version = BEACON_VERSION_LEGACY;  // Default to legacy version
   if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
-    version = BEACON_SUBSYS_VERSION_ENHANCED;  // Use enhanced version if feature supported
+    version = BEACON_VERSION_ENHANCED;  // Use enhanced version if feature supported
   }
   // For legacy encoding, skip deleted subsystems to maintain compatibility
-  if (version == BEACON_SUBSYS_VERSION_LEGACY &&
+  if (version == BEACON_VERSION_LEGACY &&
       sub.change_descriptor != subsystem_change_t::SUBSYSTEM_ADDED) {
     dout(4) << "encode BeaconSubsystem: skipping subsystem " << sub.nqn
             << " with change_descriptor " << (int)sub.change_descriptor
@@ -876,7 +873,7 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t f
   encode((uint32_t)sub.namespaces.size(), bl);
   for (const auto& ns: sub.namespaces)
     encode(ns, bl);
-  if (version >= BEACON_SUBSYS_VERSION_ENHANCED) {
+  if (version >= BEACON_VERSION_ENHANCED) {
     encode((uint32_t)sub.change_descriptor, bl);
     dout(20) << "encode BeaconSubsystems change-descr: " << (uint32_t)sub.change_descriptor << dendl;
   }
@@ -884,7 +881,7 @@ inline void encode(const BeaconSubsystem& sub,  ceph::bufferlist &bl, uint64_t f
 }
 
 inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl) {
-  DECODE_START(BEACON_SUBSYS_VERSION_ENHANCED, bl);  // Always decode with enhanced version support
+  DECODE_START(BEACON_VERSION_ENHANCED, bl);  // Always decode with enhanced version support
   decode(sub.nqn, bl);
   dout(20) << "decode BeaconSubsystems " << sub.nqn << dendl;
   uint32_t s;
@@ -903,11 +900,11 @@ inline void decode(BeaconSubsystem& sub, ceph::buffer::list::const_iterator &bl)
     decode(ns, bl);
     sub.namespaces.push_back(ns);
   }
-  if (struct_v >= BEACON_SUBSYS_VERSION_ENHANCED) {
+  if (struct_v >= BEACON_VERSION_ENHANCED) {
     uint32_t change_desc;
     decode(change_desc, bl);
     sub.change_descriptor = static_cast<subsystem_change_t>(change_desc);
-    dout(20) << "decode BeaconSubsystems version >= " << BEACON_SUBSYS_VERSION_ENHANCED << dendl;
+    dout(20) << "decode BeaconSubsystems version >= " << BEACON_VERSION_ENHANCED << dendl;
   }
   DECODE_FINISH(bl);
 }

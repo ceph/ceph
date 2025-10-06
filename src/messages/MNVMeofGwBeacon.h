@@ -21,12 +21,10 @@
 #include "mon/MonCommand.h"
 #include "mon/NVMeofGwMap.h"
 #include "include/types.h"
+#include "mon/NVMeofGwBeaconConstants.h"
 
 class MNVMeofGwBeacon final : public PaxosServiceMessage {
 private:
-  static constexpr int BEACON_VERSION_LEGACY = 1;      // legacy beacon format (no diff support)
-  static constexpr int BEACON_VERSION_ENHANCED = 2;    // enhanced beacon format (with diff support)
-  static constexpr int COMPAT_VERSION = BEACON_VERSION_LEGACY;  // minimum version to decode enhanced format
 
 protected:
     std::string       gw_id;
@@ -41,7 +39,7 @@ protected:
 public:
   MNVMeofGwBeacon()
     : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON, 0, BEACON_VERSION_ENHANCED,
-      COMPAT_VERSION}, sequence(0)
+      BEACON_VERSION_LEGACY}, sequence(0)
   {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
@@ -57,8 +55,8 @@ public:
         bool enable_diff = false)  // default to legacy behavior for backward compatibility
     : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON,
                           static_cast<version_t>(enable_diff ? 1 : 0), // user_version: 1=enhanced, 0=legacy
-                          enable_diff ? BEACON_VERSION_ENHANCED : 
-                          BEACON_VERSION_LEGACY, COMPAT_VERSION},// Minimum compatible version
+                          enable_diff ? BEACON_VERSION_ENHANCED :
+                          BEACON_VERSION_LEGACY, BEACON_VERSION_LEGACY},// Minimum compatible version
       gw_id(gw_id_), gw_pool(gw_pool_), gw_group(gw_group_), subsystems(subsystems_),
       availability(availability_), last_osd_epoch(last_osd_epoch_),
       last_gwmap_epoch(last_gwmap_epoch_), sequence(sequence_)
