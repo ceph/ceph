@@ -164,6 +164,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     SCHEMA_VERSIONED = SCHEMA_VERSIONED
 
+    bootstrap_version_stored = False
+    
     _STORE_HOST_PREFIX = "host"
 
     instance = None
@@ -4260,34 +4262,6 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
-
-    @CLIWriteCommand('cephadm set-bootstrap-version')
-    def _do_set_bootstrap_version(self, version: str) -> Tuple[int, str, str]:
-        '''
-        Stores the bootstrap version in KV store
-        '''
-        return self.version_tracker._set_bootstrap_version(version)
-    
-    @CLIWriteCommand('cephadm set-bootstrap-time')
-    def _do_set_bootstrap_time(self, time: str) -> Tuple[int, str, str]:
-        '''
-        Stores the bootstrap time in KV store
-        '''
-        return self.version_tracker._set_bootstrap_time(time)
-    
-    @CLIReadCommand('cephadm get-bootstrap-version')
-    def _do_get_bootstrap_version(self) -> Tuple[int, str, str]:
-        '''
-        Gets the bootstrap version in KV store
-        '''
-        return self.version_tracker._get_bootstrap_version()
-    
-    @CLIReadCommand('cephadm get-bootstrap-time')
-    def _do_get_bootstrap_time(self) -> Tuple[int, str, str]:
-        '''
-        Gets the bootstrap time in KV store
-        '''
-        return self.version_tracker._get_bootstrap_time()
     
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
