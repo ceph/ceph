@@ -139,7 +139,7 @@ private:
 
 public:
   FilterDriver(Driver* _next) : next(_next) {}
-  virtual ~FilterDriver() = default;
+  virtual ~FilterDriver() = default; // JFW: so... I doubt this cascades into multiple driver deletes at all?
 
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual const std::string get_name() const override;

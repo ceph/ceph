@@ -42,6 +42,10 @@
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 
+#ifndef D4N_USE_FDB_SINK
+#error oops JFW
+#endif
+
 #ifdef D4N_USE_FDB_SINK
 #include "driver/fdb/sal_d4n-fdb.h" 
 #endif
@@ -88,7 +92,7 @@ extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 #ifdef D4N_USE_FDB_SINK
-extern rgw::sal::Driver* newFDB_F4N_Filter(CephContext *cct, rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+extern rgw::sal::Driver* newFDB_D4NFilter(CephContext *cct, rgw::sal::Driver* next);
 #endif
 }
 
@@ -125,6 +129,8 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool background_tasks,
 						    optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
+ldpp_dout(dpp, 0) << "JFW: I'm alive! init_storage_provider()" << dendl;
+
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
@@ -255,6 +261,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
   ldpp_dout(dpp, 20) << "Filter name: " << cfg.filter_name << dendl;
+ldpp_dout(dpp, 0) << "JFW: filter name is: " << cfg.filter_name << dendl;
 
   if (cfg.filter_name.compare("base") == 0) {
     rgw::sal::Driver* next = driver;
@@ -267,11 +274,13 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   } 
 #ifdef WITH_RADOSGW_D4N 
-  else if (cfg.filter_name.compare("d4n") == 0) {
+  else if ((cfg.filter_name.compare("d4n") == 0) or (0 == cfg.filter_name.compare("d4n_fdb"))) {
+ldpp_dout(dpp, 0) << "JFW: starting D4NFilter" << dendl;
     rgw::sal::Driver* next = driver;
     driver = newD4NFilter(next, io_context, admin);
 
     if (driver->initialize(cct, dpp) < 0) {
+ldpp_dout(dpp, 0) << "JFW: D4NFilter did not initialize" << dendl;
       delete driver;
       delete next;
       return nullptr;
@@ -279,15 +288,20 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
 #ifdef D4N_USE_FDB_SINK
-  // JFW: we just want to sneak in line for now: else if (cfg.filter_name.compare("fdb_d4n") == 0) 
+  if (cfg.filter_name.compare("d4n_fdb") == 0) {
+ldpp_dout(dpp, 0) << "JFW: Activating oscillation overthruster! (d4n_fdb active)" << dendl;
     rgw::sal::Driver* next = driver;
-    driver = newFDB_D4NFilter(cct, next, io_context, admin);
+    driver = newFDB_D4NFilter(cct, next);
 
     if (driver->initialize(cct, dpp) < 0) {
       delete driver;
       delete next;      // JFW: is this meant to cascade..? Has anyone actually tried it? I'll bet it doesn't...
       return nullptr;
     }
+ldpp_dout(dpp, 0) << "JFW: FDB driver INIT OK" << dendl;
+  } else {
+ldpp_dout(dpp, 0) << "JFW: no FDB configuration with d4n_fdb" << dendl;
+  }
 #endif
 
   return driver;
@@ -442,6 +456,9 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   else if (config_filter == "d4n") {
     cfg.filter_name= "d4n";
   }
+#endif
+#ifdef D4N_USE_FDB_SINK
+  cfg.filter_name = config_filter;
 #endif
 
   return cfg;

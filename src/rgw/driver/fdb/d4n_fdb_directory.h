@@ -24,7 +24,7 @@ namespace net = boost::asio;
 namespace redis = boost::redis;
 namespace lfdb = ceph::libfdb;
 
-lfdb::database_handle global_fdb_dbh;
+static inline lfdb::database_handle gdbh;
 
 class FDB_BucketDirectory: public Directory 
 {

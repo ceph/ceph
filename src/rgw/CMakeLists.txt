@@ -339,6 +339,9 @@ endif(WITH_RADOSGW_FDB)
 if(D4N_USE_FDB_SINK)
  message("Building with FDB support as D4N sink (experimental).")
 
+ target_compile_definitions(rgw_common PUBLIC
+    D4N_USE_FDB_SINK)
+
  target_include_directories(rgw_common PRIVATE
 	driver/fdb)
  
