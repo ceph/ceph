@@ -76,28 +76,6 @@ class VersionTracker:
                 return True
             
             return False
-        
-    def _set_bootstrap_version(self, version: str) -> Tuple[int, str, str]:
-        self.mgr.set_store('bootstrap-version', version)
-
-        return 0, '', ''
-    
-    def _get_bootstrap_version(self) -> Tuple[int, str, str]:
-        if self.mgr.get_store_prefix('bootstrap-version'):
-            return 0, self.mgr.get_store('bootstrap-version'), ''
-        
-        return -errno.EPERM, '', 'bootstrap version not stored'
-    
-    def _set_bootstrap_time(self, time: str) -> Tuple[int, str, str]:
-        self.mgr.set_store('bootstrap-time', time)
-
-        return 0, '', ''
-    
-    def _get_bootstrap_time(self) -> Tuple[int, str, str]:
-        if self.mgr.get_store_prefix('bootstrap-time'):
-            return 0, self.mgr.get_store('bootstrap-time'), ''
-        
-        return -errno.EPERM, '', 'bootstrap time not stored'
     
     def add_cluster_version(self, version: str, time: str) -> bool:
         """
@@ -128,8 +106,8 @@ class VersionTracker:
         if self._cluster_version_history_is_empty():
             status = False
 
-            if self.mgr.get_store_prefix('bootstrap-version') and self.mgr.get_store_prefix('bootstrap-time'):
-                status = self.add_cluster_version(self.mgr.get_store('bootstrap-version'), self.mgr.get_store('bootstrap-time'))
+            if self.mgr.get_store_prefix('bootstrap_version') and self.mgr.get_store_prefix('bootstrap_time'):
+                status = self.add_cluster_version(self.mgr.get_store('bootstrap_version'), self.mgr.get_store('bootstrap_time'))
             else:  
                 status = self.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc)))
 
