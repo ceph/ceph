@@ -499,10 +499,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Option(
             'ceph_volume_log_level',
             type='str',
-	        default='debug',
+            default='debug',
             enum_allowed=['debug', 'info', 'warning', 'error', 'critical'],
-            desc='Change log level for ceph-volume commands executed by cephadm',
-       ),
+            desc='Change log level for ceph-volume commands·'
+            'executed by cephadm',
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))

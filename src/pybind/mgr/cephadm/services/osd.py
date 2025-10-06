@@ -316,7 +316,7 @@ class OSDService(CephService):
 
                 # get preview data from ceph-volume
                 for cmd in cmds:
-                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume --log-level,{self.mgr.ceph_volume_log_level}, -- {cmd}'):
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume --log-level {self.mgr.ceph_volume_log_level}, -- {cmd}'):
                         out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
@@ -385,7 +385,7 @@ class OSDService(CephService):
         _cmd = ['--config-json', '-', '--']
         _cmd.extend(split_cmd)
         out, err, code = await CephadmServe(self.mgr)._run_cephadm(
-            host, 'osd', 'ceph-volume','--log-level', self.mgr.ceph_volume_log_level,
+            host, 'osd', f'ceph-volume --log-level {self.mgr.ceph_volume_log_level}',
             _cmd,
             env_vars=env_vars,
             stdin=j,
