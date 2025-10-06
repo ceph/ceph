@@ -242,9 +242,9 @@
           <div class="ms-4 me-4 mt-0">
             <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
             </cd-dashboard-time-selector>
-            <ng-container *ngIf="usedCapacity">
+            <ng-container *ngIf="totalCapacity">
               <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
-                                       [maxValue]="usedCapacity"
+                                       [maxValue]="totalCapacity"
                                        dataUnits="B"
                                        [labelsArray]="['Used Capacity']"
                                        [dataArray]="[queriesResults.USEDCAPACITY]">
