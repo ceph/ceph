@@ -514,10 +514,9 @@ class CephFSMountBase(object):
         log.debug(f'Force/lazy unmounting on client.{self.client_id}')
 
         try:
-            proc = self.client_remote.run(
+            self.client_remote.run(
                 args=f'sudo umount --lazy --force {self.hostfs_mntpt}',
                 timeout=UMOUNT_TIMEOUT, omit_sudo=False)
-            return proc
         except CommandFailedError:
             if self.is_mounted():
                 raise
