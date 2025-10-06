@@ -10,6 +10,9 @@
 #include "ServiceDaemon.h"
 #include "Types.h"
 
+#include <stack>
+#include <boost/optional.hpp>
+
 namespace cephfs {
 namespace mirror {
 
@@ -101,6 +104,7 @@ private:
   struct SyncEntry {
     std::string epath;
     ceph_dir_result *dirp; // valid for directories
+    ceph_snapdiff_info info;
     struct ceph_statx stx;
     // set by incremental sync _after_ ensuring missing entries
     // in the currently synced snapshot have been propagated to
@@ -119,6 +123,13 @@ private:
         dirp(dirp),
         stx(stx) {
     }
+    SyncEntry(std::string_view path,
+              const ceph_snapdiff_info &info,
+              const struct ceph_statx &stx)
+      : epath(path),
+        info(info),
+        stx(stx) {
+    }
 
     bool is_directory() const {
       return S_ISDIR(stx.stx_mode);
@@ -130,6 +141,65 @@ private:
     void set_remote_synced() {
       remote_synced = true;
     }
+  };
+
+  class SyncMechanism {
+  public:
+    SyncMechanism(MountRef local, MountRef remote, FHandles *fh,
+                  const Peer &peer, /* keep dout happy */
+                  const Snapshot &current, boost::optional<Snapshot> prev);
+    virtual ~SyncMechanism() = 0;
+
+    virtual int init_sync() = 0;
+
+    virtual int get_entry(std::string *epath, struct ceph_statx *stx,
+                          const std::function<int (const std::string&)> &dirsync_func,
+                          const std::function<int (const std::string&)> &purge_func) = 0;
+
+    virtual void finish_sync() = 0;
+
+  protected:
+    MountRef m_local;
+    MountRef m_remote;
+    FHandles *m_fh;
+    Peer m_peer;
+    Snapshot m_current;
+    boost::optional<Snapshot> m_prev;
+    std::stack<PeerReplayer::SyncEntry> m_sync_stack;
+  };
+
+  class RemoteSync : public SyncMechanism {
+  public:
+    RemoteSync(MountRef local, MountRef remote, FHandles *fh,
+               const Peer &peer, /* keep dout happy */
+               const Snapshot &current, boost::optional<Snapshot> prev);
+    ~RemoteSync();
+
+    int init_sync() override;
+
+    int get_entry(std::string *epath, struct ceph_statx *stx,
+                  const std::function<int (const std::string&)> &dirsync_func,
+                  const std::function<int (const std::string&)> &purge_func);
+
+    void finish_sync();
+  };
+
+  class SnapDiffSync : public SyncMechanism {
+  public:
+    SnapDiffSync(std::string_view dir_root, MountRef local, MountRef remote,
+                 FHandles *fh, const Peer &peer, const Snapshot &current,
+                 boost::optional<Snapshot> prev);
+    ~SnapDiffSync();
+
+    int init_sync() override;
+
+    int get_entry(std::string *epeth, struct ceph_statx *stx,
+                  const std::function<int (const std::string&)> &dirsync_func,
+                  const std::function<int (const std::string&)> &purge_func);
+
+    void finish_sync();
+  private:
+    std::string m_dir_root;
   };
 
   // stats sent to service daemon
@@ -307,10 +377,12 @@ private:
   int open_dir(MountRef mnt, const std::string &dir_path, boost::optional<uint64_t> snap_id);
   int pre_sync_check_and_open_handles(const std::string &dir_root, const Snapshot &current,
                                       boost::optional<Snapshot> prev, FHandles *fh);
-  void post_sync_close_handles(const FHandles &fh);
 
   int do_synchronize(const std::string &dir_root, const Snapshot &current,
                      boost::optional<Snapshot> prev);
+  int do_synchronize(const std::string &dir_root, const Snapshot &current) {
+    return do_synchronize(dir_root, current, boost::none);
+  }
 
   int synchronize(const std::string &dir_root, const Snapshot &current,
                   boost::optional<Snapshot> prev);

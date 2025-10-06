@@ -11470,6 +11470,7 @@ void Server::handle_client_readdir_snapdiff(MDRequestRef& mdr)
     if (logger)
       logger->inc(l_mdss_cap_acquisition_throttle);
 
+    mdr->mark_event("cap_acquisition_throttle");
     mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
@@ -11545,17 +11546,17 @@ void Server::handle_client_readdir_snapdiff(MDRequestRef& mdr)
   mdr->set_mds_stamp(now);
 
   mdr->snapid_diff_other = (uint64_t)req->head.args.snapdiff.snap_other;
+  dout(10) << __func__
+    << " snap " << mdr->snapid
+    << " vs. snap " << mdr->snapid_diff_other
+    << dendl;
+
   if (mdr->snapid_diff_other == mdr->snapid ||
       mdr->snapid == CEPH_NOSNAP ||
       mdr->snapid_diff_other == CEPH_NOSNAP) {
     dout(10) << "reply to " << *req << " snapdiff -CEPHFS_EINVAL" << dendl;
     respond_to_request(mdr, -CEPHFS_EINVAL);
   }
-
-  dout(10) << __func__
-    << " snap " << mdr->snapid
-    << " vs. snap " << mdr->snapid_diff_other
-    << dendl;
 
   SnapRealm* realm = diri->find_snaprealm();
 
@@ -11860,19 +11861,30 @@ bool Server::build_snap_diff(
 	continue;
       } else {
 	if (before.dn && dn->get_name() == name_before) {
-	  if (mtime == before.mtime) {
-	    dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
-	      << dn->first << "/" << dn->last
-	      << " " << mtime
-	      << dendl;
+	  if (before.in->ino() != in->ino()) {
+	    dout(30) << __func__ << " inode changed " << dn->get_name() << " "
+		     << dn->first << "/" << dn->last
+		     << " " << before.mtime << " vs. " << mtime
+		     << dendl;
+	    if (!insert_deleted(before)) {
+	      break;
+	    }
 	    before.reset();
-	    continue;
 	  } else {
-	    dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
-	      << dn->first << "/" << dn->last
-	      << " " << before.mtime << " vs. " << mtime
-	      << dendl;
-	    before.reset();
+	    if (mtime == before.mtime) {
+	      dout(30) << __func__ << " timestamp not changed " << dn->get_name() << " "
+		       << dn->first << "/" << dn->last
+		       << " " << mtime
+		       << dendl;
+	      before.reset();
+	      continue;
+	    } else {
+	      dout(30) << __func__ << " timestamp changed " << dn->get_name() << " "
+		       << dn->first << "/" << dn->last
+		       << " " << before.mtime << " vs. " << mtime
+		       << dendl;
+	      before.reset();
+	    }
 	  }
 	}
 	dout(20) << __func__ << " new file " << dn->get_name() << " "
