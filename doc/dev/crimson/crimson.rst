@@ -79,7 +79,7 @@ number of CPU cores (``nproc``) divided by the **number of OSDs on that host**.
 
 For example, for deploying a node with eight CPU cores per OSD:
 
-.. code-block:: bash #
+.. prompt:: bash #
 
    ceph config set osd crimson_cpu_num 8
 
@@ -137,7 +137,7 @@ Native backends perform I/O operations using the **Seastar reactor**. These are 
    CyanStore **does not store data** and should be used only for measuring OSD overhead, without the cost of actually storing data.
 
 Non-Native Backends
-------------------
+-------------------
 
 Non-native backends operate through a **thread pool proxy**, which interfaces with object stores running in **alien threads**—worker threads not managed by Seastar.
 These backends allow Crimson to interact with legacy or external object store implementations:
@@ -187,7 +187,7 @@ The following options can be used with ``vstart.sh``.
     (as determined by `nproc`) will be assigned to the object store.
 
 ``--bluestore``
-    Use the alienized BlueStore as the object store backend. This is the default (see below section on the `object store backend`_ for more details)
+    Use the alienized BlueStore as the object store backend. This is the default (see above section on the `object store backends`_ for more details)
 
 ``--cyanstore``
     Use CyanStore as the object store backend.
