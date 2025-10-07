@@ -282,7 +282,6 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
   config_key = config_key_rados;
   datalog_rados = _svc.datalog_rados.get();
   mdlog = _svc.mdlog.get();
-  notify = _svc.notify.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();
