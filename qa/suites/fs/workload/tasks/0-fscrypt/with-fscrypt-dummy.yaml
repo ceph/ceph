@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        client_fscrypt_dummy_encryption: true
+  ceph-fuse:
