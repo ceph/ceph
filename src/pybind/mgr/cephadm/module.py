@@ -502,6 +502,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='169.254.1.1',
             desc="Default address for RedFish API (oob management)."
         ),
+        Option(
+            'asyncssh_log_level',
+            type='str',
+            default='INFO',
+            enum_allowed=['NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
+            desc='Change log level for asyncssh·'
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -601,6 +608,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
+            self.asyncssh_log_level = ''
             self.ssh_keepalive_interval = 0
             self.ssh_keepalive_count_max = 0
             self.certificate_duration_days = 0
