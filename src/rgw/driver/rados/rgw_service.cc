@@ -70,7 +70,9 @@ int RGWServices_Def::init(CephContext *cct,
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
   meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
-  notify = std::make_unique<RGWSI_Notify>(cct);
+  if (have_cache) {
+    notify = std::make_unique<RGWSI_Notify>(cct);
+  }
   otp = std::make_unique<RGWSI_OTP>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
@@ -107,7 +109,9 @@ int RGWServices_Def::init(CephContext *cct,
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
   meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
-  notify->init(zone.get(), driver->getRados()->get_rados_handle());
+  if (notify) {
+    notify->init(zone.get(), driver->getRados()->get_rados_handle());
+  }
   otp->init(zone.get(), meta.get(), meta_be_otp.get());
   zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
 	     sync_modules.get(), bucket_sync_sobj.get());
@@ -127,13 +131,16 @@ int RGWServices_Def::init(CephContext *cct,
   can_shutdown = true;
 
   int r = 0;
-  if (!raw) {
+
+  if (notify) {
     r = notify->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
       return r;
     }
+  }
 
+  if (!raw) {
     r = zone->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start zone service (" << cpp_strerror(-r) << dendl;
@@ -269,7 +276,9 @@ void RGWServices_Def::shutdown()
   user_rados->shutdown();
   sync_modules->shutdown();
   otp->shutdown();
-  notify->shutdown();
+  if (notify) {
+    notify->shutdown();
+  }
   meta_be_otp->shutdown();
   meta_be_sobj->shutdown();
   meta->shutdown();
@@ -283,7 +292,6 @@ void RGWServices_Def::shutdown()
 
   sysobj->shutdown();
   sysobj_core->shutdown();
-  notify->shutdown();
   if (sysobj_cache) {
     sysobj_cache->shutdown();
   }
