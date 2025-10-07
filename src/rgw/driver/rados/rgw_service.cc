@@ -328,7 +328,6 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
   meta = _svc.meta.get();
   meta_be_sobj = _svc.meta_be_sobj.get();
   meta_be_otp = _svc.meta_be_otp.get();
-  notify = _svc.notify.get();
   otp = _svc.otp.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
