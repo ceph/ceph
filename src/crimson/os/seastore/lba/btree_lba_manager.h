@@ -333,10 +333,6 @@ public:
     laddr_t laddr,
     extent_len_t len) final;
 
-  complete_lba_mapping_ret complete_indirect_lba_mapping(
-    Transaction &t,
-    LBAMapping mapping) final;
-
 private:
   Cache &cache;
 
