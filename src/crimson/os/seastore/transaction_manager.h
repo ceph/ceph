@@ -285,8 +285,7 @@ public:
     co_await pin.co_refresh();
 
     if (pin.is_indirect()) {
-      pin = co_await lba_manager->complete_indirect_lba_mapping(
-	t, std::move(pin));
+      pin = co_await complete_mapping(t, std::move(pin));
     }
 
     extent_len_t direct_partial_off = partial_off;
@@ -1160,6 +1159,23 @@ private:
     Transaction &t,
     LBACursorRef cursor);
 
+  using complete_mapping_iertr = base_iertr;
+  using complete_mapping_ret = complete_mapping_iertr::future<LBAMapping>;
+  complete_mapping_ret complete_mapping(
+    Transaction &t,
+    LBAMapping mapping) {
+    if (mapping.is_complete()) {
+      return complete_mapping_ret(
+	interruptible::ready_future_marker{},
+	std::move(mapping));
+    } else {
+      ceph_assert(mapping.indirect_cursor);
+      return resolve_cursor_to_mapping(
+	t,
+	std::move(mapping.indirect_cursor));
+    }
+  }
+
   using LBALeafNode = lba::LBALeafNode;
   get_child_ret_t<LBALeafNode, LogicalChildNode> get_extent_if_linked(
     Transaction &t,
@@ -1252,7 +1268,7 @@ private:
       SUBDEBUGT(seastore_tm, "{} into {} remaps ...",
         t, pin, remaps.size());
       co_await pin.co_refresh();
-      pin = co_await lba_manager->complete_indirect_lba_mapping(t, pin);
+      pin = co_await complete_mapping(t, std::move(pin));
     } else {
       laddr_t original_laddr = pin.get_key();
       extent_len_t original_len = pin.get_length();
