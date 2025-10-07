@@ -38,6 +38,9 @@ namespace ceph { class Formatter; }
 class filepath {
   inodeno_t ino = 0;   // base inode.  ino=0 implies pure relative path.
   std::string path;     // relative path.
+  // tells get_path() whether it should prefix path with "..." to indicate that
+  // it was shortened.
+  bool trimmed = false;
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -82,6 +85,8 @@ class filepath {
   // accessors
   inodeno_t get_ino() const { return ino; }
   const std::string& get_path() const { return path; }
+  void set_trimmed();
+  std::string get_trimmed_path() const;
   const char *c_str() const { return path.c_str(); }
 
   int length() const { return path.length(); }

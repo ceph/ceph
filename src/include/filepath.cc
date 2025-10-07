@@ -17,6 +17,21 @@
 
 #include <ostream>
 
+/* Trim given path to final 10 components and return it by prefixing it with
+ * "..."  to indicate that the path has been trimmed. */
+std::string filepath::get_trimmed_path() const
+{
+  std::size_t n = 0;
+  for (int i = 1; i <= 10; ++i) {
+    n = path.rfind("/", n - 1);
+    if (n == std::string::npos) {
+      return std::string(path);
+    }
+  }
+
+  return std::string("..." + path.substr(n, -1));
+}
+
 void filepath::rebuild_path() {
   path.clear();
   for (unsigned i=0; i<bits.size(); i++) {
@@ -39,6 +54,14 @@ void filepath::parse_bits() const {
     }
     off = nextslash+1;
   }
+}
+
+void filepath::set_trimmed() {
+  if (trimmed)
+    return;
+  // indicates that the path has been shortened.
+  path += "...";
+  trimmed = true;
 }
 
 void filepath::set_path(std::string_view s) {
