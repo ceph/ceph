@@ -142,7 +142,6 @@ struct RGWServices
   RGWSI_Meta *meta{nullptr};
   RGWSI_MetaBackend *meta_be_sobj{nullptr};
   RGWSI_MetaBackend *meta_be_otp{nullptr};
-  RGWSI_Notify *notify{nullptr};
   RGWSI_OTP *otp{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
