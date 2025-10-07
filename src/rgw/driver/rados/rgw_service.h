@@ -129,7 +129,6 @@ struct RGWServices
   RGWSI_ConfigKey *config_key{nullptr};
   RGWDataChangesLog *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
-  RGWSI_Notify *notify{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};
