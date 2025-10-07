@@ -272,7 +272,7 @@ that you're logged into ``quay.io/ceph`` and ``quay.ceph.io/ceph`` with appropri
 
     .. prompt:: bash
 
-       cd <ceph-checkout>/src/container
+       cd <ceph-checkout>/container
        ./make-manifest-list.py --promote
 
 The ``--promote`` step should be performed only as the final step in releasing
