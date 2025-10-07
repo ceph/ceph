@@ -347,18 +347,6 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
-  using complete_lba_mapping_iertr = get_mappings_iertr;
-  using complete_lba_mapping_ret =
-    complete_lba_mapping_iertr::future<LBAMapping>;
-  /*
-   * Completes an incomplete indirect mappings
-   *
-   * No effect if the indirect mapping is already complete
-   */
-  virtual complete_lba_mapping_ret complete_indirect_lba_mapping(
-    Transaction &t,
-    LBAMapping mapping) = 0;
-
   /*
    * scan all extents in the tree, including logical extents
    * and lba extents, visit them with scan_mapped_space_func_t.
