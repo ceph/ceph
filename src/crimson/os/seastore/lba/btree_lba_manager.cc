@@ -1011,30 +1011,6 @@ BtreeLBAManager::get_physical_extent_if_live(
     });
 }
 
-BtreeLBAManager::complete_lba_mapping_ret
-BtreeLBAManager::complete_indirect_lba_mapping(
-  Transaction &t,
-  LBAMapping mapping)
-{
-  assert(mapping.is_viewable());
-  assert(mapping.is_indirect());
-  if (mapping.is_complete_indirect()) {
-    return complete_lba_mapping_iertr::make_ready_future<
-      LBAMapping>(std::move(mapping));
-  }
-  auto c = get_context(t);
-  return with_btree_state<LBABtree, LBAMapping>(
-    cache,
-    c,
-    std::move(mapping),
-    [this, c](auto &btree, auto &mapping) {
-    return resolve_indirect_cursor(c, btree, *mapping.indirect_cursor
-    ).si_then([&mapping](auto cursor) {
-      mapping.direct_cursor = std::move(cursor);
-    });
-  });
-}
-
 void BtreeLBAManager::register_metrics()
 {
   LOG_PREFIX(BtreeLBAManager::register_metrics);

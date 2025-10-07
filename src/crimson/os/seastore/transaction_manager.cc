@@ -267,8 +267,7 @@ TransactionManager::_remove_indirect_mapping(
   LBAMapping mapping)
 {
   LOG_PREFIX(TransactionManager::_remove_indirect_mapping);
-  mapping = co_await lba_manager->complete_indirect_lba_mapping(t, std::move(mapping)
-  );
+  mapping = co_await complete_mapping(t, std::move(mapping));
   auto ret = get_extent_if_linked(t, *(mapping.direct_cursor));
   if (ret.has_child()) {
     auto extent = co_await ret.template get_child_fut_as<LogicalChildNode>();
