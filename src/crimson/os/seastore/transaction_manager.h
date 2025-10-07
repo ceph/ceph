@@ -305,10 +305,10 @@ public:
 
     // checking the lba child must be atomic with creating
     // and linking the absent child
-    auto ret = get_extent_if_linked<T>(t, std::move(pin));
+    auto ret = get_extent_if_linked(t, *(pin.direct_cursor));
     TCachedExtentRef<T> extent;
-    if (ret.index() == 1) {
-      extent = co_await std::move(std::get<1>(ret));
+    if (ret.has_child()) {
+      extent = co_await ret.template get_child_fut_as<T>();
       extent = co_await cache->read_extent_maybe_partial(
 	t, std::move(extent), direct_partial_off, partial_len);
       if (!extent->is_seen_by_users()) {
@@ -316,9 +316,8 @@ public:
 	extent->set_seen_by_users();
       }
     } else {
-      auto &r = std::get<0>(ret);
       extent = co_await this->pin_to_extent<T>(
-	t, std::move(r.mapping), std::move(r.child_pos),
+	t, std::move(pin), std::move(ret.get_child_pos()),
 	direct_partial_off, partial_len,
 	std::move(maybe_init));
     }
@@ -1162,35 +1161,19 @@ private:
     LBACursorRef cursor);
 
   using LBALeafNode = lba::LBALeafNode;
-  struct unlinked_child_t {
-    LBAMapping mapping;
-    child_pos_t<LBALeafNode> child_pos;
-  };
-  template <typename T>
-  std::variant<unlinked_child_t, get_child_ifut<T>>
-  get_extent_if_linked(
+  get_child_ret_t<LBALeafNode, LogicalChildNode> get_extent_if_linked(
     Transaction &t,
-    LBAMapping pin)
+    LBACursor &cursor)
   {
-    ceph_assert(pin.is_viewable());
-    // checking the lba child must be atomic with creating
-    // and linking the absent child
-    auto v = pin.get_logical_extent(t);
-    if (v.has_child()) {
-      return v.get_child_fut(
-      ).si_then([pin](auto extent) {
-#ifndef NDEBUG
-        auto lextent = extent->template cast<LogicalChildNode>();
-        auto pin_laddr = pin.get_intermediate_base();
-        assert(lextent->get_laddr() == pin_laddr);
-#endif
-	return extent->template cast<T>();
-      });
-    } else {
-      return unlinked_child_t{
-	std::move(const_cast<LBAMapping&>(pin)),
-	v.get_child_pos()};
-    }
+    ceph_assert(cursor.is_viewable());
+    ceph_assert(cursor.ctx.trans.get_trans_id()
+		== t.get_trans_id());
+    assert(!cursor.is_end());
+    assert(cursor.pos != BTREENODE_POS_NULL);
+    ceph_assert(t.get_trans_id() == cursor.ctx.trans.get_trans_id());
+    auto p = cursor.parent->cast<LBALeafNode>();
+    return p->template get_child<LogicalChildNode>(
+      t, cursor.ctx.cache, cursor.pos, cursor.key);
   }
 
   base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
@@ -1205,7 +1188,7 @@ private:
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
-      auto extent = co_await std::move(v.get_child_fut());
+      auto extent = co_await v.get_child_fut_as<LogicalChildNode>();
       auto len = extent->get_length();
       auto ext = co_await cache->read_extent_maybe_partial(
 	t, std::move(extent), 0, len);
@@ -1288,23 +1271,20 @@ private:
         assert(!maybe_indirect_extent.is_clone);
         extent = maybe_indirect_extent.extent;
       } else {
-        auto ret = get_extent_if_linked<T>(t, pin);
-        if (std::holds_alternative<get_child_ifut<T>>(ret)) {
+	auto ret = get_extent_if_linked(t, *(pin.direct_cursor));
+        if (ret.has_child()) {
           SUBTRACET(seastore_tm, "getting linked child...", t);
-          extent = co_await std::move(std::get<get_child_ifut<T>>(ret));
+          extent = co_await ret.template get_child_fut_as<T>();
           if (!extent->is_seen_by_users()) {
             // Note, no maybe_init available for data extents
             extent->set_seen_by_users();
           }
-        } else if (std::holds_alternative<unlinked_child_t>(ret)) {
+        } else {
           SUBTRACET(seastore_tm, "retire extent place holder...", t);
-          auto unlinked_child =  std::move(std::get<unlinked_child_t>(ret));
           auto retired_placeholder = cache->retire_absent_extent_addr(
             t, pin.get_key(), original_paddr, original_len
           )->template cast<RetiredExtentPlaceholder>();
-          unlinked_child.child_pos.link_child(retired_placeholder.get());
-        } else {
-          ceph_abort("unexpected varaint in remap_pin");
+	  ret.get_child_pos().link_child(retired_placeholder.get());
         }
       }
 

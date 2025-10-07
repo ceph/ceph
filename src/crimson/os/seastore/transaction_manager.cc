@@ -269,9 +269,9 @@ TransactionManager::_remove_indirect_mapping(
   LOG_PREFIX(TransactionManager::_remove_indirect_mapping);
   mapping = co_await lba_manager->complete_indirect_lba_mapping(t, std::move(mapping)
   );
-  auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
-  if (ret.index() == 1) {
-    auto extent = co_await std::move(std::get<1>(ret));
+  auto ret = get_extent_if_linked(t, *(mapping.direct_cursor));
+  if (ret.has_child()) {
+    auto extent = co_await ret.template get_child_fut_as<LogicalChildNode>();
     auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
     ceph_assert(result.direct_result);
     auto &primary_result = result.result;
@@ -297,13 +297,12 @@ TransactionManager::_remove_indirect_mapping(
   } else {
     auto remove_direct = mapping.would_cascade_remove();
     if (remove_direct) {
-      auto unlinked_child = std::move(std::get<0>(ret));
       auto retired_placeholder = cache->retire_absent_extent_addr(
 	t, mapping.get_intermediate_base(),
 	mapping.get_val(),
 	mapping.get_intermediate_length()
       )->template cast<RetiredExtentPlaceholder>();
-      unlinked_child.child_pos.link_child(retired_placeholder.get());
+      ret.get_child_pos().link_child(retired_placeholder.get());
     }
     auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
     ceph_assert(result.direct_result);
@@ -334,9 +333,9 @@ TransactionManager::_remove_direct_mapping(
   LBAMapping mapping)
 {
   LOG_PREFIX(TransactionManager::_remove_direct_mapping);
-  auto ret = get_extent_if_linked<LogicalChildNode>(t, mapping);
-  if (ret.index() == 1) {
-    auto extent = co_await std::move(std::get<1>(ret));
+  auto ret = get_extent_if_linked(t, *(mapping.direct_cursor));
+  if (ret.has_child()) {
+    auto extent = co_await ret.template get_child_fut_as<LogicalChildNode>();
     auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
     auto &primary_result = result.result;
     ceph_assert(primary_result.refcount == 0);
@@ -349,11 +348,10 @@ TransactionManager::_remove_direct_mapping(
 	   primary_result.refcount, primary_result.key);
     co_return result;
   } else {
-    auto unlinked_child = std::move(std::get<0>(ret));
     auto retired_placeholder = cache->retire_absent_extent_addr(
       t, mapping.get_key(), mapping.get_val(), mapping.get_length()
     )->template cast<RetiredExtentPlaceholder>();
-    unlinked_child.child_pos.link_child(retired_placeholder.get());
+    ret.get_child_pos().link_child(retired_placeholder.get());
     auto result = co_await lba_manager->remove_mapping(t, std::move(mapping));
     auto &primary_result = result.result;
     ceph_assert(primary_result.refcount == 0);
