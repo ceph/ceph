@@ -5,6 +5,7 @@
 
 #include "auth/Auth.h"
 
+#include "common/ceph_time_fmt.h"
 #include "crimson/common/formatter.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Errors.h"

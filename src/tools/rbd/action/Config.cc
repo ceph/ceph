@@ -126,10 +126,9 @@ int config_global_list(
       "\"prefix\": \"config dump\", "
       "\"format\": \"json\" "
     "}";
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string ss;
-  int r = rados.mon_command(cmd, in_bl, &out_bl, &ss);
+  int r = rados.mon_command(std::move(cmd), {}, &out_bl, &ss);
   if (r < 0) {
     std::cerr << "rbd: error reading config: " << ss << std::endl;
     return r;
@@ -273,9 +272,8 @@ int execute_global_set(const po::variables_map &vm,
       "\"name\": \"" + key + "\", "
       "\"value\": \"" + stringify(json_stream_escaper(value)) + "\""
     "}";
-  bufferlist in_bl;
   std::string ss;
-  r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  r = rados.mon_command(std::move(cmd), {}, nullptr, &ss);
   if (r < 0) {
     std::cerr << "rbd: error setting " << key << ": " << ss << std::endl;
     return r;
@@ -318,9 +316,8 @@ int execute_global_remove(
       "\"who\": \"" + stringify(json_stream_escaper(config_entity)) + "\", "
       "\"name\": \"" + key + "\""
     "}";
-  bufferlist in_bl;
   std::string ss;
-  r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  r = rados.mon_command(std::move(cmd), {}, nullptr, &ss);
   if (r < 0) {
     std::cerr << "rbd: error removing " << key << ": " << ss << std::endl;
     return r;
