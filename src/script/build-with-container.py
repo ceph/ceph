@@ -113,6 +113,7 @@ class DistroKind(StrEnum):
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
     DEBIAN12 = "debian12"
+    DEBIAN13 = "debian13"
 
     @classmethod
     def uses_dnf(cls):
@@ -165,6 +166,9 @@ class DistroKind(StrEnum):
             str(cls.DEBIAN12): cls.DEBIAN12,
             "debian-bookworm": cls.DEBIAN12,
             "bookworm": cls.DEBIAN12,
+            str(cls.DEBIAN13): cls.DEBIAN13,
+            "debian-trixie": cls.DEBIAN13,
+            "trixie": cls.DEBIAN13,
         }
 
     @classmethod
@@ -189,6 +193,7 @@ class DefaultImage(StrEnum):
     UBUNTU2404 = "docker.io/ubuntu:24.04"
     # debian
     DEBIAN12 = "docker.io/debian:bookworm"
+    DEBIAN13 = "docker.io/debian:trixie"
 
 
 class CommandFailed(Exception):
