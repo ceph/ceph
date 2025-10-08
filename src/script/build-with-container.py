@@ -189,6 +189,13 @@ _CONTAINER_SOURCES = [
 ]
 
 
+def _all_container_sources():
+    yield from _CONTAINER_SOURCES
+    for path, _, files in os.walk('debian'):
+        for file in files:
+            yield os.path.join(path, file)
+
+
 def _cmdstr(cmd):
     return " ".join(shlex.quote(c) for c in cmd)
 
