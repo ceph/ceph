@@ -173,7 +173,12 @@ class DistroKind(StrEnum):
 
     @classmethod
     def from_alias(cls, value):
-        return cls.aliases()[value]
+        try:
+            return cls.aliases()[value]
+        except KeyError:
+            valid = ", ".join(sorted(cls.aliases()))
+            msg = f"unknown distro: {value!r} not in {valid}"
+            raise argparse.ArgumentTypeError(msg)
 
 
 class DefaultImage(StrEnum):
