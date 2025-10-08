@@ -64,6 +64,17 @@ Options
 :Type: String
 :Default: None
 
+``ssl_reload``
+
+:Description: Optional interval in seconds to periodically recreate the SSL
+              context, which reloads the SSL certificate and private key from
+              their specified paths. A value of ``0`` disables this feature.
+              The reload is non-disruptive to existing connections. If the re-
+              load fails, the previous context continues to be used.
+
+:Type: Integer
+:Default: 0
+
 ``ssl_options``
 
 :Description: Optional colon separated list of ssl context options:
