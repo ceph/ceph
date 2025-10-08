@@ -735,7 +735,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if svc.allows_user_certificates:
                 if svc.SCOPE == TLSObjectScope.UNKNOWN:
                     OrchestratorError(f"Service {svc.TYPE} requieres certificates but it has not defined its svc.SCOPE field.")
-                self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE)
+                self.cert_mgr.register_cert_key_pair(svc.TYPE, svc.cert_name, svc.key_name, svc.SCOPE, svc.ca_cert_name)
 
         self.cert_mgr.register_cert_key_pair('nvmeof', 'nvmeof_client_cert', 'nvmeof_client_key', TLSObjectScope.SERVICE)
         self.cert_mgr.register_cert('nvmeof', 'nvmeof_root_ca_cert', TLSObjectScope.SERVICE)
@@ -3282,8 +3282,8 @@ Then run the following:
         if module_name == 'dashboard':
             host_fqdns.append('dashboard_servers')
 
-        cert, key = self.cert_mgr.generate_cert(host_fqdns, self.get_mgr_ip())
-        return {'cert': cert, 'key': key}
+        tls_creds = self.cert_mgr.generate_cert(host_fqdns, self.get_mgr_ip())
+        return {'cert': tls_creds.cert, 'key': tls_creds.key}
 
     @handle_orch_error
     def set_prometheus_access_info(self, user: str, password: str) -> str:

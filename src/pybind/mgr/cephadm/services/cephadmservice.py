@@ -34,7 +34,7 @@ from orchestrator import (
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
 from .service_registry import register_cephadm_service
-from cephadm.tlsobject_types import TLSObjectScope, CertKeyPair, EMPTY_TLS_KEYPAIR
+from cephadm.tlsobject_types import TLSObjectScope, TLSCredentials, EMPTY_TLS_CREDENTIALS
 from cephadm.ssl_cert_utils import extract_ips_and_fqdns_from_cert
 
 if TYPE_CHECKING:
@@ -291,12 +291,23 @@ class CephadmService(metaclass=ABCMeta):
         return TLSObjectScope(entry['scope'])
 
     @property
+    def requires_ca_cert(self) -> bool:
+        config = ServiceSpec.REQUIRES_CERTIFICATES.get(self.TYPE)
+        return config is not None and bool(config.get("requires_ca_cert", False))
+
+    @property
     def cert_name(self) -> str:
         return f"{self.TYPE.replace('-', '_')}_ssl_cert"
 
     @property
     def key_name(self) -> str:
         return f"{self.TYPE.replace('-', '_')}_ssl_key"
+
+    @property
+    def ca_cert_name(self) -> Optional[str]:
+        if self.requires_ca_cert:
+            return f"{self.TYPE.replace('-', '_')}_ssl_ca_cert"
+        return None
 
     @property
     @abstractmethod
@@ -312,53 +323,58 @@ class CephadmService(metaclass=ABCMeta):
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
 
-    def get_self_signed_certificates_with_label(self, svc_spec: ServiceSpec, daemon_spec: CephadmDaemonDeploySpec, label: str) -> CertKeyPair:
+    def get_self_signed_certificates_with_label(self, svc_spec: ServiceSpec, daemon_spec: CephadmDaemonDeploySpec, label: str) -> TLSCredentials:
         svc_name = svc_spec.service_name()
         ip = self.mgr.inventory.get_addr(daemon_spec.host)
         host_fqdn = self.mgr.get_fqdn(daemon_spec.host)
-        tls_pair = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_name, host_fqdn, label)
-        if not tls_pair:
-            tls_pair = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
-            self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_pair, host=daemon_spec.host, label=label)
-        return tls_pair
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, host_fqdn, label)
+        if not tls_creds:
+            tls_creds = self.mgr.cert_mgr.generate_cert(host_fqdn, ip)
+            self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host, label=label)
+        return tls_creds
 
     def get_certificates(self,
                          daemon_spec: CephadmDaemonDeploySpec,
                          ips: List[str] = [],
                          fqdns: List[str] = [],
-                         custom_sans: List[str] = []
-                         ) -> CertKeyPair:
+                         custom_sans: List[str] = [],
+                         ca_cert_required: bool = False
+                         ) -> TLSCredentials:
 
         svc_spec = cast(ServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         if not self.requires_certificates or not svc_spec.ssl:
-            return EMPTY_TLS_KEYPAIR
+            return EMPTY_TLS_CREDENTIALS
 
         return self.get_certificates_generic(
             svc_spec=svc_spec,
             daemon_spec=daemon_spec,
-            cert_attr='ssl_cert',
-            key_attr='ssl_key',
             cert_source_attr='certificate_source',
+            cert_attr='ssl_cert',
             cert_name=self.cert_name,
+            key_attr='ssl_key',
             key_name=self.key_name,
+            ca_cert_attr='ssl_ca_cert' if ca_cert_required else None,
+            ca_cert_name=self.ca_cert_name if ca_cert_required else None,
             ips=ips,
             fqdns=fqdns,
-            custom_sans=custom_sans
+            custom_sans=custom_sans,
         )
 
     def get_certificates_generic(
         self,
         svc_spec: ServiceSpec,
         daemon_spec: CephadmDaemonDeploySpec,
-        cert_attr: str,
-        key_attr: str,
         cert_source_attr: str,
+        cert_attr: str,
         cert_name: str,
+        key_attr: str,
         key_name: str,
+        ca_cert_attr: Optional[str] = None,
+        ca_cert_name: Optional[str] = None,
         custom_sans: Optional[List[str]] = None,
         ips: Optional[List[str]] = None,
-        fqdns: Optional[List[str]] = None
-    ) -> CertKeyPair:
+        fqdns: Optional[List[str]] = None,
+    ) -> TLSCredentials:
 
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
@@ -368,14 +384,14 @@ class CephadmService(metaclass=ABCMeta):
         logger.debug(f'Getting certificate for {svc_spec.service_name()} using source: {cert_source}')
 
         if cert_source == CertificateSource.INLINE.value:
-            return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name)
+            return self._get_certificates_from_spec(svc_spec, daemon_spec, cert_attr, key_attr, cert_name, key_name, ca_cert_attr, ca_cert_name)
         elif cert_source == CertificateSource.REFERENCE.value:
-            return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name)
+            return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
             logger.error(f'Invalid cert_source: {cert_source}')
-            return EMPTY_TLS_KEYPAIR
+            return EMPTY_TLS_CREDENTIALS
 
     def _get_certificates_from_spec(
         self,
@@ -384,42 +400,69 @@ class CephadmService(metaclass=ABCMeta):
         cert_attr: str,
         key_attr: str,
         cert_name: str,
-        key_name: str
-    ) -> CertKeyPair:
+        key_name: str,
+        ca_cert_attr: Optional[str] = None,
+        ca_cert_name: Optional[str] = None
+    ) -> TLSCredentials:
         """
         Fetch and persist the TLS certificate and key for a service spec.
         Returns:
-            A CertKeyPair if both are available; otherwise EMPTY_TLS_KEYPAIR.
+            A TLSCredentials if both are available; otherwise EMPTY_TLS_CREDENTIALS.
         """
         cert = getattr(svc_spec, cert_attr, None)
         key = getattr(svc_spec, key_attr, None)
-        if cert and key:
-            service_name = svc_spec.service_name()
-            host = daemon_spec.host
-            self.mgr.cert_mgr.save_cert(cert_name, cert, service_name, host, user_made=True)
-            self.mgr.cert_mgr.save_key(key_name, key, service_name, host, user_made=True)
-            return CertKeyPair(cert=cert, key=key)
+        needs_ca = bool(ca_cert_attr and ca_cert_name)
+        ca_cert: Optional[str] = None
+        if needs_ca:
+            assert ca_cert_attr
+            ca_cert = getattr(svc_spec, ca_cert_attr, None)
 
-        logger.error(
-            f"Cannot get cert/key '{self.cert_name}/{self.key_name}' for service '{svc_spec.service_name()}'"
-        )
-        return EMPTY_TLS_KEYPAIR
+        service_name = svc_spec.service_name()
+        host = daemon_spec.host
+
+        missing = []
+        if not cert:
+            missing.append(cert_attr)
+        if not key:
+            missing.append(key_attr)
+        if needs_ca and not ca_cert:
+            assert ca_cert_attr
+            missing.append(ca_cert_attr)
+        if missing:
+            logger.error(
+                f"Cannot get required TLS fields {', '.join(missing)} for service "
+                f"'{service_name}' (cert/key names: {cert_name}/{key_name})"
+            )
+            return EMPTY_TLS_CREDENTIALS
+        # Save TLS credentials
+        if needs_ca:
+            assert ca_cert_name and ca_cert
+            self.mgr.cert_mgr.save_cert(ca_cert_name, ca_cert, service_name, host, user_made=True)
+        assert cert and key
+        self.mgr.cert_mgr.save_cert(cert_name, cert, service_name, host, user_made=True)
+        self.mgr.cert_mgr.save_key(key_name, key, service_name, host, user_made=True)
+        return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
 
     def _get_certificates_from_certmgr_store(
         self,
         svc_spec: ServiceSpec,
         fqdns: List[str],
         cert_name: str,
-        key_name: str
-    ) -> CertKeyPair:
+        key_name: str,
+        ca_cert_name: Optional[str] = None
+    ) -> TLSCredentials:
         host = fqdns[0] if fqdns else None
         cert = self.mgr.cert_mgr.get_cert(cert_name, svc_spec.service_name(), host)
         key = self.mgr.cert_mgr.get_key(key_name, svc_spec.service_name(), host)
+        ca_cert = self.mgr.cert_mgr.get_cert(ca_cert_name, svc_spec.service_name(), host) if ca_cert_name else ''
         if cert and key:
-            return CertKeyPair(cert=cert, key=key)
+            if ca_cert_name and not ca_cert:
+                logger.error(f'Failed to get CA cert {ca_cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
+                return EMPTY_TLS_CREDENTIALS
+            return TLSCredentials(cert=cert, key=key, ca_cert=ca_cert)
         else:
             logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
-            return EMPTY_TLS_KEYPAIR
+            return EMPTY_TLS_CREDENTIALS
 
     def _get_cephadm_signed_certificates(
         self,
@@ -428,24 +471,24 @@ class CephadmService(metaclass=ABCMeta):
         ips: List[str],
         fqdns: List[str],
         custom_sans: List[str],
-    ) -> CertKeyPair:
+    ) -> TLSCredentials:
 
         custom_sans = custom_sans or svc_spec.custom_sans or []
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
-        tls_pair = self.mgr.cert_mgr.get_self_signed_cert_key_pair(svc_spec.service_name(), daemon_spec.host)
-        if tls_pair:
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_spec.service_name(), daemon_spec.host)
+        if tls_creds:
             combined_fqdns = sorted(set(s.lower() for s in fqdns + custom_sans))
-            cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(tls_pair.cert)
+            cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(tls_creds.cert)
             if sorted(cert_ips) == sorted(ips) and sorted(cert_fqdns) == sorted(combined_fqdns):
                 # Nothing has changed, use the stored certifiactes
-                return tls_pair
+                return tls_creds
 
         # Either there were not certs or ips/fqdns have changed generate new cets
-        tls_pair = self.mgr.cert_mgr.generate_cert(fqdns, ips, custom_sans)
-        self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_spec.service_name(), tls_pair, host=daemon_spec.host)
+        tls_creds = self.mgr.cert_mgr.generate_cert(fqdns, ips, custom_sans)
+        self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_spec.service_name(), tls_creds, host=daemon_spec.host)
 
-        return tls_pair
+        return tls_creds
 
     def allow_colo(self) -> bool:
         """
@@ -768,6 +811,8 @@ class CephadmService(metaclass=ABCMeta):
                 logger.info(f"Removing inline-saved certificate/key for service: {svc_name}, host: {host}")
                 self.mgr.cert_mgr.rm_cert(self.cert_name, svc_name, host)
                 self.mgr.cert_mgr.rm_key(self.key_name, svc_name, host)
+                if self.ca_cert_name:
+                    self.mgr.cert_mgr.rm_cert(self.ca_cert_name, svc_name, host)
             else:
                 # It's a reference cert/key to the certmgr so we must keep them as user may want to use them later
                 logger.info(f"Keeping referenced certificate/key for service: {svc_name}, host: {host}")
@@ -1292,8 +1337,8 @@ class RgwService(CephService):
         if spec.ssl:
             san_list = spec.zonegroup_hostnames or []
             custom_sans = san_list + [f"*.{h}" for h in san_list] if spec.wildcard_enabled else san_list
-            tls_pair = self.get_certificates(daemon_spec, custom_sans)
-            pem = f'{tls_pair.key.rstrip()}\n{tls_pair.cert.lstrip()}'
+            tls_creds = self.get_certificates(daemon_spec, custom_sans)
+            pem = f'{tls_creds.key.rstrip()}\n{tls_creds.cert.lstrip()}'
             rgw_cert_name = daemon_spec.name() if spec.generate_cert else spec.service_name()
             ret, out, err = self.mgr.check_mon_command({
                 'prefix': 'config-key set',
@@ -1651,10 +1696,10 @@ class CephExporterService(CephService):
         security_enabled, _, _ = self.mgr._get_security_config()
         if security_enabled:
             exporter_config.update({'https_enabled': True})
-            crt, key = self.get_certificates(daemon_spec)
+            tls_creds = self.get_certificates(daemon_spec)
             exporter_config['files'] = {
-                'ceph-exporter.crt': crt,
-                'ceph-exporter.key': key
+                'ceph-exporter.crt': tls_creds.cert,
+                'ceph-exporter.key': tls_creds.key
             }
 
         daemon_spec.keyring = keyring
@@ -1749,13 +1794,13 @@ class CephadmAgent(CephService):
                'host': daemon_spec.host,
                'device_enhanced_scan': str(self.mgr.device_enhanced_scan)}
 
-        listener_cert, listener_key = self.get_certificates(daemon_spec)
+        tls_creds = self.get_certificates(daemon_spec)
         config = {
             'agent.json': json.dumps(cfg),
             'keyring': daemon_spec.keyring,
             'root_cert.pem': self.mgr.cert_mgr.get_root_ca(),
-            'listener.crt': listener_cert,
-            'listener.key': listener_key,
+            'listener.crt': tls_creds.cert,
+            'listener.key': tls_creds.key,
         }
 
         return config, sorted([str(self.mgr.get_mgr_ip()), str(agent.server_port),
