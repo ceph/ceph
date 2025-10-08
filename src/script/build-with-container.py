@@ -294,13 +294,22 @@ def _git_current_sha(ctx, short=True):
 def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
-    for path in sorted(_CONTAINER_SOURCES):
+    sources = sorted(_all_container_sources())
+    log.debug("container sources: %r", sources)
+    for path in sources:
         with open(path, "rb") as fh:
             while True:
                 rlen = fh.readinto(buf)
                 hh.update(buf[:rlen])
                 if rlen < len(buf):
                     break
+    digest = hh.hexdigest()
+    log.info("Sources sha256 digest: %s", hh.hexdigest())
+    return hh
+
+
+def _hashed_sources_value(bsize=4096):
+    hh = _hash_sources(bsize)
     return f"sha256:{hh.hexdigest()}"
 
 
@@ -387,7 +396,7 @@ class Context:
         suffix = ""
         if tag.startswith('@'):
             suffix = f".{tag[1:]}" if tag[1:] else ""
-            srchash = _hash_sources().split(':')[-1]
+            srchash = _hash_sources().hexdigest()
             arch = _host_arch()
             distro = self.cli.distro
             return f"fp0-{srchash}.{arch}.{distro}{suffix}"
@@ -591,7 +600,7 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
-        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
+        f"--label=io.ceph.build-with-container.src={_hashed_sources_value()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -635,7 +644,7 @@ def _check_cached_image(ctx):
     elif "Labels" in ctr_info.get("Config", {}):
         labels = ctr_info["Config"]["Labels"]
     saved_hash = labels.get("io.ceph.build-with-container.src", "")
-    curr_hash = _hash_sources()
+    curr_hash = _hashed_sources_value()
     if saved_hash == curr_hash:
         log.info("Container passes source check")
         return True, True
