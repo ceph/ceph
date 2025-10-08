@@ -164,6 +164,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
     SCHEMA_VERSIONED = SCHEMA_VERSIONED
 
+    bootstrap_version_stored = False
+    
     _STORE_HOST_PREFIX = "host"
 
     instance = None

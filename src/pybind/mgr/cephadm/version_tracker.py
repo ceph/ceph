@@ -112,6 +112,7 @@ class VersionTracker:
                 status = self.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc)))
 
             if status:
+                self.mgr.bootstrap_version_stored = True
                 self.mgr.log.debug('Version Tracker, Cluster bootstrap version added successfully')
             else:
                 self.mgr.log.debug('Version Tracker, Cluster bootstrap version could not be added')
@@ -126,7 +127,8 @@ class VersionTracker:
         if not self.mgr.db_ready():
             return -errno.EAGAIN, '', 'mgr db not yet available'
         
-        self.add_bootstrap_cluster_version()
+        if not self.mgr.bootstrap_version_stored:
+            self.add_bootstrap_cluster_version()
 
         res = dict()
 
