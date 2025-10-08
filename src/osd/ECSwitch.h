@@ -293,8 +293,9 @@ public:
   }
 
   uint64_t be_get_ondisk_size(uint64_t logical_size,
-                              shard_id_t shard_id) const final {
-    if (is_optimized())
+                              shard_id_t shard_id,
+                              bool object_is_legacy_ec) const final {
+    if (is_optimized() && !object_is_legacy_ec)
     {
       return optimized.be_get_ondisk_size(logical_size, shard_id);
     }
