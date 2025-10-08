@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include <atomic>
+#include <chrono>
 #include <ctime>
 #include <iomanip>
 #include <list>
@@ -473,13 +474,16 @@ class AsioFrontend {
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
-  boost::optional<ssl::context> ssl_context;
+  std::shared_ptr<ssl::context> ssl_context;
+  boost::asio::steady_timer ssl_reload_timer;
   int get_config_key_val(string name,
                          const string& type,
                          bufferlist *pbl);
-  int ssl_set_private_key(const string& name, bool is_ssl_cert);
-  int ssl_set_certificate_chain(const string& name);
-  int init_ssl();
+  int ssl_set_private_key(ssl::context& ctx, const string& name, bool is_ssl_cert);
+  int ssl_set_certificate_chain(ssl::context& ctx, const string& name);
+  int ssl_init();
+  int ssl_reload();
+  int ssl_reload_timer_start();
 #endif
   SharedMutex pause_mutex;
   std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
@@ -514,6 +518,9 @@ class AsioFrontend {
 	       dmc::SchedulerCtx& sched_ctx,
 	       boost::asio::io_context& context)
     : env(env), conf(conf), context(context),
+      #ifdef WITH_RADOSGW_BEAST_OPENSSL
+      ssl_reload_timer(context),
+      #endif
       pause_mutex(context.get_executor()),
       backoff(context)
   {
@@ -669,7 +676,11 @@ int AsioFrontend::init()
   }
 
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
-  int r = init_ssl();
+  int r = ssl_init();
+  if (r < 0) {
+    return r;
+  }
+  r = ssl_reload_timer_start();
   if (r < 0) {
     return r;
   }
@@ -887,12 +898,12 @@ int AsioFrontend::get_config_key_val(string name,
   return 0;
 }
 
-int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificate)
+int AsioFrontend::ssl_set_private_key(ssl::context& ssl_ctx, const string& name, bool is_ssl_certificate)
 {
   boost::system::error_code ec;
 
   if (!boost::algorithm::starts_with(name, config_val_prefix)) {
-    ssl_context->use_private_key_file(name, ssl::context::pem, ec);
+    ssl_ctx.use_private_key_file(name, ssl::context::pem, ec);
   } else {
     bufferlist bl;
     int r = get_config_key_val(name.substr(config_val_prefix.size()),
@@ -901,7 +912,7 @@ int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificat
     if (r < 0) {
       return r;
     }
-    ssl_context->use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
+    ssl_ctx.use_private_key(boost::asio::buffer(bl.c_str(), bl.length()),
                                  ssl::context::pem, ec);
   }
 
@@ -919,12 +930,12 @@ int AsioFrontend::ssl_set_private_key(const string& name, bool is_ssl_certificat
   return 0;
 }
 
-int AsioFrontend::ssl_set_certificate_chain(const string& name)
+int AsioFrontend::ssl_set_certificate_chain(ssl::context& ssl_ctx, const string& name)
 {
   boost::system::error_code ec;
 
   if (!boost::algorithm::starts_with(name, config_val_prefix)) {
-    ssl_context->use_certificate_chain_file(name, ec);
+    ssl_ctx.use_certificate_chain_file(name, ec);
   } else {
     bufferlist bl;
     int r = get_config_key_val(name.substr(config_val_prefix.size()),
@@ -933,7 +944,7 @@ int AsioFrontend::ssl_set_certificate_chain(const string& name)
     if (r < 0) {
       return r;
     }
-    ssl_context->use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
+    ssl_ctx.use_certificate_chain(boost::asio::buffer(bl.c_str(), bl.length()),
                                  ec);
   }
 
@@ -946,75 +957,10 @@ int AsioFrontend::ssl_set_certificate_chain(const string& name)
   return 0;
 }
 
-int AsioFrontend::init_ssl()
+int AsioFrontend::ssl_init()
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
-
-  // ssl configuration
-  std::optional<string> cert = conf->get_val("ssl_certificate");
-  if (cert) {
-    // only initialize the ssl context if it's going to be used
-    ssl_context = boost::in_place(ssl::context::tls);
-  }
-
-  std::optional<string> key = conf->get_val("ssl_private_key");
-  bool have_cert = false;
-
-  if (key && !cert) {
-    lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
-    return -EINVAL;
-  }
-
-  std::optional<string> options = conf->get_val("ssl_options");
-  if (options) {
-    if (!cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_options" << dendl;
-      return -EINVAL;
-    }
-  } else if (cert) {
-    options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1";
-  }
-
-  if (options) {
-    for (auto &option : ceph::split(*options, ":")) {
-      if (option == "default_workarounds") {
-        ssl_context->set_options(ssl::context::default_workarounds);
-      } else if (option == "no_compression") {
-        ssl_context->set_options(ssl::context::no_compression);
-      } else if (option == "no_sslv2") {
-        ssl_context->set_options(ssl::context::no_sslv2);
-      } else if (option == "no_sslv3") {
-        ssl_context->set_options(ssl::context::no_sslv3);
-      } else if (option == "no_tlsv1") {
-        ssl_context->set_options(ssl::context::no_tlsv1);
-      } else if (option == "no_tlsv1_1") {
-        ssl_context->set_options(ssl::context::no_tlsv1_1);
-      } else if (option == "no_tlsv1_2") {
-        ssl_context->set_options(ssl::context::no_tlsv1_2);
-      } else if (option == "single_dh_use") {
-        ssl_context->set_options(ssl::context::single_dh_use);
-      } else {
-        lderr(ctx()) << "ignoring unknown ssl option '" << option << "'" << dendl;
-      }
-    }
-  }
-
-  std::optional<string> ciphers = conf->get_val("ssl_ciphers");
-  if (ciphers) {
-    if (!cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_ciphers" << dendl;
-      return -EINVAL;
-    }
-
-    int r = SSL_CTX_set_cipher_list(ssl_context->native_handle(),
-                                    ciphers->c_str());
-    if (r == 0) {
-      lderr(ctx()) << "no cipher could be selected from ssl_ciphers: "
-                   << *ciphers << dendl;
-      return -EINVAL;
-    }
-  }
 
   auto ports = config.equal_range("ssl_port");
   auto endpoints = config.equal_range("ssl_endpoint");
@@ -1027,40 +973,11 @@ int AsioFrontend::init_ssl()
     return 0;
   }
 
-  bool key_is_cert = false;
-
-  if (cert) {
-    if (!key) {
-      key = cert;
-      key_is_cert = true;
-    }
-
-    ExpandMetaVar emv(env.driver->get_zone());
-
-    cert = emv.process_str(*cert);
-    key = emv.process_str(*key);
-
-    int r = ssl_set_private_key(*key, key_is_cert);
-    bool have_private_key = (r >= 0);
-    if (r < 0) {
-      if (!key_is_cert) {
-        r = ssl_set_private_key(*cert, true);
-        have_private_key = (r >= 0);
-      }
-    }
-
-    if (have_private_key) {
-      int r = ssl_set_certificate_chain(*cert);
-      have_cert = (r >= 0);
-    }
-  }
+  auto r = ssl_reload();
+  if (r < 0) return r;
 
   // parse ssl endpoints
   for (auto i = ports.first; i != ports.second; ++i) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_port" << dendl;
-      return -EINVAL;
-    }
     auto port = parse_port(i->second.c_str(), ec);
     if (ec) {
       lderr(ctx()) << "failed to parse ssl_port=" << i->second << dendl;
@@ -1076,10 +993,6 @@ int AsioFrontend::init_ssl()
   }
 
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
-    if (!have_cert) {
-      lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
-      return -EINVAL;
-    }
     auto endpoint = parse_endpoint(i->second, 443, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
@@ -1089,7 +1002,127 @@ int AsioFrontend::init_ssl()
     listeners.back().endpoint = endpoint;
     listeners.back().use_ssl = true;
   }
+
   return 0;
+}
+
+int AsioFrontend::ssl_reload() {
+    auto ssl_ctx = ssl::context(ssl::context::tls);
+
+    std::optional<string> cert = conf->get_val("ssl_certificate");
+    std::optional<string> key = conf->get_val("ssl_private_key");
+    if (key && !cert) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_private_key" << dendl;
+      return -EINVAL;
+    }
+
+    std::optional<string> options = conf->get_val("ssl_options");
+    if (options) {
+      if (!cert) {
+        lderr(ctx()) << "no ssl_certificate configured for ssl_options" << dendl;
+        return -EINVAL;
+      }
+    } else if (cert) {
+      options = "no_sslv2:no_sslv3:no_tlsv1:no_tlsv1_1";
+    }
+
+    if (options) {
+      for (auto &option : ceph::split(*options, ":")) {
+        if (option == "default_workarounds") {
+          ssl_ctx.set_options(ssl::context::default_workarounds);
+        } else if (option == "no_compression") {
+          ssl_ctx.set_options(ssl::context::no_compression);
+        } else if (option == "no_sslv2") {
+          ssl_ctx.set_options(ssl::context::no_sslv2);
+        } else if (option == "no_sslv3") {
+          ssl_ctx.set_options(ssl::context::no_sslv3);
+        } else if (option == "no_tlsv1") {
+          ssl_ctx.set_options(ssl::context::no_tlsv1);
+        } else if (option == "no_tlsv1_1") {
+          ssl_ctx.set_options(ssl::context::no_tlsv1_1);
+        } else if (option == "no_tlsv1_2") {
+          ssl_ctx.set_options(ssl::context::no_tlsv1_2);
+        } else if (option == "single_dh_use") {
+          ssl_ctx.set_options(ssl::context::single_dh_use);
+        } else {
+          lderr(ctx()) << "ignoring unknown ssl option '" << option << "'" << dendl;
+        }
+      }
+    }
+
+    std::optional<string> ciphers = conf->get_val("ssl_ciphers");
+    if (ciphers) {
+      if (!cert) {
+        lderr(ctx()) << "no ssl_certificate configured for ssl_ciphers" << dendl;
+        return -EINVAL;
+      }
+
+      int r = SSL_CTX_set_cipher_list(ssl_ctx.native_handle(),
+                                      ciphers->c_str());
+      if (r == 0) {
+        lderr(ctx()) << "no cipher could be selected from ssl_ciphers: "
+                     << *ciphers << dendl;
+        return -EINVAL;
+      }
+    }
+
+    bool key_is_cert = false;
+    bool have_cert = false;
+    if (cert) {
+      if (!key) {
+        key = cert;
+        key_is_cert = true;
+      }
+
+      ExpandMetaVar emv(env.driver->get_zone());
+      cert = emv.process_str(*cert);
+      key = emv.process_str(*key);
+
+      int r = ssl_set_private_key(ssl_ctx, *key, key_is_cert);
+      bool have_private_key = (r >= 0);
+      if (r < 0) {
+        if (!key_is_cert) {
+          r = ssl_set_private_key(ssl_ctx, *cert, true);
+          have_private_key = (r >= 0);
+        }
+      }
+
+      if (have_private_key) {
+        int r = ssl_set_certificate_chain(ssl_ctx, *cert);
+        have_cert = (r >= 0);
+      }
+    }
+
+    if (!have_cert) {
+      lderr(ctx()) << "no ssl_certificate configured" << dendl;
+      return -EINVAL;
+    }
+
+    ssl_context = std::make_shared<ssl::context>(std::move(ssl_ctx));
+    return 0;
+}
+
+int AsioFrontend::ssl_reload_timer_start() {
+    const auto interval_str = conf->get_val("ssl_reload");
+    if (interval_str && ssl_context == nullptr) {
+      lderr(ctx()) << "no ssl_certificate configured for ssl_reload" << dendl;
+      return -EINVAL;
+    }
+
+    const auto interval = ceph::parse<uint64_t>(interval_str.value_or("0"));
+    if (!interval) {
+      lderr(ctx()) << "failed to parse ssl_reload=" << dendl;
+      return -EINVAL;
+    };
+
+    ssl_reload_timer.expires_after(std::chrono::seconds(interval.value()));
+    ssl_reload_timer.async_wait([this](const boost::system::error_code& ec) {
+      if (ec) return;
+      ssl_reload();
+      ssl_reload_timer_start();
+    });
+
+    return 0;
 }
 #endif // WITH_RADOSGW_BEAST_OPENSSL
 
@@ -1126,12 +1159,12 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 {
   boost::system::error_code ec;
   stream.set_option(tcp::no_delay(l.use_nodelay), ec);
-  
+
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
-      [this, s=std::move(stream)] (boost::asio::yield_context yield) mutable {
+      [this, s=std::move(stream), ssl_context=this->ssl_context] (boost::asio::yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream

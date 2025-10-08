@@ -64,6 +64,15 @@ Options
 :Type: String
 :Default: None
 
+``ssl_reload``
+
+:Description: Optional interval in seconds in which the certificate files
+              are checked for updates. Setting the value to ``0`` disables
+              any reloads.
+
+:Type: Integer
+:Default: 0
+
 ``ssl_options``
 
 :Description: Optional colon separated list of SSL context options:
