@@ -9,9 +9,7 @@ COPY \
 COPY debian ${CEPH_CTR_SRC}/debian
 COPY \
     ceph.spec.in \
-    do_cmake.sh \
     install-deps.sh \
-    run-make-check.sh \
     src/script/buildcontainer-setup.sh \
     ${CEPH_CTR_SRC}/
 

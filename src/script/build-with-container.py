@@ -75,6 +75,7 @@ import json
 import logging
 import os
 import pathlib
+import platform
 import re
 import shlex
 import shutil
@@ -153,7 +154,12 @@ class DistroKind(StrEnum):
 
     @classmethod
     def from_alias(cls, value):
-        return cls.aliases()[value]
+        try:
+            return cls.aliases()[value]
+        except KeyError:
+            valid = ", ".join(cls.aliases())
+            msg = f"unknown distro: {value!r} not in {valid}"
+            raise argparse.ArgumentTypeError(msg)
 
 
 class DefaultImage(StrEnum):
@@ -181,11 +187,16 @@ _CONTAINER_SOURCES = [
     "src/script/lib-build.sh",
     "src/script/run-make.sh",
     "ceph.spec.in",
-    "do_cmake.sh",
     "install-deps.sh",
-    "run-make-check.sh",
     "src/script/buildcontainer-setup.sh",
 ]
+
+
+def _all_container_sources():
+    yield from _CONTAINER_SOURCES
+    for path, _, files in os.walk('debian'):
+        for file in files:
+            yield os.path.join(path, file)
 
 
 def _cmdstr(cmd):
@@ -286,14 +297,33 @@ def _git_current_sha(ctx, short=True):
 def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
     buf = bytearray(bsize)
-    for path in sorted(_CONTAINER_SOURCES):
+    sources = sorted(_all_container_sources())
+    log.debug("container sources: %r", sources)
+    for path in sources:
         with open(path, "rb") as fh:
             while True:
                 rlen = fh.readinto(buf)
                 hh.update(buf[:rlen])
                 if rlen < len(buf):
                     break
+    digest = hh.hexdigest()
+    log.info("Sources sha256 digest: %s", hh.hexdigest())
+    return hh
+
+
+def _hashed_sources_value(bsize=4096):
+    hh = _hash_sources(bsize)
     return f"sha256:{hh.hexdigest()}"
+
+
+@ftcache
+def _host_arch():
+    arch = platform.machine().lower()
+    aliases = {
+        'x86_64': 'amd64',
+        'aarch64': 'arm64',
+    }
+    return aliases.get(arch, arch)
 
 
 class Steps(StrEnum):
@@ -365,11 +395,18 @@ class Context:
         return f"{base}:{self.target_tag()}"
 
     def target_tag(self):
+        tag = self.cli.tag or ''
         suffix = ""
-        if self.cli.tag and self.cli.tag.startswith("+"):
+        if tag.startswith('@'):
+            suffix = f".{tag[1:]}" if tag[1:] else ""
+            srchash = _hash_sources().hexdigest()
+            arch = _host_arch()
+            distro = self.cli.distro
+            return f"fp0-{srchash}.{arch}.{distro}{suffix}"
+        elif tag.startswith("+"):
             suffix = f".{self.cli.tag[1:]}"
-        elif self.cli.tag:
-            return self.cli.tag
+        elif tag:
+            return tag
         branch = self.cli.current_branch
         if not branch:
             try:
@@ -566,7 +603,7 @@ def build_container(ctx):
         "--pull",
         "-t",
         ctx.image_name,
-        f"--label=io.ceph.build-with-container.src={_hash_sources()}",
+        f"--label=io.ceph.build-with-container.src={_hashed_sources_value()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -610,7 +647,7 @@ def _check_cached_image(ctx):
     elif "Labels" in ctr_info.get("Config", {}):
         labels = ctr_info["Config"]["Labels"]
     saved_hash = labels.get("io.ceph.build-with-container.src", "")
-    curr_hash = _hash_sources()
+    curr_hash = _hashed_sources_value()
     if saved_hash == curr_hash:
         log.info("Container passes source check")
         return True, True
