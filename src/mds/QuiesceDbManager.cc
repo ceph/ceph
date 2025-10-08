@@ -99,6 +99,10 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       decltype(pending_acks) acks(std::move(pending_acks));
       decltype(pending_requests) requests(std::move(pending_requests));
       decltype(pending_db_updates) db_updates(std::move(pending_db_updates));
+      pending_acks =
+          decltype(pending_acks)(); // Reinitialize pending acks after move
+      pending_requests =
+          decltype(pending_requests)(); // Reinitialize pending requests after move
 
       ls.unlock();
 
@@ -113,7 +117,9 @@ void* QuiesceDbManager::quiesce_db_thread_main()
           next_event_at_age = db.get_age() + bootstrap_delay;
           ls.lock();
           while (!requests.empty()) {
-            pending_requests.emplace_front(std::move(requests.back()));
+            // std::move of the expression of the trivially-copyable type 'value_type'
+            // (aka 'QuiesceDbManager::RequestContext *') has no effect
+            pending_requests.emplace_front(requests.back());
             requests.pop_back();
           }
           while (!acks.empty()) {
@@ -172,8 +178,8 @@ void* QuiesceDbManager::quiesce_db_thread_main()
       dout(20) << "synchronous agent ack: " << quiesce_map << dendl;
       auto rc = membership.send_ack(std::move(quiesce_map));
       if (rc != 0) {
-        dout(1) << "ERROR ("<< rc <<") when sending synchronous agent ack " 
-        << quiesce_map << dendl;
+        dout(1) << "ERROR (" << rc << ") when sending synchronous agent ack."
+                << dendl;
       } else {
         last_acked = db_version;
       }
@@ -806,7 +812,7 @@ int QuiesceDbManager::leader_update_set(Db::Sets::value_type& set_it, const Quie
       ceph_assert(did_update);
     } else if (min_member_state < QS__MAX) {
       auto next_state = set.next_state(min_member_state);
-      if (did_update |= set.rstate.update(next_state, db_age)) {
+      if ((did_update |= set.rstate.update(next_state, db_age))) {
         dout(15) << dset("updated to match the min state of the remaining (") << included_count << ") members: " << set.rstate.state << dendl;
       }
     }
