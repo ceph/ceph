@@ -109,6 +109,7 @@ class DistroKind(StrEnum):
     FEDORA43 = "fedora43"
     ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
+    UBUNTU2004 = "ubuntu20.04"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
     DEBIAN12 = "debian12"
@@ -151,6 +152,9 @@ class DistroKind(StrEnum):
             str(cls.FEDORA43): cls.FEDORA43,
             "fc43": cls.FEDORA43,
             # ubuntu
+            str(cls.UBUNTU2004): cls.UBUNTU2004,
+            "ubuntu-focal": cls.UBUNTU2004,
+            "focal": cls.UBUNTU2004,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
@@ -180,6 +184,7 @@ class DefaultImage(StrEnum):
     FEDORA42 = "registry.fedoraproject.org/fedora:42"
     FEDORA43 = "registry.fedoraproject.org/fedora:43"
     # ubuntu
+    UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
     # debian
