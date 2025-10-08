@@ -107,7 +107,17 @@ class PrometheusRESTController(RESTController):
         return response
 
     def get_access_info(self, module_name):
-        # type (str, str, str, str, str)
+        """
+        Fetches credentials and certificate files for Prometheus/Alertmanager API access.
+        Cases handled:
+        - If secure_monitoring_stack and/or mgmt_gateway enabled:
+                fetch credentials (user, password, certs).
+        - If oauth2-proxy enabled: fetch credentials,
+                but only certs are used (user/password ignored).
+        - If not cephadm backend: returns credentials with all fields as None.
+        Returns:
+            Credentials namedtuple with user, password, ca_cert_file, cert_file, pkey_file.
+        """
 
         def write_to_tmp_file(content):
             # type (str)
@@ -138,11 +148,11 @@ class PrometheusRESTController(RESTController):
         cached_creds = self._get_cached_credentials(module_name)
         if cached_creds:
             return cached_creds
-
-        secure_monitoring_stack = mgr.get_module_option_ex('cephadm', 'secure_monitoring_stack')
-        if not secure_monitoring_stack:
-            return Credentials(user, password, ca_cert_file, cert_file, pkey_file)
         orch_client = OrchClient.instance()
+        security_config = orch_client.monitoring.get_security_config()
+        if not security_config.get('security_enabled', False):
+            return Credentials(user, password, ca_cert_file, cert_file, pkey_file)
+
         if orch_client.available():
             if module_name == 'prometheus':
                 access_info = orch_client.monitoring.get_prometheus_access_info()
