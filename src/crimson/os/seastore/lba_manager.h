@@ -175,35 +175,8 @@ public:
       return refcount == 0 && addr.is_paddr() && !addr.get_paddr().is_zero();
     }
   };
-  struct ref_update_result_t {
-    mapping_update_result_t result;
-    std::optional<mapping_update_result_t> direct_result;
-  };
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using ref_ret = ref_iertr::future<ref_update_result_t>;
-
-  /**
-   * Removes a mapping and deal with indirection
-   *
-   * @return returns the information about the removed
-   * mappings including the corresponding direct mapping
-   * if the mapping of laddr is indirect.
-   */
-  virtual ref_ret remove_mapping(
-    Transaction &t,
-    laddr_t addr) = 0;
-
-  /*
-   * Removes the mapping and deal with indirection
-   *
-   * @return returns the information about the removed
-   * mappings including the corresponding direct mapping
-   * if the mapping of laddr is indirect.
-   */
-  virtual ref_ret remove_mapping(
-    Transaction &t,
-    LBAMapping mapping) = 0;
 
   /**
    * Update ref count on mapping
