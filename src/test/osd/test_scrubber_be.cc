@@ -95,7 +95,8 @@ class TestPg : public PgScrubBeListener {
   const pg_info_t& get_pg_info(ScrubberPasskey) const final { return m_info; }
 
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
-                                  shard_id_t shard_id) const final
+                                  shard_id_t shard_id,
+                                  bool unused) const final
   {
     return logical_size;
   }
