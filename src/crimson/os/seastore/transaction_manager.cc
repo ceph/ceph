@@ -231,9 +231,11 @@ TransactionManager::ref_ret TransactionManager::remove(
   LOG_PREFIX(TransactionManager::remove);
   DEBUGT("{} ...", t, offset);
   auto cursor = co_await lba_manager->get_cursor(t, offset);
+  auto refcount = cursor->get_refcount();
+  ceph_assert(refcount > 0);
   auto mapping = co_await resolve_cursor_to_mapping(t, std::move(cursor));
-  auto result = co_await _remove(t, std::move(mapping));
-  co_return result.result.refcount;
+  mapping = co_await _remove(t, std::move(mapping));
+  co_return refcount - 1;
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
@@ -242,8 +244,8 @@ TransactionManager::remove(
   LBAMapping mapping)
 {
   mapping = co_await mapping.refresh();
-  auto res = co_await _remove(t, std::move(mapping));
-  co_return std::move(res.result.mapping);
+  mapping = co_await _remove(t, std::move(mapping));
+  co_return mapping;
 }
 
 TransactionManager::ref_iertr::future<LBAMapping>
@@ -260,8 +262,7 @@ TransactionManager::_remove_indirect_mapping_only(
     ret_cursor);
 }
 
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
+TransactionManager::ref_iertr::future<LBAMapping>
 TransactionManager::_remove_indirect_mapping(
   Transaction &t,
   LBAMapping mapping)
@@ -292,7 +293,7 @@ TransactionManager::_remove_indirect_mapping(
 	   direct_result.length,
 	   direct_result.refcount,
 	   direct_result.key);
-    co_return result;
+    co_return result.result.mapping;
   } else {
     auto remove_direct = mapping.would_cascade_remove();
     if (remove_direct) {
@@ -321,12 +322,11 @@ TransactionManager::_remove_indirect_mapping(
 	   direct_result.length,
 	   direct_result.refcount,
 	   direct_result.key);
-    co_return result;
+    co_return result.result.mapping;
   }
 }
 
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
+TransactionManager::ref_iertr::future<LBAMapping>
 TransactionManager::_remove_direct_mapping(
   Transaction &t,
   LBAMapping mapping)
@@ -345,7 +345,7 @@ TransactionManager::_remove_direct_mapping(
     DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
 	   t, primary_result.addr, primary_result.length,
 	   primary_result.refcount, primary_result.key);
-    co_return result;
+    co_return result.result.mapping;
   } else {
     auto retired_placeholder = cache->retire_absent_extent_addr(
       t, mapping.get_key(), mapping.get_val(), mapping.get_length()
@@ -359,12 +359,11 @@ TransactionManager::_remove_direct_mapping(
     DEBUGT("removed {}~0x{:x} refcount={} -- offset={}",
 	   t, primary_result.addr, primary_result.length,
 	   primary_result.refcount, primary_result.key);
-    co_return result;
+    co_return result.result.mapping;
   }
 }
 
-TransactionManager::ref_iertr::future<
-  TransactionManager::_remove_mapping_result_t>
+TransactionManager::ref_iertr::future<LBAMapping>
 TransactionManager::_remove(
   Transaction &t,
   LBAMapping mapping)
@@ -386,8 +385,7 @@ TransactionManager::_remove(
              primary_result.length,
              primary_result.refcount,
              primary_result.key);
-      return ref_iertr::make_ready_future<
-        _remove_mapping_result_t>(std::move(result));
+      return result.result.mapping;
     });
   }
 }
