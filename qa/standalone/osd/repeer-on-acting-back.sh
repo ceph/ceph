@@ -81,11 +81,14 @@ function TEST_repeer_on_down_acting_member_coming_back() {
 
     WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean
 
+    # stop backfill
+    ceph config set global osd_debug_reject_backfill_probability 1.0 || return 1
+
     # reset up to [1,4,5]
     ceph osd pg-upmap $pgid 1 4 5 || return 1
 
     # wait for peering to complete
-    sleep 2
+    sleep 8
 
     # make sure osd.2 belongs to current acting set
     ceph pg $pgid query | jq '.acting' | grep 2 || return 1
@@ -95,7 +98,7 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     ceph osd down osd.2
 
     # again, wait for peering to complete
-    sleep 2
+    sleep 8
 
     # osd.2 should have been moved out from acting set
     ceph pg $pgid query | jq '.acting' | grep 2 && return 1
@@ -105,10 +108,14 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     wait_for_osd up 2
 
     # again, wait for peering to complete
-    sleep 2
+    sleep 8
 
     # primary should be able to re-add osd.2 into acting
     ceph pg $pgid query | jq '.acting' | grep 2 || return 1
+
+    # re-enable backfill
+    ceph config set global osd_debug_reject_backfill_probability 0.0 || return 1
+    ceph pg repeer $pgid || return 1
 
     WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean
 
