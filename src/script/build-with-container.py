@@ -109,7 +109,7 @@ class DistroKind(StrEnum):
     ROCKY10 = "rocky10"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
-    BOOKWORM = "bookworm"
+    DEBIAN12 = "debian12"
 
     @classmethod
     def uses_dnf(cls):
@@ -148,7 +148,9 @@ class DistroKind(StrEnum):
             str(cls.UBUNTU2404): cls.UBUNTU2404,
             "ubuntu-noble": cls.UBUNTU2404,
             "noble": cls.UBUNTU2404,
-            str(cls.BOOKWORM): cls.BOOKWORM,
+            str(cls.DEBIAN12): cls.DEBIAN12,
+            "debian-bookworm": cls.DEBIAN12,
+            "bookworm": cls.DEBIAN12,
         }
 
     @classmethod
@@ -165,7 +167,7 @@ class DefaultImage(StrEnum):
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
-    BOOKWORM = "docker.io/debian:bookworm"
+    DEBIAN12 = "docker.io/debian:bookworm"
 
 
 class CommandFailed(Exception):
