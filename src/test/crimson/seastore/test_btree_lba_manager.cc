@@ -597,19 +597,24 @@ struct btree_lba_manager_test : btree_test_base {
 
     (void) with_trans_intr(
       *t.t,
-      [=, this](auto &t) {
-	return lba_manager->remove_mapping(
+      seastar::coroutine::lambda([=, this](auto &t)
+				 -> LBAManager::ref_iertr::future<> {
+
+	auto cursor = co_await lba_manager->get_cursor(
 	  t,
-	  target->first
-	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.result.refcount, target->second.refcount);
-	  if (result.result.refcount == 0) {
-	    return cache->retire_extent_addr(
-	      t, result.result.addr.get_paddr(), result.result.length);
-	  }
-	  return Cache::retire_extent_iertr::now();
-	});
-      }).unsafe_get();
+	  target->first);
+	auto refcount = cursor->get_refcount() - 1;
+	co_await lba_manager->update_mapping_refcount(
+	  t,
+	  cursor,
+	  -1
+	);
+	EXPECT_EQ(refcount, target->second.refcount);
+	if (refcount == 0) {
+	  co_await cache->retire_extent_addr(
+	    t, cursor->get_paddr(), cursor->get_length());
+	}
+      })).unsafe_get();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
