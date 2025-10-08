@@ -1352,15 +1352,14 @@ private:
     co_return ret;
   }
 
-  using _remove_mapping_result_t = LBAManager::ref_update_result_t;
-  ref_iertr::future<_remove_mapping_result_t> _remove(
+  ref_iertr::future<LBAMapping> _remove(
     Transaction &t,
     LBAMapping mapping);
-  ref_iertr::future<_remove_mapping_result_t>
+  ref_iertr::future<LBAMapping>
   _remove_indirect_mapping(
     Transaction &t,
     LBAMapping mapping);
-  ref_iertr::future<_remove_mapping_result_t>
+  ref_iertr::future<LBAMapping>
   _remove_direct_mapping(
     Transaction &t,
     LBAMapping mapping);
