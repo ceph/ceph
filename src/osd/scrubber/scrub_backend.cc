@@ -99,9 +99,29 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
 }
 
 uint64_t ScrubBackend::logical_to_ondisk_size(uint64_t logical_size,
-                                 shard_id_t shard_id) const
+                                 shard_id_t shard_id,
+                                 bool hinfo_present,
+                                 uint64_t expected_size) const
 {
-  return m_pg.logical_to_ondisk_size(logical_size, shard_id);
+  uint64_t ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, false);
+
+  if (!hinfo_present || ondisk_size == expected_size) {
+    return ondisk_size;
+  }
+
+  // This object does not match the expected size, but hinfo is present. In this
+  // case there are valid reasons for the shard to be *either* size when using
+  // optimised EC. The following function checks the expected size from legacy
+  // EC.
+  uint64_t legacy_ondisk_size = m_pg.logical_to_ondisk_size(logical_size, shard_id, true);
+  if (expected_size == legacy_ondisk_size) {
+    return legacy_ondisk_size;
+  }
+
+  // If this return is reached, then the size is corrupt and what we return
+  // here is relevant to the error message only.  Return the non-legacy value
+  // as it might be more useful in debug.
+  return ondisk_size;
 }
 
 void ScrubBackend::update_repair_status(bool should_repair)
@@ -732,7 +752,9 @@ shard_as_auth_t ScrubBackend::possible_auth_shard(const hobject_t& obj,
     }
   }
 
-  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard);
+  uint64_t ondisk_size = logical_to_ondisk_size(oi.size, srd.shard,
+    smap_obj.attrs.contains(ECUtil::get_hinfo_key()),
+    smap_obj.size);
   if (test_error_cond(smap_obj.size != ondisk_size, shard_info,
                       &shard_info_wrapper::set_obj_size_info_mismatch)) {
 
@@ -1327,7 +1349,9 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
   // ------------------------------------------------------------------------
 
   // sizes:
-  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard);
+  uint64_t oi_size = logical_to_ondisk_size(auth_oi.size, shard.shard,
+  candidate.attrs.contains(ECUtil::get_hinfo_key()),
+  candidate.size);
   if (oi_size != candidate.size) {
     fmt::format_to(std::back_inserter(out),
                    "{}size {} != size {} from auth oi {}",
@@ -1509,12 +1533,17 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map, const pg_shard_t &srd)
     }
 
     if (oi) {
-      if (logical_to_ondisk_size(oi->size, srd.shard) != p->second.size) {
+      bool has_hinfo = p->second.attrs.contains(
+        ECLegacy::ECUtilL::get_hinfo_key());
+      if (logical_to_ondisk_size(oi->size, srd.shard, has_hinfo, p->second.size)
+          != p->second.size) {
         clog.error() << m_mode_desc << " " << m_pg_id << " " << soid
                       << " : on disk size (" << p->second.size
                       << ") does not match object info size (" << oi->size
                       << ") adjusted for ondisk to ("
-                      << logical_to_ondisk_size(oi->size, srd.shard) << ")";
+                      << logical_to_ondisk_size(oi->size, srd.shard,
+                                                has_hinfo, p->second.size)
+                      << ")";
         soid_error.set_size_mismatch();
         this_chunk->m_error_counts.shallow_errors++;
       }
