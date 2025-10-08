@@ -1366,14 +1366,7 @@ private:
   ref_iertr::future<LBAMapping> _remove(
     Transaction &t,
     LBAMapping mapping);
-  ref_iertr::future<LBAMapping>
-  _remove_indirect_mapping(
-    Transaction &t,
-    LBAMapping mapping);
-  ref_iertr::future<LBAMapping>
-  _remove_direct_mapping(
-    Transaction &t,
-    LBAMapping mapping);
+
   ref_iertr::future<LBAMapping>
   _remove_indirect_mapping_only(
     Transaction &t,
