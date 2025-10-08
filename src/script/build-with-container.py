@@ -179,9 +179,7 @@ _CONTAINER_SOURCES = [
     "src/script/lib-build.sh",
     "src/script/run-make.sh",
     "ceph.spec.in",
-    "do_cmake.sh",
     "install-deps.sh",
-    "run-make-check.sh",
     "src/script/buildcontainer-setup.sh",
 ]
 
