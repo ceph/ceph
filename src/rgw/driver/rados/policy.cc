@@ -12,6 +12,7 @@
 
 namespace rgwrados::policy
 {
+static const int max_policy_versions = 5;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 
@@ -354,6 +355,53 @@ int list_policies(const DoutPrefixProvider *dpp,
               only_attached, policy_usage_filter, path_prefix, marker, max_items, listing);
   }
 
+  return ret;
+}
+
+int create_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view policy_document,
+    bool set_as_default,
+    std::string &version_id,
+    ceph::real_time &create_date)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  if(info.versions.size() >= max_policy_versions) {
+    ldpp_dout(dpp, 20) << "Error: max_policy_versions reached" << dendl;
+    return -ENOMEM;
+  }
+
+  int last_num = 0;
+  if (!info.versions.empty()) {
+      auto last = info.versions.rbegin();
+      last_num = ceph::parse<int>(std::string_view(last->first).substr(1)).value();
+  }
+  version_id = "v" + std::to_string(last_num + 1);
+
+  if(set_as_default) {
+    info.default_version = version_id;
+  }
+  info.versions[version_id] = policy_document;
+  ret = delete_policy(dpp, y, rados, sysobj, zone, account, policy_name);
+  if(ret < 0) {
+    return ret;
+  }
+  ret = write_policy(dpp, y, rados, sysobj, zone, info, true);
+  if(ret < 0) {
+    return ret;
+  }
+  create_date = real_clock::now();
   return ret;
 }
 }

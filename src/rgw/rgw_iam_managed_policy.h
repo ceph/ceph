@@ -84,7 +84,12 @@ struct ManagedPolicyInfo {
   uint32_t permissions_boundary_usage_count{0};
   std::multimap<std::string, std::string> tags;
   std::map<std::string, ManagedPolicyAttachment> attachments;
-  std::map<std::string, std::string> versions;
+  struct VersionCompare {
+    bool operator()(const std::string& a, const std::string& b) const {
+        return std::stoi(a.substr(1)) < std::stoi(b.substr(1));
+    }
+  };
+  std::map<std::string, std::string, VersionCompare> versions;
 
   void encode(bufferlist &bl) const
   {

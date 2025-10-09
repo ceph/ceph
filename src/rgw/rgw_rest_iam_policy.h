@@ -73,3 +73,15 @@ public:
   const char* name() const override { return "list_policies"; }
   RGWOpType get_type() override { return RGW_OP_LIST_POLICIES; }
 };
+
+class RGWCreatePolicyVersion : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string policy_document;
+  bool set_as_default = false;
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWCreatePolicyVersion() : RGWRestPolicy(rgw::IAM::iamCreatePolicyVersion, RGW_CAP_WRITE){ }
+  const char* name() const override { return "create_policy_version"; }
+  RGWOpType get_type() override { return RGW_OP_CREATE_POLICY_VERSION; }
+};
