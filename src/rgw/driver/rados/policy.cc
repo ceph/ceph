@@ -12,6 +12,7 @@
 
 namespace rgwrados::policy
 {
+static const int max_policy_versions = 5;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 
@@ -128,7 +129,7 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
 {
   int r = -EINVAL;
   IndexObj iObj;
-  if(!info.name.empty()) {
+  if(exclusive && !info.name.empty()) {
     iObj.obj = get_name_obj(zone, info);
     iObj.objv.generate_new_write_ver(dpp->get_cct());
 
@@ -140,15 +141,25 @@ int write_policy(const DoutPrefixProvider *dpp, optional_yield y, librados::Rado
       ldpp_dout(dpp, 20) << "failed to write policy obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
       return r;
     }
-  }
 
-  PolicyIndex policy_index;
-  r = write_path(dpp, y, rados, sysobj, zone, info, policy_index);
-  if (r < 0) {
-    // roll back new policy object
-    ldpp_dout(dpp, 20) << "failed to write path obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
-    std::ignore = remove_index(dpp, y, sysobj, iObj);
-    return r;
+    PolicyIndex policy_index;
+    r = write_path(dpp, y, rados, sysobj, zone, info, policy_index);
+    if (r < 0) {
+      // roll back new policy object
+      ldpp_dout(dpp, 20) << "failed to write path obj " << iObj.obj << " with: " << cpp_strerror(r) << dendl;
+      std::ignore = remove_index(dpp, y, sysobj, iObj);
+      return r;
+    }
+  } else {
+    bufferlist data;
+    encode(info, data);
+    iObj.obj = get_name_obj(zone, info);
+
+    r = rgw_put_system_obj(dpp, &sysobj, iObj.obj.pool, iObj.obj.oid, data, exclusive, &iObj.objv, info.update_date, y, nullptr);
+    if(r < 0) {
+      ldpp_dout(dpp, 20) << "failed to modify policy obj " << iObj.obj.oid << " with: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   return r;
@@ -352,6 +363,60 @@ int list_policies(const DoutPrefixProvider *dpp,
       if(ret < 0) return ret;
       ret = get_customer_managed_policies(dpp, y, rados, sysobj, zone, account_id,
               only_attached, policy_usage_filter, path_prefix, marker, max_items, listing);
+  }
+
+  return ret;
+}
+
+int create_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view policy_document,
+    bool set_as_default,
+    std::string &version_id,
+    ceph::real_time &create_date,
+    bool exclusive)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  rgw::IAM::PolicyVersion policy_version;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  if(info.versions.size() >= max_policy_versions) {
+    ldpp_dout(dpp, 20) << "Error: max_policy_versions reached" << dendl;
+    return -ENOMEM;
+  }
+
+  int version = 1;
+  if (!info.versions.empty()) {
+      version = info.versions.rbegin()->first + 1;
+  }
+
+  version_id = "v" + std::to_string(version);
+  policy_version.document = policy_document;
+  policy_version.version_id = version_id;
+  policy_version.create_date = real_clock::now();
+  policy_version.is_default_version = set_as_default;
+  create_date = policy_version.create_date;
+
+  info.update_date = create_date;
+  info.versions[version] = policy_version;
+  if(set_as_default) {
+    info.default_version = policy_version.version_id;
+    info.is_attachable = false;
+  }
+
+  ret = write_policy(dpp, y, rados, sysobj, zone, info, exclusive);
+  if(ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to create_policy_version " << info.name << " with: " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
   return ret;
