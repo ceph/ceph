@@ -380,14 +380,17 @@ else:
             "List all NVMeoF namespaces in a subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nsid": Param(str, "NVMeoF Namespace ID to filter by", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
-        def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(self, nqn: str, nsid: Optional[str] = None,
+                 gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_namespaces(
-                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn)
+                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn,
+                                                     nsid=int(nsid) if nsid else None)
             )
 
         @pick("namespaces", first=True)
