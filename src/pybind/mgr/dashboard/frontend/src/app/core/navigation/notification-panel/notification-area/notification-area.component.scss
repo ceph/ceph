@@ -43,21 +43,6 @@
   display: block;
 }
 
-.notification-icon {
-  flex-shrink: 0;
-  margin-top: 0;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  svg {
-    width: 16px;
-    height: 16px;
-  }
-}
-
 .notification-empty {
   margin: 0;
   padding: $spacing-05;
