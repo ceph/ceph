@@ -598,6 +598,14 @@ ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
   }
 }
 
+bool ecOptimisationsSupported(
+  ceph::io_sequence::tester::Profile profile) {
+  if (profile.plugin == "lrc") {
+    return false;
+  }
+  return true;
+}
+
 const ceph::io_sequence::tester::Profile
 ceph::io_sequence::tester::SelectErasureProfile::select() {
   ceph::io_sequence::tester::Profile profile;
@@ -608,6 +616,13 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
     }
   } else {
     profile.plugin = spl.select();
+
+    bool ecOptimisationsEnabled = !vm.contains("disable_pool_ec_optimizations");
+    if (!ecOptimisationsSupported(profile) && ecOptimisationsEnabled) {
+      throw std::invalid_argument(fmt::format("ec optimisations may not be enabled "
+                                                  "if using {} plugin type",
+                                                  profile.plugin));
+    }
 
     SelectErasureTechnique set{rng, vm, profile.plugin, first_use};
     profile.technique = set.select();
