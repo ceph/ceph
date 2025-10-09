@@ -105,10 +105,15 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
+    FEDORA42 = "fedora42"
+    FEDORA43 = "fedora43"
     ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
+    UBUNTU2004 = "ubuntu20.04"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
+    DEBIAN12 = "debian12"
+    DEBIAN13 = "debian13"
 
     @classmethod
     def uses_dnf(cls):
@@ -130,39 +135,70 @@ class DistroKind(StrEnum):
     @classmethod
     def aliases(cls):
         return {
+            # EL distros
             str(cls.CENTOS10): cls.CENTOS10,
             "centos10stream": cls.CENTOS10,
             str(cls.CENTOS8): cls.CENTOS8,
             str(cls.CENTOS9): cls.CENTOS9,
             "centos9stream": cls.CENTOS9,
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
             str(cls.ROCKY9): cls.ROCKY9,
             'rockylinux9': cls.ROCKY9,
             str(cls.ROCKY10): cls.ROCKY10,
             'rockylinux10': cls.ROCKY10,
+            # fedora
+            str(cls.FEDORA41): cls.FEDORA41,
+            "fc41": cls.FEDORA41,
+            str(cls.FEDORA42): cls.FEDORA42,
+            "fc42": cls.FEDORA42,
+            str(cls.FEDORA43): cls.FEDORA43,
+            "fc43": cls.FEDORA43,
+            # ubuntu
+            str(cls.UBUNTU2004): cls.UBUNTU2004,
+            "ubuntu-focal": cls.UBUNTU2004,
+            "focal": cls.UBUNTU2004,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
             str(cls.UBUNTU2404): cls.UBUNTU2404,
             "ubuntu-noble": cls.UBUNTU2404,
             "noble": cls.UBUNTU2404,
+            # debian
+            str(cls.DEBIAN12): cls.DEBIAN12,
+            "debian-bookworm": cls.DEBIAN12,
+            "bookworm": cls.DEBIAN12,
+            str(cls.DEBIAN13): cls.DEBIAN13,
+            "debian-trixie": cls.DEBIAN13,
+            "trixie": cls.DEBIAN13,
         }
 
     @classmethod
     def from_alias(cls, value):
-        return cls.aliases()[value]
+        try:
+            return cls.aliases()[value]
+        except KeyError:
+            valid = ", ".join(sorted(cls.aliases()))
+            msg = f"unknown distro: {value!r} not in {valid}"
+            raise argparse.ArgumentTypeError(msg)
 
 
 class DefaultImage(StrEnum):
+    # EL distros
     CENTOS10 = "quay.io/centos/centos:stream10"
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
     ROCKY9 = "docker.io/rockylinux/rockylinux:9"
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
+    # fedora
+    FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    FEDORA42 = "registry.fedoraproject.org/fedora:42"
+    FEDORA43 = "registry.fedoraproject.org/fedora:43"
+    # ubuntu
+    UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
+    # debian
+    DEBIAN12 = "docker.io/debian:bookworm"
+    DEBIAN13 = "docker.io/debian:trixie"
 
 
 class CommandFailed(Exception):
@@ -648,6 +684,7 @@ def get_container(ctx):
 def bc_configure(ctx):
     """Configure the build"""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     cmd = _container_cmd(
         ctx,
         [
