@@ -12,6 +12,7 @@ from ..security import Scope
 from ..services import ceph_service
 from ..services.settings import SettingsService
 from ..settings import Options, Settings
+from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router, UIRouter
 
 
