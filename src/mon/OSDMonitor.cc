@@ -7534,7 +7534,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
-			 false,
+			 std::nullopt,
 			 &ss);
 
   if (ret < 0) {
@@ -8158,6 +8158,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param pg_autoscale_mode autoscale mode, one of on, off, warn
  * @param bool bulk indicates whether pool should be a bulk pool
  * @param bool crimson indicates whether pool is a crimson pool
+ * @param int64_t Optional ID of migration source pool
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -8178,7 +8179,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
-				 bool migrate,
+				 const std::optional<int64_t> source_pool_id,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8431,11 +8432,21 @@ int OSDMonitor::prepare_new_pool(string& name,
     // This will fail if the pool cannot support ec optimizations.
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
-  if (migrate) {
+
+
+  if (source_pool_id) {
     dout(0) << "Configuring pool migration for PG " << pg_t(pi->get_pg_num() - 1, pool) << dendl;
-    pi->migration_target = 1;
+    const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
+    pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
+
+    spi->migration_src.reset();
+    spi->migration_target = pool;
+    pi->migration_src = source_pool_id.value();
+    pi->migration_target.reset();
+
     pi->migrating_pgs = { pg_t(pi->get_pg_num() - 1, pool) };
   }
+
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -13689,14 +13700,31 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
-    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
-    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
-    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
-    string pool_type_str;
-    cmd_getval(cmdmap, "pool_type", pool_type_str);
-    if (pool_type_str.empty())
-      pool_type_str = g_conf().get_val<string>("osd_pool_default_type");
+    std::string source_pool_name;
+    std::optional<int64_t> source_pool_id;
+    if (cmd_getval(cmdmap, "migrate_from", source_pool_name)) {
+      source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
+      if (source_pool_id < 0) {
+        ss << "migrate_from expects the name or ID of an existing pool. "
+           << source_pool_name << " does not exist";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+    }
+    const pg_pool_t *source_pool = osdmap.get_pg_pool(source_pool_id.value_or(-1));
+
+    int64_t default_pg_num = (source_pool) ? source_pool->get_pg_num() : 0;
+    int64_t default_pg_num_min = (source_pool) ? source_pool->get_pg_num_min() : 0;
+    int64_t default_pg_num_max = (source_pool) ? source_pool->get_pg_num_max() : 0;
+    int64_t default_pgp_num = (source_pool) ? source_pool->get_pgp_num() : default_pg_num;
+    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", default_pg_num);
+    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", default_pg_num_min);
+    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", default_pg_num_max);
+    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", default_pgp_num);
+
+    string default_type_str = (source_pool) ?
+      string(source_pool->get_type_name()) : g_conf().get_val<string>("osd_pool_default_type");
+    string pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
 
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
@@ -13732,12 +13760,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    int64_t default_expected_num_objects = (source_pool) ? source_pool->expected_num_objects : 0;
+    string default_profile = (source_pool) ? source_pool->erasure_code_profile : "";
+    string default_rule_name = (source_pool) ? osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
+
     bool implicit_rule_creation = false;
-    int64_t expected_num_objects = 0;
-    string rule_name;
-    cmd_getval(cmdmap, "rule", rule_name);
-    string erasure_code_profile;
-    cmd_getval(cmdmap, "erasure_code_profile", erasure_code_profile);
+    int64_t expected_num_objects = default_expected_num_objects;
+    string erasure_code_profile = cmd_getval_or<string>(cmdmap, "erasure_code_profile", default_profile);
+    string rule_name = cmd_getval_or<string>(cmdmap, "rule", default_rule_name);
 
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       if (erasure_code_profile == "")
@@ -13771,8 +13801,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
+
       expected_num_objects =
-	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
       //     and put expected_num_objects to rule field
@@ -13789,7 +13820,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         rule_name = erasure_code_profile;
       } else { // cmd is well-formed
         expected_num_objects =
-	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
       }
     }
 
@@ -13809,29 +13840,31 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
+    int64_t default_fast_read_param = (source_pool) ? source_pool->fast_read : -1;
+    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", default_fast_read_param);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
 
-    int64_t repl_size = 0;
-    cmd_getval(cmdmap, "size", repl_size);
-    int64_t target_size_bytes = 0;
-    double target_size_ratio = 0.0;
-    cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
-    cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
+    int64_t default_repl_size = (source_pool) ? source_pool->get_size() : 0;
+    int64_t default_target_size_bytes = (source_pool) ? source_pool->get_target_size_bytes() : 0;
+    double default_target_size_ratio = (source_pool) ? source_pool->get_target_size_ratio() : 0.0;
+    int64_t repl_size = cmd_getval_or<int64_t>(cmdmap, "size", default_repl_size);
+    int64_t target_size_bytes = cmd_getval_or<int64_t>(cmdmap, "target_size_bytes", default_target_size_bytes);
+    double target_size_ratio = cmd_getval_or<double>(cmdmap, "target_size_ratio", default_target_size_ratio);
 
-    string pg_autoscale_mode;
-    cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
+    string default_pg_autoscale_mode =
+      (source_pool) ? source_pool->get_pg_autoscale_mode_name(source_pool->pg_autoscale_mode) : "";
+    string pg_autoscale_mode = cmd_getval_or<string>(cmdmap, "autoscale_mode", default_pg_autoscale_mode);
 
-    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
+    bool default_bulk = (source_pool) ? source_pool->is_bulk() : false;
+    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", default_bulk);
 
-    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
+    bool default_crimson = (source_pool) ? source_pool->is_crimson() : false;
+    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", default_crimson) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
-
-    bool migrate = cmd_getval_or<bool>(cmdmap, "migrate", false);
 
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
@@ -13844,7 +13877,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
-			   migrate,
+			   source_pool_id,
 			   &ss);
     if (err < 0) {
       switch(err) {

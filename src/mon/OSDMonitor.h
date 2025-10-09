@@ -545,7 +545,7 @@ private:
 		       std::string pg_autoscale_mode,
 		       bool bulk,
 		       bool crimson,
-		       bool migrate,
+		       const std::optional<int64_t> source_pool_id,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 

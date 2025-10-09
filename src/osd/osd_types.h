@@ -1839,6 +1839,10 @@ public:
     return has_flag(FLAG_CRIMSON);
   }
 
+  bool is_bulk() const {
+    return has_flag(FLAG_BULK);
+  }
+
   bool can_shift_osds() const {
     switch (get_type()) {
     case TYPE_REPLICATED:
@@ -1863,6 +1867,30 @@ public:
   // return, for a given pg, the fraction (denominator) of the total
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
+
+  int64_t get_pg_num_min() const {
+    int64_t pg_num_min = 0;
+    opts.get(pool_opts_t::PG_NUM_MIN, &pg_num_min);
+    return pg_num_min;
+  }
+
+  int64_t get_pg_num_max() const {
+    int64_t pg_num_max = 0;
+    opts.get(pool_opts_t::PG_NUM_MAX, &pg_num_max);
+    return pg_num_max;
+  }
+
+  int64_t get_target_size_bytes() const {
+    int64_t target_size_bytes = 0;
+    opts.get(pool_opts_t::TARGET_SIZE_BYTES, &target_size_bytes);
+    return target_size_bytes;
+  }
+
+  double get_target_size_ratio() const {
+    double target_size_ratio = 0.0;
+    opts.get(pool_opts_t::TARGET_SIZE_RATIO, &target_size_ratio);
+    return target_size_ratio;
+  }
 
   bool is_pending_merge(pg_t pgid, bool *target) const;
 
