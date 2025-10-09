@@ -523,14 +523,13 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
-    return lba_manager->reserve_region(
+    auto pin = co_await lba_manager->reserve_region(
       t,
       hint,
       len
-    ).si_then([FNAME, &t](auto pin) {
-      SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
-      return pin;
-    });
+    );
+    SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
+    co_return pin;
   }
 
   reserve_extent_ret reserve_region(
@@ -540,18 +539,14 @@ public:
     extent_len_t len) {
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "hint {}~0x{:x} ...", t, hint, len);
-    return pos.refresh(
-    ).si_then([FNAME, this, &t, hint, len](auto pos) {
-      return lba_manager->reserve_region(
-	t,
-	std::move(pos),
-	hint,
-	len
-      ).si_then([FNAME, &t](auto pin) {
-	SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
-	return pin;
-      });
-    });
+    pos = co_await pos.refresh();
+    auto pin = co_await lba_manager->reserve_region(
+      t,
+      std::move(pos),
+      hint,
+      len
+    );
+    co_return pin;
   }
 
   /*
