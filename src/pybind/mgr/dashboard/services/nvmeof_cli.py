@@ -234,6 +234,7 @@ class NvmeofCLICommand(CLICommand):
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
         self._alias = alias
+        self._alias_cmd: Optional[NvmeofCLICommand] = None
 
     def _use_api_endpoint_desc_if_available(self, func):
         if not self.desc and hasattr(func, 'doc_info'):
@@ -241,7 +242,9 @@ class NvmeofCLICommand(CLICommand):
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         if self._alias:
-            NvmeofCLICommand(self._alias, model=self._model)._register_handler(func)
+            self._alias_cmd = NvmeofCLICommand(self._alias, model=self._model)
+            assert self._alias_cmd is not None
+            self._alias_cmd(func)
 
         resp = super().__call__(func)
         self._use_api_endpoint_desc_if_available(func)
