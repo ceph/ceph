@@ -342,7 +342,7 @@ class AlertmanagerService(CephadmService):
                                      port=dd.ports[0], path='/alerts'))
 
         context = {
-            'security_enabled': security_enabled,
+            'enable_mtls': mgmt_gw_enabled,
             'dashboard_urls': dashboard_urls,
             'webhook_urls': webhook_urls,
             'snmp_gateway_urls': snmp_gateway_urls,
