@@ -245,7 +245,7 @@ void usage()
   cout << "  zonegroup get                    show zone group info\n";
   cout << "  zonegroup modify                 modify an existing zonegroup\n";
   cout << "  zonegroup set                    set zone group info (requires infile)\n";
-  cout << "  zonegroup rm                     remove a zone from a zonegroup\n";
+  cout << "  zonegroup remove                 remove a zone from a zonegroup\n";
   cout << "  zonegroup rename                 rename a zone group\n";
   cout << "  zonegroup list                   list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list         list zonegroup's placement targets\n";

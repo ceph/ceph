@@ -106,7 +106,7 @@
     zonegroup get                    show zone group info
     zonegroup modify                 modify an existing zonegroup
     zonegroup set                    set zone group info (requires infile)
-    zonegroup rm                     remove a zone from a zonegroup
+    zonegroup remove                 remove a zone from a zonegroup
     zonegroup rename                 rename a zone group
     zonegroup list                   list all zone groups set on this cluster
     zonegroup placement list         list zonegroup's placement targets
