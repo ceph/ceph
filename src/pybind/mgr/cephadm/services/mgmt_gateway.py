@@ -33,7 +33,7 @@ class MgmtGatewayService(CephadmService):
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_service(service_name):
             assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            addr = dd.hostname or (dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname))
             port = dd.ports[0] if dd.ports else None
             srv_entries.append(f'{addr}:{port}')
         return srv_entries
@@ -59,7 +59,7 @@ class MgmtGatewayService(CephadmService):
         sd_endpoints = []
         for dd in self.mgr.cache.get_daemons_by_service('mgr'):
             assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
+            addr = dd.hostname or (dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname))
             sd_endpoints.append(f"{addr}:{self.mgr.service_discovery_port}")
         return sd_endpoints
 

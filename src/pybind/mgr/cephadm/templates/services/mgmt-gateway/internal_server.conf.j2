@@ -23,6 +23,8 @@ server {
         rewrite ^/internal/(.*) /$1 break;
         proxy_pass https://service_discovery_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ssl_server_name;
     }
 {% endif %}
 
@@ -31,6 +33,8 @@ server {
         rewrite ^/internal/dashboard/(.*) /$1 break;
         proxy_pass {{ dashboard_scheme }}://dashboard_servers;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ssl_server_name;
     }
 {% endif %}
 
@@ -38,6 +42,8 @@ server {
     location /internal/grafana {
         rewrite ^/internal/grafana/(.*) /$1 break;
         proxy_pass {{ grafana_scheme }}://grafana_servers;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ssl_server_name;
     }
 {% endif %}
 
@@ -50,7 +56,9 @@ server {
         proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
-        proxy_ssl_verify_depth 2;
+        proxy_ssl_verify_depth 1;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ssl_server_name;
     }
 {% endif %}
 
@@ -63,7 +71,9 @@ server {
         proxy_ssl_certificate_key /etc/nginx/ssl/nginx_internal.key;
         proxy_ssl_trusted_certificate /etc/nginx/ssl/ca.crt;
         proxy_ssl_verify on;
-        proxy_ssl_verify_depth 2;
+        proxy_ssl_verify_depth 1;
+        proxy_ssl_server_name on;
+        proxy_ssl_name $ssl_server_name;
     }
 {% endif %}
 }
