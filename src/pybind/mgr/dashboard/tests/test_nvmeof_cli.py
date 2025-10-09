@@ -8,7 +8,7 @@ import pytest
 from mgr_module import CLICommand, HandleCommandResult
 
 from ..controllers import EndpointDoc
-from ..model.nvmeof import CliFlags, CliHeader
+from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
     NvmeofCLICommand, convert_from_bytes, convert_to_bytes
 from ..tests import CLICommandTestMixin
@@ -488,6 +488,40 @@ class TestAnnotatedDataTextOutputFormatter():
             '+-----+----+'
         )
 
+    def test_field_transformation_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFieldTransformer(lambda x: 5)]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+\n'
+            '|Name |Age|\n'
+            '+-----+---+\n'
+            '|Alice|5  |\n'
+            '+-----+---+'
+        )
+
+    def test_field_transformation_with_override_header_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFieldTransformer(lambda x: 5), CliHeader("bla")]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+\n'
+            '|Name |Bla|\n'
+            '+-----+---+\n'
+            '|Alice|5  |\n'
+            '+-----+---+'
+        )
+
     def test_override_exclusive_list_field_annotation(self):
         class Sample(NamedTuple):
             name: str
@@ -529,6 +563,61 @@ class TestAnnotatedDataTextOutputFormatter():
         output = formatter.format_output(data, Sample)
 
         assert output == 'Success'
+
+    def test_flatten_internal_fields_annotation(self):
+        class SampleInternal(NamedTuple):
+            surname: str
+            height: int
+
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            sample_internal: Annotated[SampleInternal, CliFlags.PROMOTE_INTERNAL_FIELDS]
+
+        class SampleList(NamedTuple):
+            status: int
+            error_message: str
+            samples: Annotated[List[Sample], CliFlags.EXCLUSIVE_LIST]
+
+        data = {"status": 0, "error_message": '',
+                "samples": [{'name': 'Alice', 'age': 30,
+                             "sample_internal": {"surname": "cohen", "height": 170}},
+                            {'name': 'Bob', 'age': 40,
+                             "sample_internal": {"surname": "levi", "height": 182}}]}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, SampleList)
+        assert output == (
+            '+-----+---+-------+------+\n'
+            '|Name |Age|Surname|Height|\n'
+            '+-----+---+-------+------+\n'
+            '|Alice|30 |cohen  |170   |\n'
+            '|Bob  |40 |levi   |182   |\n'
+            '+-----+---+-------+------+'
+        )
+
+    def test_enum_type(self):
+        from enum import Enum
+
+        class SampleEnum(Enum):
+            test = 1
+            bla = 2
+
+        class Sample(NamedTuple):
+            name: str
+            state: SampleEnum
+
+        data = {'name': 'Alice', 'state': 2}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+-----+\n'
+            '|Name |State|\n'
+            '+-----+-----+\n'
+            '|Alice|bla  |\n'
+            '+-----+-----+'
+        )
 
 
 class TestConverFromBytes:
