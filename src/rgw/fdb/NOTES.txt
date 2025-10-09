@@ -13,3 +13,13 @@
 
 * OOP helper (or lambda helper) to bind dbh, we don't need that param, either.
 
+* Some "missing" things (might make a great intro project):
+    - fdb_get_max_api_version()
+
+Because this file is VERY hard to find:
+    fdbclient/vexillographer/fdb.options
+...the relationship between client library, bindings, and documentation in this project is
+logical but neither clear and nor "obvious" from the documentation. Stuff gets generated from
+this, and the documentation references generated files that may or may not exist at the time
+you read the documentation (for example). 
+

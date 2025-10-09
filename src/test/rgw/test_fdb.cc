@@ -59,7 +59,7 @@ namespace lfdb = ceph::libfdb;
 
 namespace {
 // make a database handle:
-auto dbh = lfdb::make_database();
+auto dbh = lfdb::create_database();
 } // namespace
 
 // Be nice to Catch2's template-test macros:
@@ -114,9 +114,10 @@ constexpr const char * const pearl_msg =
 "Oute of oryent, I hardyly saye.\n"
 "Ne proved I never her precios pere.\n";
 
+// Clean up test keys when we leave scope:
 struct janitor final
 {
- // flip this off if you need artefacts after debugging:
+ // flip this off if you need artifacts after debugging:
  bool drop_after_scope = true;
 
  janitor()
@@ -149,6 +150,14 @@ TEST_CASE()
 {
  REQUIRE_THROWS_AS([] { throw ceph::libfdb::libfdb_exception(0); }(),
                    ceph::libfdb::libfdb_exception);
+}
+
+TEST_CASE("fdb configuration", "[rgw][fdb]") {
+
+std::map<std::string, ceph::libfdb::option_t> dbo {
+    { "
+  };
+
 }
 
 TEST_CASE("fdb simple", "[rgw][fdb]") {
@@ -439,7 +448,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
 
  janitor j;
 
- auto dbh = lfdb::make_database();
+ auto dbh = lfdb::create_database();
 
 // A no-no because of zpp_bits-- we can work around it, but...
 // const auto k = "hi", v = "there";
@@ -504,6 +513,35 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
   CHECK_FALSE(lfdb::key_exists(dbh, "Herman"));
   CHECK_FALSE(lfdb::key_exists(dbh, "John"));
  }
+}
+
+SCENARIO("options", "[fdb]")
+{
+ // For information about options, consult the FoundationDB's source tree's
+ // documentation: fdbclient/vexillographer/fdb.options
+ SECTION("option types") {
+
+  // check that the types supported for FDB options are supported by
+  // the library:
+  lfdb::options o {
+      0,        true,                           // flag
+      1,        42,                             // integer
+      2,        "hi",                           // string
+      3,        (const std::uint8_t *)"whee"    // data
+    }; 
+
+  CHECK(bool(true) == o.find(0));
+  CHECK(std::int_64(42) == o.find(1));
+  CHECK(std::string("hi") == o.find(2));
+  CHECK(std::vector<std::uint8_t> { 'w', 'h', 'e', 'e' } == o.find(3));
+ }
+
+ auto dbh = lfdb::create_database({ FDB_DB_LOCATION_CACHE_SIZE, 200'000 }, { FDB_NETWORK_TRACE_ENABLE, false });
+
+ auto txn = lfdb::make_transaction(dbh, {
+              { FDB_TXN_READ_YOUR_WRITES_DISABLE, true },
+              { FDB_TRANSACTION_LOGGING_ENABLE, "my_nifty_transaction" }
+            });
 }
 
 TEST_CASE("fdb misc", "[fdb]")

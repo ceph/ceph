@@ -26,36 +26,33 @@
 #include <exception>
 #include <algorithm>
 #include <functional>
-
-/* JFW: needs tinkering
-namespace ceph::libfdb::detail {
-
-template <typename FnT>
-auto commit_wrapper(FnT& f, ceph::libfdb::transaction_handle&& txn, const commit_after_op&& commit_after, auto&& ...params)
-{
- auto r = f(txn, std::forward(params...));
-
- if(commit_after_op::commit == commit_after) {
-    // Perhaps a tri-state return is the better long-term path?
-    if(false == ceph::libfdb::detail::commit(txn))
-     throw ceph::libfdb::libfdb_exception("transaction commit failed");
- }
-
- return r;
-}
-
-} // namespace ceph::libfdb::detail */
+#include <filesystem>
 
 namespace ceph::libfdb {
 
-inline database_handle make_database()
+inline database_handle create_database()
 {
  return std::make_shared<database>();
+}
+
+inline database_handle create_database(const std::filesystem::path dbfile)
+{
+ return std::make_shared<database>(dbfile);
+}
+
+inline database_handle create_database(const std::filesystem::path dbfile, const database_options& opts)
+{
+ return std::make_shared<database>(dbfile, opts);
 }
 
 inline transaction_handle make_transaction(database_handle dbh)
 {
  return std::make_shared<transaction>(dbh);
+}
+
+inline transaction_handle make_transaction(database_handle dbh, const transaction_options& opts)
+{
+ return std::make_shared<transaction>(dbh, opts);
 }
 
 // Note only rarely is a direct call to this.
@@ -125,7 +122,7 @@ auto value_collector(auto& out_value)
         }; 
 }
 
-// RAII wrapper:
+// RAII gadgetry:
 struct maybe_commit final
 {
  transaction_handle& txn;
@@ -158,7 +155,7 @@ namespace ceph::libfdb::detail {
  return ceph::libfdb::from::convert(std::span { buffer, buffer_size }, target);
 }
 
-} // namespace ceph::libfdb::detail */
+} // namespace ceph::libfdb::detail 
 
 namespace ceph::libfdb {
 

@@ -107,7 +107,7 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
 TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
 
-  auto dbh = lfdb::make_database();
+  auto dbh = lfdb::create_database();
 
   SECTION("string_view -> buffer::list")
   {

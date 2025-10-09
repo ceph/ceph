@@ -25,17 +25,20 @@
 // Ceph uses libfmt rather than <format>:
 #include <fmt/format.h>
 
-#include <map> // JFW: remove after lifting (and, indeed, remove to see what you need to lift!)
-
+#include <map> 
 #include <tuple>
 #include <mutex>
 #include <memory>
 #include <ranges>
 #include <thread>
+#include <vector>
+#include <cstdint>
+#include <variant>
 #include <iterator>
 #include <concepts>
 #include <algorithm>
 #include <exception>
+#include <functional>
 #include <filesystem>
 #include <type_traits>
 
@@ -58,7 +61,7 @@ namespace ceph::libfdb::concepts {
 
 // Adapted from "https://en.cppreference.com/w/cpp/ranges/to.html#container_compatible_range":
 template<class Container, class Reference>
-constexpr bool appendable_container  = requires(Container& c, Reference&& ref)
+constexpr bool appendable_container = requires(Container& c, Reference&& ref)
 {
  requires
  (
@@ -181,6 +184,78 @@ struct maybe_commit;
 
 } // namespace ceph::libfdb::detail
 
+namespace ceph::libfdb {
+
+enum struct option_type { flag, integer, string, data };
+
+using option_value = std::variant<bool, std::int64_t, std::string, std::vector<std::uint8_t>>;
+
+// i.e. option /code/ to the value of the option itself (e.g. FDB_FOO, 42):
+template <typename OptionCodeT>
+using option_map = std::map<OptionCodeT, option_value>; 
+
+using network_options = option_map<FDBNetworkOption>;
+using database_options = option_map<FDBDatabaseOption>;
+using transaction_options = option_map<FDBTransactionOption>;
+
+namespace detail {
+
+template<typename ...XS>
+struct overload : XS... 
+{ using XS::operator()...; };
+
+template<class... Ts>
+overload(Ts...) -> overload<Ts...>;
+
+// JFW: TODO: Concept-ify these:
+// Note that these are specific to FDB's needs (see return type, casts):
+const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return (std::uint8_t *)xs.data(); }
+const std::uint8_t *data_of(const std::string& xs) { return (std::uint8_t *)xs.data(); }
+const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
+const std::uint8_t *data_of(const bool& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
+
+// JFW: TODO: Concept-ify these:
+// Note that these are specific to FDB's needs (see return type, casts):
+const int size_of(const std::vector<std::uint8_t>& xs) { return static_cast<int>(xs.size()); }
+const int size_of(const std::string& xs) { return static_cast<int>(xs.size()); }
+const int size_of(const std::int64_t x) { return static_cast<int>(x); }
+const int size_of(const bool x) { return static_cast<int>(x); }
+
+// JFW: it would be nice to unify these two nearly-identical implementations:
+// JFW: some FDB option-setting functions do not operate on handles:
+void apply_options(const auto& option_map, auto& set_option_fn)
+{
+ std::ranges::for_each(option_map, [&set_option_fn](const auto& option) {
+    // JFW: tuple-fy this:
+    auto d = std::visit([](const auto& x) { return data_of(x); }, option.second);
+    auto s = std::visit([](const auto& x) { return size_of(x); }, option.second);
+
+    if(auto r = set_option_fn(option.first, d, s); 0 != r) {
+      throw libfdb_exception(fmt::format("while setting option {}; {}", 
+                             (int)option.first, libfdb_exception::make_fdb_error_string(r)));
+    }
+  });
+}
+
+// ...and some FDB option-setting functions require a handle:
+void apply_options(auto handle, const auto& option_map, auto& set_option_fn)
+{
+ std::ranges::for_each(option_map, [&handle, &set_option_fn](const auto& option) {
+    // JFW: tuple-fy this:
+    auto d = std::visit([](const auto& x) { return data_of(x); }, option.second);
+    auto s = std::visit([](const auto& x) { return size_of(x); }, option.second);
+
+    if(auto r = set_option_fn(handle, option.first, d, s); 0 != r) {
+      throw libfdb_exception(fmt::format("while setting option {}; {}", 
+                             (int)option.first, libfdb_exception::make_fdb_error_string(r)));
+    }
+  });
+}
+
+} // detail
+
+} // namespace ceph::libfdb
+
 namespace ceph::libfdb::detail {
 
 // The global DB state and management thread:
@@ -195,14 +270,14 @@ class database_system final
  static inline std::once_flag fdb_was_initialized;
  static inline std::jthread fdb_network_thread;
 
- static inline void initialize_fdb()
+ static inline void initialize_fdb(const network_options& options)
  {
   // This must be called before ANY other API function:
   if(fdb_error_t r = fdb_select_api_version(FDB_API_VERSION); 0 != r)
    throw libfdb_exception(r);
  
   // Zero or more calls to this may now be made:
-  // fdb_error_t fdb_network_set_option(FDBNetworkOption option, uint8_t const *value, int value_length)
+  apply_options(options, fdb_network_set_option);
  
   // This must be called before any other API function (besides >= 0 calls to fdb_network_set_option()):
   if(fdb_error_t r = fdb_setup_network(); 0 != r)
@@ -256,36 +331,55 @@ struct transaction;
 class database final
 {
  private:
- FDBDatabase *fdb_handle = nullptr;
+ std::unique_ptr<FDBDatabase, decltype(&fdb_database_destroy)> db_handle;
 
- public:
- database() 
- {
-  std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, ceph::libfdb::detail::database_system::initialize_fdb);
+ FDBDatabase *create_database_ptr(const std::filesystem::path cluster_file_path) {
 
-  if(fdb_error_t r = fdb_create_database(nullptr, &fdb_handle); 0 != r)
-   throw libfdb_exception(r);
-
-  // may now set database options:
-  ; // JFW
- }
-
- ~database()
- {
-//JFW: move to smartptr
-  if(nullptr != fdb_handle) {
-   fdb_database_destroy(fdb_handle), fdb_handle = nullptr;
+  FDBDatabase *fdbp = nullptr;
+  if(fdb_error_t r = fdb_create_database(cluster_file_path.c_str(), &fdbp); 0 != r) {
+    throw libfdb_exception(r);
   }
+
+  return fdbp;
  }
 
  public:
- operator bool() { return nullptr != raw_handle(); }
+ database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts, const network_options& network_opts)
+  : db_handle(create_database_ptr(cluster_file_path), &fdb_database_destroy)
+ {
+  std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, 
+                 ceph::libfdb::detail::database_system::initialize_fdb, 
+                 network_opts);
+
+  detail::apply_options(raw_handle(), db_opts, fdb_database_set_option);
+ }
+
+ database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts)
+  : database(cluster_file_path, db_opts, {})
+ {}
+
+ database(const std::filesystem::path cluster_file_path)
+  : database({}, {})
+ {}
+
+ database()
+  : database(std::filesystem::path {})
+ {}
 
  public:
- FDBDatabase *raw_handle() const noexcept { return fdb_handle; }
+ operator bool() const noexcept { return nullptr != raw_handle(); }
+
+ public:
+ FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
  private:
  friend transaction;
+
+ private:
+ friend inline database_handle create_database();
+ friend inline database_handle create_database(const std::filesystem::path);
+ friend inline database_handle create_database(const std::filesystem::path, const database_options&);
+
 };
 
 class transaction final
@@ -296,7 +390,9 @@ class transaction final
 
  private:
  FDBTransaction *create_transaction() {
-  FDBTransaction *txn_p = nullptr; // JFW: *or* should it be angherror to create over extant txn?
+
+  FDBTransaction *txn_p;
+
   if(fdb_error_t r = fdb_database_create_transaction(dbh->raw_handle(), &txn_p); 0 != r) {
    throw libfdb_exception(r);
   }
@@ -304,30 +400,22 @@ class transaction final
   return txn_p;
  }
 
-/*JFW: rework into a coherent mechanism--
- void establish() {
-  destroy(), txn_ptr.reset(create_transaction());
- }
-
- void maybe_vivify() {
-  if(not this) {
-    throw ceph::libfdb::libfdb_exception("inactive transaction");
-  }
- if(not this) {
-   establish();
-  }
- }*/
-
  private:
  inline bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output);
  inline bool get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter); 
  inline future_value get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
 
  public:
- transaction(database_handle& dbh)
- : dbh(dbh),
+ transaction(database_handle& dbh_)
+ : dbh(dbh_),
    txn_ptr(create_transaction(), &fdb_transaction_destroy)
  {}
+
+ transaction(database_handle& dbh_, const transaction_options& opts)
+  : transaction(dbh_)
+ {
+  detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
+ }
 
  public:
  // I vacillate between considering this ok, or not even a good idea...
@@ -335,13 +423,6 @@ class transaction final
 
  public:
  FDBTransaction *raw_handle() const noexcept { return txn_ptr.get(); }
-
-/*JFW:
- private:
- void set_option(FDBTransactionOption o, std::string_view v) {
-    detail::check_fdb_result(
-      fdb_transaction_set_option(raw_handle(), o, (const std::uint8_t *)v.data(), v.length()));
-*/
 
  private:
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
