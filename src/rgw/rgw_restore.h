@@ -66,6 +66,15 @@ struct RestoreEntry {
 };
 WRITE_CLASS_ENCODER(RestoreEntry)
 
+int list(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+        RestoreEntry& entry, std::optional<std::string> restore_status_filter,
+        std::string& err_msg, RGWFormatterFlusher& flusher, optional_yield y);
+
+int status(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+           RestoreEntry& entry, std::string& err_msg,
+           RGWFormatterFlusher& flusher, optional_yield y);
+
+
 class Restore : public DoutPrefixProvider {
   CephContext *cct;
   rgw::sal::Driver* driver;
@@ -165,6 +174,15 @@ public:
                               const std::string& version_id,
                               const rgw::notify::EventTypeList& event_types,
                               optional_yield y);
+  // list restore status of objects in the bucket
+  int list(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+           std::optional<std::string> restore_status_filter, std::string& err_msg,
+           RGWFormatterFlusher& flusher, optional_yield y);
+
+  // restore status of an object in a bucket
+  int status(const DoutPrefixProvider* dpp, RestoreEntry& entry,
+             std::string& err_msg, RGWFormatterFlusher& flusher,
+             optional_yield y);
 };
 
 } // namespace rgw::restore
