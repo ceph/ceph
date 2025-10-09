@@ -431,11 +431,10 @@ void GroupEnableRequest<I>::create_primary_group_snapshot() {
                 + "." + m_group_snap.id;
   m_group_snap.name = snap_name;
 
-  cls::rbd::MirrorSnapshotState state = cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY;
-
   // Create incomplete group snap
   m_group_snap.snapshot_namespace = cls::rbd::GroupSnapshotNamespaceMirror{
-    state, m_mirror_peer_uuids, {}, {}};
+    cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY, m_mirror_peer_uuids, {}, {},
+    cls::rbd::MIRROR_GROUP_SNAPSHOT_INCOMPLETE};
 
   for (auto image_ctx: m_image_ctxs) {
     m_group_snap.snaps.emplace_back(image_ctx->md_ctx.get_id(), image_ctx->id,
@@ -532,7 +531,10 @@ void GroupEnableRequest<I>::update_primary_group_snapshot() {
     m_group_snap.snaps[i].snap_id = m_snap_ids[i];
   }
 
-  m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
+  m_group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_CREATED;
+  auto &mirror_namespace = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+            m_group_snap.snapshot_namespace);
+  mirror_namespace.complete = cls::rbd::MIRROR_GROUP_SNAPSHOT_COMPLETE;
   librados::ObjectWriteOperation op;
   cls_client::group_snap_set(&op, m_group_snap);
 

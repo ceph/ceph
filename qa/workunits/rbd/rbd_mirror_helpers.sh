@@ -2669,9 +2669,30 @@ test_group_snap_sync_state()
     local group_snap_id=$3
     local expected_state=$4
 
-    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
 
-    test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
+    # Get <state> and <snaps_synced> for the given group snapshot ID
+    local state snaps_synced
+    state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")
+    snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT")
+
+    if [ -z "$snaps_synced" ]; then
+        # User snapshot
+        if [ "$expected_state" = "complete" ]; then
+            test "$state" = "created" || { fail; return 1; }
+        elif [ "$expected_state" = "incomplete" ]; then
+            test "$state" = "creating" || { fail; return 1; }
+        fi
+    else
+        # Mirror snapshot
+        if [ "$expected_state" = "complete" ]; then
+            # Test if snaps_synced is 'true'
+            test "$snaps_synced" = "true" || { fail; return 1; }
+        elif [ "$expected_state" = "incomplete" ]; then
+            # Test if snaps_synced is 'false'
+            test "$snaps_synced" = "false" || { fail; return 1; }
+        fi
+    fi
 }
 
 test_group_snap_sync_complete()
@@ -2857,7 +2878,7 @@ get_newest_group_snapshot_id()
     local -n _group_snap_id=$3
 
     run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
-    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ) && return 0
+    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='created']/id)[last()]" "$CMD_STDOUT" ) && return 0
 
     fail "Failed to get snapshot id"
     return 1
