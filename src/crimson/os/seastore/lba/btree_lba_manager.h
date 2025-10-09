@@ -101,16 +101,10 @@ public:
   {
     std::vector<alloc_mapping_info_t> alloc_infos = {
       alloc_mapping_info_t::create_zero(len)};
-    return seastar::do_with(
-      std::move(alloc_infos),
-      [&t, hint, this](auto &alloc_infos) {
-      return alloc_contiguous_mappings(
-	t, hint, alloc_infos, alloc_policy_t::linear_search
-      ).si_then([](auto cursors) {
-	assert(cursors.size() == 1);
-	return LBAMapping::create_direct(std::move(cursors.front()));
-      });
-    });
+    auto cursors = co_await alloc_contiguous_mappings(
+      t, hint, alloc_infos, alloc_policy_t::linear_search);
+    assert(cursors.size() == 1);
+    co_return LBAMapping::create_direct(std::move(cursors.front()));
   }
 
   clone_mapping_ret clone_mapping(
