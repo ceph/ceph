@@ -628,96 +628,80 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    return lba_manager->get_mapping(t, *extent
-    ).si_then([this, &t, extent, nextent](auto mapping) {
-      return lba_manager->update_mapping(
-        t,
-        std::move(mapping),
-        extent->get_length(),
-        extent->get_paddr(),
-        *nextent
-      ).discard_result();
-    }).handle_error_interruptible(
+    auto mapping = co_await lba_manager->get_mapping(
+      t, *extent
+    ).handle_error_interruptible(
       rewrite_extent_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected enoent"}
     );
+    co_await lba_manager->update_mapping(
+      t,
+      std::move(mapping),
+      extent->get_length(),
+      extent->get_paddr(),
+      *nextent
+    );
   } else {
     assert(get_extent_category(extent->get_type()) == data_category_t::DATA);
-    auto length = extent->get_length();
-    return cache->read_extent_maybe_partial(
-      t, std::move(extent), 0, length
-    ).si_then([this, FNAME, &t](auto extent) {
-      assert(extent->is_fully_loaded());
-      cache->retire_extent(t, extent);
-      auto extents = cache->alloc_new_data_extents_by_type(
-        t,
-        extent->get_type(),
-        extent->get_length(),
-        extent->get_user_hint(),
-        // get target rewrite generation
-        extent->get_rewrite_generation());
-      return seastar::do_with(
-        std::move(extents),
-        0,
-        extent->get_length(),
-        extent_ref_count_t(0),
-        [this, FNAME, extent, &t]
-        (auto &extents, auto &off, auto &left, auto &refcount)
-      {
-        return trans_intr::do_for_each(
-          extents,
-          [extent, this, FNAME, &t, &off, &left, &refcount](auto &_nextent)
-        {
-          auto nextent = _nextent->template cast<LogicalChildNode>();
-          bool first_extent = (off == 0);
-          ceph_assert(left >= nextent->get_length());
-          nextent->rewrite(t, *extent, off);
-          DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
 
-          /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
-           * extents since we're going to do it again once we either do the ool write
-           * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
-           * avoid this complication. */
-          auto fut = base_iertr::now();
-          if (first_extent) {
-            assert(off == 0);
-            fut = lba_manager->get_mapping(t, *extent
-            ).si_then([this, &t, extent, nextent,
-                      &refcount](auto mapping) {
-              return lba_manager->update_mapping(
-                t,
-                std::move(mapping),
-                extent->get_length(),
-                extent->get_paddr(),
-                *nextent
-              ).si_then([&refcount](auto c) {
-                refcount = c;
-              });
-            }).handle_error_interruptible(
-              rewrite_extent_iertr::pass_further{},
-              crimson::ct_error::assert_all{"unexpected enoent"}
-            );
-          } else {
-            ceph_assert(refcount != 0);
-            fut = lba_manager->alloc_extent(
-              t,
-              (extent->get_laddr() + off).checked_to_laddr(),
-              *nextent,
-              refcount
-            ).si_then([extent, nextent, off](auto mapping) {
-              ceph_assert(mapping.get_key() == extent->get_laddr() + off);
-              ceph_assert(mapping.get_val() == nextent->get_paddr());
-              return seastar::now();
-            });
-          }
-          return fut.si_then([&off, &left, nextent] {
-            off += nextent->get_length();
-            left -= nextent->get_length();
-            return seastar::now();
-          });
-        });
-      });
-    });
+    auto length = extent->get_length();
+    extent = co_await cache->read_extent_maybe_partial(
+      t, std::move(extent), 0, length);
+    assert(extent->is_fully_loaded());
+    cache->retire_extent(t, extent);
+    auto extents = cache->alloc_new_data_extents_by_type(
+      t,
+      extent->get_type(),
+      extent->get_length(),
+      extent->get_user_hint(),
+      // get target rewrite generation
+      extent->get_rewrite_generation());
+    extent_len_t off = 0;
+    auto left = extent->get_length();
+    extent_ref_count_t refcount = 0;
+    for (auto &_nextent : extents) {
+      auto nextent = _nextent->template cast<LogicalChildNode>();
+      bool first_extent = (off == 0);
+      ceph_assert(left >= nextent->get_length());
+      nextent->rewrite(t, *extent, off);
+      DEBUGT("rewriting data -- {} to {}", t, *extent, *nextent);
+
+      /* This update_mapping is, strictly speaking, unnecessary for delayed_alloc
+       * extents since we're going to do it again once we either do the ool write
+       * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
+       * avoid this complication. */
+      if (first_extent) {
+	assert(off == 0);
+	auto mapping = co_await lba_manager->get_mapping(
+	  t, *extent
+	).handle_error_interruptible(
+	  rewrite_extent_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected enoent"}
+	);
+	refcount = co_await lba_manager->update_mapping(
+	  t,
+	  std::move(mapping),
+	  extent->get_length(),
+	  extent->get_paddr(),
+	  *nextent
+	).handle_error_interruptible(
+	  rewrite_extent_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected enoent"}
+	);
+      } else {
+	ceph_assert(refcount != 0);
+	auto mapping = co_await lba_manager->alloc_extent(
+	  t,
+	  (extent->get_laddr() + off).checked_to_laddr(),
+	  *nextent,
+	  refcount
+	);
+	ceph_assert(mapping.get_key() == extent->get_laddr() + off);
+	ceph_assert(mapping.get_val() == nextent->get_paddr());
+      }
+      off += nextent->get_length();
+      left -= nextent->get_length();
+    }
   }
 }
 
