@@ -119,8 +119,9 @@ public:
   void print(std::ostream&) const;
 private:
   // AuthServer methods
-  std::pair<std::vector<uint32_t>, std::vector<uint32_t>>
-  get_supported_auth_methods(int peer_type) final;
+  std::vector<uint32_t> get_supported_auth_methods(int peer_type) final;
+  std::vector<uint32_t> get_supported_con_modes(int peer_type,
+						uint32_t auth_method) final;
   uint32_t pick_con_mode(int peer_type,
 			 uint32_t auth_method,
 			 const std::vector<uint32_t>& preferred_modes) final;
