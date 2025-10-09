@@ -410,8 +410,8 @@ export class TaskMessageService {
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
     ),
-    'rgw/topic/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
-      this.topic(metadata)
+    'rgw/destination/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.destination(metadata)
     ),
     // Grafana tasks
     'grafana/dashboards/update': this.newTaskMessage(
@@ -624,8 +624,8 @@ export class TaskMessageService {
     return $localize`SMB users and groups access resource '${metadata.usersGroupsId}'`;
   }
 
-  topic(metadata: any) {
-    return $localize`Topic  '${metadata.name}'`;
+  destination(metadata: any) {
+    return $localize`Notification destination  '${metadata.name}'`;
   }
   notification(metadata: any) {
     return $localize`Notification  '${metadata.name}'`;
@@ -635,7 +635,7 @@ export class TaskMessageService {
   }
 
   rgwStorageClass(metadata: any) {
-    return $localize`Tiering Storage Class  '${metadata.storage_class}'`;
+    return $localize`Storage Class  '${metadata.storage_class}'`;
   }
 
   crudMessage(metadata: any) {
