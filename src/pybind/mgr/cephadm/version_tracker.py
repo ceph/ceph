@@ -147,10 +147,20 @@ class VersionTracker:
         
         return 0, json.dumps(res, indent=4), ''
 
-    def remove_cluster_version_history(self, time_stamp: Optional[str] = None) -> Tuple[int, str, str]:
-        SQL_QUERY_OPTION = '''
+    def remove_cluster_version_history(self, all: Optional[bool] = False, before: Optional[str] = None, after: Optional[str] = None) -> Tuple[int, str, str]:
+        SQL_QUERY_BEFORE = '''
         DELETE FROM ClusterVersionInfo
-            WHERE creation_time < ?;
+            WHERE creation_time <= ?;
+        '''
+
+        SQL_QUERY_AFTER = '''
+        DELETE FROM ClusterVersionInfo
+            WHERE creation_time >= ?;
+        '''
+
+        SQL_QUERY_RANGE = '''
+        DELETE FROM ClusterVersionInfo
+            WHERE creation_time BETWEEN ? AND ?
         '''
 
         SQL_QUERY_ALL = '''
@@ -163,22 +173,47 @@ class VersionTracker:
         if self._cluster_version_history_is_empty():
             return 0, 'No Cluster Version History', ''
         
+        if not all and not before and not after:
+            return -errno.EINVAL, '', 'requires at least one of the options "all", "before", "after" to be set'
+        
+        if all and (before or after):
+            return -errno.EINVAL, '', 'cannot have option "all" set while option "before" or option "after" are set'
+        
+        if before:
+            try:
+                datetime.datetime.strptime(before, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                return -errno.EINVAL, '', 'invalid datetime format for option "before", use "YYYY-MM-DD HH:MM:SS"'
+
+        if after:
+            try:
+                datetime.datetime.strptime(after, '%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                return -errno.EINVAL, '', 'invalid datetime format for option "after", use "YYYY-MM-DD HH:MM:SS"'
+
         with self.mgr._db_lock, self.mgr.db:
-            if time_stamp is None:
+            if all:
                 try:
                     self.mgr.db.execute(SQL_QUERY_ALL)
                 except sqlite3.Error as error:
                     return -errno.EIO, '', str(error)
+            elif before and after:
+                if before < after:
+                    return -errno.EINVAL, '', 'option "before" cannot be a datetime less than option "after", command will remove entries in range [AFTER, BEFORE]'
+                try:
+                    self.mgr.db.execute(SQL_QUERY_RANGE, (after,before))
+                except sqlite3.Error as error:
+                    return -errno.EIO, '', str(error)
+            elif before:
+                try:
+                    self.mgr.db.execute(SQL_QUERY_BEFORE, (before,))
+                except sqlite3.Error as error:
+                    return -errno.EIO, '', str(error)
             else:
                 try:
-                    datetime.datetime.strptime(time_stamp, '%Y-%m-%d %H:%M:%S')
-                except ValueError:
-                    return -errno.EINVAL, '', 'invalid datetime format, use "YYYY-MM-DD HH:MM:SS"'
-                else:
-                    try:
-                        self.mgr.db.execute(SQL_QUERY_OPTION, (time_stamp,))
-                    except sqlite3.Error as error:
-                        return -errno.EIO, '', str(error)
+                    self.mgr.db.execute(SQL_QUERY_AFTER, (after,))
+                except sqlite3.Error as error:
+                    return -errno.EIO, '', str(error)
                     
         return 0, 'Cluster Version History Deletion Successful', ''
     
