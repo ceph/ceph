@@ -120,7 +120,7 @@
 
 <ng-template #imageUsageTpl
              let-row="row">
-  <span *ngIf="row.features_name && (!row.features_name.includes('fast-diff') || row.mirror_mode === 'snapshot') ; else usageBar"
+  <span *ngIf="row.features_name && !row.features_name.includes('fast-diff') ; else usageBar"
         [ngbTooltip]="usageTooltip">
     <span>-</span>
   </span>
