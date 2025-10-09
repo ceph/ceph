@@ -136,6 +136,7 @@ export enum IconSize {
 }
 
 export const ICON_TYPE = {
+  check: 'check',
   copy: 'copy',
   danger: 'warning--filled',
   infoCircle: 'information--filled',
