@@ -3,9 +3,9 @@
    [ngClass]="{ 'running': hasRunningTasks }"
    (click)="togglePanel($event)">
   <div class="notification-icon-wrapper">
-    <svg cdsIcon="notification"
-         size="20"
-         title="notification"></svg>
+    <cd-icon type="notification"
+             size="20">
+    </cd-icon>
     <span class="notification-count"
           *ngIf="notificationCount > 0">
       {{ notificationCount }}
