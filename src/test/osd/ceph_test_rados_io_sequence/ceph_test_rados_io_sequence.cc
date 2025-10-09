@@ -136,8 +136,8 @@ constexpr std::string_view usage[] = {
     "                            --objectsize <min,max> --threads <t>",
     "ceph_test_rados_io_sequence --blocksize <b> --pool <p> --object <oid>",
     "                            --objectsize <min,max> --threads <t>",
-    "\tCustomize the test, if a pool is specified then it defines the",
-    "\tReplicated/EC configuration",
+    "\t Customize the test, if a pool is specified then it defines the",
+    "\t Replicated/EC configuration",
     "",
     "ceph_test_rados_io_sequence --listsequence",
     "\t Display list of supported I/O sequences",
@@ -175,8 +175,8 @@ constexpr std::string_view usage[] = {
 
 po::options_description get_options_description() {
   po::options_description desc("ceph_test_rados_io options");
-  desc.add_options()("help,h", "show help message")("listsequence,l",
-                                                    "show list of sequences")(
+  desc.add_options()("help,h", "show help message")(
+      "listsequence,l", "show list of sequences")(
       "dryrun,d", "test sequence, do not issue any I/O")(
       "verbose", "more verbose output during test")(
       "sequence,s", po::value<SequencePair>(), "test specified sequence range")(
@@ -218,7 +218,7 @@ po::options_description get_options_description() {
       "Disables EC optimizations. Enabled by default.")(
       "allow_unstable_pool_configs",
       "Permits pool configs that are known to be unstable. This option "
-      " may be removed. at a later date. Disabled by default if ec optimized");
+      "may be removed. at a later date. Disabled by default if ec optimized");
 
   return desc;
 }
@@ -987,16 +987,20 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
                             "OSDPoolSetRequest", {}, &outbl, formatter.get());
-      ceph_assert(rc == 0);
+      if (rc != 0) {
+        throw std::invalid_argument("Failed to enable EC optimisations, "
+                                    "the specified plugin type may not "
+                                    "support them");
+      }
     }
 
     if (allow_pool_ec_overwrites) {
       ceph::messaging::osd::OSDPoolSetRequest
-          allow_ec_optimisations_request{pool_name,
+          allow_ec_overwrites_request{pool_name,
                                         "allow_ec_overwrites",
                                         "true",
                                         std::nullopt};
-      rc = send_mon_command(allow_ec_optimisations_request, rados,
+      rc = send_mon_command(allow_ec_overwrites_request, rados,
                             "OSDPoolSetRequest", {}, &outbl, formatter.get());
       ceph_assert(rc == 0);
     }
