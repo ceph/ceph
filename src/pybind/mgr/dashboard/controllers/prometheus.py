@@ -15,6 +15,7 @@ from ..services import ceph_service
 from ..services.orchestrator import OrchClient
 from ..services.settings import SettingsService
 from ..settings import Options, Settings
+from ..tools import str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, RESTController, Router, UIRouter
 
 
@@ -242,7 +243,7 @@ class Prometheus(PrometheusRESTController):
 
     @RESTController.Collection(method='GET', path='/alertgroup')
     def get_alertgroup(self, cluster_filter=False, **params):
-        if cluster_filter:
+        if str_to_bool(cluster_filter):
             try:
                 fsid = mgr.get('config')['fsid']
             except KeyError:
