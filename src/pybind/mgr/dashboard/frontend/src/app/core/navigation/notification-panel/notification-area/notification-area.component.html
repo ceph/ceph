@@ -1,11 +1,10 @@
-<!-- Reusable notification item template -->
 <ng-template #notificationItemTemplate
              let-notification="notification"
              let-last="last">
   <div class="notification-wrapper">
     <div class="notification-item">
       <div class="notification-icon">
-        <cd-icon [type]="notificationIconMap[notification.type] || 'info'">
+        <cd-icon [type]="notificationIconMap[notification.type] || notificationIconMap['default']">
         </cd-icon>
       </div>
       <div class="notification-content">
