@@ -148,16 +148,11 @@ public:
 	refcount,
 	ext.get_last_committed_crc(),
 	ext)};
-    return seastar::do_with(
-      std::move(alloc_infos),
-      [this, &t, hint](auto &alloc_infos) {
-      return alloc_contiguous_mappings(
-	t, hint, alloc_infos, alloc_policy_t::linear_search
-      ).si_then([](auto cursors) {
-	assert(cursors.size() == 1);
-	return LBAMapping::create_direct(std::move(cursors.front()));
-      });
-    });
+    auto cursors = co_await alloc_contiguous_mappings(
+      t, hint, alloc_infos, alloc_policy_t::linear_search
+    );
+    assert(cursors.size() == 1);
+    co_return LBAMapping::create_direct(std::move(cursors.front()));
   }
 
   alloc_extents_ret alloc_extents(
