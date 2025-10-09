@@ -116,7 +116,8 @@ public:
     laddr_t offset) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, offset);
-    auto pin = co_await lba_manager->get_mapping(t, offset, false);
+    auto cursor = co_await lba_manager->get_cursor(t, offset, false);
+    auto pin = co_await resolve_cursor_to_mapping(t, std::move(cursor));
     SUBDEBUGT(seastore_tm, "got {}", t, pin);
     co_return pin;
   }
@@ -131,7 +132,8 @@ public:
     laddr_t laddr) {
     LOG_PREFIX(TransactionManager::get_containing_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, laddr);
-    auto pin = co_await lba_manager->get_mapping(t, laddr, true);
+    auto cursor = co_await lba_manager->get_cursor(t, laddr, true);
+    auto pin = co_await resolve_cursor_to_mapping(t, std::move(cursor));
     SUBDEBUGT(seastore_tm, "got {}", t, pin);
     co_return pin;
   }
@@ -139,9 +141,11 @@ public:
   get_pin_ret get_pin(Transaction &t, LogicalChildNode &extent) {
     LOG_PREFIX(TransactionManager::get_pin);
     SUBDEBUGT(seastore_tm, "{} ...", t, extent);
-    auto pin = co_await lba_manager->get_mapping(t, extent);
-    SUBDEBUGT(seastore_tm, "got {}", t, pin);
-    co_return pin;
+    auto cursor = co_await lba_manager->get_cursor(t, extent);
+    ceph_assert(cursor->is_direct());
+    auto ret = LBAMapping::create_direct(std::move(cursor));
+    SUBDEBUGT(seastore_tm, "got {}", t, ret);
+    co_return ret;
   }
 
   /**
