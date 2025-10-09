@@ -7006,7 +7006,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) {
       if (logger) {
-        logger->inc(l_mdss_cache_trim_throttle);
+        mds->server->logger->inc(l_mdss_cache_trim_throttle);
       }
       break;
     }
@@ -7037,7 +7037,7 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) {
       if (logger) {
-        logger->inc(l_mdss_cache_trim_throttle);
+        mds->server->logger->inc(l_mdss_cache_trim_throttle);
       }
       break;
     }

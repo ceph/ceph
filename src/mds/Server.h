@@ -399,6 +399,7 @@ private:
   friend class ServerContext;
   friend class ServerLogContext;
   friend class Batch_Getattr_Lookup;
+  friend class MDCache;
 
   // placeholder for validation handler to store xattr specific
   // data
