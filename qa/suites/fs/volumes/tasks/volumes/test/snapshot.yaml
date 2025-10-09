@@ -4,3 +4,4 @@ tasks:
       modules:
         - tasks.cephfs.test_volumes.TestSubvolumeGroupSnapshots
         - tasks.cephfs.test_volumes.TestSubvolumeSnapshots
+        - tasks.cephfs.test_volumes.TestSubvolumeSnapshotGetpath
