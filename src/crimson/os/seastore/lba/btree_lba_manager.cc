@@ -349,26 +349,22 @@ BtreeLBAManager::reserve_region(
   DEBUGT("{} {}~{}", t, pos, addr, len);
   assert(pos.is_viewable());
   auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [pos=std::move(pos), c, addr, len](auto &btree) mutable {
-    auto &cursor = pos.get_effective_cursor();
-    auto iter = btree.make_partial_iter(c, cursor);
-    lba_map_val_t val{
-      len,
-      P_ADDR_ZERO,
-      EXTENT_DEFAULT_REF_COUNT,
-      0,
-      extent_types_t::NONE};
-    return btree.insert(
-      c, iter, addr, val, get_reserved_ptr<LBALeafNode, laddr_t>()
-    ).si_then([c](auto p) {
-      auto &[iter, inserted] = p;
-      ceph_assert(inserted);
-      return LBAMapping::create_direct(iter.get_cursor(c));
-    });
-  });
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto &cursor = pos.get_effective_cursor();
+  auto iter = btree.make_partial_iter(c, cursor);
+  lba_map_val_t val{
+    len,
+    P_ADDR_ZERO,
+    EXTENT_DEFAULT_REF_COUNT,
+    0,
+    extent_types_t::NONE};
+  auto p = co_await btree.insert(
+    c, iter, addr, val,
+    get_reserved_ptr<LBALeafNode, laddr_t>()
+  );
+  ceph_assert(p.second);
+  iter = p.first;
+  co_return LBAMapping::create_direct(iter.get_cursor(c));
 }
 
 BtreeLBAManager::alloc_extents_ret
