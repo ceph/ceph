@@ -16,9 +16,10 @@ export class NotificationAreaComponent implements OnInit, OnDestroy {
 
   readonly notificationIconMap = {
     [NotificationType.success]: 'success',
-    [NotificationType.error]: 'danger',
-    [NotificationType.info]: 'info',
-    [NotificationType.warning]: 'warning'
+    [NotificationType.error]: 'error',
+    [NotificationType.info]: 'infoCircle',
+    [NotificationType.warning]: 'warning',
+    default: 'infoCircle'
   } as const;
 
   constructor(private notificationService: NotificationService) {}
