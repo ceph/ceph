@@ -78,7 +78,7 @@ private:
   bool check_leader_health();
   bool check_member_health();
   bool check_mutes();
-  bool is_prime(int value)
+  bool is_prime(int value);
 };
 
 #endif // CEPH_HEALTH_MONITOR_H

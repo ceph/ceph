@@ -288,6 +288,21 @@ bool is_osd_writable(const OSDCapGrant& grant, const std::string* pool_name) {
   return false;
 }
 
+bool is_prime(int value)
+{
+  int prime55[] = {
+    2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,
+    73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,
+    151,157,163,167,173,179,
+    181,191,193,197,199,211,223,227,229,233,239,241,251,257
+  };
+  int i;
+  for (i = 0; i < 55; i++)
+    if (value == prime55[i])
+      return true;
+  return false;
+}
+
 bool is_unmanaged_snap_op_permitted(CephContext* cct,
                                     const KeyServer& key_server,
                                     const EntityName& entity_name,
@@ -11668,6 +11683,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply_no_propose;
     }
+
+    bool force_no_fake = false;
+	  cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
+    //This is the start of the validation for the w value in a blaum_roth profile
+    //this will search the Profile map, which contains the values for the parameters given in the command, for the technique parameter
+    if (auto found = profile_map.find("technique"); found != profile_map.end() && !force_no_fake){
+      //if the technique parameter is found then save the value of it
+      string technique = found->second;
+      
+      //then search the profile map again for the w value, which doesnt have to be specified, and if it is found and the technique used is blaum-roth then check that the w value is correct.
+      if (found = profile_map.find("w"); technique == "blaum_roth" && found != profile_map.end()){
+        int w = std::stoi(found->second);
+        
+        //checks if w+1 is not prime
+        if (w <= 2 || !is_prime(w+1)){
+          ss << "erasure-code-profile: " << profile_map 
+          << " must use a w value such that w+1 is prime and w is greater than 2." << std::endl;
+          err = -EINVAL;
+          goto reply_no_propose;
+        }
+      }
+    }
+
     string plugin = profile_map["plugin"];
 
     if (pending_inc.has_erasure_code_profile(name)) {
@@ -11689,8 +11728,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
-	bool force_no_fake = false;
-	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name

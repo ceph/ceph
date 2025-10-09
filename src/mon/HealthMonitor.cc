@@ -1191,14 +1191,14 @@ void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
 
         if (!is_prime(w+1)){
           ostringstream ds;
-          ds << "The w+1 value for the EC profile " << erasure_code_profile.first << "is not prime";
+          ds << "The w+1 value for the EC profile " << erasure_code_profile.first << " is not prime";
           details.push_back(ds.str());
       }
     }
   }
   if (!details.empty()) {
             ostringstream ss;
-            ss << details.size() << " EC profile" << (details.size() > 1 ? "s have " : " has ") << "a w value such that w+1 is not prime";
+            ss << details.size() << " EC profile" << (details.size() > 1 ? "s have " : " has ") << "a w value such that w+1 is not prime. This can result in data corruption";
             auto &d = checks->add("BLAUM_ROTH_W_IS_NOT_PRIME", HEALTH_WARN, ss.str(), details.size());
             d.detail.swap(details);
         }

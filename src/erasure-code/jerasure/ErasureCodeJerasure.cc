@@ -708,13 +708,8 @@ void ErasureCodeJerasureLiberation::prepare()
 //
 bool ErasureCodeJerasureBlaumRoth::check_w(ostream *ss) const
 { 
-  if (w <= 2 || !is_prime(w+1)) {
-    *ss <<  "w=" << w << " must be greater than two and "
-	<< "w+1 must be prime" << std::endl;
-    return false;
-  } else {
-    return true;
-  }
+  // The validation for W is carried out in OSDMonitor.cc now so there is no need for this function
+  return true;
 }
 
 void ErasureCodeJerasureBlaumRoth::prepare()
