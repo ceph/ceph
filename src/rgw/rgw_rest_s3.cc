@@ -7250,7 +7250,7 @@ rgw::auth::s3::STSEngine::authenticate(
         real_clock::time_point now = real_clock::now();
         if (now >= *exp) {
           ldpp_dout(dpp, 0) << "ERROR: Token expired" << dendl;
-          return result_t::reject(-EPERM);
+          return result_t::reject(-ERR_EXPIRED_TOKEN);
         }
       } else {
         ldpp_dout(dpp, 0) << "ERROR: Invalid expiration: " << expiration << dendl;

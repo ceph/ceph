@@ -369,7 +369,8 @@ inline constexpr const char* RGW_REST_STS_XMLNS =
 #define ERR_ACCOUNT_EXISTS 2403
 
 #define ERR_RESTORE_ALREADY_IN_PROGRESS 2500
-    
+#define ERR_EXPIRED_TOKEN 2501
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
