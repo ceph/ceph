@@ -308,16 +308,16 @@ void ScrubStack::kick_off_scrubs()
 	}
       }
     } else if (CDir *dir = dynamic_cast<CDir*>(*it)) {
-      auto next = it;
-      ++next;
+      ++it;
+      bool added_children = false;
       bool done = false; // it's done, so pop it off the stack
-      scrub_dirfrag(dir, &done);
+      scrub_dirfrag(dir, &added_children, &done);
       if (done) {
-	dout(20) << __func__ << " dirfrag, done" << dendl;
-	++it; // child inodes were queued at bottom of stack
-	dequeue(dir);
-      } else {
-	it = next;
+        dout(20) << __func__ << " dirfrag, done" << dendl;
+        dequeue(dir);
+      }
+      if (added_children) {
+        it = scrub_stack.begin();
       }
     } else {
       ceph_assert(0 == "dentry in scrub stack");
@@ -501,7 +501,7 @@ void ScrubStack::identify_remote_link_damage(CDentry *dn) {
   }
 }
 
-void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
+void ScrubStack::scrub_dirfrag(CDir *dir, bool *added_children, bool *done)
 {
   ceph_assert(dir != NULL);
 
@@ -540,7 +540,8 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
 	continue;
       }
       if (dnl->is_primary()) {
-	_enqueue(dnl->get_inode(), header, false);
+  *added_children = true;
+	_enqueue(dnl->get_inode(), header, true);
       } else if (dnl->is_remote() || dnl->is_referent_remote()) {
         identify_remote_link_damage(dn);
       }
