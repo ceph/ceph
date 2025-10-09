@@ -4275,9 +4275,9 @@ Then run the following:
     @CLIRequiresDB
     @CLIWriteCommand('cephadm remove-cluster-version-history')
     @MgrModuleRecoverDB
-    def do_remove_cluster_version_history(self, time_stamp: Optional[str] = None) -> Tuple[int, str, str]:
+    def do_remove_cluster_version_history(self, all: Optional[bool] = False, before: Optional[str] = None, after: Optional[str] = None) -> Tuple[int, str, str]:
         '''
         Delete cluster versions stored in history
         '''
-        return self.version_tracker.remove_cluster_version_history(time_stamp)
+        return self.version_tracker.remove_cluster_version_history(all, before, after)
     
