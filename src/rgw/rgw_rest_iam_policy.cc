@@ -509,3 +509,44 @@ void RGWListPolicies::send_response()
     start_response();
   }
 }
+
+int RGWCreatePolicyVersion::init_processing(optional_yield y)
+{
+  s->info.args.get_bool("SetAsDefault", &set_as_default, false);
+  policy_document = s->info.args.get("PolicyDocument");
+
+  if(!policy_document.empty()) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWCreatePolicyVersion::execute(optional_yield y)
+{
+  std::string version_id;
+  ceph::real_time create_date;
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  constexpr bool exclusive = false;
+  op_ret = driver->create_policy_version(this, y, arn.account, policy_name, policy_document, set_as_default, version_id, create_date, exclusive);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to create policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("CreatePolicyVersionResponse ", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("CreatePolicyVersionResult");
+    s->formatter->open_object_section("PolicyVersion");
+    encode_json("IsDefaultVersion", set_as_default , s->formatter);
+    encode_json("VersionId", version_id , s->formatter);
+    encode_json("CreateDate", create_date , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}

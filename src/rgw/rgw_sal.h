@@ -717,6 +717,15 @@ class Driver {
                             std::string_view marker,
                             uint32_t max_items,
                             rgw::IAM::PolicyList& listing) = 0;
+    virtual int create_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            const std::string_view policy_document,
+                            bool set_as_default,
+                            std::string &version_id,
+                            ceph::real_time &create_date,
+                            bool exclusive) = 0;
 
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,

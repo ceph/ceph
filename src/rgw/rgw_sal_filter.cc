@@ -746,6 +746,19 @@ int FilterDriver::list_customer_mananged_policies(const DoutPrefixProvider* dpp,
   return next->list_customer_mananged_policies(dpp, y, account_id, scope, only_attached, path_prefix, policy_usage_filter, marker, max_items, listing);
 }
 
+int FilterDriver::create_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        const std::string_view policy_document,
+                        bool set_as_default,
+                        std::string &version_id,
+                        ceph::real_time &create_date,
+                        bool exclusive)
+{
+  return next->create_policy_version(dpp, y, account, policy_name, policy_document, set_as_default, version_id, create_date, exclusive);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
