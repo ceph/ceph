@@ -1,0 +1,41 @@
+# {{ cephadm_managed }}
+global_defs {
+    enable_script_security
+    script_user root
+}
+
+vrrp_script check_backend {
+    script "{{ script }}"
+    weight -20
+    interval 2
+    rise 2
+    fall 2
+}
+
+{% for x in range(virtual_ips|length) %}
+vrrp_instance VI_{{ x }} {
+  state {{ states[x] }}
+  priority {{ priorities[x] }}
+  interface {{ vrrp_interfaces[x] }}
+  virtual_router_id {{ first_virtual_router_id + x }}
+  advert_int 1
+  authentication {
+      auth_type PASS
+      auth_pass {{ password }}
+  }
+{% if not spec.use_keepalived_multicast %}
+  unicast_src_ip {{ host_ips[x] }}
+  unicast_peer {
+    {% for ip in other_ips[x] %}
+    {{ ip }}
+    {% endfor %}
+  }
+{% endif %}
+  virtual_ipaddress {
+    {{ virtual_ips[x] }} dev {{ interfaces[x] }}
+  }
+  track_script {
+      check_backend
+  }
+}
+{% endfor %}

@@ -1,0 +1,129 @@
+# nightlies are run as teuthology@teuthology.front.sepia.ceph.com
+# Dependent data in that user's $HOME:
+#   - ~/ceph                     : a checkout of https://github.com/ceph/ceph.git
+#   - ~/teuthology               : a checkout of https://github.com/ceph/teuthology.git
+#   - ~/teuthology/virtualenv    : a virtualenv created by ./bootstrap (in teuthology.git)
+#   - ~/.bash_environment        : non-interactive shell configuration, including: `source ~/teuthology/virtualenv/bin/activate`
+
+SHELL="/bin/bash"
+
+# This is necessary when running bash non-interactively.
+BASH_ENV="/home/teuthology/.bash_environment"
+
+
+TEUTH_CEPH_REPO="https://github.com/ceph/ceph.git"
+TEUTH_SUITE_REPO="https://github.com/ceph/ceph.git"
+MAILTO="ceph-infra@redhat.com;yweinste@redhat.com"
+CEPH_QA_EMAIL="ceph-qa@ceph.io"
+
+CW="/home/teuthology/ceph/qa/nightlies/cron_wrapper"
+SS="/home/teuthology/ceph/qa/nightlies/schedule_subset.sh"
+# default/common arguments added by schedule_subset.sh
+TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ceph.com/ceph.git --suite-repo=https://git.ceph.com/ceph.git --machine-type smithi"
+
+### !!!!!!!!!!!!!!!!!!!!!!!!!!
+## THIS CRONTAB MUST NOT BE EDITED MANUALLY !!!!
+## AUTOMATED CRONTAB UPDATING
+## https://code.google.com/archive/p/chkcrontab/wikis/CheckCrontab.wiki
+## https://github.com/ceph/ceph-cm-ansible/pull/391
+## crontab is in https://github.com/ceph/ceph/main/qa/crontab/teuthology-cronjobs
+# chkcrontab: disable-msg=INVALID_USER
+# chkcrontab: disable-msg=USER_NOT_FOUND
+@daily /bin/bash /home/teuthology/bin/update-crontab.sh
+### !!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+# Ensure teuthology is up-to-date
+@daily cd /home/teuthology/ceph && $CW git pull -q
+@daily cd /home/teuthology/teuthology && $CW git pull -q && $CW ./bootstrap
+# Ensure ceph-sepia-secrets is up-to-date
+*/5 * * * *  cd /home/teuthology/ceph-sepia-secrets && $CW git pull -q
+
+
+#Publish this crontab to the Tracker page http://tracker.ceph.com/projects/ceph-releases/wiki/Crontab
+@daily crontab=$(crontab -l | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h3. Crontab ; echo) ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-releases/wiki/sepia.xml?key=$(cat /etc/redmine-key)
+
+## This is an example only, don't remove !
+## to see result open http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible
+@daily SUITE_NAME=~/src/ceph-qa-suite_main/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
+
+
+## ********** smoke tests on main and release branches
+00 05  * * 0,2,4   $CW $SS      1 --ceph main    --suite smoke -p 100 --force-priority
+16 05  * * 0       $CW $SS      1 --ceph tentacle --suite smoke -p 100 --force-priority
+08 05  * * 0       $CW $SS      1 --ceph squid   --suite smoke -p 100 --force-priority
+
+## ********** windows tests on main branch - weekly
+# 00 03 * * 1 CEPH_BRANCH=main; MACHINE_NAME=smithi; $CW teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s windows -k distro -e $CEPH_QA_EMAIL
+
+
+## ********** teuthology/nop on main branch - daily
+@daily             $CW $SS      1 --ceph main --suite teuthology/nop -p 1 --force-priority
+
+
+## main branch runs - weekly
+# rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
+00 20 * * 0        $CW $SS 100000 --ceph main --suite      rados -p 101 --force-priority
+08 20 * * 1        $CW $SS     64 --ceph main --suite       orch -p 950
+16 20 * * 2        $CW $SS    128 --ceph main --suite        rbd -p 950
+24 20 1 * *        $CW $SS    512 --ceph main --suite         fs -p 700
+32 20 * * 4        $CW $SS      4 --ceph main --suite powercycle -p 950
+# RGW is easy to get to under 50 runs, use a higher priority so we have recent baselines
+40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 150 --subset "$(($RANDOM % 30000))/30000"
+48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
+56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-debug
+04 21 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-release
+
+## tentacle branch runs - weekly
+# rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
+00 22 * * 0        $CW $SS 100000 --ceph tentacle --suite      rados -p 831
+08 22 * * 1        $CW $SS     64 --ceph tentacle --suite       orch -p 830
+16 22 * * 2        $CW $SS    128 --ceph tentacle --suite        rbd -p 830
+24 22 * * 3        $CW $SS    512 --ceph tentacle --suite         fs -p 830
+32 22 * * 4        $CW $SS      4 --ceph tentacle --suite powercycle -p 830
+40 22 * * 5        $CW $SS      1 --ceph tentacle --suite        rgw -p 830
+48 22 * * 6        $CW $SS      4 --ceph tentacle --suite       krbd -p 830 --kernel testing
+56 22 * * 6        $CW $SS      1 --ceph tentacle --suite crimson-rados -p 830 --flavor crimson-debug
+
+## squid branch runs - weekly
+# rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
+00 21 * * 0        $CW $SS 100000 --ceph squid --suite      rados -p 921
+08 21 * * 1        $CW $SS     64 --ceph squid --suite       orch -p 920
+16 21 * * 2        $CW $SS    128 --ceph squid --suite        rbd -p 920
+24 21 * * 3        $CW $SS    512 --ceph squid --suite         fs -p 920
+32 21 * * 4        $CW $SS      4 --ceph squid --suite powercycle -p 920
+40 21 * * 5        $CW $SS      1 --ceph squid --suite        rgw -p 920
+48 21 * * 6        $CW $SS      4 --ceph squid --suite       krbd -p 920 --kernel testing
+
+
+###  The suite below must run on bare-metal because it's performance suite and run 3 times to produce more data points
+# 57 03 * * 6 CEPH_BRANCH=quincy; MACHINE_NAME=smithi; $CW teuthology-suite -v -c $CEPH_BRANCH -n 100 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
+
+
+##########################
+
+
+### upgrade runs for quincy release
+###### on smithi
+
+## !!!! the client suites below MUST use --suite-branch octopus, pacific (see https://tracker.ceph.com/issues/24021)
+
+08 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-octopus-quincy --suite-branch octopus -p 820
+16 00 * * 1        $CW $SS      1 --ceph quincy --suite upgrade-clients/client-upgrade-pacific-quincy --suite-branch pacific -p 820
+24 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:octopus-x -p 820
+32 00 * * 1        $CW $SS 120000 --ceph quincy --suite upgrade:pacific-x -p 820
+
+### upgrade runs for tentacle release
+###### on smithi
+
+08 01 * * 3        $CW $SS      1 --ceph tentacle --suite upgrade -p 150
+
+### upgrade runs for squid release
+###### on smithi
+
+08 02 * * 5        $CW $SS     32 --ceph squid --suite upgrade -p 840 --force-priority
+
+### upgrade runs for main
+###### on smithi
+
+08 03 * * 6        $CW $SS     32 --ceph main --suite upgrade -p 850

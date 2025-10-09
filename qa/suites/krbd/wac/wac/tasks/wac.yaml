@@ -1,0 +1,8 @@
+tasks:
+- exec:
+    client.0:
+    - "dmesg -C"
+- workunit:
+    clients:
+      all:
+        - rbd/krbd_wac.sh

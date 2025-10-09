@@ -1,0 +1,36 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+      - but it is still running
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_
+    conf:
+      osd:
+        osd min pg log entries: 5
+        crimson bluestore cpu set: 6-7
+      osd.0:
+        crimson cpu set: 0-1
+      osd.1:
+        crimson cpu set: 2-3
+      osd.2:
+        crimson cpu set: 4-5
+      global:
+- osd_backfill:

@@ -1,0 +1,1126 @@
+commit 63b0f854d1cef490624de5d6cf9039735c7de5ca
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Mon Mar 25 11:02:31 2013 -0700
+
+    v0.56.4
+
+commit 90ab120a3c08f30654207c9c67fb0a4ff1476aff
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Mar 25 09:50:33 2013 -0700
+
+    rgw: bucket index ops on system buckets shouldn't do anything
+    
+    Fixes: #4508
+    Backport: bobtail
+    On certain bucket index operations we didn't check whether
+    the bucket was a system bucket, which caused the operations
+    to fail. This triggered an error message on bucket removal
+    operations.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 70e0ee8ba955322832f0c366537ddf7a0288761e)
+
+commit b8657fa08d0fe176c71a60c1654c53c3156a9c53
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 25 15:02:50 2013 -0800
+
+    systest: restrict list error acceptance
+    
+    Only ignore errors after the midway point if the midway_sem_post is
+    defined.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 5b24a68b6e7d57bac688021b822fb2f73494c3e9)
+
+commit 5af3d64f62b30cbaac13ccc7c23fc884ee1b7ae3
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Feb 25 14:55:34 2013 -0800
+
+    systest: fix race with pool deletion
+    
+    The second test have pool deletion and object listing wait on the same
+    semaphore to connect and start. This led to errors sometimes when the
+    pool was deleted before it could be opened by the listing process. Add
+    another semaphore so the pool deletion happens only after the listing
+    has begun.
+    
+    Fixes: #4147
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit b0271e390564119e998e18189282252d54f75eb6)
+
+commit 3569489b541ac0643520d20b08c788c26dfaff7f
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Mar 19 14:26:16 2013 -0700
+
+    os/FileJournal: fix aio self-throttling deadlock
+    
+    This block of code tries to limit the number of aios in flight by waiting
+    for the amount of data to be written to grow relative to a function of the
+    number of aios.  Strictly speaking, the condition we are waiting for is a
+    function of both aio_num and the write queue, but we are only woken by
+    changes in aio_num, and were (in rare cases) waiting when aio_num == 0 and
+    there was no possibility of being woken.
+    
+    Fix this by verifying that aio_num > 0, and restructuring the loop to
+    recheck that condition on each wakeup.
+    
+    Fixes: #4079
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit e5940da9a534821d0d8f872c13f9ac26fb05a0f5)
+
+commit 664ffa7d2178e486b00fa0706067f19b1bb9ab82
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 22 13:25:49 2013 -0700
+
+    common/MemoryModel: remove logging to /tmp/memlog
+    
+    This was a hack for dev purposes ages ago; remove it.  The predictable
+    filename is a security issue.
+    
+    CVE-2013-1882
+    
+    Reported-by: Michael Scherer <misc@zarb.org>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit c524e2e01da41ab5b6362c117939ea1efbd98095)
+
+commit 901fa435bb4be29b72cec39e5ff77570d13cbc6c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 22 13:25:43 2013 -0700
+
+    init-ceph: clean up temp ceph.conf filename on exit
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 6a7ad2eac1db6abca3d7edb23ca9b80751400a23)
+
+commit 951f7e562afb4ae91b8d037ef793a96779461e96
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 22 13:25:33 2013 -0700
+
+    init-ceph: push temp conf file to a unique location on remote host
+    
+    The predictable file name is a security problem.
+    
+    CVE-2013-1882
+    
+    Reported-by: Michael Scherer <misc@zarb.org>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 051734522fea92878dd8139f28ec4e6b01371ede)
+
+commit dd670afccfd3ae58c03ea3b4c213dd8db22f618e
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 22 13:25:23 2013 -0700
+
+    mkcephfs: make remote temp directory name unique
+    
+    The predictable file name is a security problem.
+    
+    CVE-2013-1882
+    
+    Reported-by: Michael Scherer <misc@zarb.org>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit f463ef78d77b11b5ad78b31e9a3a88d0a6e62bca)
+
+commit 1cd51eb63a91fa0aa395c41572cfee4d53fbc7f5
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Mar 22 13:51:14 2013 -0700
+
+    PG::GetMissing: need to check need_up_thru in MLogRec handler
+    
+    Backport: bobtail
+    Fixes: #4534
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4fe4deafbe1758a6b3570048aca57485bd562440)
+
+commit d866814285667c7f9cd9205dca6cf95f3634c5fc
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Mar 22 13:48:49 2013 -0700
+
+    PG,osd_types: improve check_new_interval debugging
+    
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d611eba9caf45f2d977c627b123462a073f523a4)
+
+commit fc3406f395103737e5784611e2b38fd1c4f26369
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Mar 5 16:06:20 2013 -0800
+
+    FileStore: fix reversed collection_empty return value
+    
+    Backport: bobtail
+    Fixes: #4380
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 7a434d10da0f77e1b329de0b06b6645cd73cc81b)
+    
+    Conflicts:
+    	src/os/FileStore.cc
+
+commit 9f7c6ad395653b1039ea957cfaa7689699f510e7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Feb 11 12:52:07 2013 -0800
+
+    FileStore: set replay guard on create_collection
+    
+    This should prevent sequences like:
+    
+    rmcoll a
+    mkcoll a
+    touch a foo
+    <crash>
+    
+    from causing trouble by preventing the rmcoll
+    and mkcoll from being replayed.
+    
+    Fixes: 4064
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 411770c45734c9827745ddc4018d86c14f2858a6)
+
+commit 9932c9f0a0503f1902549a3c39e5d51488fff3ef
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Feb 11 12:24:14 2013 -0800
+
+    FileStore: _split_collection should not create the collection
+    
+    This will simplify adding a replay guard to create_collection.
+    
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit b184ff581a08c9e6ce5b858f06ccbe9d0e2a170b)
+
+commit 7e7ea8266ee45d96863e1edc5a567dcc2977680c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 22 15:15:27 2013 -0800
+
+    client: use 4MB f_bsize and f_frsize for statfs
+    
+    Old stat(1) reports:
+    
+      Block size: 1048576    Fundamental block size: 1048576
+    
+    and the df(1) arithmetic works out.  New stat(1) reports:
+    
+      Block size: 1048576    Fundamental block size: 4096
+    
+    which is what we are shoving into statvfs, but we have the b_size and
+    fr_size arithmetic swapped.  However, doing the *correct* reporting would
+    then break the old stat by making both sizes appear to be 4KB (or
+    whatever).
+    
+    Sidestep the issue by making *both* values 4MB.. which is both large enough
+    to report large FS sizes, and also the default stripe size and thus a
+    "reasonable" value to report for a block size.
+    
+    Perhaps in the future, when we no longer care about old userland, we can
+    report the page size for f_bsize, which is probably the "most correct"
+    thing to do.
+    
+    Fixes: #3794.  See also #3793.
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 7c94083643891c9d66a117352f312b268bdb1135)
+
+commit 66dca7730006dffbce12e6b27016ea5469b7691b
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 18 17:39:46 2013 -0800
+
+    os/FileStore: check replay guard on src for collection rename
+    
+    This avoids a problematic sequence like:
+    
+         - rename A/ -> B/
+         - remove B/1...100
+         - destroy B/
+         - create A/
+         - write A/101...
+         <crash>
+         - replay A/ -> B/
+         - remove B/1...100  (fails but tolerated)
+         - destroy B/        (fails with ENOTEMPTY)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 5fc83c8d9887d2a916af11436ccc94fcbfe59b7a)
+
+commit ea570591b0d9dda102bece0f4cc7d263c3e2a3b0
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Feb 22 14:12:28 2013 -0800
+
+    PG::proc_replica_log: oinfo.last_complete must be *before* first entry in omissing
+    
+    Fixes: #4189
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 2dae6a68ee85a20220ee940dbe33a2144d43457b)
+
+commit aa38d87c6237ccfb8b3b03bc7c28dcadb927237b
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 21 17:55:21 2013 -0800
+
+    osd/PG: fix typo, missing -> omissing
+    
+    From ce7ffc34408bf32c66dc07e6f42d54b7ec489d41.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dc181224abf6fb8fc583730ae3d90acdf0b80f39)
+
+commit ac914834ba4fb0e4770f63c60713be7a48aa3fa1
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Feb 21 15:31:36 2013 -0800
+
+    PG::proc_replica_log: adjust oinfo.last_complete based on omissing
+    
+    Otherwise, search_for_missing may neglect to check the missing
+    set for some objects assuming that if the need version is
+    prior to last_complete, the replica must have it.
+    
+    Fixes: #4994
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit ce7ffc34408bf32c66dc07e6f42d54b7ec489d41)
+
+commit 7f39704b0903fb11e3f1e102599bf0c540f93623
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 9 00:05:33 2013 -0800
+
+    osd: fix load_pgs collection handling
+    
+    On a _TEMP pg, is_pg() would succeed, which meant we weren't actually
+    hitting the cleanup checks.  Instead, restructure this loop as positive
+    checks and handle each type of collection we understand.
+    
+    This fixes _TEMP cleanup.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit b19b6dced85617d594c15631571202aab2f94ae8)
+
+commit 0a09be99f3e9d2b68a052ff63ea858a7c8e5626c
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 9 00:04:29 2013 -0800
+
+    osd: fix load_pgs handling of pg dirs without a head
+    
+    If there is a pgid that passes coll_t::is_pg() but there is no head, we
+    will populate the pgs map but then fail later when we try to do
+    read_state.  This is a side-effect of 55f8579.
+    
+    Take explicit note of _head collections we see, and then warn when we
+    find stray snap collections.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 1f80a0b576c0af1931f743ad988b6293cbf2d6d9)
+
+commit 2dc25dfd47de8d3602bdb3699c82b8b118b0fb28
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Feb 7 13:34:47 2013 -0800
+
+    OSD::load_pgs: first scan colls before initing PGs
+    
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 073f58ede2e473af91f76d01679631c169274af7)
+
+commit 2fd8db29ccf56fd5473826f20e351edfe200419d
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Tue Jan 8 19:24:13 2013 -0800
+
+    osd: Add digest of omap for deep-scrub
+    
+    Add ScrubMap encode/decode v4 message with omap digest
+    Compute digest of header and key/value.  Use bufferlist
+    to reflect structure and compute as we go, clearing
+    bufferlist to reduce memory usage.
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 509a93e89f04d7e9393090563cf7be8e0ea53891)
+
+commit ee59f517ccc195e591e0b1b6ddf6d1d054c4e2fd
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Mar 15 15:13:46 2013 -0700
+
+    OSD: split temp collection as well
+    
+    Otherwise, when we eventually remove the temp collection, there might be
+    objects in the temp collection which were independently pulled into the child
+    pg collection.  Thus, removing the old stale parent link from its temp
+    collection also blasts the omap entries and snap mappings for the real child
+    object.
+    
+    Backport: bobtail
+    Fixes: #4452
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f8d66e87a5c155b027cc6249006b83b4ac9b6c9b)
+
+commit 7ec68e2d45b431a3a77458939622e6ea1e396d0e
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Mar 14 19:59:36 2013 -0700
+
+    PG: ignore non MISSING pg query in ReplicaActive
+    
+    1) Replica sends notify
+    2) Prior to processing notify, primary queues query to replica
+    3) Primary processes notify and activates sending MOSDPGLog
+    to replica.
+    4) Primary does do_notifies at end of process_peering_events
+    and sends to Query.
+    5) Replica sees MOSDPGLog and activates
+    6) Replica sees Query and asserts.
+    
+    In the above case, the Replica should simply ignore the old
+    Query.
+    
+    Fixes: #4050
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8222cbc8f35c359a35f8381ad90ff0eed5615dac)
+
+commit b279b148b38c755d2dcca6524d7b8a95daf123a0
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Mar 13 16:04:23 2013 -0700
+
+    FileJournal: queue_pos \in [get_top(), header.max_size)
+    
+    If queue_pos == header.max_size when we create the entry
+    header magic, the entry will be rejected at get_top() on
+    replay.
+    
+    Fixes: #4436
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit de8edb732e3a5ce4471670e43cfe6357ae6a2758)
+
+commit 56e0a129b0d9ad463f4300999ed2c15173cbe603
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Mar 14 18:52:02 2013 -0700
+
+    OSD: expand_pg_num after pg removes
+    
+    Otherwise:
+    1) expand_pg_num removes a splitting pg entry
+    2) peering thread grabs pg lock and starts split
+    3) OSD::consume_map grabs pg lock and starts removal
+    
+    At step 2), we run afoul of the assert(is_splitting)
+    check in split_pgs.  This way, the would be splitting
+    pg is marked as removed prior to the splitting state
+    being updated.
+    
+    Backport: bobtail
+    Fixes: #4449
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f1b031b3cf195cf6df3d3c47c7d606fba63ed4c4)
+
+commit d6e678a62950ccc16d010a76500705e176ba9c73
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 11 06:23:54 2013 -0800
+
+    osd: update snap collections for sub_op_modify log records conditionaly
+    
+    The only remaining caller is sub_op_modify().  If we do have a non-empty
+    op transaction, we want to do this update, regardless of what we think
+    last_backfill is (our notion may be not completely in sync with the
+    primary).  In particular, our last_backfill may be the same object but
+    a different snapid, but the primary disagrees and is pushing an op
+    transaction through.
+    
+    Instead, update the collections if we have a non-empty transaction.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 31e911b63d326bdd06981ec4029ad71b7479ed70)
+
+commit 51c2c4d7ccb25617967689d7e531eb145ee7011d
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 10 17:02:45 2013 -0800
+
+    osd: include snaps in pg_log_entry_t::dump()
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 715d8717a0e8a08fbe97a3e7d3ffd33aa9529d90)
+
+commit f0bf68ff500f7337103aef2a9d6d10c3597e410f
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 10 16:59:48 2013 -0800
+
+    osd: unconditionally encode snaps buffer
+    
+    Previously we would only encode the updated snaps vector for CLONE ops.
+    This doesn't work for MODIFY ops generated by the snap trimmer, which
+    may also adjust the clone collections.  It is also possible that other
+    operations may need to populate this field in the future (e.g.,
+    LOST_REVERT may, although it currently does not).
+    
+    Fixes: #4071, and possibly #4051.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 54b6dd924fea3af982f3d729150b6449f318daf2)
+
+commit aa74fabd90b776e9938f3d59ea5ed04bd4027dbb
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 10 10:57:12 2013 -0800
+
+    osd: improve debug output on snap collections
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 8b05492ca5f1479589bb19c1ce058b0d0988b74f)
+
+commit a30903c6adaa023587d3147179d6038ad37ca520
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Mar 7 12:53:51 2013 -0800
+
+    PG: check_recovery_sources must happen even if not active
+    
+    missing_loc/missing_loc_sources also must be cleaned up
+    if a peer goes down during peering:
+    
+    1) pg is in GetInfo, acting is [3,1]
+    2) we find object A on osd [0] in GetInfo
+    3) 0 goes down, no new peering interval since it is neither up nor
+    acting, but peer_missing[0] is removed.
+    4) pg goes active and try to pull A from 0 since missing_loc did not get
+    cleaned up.
+    
+    Backport: bobtail
+    Fixes: #4371
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit de22b186c497ce151217aecf17a8d35cdbf549bb)
+
+commit 19f6df28337307ce6d8617524f88f222c0ffcab3
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Mar 5 15:49:26 2013 -0800
+
+    HashIndex: _collection_list_partial must tolerate NULL next
+    
+    Backport: bobtail
+    Fixes: #4379
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit ce4432adc67dc2fc06dd21ea08e59d179496bcc6)
+
+commit 1b5c1564bad3574db257cb17d48190958d870f51
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Mar 5 14:35:39 2013 -0800
+
+    OSD: lock not needed in ~DeletingState()
+    
+    No further refs to the object can remain at this point.
+    Furthermore, the callbacks might lock mutexes of their
+    own.
+    
+    Backport: bobtail
+    Fixes: #4378
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit e4bf1bcab159d7c5b720f5da01877c0f67c16d16)
+
+commit 50d2d4a77f339d489703c1125dc5c1159d08ca8a
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Sun Mar 10 12:50:01 2013 -0700
+
+    ReplicatedPG: don't leak reservation on removal
+    
+    Fixes: 4431
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 32bf131e0141faf407b5ff993f75f97516b27c12)
+    
+    Conflicts:
+    
+    	src/osd/ReplicatedPG.cc
+
+commit c6b7c4be3fc44d065c29ea76b744b39272c2ba05
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Mar 12 12:56:01 2013 -0700
+
+    rgw: set up curl with CURL_NOSIGNAL
+    
+    Fixes: #4425
+    Backport: bobtail
+    Apparently, libcurl needs that in order to be thread safe. Side
+    effect is that if libcurl is not compiled with c-ares support,
+    domain name lookups are not going to time out.
+    Issue affected keystone.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 88725316ddcfa02ff110e659f7a8131dc1ea2cfc)
+
+commit 8c16a376a9cbfd6812824fb71e2cc9935e14e667
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 8 08:56:44 2013 -0800
+
+    osd: mark down connections from old peers
+    
+    Close out any connection with an old peer.  This avoids a race like:
+    
+    - peer marked down
+    - we get map, mark down the con
+    - they reconnect and try to send us some stuff
+    - we share our map to tell them they are old and dead, but leave the con
+      open
+    ...
+    - peer marks itself up a few times, eventually reuses the same port
+    - sends messages on their fresh con
+    - we discard because of our old con
+    
+    This could cause a tight reconnect loop, but it is better than wrong
+    behavior.
+    
+    Other possible fixes:
+     - make addr nonce truly unique (augment pid in nonce)
+     - make a smarter 'disposable' msgr state (bleh)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 881e9d850c6762290f8be24da9e74b9dc112f1c9)
+
+commit 1affc8b6e8cb82510aed524f90a6165c6edf7513
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 8 08:53:40 2013 -0800
+
+    osd/PG: rename require_same_or_newer_map -> is_same_or_newer_map
+    
+    This avoids confusion with the OSD method of the same name, and better
+    matches what the function tests (and does not do).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ba7e815a18cad110525f228db1b3fe39e011409e)
+    
+    Conflicts:
+    
+    	src/osd/ReplicatedPG.cc
+
+commit 7ca55d36c4007be5880102fa1ed314d3d66e9d87
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 11 16:25:16 2013 -0700
+
+    log: drop default 'log max recent' from 100k -> 10k
+    
+    Use less memory.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c021c5ccf0c063cccd7314964420405cea6406de)
+
+commit 33ac786ddc14d0904f4835cbf684a51f4815d45b
+Author: Jan Harkes <jaharkes@cs.cmu.edu>
+Date:   Fri Mar 8 12:45:57 2013 -0500
+
+    Fix radosgw actually reloading after rotating logs.
+    
+    The --signal argument to Debian's start-stop-daemon doesn't
+    make it send a signal, but defines which signal should be send
+    when --stop is specified.
+    
+    Signed-off-by: Jan Harkes <jaharkes@cs.cmu.edu>
+    (cherry picked from commit 44f1cc5bc42f9bb6d5a386037408d2de17dc5413)
+
+commit 6838b8db9a3d4ceaf121a261e2ded4af9bfeaeb9
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 6 17:42:03 2013 -0800
+
+    common: reduce default in-memory logs for non-daemons
+    
+    The default of 100000 can result in hundreds of MBs of extra memory
+    used. This was most obvious when using librbd with caching enabled,
+    since there was a dout(0) accidentally left in the ObjectCacher.
+    
+    refs: #4352
+    backport: bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 7c208d2f8e3f28f4055a4ae51eceae892dcef1dc)
+
+commit f80f64cf024bd7519d5a1fb2a5698db97a003ce8
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 22 17:01:53 2013 -0800
+
+    osd: allow (some) log trim when degraded, but not during recovery
+    
+    We allow some trim during degraded, although we keep more entries around to
+    improve our chances of a restarting OSD of doing log-based recovery.
+    
+    Still disallow during recovery...
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 6d89b34e5608c71b49ef33ab58340e90bd8da6e4)
+
+commit e502a65da1779564059e74c09ab87aca1d901bd2
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Feb 25 15:33:35 2013 -0800
+
+    osd: restructure calc_trim
+    
+    No functional change, except that we log more debug, yay!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 86df164d04f6e31a0f20bbb94dbce0599c0e8b3d)
+
+commit 3a3123033d7d9e1574be3fb18c807eeb0f4678eb
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 22 16:48:02 2013 -0800
+
+    osd: allow pg log trim during (non-classic) scrub
+    
+    Chunky (and deep) scrub do not care about PG log trimming.  Classic scrub
+    still does.
+    
+    Deep scrub can take a long time, so not trimming the log during that period
+    may eat lots of RAM; avoid that!
+    
+    Might fix: #4179
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0ba8db6b664205348d5499937759916eac0997bf)
+
+commit cde0f224dac21b2e17e06d396ac52e18034a4262
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 28 12:46:00 2013 -0800
+
+    msgr: drop messages on cons with CLOSED Pipes
+    
+    Back in commit 6339c5d43974f4b495f15d199e01a141e74235f5, we tried to make
+    this deal with a race between a faulting pipe and new messages being
+    queued.  The sequence is
+    
+    - fault starts on pipe
+    - fault drops pipe_lock to unregister the pipe
+    - user (objecter) queues new message on the con
+    - submit_message reopens a Pipe (due to this bug)
+    - the message managed to make it out over the wire
+    - fault finishes faulting, calls ms_reset
+    - user (objecter) closes the con
+    - user (objecter) resends everything
+    
+    It appears as though the previous patch *meant* to drop *m on the floor in
+    this case, which is what this patch does.  And that fixes the crash I am
+    hitting; see #4271.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 0f42eddef5da6c1babe9ed51ceaa3212a42c2ec4)
+
+commit 2fa2546c90e7a6eab9a3de7ab4e4271f8b25bad6
+Author: Concubidated <tyler.brekke@inktank.com>
+Date:   Fri Mar 8 13:44:39 2013 -0800
+
+    Fix output of 'ceph osd tree --format=json'
+    
+    Signed-off-by: Tyler Brekke <tyler.brekke@inktank.com>
+    (cherry picked from commit 9bcba944c6586ad5f007c0a30e69c6b5a886510b)
+
+commit b70e2c270b9eb3fce673b7e51b527ebf88214f14
+Author: Sam Lang <sam.lang@inktank.com>
+Date:   Tue Feb 12 11:32:29 2013 -0600
+
+    deb:  Add ceph-coverage to ceph-test deb package
+    
+    Teuthology uses the ceph-coverage script extensively
+    and expects it to be installed by the ceph task.  Add
+    the script to the ceph-test debian package so that it
+    gets installed for that use case.
+    
+    Signed-off-by: Sam Lang <sam.lang@inktank.com>
+    (cherry picked from commit 376cca2d4d4f548ce6b00b4fc2928d2e6d41038f)
+
+commit ca9aac785eb9e2d1ee955792d2f4d1d911727fb3
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Feb 22 15:04:37 2013 -0800
+
+    rgw: set attrs on various list bucket xml results (swift)
+    
+    Fixes: #4247
+    The list buckets operation was missing some attrs on the different
+    xml result entities. This fixes it.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 4384e59ad046afc9ec53a2d2f1fff6a86e645505)
+
+commit e39660c901756d5e722308e72a9d8ee4893f70f7
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Feb 22 15:02:02 2013 -0800
+
+    formatter: add the ability to dump attrs in xml entities
+    
+    xml entities may have attrs assigned to them. Add the ability
+    to set them. A usage example:
+    
+    formatter->open_array_section_with_attrs("container",
+         FormatterAttrs("name", "foo", NULL));
+    
+    This will generate the following xml entity:
+    <container name="foo">
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 7cb6ee28073824591d8132a87ea09a11c44efd66)
+    
+    Conflicts:
+    	src/common/Formatter.cc
+
+commit 0304b85e5c12c30459b94ec5d332dfaa04d20d5b
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Mar 6 19:32:21 2013 -0800
+
+    rgw: don't iterate through all objects when in namespace
+    
+    Fixes: #4363
+    Backport: argonaut, bobtail
+    When listing objects in namespace don't iterate through all the
+    objects, only go though the ones that starts with the namespace
+    prefix
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 6669e73fa50e3908ec825ee030c31a6dbede6ac0)
+
+commit d0dafaa77f96fa91785df0796806ea07fd93f319
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Feb 28 12:13:45 2013 -0800
+
+    ObjectCacher: fix debug log level in split
+    
+    Level 0 should never be used for this kind of debugging.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit cb3ee33532fb60665f39f6ccb1d69d67279fd5e1)
+
+commit ff014ed26bfa4fbf40acffec4eb4805b95a9982c
+Author: Dan Mick <dmick@danceorelse.org>
+Date:   Thu Jan 24 13:38:25 2013 -0800
+
+    rados: remove unused "check_stdio" parameter
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit bb860e49a7faeaf552538a9492ef0ba738c99760)
+
+commit e89884da9f76b713372a79b772ba3cc2f3b03048
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 23 21:31:11 2013 -0800
+
+    rados: obey op_size for 'get'
+    
+    Otherwise we try to read the whole object in one go, which doesn't bode
+    well for large objects (either non-optimal or simply broken).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 234becd3447a679a919af458440bc31c8bd6b84f)
+
+commit ee943c8bcf36f1e2218d8e25edfa38ec5fe4bec2
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Feb 27 16:58:45 2013 -0800
+
+    FileJournal::wrap_read_bl: adjust pos before returning
+    
+    Otherwise, we may feed an offset past the end of the journal to
+    check_header in read_entry and incorrectly determine that the entry is
+    corrupt.
+    
+    Fixes: 4296
+    Backport: bobtail
+    Backport: argonaut
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 5d54ab154ca790688a6a1a2ad5f869c17a23980a)
+
+commit 8c6f52215240f48b5e4d5bb99a5f2f451e7ce70a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 16 13:14:00 2013 -0800
+
+    osd: leave osd_lock locked in shutdown()
+    
+    No callers expect the lock to be dropped.
+    
+    Fixes: #3816
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 98a763123240803741ac9f67846b8f405f1b005b)
+
+commit a324d999804b4648f245ee36b3bd611b3d139d5d
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Feb 26 14:07:12 2013 -0800
+
+    msg: fix entity_addr_t::is_same_host() for IPv6
+    
+    We weren't checking the memcmp return value properly!  Aie...
+    
+    Backport: bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c8dd2b67b39a8c70e48441ecd1a5cc3c6200ae97)
+
+commit 79d68ae8581141c3fb4cfafd76d5111ff009b762
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 17 22:35:50 2013 -0800
+
+    osd: requeue pg waiters at the front of the finished queue
+    
+    We could have a sequence like:
+    
+    - op1
+    - notify
+    - op2
+    
+    in the finished queue.  Op1 gets put on waiting_for_pg, the notify
+    creates the pg and requeues op1 (and the end), op2 is handled, and
+    finally op1 is handled.  That breaks ordering; see #2947.
+    
+    Instead, when we wake up a pg, queue the waiting messages at the front
+    of the dispatch queue.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 56c5a07708d52de1699585c9560cff8b4e993d0a)
+
+commit 79c4e7e91becc497843d96251776bdc176706aa0
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Feb 17 20:49:52 2013 -0800
+
+    osd: pull requeued requests off one at a time
+    
+    Pull items off the finished queue on at a time.  In certain cases, an
+    event may result in new items betting added to the finished queue that
+    will be put at the *front* instead of the back.  See latest incarnation
+    of #2947.
+    
+    Note that this is a significant changed in behavior in that we can
+    theoretically starve if an event keeps resulting in new events getting
+    generated.  Beware!
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit f1841e4189fce70ef5722d508289e516faa9af6a)
+
+commit 3a6ce5d0355beaa56199465e94666cae40bd8da1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 17 22:00:42 2013 -0800
+
+    mds: open mydir after replay
+    
+    In certain cases, we may replay the journal and not end up with the
+    dirfrag for mydir open.  This is fine--we just need to open it up and
+    fetch it below.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e51299fbce6bdc3d6ec736e949ba8643afc965ec)
+
+commit 36ed407e0f939a9bca57c3ffc0ee5608d50ab7ed
+Author: Greg Farnum <greg@inktank.com>
+Date:   Thu Feb 21 09:21:01 2013 -0800
+
+    mds: use inode_t::layout for dir layout policy
+    
+    Remove the default_file_layout struct, which was just a ceph_file_layout,
+    and store it in the inode_t.  Rip out all the annoying code that put this
+    on the heap.
+    
+    To aid in this usage, add a clear_layout() function to inode_t.
+    
+    Signed-off-by: Sage Weil <sage.weil@dreamhost.com>
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit b4fd196cae5ab76aeb8f82f0581d0a6a2133a3ed
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 20 21:53:37 2013 -0800
+
+    mds: parse ceph.*.layout vxattr key/value content
+    
+    Use qi to parse a strictly formatted set of key/value pairs.  Be picky
+    about whitespace.  Any subset of recognized keys is allowed.  Parse the
+    same set of keys as the ceph.*.layout.* vxattrs.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5551aa5b3b5c2e9e7006476b9cd8cc181d2c9a04)
+
+commit 5f92adca26b509aed5655e85ad53174fa7b574b9
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Feb 18 09:10:43 2013 -0800
+
+    rgw: fix multipart uploads listing
+    
+    Fixes: #4177
+    Backport: bobtail
+    Listing multipart uploads had a typo, and was requiring the
+    wrong resource (uploadId instead of uploads).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit db99fb4417b87301a69cb37b00c35c838b77197e)
+
+commit a44df9343594099fecb3897df393249d3d1992e2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Feb 15 10:22:54 2013 -0800
+
+    rgw: don't copy object when it's copied into itself
+    
+    Fixes: #4150
+    Backport: bobtail
+    
+    When object copied into itself, object will not be fully copied: tail
+    reference count stays the same, head part is rewritten.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 34f885be536d0ac89c10fd29b1518751d2ffc547)
+
+commit 91d6be8353259ca30dc87062422e9ae334c3c344
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Feb 19 10:49:33 2013 -0800
+
+    PG: remove weirdness log for last_complete < log.tail
+    
+    In the case of a divergent object prior to log.tail,
+    last_complete may end up before log.tail.
+    
+    Backport: bobtail
+    Fixes #4174
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit dbadb3e2921297882c5836c67ca32bb8ecdc75db)
+    
+    Conflicts:
+    
+    	src/osd/PG.cc
+
+commit 7889c5412deaab1e7ba53d66814d0f25659229c1
+Author: James Page <james.page@ubuntu.com>
+Date:   Mon Feb 18 16:24:54 2013 +0000
+
+    Strip any trailing whitespace from rbd showmapped
+    
+    More recent versions of ceph append a bit of whitespace to the line
+    after the name of the /dev/rbdX device; this causes the monitor check
+    to fail as it can't find the device name due to the whitespace.
+    
+    This fix excludes any characters after the /dev/rbdN match.
+    (cherry picked from commit ad84ea07cac5096de38b51b8fc452c99f016b8d8)
+
+commit 42fba772c3c0e2396124a9d6ec39297dd9af4cc9
+Merge: 290a352 ad6655e
+Author: Sage Weil <sage@newdream.net>
+Date:   Sun Feb 17 21:52:55 2013 -0800
+
+    Merge pull request #64 from dalgaaf/wip-bobtail-memleaks
+    
+    cherry-pick some memleak fixes from master to bobtail
+
+commit ad6655e976916d3b62e0c91fd469eeb49fe7da3e
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Feb 8 17:17:59 2013 +0100
+
+    rgw/rgw_rest.cc: fix 4K memory leak
+    
+    Fix 4K memory leak in case RGWClientIO::read() fails in
+    read_all_chunked_input().
+    
+    Error from cppcheck was:
+    Checking src/rgw/rgw_rest.cc...
+    [src/rgw/rgw_rest.cc:688]: (error) Memory leak: data
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 89df090e04ef9fc5aae29122df106b0347786fab)
+
+commit 3de692753c28ddbeb3c86b51466be16e94c9c458
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Feb 8 17:14:19 2013 +0100
+
+    SyntheticClient.cc: fix some memory leaks in the error handling
+    
+    Fix some memory leaks in case of error handling due to failed
+    client->open() calls.
+    
+    Error from cppcheck was:
+    [src/client/SyntheticClient.cc:1980]: (error) Memory leak: buf
+    [src/client/SyntheticClient.cc:2040]: (error) Memory leak: buf
+    [src/client/SyntheticClient.cc:2090]: (error) Memory leak: buf
+    (cherry picked from commit f0ba80756d1c3c313014ad7be18191981fb545be)
+
+commit f19d228c6a49222659c769099aaa4e755b80331d
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Feb 8 16:57:20 2013 +0100
+
+    rgw/rgw_xml.cc: fix realloc memory leak in error case
+    
+    Fix error from cppcheck:
+    
+    [src/rgw/rgw_xml.cc:212]: (error) Common realloc mistake: 'buf'
+      nulled but not freed upon failure
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit d48cc789ea075ba2745754035640ada4131b2119)
+
+commit b0c6be95b03d9f3dd2badcdcff359ae7bc9684f4
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Feb 8 16:54:33 2013 +0100
+
+    os/FileStore.cc: fix realloc memory leak in error case
+    
+    Fix error from cppcheck:
+    
+    [src/os/FileStore.cc:512]: (error) Common realloc mistake: 'fiemap'
+      nulled but not freed upon failure
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit c92a0f552587a232f66620170660d6b2ab6fb3a5)
+
+commit f3e5cedbc11005701ac0a8e70909a6372cd2fe6f
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Fri Feb 8 16:49:36 2013 +0100
+
+    common/fiemap.cc: fix realloc memory leak
+    
+    Fix error from cppcheck:
+    
+    [src/common/fiemap.cc:73]: (error) Common realloc mistake: 'fiemap'
+      nulled but not freed upon failure
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit f26f1470e7af36fa1eb8dc59c8a7c62c3c3a22ba)
+
+commit 290a352c3f9e241deac562e980ac8c6a74033ba6
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 14 11:37:57 2013 -0800
+
+    osd/OSDCap: add unit test for parsing pools/objects with _ and -
+    
+    Hunting #4122, where a user saw
+    
+    2013-02-13 19:39:25.467916 7f766fdb4700 10 osd.0 10  session 0x2c8cc60 client.libvirt has caps osdcap[grant(object_prefix rbd^@children  class-read),grant(pool libvirt^@pool^@test rwx)] 'allow class-read object_prefix rbd_children, allow pool libvirt-pool-test rwx'
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2ce28ef1d7f95e71e1043912dfa269ea3b0d1599)
+    (cherry picked from commit a6534bc8a0247418d5263b765772d5266f99229c)
+
+commit f47916353547c77a65c7b70e609a9096f09c6d28
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Feb 14 15:39:43 2013 -0800
+
+    osd/OSDCap: tweak unquoted_word parsing in osd caps
+    
+    Newer versions of spirit (1.49.0-3.1ubuntu1.1 in quantal, in particular)
+    dislike the construct with alnum and replace the - and _ with '\0' in the
+    resulting string.
+    
+    Fixes: #4122
+    Backport: bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 6c504d96c1e4fbb67578fba0666ca453b939c218)

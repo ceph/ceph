@@ -1,0 +1,15 @@
+<ng-container *ngIf="customLabel">
+  <ng-container *ngIf="isCustomLabelTemplate; else stringLabel">
+    <ng-container *ngTemplateOutlet="customLabel"></ng-container>
+  </ng-container>
+  <ng-template #stringLabel>
+    <ng-container i18n>{{ customLabel }}</ng-container>
+  </ng-template>
+</ng-container>
+<ibm-meter-chart *ngIf="used >=0 && total > 0; else noDataFound"
+                 [data]="data"
+                 [options]="options">
+</ibm-meter-chart>
+<ng-template #noDataFound>
+  <span i18n>{{noDataText}}</span>
+</ng-template>

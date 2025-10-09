@@ -1,0 +1,12 @@
+<p i18n
+   *ngIf="permissions.log.read">
+  <cd-icon type="infoCircle"></cd-icon >
+  See <a routerLink="/logs">Logs</a> for more details.
+</p>
+<ul>
+  <li *ngFor="let check of healthData |  keyvalue">
+    <span [ngStyle]="check.value.severity | healthColor"
+          [class.health-warn-description]="check.value.severity === 'HEALTH_WARN'">
+    {{ check.key }}</span>: {{ check.value.summary.message }} <br>
+  </li>
+</ul>

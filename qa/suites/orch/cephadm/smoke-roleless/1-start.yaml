@@ -1,0 +1,29 @@
+tasks:
+- cephadm:
+    roleless: true
+- cephadm.shell:
+    host.a:
+      - ceph orch status
+      - ceph orch ps
+      - ceph orch ls
+      - ceph orch host ls
+      - ceph orch device ls
+roles:
+- - host.a
+  - client.0
+- - host.b
+  - client.1
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+    log-only-match:
+      - CEPHADM_
+    log-ignorelist:
+      - CEPHADM_DAEMON_PLACE_FAIL
+      - CEPHADM_FAILED_DAEMON

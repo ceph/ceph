@@ -1,0 +1,22 @@
+{
+  "extends": "../tsconfig.json",
+  "exclude": [],
+  "include": [
+    "**/*.ts",
+    "plugins/index.js"
+  ],
+  "compilerOptions": {
+    "typeRoots": [
+      "../node_modules",
+      "../node_modules/@types"
+    ],
+    "sourceMap": false,
+    "types": [
+      "cypress",
+      "cypress-axe",
+      "@applitools/eyes-cypress"
+    ],
+    "target": "es6",
+    "skipLibCheck": true
+  }
+}

@@ -1,0 +1,36 @@
+roles:
+- - client.0
+- - client.1
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - client.2
+  - ceph.nvmeof.nvmeof.a
+- - host.b
+  - mon.b
+  - osd.1
+  - client.3
+  - ceph.nvmeof.nvmeof.b
+- - host.c
+  - mon.c
+  - osd.2
+  - client.4
+  - ceph.nvmeof.nvmeof.c
+- - host.d
+  - osd.3
+  - client.5
+  - ceph.nvmeof.nvmeof.d
+
+overrides:
+  ceph:
+    conf:
+      mon:
+        # cephadm can take up to 5 minutes to bring up remaining mons
+        mon down mkfs grace: 300
+    log-ignorelist:
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN
+      - PG_DEGRADED
+      - NVMEOF_SINGLE_GATEWAY

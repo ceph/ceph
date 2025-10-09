@@ -1,0 +1,6 @@
+tasks:
+-mds_creation_failure:
+- workunit:
+    clients:
+      all: [fs/misc/trivial_sync.sh]
+

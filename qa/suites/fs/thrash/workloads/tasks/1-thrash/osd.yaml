@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - but it is still running
+      - objects unfound and apparently lost
+      - MDS_SLOW_METADATA_IO
+      - MDS_TRIM
+tasks:
+- thrashosds:

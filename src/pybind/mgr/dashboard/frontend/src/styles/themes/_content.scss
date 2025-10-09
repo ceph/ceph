@@ -1,0 +1,45 @@
+@use 'sass:map';
+@use '@carbon/styles/scss/theme' as t;
+@use '@carbon/styles/scss/compat/themes' as compat;
+@use './src/styles/vendor/variables' as vv;
+@use '@carbon/colors';
+
+/*
+Color documentation:
+https://carbondesignsystem.com/elements/color/overview/
+
+More info on color that can be overriden
+https://github.com/carbon-design-system/carbon/blob/main/packages/themes/docs/sass.md
+*/
+
+$content-theme: map-merge(
+  compat.$g10,
+  (
+    background-brand: vv.$secondary,
+    background-inverse: vv.$light,
+    background-inverse-hover: vv.$gray-300,
+    link-primary: vv.$primary,
+    link-primary-hover: vv.$secondary,
+    link-secondary: vv.$secondary,
+    link-inverse: vv.$secondary,
+    link-visited: vv.$secondary,
+    focus: vv.$primary,
+    focus-inset: lighten(vv.$primary, 45%),
+    focus-inverse: lighten(vv.$primary, 25%),
+    text-inverse: vv.$dark,
+    support-info: vv.$info,
+    layer-01: vv.$light,
+    layer-hover-01: colors.$gray-20,
+    text-primary: vv.$dark,
+    text-secondary: vv.$dark,
+    text-disabled: vv.$gray-500,
+    icon-secondary: vv.$gray-800,
+    field-01: colors.$gray-10,
+    interactive: vv.$primary,
+    border-interactive: vv.$primary
+  )
+);
+
+.content-theme {
+  @include t.theme($content-theme);
+}

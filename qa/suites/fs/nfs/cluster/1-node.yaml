@@ -1,0 +1,16 @@
+meta:
+- desc: 1 ceph cluster with 1 mon, 1 mgr, 3 osds, 2 mds, 1 client
+roles:
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - ceph orch apply mds a

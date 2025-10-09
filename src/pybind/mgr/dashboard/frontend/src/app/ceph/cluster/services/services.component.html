@@ -1,0 +1,64 @@
+<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
+<ng-container *ngIf="orchStatus?.available">
+  <cd-table [data]="services"
+            [columns]="columns"
+            identifier="service_name"
+            forceIdentifier="true"
+            columnMode="flex"
+            selectionType="single"
+            [autoReload]="5000"
+            (fetchData)="getServices($event)"
+            [hasDetails]="hasDetails"
+            [serverSide]="true"
+            [count]="count"
+            (setExpandedRow)="setExpandedRow($event)"
+            (updateSelection)="updateSelection($event)">
+    <cd-table-actions class="table-actions"
+                      [permission]="permissions.hosts"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+    <cd-service-details *cdTableDetail
+                        [permissions]="permissions"
+                        [selection]="expandedRow">
+    </cd-service-details>
+  </cd-table>
+</ng-container>
+<router-outlet name="modal"></router-outlet>
+
+
+<ng-template #runningTpl
+             let-value="data.value">
+  <span ngbTooltip="Service instances running out of the total number of services requested.">
+    {{ value.running }} / {{ value.size }}
+  </span>
+  <svg  *ngIf="value.running == 0 || value.size == 0"
+        [cdsIcon]="icons.warning"
+        [size]="icons.size16"
+        class="cds-warning-color"></svg>
+</ng-template>
+
+<ng-template #urlTpl
+             let-row="data.row">
+  <ng-container *ngIf="serviceUrls[row.service_type] else noUrl">
+    <a *ngIf="!isMgmtGateway else mgmtGateway"
+       target="_blank"
+       [href]="serviceUrls[row.service_type]">
+      {{ row.service_name }}
+      <svg [cdsIcon]="icons.launch"
+           [size]="icons.size16"
+           class="cds-info-color"></svg>
+    </a>
+
+    <ng-template #mgmtGateway>
+      <a target="_blank"
+         [href]="row.service_type">
+        {{ row.service_name }}
+        <svg [cdsIcon]="icons.launch"
+             [size]="icons.size16"
+             class="cds-info-color"></svg>
+      </a>
+    </ng-template>
+  </ng-container>
+  <ng-template #noUrl>{{row.service_name}}</ng-template>
+</ng-template>

@@ -1,0 +1,32 @@
+
+The Solaris build will only build the librados library.
+
+Build Prerequisites
+===================
+
+The following Solaris packages are required for compilation:
+
+        git
+        autoconf
+        libtool
+        automake
+        gcc-c++-48
+        gnu-make
+
+        (use the "pkg install <packagename>" command to install, as root)
+
+Download and Compile Boost 1.59 (or higher)
+
+Building Ceph
+=============
+
+        export LDFLAGS="-m64  -L<pathtoboost>/stage/lib -L/usr/lib/mps/64"
+        export CPPFLAGS="-m64 -I<pathtoboost>"
+        export CXXFLAGS="-m64"
+        export CFLAGS="-m64"
+
+        ./autogen.sh
+        ./configure --disable-server --without-fuse --without-tcmalloc --without-libatomic-ops --without-libaio --without-libxfs
+	cd src
+        gmake librados.la
+

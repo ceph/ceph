@@ -1,0 +1,28 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+
+def main():
+    """
+    Read json output of admin socket command 'dump_ops_in_flight' from
+    stdin, and check that it is consistent.
+    """
+    read = sys.stdin.read()
+    records = json.loads(read)
+
+    info_types = ['num_ops', 'ops']
+    assert sorted(records.keys()) == sorted(info_types)
+    assert(records['num_ops'] == len(records['ops']))
+    
+    for op in records['ops']:
+        assert op['description'] is not None
+        assert op['received_at'] is not None
+        assert op['age'] is not None
+        assert op['flag_point'] is not None
+        if op['client_info']:
+            assert op['client_info']['client'] is not None
+            assert op['client_info']['tid'] is not None
+
+if __name__ == '__main__':
+    main()

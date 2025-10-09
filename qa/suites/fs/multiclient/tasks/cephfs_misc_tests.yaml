@@ -1,0 +1,14 @@
+tasks:
+- cephfs_test_runner:
+    modules:
+      - tasks.cephfs.test_misc
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - evicting unresponsive client
+      - POOL_APP_NOT_ENABLED
+      - has not responded to cap revoke by MDS for over
+      - MDS_CLIENT_LATE_RELEASE
+      - responding to mclientcaps
+      - RECENT_CRASH

@@ -1,0 +1,16 @@
+<div class="cds--toast-notification-container">
+  @for (toast of activeToasts$ | async; track $index) {
+  <cds-toast
+    [@toastAnimation]="'in'"
+    [notificationObj]="{
+      type: toast.type,
+      title: toast.title,
+      subtitle: toast.subtitle,
+      caption: toast.caption,
+      lowContrast: toast.lowContrast,
+      showClose: toast.showClose
+    }"
+    (close)="onToastClose(toast)">
+  </cds-toast>
+  }
+</div>

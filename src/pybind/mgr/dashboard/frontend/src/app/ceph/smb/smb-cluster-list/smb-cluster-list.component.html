@@ -1,0 +1,30 @@
+<cd-smb-tabs></cd-smb-tabs>
+
+<ng-container *ngIf="smbClusters$ | async as smbClusters">
+  <cd-table
+    headerTitle="Clusters"
+    headerDescription="Logical management units that may map to one or more managed Samba service"
+    [data]="smbClusters"
+    columnMode="flex"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="true"
+    (setExpandedRow)="setExpandedRow($event)"
+    (fetchData)="loadSMBCluster($event)"
+    (updateSelection)="updateSelection($event)"
+  >
+    <div class="table-actions">
+      <cd-table-actions
+        class="btn-group"
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </div>
+    <cd-smb-cluster-tabs
+      *cdTableDetail
+      [selection]="expandedRow">
+    </cd-smb-cluster-tabs>
+  </cd-table>
+</ng-container>

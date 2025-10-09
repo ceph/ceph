@@ -1,0 +1,31 @@
+{% extends "!page.html" %}
+{% block body %}
+
+{%- if release == 'dev' %}
+<div id="dev-warning" class="admonition note">
+  <p class="first admonition-title">Notice</p>
+  <p class="last">This document is for a development version of Ceph.</p>
+</div>
+{%- endif %}
+
+{%- if is_release_eol %}
+<div id="eol-warning" class="admonition warning">
+  <p class="first admonition-title">Warning</p>
+  <p class="last">This document is for an unsupported version of Ceph.</p>
+</div>
+{%- endif %}
+
+{%- if not is_release_eol %}
+  <div id="docubetter" align="right" style="padding: 5px; font-weight: bold;">
+    <a href="https://pad.ceph.com/p/Report_Documentation_Bugs">Report a Documentation Bug</a>
+  </div>
+{%- endif %}
+
+  {{ super() }}
+
+<div id="support-the-ceph-foundation" class="admonition note">
+  <p class="first admonition-title">Brought to you by the Ceph Foundation</p>
+  <p class="last">The Ceph Documentation is a community resource funded and hosted by the non-profit <a href="https://ceph.io/en/foundation/">Ceph Foundation</a>. If you would like to support this and our other efforts, please consider <a href="https://ceph.io/en/foundation/join/">joining now</a>.</p>
+</div>
+
+{% endblock %}

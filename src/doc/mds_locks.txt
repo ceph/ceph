@@ -1,0 +1,66 @@
+
+new names
+ dentry_read  (not path_pins)
+ dentry_xlock
+
+ inode_read
+ inode_xlock  (not inode_write)
+
+locks are always tied to active_requests.
+
+read locks can be placed on any node.
+xlocks must be applied at the authority.
+
+for multi-lock operations (link, unlink, rename), we must acquire xlocks on a remote node.  lock requests are associated with a reqid.  the authoritative node keeps track of which remote xlocks it holds.  when forwarded/restarted, it can drop remote locks.  
+
+when restarting, drop all locks.
+on remote, drop locks and state, and notify main req node.  
+recover dist request state on rejoin:
+ - surviving op initiator will assert read or xlock
+ - recovering op initiator will restart requests.  (from initiator's perspective, ops have either happened or they haven't, depending on whether the event is journaled.)
+ - recovering or surviving op cohort will determine lock state during rejoin, or get a commit or rollback...
+ - 
+
+
+--- path_pin = read lock on /some/random/path
+  - blocks a dentry xlock
+
+--- dnxlock = exclusive lock on /some/random/path
+  - locking: prevents subsequent path pins.
+  - locked: prevents dn read
+  - on auth
+
+-> grab _all_ path pins at once; hold none while waiting.
+-> grab xlocks in order.
+
+--- auth_pin = pin to authority, on *dir, *in
+  - prevents freezing -> frozen.
+    - freezing blocks new auth pins, thus blocking other local auth_pins.  (hangs up local export.)
+    - does not block remote auth_pins, because remote side is not auth (or frozen!) until after local subtree is frozen.
+
+-> blocking on auth_pins is dangerous.  _never_ block if we are holding other auth_pins on the same node (subtree?).
+-> grab _all_ auth pins at once; hold none while waiting.
+
+--- hard/file_wrlock = exclusive lock on inode content
+  - prevents inode read
+  - on auth
+
+-> grab locks in order.
+
+
+ORDERING
+- namespace(dentries) < inodes
+- order dentries on (dirino, dname)
+- order inodes on (ino);
+- need to order both read and write locks, esp with dentries.  so, if we need to lock /usr/bin/foo with read on usr and bin and xwrite on foo, we need to acquire all of those locks using the same ordering.
+  - on same host, we can be 'nice' and check lockability of all items, then lock all, and drop everything while waiting.  (actually, is there any use to this?)
+  - on multiple hosts, we need to use full ordering (at least as things separate across host boundaries).  and if needed lock set changes (such that the order of already acquired locks changes), we need to drop those locks and start over.
+
+- how do auth pins fit into all this?
+  - auth pin on xlocks only.  no need on read locks.
+  - pre-grab all auth pins on a node the first time it is visiting during lock acquisition.
+    - what if things move?  if we find we are missing a needed auth pin when we revisit a host at any point, and the item is not still authpinnable, we back off and restart.  (we cannot block.)
+  - 
+  - if we find we are not authpinnable, drop all locks and wait.
+
+

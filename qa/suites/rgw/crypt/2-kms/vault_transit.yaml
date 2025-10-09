@@ -1,0 +1,29 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw crypt s3 kms backend: vault
+        rgw crypt vault auth: token
+        rgw crypt vault secret engine: transit
+        rgw crypt vault prefix: /v1/transit/
+        rgw crypt sse s3 backend: vault
+        rgw crypt sse s3 vault auth: token
+        rgw crypt sse s3 vault secret engine: transit
+        rgw crypt sse s3 vault prefix: /v1/transit/
+  rgw:
+    client.0:
+      use-vault-role: client.0
+  s3tests:
+    with-sse-s3: true
+
+tasks:
+- vault:
+    client.0:
+      install_url: https://releases.hashicorp.com/vault/1.19.0/vault_1.19.0_linux_amd64.zip
+      install_sha256: 9df904271319452bbb37825cfe50726383037550cc04b7c2d0ab09e2f08f82a1
+      root_token: test_root_token
+      engine: transit
+      prefix: /v1/transit/keys/
+      secrets:
+        - path: my-key-1
+        - path: my-key-2

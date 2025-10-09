@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+# ccache breaks if it sees CCACHE_DIR="", yet due to clumsiness of
+# /usr/bin/env, it's hard to avoid setting env vars for the parent;
+# unset them if they're empty
+
+if [ -z "$CCACHE_DIR" ]; then
+   unset CCACHE_DIR
+fi
+
+if [ -z "$CC" ]; then
+   unset CC
+fi
+
+if [ -z "$CXX" ]; then
+   unset CXX
+fi
+
+exec "$@"

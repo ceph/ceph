@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+- rgw:
+    client.0:
+      port: 8000
+- workunit:
+    basedir: qa/workunits/rgw
+    clients:
+      client.0:
+        - keystone-service-token.sh

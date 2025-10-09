@@ -1,0 +1,8 @@
+tasks:
+- install:
+    extra_system_packages:
+      deb: ['cpanminus', 'libxml-simple-perl']
+      rpm: ['cpanminus', 'perl-XML-Simple', 'perl-LWP-Protocol-https', 'perl-ExtUtils-Config', 'perl-ExtUtils-Helpers', 'perl-ExtUtils-InstallPaths', 'perl-Module-Build-Tiny']
+- ceph:
+- rgw: [client.0]
+- tox: [client.0]

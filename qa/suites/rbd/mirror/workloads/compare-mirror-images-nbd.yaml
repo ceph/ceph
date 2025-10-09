@@ -1,0 +1,15 @@
+overrides:
+  install:
+    ceph:
+      extra_packages:
+        - rbd-nbd
+    extra_system_packages:
+      - pv
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror:
+        - rbd/compare_mirror_images.sh
+    env:
+      RBD_DEVICE_TYPE: 'nbd'
+    timeout: 3h

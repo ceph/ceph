@@ -1,0 +1,13 @@
+# created by cephadm
+/var/log/ceph/{{ fsid }}/*.log {
+    rotate 7
+    daily
+    compress
+    sharedscripts
+    postrotate
+        killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
+    endscript
+    missingok
+    notifempty
+    su root root
+}

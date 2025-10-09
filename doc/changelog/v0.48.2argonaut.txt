@@ -1,0 +1,476 @@
+commit 3e02b2fad88c2a95d9c0c86878f10d1beb780bfe
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Sep 11 13:04:50 2012 -0700
+
+    v0.48.2argonaut
+
+commit 343e607980c923324de241d2cf8396d7c4857dd8
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Sep 18 13:45:27 2012 -0700
+
+    cls_rgw: if stats drop below zero, set them to zero
+    
+    This complements fix for #3127. This is only a band aid
+    solution for argonaut, the real solution fixes the original
+    issue that made this possible.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 92be908c7f22c0ccf2092024fd54096362032394
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 12 16:41:17 2012 -0700
+
+    cls_rgw: change scoping of suggested changes vars
+    
+    Fixes: #3127
+    Bad variable scoping made it so that specific variables
+    weren't initialized between suggested changes iterations.
+    This specifically affected a case where in a specific
+    change we had an updated followed by a remove, and the
+    remove was on a non-existent key (e.g., was already
+    removed earlier). We ended up re-substracting the
+    object stats, as the entry wasn't reset between
+    the iterations (and we didn't read it because the
+    key didn't exist).
+    
+    backport:argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d3a8497b44296484fa18ac10e776c93701365a8b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Sep 4 11:29:21 2012 -0700
+
+    objecter: fix osdmap wait
+    
+    When we get a pool_op_reply, we find out which osdmap we need to wait for.
+    The wait_for_new_map() code was feeding that epoch into
+    maybe_request_map(), which was feeding it to the monitor with the subscribe
+    request.  However, that epoch is the *start* epoch, not what we want.  Fix
+    this code to always subscribe to what we have (+1), and ensure we keep
+    asking for more until we catch up to what we know we should eventually
+    get.
+    
+    Bug: #3075
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit e09b26555c6132ffce08b565780a39e4177cbc1c)
+
+commit de026f31f7f31c2b79c41910b83570f052f354d5
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Aug 27 07:38:34 2012 -0700
+
+    objecter: send queued requests when we get first osdmap
+    
+    If we get our first osdmap and already have requests queued, send them.
+    
+    Backported from 8d1efd1b829ae50eab7f7f4c07da04e03fce7c45.
+    
+    Fixes: #3050
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 379aa80ac3a313025e433cefd239ddbeec45f9e7
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 21 21:12:33 2012 -0700
+
+    objecter: use ordered map<> for tracking tids to preserve order on resend
+    
+    We are using a hash_map<> to map tids to Op*'s.  In handle_osd_map(),
+    we will recalc_op_target() on each Op in a random (hash) order.  These
+    will get put in a temp map<tid,Op*> to ensure they are resent in the
+    correct order, but their order on the session->ops list will be random.
+    
+    Then later, if we reset an OSD connection, we will resend everything for
+    that session in ops order, which is be incorrect.
+    
+    Fix this by explicitly reordering the requests to resend in
+    kick_requests(), much like we do in handle_osd_map().  This lets us
+    continue to use a hash_map<>, which is faster for reasonable numbers of
+    requests.  A simpler but slower fix would be to just use map<> instead.
+    
+    This is one of many bugs contributing to #2947.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 1113a6c56739a56871f01fa13da881dab36a32c4)
+
+commit 54788d0da40608fb8ccf8f16039536729881d542
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Mon Aug 20 15:02:57 2012 -0700
+
+    rbd: force all exiting paths through main()/return
+    
+    This properly destroys objects.  In the process, remove usage_exit();
+    also kill error-handling in set_conf_param (never relevant for rbd.cc,
+    and if you call it with both pointers NULL, well...)
+    Also switch to EXIT_FAILURE for consistency.
+    
+    Backported from fed8aea662bf919f35a5a72e4e2a2a685af2b2ed.
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Fixes: #2948
+
+commit a179ccee8848fe9bc8d622cba13fab1a99f6eb63
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Sep 18 09:37:44 2012 -0700
+
+    rbd: only open the destination pool for import
+    
+    Otherwise importing into another pool when the default pool, rbd,
+    doesn't exist results in an error trying to open the rbd pool.
+    
+    Reported-by: Sébastien Han <han.sebastien@gmail.com>
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 16aca749989b006f4d5d2190ed1e8480c1bf0282
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Mon Sep 17 08:55:14 2012 -0700
+
+    ceph-disk-activate, upstart: Use "initctl emit" to start OSDs.
+    
+    This avoids an error if the daemon was running already, and is
+    already being done with the other services.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 34d8eec9e23edec174a96d16bf42a0b8df118183
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Sep 14 17:13:57 2012 -0700
+
+    rbd: make --pool/--image args easier to understand for import
+    
+    There's no need to set the default pool in set_pool_image_name - this
+    is done later, in a way that doesn't ignore --pool if --dest-pool
+    is not specified.
+    
+    This means --pool and --image can be used with import, just like
+    the rest of the commands. Without this change, --dest and --dest-pool
+    had to be used, and --pool would be silently ignored for rbd import.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit f390ee68233e9c6db1202aa95665adf27ba4399a
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Sep 13 14:06:04 2012 -0700
+
+    ceph-create-keys: Create a bootstrap-osd key too.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 9348ea0de953a4fd2eed239437d14c366c8e2cdd
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Sep 13 11:34:03 2012 -0700
+
+    ceph-create-keys: Refactor to share wait_for_quorum call.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit c9d4c58b9d71e6d84b644376684bcb72eae7e11c
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Sep 12 11:38:07 2012 -0700
+
+    objecter: fix skipped map handling
+    
+    If we skip a map, we want to translate NO_ACTION to NEED_RESEND, but leave
+    POOL_DNE alone.
+    
+    Backported from 2a3b7961c021b19a035f8a6cc4fc3cc90f88f367.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit d8dff93a2497bd578116eb20ed65a0595acdf341
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Jul 30 15:19:29 2012 -0700
+
+    librbd, cls_rbd: close snapshot creation race with old format
+    
+    If two clients created a snapshot at the same time, the one with the
+    higher snapshot id might be created first, so the lower snapshot id
+    would be added to the snapshot context and the snaphot seq would be
+    set to the lower one.
+    
+    Instead of allowing this to happen, return -ESTALE if the snapshot id
+    is lower than the currently stored snapshot sequence number. On the
+    client side, get a new id and retry if this error is encountered.
+    
+    Backport: argonaut
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 771ca71c0357bd8149677795ac934ab09945a3a3
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Sep 11 16:31:57 2012 -0700
+
+    upstart: Give everything a stop on stanza.
+    
+    These are all tasks, and expected to exit somewhat quickly,
+    but e.g. ceph-create-keys has a loop where it waits for mon
+    to reach quorum, so it might still be in that loop when the
+    machine is shut down.
+
+commit 9f967e3ac255b0037b598061f5cbb4050db79472
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Sep 11 16:28:41 2012 -0700
+
+    upstart: Start mds,mon,radosgw after a reboot.
+    
+    They had no "start on" stanzas, so they didn't get started earlier.
+
+commit ce1e7d1b0291759950abf02f5bae064994d2ec34
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Sep 11 15:31:06 2012 -0700
+
+    upstart: Add ceph-create-keys.conf to package.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 0ff22ba0508d43cd78aeae6736f2db002cc8de8e
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Sep 11 14:50:53 2012 -0700
+
+    obsync: if OrdinaryCallingFormat fails, try SubdomainCallingFormat
+    
+    This blindly tries the Subdomain calling format if the ordinary method
+    fails.  In particular, this works around buckets that present a
+    PermanentRedirect message.
+    
+    See bug #3128.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Matthew Wodrich <matthew.wodrich@dreamhost.com>
+
+commit 0e58d95134dd95f33b9b1a3b1286a0719ad20707
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Aug 17 16:04:20 2012 -0700
+
+    librbd: add test for discard of nonexistent objects
+    
+    This verifies librbd properly handles ENOENT during discard.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 97d8a734ce937ce2a683c7c36f5b72395c6456c2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Sep 10 13:19:53 2012 -0700
+
+    librbd: ignore -ENOENT during discard
+    
+    This is a backport of a3ad98a3eef062e9ed51dd2d1e58c593e12c9703
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 61d705e2d67f83c81aa7c6362ec6703e014ecb87
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Aug 15 18:42:56 2012 -0700
+
+    objectcacher: fix bh leak on discard
+    
+    Fixes: #2950
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 787a78e8b1d8e5d92ee447b970ec8b79baa46f0b
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Aug 30 10:16:52 2012 -0400
+
+    upstart, ceph-create-keys: Make client.admin key generation automatic.
+    
+    This should help simplify Chef etc deployments. Now (when using the
+    Upstart jobs), when a ceph-mon is started, ceph-create-admin-key is
+    triggered. If /etc/ceph/$cluster.client.admin.keyring already exists,
+    it does nothing; otherwise, it waits for ceph-mon to reach quorum, and
+    then does a "ceph auth get-or-create" to create the key, and writes it
+    atomically to disk.
+    
+    The equivalent code can be removed from the Chef cookbook once this is
+    in.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 66aecb1e410a59f3e0ed89a30212b8dc546a3d4a
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Aug 30 10:21:29 2012 -0400
+
+    config: Add a per-name default keyring to front of keyring search path.
+    
+    This lets us have e.g. /etc/ceph/ceph.client.admin.keyring that is
+    owned by root:admin and mode u=rw,g=r,o= without making every non-root
+    run of the command line tools complain and fail.
+    
+    This is what the Chef cookbook has been doing for a while already.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 6e34b8c109322690151b42efb745bc96a210dda4
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Aug 30 10:11:09 2012 -0400
+
+    upstart: Make instance jobs export their cluster and id variables.
+    
+    This allows other jobs listening to Upstart "started ceph-mon" events
+    to see what instance started.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 27372dc4e99c17a7a2d5ad6646e5ae54392d5955
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Thu Jul 12 10:47:29 2012 -0700
+
+    upstart: Make ceph-osd always set the crush location.
+    
+    This used to be conditional on config having osd_crush_location set,
+    but with that, minimal configuration left the OSD completely out of
+    the crush map, and prevented the OSD from starting properly.
+    
+    Note: Ceph does not currently let this mechanism automatically move
+    hosts to another location in the CRUSH hierarchy. This means if you
+    let this run with defaults, setting osd_crush_location later will not
+    take effect. Set up your config file (or Chef environment) fully
+    before starting the OSDs the first time.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 471105a966f873aef2361b1ed48d088c490fe1aa
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Jul 3 15:24:26 2012 -0700
+
+    ceph-disk-prepare: Partition and format OSD data disks automatically.
+    
+    Uses gdisk, as it seems to be the only tool that can automate GPT uuid
+    changes. Needs to run as root.
+    
+    Adds Recommends: gdisk to ceph.deb.
+    
+    Closes: #2547
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 24fe265c594308d5679e845fcfe8b0fe6a7be612
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Tue Jul 3 09:22:28 2012 -0700
+
+    ceph-disk-prepare: Take fsid from config file.
+    
+    Closes: #2546.
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+
+commit 1f06b490b4187055a5bfabc20746c87dfa075e0d
+Author: Tommi Virtanen <tv@inktank.com>
+Date:   Mon Jun 25 15:14:33 2012 -0700
+
+    upstart: fix regex
+    
+    Signed-off-by: Tommi Virtanen <tv@inktank.com>
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+
+commit 657ca118a7658617b9117311d9ee1cbe00103c06
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Aug 28 16:17:21 2012 -0700
+
+    rgw: clear usage map before reading usage
+    
+    Fixes: #3057
+    Since we read usage in chunks we need to clear the
+    usage map before reading the next chunk, otherwise
+    we're going to aggregate the old data as well.
+    
+    Backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit c49284c98de1df1a889e0c88e6b1157133f5e0a6
+Author: Gary Lowell <glowell@inktank.com>
+Date:   Thu Aug 23 11:48:50 2012 -0700
+
+    Don't package crush header files.
+
+commit b6fb3e37a68d48434a81ee4356cde48cad187e94
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Aug 17 17:34:23 2012 -0700
+
+    rgw: dump content_range using 64 bit formatters
+    
+    Fixes: #2961
+    Also make sure that size is 64 bit.
+    
+    backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 08d975146cbe6796799266f03361240a62acb297
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 21 10:58:38 2012 -0700
+
+    Revert "rgw: dump content_range using 64 bit formatters"
+    
+    This reverts commit faf9fa5744b459abc2eda829a48a4e07b9c97a08.
+
+commit faf9fa5744b459abc2eda829a48a4e07b9c97a08
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Aug 17 17:34:23 2012 -0700
+
+    rgw: dump content_range using 64 bit formatters
+    
+    Fixes: #2961
+    Also make sure that size is 64 bit.
+    
+    backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 47b24c0562bcb44964a0b8f6c4847bb0f05924e0
+Author: Matthew Wodrich <matthew.wodrich@dreamhost.com>
+Date:   Tue Jul 31 19:13:03 2012 -0700
+
+    obsync: add missing package specifier to format_exc
+    
+    Fixes: #2873
+    Signed-off-by: Matthew Wodrich <matthew.wodrich@dreamhost.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+
+commit a14214dc9b7c15581a0664dbe259389867f88e72
+Author: Danny Kukawka <danny.kukawka@bisect.de>
+Date:   Thu Aug 16 12:56:58 2012 +0200
+
+    fix keyring generation for mds and osd
+    
+        [ The following text is in the "UTF-8" character set. ]
+        [ Your display is set for the "ANSI_X3.4-1968" character set.  ]
+        [ Some characters may be displayed incorrectly. ]
+    
+    Fix config keys for OSD/MDS data dirs. As in documentation and other
+    places of the scripts the keys are 'osd data'/'mds data' and not
+    'osd_data'
+    
+    In case if MDS: if 'mds data' doesn't exist, create it.
+    
+    Signed-off-by: Danny Kukawka <danny.kukawka@bisect.de>
+
+commit d1a31ce1ca2a5e1c53146c6e9063a123a1fe8cdb
+Author: Danny Kukawka <danny.kukawka@bisect.de>
+Date:   Thu Aug 16 12:56:32 2012 +0200
+
+    fix ceph osd create help
+    
+        [ The following text is in the "UTF-8" character set. ]
+        [ Your display is set for the "ANSI_X3.4-1968" character set.  ]
+        [ Some characters may be displayed incorrectly. ]
+    
+    Change ceph osd create <osd-id> to ceph osd create <uuid>, since this
+    is what the command is really doing.
+    
+    Signed-off-by: Danny Kukawka <danny.kukawka@bisect.de>
+
+commit dc2a232bd37b7202c3d6e94396b3d85cec5225cd
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 9 17:24:19 2012 -0700
+
+    mon: simplify logmonitor check_subs; less noise
+    
+     * simple helper to translate name to id
+     * verify sub type is valid in caller
+     * assert sub type is valid in method
+     * simplify iterator usage
+    
+    Among other things, this gets rid of this noise in the logs:
+    
+    2012-07-10 20:51:42.617152 7facb23f1700  1 mon.a@1(peon).log v310 check_sub sub monmap not log type
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>

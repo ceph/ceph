@@ -1,0 +1,16 @@
+# author: min chen(minchen@ubuntukylin.com) 2014 2015
+
+1. error "get_image_metadata_v2: no meta_header_seq input"
+cause: 
+  database is old, refresh database
+solution:
+  ./rbd-recover-tool database
+
+2. Error initializing leveldb: IO error: lock /var/lib/ceph/osd/ceph-0/current/omap/LOCK: Resource temporarily unavailable
+   ERROR: error flushing journal /var/lib/ceph/osd/ceph-0/journal for object store /var/lib/ceph/osd/ceph-0: (1) Operation not permitted
+cause: 
+  when ./rbd-recover-tool database is interrupted , but command has been sent to each osd node, and there is a process reading leveldb and it is LOCKED
+  if run ./rbd-recover-tool database again, all command are sent to osd nodes again, while previous process is locking leveldb, so all new command
+  are failed.
+solution:
+  wait until all previous command finished.

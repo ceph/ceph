@@ -1,0 +1,35 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "downlevelIteration": true,
+    "esModuleInterop": true,
+    "importHelpers": true,
+    "outDir": "./dist/out-tsc",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitThis": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": true,
+    "ignoreDeprecations": "5.0",
+    "suppressImplicitAnyIndexErrors": true,
+    "target": "ES2022",
+    "module": "ES2022",
+    "baseUrl": "./",
+    "resolveJsonModule": true,
+    "paths": {
+      "stream": ["node_modules/stream-browserify"],
+      "timers": ["node_modules/timers-browserify"],
+      "~/*": ["src/*"]
+    },
+    "typeRoots": ["node_modules/@types"],
+    "lib": ["es2017", "dom"],
+    "allowJs": true
+  },
+  "exclude": ["coverage", "dist", "node_modules", "cypress"]
+}

@@ -1,0 +1,1090 @@
+{
+   "annotations": {
+      "list": [
+         {
+            "builtIn": 1,
+            "datasource": {
+               "type": "datasource",
+               "uid": "grafana"
+            },
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "showIn": 0,
+            "tags": [],
+            "type": "dashboard"
+         }
+      ]
+   },
+   "description": "SMB Overview dashboard shows data across all clusters and hosts associated with the SMB service.",
+   "editable": false,
+   "fiscalYearStartMonth": 0,
+   "graphTooltip": 0,
+   "hideControls": false,
+   "id": null,
+   "links": [],
+   "panels": [
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "SMB metrics daemon health.",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [
+                  {
+                     "options": {
+                        "0": {
+                           "color": "red",
+                           "text": "Down"
+                        },
+                        "1": {
+                           "color": "green",
+                           "text": "Up"
+                        }
+                     },
+                     "type": "value"
+                  }
+               ],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "short"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 8,
+            "w": 8,
+            "x": 0,
+            "y": 0
+         },
+         "id": 2,
+         "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "expr": "sum(smb_metrics_status{instance=~\"$hostname\"})  by (instance)",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Prometheus SMB metrics status",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Number of nodes per cluster/s",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 0
+         },
+         "id": 3,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "expr": "sum(count by (netbiosname) (smb_sessions_total * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"}))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Nodes",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Number of users currently logged in Cluster/s",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 0
+         },
+         "id": 4,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(sum by(netbiosname)(smb_sessions_total * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"}) / (count by ( netbiosname)(smb_sessions_total * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"})))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Active sessions",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Number of remote machines using a share in cluster/s",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 4
+         },
+         "id": 5,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(sum by(netbiosname)(smb_share_activity * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"}) / (count by ( netbiosname)(smb_share_activity * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"})))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Shares activity",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Number of currently active SMB user per cluster/s",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "none"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 4
+         },
+         "id": 6,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(sum by(netbiosname)(smb_users_total * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"}) / (count by ( netbiosname)(smb_users_total * on (instance) group_left (netbiosname) smb_metrics_status{netbiosname=~\"$SMBcluster\"})))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Active users",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Current total ingress throughput, bytes going in per second",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "decbytes"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 0,
+            "y": 8
+         },
+         "id": 7,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(rate(smb_smb2_request_inbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Ingress throughtput",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Current total request time for the sum of all runing operations",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "µs"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 6,
+            "y": 8
+         },
+         "id": 8,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(rate(smb_smb2_request_duration_microseconds_sum{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Latency",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Current total egress throughput, bytes going out per second",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "decbytes"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 12,
+            "y": 8
+         },
+         "id": 9,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(rate(smb_smb2_request_outbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Egress throughtput",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "Current total number of operations per second",
+         "fieldConfig": {
+            "defaults": {
+               "decimals": 0,
+               "links": [],
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": [
+                     {
+                        "color": "green"
+                     },
+                     {
+                        "color": "red",
+                        "value": 80
+                     }
+                  ]
+               },
+               "unit": "short"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 5,
+            "w": 6,
+            "x": 18,
+            "y": 8
+         },
+         "id": 10,
+         "options": {
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "auto",
+            "orientation": "auto",
+            "percentChangeColorMode": "standard",
+            "reduceOptions": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "fields": "",
+               "values": false
+            },
+            "showPercentChange": false,
+            "textMode": "auto",
+            "wideLayout": true
+         },
+         "pluginVersion": "11.6.0",
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "exemplar": false,
+               "expr": "sum(rate(smb_smb2_request_total{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "__auto",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "I/O",
+         "type": "stat"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 8,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 2,
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": []
+               },
+               "unit": "decbytes"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 13
+         },
+         "id": 11,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "right",
+               "showLegend": true,
+               "sortBy": "Last *",
+               "sortDesc": true
+            },
+            "tooltip": {
+               "hideZeros": false,
+               "mode": "single",
+               "sort": "none"
+            }
+         },
+         "pluginVersion": "11.6.0",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "expr": "rate(smb_smb2_request_inbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Input - {{operation}}",
+               "range": true,
+               "refId": "A"
+            },
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "expr": "rate(smb_smb2_request_outbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "format": "time_series",
+               "hide": false,
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "Output-  {{operation}}",
+               "range": true,
+               "refId": "B"
+            }
+         ],
+         "title": "Throughput per Operation",
+         "type": "timeseries"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 8,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 2,
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": []
+               },
+               "unit": "none"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 13
+         },
+         "id": 12,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "right",
+               "showLegend": true,
+               "sortBy": "Last *",
+               "sortDesc": true
+            },
+            "tooltip": {
+               "hideZeros": false,
+               "mode": "single",
+               "sort": "none"
+            }
+         },
+         "pluginVersion": "11.6.0",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "expr": "rate(smb_smb2_request_total{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "{{operation}}",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "IO per Operation",
+         "type": "timeseries"
+      },
+      {
+         "datasource": {
+            "uid": "${datasource}"
+         },
+         "description": "",
+         "fieldConfig": {
+            "defaults": {
+               "color": {
+                  "mode": "palette-classic"
+               },
+               "custom": {
+                  "axisBorderShow": false,
+                  "axisCenteredZero": false,
+                  "axisColorMode": "text",
+                  "axisLabel": "",
+                  "axisPlacement": "auto",
+                  "barAlignment": 0,
+                  "barWidthFactor": 0.6,
+                  "drawStyle": "line",
+                  "fillOpacity": 8,
+                  "gradientMode": "none",
+                  "hideFrom": {
+                     "legend": false,
+                     "tooltip": false,
+                     "viz": false
+                  },
+                  "insertNulls": false,
+                  "lineInterpolation": "linear",
+                  "lineWidth": 1,
+                  "pointSize": 5,
+                  "scaleDistribution": {
+                     "type": "linear"
+                  },
+                  "showPoints": "auto",
+                  "spanNulls": false,
+                  "stacking": {
+                     "group": "A",
+                     "mode": "none"
+                  },
+                  "thresholdsStyle": {
+                     "mode": "off"
+                  }
+               },
+               "decimals": 2,
+               "mappings": [],
+               "thresholds": {
+                  "mode": "absolute",
+                  "steps": []
+               },
+               "unit": "µs"
+            },
+            "overrides": []
+         },
+         "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 22
+         },
+         "id": 13,
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "table",
+               "placement": "right",
+               "showLegend": true,
+               "sortBy": "Last *",
+               "sortDesc": true
+            },
+            "tooltip": {
+               "hideZeros": false,
+               "mode": "single",
+               "sort": "none"
+            }
+         },
+         "pluginVersion": "11.6.0",
+         "seriesOverrides": [ ],
+         "targets": [
+            {
+               "datasource": {
+                  "uid": "${datasource}"
+               },
+               "editorMode": "code",
+               "expr": "rate(smb_smb2_request_duration_microseconds_sum{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "format": "time_series",
+               "instant": false,
+               "intervalFactor": 1,
+               "legendFormat": "{{operation}}",
+               "range": true,
+               "refId": "A"
+            }
+         ],
+         "title": "Latencies per operation",
+         "type": "timeseries"
+      }
+   ],
+   "preload": false,
+   "refresh": "30s",
+   "style": "dark",
+   "schemaVersion": 41,
+   "tags": [
+      "ceph-mixin"
+   ],
+   "templating": {
+      "list": [
+         {
+            "current": {
+               "text": "default",
+               "value": "default"
+            },
+            "label": "Data Source",
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "regex": "",
+            "type": "datasource"
+         },
+         {
+            "current": {},
+            "datasource": "$datasource",
+            "includeAll": false,
+            "name": "Cluster",
+            "options": [],
+            "query": "label_values(ceph_health_status, cluster)",
+            "refresh": 2,
+            "regex": "",
+            "type": "query"
+         },
+         {
+            "current": {
+               "text": "All",
+               "value": "$__all"
+            },
+            "datasource": "$datasource",
+            "includeAll": true,
+            "label": "SMB Cluster",
+            "name": "SMBcluster",
+            "options": [],
+            "query": "label_values(smb_metrics_status,netbiosname)",
+            "refresh": 1,
+            "sort": 1,
+            "type": "query"
+         },
+         {
+            "current": {
+               "text": "All",
+               "value": "$__all"
+            },
+            "datasource": "$datasource",
+            "hide": 2,
+            "includeAll": true,
+            "label": "Hostname",
+            "name": "hostname",
+            "options": [],
+            "query": "label_values(smb_metrics_status{netbiosname=~\"$SMBcluster\"},instance)",
+            "refresh": 1,
+            "sort": 1,
+            "type": "query"
+         },
+         {
+            "current": {
+               "text": "All",
+               "value": "$__all"
+            },
+            "definition": "label_values(smb_smb2_request_inbytes{netbiosname=~\"$SMBcluster\", instance=~\"$hostname\"},share)",
+            "description": "",
+            "includeAll": true,
+            "label": "Share",
+            "name": "share",
+            "options": [],
+            "query": {
+               "qryType": 1,
+               "query": "label_values(smb_smb2_request_inbytes{netbiosname=~\"$SMBcluster\", instance=~\"$hostname\"},share)",
+               "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "type": "query"
+         },
+         {
+            "current": {
+               "text": "All",
+               "value": "$__all"
+            },
+            "definition": "label_values(smb_smb2_request_inbytes{netbiosname=~\"$SMBcluster\", instance=~\"$hostname\", share=~\"$share\"},client)",
+            "description": "",
+            "includeAll": true,
+            "label": "Client",
+            "name": "client",
+            "options": [],
+            "query": {
+               "qryType": 1,
+               "query": "label_values(smb_smb2_request_inbytes{netbiosname=~\"$SMBcluster\", instance=~\"$hostname\", share=~\"$share\"},client)",
+               "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "type": "query"
+         }
+      ]
+   },
+   "time": {
+      "from": "now-6h",
+      "to": "now"
+   },
+   "timepicker": {},
+   "timezone": "",
+   "title": "SMB Overview",
+   "uid": "feem6ehrmi2o0b",
+   "version": 1
+}

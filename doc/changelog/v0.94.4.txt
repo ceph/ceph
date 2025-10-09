@@ -1,0 +1,3576 @@
+commit 95292699291242794510b39ffde3f4df67898d3a (tag: refs/tags/v0.94.4, refs/remotes/gh/hammer)
+Author: Jenkins <jenkins@ceph.com>
+Date:   Mon Oct 19 07:43:50 2015 -0700
+
+    0.94.4
+
+commit 5764e233e56be08a59ffe6292f6fba9a76288aee
+Merge: 7f485ed b203979
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Oct 15 16:35:10 2015 -0400
+
+    Merge pull request #6287 from jcsp/wip-test-fixes
+    
+    git path backports for hammer
+
+commit b2039797638057dd74a8a47c99091c2c892b042e
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Apr 16 08:29:41 2015 -0700
+
+    use git://git.ceph.com
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 34c467ba06345eacd2fd0e79c162dfd0b22f0486)
+
+commit 0f4ef19047c58aacfb359bdd9d104f059aa2f5b4
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Sep 24 18:10:46 2015 -0400
+
+    qa: http://ceph.com/qa -> http://download.ceph.com/qa
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit d4d65fbd6ad15320339751c604613ac63511e645)
+
+commit 7f485ed5aa620fe982561663bf64356b7e2c38f2
+Merge: 3dc1de2 294f016
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Oct 13 00:28:52 2015 +0200
+
+    Merge pull request #6161 from dachary/wip-13227-hammer
+    
+    With root as default user, unable to have multiple RGW instances running
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Reviewed-by: Yehuda Sadeh <ysadehwe@redhat.com>
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit 294f016ff84c7efef36ca94daef39fe2686df690
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 7 15:40:05 2015 -0700
+
+    init-radosgw.sysv: remove
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9d8c115b0ab05cfc1db6670d1d367737e61fe0ea)
+
+commit 3dc1de22552065bd930cc3e42a486e29639927ba
+Merge: aa74de9 7de65e7
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:16:17 2015 -0700
+
+    Merge pull request #6166 from dachary/wip-13046-hammer
+    
+    RGW : setting max number of buckets for user via ceph.conf option
+
+commit aa74de9d34801552d7d3e0aced07b6bc5bd129b9
+Merge: d3e49eb 77cb503
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:15:21 2015 -0700
+
+    Merge pull request #6039 from ceph/wip-13015-hammer
+    
+    rgw: don't preserve acls when copying object
+
+commit d3e49ebce00d749c36fe8dc46a5c432b1b907126
+Merge: 417e948 424fc1c
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:14:47 2015 -0700
+
+    Merge pull request #6042 from dreamhost/wip-hammer-crossftp
+    
+    rgw: remove trailing :port from host for purposes of subdomain matching
+
+commit 417e948898d260a1ad6354244f9967ccbd75d768
+Merge: b5badcb 9ab9c44
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:14:09 2015 -0700
+
+    Merge pull request #6160 from dachary/wip-13228-hammer
+    
+    rgw: segments are read during HEAD on Swift DLO
+
+commit b5badcb47e565cd17145adca49abf07e167963e0
+Merge: e3f8df9 6119b15
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:13:25 2015 -0700
+
+    Merge pull request #6162 from dachary/wip-13226-hammer
+    
+    Keystone Fernet tokens break auth
+
+commit e3f8df9e12b434714b67036838f37b75ed1f9a25
+Merge: 8078233 ad83304
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:12:26 2015 -0700
+
+    Merge pull request #6163 from dachary/wip-13054-hammer
+    
+    rgw: region data still exist in region-map after region-map update
+
+commit 8078233ca1dda8eef3c59d6a92760365634cf41a
+Merge: dd64c78 4b0686f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:12:07 2015 -0700
+
+    Merge pull request #6164 from dachary/wip-13053-hammer
+    
+    rgw: GWWatcher::handle_error -> common/Mutex.cc: 95: FAILED assert(r == 0)
+
+commit dd64c7813bbdd2a6a4ffde6767c5d060ee1b9290
+Merge: 135c112 e80bd0a
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:11:16 2015 -0700
+
+    Merge pull request #5718 from dachary/wip-12859-hammer
+    
+    testGetContentType and testHead failed
+
+commit 135c112789d4925a735229394c0ec9e2b728d3ca
+Merge: fd17f3c 3b2affc
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:10:55 2015 -0700
+
+    Merge pull request #5860 from lebauce/wip-12960-hammer
+    
+    rgw: add delimiter to prefix only when path is specified
+
+commit fd17f3ccbf98832098bd1cd35fe2a5d567b51f4c
+Merge: 036c718 297c04d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Oct 12 08:08:59 2015 -0700
+
+    Merge pull request #6165 from dachary/wip-13052-hammer
+    
+    rgw: init_rados failed leads to repeated delete
+
+commit 036c7186f9304e4e48ecf50a4299cf74d55875fe
+Merge: 629b631 698d75c
+Author: Loic Dachary <loic@dachary.org>
+Date:   Fri Oct 9 09:17:19 2015 +0200
+
+    Merge pull request #6201 from dachary/wip-13410-hammer
+    
+    TEST_crush_rule_create_erasure consistently fails on i386 builder
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 629b631488f044150422371ac77dfc005f3de1bc
+Merge: 70e612a 0a5b856
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Oct 8 12:18:49 2015 -0400
+
+    Merge pull request #5885 from Abhishekvrshny/wip-13034-hammer
+    
+    osd: copy-from doesn't preserve truncate_{seq,size}
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 698d75c11fa116d6546b09d14484d094fae8f6d7
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Wed Jul 22 10:42:32 2015 +0200
+
+    tests: robust test for the pool create crushmap test
+    
+    The test that goes with f1e86be589803596e86acc964ac5c5c03b4038d8 to
+    verify that a bugous crush ruleset will prevent the creation of a pool
+    trying to use it was fragile. I depends on the implementation of the
+    erasure code lrc plugin and turns out to not work on i386.
+    
+    The test is modified to use a fake crushtool that always returns false
+    and validate that it prevents the creation of a pool, which demonstrate
+    it is used for crushmap validation prior to the pool creation.
+    
+    http://tracker.ceph.com/issues/12419 Fixes: #12419
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit e47903727b5d53f795014bf29b417d357f2bd65a)
+
+commit 70e612a395f7f5daf2fa289d8ae522824ef7a38f
+Merge: 0650862 2a28114
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Oct 8 00:09:24 2015 +0200
+
+    Merge pull request #6192 from dachary/wip-13401-hammer
+    
+    mon: fix crush testing for new pools
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 2a28114053fbf4ceee09558790ad3cf755270d5f
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Aug 21 16:40:34 2015 -0400
+
+    crush/CrushTester: test fewer inputs when running crushtool
+    
+    If there are a lot of crush rules (say, 100) then the test can
+    take a long time.  100 values per rule should be enough to catch
+    most issues.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 0f82f461b33d93d868e185912a2c7e4074d06900)
+    
+    Conflicts:
+    	src/crush/CrushTester.cc
+    	  in hammer the crushtool validation is via a shell
+        	  and not via an internal subprocess utility
+
+commit abc5b5f139b05da0be0fbaa99282be16386980db
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun Sep 20 23:42:45 2015 +0200
+
+    tests: update to match crushmap validation message
+    
+    http://tracker.ceph.com/issues/13182 Fixes: #13182
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 21a1e75d8a7bad89a48cd9d36902c5d609be5015)
+    
+    Conflicts:
+    	qa/workunits/cephtool/test.sh
+    	  the test structure in hammer is different, adapt
+    	  the relevant test.
+
+commit 25bd2778f8b7f5eb5245efebca56a7348dd064eb
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 18 09:42:47 2015 -0400
+
+    mon/OSDMonitor: fix crush injection error message
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1b3090d50e5bd5ca3e6e396b23d2d9826896c718)
+    
+    Conflicts:
+    	src/mon/OSDMonitor.cc
+    	  hammer has a separate error message for EINTR
+    	  which is in the context of the fix for error message
+
+commit 6635530aa94b1f21c3052e64d4dfe3952f98fe83
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 18 09:41:25 2015 -0400
+
+    mon/OSDMonitor: only test crush ruleset for the newly created pool
+    
+    Otherwise, we test *all* crush rules.. which might be a lot, and
+    which is a big waste of time and effort.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 524b0bdcc45c2f4b95f2239c988e93250f337f3d)
+    
+    Conflicts:
+    	src/mon/OSDMonitor.cc : trivial resolution
+
+commit cc1fedda02fbf3c95d7a00f0b395db5439e96f90
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 18 09:40:13 2015 -0400
+
+    crush/CrushTester: allow testing by ruleset
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit aa238e5ed50f44a94caf84567267e4f6be8732a2)
+    
+    Conflicts:
+    	src/crush/CrushTester.cc
+              in hammer the crushtool validation is via a shell
+    	  and not via an internal subprocess utility
+    	src/tools/crushtool.cc
+    	  ceph_argparse_withint is preferred to ceph_argparse_witharg
+
+commit 065086246290cfa02f67c37c95a2ccdb05872f21
+Merge: 79385a8 3a50b90
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Oct 6 11:11:14 2015 -0400
+
+    Merge pull request #5887 from Abhishekvrshny/wip-13044-hammer
+    
+    LibCephFS.GetPoolId failure
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 79385a85beea9bccd82c99b6bda653f0224c4fcd
+Merge: 5b25fc9 3228161
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Oct 4 15:33:49 2015 +0200
+
+    Merge pull request #6172 from dachary/wip-13354-hammer
+    
+    qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 322816116ea14a8fd79616b1c55545ae7c62e7f6
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Sep 28 13:13:40 2015 -0400
+
+    qa/workunits/cephtool/test.sh: don't assume crash_replay_interval=45
+    
+    e.g., it's 5 in teuthology's ceph.conf.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 80b7237e5e74d12b9d8b1f96ea535c96bdff9c6f)
+
+commit ad833044dee4208625213bc83c7847ce9d1a73aa
+Author: dwj192 <duanweijun@h3c.com>
+Date:   Wed Sep 9 09:48:16 2015 +0800
+
+    rgw:add --reset-regions for regionmap update
+    
+    Fixes: #12964
+    
+    Signed-off-by: Weijun Duan <duanweijun@h3c.com>
+    (cherry picked from commit 95685c19d6f1eab50b903e61273b5351bedc2980)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc: usage is on cerr in hammer, not cout
+            src/test/cli/radosgw-admin/help.t: remove extra empty line
+
+commit 5b25fc9c8431423c6239da2eafcf7e8863d2262f
+Merge: e72bdc3 9026c4a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sat Oct 3 09:39:12 2015 +0200
+
+    Merge pull request #6156 from dachary/wip-13170-hammer
+    
+    doc: update docs to point to download.ceph.com
+    
+    Reviewed-by: Abhishek Varshney <abhishek.varshney@flipkart.com>
+
+commit 7de65e7ede52f3e417c354f180cfd80f1407c6cb
+Author: Vikhyat Umrao <vumrao@redhat.com>
+Date:   Thu Sep 3 12:02:05 2015 +0530
+
+    rgw : setting max number of buckets for users via ceph.conf option
+    
+    This patch adds a new option "rgw_user_max_buckets" for setting
+    max number of buckets for users via ceph.conf.
+    
+    Fixes #12714
+    
+    Signed-off-by: Vikhyat Umrao <vumrao@redhat.com>
+    (cherry picked from commit f65267c96cbd4cd25036b6bf399692e77bbb9436)
+    
+    Conflicts:
+    	src/rgw/rgw_admin.cc: usage is on cerr in hammer, not cout
+
+commit 297c04d856c4864d21b2241ad01560afa61dde40
+Author: Xiaowei Chen <cxwshawn@gmail.com>
+Date:   Tue Sep 8 06:58:57 2015 -0400
+
+    rgw: init_rados failed leads to repeated delete
+    
+    Fixes: #12978
+    
+    Signed-off-by: Xiaowei Chen <chen.xiaowei@h3c.com>
+    (cherry picked from commit ab4232baa7bcc86e90746e13312ac9bda1772872)
+
+commit 4b0686f18f323b95adb1fc5cffe7c1e55e8f1c63
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Aug 26 15:08:18 2015 -0700
+
+    rgw: delete finisher only after finalizing watches
+    
+    Fixes: #12208
+    
+    The watch error path might try to schedule a finisher work, delete finisher
+    only after watch destruction.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 97aed59fb9e865d30d31d2b7f4e93fc9727c96fa)
+
+commit 6119b152412ddfa2a614c1862aad52a123a4fe8e
+Author: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+Date:   Mon Aug 24 23:11:35 2015 +0530
+
+    rgw: be more flexible with iso8601 timestamps
+    
+    make parsing 8601 more flexible by not restricting the length of seconds
+    to 5, this allows timestamp to be specified both as ms or us. Newer
+    keystone backends such as fernet token backend default to microseconds
+    when publishing iso8601 timestamps, so this allows these timestamps to
+    be allowed when specifying the token expiry time.
+    
+    Fixes: #12761
+    Reported-by: Ian Unruh <ianunruh@gmail.com>
+    Signed-off-by: Abhishek Lekshmanan <abhishek.lekshmanan@ril.com>
+    (cherry picked from commit 136242b5612b8bbf260910b1678389361e86d22a)
+
+commit 607904e8d5616bd7df20e1e387a14d55e4ca43b6
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 22 14:12:02 2015 -0400
+
+    init-radosgw: specify pid file to start-stop-daemon
+    
+    This fixes restart when multiple instances are running.
+    
+    Fixes: #12407
+    Tested-by: Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit e17c8e1a7a06db0e2680dedc7e954021610320d1)
+
+commit f51ab26d8721bde6852e5c169869d7ae16bd0574
+Author: Vikhyat Umrao <vumrao@redhat.com>
+Date:   Thu Jul 23 18:10:06 2015 +0530
+
+    rgw: fix radosgw start-up script.
+    
+    radosgw init script is unable to start radosgw daemon.
+    as it is relies on requiretty being disabled.
+    once init script start this daemon with sudo it fails
+    to start the daemon.
+    
+    changing 'sudo' to 'su', it will fix this issue and
+    will also help running radosgw daemon with our new
+    "ceph" UID project.
+    
+    Fixes: #10927
+    
+    Signed-off-by: Vikhyat Umrao <vumrao@redhat.com>
+    (cherry picked from commit c83542296aeb8f5dd96f5d9e09327e7a89370742)
+
+commit 544a98fa9dd47d02778f622de5f7ebe1acccc12f
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 7 15:39:22 2015 -0700
+
+    init-radosgw: unify init-radosgw[.sysv]
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1c45f512a91ee49e9253ba6fd3857af9bd2ae57a)
+
+commit 2a733e9e720bcdb8ea342a96be679d6f9efa3b2b
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu May 7 15:29:11 2015 -0700
+
+    init-radosgw: look in /var/lib/ceph/radosgw
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a4bb992426b39188e750fce9198052ca0d510117)
+
+commit d00c52b874ddc74aa5f4c2e07b70b881ce963114
+Author: Nathan Cutler <ncutler@suse.cz>
+Date:   Sun May 10 18:17:53 2015 +0200
+
+    doc: rgw: fix typo in comments
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.cz>
+    (cherry picked from commit 05cf0db22dc3a9cb2bf4b86b8f240683c23f41ac)
+
+commit eb001d3a7275cc040bea716b8bdb0cf8b97efbc9
+Author: Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
+Date:   Tue Mar 17 15:44:52 2015 -0700
+
+    rgw: init script waits until the radosgw stops
+    
+    Fixes: #11140
+    Init script waits in stop action until the radowgw daemons stop.
+    
+    Signed-off-by: Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
+    (cherry picked from commit 1cca0c1e91a1e18f82f4d22855e96b2fc947f5ea)
+
+commit 9ab9c44583c96f1679db3dbcef322a706548a7dd
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 17 09:10:39 2015 -0700
+
+    rgw: don't read actual data on user manifest HEAD
+    
+    Fixes: #12780
+    We unconditionally read all the data, which is not needed
+    when doing HEAD operation on user manifest objects.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 4a8b08d1dd2511e28e999f1625103fb919fb5465)
+
+commit 9026c4a7c7699a9a013d4fe207e6681403f934a6
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 18 14:20:12 2015 -0400
+
+    doc: remove mention of ceph-extra as a requirement
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit a6f07e9fa3bd5e50a2d8cfa387b44a39d383fa65)
+
+commit 45ed24da879fe12b921cf03e4a921ccc0582b8d2
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 18 14:13:21 2015 -0400
+
+    doc: remove ceph-extras
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit c0ef84fd22aac58b6ec8e58eb4f8dffed306d39e)
+
+commit faccdce79e003318c751dd9203773af7ed31d052
+Author: Alfredo Deza <adeza@redhat.com>
+Date:   Fri Sep 18 14:13:02 2015 -0400
+
+    doc: correct links to download.ceph.com
+    
+    Signed-off-by: Alfredo Deza <adeza@redhat.com>
+    (cherry picked from commit 387d7800359154950431d0984c756f43f21dd9b4)
+
+commit e9f4aecf3f406b42b74f840edb398be9243da85a
+Author: ritz303 <ritz_303@yahoo.com>
+Date:   Tue Aug 25 10:02:49 2015 -0500
+
+    doc: Added "Hammer" in the list of major releases.
+    
+    Fixes: #12771
+    
+    Signed-off-by: ritz303 <ritz_303@yahoo.com>
+    (cherry picked from commit 582f0f64455079290ad3b4ae7338b716e170911f)
+
+commit 424fc1ccb244f5084f94904cb20cbf88a1bd4638
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Sep 25 10:44:40 2015 -0700
+
+    rgw: set default value for env->get() call
+    
+    Fixes: #13239
+    
+    This fixes a regression introduced at commit abe4ec293d08b0314bf5c081ace2456073f3a22c.
+    The host var is a string, env->get() returns a char pointer, shouldn't
+    pass in NULL.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 0d5730efc0054334897315dc23ba04f30548e36e)
+    Signed-off-by: Robin H. Johnson <robin.johnson@dreamhost.com>
+
+commit e72bdc3bf1541e445f74def70b5aa185f1757468
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Sep 21 11:41:03 2015 -0400
+
+    osd/ReplicatedPG: tolerate promotion completion with stopped agent
+    
+    We may start a promotion, then get a pool update that disables the
+    agent, and then complete it.  We should not segfault in this case.
+    
+    Fixes: #13190
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit fd9ce66e8b76787f69c5e337332d57aa72c8b8d5)
+
+commit a3afb3f59435050efa711436134b4abe63a8f5cf
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Jun 9 14:15:10 2015 -0400
+
+    rgw: remove trailing :port from host for purposes of subdomain matching
+    
+    Some clients (ahem, CrossFTP) include the :port in the HTTP_HOST header.
+    Strip it out.
+    
+    Switch req_info field to a std::string and avoid copying it in preprocess.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit abe4ec293d08b0314bf5c081ace2456073f3a22c)
+
+commit fe0fc4f18f6f275b34e8bbfa868a7310ecc3842f
+Merge: e26f8bc 8ba6b2f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 24 14:01:26 2015 -0700
+
+    Merge pull request #5715 from dachary/wip-12592-hammer
+    
+    RGW returns requested bucket name raw in Bucket response header
+
+commit e26f8bc2dbc82b6ff31d2bd2d5c890aa12da9f4a
+Merge: 19e549e 6acf36f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 24 14:00:55 2015 -0700
+
+    Merge pull request #5719 from dachary/wip-12855-hammer
+    
+    segmentation fault when rgw_gc_max_objs > HASH_PRIME
+
+commit 19e549e9c2fbacdbf747344c1dafcc6b66902339
+Merge: 2b11a4c a13c7fd
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Sep 24 14:00:09 2015 -0700
+
+    Merge pull request #5720 from dachary/wip-12854-hammer
+    
+    the arguments 'domain' should not be assigned when return false
+
+commit 77cb503ba057f033825aa40d57dee42e838c67ac (refs/remotes/gh/wip-13015-hammer)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Sep 9 15:41:02 2015 -0700
+
+    rgw: preserve all attrs if intra-zone copy
+    
+    Fixes: #13015
+    Intra zone copy requires that all objects' attributes are preserved.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit b9f2ed303eedfa0b747884f8e66fbe97cfeeb0d5
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Aug 13 10:59:32 2015 -0700
+
+    rgw: don't preserve acls when copying object
+    
+    Fixes: #12370
+    
+    When copying an object we need to use the acls we calculated earlier,
+    and not the source acls.
+    This was broken at e41d97c8e38bb60d7e09e9801c0179efe7af1734.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit fb020247449d3daf033885bab5b3a10c0e5df4a5)
+
+commit 2b11a4c07a9416a2f75c8ce62a923994977d799c
+Merge: 0022c03 b3822f1
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Sep 15 10:23:49 2015 +0200
+
+    Merge pull request #5930 from liewegas/wip-11798-hammer
+    
+    upstart: limit respawn to 3 in 30 mins (instead of 5 in 30s)
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 0022c035476eff471a777b23a619d024f632a1bf
+Merge: 23fb811 0d6a8c6
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 14 23:57:13 2015 +0200
+
+    Merge pull request #5908 from liewegas/wip-simple-connect-hammer
+    
+    Pipe: Drop connect_seq increase line
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit b3822f113e07547194b844f647bcb7d45513b25f (refs/remotes/me/wip-11798-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Jun 3 14:57:34 2015 -0400
+
+    upstart: limit respawn to 3 in 30 mins (instead of 5 in 30s)
+    
+    It may take tens of seconds to restart each time, so 5 in 30s does not stop
+    the crash on startup respawn loop in many cases.  In particular, we'd like
+    to catch the case where the internal heartbeats fail.
+    
+    This should be enough for all but the most sluggish of OSDs and capture
+    many cases of failure shortly after startup.
+    
+    Fixes: #11798
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit eaff6cb24ef052c54dfa2131811758e335f19939)
+
+commit 0d6a8c631f55367ac4f6f792a10ba62cd97e9fed (refs/remotes/me/wip-simple-connect-hammer)
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Wed Feb 25 23:38:54 2015 +0800
+
+    Pipe: Drop connect_seq increase line
+    
+    Revert commit 0fc47e267b6f8dcd4511d887d5ad37d460374c25.
+    
+    When accepting and "connect.connect_seq == existing->connect_seq",
+    existing->state maybe STATE_OPEN, STATE_STANDBY or STANDY_CONNECTING.
+    This commit only fix partial problem and want to assert
+    "(existing->state == STATE_CONNECTING)".
+    
+    So later we added codes to catch
+    "(existing->state == STATE_OPEN || existing->state == STATE_STANDBY)"
+    before asserting.
+    
+    Backport: dumpling, firefly, giant
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit 67225cb3ee1f6d274a02293724942bdb25cec8ca)
+
+commit 23fb811303971152f1c348e2a02de4e2bc6ed53d
+Merge: c1849ec 6c4ccc8
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Sep 13 14:10:23 2015 +0200
+
+    Merge pull request #5767 from dachary/wip-12597-hammer
+    
+    Crash during shutdown after writeback blocked by IO errors
+    
+    Reviewed-by: Jason Dillaman <dillaman@redhat.com>
+
+commit c1849ecfb2ae55b99b6db75ee49af19886c246b2
+Merge: f35c53d f028389
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Sep 13 07:42:36 2015 -0400
+
+    Merge pull request #5687 from liewegas/wip-hammer-feature-hammer
+    
+    include/ceph_features: define HAMMER_0_94_4 feature
+
+commit f35c53df7c155d7ff4a316a0817b11bc018c57ca
+Merge: 6e22620 4be8a28
+Author: Sage Weil <sage@redhat.com>
+Date:   Sat Sep 12 09:23:13 2015 -0400
+
+    Merge pull request #5892 from ceph/wip-13060-hammer
+    
+    osd: allow peek_map_epoch to return an error
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 4be8a28d5b5ba868d100300ab64ebb82b188222b
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 11 11:00:38 2015 -0400
+
+    osd/PG: peek_map_epoch: skip legacy PGs if infos object is missing
+    
+    - pg is removed
+    - osd is stopped before pg is fully removed
+    - on restart, we ignore/skip the pg because its epoch is too old
+    - we upgrade to hammer and convert other pgs, skipping this one, and then
+      remove the legacy infos object
+    - hammer starts, tries to parse the legacy pg, and fails because the infos
+      object is gone, crashing.
+    
+    The fix is to continue ignoring the zombie pg.
+    
+    Fixes: #16030
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit f237ed97228839a1b412ad213945f0343df05bf5
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Sep 11 17:41:01 2015 -0400
+
+    osd: allow peek_map_epoch to return an error
+    
+    Allow PG::peek_map_epoch to return an error indicating the PG
+    should be skipped.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f15d9585edc5a12ac2d076951076247253b897c2)
+    
+    [fixed *pepoch default of 0]
+    [fixed other return paths in peek_map_epoch]
+
+commit 3a50b904a2ffd613b695ead1b26c93278044d7df
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Aug 5 15:19:13 2015 +0800
+
+    crypto: fix unbalanced ceph::crypto::init/ceph::crypto:shutdown
+    
+    we may create a CephContext without calling common_init_finish(), then
+    delete the CephContext. In this case, ceph::crypto:init() is not called,
+    so CephContext::~CephContext() should not call ceph::crypto::shutdown().
+    
+    Fixes: #12598
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 98a85ec6464d8ec3fc7f0c647ac97c8cf002ebe2)
+
+commit 0a5b8569ecc6efa42b3d4fa7a58c155b3c2dbbe8
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Jul 30 16:59:32 2015 -0700
+
+    ReplicatedPG,Objecter: copy_get should include truncate_seq and size
+    
+    Otherwise, we break CephFS over cache tiers.
+    
+    Fixes: #12551
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 6f9ee7961eee9ee3a61a07cbe0d8d289ee98fa9a)
+    
+    Conflicts:
+    	src/osd/ReplicatedPG.cc
+
+commit 6e22620165872a88ab4b75ed2fb93f61beb65d12
+Merge: 508733f 00e73ad
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Sep 9 19:44:09 2015 -0400
+
+    Merge pull request #5769 from dachary/wip-12850-hammer
+    
+    Crash during TestInternal.MultipleResize
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 508733fd48f2c704b79ad36841346965f4d0429b
+Merge: 69a320e dc693fc
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Sep 9 19:44:01 2015 -0400
+
+    Merge pull request #5768 from dachary/wip-12849-hammer
+    
+    [  FAILED  ] TestLibRBD.BlockingAIO
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 82ea02ab8d886c16c511c4bd7d03d826158f954b
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jun 17 11:35:18 2015 -0700
+
+    rgw: fix assignment of copy obj attributes
+    
+    Fixes: #11563
+    Clarify the confusing usage of set_copy_attrs() by switching the source and
+    destinatiion params (attrs, src_attrs). Switch to use attrs instead of
+    src_attrs afterwards. In one of the cases we originally used the wrong
+    variable.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit e41d97c8e38bb60d7e09e9801c0179efe7af1734)
+
+commit 3b2affce1a229cead3e0ffacfdfde69258a267cb
+Author: Sylvain Baubeau <sbaubeau@redhat.com>
+Date:   Fri Sep 4 22:51:44 2015 +0200
+
+    rgw: add delimiter to prefix only when path is specified
+    
+    http://tracker.ceph.com/issues/12960
+    Fixes: #12960
+    
+    Signed-off-by: Sylvain Baubeau <sbaubeau@redhat.com>
+    (cherry picked from commit 27cf257248ea55f8f4bc7851c3956611828bcae2)
+
+commit 69a320e185f20da0824d0a62d3de77578c431a7a
+Merge: 8039375 0bc909e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 9 16:58:56 2015 +0200
+
+    Merge pull request #5697 from tchaikov/wip-12638-hammer
+    
+    mon: add a cache layer over MonitorDBStore
+    
+    Reviewed-by: Joao Eduardo Luis <joao@suse.de>
+
+commit 8039375327b5074a700193aae2d8b1922ca85398
+Merge: 19ff928 256620e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 9 14:52:54 2015 +0200
+
+    Merge pull request #5381 from dachary/wip-12499-hammer
+    
+    ceph-fuse 0.94.2-1trusty segfaults / aborts
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 19ff92806fd1e0fb866737f58e379aa8078b8017
+Merge: 7614bf7 059bf98
+Author: David Zafman <dzafman@redhat.com>
+Date:   Tue Sep 8 14:58:16 2015 -0700
+
+    Merge pull request #5757 from dachary/wip-12836-hammer
+    
+    WBThrottle::clear_object: signal on cond when we reduce throttle values
+    
+    Reviewed-by: David Zafman <dzafman@redhat.com>
+
+commit 7614bf7d117fdd476931cdd8825265321cef3c4c
+Merge: 2100631 bf72785
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:06:30 2015 +0200
+
+    Merge pull request #5759 from dachary/wip-12841-hammer
+    
+    recursive lock of md_config_t (0)
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 210063120708a7d6502c2b8d3e8c61731e37de5b
+Merge: a2e1fe2 836f763
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:05:41 2015 +0200
+
+    Merge pull request #5761 from dachary/wip-12843-hammer
+    
+    long standing slow requests: connection->session->waiting_for_map->connection ref cycle
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit a2e1fe26f602d0165999dfb72b97985f9bfe38ce
+Merge: 8ccb771 2348a5b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:04:51 2015 +0200
+
+    Merge pull request #5762 from dachary/wip-12844-hammer
+    
+    osd suicide timeout during peering - search for missing objects
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 8ccb7711d68dd3b95d2522c6e46f5021362c9088
+Merge: e9db807 77624af
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:04:03 2015 +0200
+
+    Merge pull request #5763 from dachary/wip-12846-hammer
+    
+    osd/PGLog.cc: 732: FAILED assert(log.log.size() == log_keys_debug.size())
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit e9db8075034dc4ac0ffe5d8dd9dd2153509237fa
+Merge: 5ef999e aa00373
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:03:10 2015 +0200
+
+    Merge pull request #5764 from dachary/wip-12847-hammer
+    
+    common: do not insert emtpy ptr when rebuild emtpy bufferlist
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 5ef999e4a1dc04d7b7e58b1a61f85511099fd6d4
+Merge: c243f7a cd11b88
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:02:14 2015 +0200
+
+    Merge pull request #5373 from dachary/wip-12489-hammer
+    
+    pg_interval_t::check_new_interval - for ec pool, should not rely on min_size to determine if the PG was active at the interval
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit c243f7a33b0fff261bb92595a3cc7abf12b7e56d
+Merge: e61fdc6 7bddf5d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 10:00:32 2015 +0200
+
+    Merge pull request #5383 from dachary/wip-12504-hammer
+    
+    rest-bench common/WorkQueue.cc: 54: FAILED assert(_threads.empty())
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit e61fdc67031b0358800335b638c96d22ecb85bd6
+Merge: 62f543b 9f69660
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 09:54:07 2015 +0200
+
+    Merge pull request #5765 from dachary/wip-12883-hammer
+    
+    cache agent is idle although one object is left in the cache
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 62f543bbb092554746d3b89aab4b1ea75a5cdbf1
+Merge: f25315c e471c5d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 09:53:14 2015 +0200
+
+    Merge pull request #5754 from dachary/wip-12588-hammer
+    
+    Change radosgw pools default crush ruleset
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit f25315c1e7e6e4700c2f39ba849dbcb25b0f1f89
+Merge: 021abe7 43a72e4
+Author: Loic Dachary <loic@dachary.org>
+Date:   Mon Sep 7 09:51:50 2015 +0200
+
+    Merge pull request #5377 from dachary/wip-12396-hammer
+    
+    register_new_pgs() should check ruleno instead of its index
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 021abe742ccec876497468ac556b9dfaf6c9503d
+Merge: 4125196 c94fd92
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Sep 6 21:07:38 2015 -0400
+
+    Merge pull request #5758 from dachary/wip-12839-hammer
+    
+    Mutex Assert from PipeConnection::try_get_pipe
+
+commit 9f69660133f9534722589801a6fc827b74bead44
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Aug 13 19:41:47 2015 +0200
+
+    tests: tiering agent and proxy read
+    
+    Verify that an object promoted to a cache tier because of a proxy read
+    is evicted as expected.
+    
+    http://tracker.ceph.com/issues/12673 Refs: #12673
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 7924231930732bd297d3bd034c8295e96cb81088)
+
+commit 5656eec0000e95ea790c796a9f572c7261163cfa
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Aug 13 13:47:24 2015 +0200
+
+    osd: trigger the cache agent after a promotion
+    
+    When a proxy read happens, the object promotion is done in parallel. The
+    agent_choose_mode function must be called to reconsider the situation
+    to protect against the following scenario:
+    
+      * proxy read
+      * agent_choose_mode finds no object exists and the agent
+        goes idle
+      * object promotion happens
+      * the agent does not reconsider and eviction does not happen
+        although it should
+    
+    http://tracker.ceph.com/issues/12673 Fixes: #12673
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit e1f58feb9b1d20b72f2eb2eefdea5982e0cddccd)
+
+commit 4125196d31de8933656561b2f860e16a546ec4b9
+Merge: 47af509 f47ba4b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Sep 6 23:17:22 2015 +0200
+
+    Merge pull request #5276 from dachary/wip-11824-hammer
+    
+    implicit erasure code crush ruleset is not validated
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 47af509003e551238702858ccd845b930e5ef1ed
+Merge: 2fd8ec8 1e05578
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Sep 6 17:24:43 2015 +0200
+
+    Merge pull request #5382 from dachary/wip-12500-hammer
+    
+    segfault launching ceph-fuse with bad --name
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 2fd8ec8385a90daaa1bdb9de189ec73c7ba49c6c
+Merge: e6bdae9 fa19474
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Sep 6 17:23:19 2015 +0200
+
+    Merge pull request #5367 from dachary/wip-12311-hammer
+    
+    read on chunk-aligned xattr not handled
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit dc693fcaf2c596087b434f9e90fbc553394b9a14
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Jul 29 12:46:24 2015 -0400
+
+    lockdep: allow lockdep to be dynamically enabled/disabled
+    
+    librbd test cases attempt to enable lockdep coverage via the librados
+    API.  Use a configuration observer to register/unregister lockdep
+    support.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit af0cade0293be22e74a3293765676c7b227b06c4)
+
+commit 805732b143fd28603238969ba784adb57eff1a12
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jul 28 14:23:14 2015 -0400
+
+    tests: librbd API test cannot use private md_config_t struct
+    
+    Remove all depencencies on md_config_t and instead use librados API
+    methods to get/set configuration values.
+    
+    Fixes: #12479
+    Backport: hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 2c51aadb447d3447b5dace19c5cb6268e94247c8)
+
+commit 7ac01731bcb0f1d46cf98ecf623c7e8e6cb1a38e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 9 15:06:27 2015 -0400
+
+    tests: ensure old-format RBD tests still work
+    
+    Override the RBD default image format back to version 1
+    to ensure tests properly cover the old format.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3b95edb5bd373bd05f83516eccfd30a6b5cf4693)
+
+commit b68d7574d12944589b246281474bcad01f5347be
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Jul 30 09:00:57 2015 -0400
+
+    librados_test_stub: implement conf get/set API methods
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 4d03c664f2a9362009c7e3077ed65e2989f0f21b)
+
+commit f0fa637e4a91a93a326ba303bc22101fadcc787d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jul 28 13:14:29 2015 -0400
+
+    crypto: use NSS_InitContext/NSS_ShutdownContex to avoid memory leak
+    
+    Switched to context-aware NSS init/shutdown functions to avoid conflicts
+    with parent application.  Use a reference counter to properly shutdown the
+    NSS crypto library when the last CephContext is destroyed.  This avoids
+    memory leaks with the NSS library from users of librados.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 9fa0112dd9286178da1d76020158503b2062d252)
+
+commit 3f542aa2410139bece0f4192079e4e34260da782
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Mar 21 07:13:51 2015 +0800
+
+    auth: use crypto_init_mutex to protect NSS_Shutdown()
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit cf058174fe6be26129eb52f4fb24d0f7146ef7af)
+
+commit e487e8e3d84c7845ce7824ace3e375c6c389ba20
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Mar 21 01:02:42 2015 +0800
+
+    auth: reinitialize NSS modules after fork()
+    
+    Fixes: #11128
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 4c24d0cc074462ae258b5cf901cd884bb4f50a53)
+
+commit 00e73adb03ef4453599268779fe354e4e8513e54
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Aug 11 09:26:33 2015 -0400
+
+    librbd: prevent race condition between resize requests
+    
+    It was possible that the same resize request could be sent twice
+    if a completed resize op started a newly created resize op while
+    it was also being concurrently started by another thread.
+    
+    Fixes: #12664
+    Backport: hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6ec431bac1cf9446f3af90209d193dfcf003f2c5)
+
+commit 6c4ccc854fa8a8403b03785b06cb35a7174f4f42
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Mon Mar 9 14:23:23 2015 +0800
+
+    librbd: Add a paramter:purge_on_error in ImageCtx::invalidate_cache().
+    
+    If bh_write met error, it will try again. For closing image, if met this
+    issue, it will trigger a assert:
+    >>2015-02-03 15:22:49.198292 7ff62d537800 -1 osdc/ObjectCacher.cc: In
+    function 'ObjectCacher::~ObjectCacher()' thread 7ff62d537800 time
+    >>2015-02-03 15:22:49.195927osdc/ObjectCacher.cc: 551: FAILED
+    >>assert(i->empty())
+    
+    Now add purge_on_error, when shutdown_cache it set true.
+    In ImageCtx::invalidate_cache, if met error and purge_on_error is true,
+    purge the dirty bh.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 35def5c81f7fc83d55d18320e4860c6a63d4c7f5)
+    
+    Conflicts:
+    	src/librbd/ImageCtx.cc : trivial resolution
+
+commit 05734916ab119c6d3879c2ce2bc9f9581907861a
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Thu Feb 5 11:28:50 2015 +0800
+
+    librbd: Remvoe unused func ImageCtx::read_from_cache.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 101440a41253680770f94bc380af7072c7adaebf)
+
+commit 28838f20a722b72a6e926e53f104342d3b9f4791
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Thu Feb 5 11:03:10 2015 +0800
+
+    osdc: clean up code in ObjectCacher::Object::map_write
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 9f80c2909ace09cd51c24b49c98a093e0e864dca)
+
+commit 5c4f152efa8e8f57c59ea7decc05ae1a34f2a9ee
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Thu Feb 5 10:13:06 2015 +0800
+
+    osdc: Don't pass mutex into ObjectCacher::_wait_for_write.
+    
+    Because the mutex is the same as ObjectCacher::lock.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit d7cf7aeea5cba1ffa8e51ff1ad2424b1ec161a12)
+
+commit 86e7698a19745c26b9d3e7a12a16c87ea9a5d565
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Mon Mar 2 11:23:44 2015 +0800
+
+    osdc: After write try merge bh.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 1a48a8a2b222e41236341cb1241f0885a1b0b9d8)
+
+commit c96541ad19fb142ed31ff3006f1dc25e0c1de86c
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Mon Mar 2 11:36:24 2015 +0800
+
+    osdc: Make last missing bh to wake up the reader.
+    
+    Avoid wakeup early and wait again.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit d582bda090b3339d03e25b0e6d0971ad0267f476)
+
+commit 4135b9a2d199583685a1bae3713347dcc1b872e6
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Fri Feb 6 09:53:36 2015 +0800
+
+    osdc: For trust_enoent is true, there is only one extent.
+    
+    Now the judgement only in conditon which will return -ENOENT.
+    But o->exists don't depend on the extent size. It only depend on
+    trust_enoent. So move this judgement at the first of _readx().
+    Make this bug ASAP occur.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 2449fddc13b5ce8bbf1bb4ecaa5d6937f54e54d1)
+
+commit 81376b6a1a5db9f8b45c58ea318ec924e932d990
+Author: Jianpeng Ma <jianpeng.ma@intel.com>
+Date:   Tue Feb 3 14:46:39 2015 +0800
+
+    osdc: In _readx() only no error can tidy read result.
+    
+    Signed-off-by: Jianpeng Ma <jianpeng.ma@intel.com>
+    (cherry picked from commit 540346d4a901d8041c9fd74641c98cdfd2e1ab32)
+
+commit e6bdae903cdd2f702829adc31fa9a31c239a3b87
+Merge: 317770d cdde626
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Fri Sep 4 15:38:43 2015 -0600
+
+    Merge pull request #5223 from SUSE/wip-12305-hammer
+    
+    ceph.spec.in: running fdupes unnecessarily
+    
+    Reviewed-by: Ken Dreyer <kdreyer@redhat.com>
+
+commit e80bd0a2a39afdabcb134100e0cc8fa74cbd14c2
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Thu Jun 25 18:28:50 2015 +0200
+
+    rgw: send Content-Length in response for GET on Swift account.
+    
+    Fixes: #12158
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 5f47b11791cd46ce2771046e4888575869cc9685)
+    Conflicts:
+    	src/rgw/rgw_rest_swift.cc
+
+commit 2e542456dee6c30b3200e9830d4ccae4b0325388
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Mon Jun 22 13:51:49 2015 +0200
+
+    rgw: force content_type for swift bucket stats request
+    
+    Fixes: 12095
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit da259e4da1329e1e448d75c48c6ee3d1318e19b2)
+
+commit 5d57b63c32e43000ff95c2d8ce34347ed0579a8a
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Aug 13 15:02:03 2015 +0200
+
+    rgw: we should not overide Swift sent content type
+    
+    Fixes: #12363
+    backport: hammer
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 423cf136f15df3099c9266f55932542d303c2713)
+
+commit b8aafbc6f9f80f029606a577d73f8685a80225b8
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Tue Jun 23 11:54:09 2015 +0200
+
+    rgw: enforce Content-Type in Swift responses.
+    
+    Swift sends Content-Type HTTP header even if the response
+    doesn't contain body. We have this behaviour implemented
+    until applying some changes in end_header() function.
+    Unfortunately, lack of Content-Type causes early exits in
+    many Tempest's tests for Swift API verification.
+    
+    Fixes: #12157
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit 106aeba206736d4080326f9bc191876bed63370b)
+
+commit 143cfc331efcc7bed8b1cf90d7e3188d0ac7604b
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Tue Apr 21 12:31:19 2015 +0200
+
+    rgw: force content-type header for swift account responses without body
+    
+    This regression was introduced in commit 4cfeca03ade21861ab70ca759f94eb244c16cb39
+    
+    Fixes: #11438
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 009664e560ee37ef6dc170a0155d6c749e151b06)
+
+commit b5420d6f1a6a1da34c7bba339e6763c4b369d349
+Author: Orit Wasserman <owasserm@redhat.com>
+Date:   Thu Apr 9 20:04:59 2015 +0200
+
+    rgw: shouldn't return content-type: application/xml if content length is 0
+    
+    Fixed: #11091
+    
+    Signed-off-by: Orit Wasserman <owasserm@redhat.com>
+    (cherry picked from commit 5cc92bb27cfbaee4af24dc312c9b98331f899794)
+
+commit 317770dd39510221cbc0fc7ee50960992137eaaf
+Merge: 6b02be7 6b36514
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Sep 3 12:20:38 2015 +0200
+
+    Merge pull request #5716 from dachary/wip-12851-hammer
+    
+    Ensure that swift keys don't include backslashes
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit 6b02be7395ad8f41f70458e7bd11630ddd498cc5
+Merge: fa74ea1 f1c7c62
+Author: Loic Dachary <loic@dachary.org>
+Date:   Thu Sep 3 12:11:24 2015 +0200
+
+    Merge pull request #5717 from dachary/wip-12591-hammer
+    
+    rgw: create a tool for orphaned objects cleanup
+    
+    Reviewed-by: Orit Wasserman <owasserm@redhat.com>
+
+commit fa74ea10ac25fe93f359ccf0fd036d567e9610fe
+Merge: 011e4c5 a478385
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 23:35:58 2015 +0200
+
+    Merge pull request #5755 from dachary/wip-12589-hammer
+    
+    ceph-disk zap should ensure block device
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 011e4c58ffb41aa5ae3240a40cbeba8266b89001
+Merge: e7c2269 b80859e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 23:22:59 2015 +0200
+
+    Merge pull request #5732 from ceph/wip-11455-hammer
+    
+    rgw: init some manifest fields when handling explicit objs
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit e7c2269dbebd5337ae5aad127d6ddaa4260a8f53
+Merge: 92b641f da00bed
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 23:19:02 2015 +0200
+
+    Merge pull request #5721 from dachary/wip-12853-hammer
+    
+    RGW Swift API: X-Trans-Id header is wrongly formatted
+    
+    Reviewed-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+
+commit 92b641f301df33a38ccfcf018c5f7657db8548ae
+Merge: 845d2ae 3ab5d82
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 23:08:24 2015 +0200
+
+    Merge pull request #5498 from ceph/wip-12432-hammer
+    
+    rgw: HTTP return code is not being logged by CivetWeb
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 836f7636f76b2778812e4fa055206a887fd27dad
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue Jul 21 11:31:12 2015 -0700
+
+    OSD: break connection->session->waiting message->connection cycle
+    
+    Fixes: #12338
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 7f15e22be291df139c85909b96b2366f6dbadf37)
+
+commit 77624aff03a8df7805ac0c1c6a7a2085f41fb6a3
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Aug 9 10:46:10 2015 -0400
+
+    osd/PGLog: dirty_to is inclusive
+    
+    There are only two callers of mark_dirty_to who do not pass max,
+    and they are both in the merge_log extending tail path.  In that
+    case, we want to include the last version specified in the log
+    writeout.  Fix the tail extending code to always specify the
+    last entry added, inclusive.
+    
+    Fixes: #12652
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f0ca14df0641daa04eee39d98d8bd0faf46e4e6d)
+
+commit aa003736d2aeea937ce0d8663b159cf06b2dda3e
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Mon Aug 24 23:02:10 2015 +0800
+
+    common: fix code format
+    
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit 15e5ebe14787bbbc6b906d72ccd2d418d762cfad)
+
+commit aab35da90d7d50750fda6355d5a124a45d66f1c5
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Mon Aug 24 22:59:40 2015 +0800
+
+    test: add test case for insert empty ptr when buffer rebuild
+    
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit 2d2f0eb338906742d516a2f8e6d5d05505be8f47)
+
+commit 2b0b7ae6443eeca271813415a91ab749c886fdf0
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Mon Aug 24 23:01:27 2015 +0800
+
+    common: fix insert empty ptr when bufferlist rebuild
+    
+    Fixes: #12775
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit fb1b6ddd7bfe40d4a38d5ec59b1c3f59f2a83f23)
+    
+    Conflicts:
+    	src/common/buffer.cc : because invalidate_crc did not exist
+            in hammer
+
+commit 845d2aed9e9a9893678226b8661fbd8ff87c090f
+Merge: a6517d2 3396a96
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 12:00:11 2015 +0200
+
+    Merge pull request #5527 from SUSE/wip-12585-hammer
+    
+    OSD crash creating/deleting pools
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 2348a5b5c96d065fbc2188bd9e8e7ff20c75ecaa
+Author: Guang G Yang <yguang@renownedground.corp.gq1.yahoo.com>
+Date:   Wed Jul 29 21:47:17 2015 +0000
+
+    osd: copy the RecoveryCtx::handle when creating a new RecoveryCtx instance from another one
+    
+    Fixes: 12523
+    
+    Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
+    (cherry picked from commit 6ab9efe799b947f2ef6113df8cc542c73760107d)
+
+commit bf72785e1e11b18df9a03ebfa7c284fe4f43eaa0
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Aug 24 15:40:39 2015 -0700
+
+    config: skip lockdep for intentionally recursive md_config_t lock
+    
+    lockdep can't handle recursive locks, resulting in false positive
+    reports for certain set_val_or_die() calls, like via
+    md_config_t::parse_argv() passed "-m".
+    
+    Fixes: #12614
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 415226995ebe841cc9e8639a3233150a75aecaed)
+
+commit c94fd926239a31dea1389a760f55f332a9b6814a
+Author: David Zafman <dzafman@redhat.com>
+Date:   Thu Jul 23 16:36:19 2015 -0700
+
+    osd: Keep a reference count on Connection while calling send_message()
+    
+    Fixes: #12437
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit a140085f467889f2743294a3c150f13b62fcdf51)
+
+commit 059bf98d40fa7e1eddb7aef2ecfdfb6bc96c14fb
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue Jul 7 08:49:54 2015 -0700
+
+    WBThrottle::clear_object: signal if we cleared an object
+    
+    Fixes: #12223
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 8447b08d60d5cf7dce20f8b839cc2cb5a93782de)
+
+commit a478385334323071b5cfa4d546eef5b0ef43dce7
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sun May 31 19:42:45 2015 +0200
+
+    ceph-disk: always check zap is applied on a full device
+    
+    zap only makes sense on a full device and this is verified for
+    
+        ceph-disk prepare --zap-disk
+    
+    but not for
+    
+        ceph-disk zap
+    
+    Unify the two and add a test to check that it fails as expected when
+    trying to zap a directory.
+    
+    http://tracker.ceph.com/issues/11272 Fixes: #11272
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit 8e1bcf21f090fc98ac9b495d76614e3012f5872a)
+    
+    Conflicts:
+    	src/test/ceph-disk.sh : trivial resolution
+
+commit e471c5dc16847ba35d3c3c8c74da1bf7c4c946e0
+Author: Yuan Zhou <yuan.zhou@intel.com>
+Date:   Wed Jul 8 10:35:49 2015 +0800
+
+    librados: Make librados pool_create respect default_crush_ruleset
+    
+    Make pool_create in librados use the osd_pool_default_crush_replicated_ruleset
+    
+    Fixes: #11640
+    
+    Signed-off-by: Yuan Zhou <yuan.zhou@intel.com>
+    (cherry picked from commit da96a89033590277460aef1c80f385bd93d625e1)
+
+commit a6517d286b59eac283d7bfd04b620f5b859657b6
+Merge: a89c173 35fa47a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Wed Sep 2 02:19:26 2015 +0200
+
+    Merge pull request #5551 from ceph/wip-corpus-hammer
+    
+    ceph-object-corpus: add 0.94.2-207-g88e7ee7 hammer objects
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 35fa47a117a3e8d185f7ebe02eea5671f8229427 (refs/remotes/me/wip-corpus-hammer, refs/remotes/gh/wip-corpus-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Sep 1 17:44:06 2015 -0400
+
+    ceph-object-corpus: add 0.94.2-207-g88e7ee7 hammer objects
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit b80859e2b2efc2402dc62aa319e40319863586f7 (refs/remotes/gh/wip-11455-hammer)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Aug 26 14:34:30 2015 -0700
+
+    rgw: init some manifest fields when handling explicit objs
+    
+    Fixes: #11455
+    When dealing with old manifest that has explicit objs, we also
+    need to set the head size and head object correctly so that
+    code that relies on this info doesn't break.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit d7bf8cb594e5276d1c80544f5ec954d52b159750)
+
+commit f47ba4b1a1029a55f8bc4ab393a7fa3712cd4e00
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Thu Jul 16 18:02:02 2015 +0200
+
+    mon: test the crush ruleset when creating a pool
+    
+    We want to fix the following scenario:
+    
+     * an erasure code plugin (or another part of the code) creates a
+       ruleset
+     * the ruleset crashes during mapping (for whatever reason)
+     * ceph osd pool create uses the bugous ruleset
+     * the monitors try to do mapping a crash
+    
+    Having a bugous ruleset in the crush map is very difficult prevent. The
+    catastrophic event of using it with a newly created pool can however be
+    prevented by calling the CrushTester just before creating the pool and
+    after all implicit or explicit crush ruleset creation happened.
+    
+    http://tracker.ceph.com/issues/11814 Fixes: #11814
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit f1e86be589803596e86acc964ac5c5c03b4038d8)
+    
+    Conflicts:
+    	src/test/mon/osd-crush.sh
+              removed the run_mon because in hammer it is shared
+              between all tests
+            src/mon/OSDMonitor.cc
+              prepare_new_pool changed stringstream to *ostream
+
+commit b58cbbab4f74e352c3d4a61190cea2731057b3c9
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat May 30 12:40:26 2015 +0200
+
+    erasure-code: set max_size to chunk_count() instead of 20 for shec
+    
+    See 8b64fe93b088a3a33d357869c47e6bf928c3f0e4 for a detailed explanation.
+    
+    Signed-off-by: Loic Dachary <ldachary@redhat.com>
+    (cherry picked from commit a44499f7e6609d9a32254dc6f4303122de74db31)
+
+commit 6f0af185ad7cf9640557efb7f61a7ea521871b5b
+Author: Mykola Golub <mgolub@mirantis.com>
+Date:   Thu Feb 26 21:22:31 2015 +0200
+
+    vstart.sh: set PATH to include pwd
+    
+    ceph-mon needs crushtool to be in PATH. Don't set if it is run
+    from ceph_vstart_wrapper, which already sets it as it needs.
+    
+    Signed-off-by: Mykola Golub <mgolub@mirantis.com>
+    (cherry picked from commit e08bccf377292d72463796ae1dff5d8be40d88e9)
+
+commit a89c1731e0e327acdb876d39df574e27379aaa1e
+Merge: c3a2bf3 0fde3a2
+Author: Gregory Farnum <greg@gregs42.com>
+Date:   Mon Aug 31 09:41:33 2015 +0100
+
+    Merge pull request #5365 from dachary/wip-12491-hammer
+    
+    buffer: critical bufferlist::zero bug
+    
+    Reviewed-by: Greg Farnum <gfarnum@redhat.com>
+
+commit c3a2bf3f6b1d1bf416fa04df1629630abe2fe563
+Merge: 0a44eb1 4457d3e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 19:58:25 2015 +0200
+
+    Merge pull request #5369 from dachary/wip-12498-hammer
+    
+    get pools health'info have error
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 0a44eb12fc7d2ef902f1999e37abae0f11511d66
+Merge: dfcdba7 9916d37
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 19:52:52 2015 +0200
+
+    Merge pull request #5370 from dachary/wip-12496-hammer
+    
+    pgmonitor: wrong at/near target max“ reporting
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit dfcdba75f310eaa2cfc5ae97ba3093afe1198737
+Merge: 69a9a4c b8176d0
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 19:44:56 2015 +0200
+
+    Merge pull request #5378 from dachary/wip-12394-hammer
+    
+    Memory leak in Mutex.cc, pthread_mutexattr_init without pthread_mutexattr_destroy
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit 69a9a4cbf28c87fcd68f6c6c0c09f7a6d95ab003
+Merge: d3b160e 42bff0b
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 19:44:26 2015 +0200
+
+    Merge pull request #5372 from dachary/wip-12493-hammer
+    
+    the output is wrong when runing ceph osd reweight
+    
+    Reviewed-by: Kefu Chai <kchai@redhat.com>
+
+commit da00bedbc2f5d2facb9472078fd6cdd7260492ac
+Author: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+Date:   Thu Aug 6 15:52:58 2015 +0200
+
+    rgw: rework X-Trans-Id header to be conform with Swift API.
+    
+    Fixes: #12108
+    Signed-off-by: Radoslaw Zarzynski <rzarzynski@mirantis.com>
+    (cherry picked from commit d1735a4e8ea2056d333a5001a7a410fc03fe1b9e)
+
+commit 9937c818f1073bceffcf5811c7cc543b9043e646
+Author: Abhishek Dixit <dixitabhi@gmail.com>
+Date:   Mon Jun 8 22:59:54 2015 +0530
+
+    Transaction Id added in response
+    
+    Signed-off-by: Abhishek Dixit dixitabhi@gmail.com
+    
+    (cherry picked from commit b711e3124f8f73c17ebd19b38807a1b77f201e44)
+    
+    Conflicts:
+    	src/rgw/rgw_rest.cc
+                 the prototype of the end_header( function
+                 in the context of the diff changed
+
+commit f1c7c629f2a7baf87a3d25d68b7a40fb3b2f6c49
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Jun 29 15:35:04 2015 -0700
+
+    rgw: api adjustment following a rebase
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 7cf1f376e7dbc98a44f4a8e78bfa11f84291a941)
+
+commit 85911df5226dccfd2f1806a204a23eae3966eee7
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Jun 29 15:34:44 2015 -0700
+
+    rgw: orphans, fix check on number of shards
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 47edec359be2a4d230a4a54c0c670d0aa711fa1e)
+
+commit c1cf7dfb672032012889840fb4462b1a076f34c0
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Jun 29 15:34:11 2015 -0700
+
+    rgw: orphans, change default number of shards
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 5528f21d0861d42378a8eb10759a1e55ddd66c09)
+
+commit bb1d4cc3a3e9af3bf8cd8fd80085fbbbaeb8b89f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue May 5 14:43:05 2015 -0700
+
+    rgw: change error output related to orphans
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit cac57caf639236adc9a641a85352eb729b58725a)
+
+commit 2e0f6fe98787e1f3ea7d107a814caadce7ee5f23
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 4 17:02:29 2015 -0700
+
+    rgw: orphan, fix truncated detection
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit d8ce04db8542dae0027423f3c50355e5de74dc9a)
+
+commit 1bfebefba2e09448d28853b34415d3f65e323c76
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 4 16:32:57 2015 -0700
+
+    radosgw-admin: simplify orphan command
+    
+    No need for --init-search
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 4980cbd04ff650d79a033bc5298e6c1abe985133)
+
+commit f244b159ac8793c11a5707ea0b104b3180efb58f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 4 15:24:00 2015 -0700
+
+    radosgw-admin: stat orphan objects before reporting leakage
+    
+    We don't want to report new objects as leaked, because they might just
+    be written, and waiting to be linked to a new object. The number of
+    seconds prior to the job initialization can be cofigured through
+    --orphan-stale-secs (by default it's 24h).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 66b0090023859d97da2bbaca698b6a50c225abd0)
+
+commit f80e2b2bc8879d1cc40338816196f51378aaa785
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon May 4 14:39:20 2015 -0700
+
+    radosgw-admin: orphans finish command
+    
+    A command to remove orphans data
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 55d6f5ecf18f532c7f056f8b60c101843594b00c)
+
+commit 88d32c641a06823df93f0e3fae640a880778e1e4
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Sat May 2 17:28:30 2015 -0700
+
+    rgw: cannot re-init an orphan scan job
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit f8993102731518153bb18eb74c3e6e4943a5dbac)
+
+commit 80a40342b6a0d9e7a47ca4b672901315246385df
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Sat May 2 16:38:08 2015 -0700
+
+    rgw: stat_async() sets the object locator appropriately
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit d7d117121858155acc8548908e9459a48c676dd1)
+
+commit 0082036348e0463e42520504466961eb2bd77602
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Sat May 2 16:34:09 2015 -0700
+
+    rgw: list_objects() sets namespace appropriately
+    
+    list_objects() now uses parse_raw_oid(), so that it can set the correct
+    namespace. It only affects users of the function that want to get all
+    objects in bucket, regardless to the namespace associated with it. This
+    makes it so that the orphan code actually works now with namespaced
+    objects, and with special named objects (namely, start with underscore).
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 20bd490bebf9be3553d4e25322c9544b0b090086)
+
+commit 1c3707291e83771ca1d5cd24ce445f723006b744
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri May 1 17:23:44 2015 -0700
+
+    rgw: modify orphan search fingerprints
+    
+    Now works with multipart uploads.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit fa61ea2ccc94f04afb39868ac34abc264806d8d4)
+
+commit ef81367a1eaeb7778dc60a668b9fe2f6a77e06ff
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri May 1 15:17:10 2015 -0700
+
+    rgw: compare oids and dump leaked objects
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 1bc63d98ff8a3aa180065153690b4f8a73658b79)
+
+commit f4d0544e63f68fa94b21fda71c0b78edd05038a1
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Apr 30 16:17:54 2015 -0700
+
+    rgw: keep accurate state for linked objects orphan scan
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit f19b2f087cfb5a89edf3b19487c0df3a214e350f)
+
+commit 748ea57cfeca7b295afca5b8126d454eb85550c7
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Apr 29 17:12:34 2015 -0700
+
+    rgw: iterate over linked objects, store them
+    
+    only keep part of the oid name if it is in a namespace.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 75902fdb12ce0413d3beb455df47134f3d7386e7)
+
+commit 6c6aa5ddf38102012e61f79f5234b9647d42b461
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Apr 29 17:12:00 2015 -0700
+
+    rgw: add rgw_obj::parse_raw_oid()
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 7c1aa8373a090d5c1b2aa121582547723120a079)
+
+commit 62d562d76e0456cc3c735c6708531c7deb2874da
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Apr 29 14:50:15 2015 -0700
+
+    rgw: iterate asynchronously over linked objects
+    
+    Read objects manifest. So that we could keep the relevant info later.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 05a953d965a0a6a0e9feddaa62f7429e154e828e)
+
+commit 00ecf2d0a895407bc8ec0e55e1b1b0f47a1aa96f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Apr 29 14:15:33 2015 -0700
+
+    rgw: async object stat functionality
+    
+    An async functionality that stats object.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 13adf3cf4f5fd8a0feb7cc1d7a4ee4ded9f573db)
+
+commit 7d1cc48ba32e8bc732c43ecb539312c6bfcc0f80
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Apr 28 16:45:49 2015 -0700
+
+    rgw-admin: build index of bucket indexes
+    
+    for the orphan search tool
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 16a2dbd838b69fb445c06122a68fc65ec3a7b3de)
+
+commit c1b0e7a985cc9e742dcef4c8c427c57a2f58fa43
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Sat Apr 25 09:37:53 2015 -0700
+
+    rgw: initial work of orphan detection tool implementation
+    
+    So far doesn't do much, iterate through all objects in a specific pool
+    data, store it in a sharded index.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 767fc29aa62a0a4e4dd8a78785576e8f1b44ee5b)
+
+commit b16129c3393d6e301b4af5203ffa1c6d8dfdda38
+Author: Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
+Date:   Wed Apr 29 13:35:29 2015 +0530
+
+    Avoid an extra read on the atomic variable
+    
+    Signed-off-by: Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
+    (cherry picked from commit 7476e944af049aefdb8871cce62883b86f6b6f8d)
+
+commit 1f6916d5a9b0ebe5181b801c4c381a699883bb09
+Author: Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
+Date:   Wed Apr 8 18:53:14 2015 +0530
+
+    RGW: Make RADOS handles in RGW to be a configurable option
+    
+    Having a configurable number of RADOS handles is resulting
+    in significant performance boost for all types of workloads.
+    Each RGW worker thread would now get to pick a RADOS handle
+    for its lifetime, from the available bunch.
+    
+    Signed-off-by: Pavan Rallabhandi <pavan.rallabhandi@sandisk.com>
+    (cherry picked from commit b3c3a24fe9c0fbb2bdbbccb08b40efc1dca207cc)
+
+commit d3b160ecbe181c2b969a14825cf314a056630188
+Merge: 7357659 695f782
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 15:50:03 2015 +0200
+
+    Merge pull request #5374 from dachary/wip-12487-hammer
+    
+    ceph osd crush reweight-subtree does not reweight parent node
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit 7357659b59d9bf3522bf664f1a3da7475a7c8a49
+Merge: 8f559d5 8a2ad05
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 15:49:41 2015 +0200
+
+    Merge pull request #5380 from dachary/wip-12390-hammer
+    
+    PGLog::proc_replica_log: correctly handle case where entries between olog.head and log.tail were split out
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+
+commit a13c7fd7c39e83072f2975477e1cdcfe079fb041
+Author: Ruifeng Yang <149233652@qq.com>
+Date:   Sat Aug 1 17:39:17 2015 +0800
+
+    rgw:the arguments 'domain' should not be assigned when return false
+    
+        Hostnames: [B.A]
+        Inputs: [X.BB.A]
+        Return: [false]
+        Output: [B.A] it is wrong.
+    
+    Fixes: #12629
+    Signed-off-by: Ruifeng Yang <149233652@qq.com>
+    (cherry picked from commit 9420d24c21b4e06d62f356637599c6ec8e7e3e4d)
+
+commit 6acf36f8851b8a369949f0fad9d0156af7dde20f
+Author: Ruifeng Yang <149233652@qq.com>
+Date:   Sun Aug 2 16:16:05 2015 +0800
+
+    rgw:segmentation fault when rgw_gc_max_objs > HASH_PRIME
+    
+    obj_names[] is index out of bounds when rgw_gc_max_objs > HASH_PRIME
+    
+    Fixes: #12630
+    Signed-off-by: Ruifeng Yang <149233652@qq.com>
+    (cherry picked from commit e3147b8ddcaafafde9ce2029f7af5062e22076d3)
+
+commit 6b365144862cbd387d8b931939a3dc2cfe17bbbd
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Mon Jul 20 20:27:33 2015 -0700
+
+    rgw: avoid using slashes for generated secret keys
+    
+    Just use plain alphanumeric characterset.
+    
+    Fixes: #7647
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 3f04a6126fdbfb93304f798da3775c0eec9b7d44)
+
+commit 8f559d58b42b91f070bfa590d9c33e9a156e0066
+Merge: d94e764 931ffe3
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Aug 30 08:36:37 2015 -0400
+
+    Merge pull request #5366 from dachary/wip-12303-hammer
+    
+    arm: all programs that link to librados2 hang forever on startup
+
+commit 8ba6b2f628a0f80964afbf4a83b61c4eee9c78ce
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Jul 30 14:47:15 2015 -0700
+
+    rgw: url encode exposed bucket
+    
+    Fixes: #12537
+    Don't send the bucket name back without url encoding it.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit ad5507fe0bf72ed5bdf8353e315cc9092c740144)
+
+commit d94e7642d0b0213a4b650a5acffa050d042087eb
+Merge: 11a80d8 6417e8e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:41:01 2015 +0200
+
+    Merge pull request #5202 from SUSE/wip-12293-hammer
+    
+    ceph.spec.in: rpm: cephfs_java not fully conditionalized
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 11a80d8bec6ff704e794a2995d653cd5d5c1c979
+Merge: a792ae6 3728477
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:40:48 2015 +0200
+
+    Merge pull request #5203 from SUSE/wip-11997-hammer
+    
+     ceph.spec.in: rpm: not possible to turn off Java
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a792ae65e2e03e1ca8804380cdbbfa1aec7a2123
+Merge: f7e76d2 8f78001
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:40:30 2015 +0200
+
+    Merge pull request #5204 from SUSE/wip-11629-hammer
+    
+    ceph.spec.in: SUSE/openSUSE builds need libbz2-devel
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit f7e76d2c9e681b3c5775f74c582830f546359703
+Merge: d1feb04 4eb58ad
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:40:09 2015 +0200
+
+    Merge pull request #5207 from SUSE/wip-12267-hammer
+    
+    ceph.spec.in: 50-rbd.rules conditional is wrong
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit d1feb0415b3b3dc9c5b003d8528079ccccd0729f
+Merge: 2dca2ec 8b576bd
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:39:57 2015 +0200
+
+    Merge pull request #5216 from SUSE/wip-12269-hammer
+    
+    ceph.spec.in: ceph-common needs python-argparse on older distros, but doesn't require it
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 2dca2ece0478972e89ed6611a15892ad9e449cc8
+Merge: 64fafc9 0818e9f
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:39:31 2015 +0200
+
+    Merge pull request #5264 from SUSE/wip-12361-hammer
+    
+    ceph.spec.in: snappy-devel for all supported distros
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 64fafc95785024421cbb7ccae41ed4276eeb8fe9
+Merge: 4675971 add0f1e
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:39:14 2015 +0200
+
+    Merge pull request #5368 from dachary/wip-12331-hammer
+    
+    ceph: cli throws exception on unrecognized errno
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 4675971ce3331f1285398d1556a594f671e489c0
+Merge: 53cdcf2 e004941
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:39:00 2015 +0200
+
+    Merge pull request #5371 from dachary/wip-12494-hammer
+    
+    ceph tell: broken error message / misleading hinting
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 53cdcf20482823cdb8682dde89706d6f21d8d0d2
+Merge: 362874c eccf369
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:38:43 2015 +0200
+
+    Merge pull request #5385 from dachary/wip-12501-hammer
+    
+    error in ext_mime_map_init() when /etc/mime.types is missing
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 362874ca39e32c3bc5ee13b13f905fd7693d9449
+Merge: 2044f3c 8804b3f
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:38:29 2015 +0200
+
+    Merge pull request #5411 from SUSE/wip-12446-hammer
+    
+    ceph.spec.in: radosgw requires apache for SUSE only -- makes no sense
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 2044f3cd7b220cc642245e7ca93c21a17cc8c536
+Merge: 260e24b a785193
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:38:13 2015 +0200
+
+    Merge pull request #5412 from SUSE/wip-12448-hammer
+    
+    ceph.spec.in: useless %py_requires breaks SLE11-SP3 build
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 260e24bba0e83dfa61d25ac0489f656244211db4
+Merge: dc944fb b575ecc
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:30:18 2015 +0200
+
+    Merge pull request #5318 from ceph/wip-12236-hammer
+    
+    Possible crash while concurrently writing and shrinking an image
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit dc944fbbedcee56dfbd9d4f5ac3c38d15a6621ea
+Merge: a8c1b4e 92272dd
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:30:01 2015 +0200
+
+    Merge pull request #5319 from ceph/wip-12235-hammer
+    
+    librbd: deadlock during cooperative exclusive lock transition
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a8c1b4e7436832ed3040d5a90df713ef6029cb69
+Merge: a39aeee e971820
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 13:29:26 2015 +0200
+
+    Merge pull request #5296 from ceph/wip-12345-hammer
+    
+    librbd: correct issues discovered via lockdep / helgrind
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit a39aeeedf07518d65c9944476b98a0788585f5c1
+Merge: 6a949e1 153744d
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 12:14:22 2015 +0200
+
+    Merge pull request #5559 from ceph/wip-12682-hammer
+    
+    object_map_update fails with -EINVAL return code
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 6a949e10198a1787f2008b6c537b7060d191d236
+Merge: 1e423af 4faa8e0
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 12:11:10 2015 +0200
+
+    Merge pull request #5468 from ceph/wip-12577-hammer
+    
+    osd: fix repair when recorded digest is wrong
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 1e423afd3c7e534e302dbea0798a47f82acec141
+Merge: 574932b 0ca93db
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 12:06:59 2015 +0200
+
+    Merge pull request #5376 from dachary/wip-12433-hammer
+    
+    Show osd as NONE in ceph osd map <pool> <object>  output
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 574932b2f438787f1a330a271644d9787eecbb63
+Merge: ed162d4 d08db7a
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sun Aug 30 11:54:55 2015 +0200
+
+    Merge pull request #5359 from ceph/wip-11470.hammer
+    
+    mon: PaxosService: call post_refresh() instead of post_paxos_update()
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit ed162d498051ac237be33ac6a6764ae0c61d57a6
+Merge: 41a245a bee8666
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Fri Aug 28 14:43:31 2015 -0400
+
+    Merge pull request #5691 from jdurgin/wip-10399-hammer
+    
+    is_new_interval() fixes
+    
+    Reviewed-by: Samuel Just <sjust@redhat.com>
+
+commit 0bc909e54b0edd8a32a3e7db16877f1d875c3186
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Mon Aug 10 04:25:03 2015 -0700
+
+    mon: add a cache layer over MonitorDBStore
+    
+    the cache of of leveldb does not perform well under some condition,
+    so we need a cache in our own stack.
+    
+    * add an option "mon_osd_cache_size" to control the size of cache size
+      of MonitorDBStore.
+    
+    Fixes: #12638
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 5e99a578050976ca22b549812ac80d494fe7041d)
+    
+    Conflicts:
+    	src/mon/OSDMonitor.h
+    minor differences in OSDMonitor ctor
+
+commit bee86660377cfaa74f7ed668dd02492f25553ff9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Aug 21 11:32:39 2015 -0400
+
+    Objecter: pg_interval_t::is_new_interval needs pgid from previous pool
+    
+    When increasing the pg_num of a pool, an assert would fail since the
+    calculated pgid seed would be for the pool's new pg_num value instead
+    of the previous pg_num value.
+    
+    Fixes: #10399
+    Backport: infernalis, hammer, firefly
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f20f7a23e913d09cc7fc22fb3df07f9938ddc144)
+    
+    Conflicts: (hobject_t sort order not backported, trivial resolution)
+    	src/osdc/Objecter.cc
+    	src/osdc/Objecter.h
+
+commit b5418b9a7138b45b5fe4f24cfb679c2abb30ab71
+Author: Samuel Just <sjust@redhat.com>
+Date:   Tue May 26 12:35:11 2015 -0700
+
+    osd_types::is_new_interval: size change triggers new interval
+    
+    Fixes: 11771
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit ff79959c037a7145f7104b06d9e6a64492fdb95f)
+
+commit f0283890d22e8d5c2210d565077ad3af1921f098 (refs/remotes/gh/liewegas-wip-hammer-feature-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 27 14:09:50 2015 -0400
+
+    include/ceph_features: define HAMMER_0_94_4 feature
+    
+    This is to constrain upgrades past hammer to version that include
+    the appropriate compatibility fixes (e.g., hobject_t encoding).
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2868b49c0e39fdc7ae72af81962370c4f95a859e)
+    
+    # Conflicts:
+    #	src/include/ceph_features.h
+
+commit 41a245aff77dde8a2ab212f9c91a73a23a77c40d
+Merge: 95cefea 65b380f
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Aug 27 13:07:29 2015 -0400
+
+    Merge remote-tracking branch 'gh/wip-12536-hammer' into hammer
+    
+    This includes wip-osd-compat-hammer.
+
+commit 65b380f7f28a36bb51a6771a2fd9b657ea2848ba (refs/remotes/gh/wip-12536-hammer)
+Merge: 00d802d 9b91adc
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Aug 19 09:52:02 2015 -0400
+
+    Merge remote-tracking branch 'gh/wip-osd-compat-hammer' into wip-12536-hammer
+
+commit 153744d7c596705c4f92bee5e827846b46c80141
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Aug 10 09:39:50 2015 -0400
+
+    tests: increase test coverage for partial encodes/decodes
+    
+    Multiple combinations of offsets/lengths are now tested when
+    performing partial encodes/decodes of the bit vector.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3e145f714ac9b2d599b45a058c6b93595e38f424)
+
+commit fca78765366f3ac365cfa98224aca5fb79b2a7fe
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Aug 10 09:34:42 2015 -0400
+
+    common: bit_vector extent calculation incorrect for last page
+    
+    It's highly probable that the last page in the bit vector will not
+    be a full page size.  As a result, the computed extents will extend
+    beyond the data portion of the bit vector, resulting in a end_of_buffer
+    exception.
+    
+    Fixes: #12611
+    Backport: hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c6d98992691683524d3d96def83a90a6f5fe7f93)
+
+commit 3396a969741f74e5b1f55d8d7af258493ca26478
+Author: John Spray <john.spray@redhat.com>
+Date:   Thu Jul 30 14:20:56 2015 +0100
+
+    osd/OSDMap: handle incrementals that modify+del pool
+    
+    Because new_pools was processed after old_pools, if something
+    was modified and then deleted in the same incremental
+    map, then the resulting state would be a pool in the map
+    that had no entry in pool_name.
+    
+    Fixes: #12429
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 8d4932e721e32a33c1bada54e11d4ecccd868618)
+
+commit 3ab5d82a1c09142267c27156b69a3117d30c5b7d (refs/remotes/gh/wip-12432-hammer)
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jul 22 10:01:00 2015 -0700
+
+    rgw: set http status in civetweb
+    
+    Need to set the http status in civetweb so that we report it correctly.
+    Fixes: #12432
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit b8e28ab9f914bf48c9ba4f0def9a0deb9dbb93bc)
+
+commit 10a03839853246c535e639b6dc6cea45b8673642
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Jul 31 11:03:29 2015 -0700
+
+    civetweb: update submodule to support setting of http status
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+
+commit 00d802d97ba5e1a8bde2414f8710494f15807fcd
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 23 11:03:17 2014 -0800
+
+    hobject_t: fix get_boundary to work with new sorting regime
+    
+    The hash is no longer the most significant field; set everything that is
+    more significant, too.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 45281efad1ae6b2b5ddd5549c56dbdd46671e5c5)
+
+commit 9b91adc560c8dffc1f5f7470d28c25f448b2b619 (refs/remotes/gh/wip-osd-compat-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 4 13:21:50 2015 -0400
+
+    mon: disallow post-hammer OSDs if there are up pre-hammer OSDs
+    
+    Force *all* OSDs to upgrade to hammer before allowing post-hammer
+    OSDs to join.  This prevents any pre-hammer OSDs from running at
+    the same time as a post-hammer OSD.
+    
+    This commit, as well as the definition of the sentinal post-hammer
+    feature, should get backported to hammer stable series.
+    
+    Backport: hammer
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit e38d60e94503c7e8511a60a8dceceb3cd39c2bd8)
+    
+    # Conflicts:
+    #	src/mon/OSDMonitor.cc
+
+commit 8a559c1e80bb7c70e13c46f1900896c9b8fcd9a9
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Aug 4 13:16:11 2015 -0400
+
+    include/ceph_features: define MON_METADATA feature
+    
+    This was added in master in 40307748b9b8f84c98354a7141da645a3c556ba9.  We
+    define it but notably do not support it!
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 4faa8e04069417a6e2a6c4ea5c10b54d76aa00c4 (refs/remotes/gh/wip-12577-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Mar 27 10:17:12 2015 -0700
+
+    osd: include newlines in scrub errors
+    
+    We may log more than one of these in a scrubmap; make sure they are
+    not concatenated.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 2b3dd1bb7ab360e8f467a47b7ce3a0e4d3a979b2)
+
+commit 455eb2a89197e9609c5bb510112d661d388b4c85
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Mar 27 10:04:00 2015 -0700
+
+    osd: fix condition for loggin scrub errors
+    
+    We may have an error to log even though the authoritative map is empty:
+    when we have a digest that doesn't match all replicas.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit d23766be902080ffb29528acb5a00d70beb97a9f)
+
+commit 67e7946ce8e28f00db9588bed670ef5141268f41
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Mar 27 10:03:22 2015 -0700
+
+    osd: fix fallback logic; move into be_select_auth_object
+    
+    The fallback behavior was printing a promising message but then doing
+    a 'continue' and not actually scrubbing the object.  Instead, fall back to
+    a less-bad auth inside be_select_auth_object.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b597db59fedc9a96dbe4b37f03b819dcf8fdb1bb)
+
+commit 0f57c7017a98f7e416a160375b8b80355b8e0fc3
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Mar 27 09:34:44 2015 -0700
+
+    osd: log a scrub error when we can't pick an auth object
+    
+    If we really can't find a suitable auth, log an error.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a476d8f3903ca78b5cf36d63059f13cb5268efe5)
+
+commit d4f4c5c4334add6acfc66407c2383d01094d384d
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Mar 27 10:20:23 2015 -0700
+
+    osd: repair record digest if all replicas match but do not match
+    
+    If the recorded digest does not match the replicas, and all replicas
+    match, then (on repair) fix the recorded digest.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f581fecd8a16b9250fa96beec5aa26074f401028)
+
+commit acfed6b5eae764d381c88ed7d3f4942c61191127
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 26 13:52:20 2015 -0700
+
+    osd: move recorded vs on disk digest warning into be_compare_scrubmaps
+    
+    This is a better place for it.  While we are here, change the wording to
+    clearly call out the 'recorded' digest (from object_info_t) vs the 'on
+    disk' digest (what we observed during scrub).
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit cf349ff35e9111ca52db1b0aad3753d0680b486d)
+
+commit 674029bc6c519e82011d1429ab5eddff9720c2dc
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 26 13:46:22 2015 -0700
+
+    osd: be slightly paranoid about value of okseed
+    
+    The scrubber.seed value is set based on the peer feature; check for that
+    too explicitly, and assert the scrubber.seed value matches.
+    
+    No change in behavior here.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit e34d31b7a9a71132a17b95cf5ad60255ece60243)
+
+commit f2002b7fa2af2db52037da4c1cf66d405a4941e7
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 26 13:44:25 2015 -0700
+
+    osd: be precise about "known" vs "best guess"
+    
+    We cannot assume that the auth info has the "known" digest; all replicas
+    may have a matching digest that does not match the oi, or we may choose
+    a different auth info for some other reason.  Verify that the digest
+    matches the oi before calling it "known".
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 546d1c7b8224d96d0cc93dc3c96f52787cd69413)
+
+commit 4e5d146ad36ef0380eb72e45dca651494658aeeb
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Mar 26 13:24:11 2015 -0700
+
+    osd: record digest if object is clean (vs entire scrub chunk)
+    
+    If an individual object is clean, record it in the missing_digest map.
+    If not, leave it out.  This lets us drop the old condition that only
+    recorded any digests if the entire scrub chunk was clean.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit c39e0e5f126028f552d410ab6924cac6e1f714fb)
+
+commit 1357ed1bd0e250b942bcba0346c97c24bb79a5d1
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 3 13:05:45 2015 -0400
+
+    hobject_t: decode future hobject_t::get_min() properly
+    
+    The post-hammer wip-temp branch changed hobject_t::get_min() so that pool
+    is INT64_MIN instead of -1 and neglected to deal with the encoding compat
+    with older versions.  Compensate on hammer by mapping INT64_MIN to -1
+    locally.  See commit ff99af38df830e215359bfb8837bf310a2023a4d.
+    
+    Note that this means upgrades from hammer to post-hammer *must* include
+    this fix prior to the upgrade.  This will need to be well-documented in the
+    release notes.
+    
+    Master gets a similar fix so that they map our min value to the new
+    INT64_MIN one on decode.
+    
+    Fixes: #12536 (for hammer)
+    Signed-off-by: Sage Weil <sage@redhat.com>
+
+commit 6d01d6b700300841f49f288a89d514f26a4f94b1
+Author: Samuel Just <sjust@redhat.com>
+Date:   Wed Jul 29 11:49:57 2015 -0700
+
+    OSDMonitor::preprocess_get_osdmap: send the last map as well
+    
+    Fixes: #12410
+    Backport: hammer
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1320e29dfaee9995409a6d99b9ccaa748dc67b90)
+
+commit a7851933033473d11e69fa1f237c0ad8bbbd4a13
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 9 11:51:13 2015 +0200
+
+    ceph.spec.in: drop SUSE-specific %py_requires macro
+    
+    %py_requires expands to
+    
+    BuildRequires: /usr/bin/python
+    PreReq: python = 2.7
+    
+    The BuildRequires: is already provided, and the PreReq is wrong because
+    e.g. SLE11-SP3 (a platform we are trying to support) has Python 2.6.
+    
+    http://tracker.ceph.com/issues/12351 Fixes: #12351
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit cbf6c7b46b42e163950bf7956e5b7565fca961c9)
+
+commit 8804b3f1ab5180c8a85b25b9b46b986fe7022868
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 16 15:16:22 2015 +0200
+
+    ceph.spec.in: remove SUSE-specific apache2-mod_fcgid dependency
+    
+    This package is no longer required for RGW to work in SUSE.
+    
+    http://tracker.ceph.com/issues/12358 Fixes: #12358
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit f3f8d3660d0ece3139e5f3dc7881ccceadcf648d)
+    
+    Conflicts:
+    	ceph.spec.in
+                In master, the "%if %else %endif" has been changed
+                into two "%if %endif"s
+
+commit b575ecca9743ab08439bfe0b5283e483e2a799ce
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 23 14:20:16 2015 -0400
+
+    tests: verify that image shrink properly handles flush op
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8dfcc72071d63c7867a5a59abe871cf5db673a0a)
+
+commit d4eb7bd63a5e46b790bad7001d2873c5c238cc90
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 23 14:18:20 2015 -0400
+
+    librbd: invalidate cache outside cache callback context
+    
+    When shrinking an image, it's possible that the op flush callback
+    will be from within the cache callback context.  This would result
+    in a deadlock when attempting to re-lock the cache lock in order to
+    invalidate the cache.
+    
+    Fixes: #11743
+    Backport: hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 726d699b7790c7e371279281ab32cd3aeb8ece7b)
+
+commit 92272dd676ebb67a3095ce3933cac24809b054da
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 15 11:18:29 2015 -0400
+
+    librbd: don't cancel request lock early
+    
+    It's possible that a stale notice is received and will
+    be discarded after the request lock has been canceled.
+    This will stale the client.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d9dd5c5890029107df40ed438f23fb9865d7de29)
+
+commit 58ae92f1a716e1ffac6408793e19d47f99d63520
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 14 16:13:38 2015 -0400
+
+    tests: new test for transitioning exclusive lock
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit f97ce46ea4c9c7cdc6e37e3759871d5b41b25769)
+
+commit 7b21ccba7c2885027b1d345baaad08a978fbc72f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 13:31:50 2015 -0400
+
+    tests: verify that librbd will periodically resend lock request
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d2a1c226ab3f7e202f62896f0c80c4cf3607cdaf)
+
+commit c95b37f48c129ef6780f67b326e97957f3771472
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 15 10:49:36 2015 -0400
+
+    common: Mutex shouldn't register w/ lockdep if disabled
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 879b8a73e2452332b26b8f3428ff5e3e0af8ddad)
+
+commit 117205af89398457e197793505381622705488b2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 15 10:47:04 2015 -0400
+
+    librbd: improve debugging output for ImageWatcher
+    
+    Include the instance pointer so that different images
+    can be differentiated in the logs.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b951a7398e3e749cb64a3f6a604212a5627e82a0)
+
+commit 08ae01231754d3010c1ede762579cf75c1c7460d
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri May 15 10:45:04 2015 -0400
+
+    librados_test_stub: watcher id should be the instance id (gid)
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3e1e561cc29043eb64dff8afb3a2c1ed77788e93)
+
+commit 704c0e09479d435ecbb84693a786c60694732b19
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 12:51:49 2015 -0400
+
+    librbd: retry lock requests periodically until acquired
+    
+    If the exclusive lock owner acks the lock release request but crashes
+    before it actually releases the lock, the requestor will wait forever.
+    Therefore, after a certain timeout, retry the request again until it
+    succeeds.
+    
+    Fixes: #11537
+    Backport: hammer
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 37c74e6e5274208d1b6efaf315afec03ea7eaa82)
+
+commit dbaaed9cf99121d0c97c22a695a7a6e872a11f48
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 12:35:36 2015 -0400
+
+    librbd: don't hold owner_lock for write during flush
+    
+    The various IO callback codepaths will attempt to take
+    the lock, which will result in deadlock since the flush
+    cannot complete.
+    
+    Backport: hammer
+    Fixes: #11537
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    
+    (cherry picked from commit 2b6d0633d5c89de3a557cdd72621dfc19f0540de)
+
+commit e9718201c6ed785c61077797a74ffda7e0438fb9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jun 22 15:30:02 2015 -0400
+
+    lockdep: do not automatically collect all backtraces
+    
+    It is expensive to collect backtraces every time a lock is
+    checked in order to provide cycle backtraces.  The backtraces
+    can be forced on for specific locks or globally via the new
+    config option "lockdep_force_backtrace".
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7354d25f56c5e004f288febdee2b6961c069163b)
+
+commit 27f7042e923366c31748c4cc9992c1a8cb37b457
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Jun 9 13:20:54 2015 -0400
+
+    librbd: flush operations need to acquire owner lock
+    
+    Cache writeback operations will expect the owner lock to be held.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit adfa2e0070ccca7b6556d3bfc5fac7ce4d43a4d0)
+
+commit 5b39983025f510c3119ebb375870e7669be7ddd0
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 21 00:13:31 2015 -0400
+
+    librbd: avoid infinite loop if copyup fails
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 43e0e3cd63f0067217ed0811d73f6c546f3027be)
+
+commit 88b583b249a74a71bc87409015f7a8d85200e1bf
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 12 10:19:48 2015 -0400
+
+    librbd: flush pending ops while not holding lock
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3d5cef38c37e5dda6b23751ad560851f1304d86d)
+
+commit a88b180571cb481a31cb94c249a3b486220232fa
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue May 12 10:07:21 2015 -0400
+
+    tests: fix possible deadlock in librbd ImageWatcher tests
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 742a85d667b26b3490d96270b5c500b08f2a5283)
+
+commit 321eb8d1c3f7d553addb780928e201acf5091132
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon May 11 13:59:49 2015 -0400
+
+    tests: enable lockdep for librbd unit tests
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 45cb9cb5980e90235b8244d0d61ece40bde4784a)
+
+commit bfe5b90921a3faaad0533388cb150cea20f47ae9
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 14:17:37 2015 -0400
+
+    librbd: owner_lock should be held during flush request
+    
+    Flush might result in the cache writing out dirty objects, which
+    would require that the owner_lock be held.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c9142fe35372cf69b7a56f334622a775a6b7c43f)
+
+commit 1e84fb05f48c146cc9d2d090be8c2d355326938b
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 14:06:16 2015 -0400
+
+    osdc: ObjectCacher flusher might needs additional locks
+    
+    librbd requires the ObjectCacher flusher thread to acquire
+    an additional lock in order to maintain lock ordering
+    constraints.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit a38f9e5104a6e08e130dc4f15ad19a06d9e63719)
+
+commit 506a45a906024d4bb5d3d4d6cc6cbb9eec39c5f2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 16:11:03 2015 -0400
+
+    librbd: fix recursive locking issues
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 1b57cc1da7a51e6f8ffea689b94ef843732c20a4)
+
+commit acf5125fe27fb3b9de8b97c4e44fa1f5c61147fd
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 16:04:28 2015 -0400
+
+    librbd: simplify state machine handling of exclusive lock
+    
+    It is expected that all IO is flushed and all async ops are cancelled
+    prior to releasing the exclusive lock.  Therefore, replace handling of
+    lost exclusive locks in state machines with an assertion.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit d6b733dbdd0aeb5d1e136dcbf30c58c80952651e)
+
+commit 9454f04e62ece39fdcdbb4eb5a83945f76bcc0a5
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 15:32:38 2015 -0400
+
+    librbd: ObjectMap::aio_update can acquire snap_lock out-of-order
+    
+    Detected during an fsx run where a refresh and CoR were occurring
+    concurrently.  The refresh held the snap_lock and was waiting on
+    the object_map_lock, while the CoR held object_map_lock and was
+    waiting for snap_lock.
+    
+    Fixes: #11577
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 8cbd92b1fe835b1eb3a898976f9507f51cc115b2)
+
+commit 3e0358e17e7ddb488109bce04bb08cd16fd5bb2f
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 16 14:15:10 2015 -0400
+
+    librbd: move copyup class method call to CopyupRequest
+    
+    Move AbstractWrite's invocation of copyup to the CopyupRequest
+    class.  The AioRequest write path will now always create a
+    CopyupRequest, which will now append the actual write ops to the
+    copyup.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7be3df67809925164237cc185f9f29e145f45768)
+
+commit 2ee64a80794297d4fc5aeafbb185818f7f6a77b8
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Tue Mar 31 12:28:11 2015 -0400
+
+    librbd: simplify AioRequest constructor parameters
+    
+    Moved all parent overlap computation to within AioRequest so that
+    callers don't need to independently compute the overlap.  Also
+    removed the need to pass the snap_id for write operations since
+    it can only be CEPH_NOSNAP.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 46515971edab8888284b1a8307ffca88a9c75f5c)
+
+commit 3e71a7554da05aee06d5a2227808c321a3e3f0f1
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sat Mar 14 01:16:31 2015 +0100
+
+    librbd/AioRequest.h: fix UNINIT_CTOR
+    
+    Fix for:
+    
+    CID 1274319: Uninitialized scalar field (UNINIT_CTOR)
+     uninit_member: Non-static class member m_object_state is not
+     initialized in this constructor nor in any functions that it calls.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 48f18ea0e1c4c6de1921ea2359448deb761461e7)
+
+commit cb57fe581df7c14d174e6eaff382d6a28ab658d6
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Fri Jul 17 15:04:10 2015 -0400
+
+    librbd: add object state accessor to ObjectMap
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 9249ab7dacd43e7a546656b99013a595381fd5fd
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 15:41:59 2015 -0400
+
+    librbd: AsyncObjectThrottle should always hold owner_lock
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c352bcdc0f63eea55677fe3c3b5f0c61347c0db3)
+
+commit 26902b94f97edb189ae620c86a8dda8166df471a
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 15:34:43 2015 -0400
+
+    librbd: execute flush completion outside of cache_lock
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 5f157f20980de7e9a05fb933fb57efdc759da78b)
+
+commit 571220d6f4642dd3cd78988882645fdf647c150e
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 15:17:54 2015 -0400
+
+    librbd: add AsyncRequest task enqueue helper method
+    
+    In order to support the invariant that all state machine
+    callbacks occur without holding locks, transitions that
+    don't always involve a librados call should queue their
+    callback.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 218bc2d0f8d90c9c64408cb22e26680e88138844)
+
+commit 8e280f4cfef0d2fdc706d43bbee0c377d288a457
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu May 7 15:32:27 2015 -0400
+
+    librbd: disable lockdep on AioCompletion
+    
+    It is only used by clients and it causes a large slowdown
+    in performance due to the rate at which the lock is constructed/
+    destructed for each IO request.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 66e74641baeed9aadb7e474d6e6b142b7725722d)
+
+commit b38da48059792e9182fe2877786d9159007683d3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:42:19 2015 -0400
+
+    librbd: AioCompletion shouldn't hold its lock during callback
+    
+    The callback routine most likely will attempt to retrieve the result
+    code, which will result in a recursive lock attempt.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 3ad19ae349ebb27ff6027e40883735240fa97a3c)
+
+commit 6fdd3f1ce69fa2e00c6f1bedd5f72352953e1e44
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:51:03 2015 -0400
+
+    librbd: give locks unique names to prevent false lockdep failures
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c474ee42b87975c04eeb2b40b976deb5a5e2d518)
+
+commit 70041499f99cad551b3aab16f086f725b33b25e2
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:40:16 2015 -0400
+
+    librbd: complete cache read in a new thread context
+    
+    The ObjectCacher complete the read callback while still holding
+    the cache lock.  This introduces lock ordering issues which are
+    resolved by queuing the completion to execute in a clean (unlocked)
+    context.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 0024677dc8adfd610418ca47599dd95d3a5a6612)
+
+commit 65ef695eba0f5b5d87347ffb3407bb5d6d75b402
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Mar 19 15:35:59 2015 -0400
+
+    librbd: require callers to ObjectMap::aio_update to acquire lock
+    
+    This is needed to allow an atomic compare and update operation
+    from the rebuild object map utility.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 2db758cb4cb6d88cbaf9842b1e5d0872a185d8df)
+
+commit 58b8fafb87b18f2a4d8c38f77ecf81ff58452409
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:38:29 2015 -0400
+
+    log: fix helgrind warnings regarding possible data race
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit c1e14451775049bbd95bcb19a0b62ab5e2c0a7bb)
+
+commit a5203d32544d40cb51eb60fc906cc3ceaacbfe96
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:37:56 2015 -0400
+
+    librados_test_stub: fix helgrind warnings
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit b65ae4bc26f2dcaaa9518d5cce0e8b83ea310de8)
+
+commit b73e87eb307137786e0f0d89362ef0e92e2670b8
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:36:26 2015 -0400
+
+    librados_test_stub: add support for flushing watches
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 6e400b9049ede5870e40e4dd2cb41874550eac25)
+
+commit 2fa35b1c5ca8e33959fff8c84eaa4feca0f67df3
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:29:12 2015 -0400
+
+    common: lockdep now support unregistering once destructed
+    
+    librbd use of an image hierarchy resulted in lock names being
+    re-used and incorrectly analyzed.  librbd now uses unique lock
+    names per instance, but to prevent an unbounded growth of
+    tracked locks, we now remove lock tracking once a lock is
+    destructed.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 7c7df2ce9f837628535d21df61ae4f13d809c4fa)
+
+commit 7b85c7bfe599644eb29e6b1e03733da4774c2eac
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Thu Apr 30 13:26:41 2015 -0400
+
+    common: add valgrind.h convenience wrapper
+    
+    Conditionally support helgrind annotations if valgrind support is
+    enabled during the build.
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 650ad32d74a24d248dd8e19bff1bbd31f0bb224b)
+
+commit 6d3db5ffbef71c8927a9ffc68c5955dca0f5612c
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Apr 8 17:24:08 2015 -0400
+
+    librbd: add work queue for op completions
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 21f990efe6c6d710376d5b1a49fc8cd53aa020e6)
+
+commit 64425e861400fde4703fb06529777c55650b6676
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Wed Apr 8 16:46:34 2015 -0400
+
+    WorkQueue: ContextWQ can now accept a return code
+    
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit e5ffae578e83c1e4fca3f328c937e7c9be8cc03c)
+
+commit eccf36980511de7ed122a38d426170496ffdea64
+Author: Ken Dreyer <kdreyer@redhat.com>
+Date:   Tue Jun 23 13:41:53 2015 -0600
+
+    packaging: RGW depends on /etc/mime.types
+    
+    If the mimecap RPM or mime-support DEB is not installed, then the
+    /etc/mime.types file is not present on the system. RGW attempts to read
+    this file during startup, and if the file is not present, RGW logs an
+    error:
+    
+      ext_mime_map_init(): failed to open file=/etc/mime.types ret=-2
+    
+    Make the radosgw package depend on the mailcap/mime-support packages so
+    that /etc/mime.types is always available on RGW systems.
+    
+    http://tracker.ceph.com/issues/11864 Fixes: #11864
+    
+    Signed-off-by: Ken Dreyer <kdreyer@redhat.com>
+    (cherry picked from commit c74a2f86a1f9b15aae0e723b410bedfc1d01a79b)
+
+commit 7bddf5d4dad09b1f6d3b4e80e4bdd895191560b0
+Author: huangjun <hjwsm1989@gmail.com>
+Date:   Thu Jul 16 09:42:55 2015 +0800
+
+      rest_bench: bucketname is not mandatory as we have a default name
+    
+      Signed-off-by: huangjun <hjwsm1989@gmail.com>
+    
+    (cherry picked from commit bc56a87ea3b69b4856a2b9f9fb2a63dbfb1211c3)
+
+commit 6e7358b3958b7ee11ef612302b300d07f3982d54
+Author: huangjun <hjwsm1989@gmail.com>
+Date:   Thu Jul 16 09:17:59 2015 +0800
+
+      rest_bench: drain the work queue to fix a crash
+      Fixes: #3896
+      Signed-off-by: huangjun <hjwsm1989@gmail.com>
+    
+    (cherry picked from commit f3d34d8ff921dbd2ff21f6b72af7c73bb9c6940e)
+
+commit 1e055782f5ade94c19c2614be0d61d797490701e
+Author: John Spray <john.spray@redhat.com>
+Date:   Tue Jul 21 16:09:32 2015 +0100
+
+    auth: check return value of keyring->get_secret
+    
+    get_secret can fail to populate the passed CryptoKey, for
+    example if the entity name is not found in the keyring.  In
+    this case, attempts to use the CryptoKey will lead to
+    segfaults.
+    
+    Fixes: #12417
+    Signed-off-by: John Spray <john.spray@redhat.com>
+    (cherry picked from commit 64e5041008744362fdbb16e16bc3e049a2d426aa)
+
+commit 256620e37fd94ee4b3af338ea6955be55529d0d6
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Thu Jul 16 04:45:05 2015 -0700
+
+    Client: check dir is still complete after dropping locks in _readdir_cache_cb
+    
+    We drop the lock when invoking the callback, which means the directory
+    we're looking at might get dentries trimmed out of memory. Make sure that
+    hasn't happened after we get the lock back. If it *has* happened, fall back
+    to requesting the directory contents from the MDS. Update the dirp location
+    pointers after each entry to facilitate this.
+    Because this requires we update the dirp->at_cache_name value on every loop,
+    we rework the updating scheme a bit: to dereference the dn->name before
+    unlocking, so we know it's filled in; and since we update it on every loop
+    we don't need to refer to the previous dentry explicitly like we did before.
+    
+    This should also handle racing file deletes: we get back a trace on
+    the removed dentry and that will clear the COMPLETE|ORDERED flags.
+    
+    Fixes #12297
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 62dd63761701a7e0f7ce39f4071dcabc19bb1cf4)
+
+commit 8a2ad0540994efe530a1775ebd949aeaf6609e57
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Apr 9 16:29:45 2015 -0700
+
+    TestPGLog: fix invalid proc_replica_log test caes
+    
+    If 1'3 is non-divergent, no osd could correctly have created 2'3.  Also,
+    proc_replica_log does not add the extra entries from the auth log to the
+    missing set, that happens later on in activate.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1333b676dba4ed4b5db854fe935bdadbf9f21d08)
+
+commit df71e6be7ccbe18d99200b2a5844a9f19ac70141
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Apr 9 16:28:23 2015 -0700
+
+    TestPGLog: fix noop log proc_replica_log test case
+    
+    Need to fill in log.head, olog.head.
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 1e5b22053381580708af29a1536f1e106c9b479c)
+
+commit 549ff9a938c5126d4dcb15535845d5354cb44bb2
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Apr 9 15:01:41 2015 -0700
+
+    TestPGLog: add test for 11358
+    
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit b61e5aef15d7448d24b713d13dce77697bc0af74)
+
+commit c224fc70e14bd76494bc437595c8b0b0d275694e
+Author: Samuel Just <sjust@redhat.com>
+Date:   Thu Apr 9 15:01:29 2015 -0700
+
+    PGLog::proc_replica_log: handle split out overlapping entries
+    
+    See the comment, if the overlapping entries between olog.head
+    and log.tail were split out, last_update should be log.tail.
+    
+    Fixes: 11358
+    Signed-off-by: Samuel Just <sjust@redhat.com>
+    (cherry picked from commit 6561e0d955c4563a8505b717de41f5bd89119f63)
+
+commit b8176d0f21ce80d2e5a92057ab85f7618504cd9f
+Author: Ketor Meng <d.ketor@gmail.com>
+Date:   Tue May 26 18:50:17 2015 +0800
+
+    Mutex: fix leak of pthread_mutexattr
+    
+    Need pthread_mutexattr_destroy after pthread_mutexattr_init
+    
+    Fixes: #111762
+    Signed-off-by: Ketor Meng <d.ketor@gmail.com>
+    (cherry picked from commit 2b23327b3aa8d96341d501a5555195ca1bc0de8f)
+
+commit 43a72e47c4adae674e02bb262645d88ac528e2be
+Author: Xinze Chi <xmdxcxz@gmail.com>
+Date:   Fri Jul 3 18:27:13 2015 +0800
+
+    mon/PGMonitor: bug fix pg monitor get crush rule
+    
+    when some rules have been deleted before, the index in array of crush->rules
+    is not always equals to crush_ruleset of pool.
+    
+    Fixes: #12210
+    Reported-by: Ning Yao <zay11022@gmail.com>
+    Signed-off-by: Xinze Chi <xmdxcxz@gmail.com>
+    (cherry picked from commit 498793393c81c0a8e37911237969fba495a3a183)
+
+commit 0ca93db7d79f11e51af75e322941419b860bb2f8
+Author: Shylesh Kumar <shmohan@redhat.com>
+Date:   Wed Jul 22 18:47:20 2015 +0530
+
+    mon: ceph osd map shows NONE when an osd is missing
+    
+    Signed-off-by: Shylesh Kumar <shmohan@redhat.com>
+    (cherry picked from commit 4d030302ea3709eb021710e873f1ebe62f951cec)
+
+commit 695f782e59baffbe8429f9daa47a4f1476a02976
+Author: Sage Weil <sage@redhat.com>
+Date:   Sun Jun 7 20:05:58 2015 -0400
+
+    crush/CrushWrapper: fix adjust_subtree_weight debug
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 26be86f649a1e9846280204fe1e3f8344eb975ce)
+
+commit 0bd4c81ce41a22b22ca76e539de87260b140bbc4
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 5 12:15:45 2015 -0700
+
+    crush/CrushWrapper: return changed from adjust_subtree_weight
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 551ab2d69dd50a078d62340740d357d85ab8dcbb)
+
+commit 05fc59bee9138d04227255a2f31bd82efe94b1e9
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 5 12:15:22 2015 -0700
+
+    crush/CrushWrapper: adjust subtree base in adjust_subtree_weight
+    
+    We were correctly adjusting all the children, but the subtree root was
+    not being updated.
+    
+    Fixes: #11855
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 1da96ab8442522bda4fc39e05597f17b8ebddf89)
+
+commit d2f31adc49a7c6b8276dbf8773575e91ba5e18fa
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 5 12:12:41 2015 -0700
+
+    unittest_crush_wrapper: test adjust_subtree_weight
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit b461dc2e970f139dcb25d93b32be6b4bb9f1c8eb)
+
+commit 0ccdf342e7cf0072d3c38c6e1a6cf3a87f154a28
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 5 12:17:26 2015 -0700
+
+    unittest_crush_wrapper: attach buckets to root in adjust_item_weight test
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit a8351eb3de2b4069ffec9c4f561eb1519ea11aa2)
+
+commit 1e737532cfe1daf43bea3d9bd4e55faed560f0f2
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jun 5 12:12:32 2015 -0700
+
+    unittest_crush_wrapper: parse env
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 14c60b288b33e4cec9c9819d4668a5ff9855ccc1)
+
+commit cd11b887c6c586085a7014ba44123b115370a462
+Author: Guang G Yang <yguang@renownedground.corp.gq1.yahoo.com>
+Date:   Thu Jul 2 05:29:47 2015 +0000
+
+    osd: pg_interval_t::check_new_interval should not rely on pool.min_size to determine if the PG was active
+    
+    If the pool's min_size is set improperly, during peering, pg_interval_t::check_new_interval
+    might wrongly determine the PG's state and cause the PG to stuck at down+peering forever
+    
+    Fixes: #12162
+    Signed-off-by: Guang Yang yguang@yahoo-inc.com
+    (cherry picked from commit 684927442d81ea08f95878a8af69d08d3a14d973)
+    
+    Conflicts:
+    	src/osd/PG.cc
+               because PG::start_peering_interval has an assert
+               that is not found in hammer in the context
+    	src/test/osd/types.cc
+               because include/stringify.h is not included by
+               types.cc in hammer
+
+commit c5f0e2222cc55a92ebc46d12b618fadb3d2fb577
+Author: Guang G Yang <yguang@renownedground.corp.gq1.yahoo.com>
+Date:   Wed Jul 1 20:26:54 2015 +0000
+
+    osd: Move IsRecoverablePredicate/IsReadablePredicate to osd_types.h
+    
+    Signed-off-by: Guang Yang <yguang@yahoo-inc.com>
+    (cherry picked from commit 466b083166231ec7e4c069fef8c9e07d38accab9)
+
+commit 42bff0b9e2f80e32001082a608d63719332677e3
+Author: Joao Eduardo Luis <joao@suse.de>
+Date:   Tue Jul 21 11:20:53 2015 +0100
+
+    mon: OSDMonitor: fix hex output on 'osd reweight'
+    
+    Fixes: #12251
+    
+    Signed-off-by: Joao Eduardo Luis <joao@suse.de>
+    (cherry picked from commit 787fa80c2746fde44ac0583ff7995ec5be9a672d)
+
+commit e00494118ee42322784988fe56623cbc7aac4cc9
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Wed Jul 15 19:03:33 2015 +0800
+
+    ceph.in: print more detailed warning for 'ceph <type> tell'
+    
+    put the full signature of "tell <target> <command> [options...]"
+    instead of "tell {0}.<id>", which could be misleading somehow.
+    
+    Fixes: 11101
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit aa1a5222eebd0256d4ecffb0eefeb0f78ecf0a1f)
+
+commit f18900f2eb724acd898e8b32fe75c0850d7cf94c
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Wed Jul 15 18:01:52 2015 +0800
+
+    ceph.in: print more detailed error message for 'tell' command
+    
+    * we do not allow user specify a certain daemon when starting an
+      interactive session. the existing error message could lead to
+      some confusion. so put more details in it.
+    
+    Fixes: #11101
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 972dc9145235ff0f60663369ebcab8c16628b89f)
+
+commit 9916d37ead705d467b1d730adb15bb6974b3bf1b
+Author: huangjun <hjwsm1989@gmail.com>
+Date:   Mon Jul 20 10:50:20 2015 +0800
+
+      mon/PGMonitor: avoid uint64_t overflow when checking pool 'target/max' status.
+      Fixes: #12401
+    
+      Signed-off-by: huangjun <hjwsm1989@gmail.com>
+    
+    (cherry picked from commit f84e6b8157e78fd05cd1c8ac957c92df17e6ba06)
+
+commit 4457d3eb70712ec3b7d8e98af973e099c8c7d258
+Author: renhwztetecs <rhwlyw@163.com>
+Date:   Tue Jul 21 18:55:00 2015 +0800
+
+    Update OSDMonitor.cc
+    
+    OSDMonitor::get_pools_health(), s/objects/bytes/
+    
+    Fixes: #12402
+    Signed-off-by: ren.huanwen@zte.com.cn
+    (cherry picked from commit 7fc13c9d6b9a4962d7640240416105d8f558d600)
+
+commit add0f1e5e229c9ad66e8ef77ad59e0e390e20db6
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Thu Apr 16 18:29:00 2015 +0800
+
+    ceph.in: do not throw on unknown errno
+    
+    some of the errnos are not listed in errno.errorcode. if we happen
+    to run into them, print 'Unknown' instead.
+    
+    Fixes: #11354
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 53514ad97f6f75746613f09d464f69a7c31bed55)
+
+commit fa194744fdaed13949bffb6f2b8a0fc420006e0b
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Mar 18 13:49:20 2015 -0700
+
+    os/chain_xattr: handle read on chnk-aligned xattr
+    
+    If we wrote an xattr that was a multiple of a chunk, we will try to read
+    the next chunk and get ENODATA.  If that happens bail out of the loop and
+    assume we've read the whole thing.
+    
+    Backport: hammer, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 8614dcebf384b74b283cd352001a65fa26ba925c)
+
+commit 931ffe3b3a43157798717e64de8f46fadbcd9e9b
+Author: Boris Ranto <branto@redhat.com>
+Date:   Wed Jun 3 12:24:48 2015 +0200
+
+    common/Cycles.cc: skip initialization if rdtsc is not implemented
+    
+    The Cycles initialization gets stuck in infinite loop if rdtsc is not
+    implemented. This patch fixes the issue by quitting the initialization
+    if rtdsc fails.
+    
+    The patch was cherry-picked from ubuntu patch by James Page, see
+    
+    https://bugzilla.redhat.com/show_bug.cgi?id=1222286
+    
+    for more details on the patch.
+    
+    Signed-off-by: James Page <james.page@ubuntu.com>
+    (cherry picked from commit 35c5fd0091fc4d63b21207fb94e46b343519fd56)
+
+commit 0fde3a2465e156ebf9a5cdc6adc45d66d6d647fc
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Thu Jul 9 13:42:42 2015 +0800
+
+    buffer: Fix bufferlist::zero bug with special case
+    
+    Fixes: #12252
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit 43f583d160ccaf879eaf0f3020e77860cf8d1df0)
+
+commit dabc61110a5773262614fc77d3653674aac421f7
+Author: Haomai Wang <haomaiwang@gmail.com>
+Date:   Thu Jul 9 13:32:03 2015 +0800
+
+    UnittestBuffer: Add bufferlist zero test case
+    
+    Signed-off-by: Haomai Wang <haomaiwang@gmail.com>
+    (cherry picked from commit 577acf665948e531e50d36f5780ea19351a5bf65)
+
+commit d08db7a0677412dbe590c850976fb4fe2f503a79 (refs/remotes/gh/wip-11470.hammer)
+Author: Joao Eduardo Luis <joao@suse.de>
+Date:   Fri Jun 12 19:21:10 2015 +0100
+
+    mon: PaxosService: call post_refresh() instead of post_paxos_update()
+    
+    Whenever the monitor finishes committing a proposal, we call
+    Monitor::refresh_from_paxos() to nudge the services to refresh.  Once
+    all services have refreshed, we would then call each services
+    post_paxos_update().
+    
+    However, due to an unfortunate, non-critical bug, some services (mainly
+    the LogMonitor) could have messages pending in their
+    'waiting_for_finished_proposal' callback queue [1], and we need to nudge
+    those callbacks.
+    
+    This patch adds a new step during the refresh phase: instead of calling
+    directly the service's post_paxos_update(), we introduce a
+    PaxosService::post_refresh() which will call the services
+    post_paxos_update() function first and then nudge those callbacks when
+    appropriate.
+    
+    [1] - Given the monitor will send MLog messages to itself, and given the
+    service is not readable before its initial state is proposed and
+    committed, some of the initial MLog's would be stuck waiting for the
+    proposal to finish.  However, by design, we only nudge those message's
+    callbacks when an election finishes or, if the leader, when the proposal
+    finishes.  On peons, however, we would only nudge those callbacks if an
+    election happened to be triggered, hence the need for an alternate path
+    to retry any message waiting for the initial proposal to finish.
+    
+    Fixes: #11470
+    
+    Signed-off-by: Joao Eduardo Luis <joao@suse.de>
+    (cherry picked from commit 1551ebb63238073d2fd30201e6b656a8988e958c)
+
+commit 0818e9f78b11801aa619b9ec04eeffb2795c3f62
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jul 9 13:28:22 2015 +0200
+
+    ceph.spec.in: snappy-devel for all supported distros
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit e4634ddcc1c0a2abe51679425d15e6f693811e17)
+    
+    Conflicts:
+    	ceph.spec.in
+                minor difference
+
+commit 8b576bd529d7c1604f0a4cdf97ece64fc5d69447
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Tue Jun 16 18:27:20 2015 +0200
+
+    ceph.spec.in: python-argparse only in Python 2.6
+    
+    argparse is a widely-used Python module for parsing command-line arguments.
+    Ceph makes heavy use of Python scripts, both in the build environment and on
+    cluster nodes and clients.
+    
+    Until Python 2.6, argparse was distributed separately from Python proper.
+    As of 2.7 it is part of the Python standard library.
+    
+    Although the python package in a given distro may or may not Provide:
+    python-argparse, this cannot be relied upon.
+    
+    Therefore, this commit puts appropriate conditionals around Requires:
+    python-argparse and BuildRequires: python-argparse. It does so for Red
+    Hat/CentOS and SUSE only, because the last Fedora version with Python 2.6
+    was Fedora 13, which is EOL.
+    
+    argparse is required by both the ceph and ceph-common packages, but since ceph
+    requires ceph-common, the argparse Requires and BuildRequires need only appear
+    once, under ceph-common.
+    
+    http://tracker.ceph.com/issues/12034 Fixes: #12034
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 23171c952997d104cfa6b5700ec0bb658a8e0915)
+
+commit cdde626f6371e1da501306ed16bc450ee1ec0b91
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Mon Jul 13 18:12:01 2015 +0200
+
+    ceph.spec.in: do not run fdupes, even on SLE/openSUSE
+    
+    In openSUSE there is a policy to use %fdupes in the spec file if RPMLINT
+    complains about duplicate files wasting space in the filesystem.
+    
+    However, RPMLINT is not so complaining, so drop fdupes.
+    
+    http://tracker.ceph.com/issues/12301 Fixes: #12301
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 53072b9019caf72e0313b2804ea174237ed7da33)
+
+commit 6417e8eff942dbbf6cd231ffb73136b7bdcd837f
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Fri Jun 12 17:50:58 2015 +0200
+
+    rpm: add missing Java conditionals
+    
+    http://tracker.ceph.com/issues/11991 Fixes: #11991
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 04e91bbd929801de7f1d6a05086d47a781c2e361)
+
+commit 37284773a754ef4b91d2b5436d46a5fd2be4f67e
+Author: Owen Synge <osynge@suse.com>
+Date:   Fri May 29 13:28:24 2015 +0200
+
+    Add rpm conditionals : cephfs_java
+    
+    Extracted conditionals from SUSE rpm spec file to forward port.
+    Original work done by Thorsten Behrens <tbehrens@suse.com>
+    
+    Signed-off-by: Owen Synge <osynge@suse.com>
+    (cherry picked from commit c65538f489897821877421043300d9c008224f02)
+
+commit 8f78001c2e09d483dcbcd33c24e2ef8043119773
+Author: Nathan Cutler <ncutler@suse.cz>
+Date:   Thu May 14 20:07:37 2015 +0200
+
+    ceph.spec.in: SUSE/openSUSE builds need libbz2-devel
+    
+    http://tracker.ceph.com/issues/11629 Fixes: #11629
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.cz>
+    (cherry picked from commit 584ed2e28b0a31821f29a99cf6078cfd76ee31fc)
+
+commit 4eb58ad2027148561d94bb43346b464b55d041a6
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Thu Jun 25 22:37:52 2015 +0200
+
+    ceph.spec.in: use _udevrulesdir to eliminate conditionals
+    
+    The conditionals governing where 50-rbd.rules is installed were not doing the
+    right thing on SUSE distros.
+    
+    Start using the %_udevrulesdir RPM macro, while taking care that it is defined
+    and set to the right value. Use it to eliminate some conditionals around other
+    udev rules files as well.
+    
+    http://tracker.ceph.com/issues/12166 Fixes: #12166
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+    (cherry picked from commit 8aa758ee7a14e93ded1d55b4aca7a54aa47d7174)
+    
+    Conflicts:
+    	ceph.spec.in
+                hammer does not yet have _with_systemd or ceph_daemon.py

@@ -1,0 +1,42 @@
+<ng-template #tooltipTemplate>
+  <div class="cds--popover-scroll-container">
+    <div [class]="class"
+         [innerHtml]="html">
+    </div>
+    <ng-container *ngTemplateOutlet="content"></ng-container>
+  </div>
+</ng-template>
+@if (type === helperType.tooltip) {
+  <cds-tooltip [description]="tooltipTemplate"
+               [autoAlign]="true">
+    <svg [cdsIcon]="iconType"
+         [size]="iconSize"></svg>
+  </cds-tooltip>
+} @else {
+  <div class="inline-block"
+       [ngClass]="class">
+    <div
+      cdsPopover
+      [isOpen]="isPopoverOpen"
+      [autoAlign]="true"
+      (click)="togglePopover()"
+      (keydown.enter)="togglePopover()"
+      tabindex="0">
+      <div class="popover-trigger">
+        <svg
+          [cdsIcon]="iconType"
+          [size]="iconSize"></svg>
+      </div>
+      <cds-popover-content>
+        <div class="cds--popover-scroll-container"
+             (click)="$event.stopPropagation()">
+          <ng-container *ngTemplateOutlet="content"></ng-container>
+        </div>
+      </cds-popover-content>
+    </div>
+  </div>
+}
+
+<ng-template #content>
+  <ng-content></ng-content>
+</ng-template>

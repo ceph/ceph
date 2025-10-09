@@ -1,0 +1,41 @@
+# {{ cephadm_managed }}
+apiVersion: 1
+
+deleteDatasources:
+{% for host in hosts %}
+  - name: 'Dashboard{{ loop.index }}'
+    orgId: 1
+{% endfor %}
+
+datasources:
+{% for host in hosts %}
+  - name: 'Dashboard{{ loop.index }}'
+    type: 'prometheus'
+    access: 'proxy'
+    orgId: 1
+    url: '{{ host }}'
+    basicAuth: {{ 'true' if security_enabled else 'false' }}
+    isDefault: {{ 'true' if loop.first else 'false' }}
+    editable: false
+{% if security_enabled %}
+    basicAuthUser: {{ prometheus_user }}
+    jsonData:
+       graphiteVersion: "1.1"
+       tlsAuth: false
+       tlsAuthWithCACert: true
+       tlsSkipVerify: false
+    secureJsonData:
+      basicAuthPassword: {{ prometheus_password }}
+      tlsCACert: "{{ cephadm_root_ca }}"
+      tlsClientCert: "{{ cert }}"
+      tlsClientKey: "{{ key }}"
+{% endif %}
+{% endfor %}
+
+  - name: 'Loki'
+    type: 'loki'
+    access: 'proxy'
+    url: '{{ loki_host }}'
+    basicAuth: false
+    isDefault: false
+    editable: false

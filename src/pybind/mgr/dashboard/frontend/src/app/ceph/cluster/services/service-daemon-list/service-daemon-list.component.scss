@@ -1,0 +1,14 @@
+@use './src/styles/vendor/variables' as vv;
+
+.fa-info-circle {
+  color: vv.$info;
+}
+
+.fa-exclamation-triangle {
+  color: vv.$danger;
+}
+
+.list-group-item {
+  background-color: transparent;
+  border-width: 0;
+}

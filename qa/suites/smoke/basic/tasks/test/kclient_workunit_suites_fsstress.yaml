@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+tasks:
+- ceph:
+    fs: xfs
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+- kclient:
+- workunit:
+    clients:
+      all:
+        - suites/fsstress.sh

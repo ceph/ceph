@@ -1,0 +1,72 @@
+
+# {{ cephadm_managed }}
+worker_rlimit_nofile 8192;
+
+events {
+    worker_connections 4096;
+}
+
+http {
+
+    #access_log /dev/stdout;
+    error_log /dev/stderr warn;
+    client_header_buffer_size 32K;
+    large_client_header_buffers 4 32k;
+    proxy_busy_buffers_size 512k;
+    proxy_buffers 4 512k;
+    proxy_buffer_size 256K;
+    proxy_headers_hash_max_size 1024;
+    proxy_headers_hash_bucket_size 128;
+
+{% if oauth2_proxy_endpoints %}
+    upstream oauth2_proxy_servers {
+     {% for ep in oauth2_proxy_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if service_discovery_endpoints %}
+    upstream service_discovery_servers {
+     {% for ep in service_discovery_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if dashboard_endpoints %}
+    upstream dashboard_servers {
+     {% for ep in dashboard_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if grafana_endpoints %}
+    upstream grafana_servers {
+     {% for ep in grafana_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if prometheus_endpoints %}
+    upstream prometheus_servers {
+     ip_hash;
+     {% for ep in prometheus_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+{% if alertmanager_endpoints %}
+    upstream alertmanager_servers {
+     {% for ep in alertmanager_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
+    include /etc/nginx_external_server.conf;
+    include /etc/nginx_internal_server.conf;
+}

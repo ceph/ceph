@@ -1,0 +1,18 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms die on skipped message: false
+      client:
+        rbd default features: 5
+tasks:
+- ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
+- rbd:
+    all:
+      image_size: 20480
+- workunit:
+    clients:
+      all:
+        - suites/iozone.sh

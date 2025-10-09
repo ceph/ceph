@@ -1,0 +1,6 @@
+This suite was introduced for testing MDS upgrade (and not client upgrade)
+without reducing `max_mds` to `1` using the MGR config option `fail_fs`
+(PR #47756) which will be set to be `true` or `false` prior to initiating the
+upgrade.
+
+This suite should make use of N-1|N-2 releases.

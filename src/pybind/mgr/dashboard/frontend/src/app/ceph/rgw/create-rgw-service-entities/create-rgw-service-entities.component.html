@@ -1,0 +1,70 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Create Realm/Zone Group/Zone
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="createMultisiteEntitiesForm"
+          #formDir="ngForm"
+          [formGroup]="createMultisiteEntitiesForm"
+          novalidate>
+    <div class="modal-body">
+      <cd-alert-panel type="info"
+                      spacingClass="mb-3">The realm/zone group/zone created will be set as default and master.
+      </cd-alert-panel>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="realmName"
+               i18n>Realm Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Realm name..."
+                 id="realmName"
+                 name="realmName"
+                 formControlName="realmName">
+          <span class="invalid-feedback"
+                *ngIf="createMultisiteEntitiesForm.showError('realmName', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zonegroupName"
+               i18n>Zone Group Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone group name..."
+                 id="zonegroupName"
+                 name="zonegroupName"
+                 formControlName="zonegroupName">
+          <span class="invalid-feedback"
+                *ngIf="createMultisiteEntitiesForm.showError('zonegroupName', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zoneName"
+               i18n>Zone Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="createMultisiteEntitiesForm.showError('zoneName', formDir, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="submit()"
+                            [form]="createMultisiteEntitiesForm"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

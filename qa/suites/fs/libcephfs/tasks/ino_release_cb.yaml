@@ -1,0 +1,19 @@
+overrides:
+  ceph:
+    cluster-conf:
+      client:
+        debug ms: 1
+        debug client: 20
+      mds:
+        debug ms: 2
+        debug mds: 20
+tasks:
+- exec:
+    mon.a:
+    - ceph config set mds mds_min_caps_per_client 1
+- background_exec:
+    mon.a:
+    - "sleep 30 && ceph config set mds mds_max_caps_per_client 1"
+- exec:
+    client.0:
+    - ceph_test_ino_release_cb

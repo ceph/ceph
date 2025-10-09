@@ -1,0 +1,4 @@
+{usr/,}lib/systemd/system/ceph-mon*
+usr/bin/ceph-mon
+usr/bin/ceph-monstore-tool
+usr/share/man/man8/ceph-mon.8

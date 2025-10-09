@@ -1,0 +1,79 @@
+import { Injectable } from '@angular/core';
+
+import _ from 'lodash';
+
+import { Icons } from '../enum/icons.enum';
+import { NotificationType } from '../enum/notification-type.enum';
+import { CdNotificationConfig } from '../models/cd-notification';
+import {
+  AlertmanagerAlert,
+  AlertmanagerNotificationAlert,
+  PrometheusCustomAlert
+} from '../models/prometheus-alerts';
+import { NotificationService } from './notification.service';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class PrometheusAlertFormatter {
+  constructor(private notificationService: NotificationService) {}
+
+  sendNotifications(notifications: CdNotificationConfig[]) {
+    notifications.forEach((n) => this.notificationService.show(n));
+  }
+
+  convertToCustomAlerts(
+    alerts: (AlertmanagerNotificationAlert | AlertmanagerAlert)[]
+  ): PrometheusCustomAlert[] {
+    return _.uniqWith(
+      alerts.map((alert) => {
+        return {
+          status: _.isObject(alert.status)
+            ? (alert as AlertmanagerAlert).status.state
+            : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
+          name: alert.labels.alertname,
+          url: alert.generatorURL,
+          description: alert.annotations.description,
+          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint,
+          severity: alert.labels.severity
+        };
+      }),
+      _.isEqual
+    ) as PrometheusCustomAlert[];
+  }
+
+  /*
+   * This is needed because NotificationAlerts don't use 'active'
+   */
+  private getPrometheusNotificationStatus(alert: AlertmanagerNotificationAlert): string {
+    const state = alert.status;
+    return state === 'firing' ? 'active' : state;
+  }
+
+  convertAlertToNotification(alert: PrometheusCustomAlert): CdNotificationConfig {
+    return new CdNotificationConfig(
+      this.formatType(alert.status, alert.severity),
+      `${alert.name} (${alert.status})`,
+      this.appendSourceLink(alert, alert.description),
+      undefined,
+      'Prometheus'
+    );
+  }
+
+  private formatType(status: string, severity?: string): NotificationType {
+    if (status === 'active' && severity === 'warning') {
+      return NotificationType.warning;
+    }
+
+    const types = {
+      error: ['firing', 'active'],
+      info: ['suppressed', 'unprocessed'],
+      success: ['resolved']
+    };
+    return NotificationType[_.findKey(types, (type) => type.includes(status))];
+  }
+
+  private appendSourceLink(alert: PrometheusCustomAlert, message: string): string {
+    return `${message} <a href="${alert.url}" target="_blank"><svg cdsIcon="${Icons.lineChart}" size="${Icons.size16}" ></svg></a>`;
+  }
+}

@@ -1,0 +1,511 @@
+import ipaddress
+import logging
+import random
+import string
+from typing import List, Dict, Any, Tuple, cast, Optional, TYPE_CHECKING
+
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec, MonitorCertSource
+from mgr_util import build_url
+from cephadm import utils
+from orchestrator import OrchestratorError, DaemonDescription
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephService
+from .service_registry import register_cephadm_service
+from cephadm.tlsobject_types import TLSCredentials
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
+
+logger = logging.getLogger(__name__)
+
+
+@register_cephadm_service
+class IngressService(CephService):
+    TYPE = 'ingress'
+    MAX_KEEPALIVED_PASS_LEN = 8
+
+    @property
+    def needs_monitoring(self) -> bool:
+        return True
+
+    @property
+    def haproxy_stats_cert_name(self) -> str:
+        return 'haproxy_monitor_ssl_cert'
+
+    @property
+    def haproxy_stats_key_name(self) -> str:
+        return 'haproxy_monitor_ssl_key'
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        if daemon_type == 'haproxy':
+            return IngressService.get_haproxy_dependencies(mgr, spec)
+        elif daemon_type == 'keepalived':
+            return IngressService.get_keepalived_dependencies(mgr, spec)
+        return []
+
+    def primary_daemon_type(self, spec: Optional[ServiceSpec] = None) -> str:
+        if spec:
+            ispec = cast(IngressSpec, spec)
+            # in keepalive only setups, we are only deploying keepalived,
+            # so that should be marked as the primary daemon type. Otherwise,
+            # we consider haproxy to be the primary.
+            if hasattr(spec, 'keepalive_only') and ispec.keepalive_only:
+                return 'keepalived'
+        return 'haproxy'
+
+    def per_host_daemon_type(self, spec: Optional[ServiceSpec] = None) -> Optional[str]:
+        if spec:
+            ispec = cast(IngressSpec, spec)
+            # if we are using "keepalive_only" mode on this ingress service
+            # we are only deploying keepalived daemons, so there should
+            # only be a primary daemon type and the per host daemon type
+            # should be empty
+            if hasattr(spec, 'keepalive_only') and ispec.keepalive_only:
+                return None
+        return 'keepalived'
+
+    def prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> CephadmDaemonDeploySpec:
+        super().prepare_create(daemon_spec)
+        if daemon_spec.daemon_type == 'haproxy':
+            return self.haproxy_prepare_create(daemon_spec)
+        if daemon_spec.daemon_type == 'keepalived':
+            return self.keepalived_prepare_create(daemon_spec)
+        assert False, "unexpected daemon type"
+
+    def generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        if daemon_spec.daemon_type == 'haproxy':
+            return self.haproxy_generate_config(daemon_spec)
+        else:
+            return self.keepalived_generate_config(daemon_spec)
+        assert False, "unexpected daemon type"
+
+    def haproxy_prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> CephadmDaemonDeploySpec:
+        assert daemon_spec.daemon_type == 'haproxy'
+
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+        spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+        logger.debug('prepare_create haproxy.%s on host %s with spec %s' % (
+            daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.haproxy_generate_config(daemon_spec)
+
+        return daemon_spec
+
+    @staticmethod
+    def get_haproxy_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+        # because cephadm creates new daemon instances whenever
+        # port or ip changes, identifying daemons by name is
+        # sufficient to detect changes.
+        if not spec:
+            return []
+
+        ingress_spec = cast(IngressSpec, spec)
+        assert ingress_spec.backend_service
+        daemons = mgr.cache.get_daemons_by_service(ingress_spec.backend_service)
+        deps = [d.name() for d in daemons]
+        for attr in ['ssl_cert', 'ssl_key']:
+            ssl_cert_key = getattr(ingress_spec, attr, None)
+            if ssl_cert_key:
+                assert isinstance(ssl_cert_key, str)
+                deps.append(f'ssl-cert-key:{str(utils.md5_hash(ssl_cert_key))}')
+
+        return sorted(deps)
+
+    def haproxy_generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        assert spec.backend_service
+        if spec.backend_service not in self.mgr.spec_store:
+            raise RuntimeError(
+                f'{spec.service_name()} backend service {spec.backend_service} does not exist')
+        backend_spec = self.mgr.spec_store[spec.backend_service].spec
+        daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
+
+        # generate password?
+        pw_key = f'{spec.service_name()}/monitor_password'
+        password = self.mgr.get_store(pw_key)
+        if password is None:
+            if not spec.monitor_password:
+                password = ''.join(random.choice(string.ascii_lowercase)
+                                   for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
+                self.mgr.set_store(pw_key, password)
+        else:
+            if spec.monitor_password:
+                self.mgr.set_store(pw_key, None)
+        if spec.monitor_password:
+            password = spec.monitor_password
+
+        if backend_spec.service_type == 'nfs':
+            mode = 'tcp'
+            # we need to get the nfs daemon with the highest rank_generation for
+            # each rank we are currently deploying for the haproxy config
+            # for example if we had three (rank, rank_generation) pairs of
+            # (0, 0), (0, 1), (1, 0) we would want the nfs daemon corresponding
+            # to (0, 1) and (1, 0) because those are the two with the highest
+            # rank_generation for the existing ranks (0 and 1, with the highest
+            # rank_generation for rank 0 being 1 and highest rank_generation for
+            # rank 1 being 0)
+            ranked_daemons = [d for d in daemons if (d.rank is not None and d.rank_generation is not None)]
+            by_rank: Dict[int, DaemonDescription] = {}
+            for d in ranked_daemons:
+                # It doesn't seem like mypy can figure out that rank
+                # and rank_generation for both the daemon we're looping on
+                # and all those in by_rank cannot be None due to the filtering
+                # when creating the ranked_daemons list, which is why these
+                # seemingly unnecessary assertions are here.
+                assert d.rank is not None
+                if d.rank not in by_rank:
+                    by_rank[d.rank] = d
+                else:
+                    same_rank_nfs = by_rank[d.rank]
+                    assert d.rank_generation is not None
+                    assert same_rank_nfs.rank_generation is not None
+                    # if we have multiple of the same rank. take the one
+                    # with the highesr rank generation
+                    if d.rank_generation > same_rank_nfs.rank_generation:
+                        by_rank[d.rank] = d
+            servers = []
+
+            # try to establish how many ranks we *should* have
+            num_ranks = backend_spec.placement.count
+            if not num_ranks:
+                num_ranks = 1 + max(by_rank.keys())
+
+            for rank in range(num_ranks):
+                if rank in by_rank:
+                    d = by_rank[rank]
+                    assert d.ports
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': d.ip or utils.resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
+                        'port': d.ports[0],
+                    })
+                else:
+                    # offline/missing server; leave rank in place
+                    servers.append({
+                        'name': f"{spec.backend_service}.{rank}",
+                        'ip': '0.0.0.0',
+                        'port': 0,
+                    })
+        else:
+            mode = 'http'
+            servers = [
+                {
+                    'name': d.name(),
+                    'ip': d.ip or utils.resolve_ip(self.mgr.inventory.get_addr(str(d.hostname))),
+                    'port': d.ports[0],
+                } for d in daemons if d.ports
+            ]
+
+        host_ip = daemon_spec.ip or self.mgr.inventory.get_addr(daemon_spec.host)
+        server_opts = []
+        if spec.enable_haproxy_protocol:
+            server_opts.append("send-proxy-v2")
+        logger.debug("enabled default server opts: %r", server_opts)
+        ip = '[::]' if spec.virtual_ips_list else str(spec.virtual_ip).split('/')[0] or daemon_spec.ip or '[::]'
+        v4v6_flag = "v4v6" if ip == "[::]" else ""
+
+        frontend_port = daemon_spec.ports[0] if daemon_spec.ports else spec.frontend_port
+        if ip != '[::]' and frontend_port:
+            daemon_spec.port_ips = {str(frontend_port): ip}
+
+        monitor_ip, monitor_port = self.get_monitoring_details(daemon_spec.service_name, daemon_spec.host)
+        if monitor_ip:
+            monitor_ips = [monitor_ip]
+            daemon_spec.port_ips.update({str(monitor_port): monitor_ip})
+        else:
+            monitor_ips = [ip, host_ip]
+
+        monitor_ssl_file = None
+        cert_ips = [ip]
+        if spec.monitor_ssl:
+            if spec.monitor_cert_source == MonitorCertSource.REUSE_SERVICE_CERT.value:
+                monitor_ssl_file = 'haproxy.pem'
+                cert_ips.extend(monitor_ips)
+            else:
+                monitor_ssl_file = 'stats_haproxy.pem'
+
+        haproxy_conf = self.mgr.template.render(
+            'services/ingress/haproxy.cfg.j2',
+            {
+                'spec': spec,
+                'backend_spec': backend_spec,
+                'mode': mode,
+                'servers': servers,
+                'user': spec.monitor_user or 'admin',
+                'password': password,
+                'ip': ip,
+                'monitor_ips': monitor_ips,
+                'frontend_port': frontend_port,
+                'monitor_port': spec.monitor_port,
+                'default_server_opts': server_opts,
+                'health_check_interval': spec.health_check_interval or '2s',
+                'v4v6_flag': v4v6_flag,
+                'monitor_ssl_file': monitor_ssl_file,
+            }
+        )
+        config_files = {
+            'files': {
+                "haproxy.cfg": haproxy_conf,
+            }
+        }
+
+        if spec.ssl:
+            tls_pair = self.get_certificates(daemon_spec)
+            combined_pem = tls_pair.cert + '\n' + tls_pair.key
+            config_files['files']['haproxy.pem'] = combined_pem
+
+        if spec.monitor_ssl and spec.monitor_cert_source != MonitorCertSource.REUSE_SERVICE_CERT.value:
+            tls_creds = self.get_stats_certs(spec, daemon_spec, monitor_ips)
+            monitor_ssl_cert = [tls_creds.cert, tls_creds.key]
+            config_files['files']['stats_haproxy.pem'] = '\n'.join(monitor_ssl_cert)
+
+        return config_files, self.get_haproxy_dependencies(self.mgr, spec)
+
+    def get_stats_certs(
+        self,
+        svc_spec: IngressSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        ips: Optional[List[str]] = None,
+    ) -> TLSCredentials:
+        return self.get_certificates_generic(
+            svc_spec=svc_spec,
+            daemon_spec=daemon_spec,
+            cert_attr='monitor_ssl_cert',
+            key_attr='monitor_ssl_key',
+            cert_source_attr='monitor_cert_source',
+            cert_name=self.haproxy_stats_cert_name,
+            key_name=self.haproxy_stats_key_name,
+            ips=ips
+        )
+
+    def keepalived_prepare_create(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> CephadmDaemonDeploySpec:
+        assert daemon_spec.daemon_type == 'keepalived'
+
+        daemon_id = daemon_spec.daemon_id
+        host = daemon_spec.host
+        spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+
+        logger.debug('prepare_create keepalived.%s on host %s with spec %s' % (
+            daemon_id, host, spec))
+
+        daemon_spec.final_config, daemon_spec.deps = self.keepalived_generate_config(daemon_spec)
+
+        return daemon_spec
+
+    @staticmethod
+    def get_keepalived_dependencies(mgr: "CephadmOrchestrator", spec: Optional[ServiceSpec]) -> List[str]:
+        # because cephadm creates new daemon instances whenever
+        # port or ip changes, identifying daemons by name is
+        # sufficient to detect changes.
+        if not spec:
+            return []
+        daemons = mgr.cache.get_daemons_by_service(spec.service_name())
+        return sorted([d.name() for d in daemons if d.daemon_type == 'haproxy'])
+
+    def keepalived_generate_config(
+            self,
+            daemon_spec: CephadmDaemonDeploySpec,
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        spec = cast(IngressSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        assert spec.backend_service
+
+        # generate password?
+        pw_key = f'{spec.service_name()}/keepalived_password'
+        password = self.mgr.get_store(pw_key)
+        if password is None:
+            if not spec.keepalived_password:
+                password = ''.join(random.choice(string.ascii_lowercase)
+                                   for _ in range(self.MAX_KEEPALIVED_PASS_LEN))
+                self.mgr.set_store(pw_key, password)
+        else:
+            if spec.keepalived_password:
+                self.mgr.set_store(pw_key, None)
+        if spec.keepalived_password:
+            password = spec.keepalived_password
+
+        if spec.keepalive_only:
+            # when keepalive_only instead of haproxy, we have to monitor the backend service daemons
+            if spec.backend_service is not None:
+                daemons = self.mgr.cache.get_daemons_by_service(spec.backend_service)
+        else:
+            daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
+
+        if not daemons and not spec.keepalive_only:
+            raise OrchestratorError(
+                f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
+
+        host = daemon_spec.host
+        hosts = sorted(list(set([host] + [str(d.hostname) for d in daemons])))
+
+        def _get_valid_interface_and_ip(vip: str, host: str) -> Tuple[str, str]:
+            # interface
+            bare_ip = ipaddress.ip_interface(vip).ip
+            host_ip = ''
+            interface = None
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
+                    interface = list(ifaces.keys())[0]
+                    for ip_addr in ifaces[interface]:
+                        if ip_addr != str(bare_ip):
+                            host_ip = ip_addr
+                            break
+                    logger.info(
+                        f'{bare_ip} is in {subnet} on {host} interface {interface}'
+                    )
+                    break
+            # try to find interface by matching spec.virtual_interface_networks
+            if not interface and spec.virtual_interface_networks:
+                for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                    if subnet in spec.virtual_interface_networks:
+                        interface = list(ifaces.keys())[0]
+                        for ip_addr in ifaces[interface]:
+                            if ip_addr != str(bare_ip):
+                                host_ip = ip_addr
+                                break
+                        logger.info(
+                            f'{spec.virtual_ip} will be configured on {host} interface '
+                            f'{interface} (which is in subnet {subnet})'
+                        )
+                        break
+            if not interface:
+                raise OrchestratorError(
+                    f"Unable to identify interface for {spec.virtual_ip} on {host}"
+                )
+            return interface, host_ip
+
+        # script to monitor health
+        script = '/usr/bin/false'
+        for d in daemons:
+            if d.hostname == host:
+                if d.daemon_type == 'haproxy':
+                    assert d.ports
+                    port = d.ports[1]   # monitoring port
+                    host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
+                    script = f'/usr/bin/curl {build_url(scheme="http", host=host_ip, port=port)}/health'
+                elif d.daemon_type == 'mgmt-gateway':
+                    mgmt_gw_port = d.ports[0] if d.ports else None
+                    host_ip = d.ip or self.mgr.inventory.get_addr(d.hostname)
+                    script = f'/usr/bin/curl -k {build_url(scheme="https", host=host_ip, port=mgmt_gw_port)}/health'
+        assert script
+
+        states = []
+        priorities = []
+        virtual_ips = []
+
+        # Set state and priority. Have one master for each VIP. Or at least the first one as master if only one VIP.
+        if spec.virtual_ip:
+            virtual_ips.append(spec.virtual_ip)
+            if hosts[0] == host:
+                states.append('MASTER')
+                priorities.append(100)
+            else:
+                states.append('BACKUP')
+                priorities.append(90)
+
+        elif spec.virtual_ips_list:
+            virtual_ips = spec.virtual_ips_list
+            if len(virtual_ips) > len(hosts):
+                raise OrchestratorError(
+                    "Number of virtual IPs for ingress is greater than number of available hosts"
+                )
+            for x in range(len(virtual_ips)):
+                if hosts[x] == host:
+                    states.append('MASTER')
+                    priorities.append(100)
+                else:
+                    states.append('BACKUP')
+                    priorities.append(90)
+
+        # remove host, daemon is being deployed on from hosts list for
+        # other_ips in conf file and converter to ips
+        if host in hosts:
+            hosts.remove(host)
+        host_ips: List[str] = []
+        other_ips: List[List[str]] = []
+        interfaces: List[str] = []
+        for vip in virtual_ips:
+            interface, ip = _get_valid_interface_and_ip(vip, host)
+            host_ips.append(ip)
+            interfaces.append(interface)
+            ips: List[str] = []
+            for h in hosts:
+                _, ip = _get_valid_interface_and_ip(vip, h)
+                ips.append(ip)
+            other_ips.append(ips)
+
+        # Use interface as vrrp_interface for vrrp traffic if vrrp_interface_network not set on the spec
+        vrrp_interfaces: List[str] = []
+        if not spec.vrrp_interface_network:
+            vrrp_interfaces = interfaces
+        else:
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if subnet == spec.vrrp_interface_network:
+                    vrrp_interfaces = [list(ifaces.keys())[0]] * len(interfaces)
+                    logger.info(
+                        f'vrrp will be configured on {host} interface '
+                        f'{vrrp_interfaces} (which is in subnet {subnet})'
+                    )
+                    break
+            else:
+                raise OrchestratorError(
+                    f"Unable to identify vrrp interface for {spec.vrrp_interface_network} on {host}"
+                )
+
+        keepalived_conf = self.mgr.template.render(
+            'services/ingress/keepalived.conf.j2',
+            {
+                'spec': spec,
+                'script': script,
+                'password': password,
+                'interfaces': interfaces,
+                'vrrp_interfaces': vrrp_interfaces,
+                'virtual_ips': virtual_ips,
+                'first_virtual_router_id': spec.first_virtual_router_id,
+                'states': states,
+                'priorities': priorities,
+                'other_ips': other_ips,
+                'host_ips': host_ips,
+            }
+        )
+
+        config_file = {
+            'files': {
+                "keepalived.conf": keepalived_conf,
+            }
+        }
+
+        return config_file, self.get_keepalived_dependencies(self.mgr, spec)
+
+    def get_monitoring_details(self, service_name: str, host: str) -> Tuple[Optional[str], Optional[int]]:
+        spec = cast(IngressSpec, self.mgr.spec_store[service_name].spec)
+        monitor_port = spec.monitor_port
+
+        # check if monitor needs to be bind on specific ip
+        monitor_addr = spec.monitor_ip_addrs.get(host) if spec.monitor_ip_addrs else None
+        if monitor_addr and monitor_addr not in self.mgr.cache.get_host_network_ips(host):
+            logger.debug(f"Monitoring IP {monitor_addr} is not configured on host {host}.")
+            monitor_addr = None
+        if not monitor_addr and spec.monitor_networks:
+            monitor_addr = self.mgr.get_first_matching_network_ip(host, spec, spec.monitor_networks)
+            if not monitor_addr:
+                logger.debug(f"No IP address found in the network {spec.monitor_networks} on host {host}.")
+        return monitor_addr, monitor_port

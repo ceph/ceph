@@ -1,0 +1,7 @@
+@use './src/styles/vendor/variables' as vv;
+
+.apiDocs {
+  background: vv.$gray-100;
+  font-size: 18px !important;
+  margin-top: -48px !important;
+}

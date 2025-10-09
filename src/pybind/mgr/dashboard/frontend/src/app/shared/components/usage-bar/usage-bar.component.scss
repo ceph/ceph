@@ -1,0 +1,22 @@
+@use '@carbon/type';
+
+::ng-deep {
+  .cds--cc--chart-wrapper {
+    text {
+      @include type.type-style('heading-01');
+
+      font-family: inherit;
+      font-weight: normal;
+    }
+  }
+
+  .meter-tooltip {
+    @include type.type-style('helper-text-01');
+
+    padding-top: 0.25rem;
+
+    div {
+      padding-bottom: 0.25rem;
+    }
+  }
+}

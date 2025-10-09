@@ -1,0 +1,12 @@
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- workunit:
+    clients:
+      all:
+        - post-file.sh

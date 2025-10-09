@@ -1,0 +1,1294 @@
+commit 586538e22afba85c59beda49789ec42024e7a061
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Tue Jan 29 23:54:47 2013 -0800
+
+    v0.56.2
+
+commit bcb8dfad9cbb4c6af7ae7f9584e36449a03cd1b6
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Tue Jan 29 23:05:49 2013 -0800
+
+    cls_rbd, cls_rgw: use PRI*64 when printing/logging 64-bit values
+
+    caused segfaults in 32-bit build
+
+    Fixes: #3961
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e253830abac76af03c63239302691f7fac1af381)
+
+commit 5a7c5088cc8f57f75eb594a21bf5fb6661e50978
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Tue Jan 29 15:18:53 2013 -0800
+
+    init-ceph: make ulimit -n be part of daemon command
+
+    ulimit -n from 'max open files' was being set only on the machine
+    running /etc/init.d/ceph.  It needs to be added to the commands to
+    start the daemons, and run both locally and remotely.
+
+    Verified by examining /proc/<pid>/limits on local and remote hosts
+
+    Fixes: #3900
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Loïc Dachary <loic@dachary.org>
+    Reviewed-by: Gary Lowell <gary.lowell@inktank.com>
+    (cherry picked from commit 84a024b647c0ac2ee5a91bacdd4b8c966e44175c)
+
+commit 95677fc599b9bf37ab4c2037b3675fd68f92ebcf
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Sat Jan 12 01:06:36 2013 +0000
+
+    mon: OSDMonitor: only share osdmap with up OSDs
+
+    Try to share the map with a randomly picked OSD; if the picked monitor is
+    not 'up', then try to find the nearest 'up' OSD in the map by doing a
+    backward and a forward linear search on the map -- this would be O(n) in
+    the worst case scenario, as we only do a single iteration starting on the
+    picked position, incrementing and decrementing two different iterators
+    until we find an appropriate OSD or we exhaust the map.
+
+    Fixes: #3629
+    Backport: bobtail
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3610e72e4f9117af712f34a2e12c5e9537a5746f)
+
+commit e4d76cb8594c0ec901f89c2f2e8cc53e00eb2a06
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Sun Jan 27 21:57:31 2013 +0100
+
+    utime: fix narrowing conversion compiler warning in sleep()
+
+    Fix compiler warning:
+    ./include/utime.h: In member function 'void utime_t::sleep()':
+    ./include/utime.h:139:50: warning: narrowing conversion of
+     '((utime_t*)this)->utime_t::tv.utime_t::<anonymous struct>::tv_sec' from
+     '__u32 {aka unsigned int}' to '__time_t {aka long int}' inside { } is
+     ill-formed in C++11 [-Wnarrowing]
+    ./include/utime.h:139:50: warning: narrowing conversion of
+     '((utime_t*)this)->utime_t::tv.utime_t::<anonymous struct>::tv_nsec' from
+     '__u32 {aka unsigned int}' to 'long int' inside { } is
+     ill-formed in C++11 [-Wnarrowing]
+
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit 014fc6d6c1c68e2e3ad0117d08c4e46e4030d49e)
+
+commit a8964107ddf02ac4a6707a997e1b634c1084a3b9
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jan 28 17:13:23 2013 -0800
+
+    rgw: fix crash when missing content-type in POST object
+
+    Fixes: #3941
+    This fixes a crash when handling S3 POST request and content type
+    is not provided.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit f41010c44b3a4489525d25cd35084a168dc5f537)
+
+commit 11e1f3acf0953e9ac38322c0423144eaabd7bb61
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 11 15:00:02 2013 -0800
+
+    ReplicatedPG: make_snap_collection when moving snap link in snap_trimmer
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 88956e3186798058a1170803f8abfc0f3cf77a07)
+
+commit c9201d0e9de5f4766a2d9f4715eb7c69691964de
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 11 16:43:14 2013 -0800
+
+    ReplicatedPG: correctly handle new snap collections on replica
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9e44fca13bf1ba39dbcad29111b29f46c49d59f7)
+
+commit 2efdfb41c1bc9128b76416630ee00a75de90c020
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Sun Jan 27 18:08:15 2013 +0000
+
+    mon: Elector: reset the acked leader when the election finishes and we lost
+
+    Failure to do so will mean that we will always ack the same leader during
+    an election started by another monitor.  This had been working so far
+    because we were still acking the existing leader if he was supposed to
+    still be the leader; or we were acking a new potentially leader; or we
+    would eventually fall behind on an election and start a new election
+    ourselves, thus resetting the previously acked leader.  While this wasn't
+    something that mattered much until now, the timechecks code stumbled into
+    this tiny issue and was failing hard at completing a round because there
+    wouldn't be a reset before the election started -- timechecks are bound
+    to election epochs.
+
+    Fixes: #3854
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit c54781618569680898e77e151dd7364f22ac4aa1)
+
+commit a16c6f3dc278e19e66776ffde45de3ff0db46a6c
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Dec 26 14:24:22 2012 -0800
+
+    rbd: fix bench-write infinite loop
+
+    I/O was continously submitted as long as there were few enough ops in
+    flight. If the number of 'threads' was high, or caching was turned on,
+    there would never be that many ops in flight, so the loop would continue
+    indefinitely. Instead, submit at most io_threads ops per offset.
+
+    Fixes: #3413
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+    (cherry picked from commit d81ac8418f9e6bbc9adcc69b2e7cb98dd4db6abb)
+
+commit 76f93751d3603e3fb5c4b9e14bfdac406d8d1a58
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Fri Jan 4 18:00:24 2013 -0800
+
+    rbd: Don't call ProgressContext's finish() if there's an error.
+
+    do_copy was different from the others; call pc.fail() on error and
+    do not call pc.finish().
+
+    Fixes: #3729
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 0978dc4963fe441fb67afecb074bc7b01798d59d)
+
+commit 10053b14623f9c19727cb4d2d3a6b62945bef5c1
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Jan 2 14:15:24 2013 -0800
+
+    librbd: establish watch before reading header
+
+    This eliminates a window in which a race could occur when we have an
+    image open but no watch established. The previous fix (using
+    assert_version) did not work well with resend operations.
+
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit c4370ff03f8ab655a009cfd9ba3a0827d8c58b11)
+
+commit f666c617f6a5f8d94ce81461942c9f94a0775fb2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Jan 2 12:32:33 2013 -0800
+
+    Revert "librbd: ensure header is up to date after initial read"
+
+    Using assert version for linger ops doesn't work with retries,
+    since the version will change after the first send.
+    This reverts commit e1776809031c6dad441cfb2b9fac9612720b9083.
+
+    Conflicts:
+
+	qa/workunits/rbd/watch_correct_version.sh
+    (cherry picked from commit e0858fa89903cf4055889c405f17515504e917a0)
+
+commit 575a58666adbca83d15468899272e8c369e903e1
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 23 22:16:49 2013 -0800
+
+    os/FileStore: only adjust up op queue for btrfs
+
+    We only need to adjust up the op queue limits during commit for btrfs,
+    because the snapshot initiation (async create) is currently
+    high-latency and the op queue is quiesced during that period.
+
+    This lets us revert 44dca5c, which disabled the extra allowance because
+    it is generally bad for non-btrfs writeahead mode.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 38871e27eca5a34de78db23aa3663f6cb045d461)
+
+commit c9eb1b0a99b0e55f7d7343176dad17d1a53589a1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 24 10:52:46 2013 -0800
+
+    common/HeartbeatMap: fix uninitialized variable
+
+    Introduced by me in 132045ce085e8584a3e177af552ee7a5205b13d8.  Thank you,
+    valgrind!
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 00cfe1d3af286ffab7660933415684f18449720c)
+
+commit e6bceeedb0b77d23416560bd951326587470aacb
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 25 11:31:29 2013 -0800
+
+    sharedptr_registry: remove extaneous Mutex::Locker declaration
+
+    For some reason, the lookup() retry loop (for when happened to
+    race with a removal and grab an invalid WeakPtr) locked
+    the lock again.  This causes the #3836 crash since the lock
+    is already locked.  It's rare since it requires a lookup between
+    invalidation of the WeakPtr and removal of the WeakPtr entry.
+
+    Fixes: #3836
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 037900dc7a051ce2293a4ef9d0e71911b29ec159)
+
+commit 60888cafdc53d6b381cd634170646c12669e1754
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 24 12:02:09 2013 -0800
+
+    FileStore: ping TPHandle after each operation in _do_transactions
+
+    Each completed operation in the transaction proves thread
+    liveness, a stuck thread should still trigger the timeouts.
+
+    Fixes: #3928
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0c1cc687b6a40d3c6a26671f0652e1b51c3fd1af)
+
+commit 6b8a673f88cbaca2891834dd5d2137a0e076fd1e
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 24 11:07:37 2013 -0800
+
+    OSD: use TPHandle in peering_wq
+
+    Implement _process overload with TPHandle argument and use
+    that to ping the hb map between pgs and between map epochs
+    when advancing a pg.  The thread will still timeout if
+    genuinely stuck at any point.
+
+    Fixes: 3905
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit e0511f4f4773766d04e845af2d079f82f3177cb6)
+
+commit aa6d20aac22d4c14ff059dbc28e06b7a5e5d6de1
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 24 11:04:04 2013 -0800
+
+    WorkQueue: add TPHandle to allow _process to ping the hb map
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 4f653d23999b24fc8c65a59f14905db6630be5b5)
+
+commit e66a75052a340b15693f08b05f7f9f5d975b0978
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 12:49:04 2013 -0800
+
+    ReplicatedPG: handle omap > max_recovery_chunk
+
+    span_of fails if len == 0.
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 8a97eef1f7004988449bd7ace4c69d5796495139)
+
+commit 44f0407a6b259e87803539ec9e942043de0cf35d
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 12:18:31 2013 -0800
+
+    ReplicatedPG: correctly handle omap key larger than max chunk
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit c3dec3e30a85ecad0090c75a38f28cb83e36232e)
+
+commit 50fd6ac9f147a4418d64dfe08843402e7cfb4910
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 12:15:10 2013 -0800
+
+    ReplicatedPG: start scanning omap at omap_recovered_to
+
+    Previously, we started scanning omap after omap_recovered_to.
+    This is a problem since the break in the loop implies that
+    omap_recovered_to is the first key not recovered.
+
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 09c71f2f5ee9929ac4574f4c35fb8c0211aad097)
+
+commit 4b32eecba2e2bd8e8ea17e1888e6971d31e71439
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 11:50:13 2013 -0800
+
+    ReplicatedPG: don't finish_recovery_op until the transaction completes
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 62a4b96831c1726043699db86a664dc6a0af8637)
+
+commit da34c77b93e3f880c01329711ab8eca7776b1830
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 11:35:47 2013 -0800
+
+    ReplicatedPG: ack push only after transaction has completed
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 20278c4f77b890d5b2b95d2ccbeb4fbe106667ac)
+
+commit f9381c74931b80294e5df60f6d2e69c946b8fe88
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 23 11:13:28 2013 -0800
+
+    ObjectStore: add queue_transactions with oncomplete
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 4d6ba06309b80fb21de7bb5d12d5482e71de5f16)
+
+commit e2560554f0568c30c786632723c5ce0c86043359
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 21:18:45 2013 -0800
+
+    common/HeartbeatMap: inject unhealthy heartbeat for N seconds
+
+    This lets us test code that is triggered by an unhealthy heartbeat in a
+    generic way.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 132045ce085e8584a3e177af552ee7a5205b13d8)
+
+commit cbe8b5bca40fd63a382b1a903087e7c34b314985
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 18:08:22 2013 -0800
+
+    os/FileStore: add stall injection into filestore op queue
+
+    Allow admin to artificially induce a stall in the op queue.  Forces the
+    thread(s) to sleep for N seconds.  We pause for 1 second increments and
+    recheck the value so that a previously stalled thread can be unwedged by
+    reinjecting a lower value (or 0).  To stall indefinitely, just injust
+    very large number.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 657df852e9c89bfacdbce25ea014f7830d61e6aa)
+
+commit beb6ca44cd0e7fc405360e6da974252cb76e7039
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 18:03:10 2013 -0800
+
+    osd: do not join cluster if not healthy
+
+    If our internal heartbeats are failing, do not send a boot message and try
+    to join the cluster.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a4e78652cdd1698e8dd72dda51599348d013e5e0)
+
+commit 1ecdfca3a3b4985ebd182a5f399c7b15af258663
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 18:01:07 2013 -0800
+
+    osd: hold lock while calling start_boot on startup
+
+    This probably doesn't strictly matter because start_boot doesn't need the
+    lock (currently) and few other threads should be running, but it is
+    better to be consistent.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c406476c0309792c43df512dddb2fe0f19835e71)
+
+commit e120bf20b3c7213fbde20907e158792dd36c8e54
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 17:56:32 2013 -0800
+
+    osd: do not reply to ping if internal heartbeat is not healthy
+
+    If we find that our internal threads are stalled, do not reply to ping
+    requests.  If we do this long enough, peers will mark us down.  If we are
+    only transiently unhealthy, we will reply to the next ping and they will
+    be satisfied.  If we are unhealthy and marked down, and eventually recover,
+    we will mark ourselves back up.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ad6b231127a6bfcbed600a7493ca3b66c68484d2)
+
+commit 5f396e2b9360401dfe4dc2afa6acc37df8580c80
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jan 22 17:53:40 2013 -0800
+
+    osd: reduce op thread heartbeat default 30 -> 15 seconds
+
+    If the thread stalls for 15 seconds, let our internal heartbeat fail.
+    This will let us internally respond more quickly to a stalled or failing
+    disk.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 61eafffc3242357d9add48be9308222085536898)
+
+commit fca288b718ef4582d65ff4b9d1fc87ba53d7fd8d
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 21:02:01 2013 -0800
+
+    osd: improve sub_op flag points
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 73a969366c8bbd105579611320c43e2334907fef)
+
+commit f13ddc8a2df401c37f6dc792eb93fc0cc45705e2
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 20:55:20 2013 -0800
+
+    osd: refactor ReplicatedPG::do_sub_op
+
+    PULL is the only case where we don't wait for active.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 23c02bce90c9725ccaf4295de3177e8146157723)
+
+commit d5e00f963f177745f0e0684d5977460b7ab59fbd
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 16:36:36 2013 -0800
+
+    osd: make last state for slow requests more informative
+
+    Report on the last event string, and pass in important context for the
+    op event list, including:
+
+     - which peers were sent sub ops and we are waiting for
+     - which pg queue we are delayed by
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a1137eb3e168c2d00f93789e4d565c1584790df0)
+
+commit ab3a110cbe16b548bb96225656b64507aa67e78f
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 15:59:07 2013 -0800
+
+    osd: dump op priority queue state via admin socket
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 24d0d7eb0165c8b8f923f2d8896b156bfb5e0e60)
+
+commit 43a65d04d8a13621a856baec85fb741971c13cb0
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 15:50:33 2013 -0800
+
+    osd: simplify asok to single callback
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 33efe32151e04beaafd9435d7f86dc2eb046214d)
+
+commit d040798637da03e3df937181de156714fc62a550
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 15:58:57 2013 -0800
+
+    common/PrioritizedQueue: dump state to Formatter
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 514af15e95604bd241d2a98a97b938889c6876db)
+
+commit 691fd505ad606bd8befd2b19113ee51a17a0a543
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 15:29:28 2013 -0800
+
+    common/PrioritizedQueue: add min cost, max tokens per bucket
+
+    Two problems.
+
+    First, we need to cap the tokens per bucket.  Otherwise, a stream of
+    items at one priority over time will indefinitely inflate the tokens
+    available at another priority.  The cap should represent how "bursty"
+    we allow a given bucket to be.  Start with 4MB for now.
+
+    Second, set a floor on the item cost.  Otherwise, we can have an
+    infinite queue of 0 cost items that start over queues.  More
+    realistically, we need to balance the overhead of processing small items
+    with the cost of large items.  I.e., a 4 KB item is not 1/1000th as
+    expensive as a 4MB item.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6e3363b20e590cd9df89f2caebe71867b94cc291)
+
+commit a2b03fe08044b5c121ea6b4c2f9d19e73e4c83d1
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 14:52:54 2013 -0800
+
+    common/PrioritizedQueue: buckets -> tokens
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c549a0cf6fae78c8418a3b4b0702fd8a1e4ce482)
+
+commit 612d75cdee0daf9dfca97831c249e1ac3fbd59fc
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 14:31:00 2013 -0800
+
+    note puller's max chunk in pull requests
+
+    this lets us calculate a cost value
+    (cherry picked from commit 128fcfcac7d3fb66ca2c799df521591a98b82e05)
+
+commit 2224e413fba11795693025fa8f11c3f1fba4bbaa
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 14:14:25 2013 -0800
+
+    osd: add OpRequest flag point when commit is sent
+
+    With writeahead journaling in particular, we can get requests that
+    stay in the queue for a long time even after the commit is sent to the
+    client while we are waiting for the transaction to apply to the fs.
+    Instead of showing up as 'waiting for subops', make it clear that the
+    client has gotten its reply and it is local state that is slow.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b685f727d4c37a26cb78bd4a04cce041428ceb52)
+
+commit 5b5ca5926258e4f0b5041fb2c15b1c2f904c4adb
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 13:57:59 2013 -0800
+
+    osd: set PULL subop cost to size of requested data
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a1bf8220e545f29b83d965f07b1abfbea06238b3)
+
+commit 10651e4f500d7b55d8c689a10a61d2239b3ecd26
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 13:57:38 2013 -0800
+
+    osd: use Message::get_cost() function for queueing
+
+    The data payload is a decent proxy for cost in most cases, but not all.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e8e0da1a577e24cd4aad71fb94d8b244e2ac7300)
+
+commit 9735c6b163f4d226d8de6508d5c1534d18f1c300
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 13:25:21 2013 -0800
+
+    osd: debug msg prio, cost, latency
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bec96a234c160bebd9fd295df5b431dc70a2cfb3)
+
+commit c48279da7ad98013ce97eab89c17fe9fae1ba866
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 21:05:00 2013 -0800
+
+    filestore: filestore_queue_max_ops 500 -> 50
+
+    Having a deep queue limits the effectiveness of the priority queues
+    above by adding additional latency.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 40654d6d53436c210b2f80911217b044f4d7643a)
+
+commit f47b2e8b607cc0d56a42ec7b1465ce6b8c0ca68c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 20:00:26 2013 -0800
+
+    osd: target transaction size 300 -> 30
+
+    Small transactions make pg removal nicer to the op queue.  It also slows
+    down PG deletion a bit, which may exacerbate the PG resurrection case
+    until #3884 is addressed.
+
+    At least on user reported this fixed an osd that kept failing due to
+    an internal heartbeat failure.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1233e8617098766c95100aa9a6a07db1a688e290)
+
+commit 4947f0efadf9ef209d02fd17f5f86b9a7d6523ef
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 21 19:55:26 2013 -0800
+
+    os/FileStore: allow filestore_queue_max_{ops,bytes} to be adjusted at runtime
+
+    The 'committing' ones too.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cfe4b8519363f92f84f724a812aa41257402865f)
+
+commit ad6e6c91f61c092bfc9f88b788ccbee6438fd40b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 22:06:27 2013 -0800
+
+    osd: make osd_max_backfills dynamically adjustable
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 101955a6b8bfdf91f4229f4ecb5d5b3da096e160)
+
+commit 939b1855245bc9cb31f5762027f2ed3f2317eb55
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 19 18:28:35 2013 -0800
+
+    osd: make OSD a config observer
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 9230c863b3dc2bdda12c23202682a84c48f070a1)
+
+    Conflicts:
+
+	src/osd/OSD.cc
+
+commit b0f27a8f81feb401407bed784bf5d4d799998ee0
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Tue Jan 8 11:21:22 2013 -0800
+
+    librbd: Allow get_lock_info to fail
+
+    If the lock class isn't present, EOPNOTSUPP is returned for lock calls
+    on newer OSDs, but sadly EIO on older; we need to treat both as
+    acceptable failures for RBD images.  rados lock list will still fail.
+
+    Fixes #3744.
+
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4483285c9fb16f09986e2e48b855cd3db869e33c)
+
+commit 022a5254b4fac3f76220abdde2a2e81de33cb8dc
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 4 13:00:56 2013 -0800
+
+    osd: drop newlines from event descriptions
+
+    These produce extra newlines in the log.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 9a1f574283804faa6dbba9165a40558e1a6a1f13)
+
+commit ebc93a878c8b0697004a619d6aa957a80b8b7e35
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 18 14:35:51 2013 -0800
+
+    OSD: do deep_scrub for repair
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 0cb760f31b0cb26f022fe8b9341e41cd5351afac)
+
+commit 32527fa3eb48a7d7d5d67c39bfa05087dbc0e41b
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jan 14 12:52:04 2013 -0800
+
+    ReplicatedPG: ignore snap link info in scrub if nlinks==0
+
+    links==0 implies that the replica did not sent snap link information.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 70c3512037596a42ba6eb5eb7f96238843095db9)
+
+commit 13e42265db150b19511a5a618c7a95ad801290c8
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 11 12:25:22 2013 -0800
+
+    osd/PG: fix osd id in error message on snap collection errors
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 381e25870f26fad144ecc2fb99710498e3a7a1d4)
+
+commit e3b6191fc45c7d2c27ec75c867be822a6da17e9a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 9 22:34:12 2013 -0800
+
+    osd/ReplicatedPG: validate ino when scrubbing snap collections
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 665577a88b98390b9db0f9991836d10ebdd8f4cf)
+
+commit 353b7341caff86f936a429669de52e6949a89c2b
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 9 16:41:40 2013 -0800
+
+    ReplicatedPG: compare nlinks to snapcolls
+
+    nlinks gives us the number of hardlinks to the object.
+    nlinks should be 1 + snapcolls.size().  This will allow
+    us to detect links which remain in an erroneous snap
+    collection.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit e65ea70ea64025fbb0709ee8596bb2878be0bbdc)
+
+commit 33d5cfc8c080a270d65275f8e010a6468c77381a
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 10 15:35:10 2013 -0800
+
+    ReplicatedPG/PG: check snap collections during _scan_list
+
+    During _scan_list check the snapcollections corresponding to the
+    object_info attr on the object.  Report inconsistencies during
+    scrub_finalize.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 57352351bb86e0ae9f64f9ba0d460c532d882de6)
+
+commit bea783bd722d862a5018477a637c843fe4b18a58
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 9 11:53:52 2013 -0800
+
+    osd_types: add nlink and snapcolls fields to ScrubMap::object
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit b85687475fa2ec74e5429d92ee64eda2051a256c)
+
+commit 0c48407bf46b39b2264a7be14e9d3caa2c1e5875
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 3 20:16:50 2013 -0800
+
+    PG: move auth replica selection to helper in scrub
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 39bc65492af1bf1da481a8ea0a70fe7d0b4b17a3)
+
+commit c3433ce60ec3683217d8b4cd2b6e75fb749af2c6
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 18:23:52 2013 -0800
+
+    mon: note scrub errors in health summary
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8e33a8b9e1fef757bbd901d55893e9b84ce6f3fc)
+
+commit 90c6edd0155b327c48a5b178d848d9e5839bd928
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 18:31:06 2013 -0800
+
+    osd: fix rescrub after repair
+
+    We were rescrubbing if INCONSISTENT is set, but that is now persistent.
+    Add a new scrub_after_recovery flag that is reset on each peering interval
+    and set that when repair encounters errors.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a586966a3cfb10b5ffec0e9140053a7e4ff105d2)
+
+commit 0696cf57283e6e9a3500c56ca5fc9f981475ca26
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 18:22:02 2013 -0800
+
+    osd: note must_scrub* flags in PG operator<<
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d56af797f996ac92bf4e0886d416fd358a2aa08e)
+
+commit 1541ffe4bec6cce607c505271ff074fd0a292d30
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 18:21:46 2013 -0800
+
+    osd: based INCONSISTENT pg state on persistent scrub errors
+
+    This makes the state persistent across PG peering and OSD restarts.
+
+    This has the side-effect that, on recovery, we rescrub any PGs marked
+    inconsistent.  This is new behavior!
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2baf1253eed630a7c4ae4cb43aab6475efd82425)
+
+commit 609101255c81d977072b2ab741ac47167d9b1b16
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 18:20:29 2013 -0800
+
+    osd: fix scrub scheduling for 0.0
+
+    The initial value for pair<utime_t,pg_t> can match pg 0.0, preventing it
+    from being manually scrubbed.  Fix!
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 26a63df97b2a12fd1a7c1e3cc9ccd34ca2ef9834)
+
+commit 0961a3a85c286a31ec2e8bba23217bbd3974572c
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 23:03:01 2013 -0800
+
+    osd: note last_clean_scrub_stamp, last_scrub_errors
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 389bed5d338cf32ab14c9fc2abbc7bcc386b8a28)
+
+commit 8d823045538bf4c51506e349b5c6705fd76450f8
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 22:59:39 2013 -0800
+
+    osd: add num_scrub_errors to object_stat_t
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 2475066c3247774a2ad048a2e32968e47da1b0f5)
+
+commit 3a1cd6e07b4e2a4714de159f69afd689495e2927
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 22:43:35 2013 -0800
+
+    osd: add last_clean_scrub_stamp to pg_stat_t, pg_history_t
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d738328488de831bf090f23e3fa6d25f6fa819df)
+
+commit 7e5a899bdcf6c08a5f6f5c98cd2fff7fa2dacaca
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 22:56:14 2013 -0800
+
+    osd: fix object_stat_sum_t dump signedness
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6f6a41937f1bd05260a8d70b4c4a58ecadb34a2f)
+
+commit e252a313d465006d3fe4db97939ad307ebe91c71
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 22:04:58 2013 -0800
+
+    osd: change scrub min/max thresholds
+
+    The previous 'osd scrub min interval' was mostly meaningless and useless.
+    Meanwhile, the 'osd scrub max interval' would only trigger a scrub if the
+    load was sufficiently low; if it was high, the PG might *never* scrub.
+
+    Instead, make the 'min' what the max used to be.  If it has been more than
+    this many seconds, and the load is low, scrub.  And add an additional
+    condition that if it has been more than the max threshold, scrub the PG
+    no matter what--regardless of the load.
+
+    Note that this does not change the default scrub interval for less-loaded
+    clusters, but it *does* change the meaning of existing config options.
+
+    Fixes: #3786
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 299548024acbf8123a4e488424c06e16365fba5a)
+
+    Conflicts:
+
+	PendingReleaseNotes
+
+commit 33aa64eee34f4759f6000130de4d1306de49d087
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 20:27:59 2013 -0800
+
+    osd/PG: remove useless osd_scrub_min_interval check
+
+    This was already a no-op: we don't call PG::scrub_sched() unless it has
+    been osd_scrub_max_interval seconds since we last scrubbed.  Unless we
+    explicitly requested in, in which case we don't want this check anyway.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 16d67c798b6f752a6e03084bafe861396b86baae)
+
+commit fdd0c1ec3519376980a205b94e65187833634e2e
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 13 20:25:39 2013 -0800
+
+    osd: move scrub schedule random backoff to seperate helper
+
+    Separate this from the load check, which will soon vary dependon on the
+    PG.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a148120776d0930b265411332a60e93abfbf0423)
+
+commit 9ffbe268f785e1a74c0d893735117edb7a3ef377
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 12 09:18:38 2013 -0800
+
+    osd/PG: trigger scrub via scrub schedule, must_ flags
+
+    When a scrub is requested, flag it and move it to the front of the
+    scrub schedule instead of immediately queuing it.  This avoids
+    bypassing the scrub reservation framework, which can lead to a heavier
+    impact on performance.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 62ee6e099a8e4873287b54f9bba303ea9523d040)
+
+commit cffb1b22d5df7300ec411d2b620bf3c4a08351cd
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 12 09:15:16 2013 -0800
+
+    osd/PG: introduce flags to indicate explicitly requested scrubs
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1441095d6babfacd781929e8a54ed2f8a4444467)
+
+commit 438e3dfc88bfdc8eb36b5b5f7b728b2610476724
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jan 12 09:14:01 2013 -0800
+
+    osd/PG: move scrub schedule registration into a helper
+
+    Simplifies callers, and will let us easily modify the decision of when
+    to schedule the PG for scrub.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 796907e2159371f84a16cbd35f6caa8ac868acf6)
+
+commit acb47e4d7dc9682937984661a9d754131d806630
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 12:14:48 2013 -0800
+
+    os/FileStore: only flush inline if write is sufficiently large
+
+    Honor filestore_flush_min in the inline flush case.
+
+    Backport: bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 49726dcf973c38c7313ab78743b45ccc879671ea)
+
+commit 15a1ced859629c361da127799b05620bee84c9a8
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 12:14:40 2013 -0800
+
+    os/FileStore: fix compile when sync_file_range is missing;
+
+    If sync_file_range is not present, we always close inline, and flush
+    via fdatasync(2).
+
+    Fixes compile on ancient platforms like RHEL5.8.
+
+    Backport: bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 8ddb55d34c72e6df1023cf427cbd41f3f98da402)
+
+commit 9dddb9d855e6d5fd804b54bff1f726c1d2fb566c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 15:23:22 2013 -0800
+
+    osd: set pg removal transactions based on configurable
+
+    Use the osd_target_transaction_size knob, and gracefully tolerate bogus
+    values (e.g., <= 0).
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5e00af406b89c9817e9a429f92a05ca9c29b19c3)
+
+commit c30d231e40a17c3fb08d1db5e01133466170e90c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 15:30:06 2013 -0800
+
+    osd: make pg removal thread more friendly
+
+    For a large PG these are saturating the filestore and journal queues.  Do
+    them synchronously to make them more friendly.  They don't need to be fast.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4712e984d3f62cdf51ea67da8197eed18a5983dd)
+
+commit b2bc4b95fefaeb0cfc31ce0bc95b77062d0777c7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 15:27:24 2013 -0800
+
+    os: move apply_transactions() sync wrapper into ObjectStore
+
+    This has nothing to do with the backend implementation.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bc994045ad67fb70c7a0457b8cd29273dd5d1654)
+
+commit 6d161b57979246ddea4e6309e0e489ab729eec4b
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 18 15:28:24 2013 -0800
+
+    os: add apply_transaction() variant that takes a sequencer
+
+    Also, move the convenience wrappers into the interface and funnel through
+    a single implementation.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f6c69c3f1ac35546b90315fff625993ba5cd8c07)
+
+commit c5fe0965572c074a2a33660719ce3222d18c1464
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jan 20 16:11:10 2013 -0800
+
+    osd: calculate initial PG mapping from PG's osdmap
+
+    The initial values of up/acting need to be based on the PG's osdmap, not
+    the OSD's latest.  This can cause various confusion in
+    pg_interval_t::check_new_interval() when calling OSDMap methods due to the
+    up/acting OSDs not existing yet (for example).
+
+    Fixes: #3879
+    Reported-by: Jens Kristian S?gaard <jens@mermaidconsulting.dk>
+    Tested-by: Jens Kristian S?gaard <jens@mermaidconsulting.dk>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 17160843d0c523359d8fa934418ff2c1f7bffb25)
+
+commit 6008b1d8e4587d5a3aea60684b1d871401496942
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jan 17 15:01:35 2013 -0800
+
+    osdmap: make replica separate in default crush map configurable
+
+    Add 'osd crush chooseleaf type' option to control what the default
+    CRUSH rule separates replicas across.  Default to 1 (host), and set it
+    to 0 in vstart.sh.
+
+    Fixes: #3785
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit c236a51a8040508ee893e4c64b206e40f9459a62)
+
+commit 5fb77bf1d1b241b4f9c1fe9e57288bbc84d8d97d
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 16 14:09:53 2013 -0800
+
+    ceph: adjust crush tunables via 'ceph osd crush tunables <profile>'
+
+    Make it easy to adjust crush tunables.  Create profiles:
+
+     legacy: the legacy values
+     argonaut: the argonaut defaults, and what is supported.. legacy! (*(
+     bobtail: best that bobtail supports
+     optimal: the current optimal values
+     default: the current default values
+
+    * In actuality, argonaut supports some of the tunables, but it doesn't
+      say so via the feature bits.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 19ee23111585f15a39ee2907fa79e2db2bf523f0)
+
+commit 8c0d702e6f2ba0ed0fe31c06c7a028260ae08e42
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Dec 28 17:20:43 2012 -0800
+
+    msg/Pipe: use state_closed atomic_t for _lookup_pipe
+
+    We shouldn't look at Pipe::state in SimpleMessenger::_lookup_pipe() without
+    holding pipe_lock.  Instead, use an atomic that we set to non-zero only
+    when transitioning to the terminal STATE_CLOSED state.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 82f8bcddb5fa09913eb477ee26c71d6b4bb8d97c)
+
+commit 8e0359c3e586c0edcce769c8ed1a03444a521165
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Dec 23 13:43:15 2012 -0800
+
+    msgr: inject delays at inconvenient times
+
+    Exercise some rare races by injecting delays before taking locks
+    via the 'ms inject internal delays' option.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a5d692a7b9b4bec2c27993ca37aa3fec4065292b)
+
+commit 34e2d4024700f633c2c586265efb61537342db18
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Dec 23 09:22:18 2012 -0800
+
+    msgr: fix race on Pipe removal from hash
+
+    When a pipe is faulting and shutting down, we have to drop pipe_lock to
+    take msgr lock and then remove the entry.  The Pipe in this case will
+    have STATE_CLOSED.  Handle this case in all places we do a lookup on
+    the rank_pipe hash so that we effectively ignore entries that are
+    CLOSED.
+
+    This fixes a race introduced by the previous commit where we won't use
+    the CLOSED pipe and try to register a new one, but the old one is still
+    registered.
+
+    See bug #3675.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e99b4a307b4427945a4eb5ec50e65d6239af4337)
+
+commit ae1882e7efc91b770ac0ac8682ee6c5792a63a93
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Dec 23 09:19:05 2012 -0800
+
+    msgr: don't queue message on closed pipe
+
+    If we have a con that refs a pipe but it is closed, don't use it.  If
+    the ref is still there, it is only because we are racing with fault()
+    and it is about to (or just was) be detached.  Either way,
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6339c5d43974f4b495f15d199e01a141e74235f5)
+
+commit 373f1671b6cb64dba5a9172967b27177515be1fd
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Dec 22 21:24:52 2012 -0800
+
+    msgr: atomically queue first message with connect_rank
+
+    Atomically queue the first message on the new pipe, without dropping
+    and retaking pipe_lock.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7bf0b0854d1f2706a3a2302bcbf92dd5c8c888ef)
+
+commit 82f22b38c5dc0b636574679ba1fee1b36a3c0478
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Jan 10 11:06:02 2013 -0800
+
+    config_opts.h: default osd_recovery_delay_start to 0
+
+    This setting was intended to prevent recovery from overwhelming peering traffic
+    by delaying the recovery_wq until osd_recovery_delay_start seconds after pgs
+    stop being added to it.  This should be less necessary now that recovery
+    messages are sent with strictly lower priority then peering messages.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Gregory Farnum <greg@inktank.com>
+    (cherry picked from commit 44625d4460f61effe2d63d8280752f10f159e7b4)
+
+commit 81e8bb55e28384048fd82116a791a65ca52ef999
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 16 21:19:18 2013 -0800
+
+    osdmaptool: more fix cli test
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit b0162fab3d927544885f2b9609b9ab3dc4aaff74)
+
+commit 2b5b2657579abdf5b1228f4c5c5ac8cec3706726
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jan 16 21:10:26 2013 -0800
+
+    osdmaptool: fix cli test
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5bd8765c918174aea606069124e43c480c809943)
+
+commit f739d1238a8a67598c037b6e2ed5d539a2d79996
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 16 14:21:47 2013 -0800
+
+    osdmaptool: allow user to specify pool for test-map-object
+
+    Fixes: #3820
+    Backport: bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Gregory Farnum <greg@inktank.com>
+    (cherry picked from commit 85eb8e382a26dfc53df36ae1a473185608b282aa)
+
+commit 00759ee08f5dc62cbe4f237399f298472f6d8f4a
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Jan 16 12:41:16 2013 -0800
+
+    rados.cc: fix rmomapkey usage: val not needed
+
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Reviewed-by: Samuel Just <samuel.just@inktank.com>
+    (cherry picked from commit 625c3cb9b536a0cff7249b8181b7a4f09b1b4f4f)
+
+commit 06b3270f679be496df41810dacf863128b0cfcaa
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jan 15 21:27:23 2013 -0800
+
+    librados.hpp: fix omap_get_vals and omap_get_keys comments
+
+    We list keys greater than start_after.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 3f0ad497b3c4a5e9bef61ecbae5558ae72d4ce8b)
+
+commit 75072965201380aa55a8e15f9db4ccaf4d34d954
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jan 15 21:26:22 2013 -0800
+
+    rados.cc: use omap_get_vals_by_keys in getomapval
+
+    Fixes: #3811
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit cb5e2be418924cf8b2c6a6d265a7a0327f08d00a)
+
+commit a3c2980fccfe95b7d094a7c93945437c3911b858
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jan 15 21:24:50 2013 -0800
+
+    rados.cc: fix listomapvals usage: key,val are not needed
+
+    Fixes: #3812
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 44c45e520cc2e60c6c803bb245edb9330bff37e4)
+
+commit 20b27a1ce71c379a3b2a29d282dc0689a3a0df46
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jan 16 15:01:47 2013 -0800
+
+    rgw: copy object should not copy source acls
+
+    Fixes: #3802
+    Backport: argonaut, bobtail
+
+    When using the S3 api and x-amz-metadata-directive is
+    set to COPY we used to copy complete metadata of source
+    object. However, this shouldn't include the source ACLs.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 37dbf7d9df93dd0e92019be31eaa1a19dd9569c7)
+
+commit 3293b31b44c9adad2b5e37da9d5342a6e4b72ade
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Fri Jan 11 11:02:15 2013 -0800
+
+    OSD: only trim up to the oldest map still in use by a pg
+
+    map_cache.cached_lb() provides us with a lower bound across
+    all pgs for in-use osdmaps.  We cannot trim past this since
+    those maps are still in use.
+
+    backport: bobtail
+    Fixes: #3770
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 66eb93b83648b4561b77ee6aab5b484e6dba4771)
+
+commit 898a4b19ecc6fffc33feb198f37182ec0a6e77e9
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jan 14 08:15:02 2013 -0800
+
+    Revert "osdmap: spread replicas across hosts with default crush map"
+
+    This reverts commit 503917f0049d297218b1247dc0793980c39195b3.
+
+    This breaks vstart and teuthology configs.  A better fix is coming.
+
+commit 55b7dd3248f35929ea097525798e8667fafbf161
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Thu Jan 10 18:54:12 2013 +0000
+
+    mon: OSDMonitor: don't output to stdout in plain text if json is specified
+
+    Fixes: #3748
+
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 410906e04936c935903526f26fb7db16c412a711)
+
+commit 015a454a0c046cb678991cc4f4d53fb58c41dbe4
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 11 17:23:22 2013 -0800
+
+    osdmap: spread replicas across hosts with default crush map
+
+    This is more often the case than not, and we don't have a good way to
+    magically know what size of cluster the user will be creating.  Better to
+    err on the side of doing the right thing for more people.
+
+    Fixes: #3785
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 7ea5d84fa3d0ed3db61eea7eb9fa8dbee53244b6)
+
+commit d882d053927c319274be38a247f2beabb4e06b64
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Jan 9 19:17:23 2013 -0800
+
+    ReplicatedPG: fix snapdir trimming
+
+    The previous logic was both complicated and not correct.  Consequently,
+    we have been tending to drop snapcollection links in some cases.  This
+    has resulted in clones incorrectly not being trimmed.  This patch
+    replaces the logic with something less efficient but hopefully a bit
+    clearer.
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 0f42c37359d976d1fe90f2d3b877b9b0268adc0b)

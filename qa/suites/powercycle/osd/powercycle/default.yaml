@@ -1,0 +1,26 @@
+tasks:
+- install:
+    extra_system_packages:
+      deb:
+      - bison
+      - flex
+      - libelf-dev
+      - libssl-dev
+      - libaio-dev
+      - libtool-bin
+      - uuid-dev
+      - xfslibs-dev
+      rpm:
+      - bison
+      - flex
+      - elfutils-libelf-devel
+      - openssl-devel
+      - libaio-devel
+      - libtool
+      - libuuid-devel
+      - xfsprogs-devel
+- ceph:
+- thrashosds:
+    chance_down: 1.0
+    powercycle: true
+    timeout: 600

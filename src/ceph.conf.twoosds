@@ -1,0 +1,97 @@
+; ---------------------
+[group cephnet]
+        addr = 10.3.14.0/24
+
+[group backup]
+	addr =  10.104.0.219
+
+[mount /]
+        allow = "%cephnet %backup"
+
+; ---------------------
+[global]
+	pid file = /home/sage/ceph/src/out/$name.pid
+	profiling logger uri = /home/sage/ceph/src/profiling_logger.$name
+	log sym dir = /home/sage/ceph/src/out
+	chdir = /home/sage/ceph/src
+	restart on core dump = false
+	user = sage
+	pre start command = "cp /home/sage/ceph/src/c$type /tmp/c$type.`date +%Y%m%d.%H%M%S`"
+
+; ---------------------
+[mon]
+	mon data = /data/mondata/mon$num
+	debug mon = 20
+	debug ms = 20
+	mon osd down out interval = 600  ; 10 minutes
+
+[mon0]
+	host = cosd0
+	mon addr = 10.3.14.95:6789
+	log dir = /data/cosd0
+
+[mon1]
+	host = cosd1
+	mon addr = 10.3.14.96:6789
+	log dir = /data/cosd1
+
+[mon2]
+	host = cosd2
+	mon addr = 10.3.14.97:6789
+	log dir = /data/cosd2
+
+
+; ---------------------
+[mds]
+	debug mds = 20
+	debug ms = 1
+;	debug journaler = 20
+;	log dir = /data/ceph4
+;	log dir = /home/sage/ceph/src/log
+
+[mds.foo]
+	host = ceph4
+	log dir = /data/ceph4
+;	valgrind = --tool=massif
+
+[mds.bar]
+	host = cephbooter
+	log dir = /data/cephbooter
+	auto start = false
+
+; ---------------------
+[osd]
+	debug ms = 1
+	debug osd = 20
+	debug filestore = 20
+	debug journal = 20
+	log dir = /data/cosd$id
+	osd data = /mnt/osd$id
+;	user = root
+
+;	osd journal = /mnt/osd$id/journal
+;	osd journal size = 1000
+	osd journal = "/dev/disk/by-path/pci-0000:05:02.0-scsi-6:0:0:0"
+        osd mkfs type = btrfs
+	osd mount options btrfs = "flushoncommit,usertrans"
+;	filestore max sync interval = 1
+
+	devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0"
+;	devs = "/dev/disk/by-path/pci-0000:05:01.0-scsi-2:0:0:0 \
+;	      	   /dev/disk/by-path/pci-0000:05:01.0-scsi-3:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-4:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-5:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-6:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:01.0-scsi-7:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-0:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-1:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-2:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-3:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-4:0:0:0 \
+;		   /dev/disk/by-path/pci-0000:05:02.0-scsi-5:0:0:0"
+
+;	valgrind = "--tool=memcheck --log-file=/data/cosd$id/v.osd$id"
+
+[osd3]
+	host = cosd3
+

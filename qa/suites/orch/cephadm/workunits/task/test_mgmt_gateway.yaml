@@ -1,0 +1,101 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_FAILED_DAEMON
+    log-only-match:
+      - CEPHADM_
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.c:
+      - |
+        set -ex
+        # Deploy monitoring stack
+        ceph orch apply node-exporter
+        ceph orch apply grafana
+        ceph orch apply alertmanager
+        ceph orch apply prometheus
+        sleep 240
+        # generate SSL certificate
+        openssl req -x509 -newkey rsa:4096 -keyout /tmp/key.pem -out /tmp/cert.pem -sha256 -days 30 -nodes -subj "/CN=*"
+        # Generate a mgmt.spec template
+        cat << EOT > /tmp/mgmt.spec
+        service_type: mgmt-gateway
+        service_id: foo
+        placement:
+          hosts:
+            - ${HOSTNAME}
+        spec:
+          ssl_protocols:
+            - TLSv1.2
+            - TLSv1.3
+          ssl_ciphers:
+            - AES128-SHA
+            - AES256-SHA
+          enable_health_check_endpoint: True
+        EOT
+        # Add generated certificates to spec file
+        echo "  ssl_cert: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/cert.pem >> /tmp/mgmt.spec
+        echo "  ssl_key: |" >> /tmp/mgmt.spec
+        while read LINE; do echo $LINE | sed -e "s/^/    /"; done < /tmp/key.pem >> /tmp/mgmt.spec
+        # Apply spec
+        ceph orch apply -i /tmp/mgmt.spec
+- cephadm.wait_for_service:
+    service: mgmt-gateway
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+
+        # Function to wait for a service to be healthy and log response on error
+        wait_for_service() {
+          local name="$1"
+          local url="$2"
+          local jq_filter="$3"
+
+          echo "Waiting for service $name to be healthy at $url..."
+          for i in {1..30}; do
+            local response
+            response=$(curl -k -s -u admin:admin "$url")
+            if echo "$response" | jq -e "$jq_filter" > /dev/null; then
+              echo "Service $name is healthy."
+              return 0
+            fi
+            echo "Attempt $i: service $name not ready yet"
+            sleep 10
+          done
+
+          echo "Timeout waiting for $name at $url"
+          echo "Last HTTP response:"
+          echo "$response"
+          echo "jq output:"
+          echo "$response" | jq "$jq_filter" || echo "(jq parse error or no match)"
+          return 1
+        }
+
+        # retrieve mgmt hostname and ip
+        MGMT_GTW_HOST=$(ceph orch ps --daemon-type mgmt-gateway -f json | jq -e '.[]' | jq -r '.hostname')
+        MGMT_GTW_IP=$(ceph orch host ls -f json | jq -r --arg MGMT_GTW_HOST "$MGMT_GTW_HOST" '.[] | select(.hostname==$MGMT_GTW_HOST) | .addr')
+
+        # check mgmt-gateway health
+        curl -k -s https://${MGMT_GTW_IP}/health
+        curl -k -s https://${MGMT_GTW_IP}:29443/health
+
+        # wait for monitoring services
+        wait_for_service "Grafana" "https://${MGMT_GTW_IP}/grafana/api/health" '.database == "ok"' || exit 1
+        wait_for_service "Prometheus" "https://${MGMT_GTW_IP}/prometheus/api/v1/status/config" '.status == "success"' || exit 1
+        wait_for_service "Alertmanager" "https://${MGMT_GTW_IP}/alertmanager/api/v2/status" '.cluster.status == "ready"' || exit 1

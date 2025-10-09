@@ -1,0 +1,454 @@
+commit 14f23ab86b0058a8651895b3dc972a29459f3a33
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Tue Aug 27 10:44:32 2013 -0700
+
+    v0.56.7
+
+commit 8551be345c86837e0893fdf6c9c5b0af523f50f8
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Aug 21 14:28:49 2013 -0700
+
+    objecter: resend unfinished lingers when osdmap is no longer paused
+
+    Plain Ops that haven't finished yet need to be resent if the osdmap
+    transitions from full or paused to unpaused.  If these Ops are
+    triggered by LingerOps, they will be cancelled instead (since
+    should_resend = false), but the LingerOps that triggered them will not
+    be resent.
+
+    Fix this by checking the registered flag for all linger ops, and
+    resending any of them that aren't paused anymore.
+
+    Fixes: #6070
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+    (cherry picked from commit 38a0ca66a79af4b541e6322467ae3a8a4483cc72)
+
+commit 1670a73b56e0b407b65334d8f03d3ebb9558ac8b
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Aug 13 12:52:41 2013 -0700
+
+    librados: fix async aio completion wakeup
+
+    For aio flush, we register a wait on the most recent write.  The write
+    completion code, however, was *only* waking the waiter if they were waiting
+    on that write, without regard to previous writes (completed or not).
+    For example, we might have 6 and 7 outstanding and wait on 7.  If they
+    finish in order all is well, but if 7 finishes first we do the flush
+    completion early.  Similarly, if we
+
+     - start 6
+     - start 7
+     - finish 7
+     - flush; wait on 7
+     - finish 6
+
+    we can hang forever.
+
+    Fix by doing any completions that are prior to the oldest pending write in
+    the aio write completion handler.
+
+    Refs: #5919
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Tested-by: Oliver Francke <Oliver.Francke@filoo.de>
+    (cherry picked from commit 16ed0b9af8bc08c7dabead1c1a7c1a22b1fb02fb)
+
+commit 6cf05375abea26d2645e3301c9082c64ddf31a55
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Aug 12 19:17:09 2013 -0700
+
+    librados: fix locking for AioCompletionImpl refcounting
+
+    Add an already-locked helper so that C_Aio{Safe,Complete} can
+    increment the reference count when their caller holds the
+    lock. C_AioCompleteAndSafe's caller is not holding the lock, so call
+    regular get() to ensure no racing updates can occur.
+
+    This eliminates all direct manipulations of AioCompletionImpl->ref,
+    and makes the necessary locking clear.
+
+    The only place C_AioCompleteAndSafe is used is in handling
+    aio_flush_async(). This could cause a missing completion.
+
+    Refs: #5919
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Tested-by: Oliver Francke <Oliver.Francke@filoo.de>
+    (cherry picked from commit 7a52e2ff5025754f3040eff3fc52d4893cafc389)
+
+commit 6a37a62b6f794026b82b88630519ec2cde4f20d6
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Aug 12 10:05:44 2013 -0700
+
+    rgw: fix multi delete
+
+    Fixes: #5931
+    Backport: bobtail, cuttlefish
+
+    Fix a bad check, where we compare the wrong field. Instead of
+    comparing the ret code to 0, we compare the string value to 0
+    which generates implicit casting, hence the crash.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit f9f1c48ad799da2b4be0077bf9d61ae116da33d7)
+
+    Conflicts:
+	src/rgw/rgw_rest_s3.cc
+
+commit 586c68f544c95f9e379df7e4d2705a3090baca49
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jun 2 21:21:09 2013 -0700
+
+    ceph-fuse: create finisher threads after fork()
+
+    The ObjectCacher and MonClient classes both instantiate Finisher
+    threads.  We need to make sure they are created *after* the fork(2)
+    or else the process will fail to join() them on shutdown, and the
+    threads will not exist while fuse is doing useful work.
+
+    Put CephFuse on the heap and move all this initalization into the child
+    block, and make sure errors are passed back to the parent.
+
+    Fix-proposed-by: Alexandre Marangone <alexandre.maragone@inktank.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c1198d680587928b390bb82c87442384331afd40
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jun 21 16:22:08 2013 -0700
+
+    debian: update postinst, prerm hooks
+
+    This syncs up the hooks with the latest master versions.  In particular,
+    do not blindly stop/restart daemons on package upgrade!
+
+    Fixes: #5414
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit de8900dcd079207852b6ce0b51473037be9ae956
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 18 21:33:09 2013 -0700
+
+    os/FileStore: use fdatasync(2) instead of sync_file_range(2)
+
+    This fixes data corruption on XFS.  Backported from
+    ffade3c85dfffa13a16edd9630a52d99eb8a413d.
+
+    Fixes: #4976
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit cbbad5b5d917fe74d6cbc50a259f9dbaeda54ca8
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jun 17 20:06:59 2013 -0700
+
+    chmod +x iogen.sh
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit fcd65139135d907098a47427d8503ac6d6042f81
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jun 14 14:53:54 2013 -0700
+
+    rgw: escape prefix correctly when listing objects
+
+    Fixes: #5362
+    When listing objects prefix needs to be escaped correctly (the
+    same as with the marker). Otherwise listing objects with prefix
+    that starts with underscore doesn't work.
+    Backport: bobtail, cuttlefish
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit a8f9d57a15ad7a69d53aa8fc6090fd1b394b616a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Sun Mar 31 00:02:15 2013 -0700
+
+    rgw: translate object marker to raw format
+
+    Fixes: #4600
+    Object marker should be treated as an object, so that name is formatted
+    correctly when getting the raw oid.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit b083dece36a050ec15ac41a275aeef0ece1ac009)
+
+commit e1d41901cde97a77fc1fda2d7f6e78a7cea61c5c
+Author: tamil <tamil.muthamizhan@inktank.com>
+Date:   Thu Jun 13 13:50:56 2013 -0700
+
+    adding iogen.sh
+
+    Signed-off-by: tamil <tamil.muthamizhan@inktank.com>
+
+commit 32b2f11366418f9a0cc0659be22cf15fbafbe3b1
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 6 16:35:54 2013 -0700
+
+    osd: do not include logbl in scrub map
+
+    This is a potentially use object/file, usually prefixed by a zeroed region
+    on disk, that is not used by scrub at all.  It dates back to
+    f51348dc8bdd5071b7baaf3f0e4d2e0496618f08 (2008) and the original version of
+    scrub.
+
+    This *might* fix #4179.  It is not a leak per se, but I observed 1GB
+    scrub messages going over the write.  Maybe the allocations are causing
+    fragmentation, or the sub_op queues are growing.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0b036ecddbfd82e651666326d6f16b3c000ade18)
+
+commit 5047a4ff16f556ec25b6624fe8f1a07e3ec5f864
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 6 21:53:00 2013 -0700
+
+    rgw: handle deep uri resources
+
+    In case of deep uri resources (ones created beyond a single level
+    of hierarchy, e.g. auth/v1.0) we want to create a new empty
+    handlers for the path if no handlers exists. E.g., for
+    auth/v1.0 we need to have a handler for 'auth', otherwise
+    the default S3 handler will be used, which we don't want.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit ad3934e335399f7844e45fcfd17f7802800d2cb3)
+
+commit 3ea45533c18174cb49af52024dae27533971fa01
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 6 21:47:21 2013 -0700
+
+    rgw: fix get_resource_mgr() to correctly identify resource
+
+    Fixes: #5262
+    The original test was not comparing the correct string, ended up
+    with the effect of just checking the substring of the uri to match
+    the resource.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 8d55b87f95d59dbfcfd0799c4601ca37ebb025f5)
+
+commit 4ee638cc3b1d74e678a3f78b3a57baf57a5d407c
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Apr 15 16:33:48 2013 -0700
+
+    PG: don't write out pg map epoch every handle_activate_map
+
+    We don't actually need to write out the pg map epoch on every
+    activate_map as long as:
+    a) the osd does not trim past the oldest pg map persisted
+    b) the pg does update the persisted map epoch from time
+    to time.
+
+    To that end, we now keep a reference to the last map persisted.
+    The OSD already does not trim past the oldest live OSDMapRef.
+    Second, handle_activate_map will trim if the difference between
+    the current map and the last_persisted_map is large enough.
+
+    Fixes: #4731
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 8c6a912ae46c4d3aeb7c1000d221f67e158ec5c8
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu May 30 12:58:11 2013 -0700
+
+    rgw: only append prefetched data if reading from head
+
+    Fixes: #5209
+    Backport: bobtail, cuttlefish
+    If the head object wrongfully contains data, but according to the
+    manifest we don't read from the head, we shouldn't copy the prefetched
+    data. Also fix the length calculation for that data.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit c5fc52ae0fc851444226abd54a202af227d7cf17)
+
+commit f42e84ee3148dcc59a05c8a12ce39996eb854e26
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu May 30 09:34:21 2013 -0700
+
+    rgw: don't copy object idtag when copying object
+
+    Fixes: #5204
+    When copying object we ended up also copying the original
+    object idtag which overrode the newly generated one. When
+    refcount put is called with the wrong idtag the count
+    does't go down.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit b1312f94edc016e604f1d05ccfe2c788677f51d1)
+
+commit d86b9a852b57553448709c2b978ac3a8637cd63f
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 29 16:50:04 2013 -0700
+
+    osd: initialize new_state field when we use it
+
+    If we use operator[] on a new int field its value is undefined; avoid
+    reading it or using |= et al until we initialize it.
+
+    Fixes: #4967
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 50ac8917f175d1b107c18ecb025af1a7b103d634)
+
+commit fca54bfbb35f0c200fac52963cd2d1780467f59a
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue May 28 11:10:05 2013 -0700
+
+    HashIndex: sync top directory during start_split,merge,col_split
+
+    Otherwise, the links might be ordered after the in progress
+    operation tag write.  We need the in progress operation tag to
+    correctly recover from an interrupted merge, split, or col_split.
+
+    Fixes: #5180
+    Backport: cuttlefish, bobtail
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5bca9c38ef5187c7a97916970a7fa73b342755ac)
+
+commit ac6c77830ad9182c7345f10943ea4f537c1629b0
+Merge: 3984b98 0b50d07
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 19:29:06 2013 -0700
+
+    Merge remote-tracking branch 'upstream/wip_scrub_tphandle_bobtail' into bobtail
+
+    Fixes: #5159
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 0b50d073fab11f64682e20fec7bb71d4e931bd3c
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 17:40:44 2013 -0700
+
+    PG: ping tphandle during omap loop as well
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit 5979a26d521918d74fc3b62b75c9fb6afe109933
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 15:24:39 2013 -0700
+
+    PG: reset timeout in _scan_list for each object, read chunk
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit bde6b58baf5e78550980ee5076bbc2d72a52c0fc
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu May 23 15:23:05 2013 -0700
+
+    OSD,PG: pass tphandle down to _scan_list
+
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit 3984b98804bf18711a7a4fc3940143ab599ad5b5
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed May 22 21:34:52 2013 -0700
+
+    rgw: iterate usage entries from correct entry
+
+    Fixes: #5152
+    When iterating through usage entries, and when user id was
+    provided, we started at the user's first entry and not from
+    the entry indexed by the request start time.
+    This commit fixes the issue.
+
+    Backport: bobtail
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 8b3a04dec8be13559716667d4b16cde9e9543feb)
+
+commit 3d7f8f840fb9fd975089af32c85093eeb1eac338
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed May 22 12:45:27 2013 -0700
+
+    mon: be a bit more verbose about osd mark down events
+
+    Put these in the cluster log; they are interesting.
+
+    This is a backport of 87767fb1fb9a52d11b11f0b641cebbd9998f089e.
+
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit f21a7f7bf3db61bd533e777297bff1346112a0db
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri May 3 12:57:00 2013 -0700
+
+    rgw: protect ops log socket formatter
+
+    Fixes: #4905
+    Ops log (through the unix domain socket) uses a formatter, which wasn't
+    protected.
+
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit d48f1edb07a4d8727ac956f70e663c1b4e33e1dd)
+
+commit 49c04c623466df45003ed2a18445c354c424a078
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:28:40 2013 -0700
+
+    librbd: make image creation defaults configurable
+
+    Programs using older versions of the image creation functions can't
+    set newer parameters like image format and fancier striping.
+
+    Setting these options lets them use all the new functionality without
+    being patched and recompiled to use e.g. rbd_create3().
+    This is particularly useful for things like qemu-img, which does not
+    know how to create format 2 images yet.
+
+    Refs: #5067
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit aacc9adc4e9ca90bbe73ac153cc754a3a5b2c0a1)
+
+commit 4d7058fe2254f335969f05bef649b1a27d470aa4
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:21:24 2013 -0700
+
+    rbd.py: fix stripe_unit() and stripe_count()
+
+    These matched older versions of the functions, but would segfault
+    using the current versions.
+
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 53ee6f965e8f06c7256848210ad3c4f89d0cb5a0)
+
+commit 82a16c32a37dc46e3019cedc2a5407ae34f806e2
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu May 16 15:19:46 2013 -0700
+
+    cls_rbd: make sure stripe_unit is not larger than object size
+
+    Test a few other cases too.
+
+    backport: cuttlefish, bobtail
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 810306a2a76eec1c232fd28ec9c351e827fa3031)
+
+commit e0de00897468a434e94790a86fc812b77a59614c
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri May 10 22:14:05 2013 -0700
+
+    mon: fix validatation of mds ids in mon commands
+
+    Fixes: #4996
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5c305d63043762027323052b4bb3ae3063665c6f)
+
+    Conflicts:
+
+	src/mon/MDSMonitor.cc

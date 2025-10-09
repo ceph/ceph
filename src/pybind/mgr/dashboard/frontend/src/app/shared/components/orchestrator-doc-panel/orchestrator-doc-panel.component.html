@@ -1,0 +1,10 @@
+<cd-alert-panel *ngIf="missingFeatures; else elseBlock"
+                type="info"
+                i18n>The feature is not supported in the current Orchestrator.</cd-alert-panel>
+
+<ng-template #elseBlock>
+  <cd-alert-panel type="info"
+                  i18n>Orchestrator is not available.
+    Please consult the&nbsp;<cd-doc section="orch"></cd-doc>&nbsp;on how to configure and
+    enable the functionality.</cd-alert-panel>
+</ng-template>

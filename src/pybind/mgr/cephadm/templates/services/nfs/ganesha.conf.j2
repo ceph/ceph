@@ -1,0 +1,70 @@
+# {{ cephadm_managed }}
+NFS_CORE_PARAM {
+        Enable_NLM = {{ enable_nlm }};
+        Enable_RQUOTA = false;
+        Protocols = 3, 4;
+        mount_path_pseudo = true;
+        Enable_UDP = false;
+        NFS_Port = {{ port }};
+        allow_set_io_flusher_fail = true;
+{% if bind_addr %}
+        Bind_addr = {{ bind_addr }};
+{% endif %}
+{% if haproxy_hosts %}
+        HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
+{% endif %}
+{% if monitoring_addr %}
+	Monitoring_Addr = {{ monitoring_addr }};
+{% endif %}
+        Monitoring_Port = {{ monitoring_port }};
+}
+
+NFSv4 {
+        Delegations = false;
+        RecoveryBackend = "rados_cluster";
+        Minor_Versions = 1, 2;
+        Server_Scope = "{{ cluster_id }}-{{ namespace }}";
+{% if nfs_idmap_conf %}
+        IdmapConf = "{{ nfs_idmap_conf }}";
+{% endif %}
+}
+
+RADOS_KV {
+        UserId = "{{ user }}";
+        nodeid = {{ nodeid }};
+        pool = "{{ pool }}";
+        namespace = "{{ namespace }}";
+}
+
+RADOS_URLS {
+        UserId = "{{ user }}";
+        watch_url = "{{ url }}";
+}
+
+RGW {
+        cluster = "ceph";
+        name = "client.{{ rgw_user }}";
+}
+
+{% if tls_add %}
+TLS_CONFIG{
+        Enable_TLS = {{ tls_add }};
+        TLS_Cert_File = /etc/ganesha/tls/tls_cert.pem;
+        TLS_Key_File = /etc/ganesha/tls/tls_key.pem;
+        TLS_CA_File = /etc/ganesha/tls/tls_ca_cert.pem;
+	{% if tls_ciphers %}
+        TLS_Ciphers = "{{ tls_ciphers }}";
+	{% endif %}
+	{% if tls_min_version %}
+        TLS_Min_Version = "{{ tls_min_version }}";
+	{% endif %}
+	{% if tls_ktls %}
+        Enable_KTLS = {{ tls_ktls }};
+	{% endif %}
+	{% if tls_debug %}
+        Enable_debug = {{ tls_debug }};
+	{% endif %}
+}
+
+{% endif %}
+%url    {{ url }}

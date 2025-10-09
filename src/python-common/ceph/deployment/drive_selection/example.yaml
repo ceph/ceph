@@ -1,0 +1,21 @@
+# default:
+#   target: 'data*'
+#   data_devices:
+#     size: 20G
+#   db_devices:
+#     size: 10G
+#     rotational: 1
+# allflash:
+#   target: 'fast_nodes*'
+#   data_devices:
+#     size: 100G
+#   db_devices:
+#     size: 50G
+#     rotational: 0
+
+# This is the default configuration and
+# will create an OSD on all available drives
+default:
+  target: 'fnmatch_target'
+  data_devices:
+    all: true

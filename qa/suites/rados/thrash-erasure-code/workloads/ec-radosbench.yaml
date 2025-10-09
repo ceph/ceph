@@ -1,0 +1,27 @@
+tasks:
+- full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 150
+      unique_pool: true
+      ec_pool: true
+  - radosbench:
+      clients: [client.0]
+      time: 150
+      unique_pool: true
+      ec_pool: true
+  - radosbench:
+      clients: [client.0]
+      time: 150
+      unique_pool: true
+      ec_pool: true
+  - radosbench:
+      clients: [client.0]
+      time: 150
+      unique_pool: true
+      ec_pool: true
+  - radosbench:
+      clients: [client.0]
+      time: 150
+      unique_pool: true
+      ec_pool: true

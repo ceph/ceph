@@ -1,0 +1,74 @@
+<cd-modal [pageURL]="pageURL"
+          [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form name="subsystemForm"
+          #formDir="ngForm"
+          [formGroup]="subsystemForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- NQN -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="nqn">
+            <span class="required"
+                  i18n>NQN</span>
+          </label>
+          <div class="cd-col-form-input">
+            <input name="nqn"
+                   class="form-control"
+                   type="text"
+                   formControlName="nqn">
+              <cd-help-text>
+                A unique and permanent name for the lifetime of the subsystem.
+              </cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('nqn', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('nqn', formDir, 'unique')"
+                  i18n>This NQN is already in use.</span>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('nqn', formDir, 'pattern')"
+                  i18n>Expected NQN format<br/>&lt;<code>nqn.$year-$month.$reverseDomainName:$utf8-string</code>".&gt; or <br/>&lt;<code>nqn.2014-08.org.nvmexpress:uuid:$UUID-string</code>".&gt;</span>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('nqn', formDir, 'maxLength')"
+                  i18n>An NQN may not be more than 223 bytes in length.</span>
+          </div>
+        </div>
+        <!-- Maximum Namespaces -->
+        <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="max_namespaces">
+            <span i18n>Maximum Namespaces</span>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="max_namespaces"
+                   class="form-control"
+                   type="text"
+                   name="max_namespaces"
+                   formControlName="max_namespaces">
+            <cd-help-text i18n>The maximum namespaces per subsystem. Default is {{defaultMaxNamespace}}</cd-help-text>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('max_namespaces', formDir, 'min')"
+                  i18n>The value must be at least 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('max_namespaces', formDir, 'max')"
+                  i18n>The value cannot be greater than {{defaultMaxNamespace}}.</span>
+            <span class="invalid-feedback"
+                  *ngIf="subsystemForm.showError('max_namespaces', formDir, 'pattern')"
+                  i18n>The value must be a positive integer.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="subsystemForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
