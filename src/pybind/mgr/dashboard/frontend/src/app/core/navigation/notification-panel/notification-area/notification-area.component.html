@@ -3,10 +3,9 @@
              let-last="last">
   <div class="notification-wrapper">
     <div class="notification-item">
-      <div class="notification-icon">
-        <cd-icon [type]="notificationIconMap[notification.type] || notificationIconMap['default']">
-        </cd-icon>
-      </div>
+      <cd-icon id="notification-icon"
+               [type]="notificationIconMap[notification.type] || notificationIconMap['default']">
+      </cd-icon>
       <div class="notification-content">
         <div class="notification-timestamp">{{ notification.timestamp | relativeDate }}</div>
         <div class="notification-title">{{ notification.title }}</div>

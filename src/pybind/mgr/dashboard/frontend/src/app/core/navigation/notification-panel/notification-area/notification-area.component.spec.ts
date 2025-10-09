@@ -107,7 +107,7 @@ describe('NotificationAreaComponent', () => {
       firstNotification.query(By.css('.notification-message')).nativeElement.textContent
     ).toContain('message');
 
-    const iconElement = firstNotification.query(By.css('.notification-icon cd-icon'));
+    const iconElement = firstNotification.query(By.css('#notification-icon'));
     expect(iconElement).toBeTruthy();
   });
 
@@ -119,12 +119,12 @@ describe('NotificationAreaComponent', () => {
   });
 
   it('should render notification icons with correct types', () => {
-    const iconElements = fixture.debugElement.queryAll(By.css('.notification-icon cd-icon'));
+    const iconElements = fixture.debugElement.queryAll(By.css('#notification-icon'));
     expect(iconElements.length).toBe(2);
 
     // Check that icons have the correct type attribute
     expect(iconElements[0].attributes['ng-reflect-type']).toBe('success');
-    expect(iconElements[1].attributes['ng-reflect-type']).toBe('danger');
+    expect(iconElements[1].attributes['ng-reflect-type']).toBe('error');
   });
 
   it('should render notification dividers between items', () => {
@@ -170,8 +170,8 @@ describe('NotificationAreaComponent', () => {
 
   it('should handle notification icon mapping correctly', () => {
     expect(component.notificationIconMap[NotificationType.success]).toBe('success');
-    expect(component.notificationIconMap[NotificationType.error]).toBe('danger');
-    expect(component.notificationIconMap[NotificationType.info]).toBe('info');
+    expect(component.notificationIconMap[NotificationType.error]).toBe('error');
+    expect(component.notificationIconMap[NotificationType.info]).toBe('infoCircle');
     expect(component.notificationIconMap[NotificationType.warning]).toBe('warning');
   });
 
