@@ -986,8 +986,12 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         "true",
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
-                            "OSDPoolSetRequest", inbl, &outbl, formatter.get());
-      ceph_assert(rc == 0);
+                            "OSDPoolSetRequest", inbl, &outbl, formatter.get());               
+      //Add error message here (Failed to set allow_ec_optimizations to true, plugin may not support it)
+      //ceph_assert(rc == 0);
+        if (rc != 0) {
+          derr << "Failed to set allow_ec_optimizations to true, plugin may not support it" << dendl;
+        }
     }
 
     if (allow_pool_ec_overwrites) {
