@@ -1399,7 +1399,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   editCellItem(rowId: string, column: CdTableColumn, value: string) {
     const key = `${rowId}-${column.prop}`;
-    this.formGroup.addControl(key, new FormControl('', column.customTemplateConfig?.validators));
+    this.formGroup.addControl(
+      key,
+      new FormControl('', {
+        validators: column.customTemplateConfig?.validators || [],
+        asyncValidators: column.customTemplateConfig?.asyncValidators || []
+      })
+    );
     this.editingCells.add(key);
     if (!this.editStates[rowId]) {
       this.editStates[rowId] = {};

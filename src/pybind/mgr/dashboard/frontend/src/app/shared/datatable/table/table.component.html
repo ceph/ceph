@@ -426,12 +426,12 @@
                  [invalid]="formGroup.controls[row?.[identifier] + '-' + column?.prop]?.invalid && formGroup.controls[row?.[identifier] + '-' + column?.prop]?.dirty">
         </cds-text-label>
         <ng-template #errorTpl>
-          <span *ngIf="formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'required')">
-            <ng-container i18n>This field is required.</ng-container>
-          </span>
-          <span *ngIf="column?.customTemplateConfig?.formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, 'pattern')">
-            <ng-container i18n>The field format is invalid.</ng-container>
-          </span>
+          @for (errorKey of formGroup?.get(row?.[identifier] + '-' + column?.prop)?.errors | keyvalue; track $index) {
+          @if (formGroup?.showError(row?.[identifier] + '-' + column?.prop, formDir, errorKey.key)) {
+          <ng-container i18n>
+            {{ column.customTemplateConfig?.errorMessages?.[errorKey.key] || ('Invalid ' + column.name) }}
+          </ng-container>
+          }}
         </ng-template>
       </div>
       <div cdsCol
