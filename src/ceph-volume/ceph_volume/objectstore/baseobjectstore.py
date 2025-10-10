@@ -54,8 +54,7 @@ class BaseObjectStore:
     def get_ptuuid(self, argument: str) -> str:
         uuid = disk.get_partuuid(argument)
         if not uuid:
-            terminal.error('blkid could not detect a PARTUUID for device: %s' %
-                           argument)
+            terminal.error(f'blkid could not detect a PARTUUID for device: {argument}')
             raise RuntimeError('unable to use device')
         return uuid
 
@@ -137,7 +136,7 @@ class BaseObjectStore:
             return conf.ceph.get('global', 'fsid')
 
     def get_osd_path(self) -> str:
-        return '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, self.osd_id)
+        return f'/var/lib/ceph/osd/{conf.cluster}-{self.osd_id}/'
 
     def build_osd_mkfs_cmd(self) -> List[str]:
         self.supplementary_command = [
@@ -184,13 +183,11 @@ class BaseObjectStore:
             else:
                 if returncode == errno.EWOULDBLOCK:
                     time.sleep(1)
-                    logger.info('disk is held by another process, '
-                                'trying to mkfs again... (%s/5 attempt)' %
-                                retry)
+                    logger.info(f'disk is held by another process, '
+                                f'trying to mkfs again... ({retry}/5 attempt)')
                     continue
                 else:
-                    raise RuntimeError('Command failed with exit code %s: %s' %
-                                       (returncode, ' '.join(cmd)))
+                    raise RuntimeError(f'Command failed with exit code {returncode}: {" ".join(cmd)}')
 
         mapping: Dict[str, Any] = {'raw': ['data', 'block_db', 'block_wal'],
                                    'lvm': ['ceph.block_device', 'ceph.db_device', 'ceph.wal_device']}

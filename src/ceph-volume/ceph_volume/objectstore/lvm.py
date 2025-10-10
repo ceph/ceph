@@ -84,13 +84,13 @@ class Lvm(BaseObjectStore):
         device = self.args.data
         if disk.is_partition(device) or disk.is_device(device):
             # we must create a vg, and then a single lv
-            lv_name_prefix = "osd-{}".format(device_type)
+            lv_name_prefix = f"osd-{device_type}"
             kwargs = {
                 'device': device,
                 'tags': {'ceph.type': device_type},
                 'slots': self.args.data_slots,
                 }
-            logger.debug('data device size: {}'.format(self.args.data_size))
+            logger.debug(f'data device size: {self.args.data_size}')
             if self.args.data_size != 0:
                 kwargs['size'] = self.args.data_size
             return api.create_lv(
@@ -99,7 +99,7 @@ class Lvm(BaseObjectStore):
                 **kwargs)
         else:
             error = [
-                'Cannot use device ({}).'.format(device),
+                f'Cannot use device ({device}).',
                 'A vg/lv path or an existing device is needed']
             raise RuntimeError(' '.join(error))
 
@@ -122,8 +122,7 @@ class Lvm(BaseObjectStore):
             logger.info('will rollback OSD ID creation')
             rollback_osd(self.osd_id)
             raise
-        terminal.success("ceph-volume lvm prepare successful for: %s" %
-                         self.args.data)
+        terminal.success(f"ceph-volume lvm prepare successful for: {self.args.data}")
 
     @decorators.needs_root
     def prepare(self) -> None:
@@ -176,7 +175,7 @@ class Lvm(BaseObjectStore):
         """
         if not device:
             return ''
-        tag_name = 'ceph.%s_uuid' % device_type
+        tag_name = f'ceph.{device_type}_uuid'
         uuid = tags[tag_name]
         # format data device
         encryption_utils.luks_format(
@@ -195,7 +194,7 @@ class Lvm(BaseObjectStore):
             self.with_tpm,
             self.args.dmcrypt_open_opts)
 
-        return '/dev/mapper/%s' % uuid
+        return f'/dev/mapper/{uuid}'
 
     def setup_metadata_devices(self) -> None:
         """
@@ -238,13 +237,13 @@ class Lvm(BaseObjectStore):
                 lv = None
 
             if lv:
-                _tags['ceph.%s_uuid' % device_type] = lv.lv_uuid
-                _tags['ceph.%s_device' % device_type] = lv.lv_path
+                _tags[f'ceph.{device_type}_uuid'] = lv.lv_uuid
+                _tags[f'ceph.{device_type}_device'] = lv.lv_path
                 lv.set_tags(_tags)
             elif disk.is_partition(device_name) or disk.is_device(device_name):
                 # We got a disk or a partition, create an lv
                 path = device_name
-                lv_type = "osd-{}".format(device_type)
+                lv_type = f"osd-{device_type}"
                 name_uuid = system.generate_uuid()
                 kwargs = {
                     'name_prefix': lv_type,
@@ -294,9 +293,8 @@ class Lvm(BaseObjectStore):
                 break
         if osd_block_lv:
             is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
-            logger.debug('Found block device (%s) with encryption: %s',
-                         osd_block_lv.name, is_encrypted)
-            uuid_tag = 'ceph.%s_uuid' % device_type
+            logger.debug(f'Found block device ({osd_block_lv.name}) with encryption: {is_encrypted}')
+            uuid_tag = f'ceph.{device_type}_uuid'
             device_uuid = osd_block_lv.tags.get(uuid_tag, '')
             if not device_uuid:
                 return None
@@ -311,7 +309,7 @@ class Lvm(BaseObjectStore):
                 encryption_utils.luks_open(dmcrypt_secret,
                                            device_lv.__dict__['lv_path'],
                                            device_uuid)
-                return '/dev/mapper/%s' % device_uuid
+                return f'/dev/mapper/{device_uuid}'
             return device_lv.__dict__['lv_path']
 
         # this could be a regular device, so query it with blkid
@@ -321,11 +319,10 @@ class Lvm(BaseObjectStore):
                 encryption_utils.luks_open(dmcrypt_secret,
                                            physical_device,
                                            device_uuid)
-                return '/dev/mapper/%s' % device_uuid
+                return f'/dev/mapper/{device_uuid}'
             return physical_device
 
-        raise RuntimeError('could not find %s with uuid %s' % (device_type,
-                                                               device_uuid))
+        raise RuntimeError(f'could not find {device_type} with uuid {device_uuid}')
 
     def _activate(self,
                   osd_lvs: List["Volume"],
@@ -348,7 +345,7 @@ class Lvm(BaseObjectStore):
         configuration.load()
 
         # mount on tmpfs the osd directory
-        self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+        self.osd_path = f'/var/lib/ceph/osd/{conf.cluster}-{osd_id}'
         if not system.path_is_mounted(self.osd_path):
             # mkdir -p and mount as tmpfs
             prepare_utils.create_osd_path(osd_id, tmpfs=not no_tmpfs)
@@ -359,7 +356,7 @@ class Lvm(BaseObjectStore):
 
         # encryption is handled here, before priming the OSD dir
         if is_encrypted:
-            osd_lv_path = '/dev/mapper/%s' % osd_block_lv.__dict__['lv_uuid']
+            osd_lv_path = f'/dev/mapper/{osd_block_lv.__dict__["lv_uuid"]}'
             lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
             self.with_tpm = osd_block_lv.tags.get('ceph.with_tpm') == '1'
             if not self.with_tpm:
@@ -398,7 +395,7 @@ class Lvm(BaseObjectStore):
         objectstore = osd_block_lv.tags.get('ceph.objectstore', 'bluestore')
         if objectstore == 'bluestore':
             prime_command = [
-                'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
+                'ceph-bluestore-tool', f'--cluster={conf.cluster}',
                 'prime-osd-dir', '--dev', osd_lv_path,
                 '--path', self.osd_path, '--no-mon-config']
 
@@ -432,8 +429,7 @@ class Lvm(BaseObjectStore):
 
             # start the OSD
             systemctl.start_osd(osd_id)
-        terminal.success("ceph-volume lvm activate successful for osd ID: %s" %
-                         osd_id)
+        terminal.success(f"ceph-volume lvm activate successful for osd ID: {osd_id}")
 
     @decorators.needs_root
     def activate_all(self) -> None:
@@ -455,12 +451,11 @@ class Lvm(BaseObjectStore):
         for osd_fsid, osd_id in osds.items():
             if not self.args.no_systemd and systemctl.osd_is_active(osd_id):
                 terminal.warning(
-                    'OSD ID %s FSID %s process is active. '
-                    'Skipping activation' % (osd_id, osd_fsid)
+                    f'OSD ID {osd_id} FSID {osd_fsid} process is active. '
+                    f'Skipping activation'
                 )
             else:
-                terminal.info('Activating OSD ID %s FSID %s' % (osd_id,
-                                                                osd_fsid))
+                terminal.info(f'Activating OSD ID {osd_id} FSID {osd_fsid}')
                 self.activate(self.args, osd_id=osd_id, osd_fsid=osd_fsid)
 
     @decorators.needs_root
@@ -483,14 +478,13 @@ class Lvm(BaseObjectStore):
         elif not osd_id and osd_fsid:
             tags = {'ceph.osd_fsid': osd_fsid}
         elif osd_id and not osd_fsid:
-            raise RuntimeError('could not activate osd.{}, please provide the '
-                               'osd_fsid too'.format(osd_id))
+            raise RuntimeError(f'could not activate osd.{osd_id}, please provide the '
+                               f'osd_fsid too')
         else:
             raise RuntimeError('Please provide both osd_id and osd_fsid')
         lvs = api.get_lvs(tags=tags)
         if not lvs:
-            raise RuntimeError('could not find osd.%s with osd_fsid %s' %
-                               (osd_id, osd_fsid))
+            raise RuntimeError(f'could not find osd.{osd_id} with osd_fsid {osd_fsid}')
 
         self._activate(lvs, self.args.no_systemd, getattr(self.args,
                                                           'no_tmpfs',
