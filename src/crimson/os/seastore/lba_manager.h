@@ -111,7 +111,7 @@ public:
     extent_ref_count_t refcount) = 0;
 
   using alloc_extents_ret = alloc_extent_iertr::future<
-    std::vector<LBAMapping>>;
+    std::vector<LBACursorRef>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
     laddr_t hint,
@@ -124,7 +124,7 @@ public:
    */
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    LBAMapping pos,
+    LBACursorRef cursor,
     std::vector<LogicalChildNodeRef> ext) = 0;
 
   struct clone_mapping_ret_t {

@@ -366,18 +366,15 @@ BtreeLBAManager::reserve_region(
 BtreeLBAManager::alloc_extents_ret
 BtreeLBAManager::alloc_extents(
   Transaction &t,
-  LBAMapping pos,
+  LBACursorRef cursor,
   std::vector<LogicalChildNodeRef> extents)
 {
   LOG_PREFIX(BtreeLBAManager::alloc_extents);
-  DEBUGT("{}", t, pos);
-  assert(pos.is_viewable());
+  DEBUGT("{}", t, *cursor);
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
-  auto &cursor = pos.get_effective_cursor();
-  co_await cursor.refresh();
-  auto iter = btree.make_partial_iter(c, cursor);
-  std::vector<LBAMapping> ret;
+  auto iter = btree.make_partial_iter(c, *cursor);
+  std::vector<LBACursorRef> ret;
   for (auto eiter = extents.rbegin(); eiter != extents.rend(); ++eiter) {
     auto ext = *eiter;
     assert(ext->has_laddr());
@@ -400,7 +397,7 @@ BtreeLBAManager::alloc_extents(
       ext.get(),
       leaf_node.get_size() - 1 /*the size before the insert*/);
     TRACET("inserted {}", c.trans, *ext);
-    ret.emplace(ret.begin(), LBAMapping::create_direct(it.get_cursor(c)));
+    ret.emplace(ret.begin(), it.get_cursor(c));
     iter = it;
 #ifndef NDEBUG
     if (eiter != extents.rend()) {
