@@ -34,3 +34,8 @@ tasks:
     clients:
       client.0:
         - fs/full/subvolume_ls.sh
+- workunit:
+    cleanup: true
+    clients:
+      client.0:
+        - fs/full/subvol_rm_retained_snap_when_cluster_is_full.sh
