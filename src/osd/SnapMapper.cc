@@ -57,19 +57,42 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   e.g., clean up on deletion).
 
   "SNA_"
-  + ("%lld" % poolid)
-  + "_"
-  + ("%016x" % snapid)
-  + "_"
-  + (".%x" % shard_id)
-  + "_"
+  + ("%lld" % poolid) + "_"
+
+  + ("%016x" % snapid) + "_"
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
+  + (".%x" % shard_id) + "_"
+
   + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
+
   -> SnapMapping::Mapping { snap, hoid }
 
+  -----
+
   "OBJ_" +
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
   + (".%x" % shard_id)
+
   + hobject_t::to_str()
+
    -> SnapMapper::object_snaps { oid, set<snapid_t> }
+
+  -----
+
+  Key formats when shard exists (EC):
+
+  <SNA_><pool>_<snapid>_.<shardid>_<hobject_t::to_str()>
+
+  <OBJ_>_.<shardid>_<hobject_t::to_str()>
+
+  Otherwise, for shard_id_t::NO_SHARD (Replicated):
+
+  <SNA_><pool>_<snapid>_<hobject_t::to_str()>
+
+  <OBJ_>_<hobject_t::to_str()>
+
 
   */
 
@@ -977,8 +1000,8 @@ bool SnapMapper::Scrubber::_parse_m(
   {
     unsigned long long p, s;
     long sh;
-    int r = sscanf(key.data(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
-    if (r != 1) {
+    int r = sscanf(key.data(), "SNA_%lld_%llx_.%lx", &p, &s, &sh);
+    if (r != 3) {
       shard = shard_id_t::NO_SHARD;
     } else {
       shard = shard_id_t(sh);
