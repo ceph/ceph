@@ -12553,9 +12553,10 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
   // Usually quota_root will == root_ancestor, but if the mount root has no
   // quota but we can see a parent of it that does have a quota, we'll
   // respect that one instead.
-  InodeRef quota_root = in->quota.is_enabled() ? in : get_quota_root(in, perms);
+  InodeRef qr_bytes = in->quota.is_enabled(QUOTA_MAX_BYTES) ? in : get_quota_root(in, perms, QUOTA_MAX_BYTES);
+  InodeRef qr_files = in->quota.is_enabled(QUOTA_MAX_FILES) ? in : get_quota_root(in, perms, QUOTA_MAX_FILES);
 
-  total_files_on_fs = quota_root->rstat.rfiles + quota_root->rstat.rsubdirs;
+  total_files_on_fs = qr_files->rstat.rfiles + qr_files->rstat.rsubdirs;
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
@@ -12585,23 +12586,23 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
 
   // get_quota_root should always give us something if client quotas are
   // enabled
-  ceph_assert(cct->_conf.get_val<bool>("client_quota") == false || quota_root != nullptr);
+  ceph_assert(cct->_conf.get_val<bool>("client_quota") == false || qr_bytes != nullptr);
 
   /* If bytes quota is set on a directory and conf option "client quota df"
    * is also set, available space = quota limit - used space. Else,
    * available space = total space - used space. */
-  if (quota_root && cct->_conf->client_quota_df && quota_root->quota.max_bytes) {
+  if (qr_bytes && cct->_conf->client_quota_df && qr_bytes->quota.max_bytes) {
 
     // Skip the getattr if any sessions are stale, as we don't want to
     // block `df` if this client has e.g. been evicted, or if the MDS cluster
     // is unhealthy.
     if (!_any_stale_sessions()) {
-      int r = _getattr(quota_root, 0, perms, true);
+      int r = _getattr(qr_bytes, 0, perms, true);
       if (r != 0) {
         // Ignore return value: error getting latest inode metadata is not a good
         // reason to break "df".
         lderr(cct) << "Error in getattr on quota root 0x"
-                   << std::hex << quota_root->ino << std::dec
+                   << std::hex << qr_bytes->ino << std::dec
                    << " statfs result may be outdated" << dendl;
       }
     }
@@ -12609,8 +12610,8 @@ int Client::_statfs(Inode *in, struct statvfs *stbuf,
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
-    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
-    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t total = qr_bytes->quota.max_bytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t used = qr_bytes->rstat.rbytes >> CEPH_BLOCK_SHIFT;
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
     const fsblkcnt_t free = total > used ? total - used : 0;
