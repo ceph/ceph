@@ -94,8 +94,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
 
+  private _headerTitle: string | TemplateRef<any>;
+  isHeaderTitleString = false;
+
   @Input()
-  headerTitle: string;
+  set headerTitle(value: string | TemplateRef<any>) {
+    this._headerTitle = value;
+    this.isHeaderTitleString = typeof value === 'string';
+  }
+
   @Input()
   headerDescription: string;
   // This is the array with the items to be shown.
@@ -293,6 +300,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     return this.selectionType === 'single';
   }
 
+  get headerTitle(): string | TemplateRef<any> {
+    return this._headerTitle;
+  }
   /**
    * Controls if all checkboxes are viewed as selected.
    */
@@ -1399,7 +1409,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
   editCellItem(rowId: string, column: CdTableColumn, value: string) {
     const key = `${rowId}-${column.prop}`;
-    this.formGroup.addControl(key, new FormControl('', column.customTemplateConfig?.validators));
+    this.formGroup.addControl(
+      key,
+      new FormControl('', {
+        validators: column.customTemplateConfig?.validators || [],
+        asyncValidators: column.customTemplateConfig?.asyncValidators || []
+      })
+    );
     this.editingCells.add(key);
     if (!this.editStates[rowId]) {
       this.editStates[rowId] = {};

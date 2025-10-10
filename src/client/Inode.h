@@ -349,6 +349,7 @@ struct Inode : RefCountedObject {
 
   void recall_deleg(bool skip_read);
   bool has_recalled_deleg();
+  bool is_write_delegated();
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 

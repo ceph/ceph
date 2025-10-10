@@ -87,7 +87,12 @@ export enum CellTemplate {
   //    ...
   //    cellTransformation: CellTemplate.editing,
   //    customTemplateConfig: {
-  //       validators: [Validators.required]
+  //          validators: [Validators.required, Validators.pattern(/^[A-Za-z ]+$/)],
+  //          asyncValidators: [AsyncValidator]
+  //          errorMessages: {
+  //            required:  $localize`This field is required.`,
+  //            pattern: $localize`The field format is invalid.`
+  //          }
   //    }
   //    ...
   // }
