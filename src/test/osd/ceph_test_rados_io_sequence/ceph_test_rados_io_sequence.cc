@@ -598,17 +598,6 @@ ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
   }
 }
 
-bool ecOptimisationsSupported(
-  ceph::io_sequence::tester::Profile profile) {
-  if (profile.technique != "reed_sol_van") {
-    return false;
-  }
-  if (profile.plugin == "jerasure" || profile.plugin == "isa") {
-    return true;
-  }
-  return false;
-}
-
 const ceph::io_sequence::tester::Profile
 ceph::io_sequence::tester::SelectErasureProfile::select() {
   ceph::io_sequence::tester::Profile profile;
@@ -622,14 +611,6 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
 
     SelectErasureTechnique set{rng, vm, profile.plugin, first_use};
     profile.technique = set.select();
-
-    bool ecOptimisationsEnabled = !vm.contains("disable_pool_ec_optimizations");
-    if (!ecOptimisationsSupported(profile) && ecOptimisationsEnabled) {
-      throw std::invalid_argument(fmt::format("ec optimisations may not be enabled "
-                                                  "if using {} plugin type "
-                                                  "with technique {}",
-                                                  profile.plugin, profile.technique));
-    }
 
     SelectErasureKM skm{rng, vm, profile.plugin, profile.technique, first_use};
     profile.km = skm.select();
@@ -1006,7 +987,10 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                         std::nullopt};
       rc = send_mon_command(allow_ec_optimisations_request, rados,
                             "OSDPoolSetRequest", inbl, &outbl, formatter.get());
-      ceph_assert(rc == 0);
+      if (rc != 0) {
+        throw std::invalid_argument(fmt::format("ec optimisations may not be enabled "
+                                                "for the specified plugin type"));
+      }
     }
 
     if (allow_pool_ec_overwrites) {
