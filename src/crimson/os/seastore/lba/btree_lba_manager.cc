@@ -373,64 +373,44 @@ BtreeLBAManager::alloc_extents(
   DEBUGT("{}", t, pos);
   assert(pos.is_viewable());
   auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [c, FNAME, pos=std::move(pos), this,
-    extents=std::move(extents)](auto &btree) mutable {
-    auto &cursor = pos.get_effective_cursor();
-    return cursor.refresh(
-    ).si_then(
-      [&cursor, &btree, extents=std::move(extents),
-      pos=std::move(pos), c, FNAME, this] {
-      return seastar::do_with(
-	std::move(extents),
-	btree.make_partial_iter(c, cursor),
-	std::vector<LBAMapping>(),
-	[c, &btree, FNAME, this]
-	(auto &extents, auto &iter, auto &ret) mutable {
-	return trans_intr::do_for_each(
-	  extents.rbegin(),
-	  extents.rend(),
-	  [&btree, FNAME, &iter, c, &ret, this](auto ext) {
-	  assert(ext->has_laddr());
-	  stats.num_alloc_extents += ext->get_length();
-	  return btree.insert(
-	    c,
-	    iter,
-	    ext->get_laddr(),
-	    lba_map_val_t{
-	      ext->get_length(),
-	      ext->get_paddr(),
-	      EXTENT_DEFAULT_REF_COUNT,
-	      ext->get_last_committed_crc()}
-	  ).si_then([ext, c, FNAME, &iter, &ret](auto p) {
-	    auto &[it, inserted] = p;
-	    ceph_assert(inserted);
-	    auto &leaf_node = *it.get_leaf_node();
-	    leaf_node.insert_child_ptr(
-	      it.get_leaf_pos(),
-	      ext.get(),
-	      leaf_node.get_size() - 1 /*the size before the insert*/);
-	    TRACET("inserted {}", c.trans, *ext);
-	    ret.emplace(ret.begin(), LBAMapping::create_direct(it.get_cursor(c)));
-	    iter = it;
-	  });
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto &cursor = pos.get_effective_cursor();
+  co_await cursor.refresh();
+  auto iter = btree.make_partial_iter(c, cursor);
+  std::vector<LBAMapping> ret;
+  for (auto eiter = extents.rbegin(); eiter != extents.rend(); ++eiter) {
+    auto ext = *eiter;
+    assert(ext->has_laddr());
+    stats.num_alloc_extents += ext->get_length();
+    auto p = co_await btree.insert(
+      c,
+      iter,
+      ext->get_laddr(),
+      lba_map_val_t{
+	ext->get_length(),
+	ext->get_paddr(),
+	EXTENT_DEFAULT_REF_COUNT,
+	ext->get_last_committed_crc()}
+    );
+    auto &[it, inserted] = p;
+    ceph_assert(inserted);
+    auto &leaf_node = *it.get_leaf_node();
+    leaf_node.insert_child_ptr(
+      it.get_leaf_pos(),
+      ext.get(),
+      leaf_node.get_size() - 1 /*the size before the insert*/);
+    TRACET("inserted {}", c.trans, *ext);
+    ret.emplace(ret.begin(), LBAMapping::create_direct(it.get_cursor(c)));
+    iter = it;
 #ifndef NDEBUG
-	}).si_then([&iter, c] {
-	  if (iter.is_begin()) {
-	    return base_iertr::now();
-	  }
-	  auto key = iter.get_key();
-	  return iter.prev(c).si_then([key](auto it) {
-	    assert(key >= it.get_key() + it.get_val().len);
-	    return base_iertr::now();
-	  });
+    if (eiter != extents.rend()) {
+      auto key = iter.get_key();
+      auto it = co_await iter.prev(c);
+      assert(key >= it.get_key() + it.get_val().len);
+    }
 #endif
-	}).si_then([&ret] { return std::move(ret); });
-      });
-    });
-  });
+  }
+  co_return ret;
 }
 
 BtreeLBAManager::clone_mapping_ret

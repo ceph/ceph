@@ -170,38 +170,28 @@ public:
 	  extent->get_last_committed_crc(),
 	  *extent));
     }
-    return seastar::do_with(
-      std::move(alloc_infos),
-      [this, &t, hint, has_laddr](auto &alloc_infos)
-    {
-      if (has_laddr) {
-	return alloc_sparse_mappings(
-	  t, hint, alloc_infos, alloc_policy_t::deterministic)
+    std::list<LBACursorRef> cursors;
+    if (has_laddr) {
+      cursors = co_await alloc_sparse_mappings(
+	t, hint, alloc_infos, alloc_policy_t::deterministic);
+      assert(alloc_infos.size() == cursors.size());
 #ifndef NDEBUG
-	.si_then([&alloc_infos](std::list<LBACursorRef> cursors) {
-	  assert(alloc_infos.size() == cursors.size());
-	  auto info_p = alloc_infos.begin();
-	  auto cursor_p = cursors.begin();
-	  for (; info_p != alloc_infos.end(); info_p++, cursor_p++) {
-	    auto &cursor = *cursor_p;
-	    assert(cursor->get_laddr() == info_p->key);
-	  }
-	  return alloc_extent_iertr::make_ready_future<
-	    std::list<LBACursorRef>>(std::move(cursors));
-	})
+      auto info_p = alloc_infos.begin();
+      auto cursor_p = cursors.begin();
+      for (; info_p != alloc_infos.end(); info_p++, cursor_p++) {
+	auto &cursor = *cursor_p;
+	assert(cursor->get_laddr() == info_p->key);
+      }
 #endif
-	  ;
-      } else {
-	return alloc_contiguous_mappings(
-	  t, hint, alloc_infos, alloc_policy_t::linear_search);
-      }
-    }).si_then([](std::list<LBACursorRef> cursors) {
-      std::vector<LBAMapping> ret;
-      for (auto &cursor : cursors) {
-	ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
-      }
-      return ret;
-    });
+    } else {
+      cursors = co_await alloc_contiguous_mappings(
+	t, hint, alloc_infos, alloc_policy_t::linear_search);
+    }
+    std::vector<LBAMapping> ret;
+    for (auto &cursor : cursors) {
+      ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
+    }
+    co_return ret;
   }
 
   base_iertr::future<LBACursorRef> update_mapping_refcount(
