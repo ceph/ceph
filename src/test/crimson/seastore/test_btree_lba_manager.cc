@@ -565,16 +565,16 @@ struct btree_lba_manager_test : btree_test_base {
 	});
       }).unsafe_get();
     for (auto &ret : rets) {
-      logger().debug("alloc'd: {}", ret);
-      EXPECT_EQ(len, ret.get_length());
-      auto [b, e] = get_overlap(t, ret.get_key(), len);
+      logger().debug("alloc'd: {}", *ret);
+      EXPECT_EQ(len, ret->get_length());
+      auto [b, e] = get_overlap(t, ret->get_laddr(), len);
       EXPECT_EQ(b, e);
       t.mappings.emplace(
 	std::make_pair(
-	  ret.get_key(),
+	  ret->get_laddr(),
 	  test_extent_t{
-	    ret.get_val(),
-	    ret.get_length(),
+	    ret->get_paddr(),
+	    ret->get_length(),
 	    1
 	  }
 	));
