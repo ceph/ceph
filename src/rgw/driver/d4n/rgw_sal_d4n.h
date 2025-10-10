@@ -171,14 +171,15 @@ class D4NFilterWriter : public FilterWriter {
     virtual int prepare(optional_yield y);
     virtual int process(bufferlist&& data, uint64_t offset) override;
     virtual int complete(size_t accounted_size, const std::string& etag,
-                       ceph::real_time *mtime, ceph::real_time set_mtime,
-                       std::map<std::string, bufferlist>& attrs,
-                       ceph::real_time delete_at,
-                       const char *if_match, const char *if_nomatch,
-                       const std::string *user_data,
-                       rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx,
-                       uint32_t flags) override;
+			 ceph::real_time *mtime, ceph::real_time set_mtime,
+			 std::map<std::string, bufferlist>& attrs,
+			 const std::optional<rgw::cksum::Cksum>& cksum,
+			 ceph::real_time delete_at,
+			 const char *if_match, const char *if_nomatch,
+			 const std::string *user_data,
+			 rgw_zone_set *zones_trace, bool *canceled,
+			 const req_context& rctx,
+			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* dpp() { return save_dpp; }
 };
