@@ -94,6 +94,9 @@
   necessary in cases where MGR(s) needs to be prevented from being flooded by
   the module commands when coresponding Ceph service is down/degraded.
 
+* CephFS: The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present
+  ``ENOENT`` is returned.
 
 >=19.0.0
 

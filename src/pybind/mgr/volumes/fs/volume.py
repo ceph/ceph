@@ -21,7 +21,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone
+    create_clone, open_subvol_in_vol
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -775,6 +775,23 @@ class VolumeClient(CephfsClient["Module"]):
                         ret = 0, json.dumps(snap_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
                 ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_getpath(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        snapname   = kwargs['snap_name']
+        groupname  = kwargs['group_name']
+
+        try:
+            with open_subvol_in_vol(self, self.volspec, volname, groupname, subvolname,
+                                    SubvolumeOpType.SNAP_GETPATH) \
+                                    as (vol, group, subvol):
+                snap_path = subvol.snapshot_data_path(snapname)
+                ret = 0, snap_path.decode("utf-8"), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
         return ret
 
     def set_subvolume_snapshot_metadata(self, **kwargs):
