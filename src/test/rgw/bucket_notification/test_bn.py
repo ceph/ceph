@@ -720,9 +720,7 @@ def test_ps_s3_topic_admin_on_master():
     assert_equal(result, 2)
 
     # get the remaining 2 topics
-    result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['topics']), 2)
+    list_topics(2, tenant)
 
     # delete topics
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_1', '--tenant', tenant], get_config_cluster())
@@ -731,9 +729,7 @@ def test_ps_s3_topic_admin_on_master():
     assert_equal(result, 0)
 
     # get topic list, make sure it is empty
-    result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-    parsed_result = json.loads(result[0])
-    assert_equal(len(parsed_result['topics']), 0)
+    list_topics(0, tenant)
 
 
 @attr('basic_test')
@@ -5431,11 +5427,9 @@ def test_ps_s3_data_path_v2_large_migration():
     # check if we migrated all the topics
     for tenant in tenants_list:
         if tenant == '':
-            topics_result = admin(['topic', 'list'], get_config_cluster())
+            list_topics(1)
         else:
-            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-        topics_json = json.loads(topics_result[0])
-        assert_equal(len(topics_json['topics']), 1)
+            list_topics(1, tenant)
 
     # check if we migrated all the notifications
     for tenant, bucket in zip(tenants_list, buckets_list):
@@ -5591,11 +5585,9 @@ def test_ps_s3_data_path_v2_mixed_migration():
     # check if we migrated all the topics
     for tenant in tenants_list:
         if tenant == '':
-            topics_result = admin(['topic', 'list'], get_config_cluster())
+            list_topics(2)
         else:
-            topics_result = admin(['topic', 'list', '--tenant', tenant], get_config_cluster())
-        topics_json = json.loads(topics_result[0])
-        assert_equal(len(topics_json['topics']), 2)
+            list_topics(2, tenant)
 
     # check if we migrated all the notifications
     for tenant, bucket in zip(tenants_list, buckets_list):
