@@ -207,6 +207,13 @@ private:
     return *direct_cursor;
   }
 
+  LBACursorRef get_effective_cursor_ref() {
+    if (is_indirect()) {
+      return indirect_cursor;
+    }
+    return direct_cursor;
+  }
+
   bool is_null() const {
     return !direct_cursor && !indirect_cursor;
   }

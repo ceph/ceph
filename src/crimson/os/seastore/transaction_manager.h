@@ -464,7 +464,7 @@ public:
       auto npos = co_await pos->refresh();
       co_await lba_manager->alloc_extents(
 	t,
-	std::move(npos),
+	npos.get_effective_cursor_ref(),
 	std::vector<LogicalChildNodeRef>(
 	  exts.begin(), exts.end()));
     } else {

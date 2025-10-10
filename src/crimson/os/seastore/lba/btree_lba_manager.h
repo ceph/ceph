@@ -122,7 +122,7 @@ public:
 
   alloc_extents_ret alloc_extents(
     Transaction &t,
-    LBAMapping pos,
+    LBACursorRef pos,
     std::vector<LogicalChildNodeRef> ext) final;
 
   alloc_extent_ret alloc_extent(
@@ -187,11 +187,7 @@ public:
       cursors = co_await alloc_contiguous_mappings(
 	t, hint, alloc_infos, alloc_policy_t::linear_search);
     }
-    std::vector<LBAMapping> ret;
-    for (auto &cursor : cursors) {
-      ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
-    }
-    co_return ret;
+    co_return std::vector<LBACursorRef>(cursors.begin(), cursors.end());
   }
 
   base_iertr::future<LBACursorRef> update_mapping_refcount(
