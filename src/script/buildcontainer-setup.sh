@@ -37,13 +37,16 @@ case "${CEPH_BASE_BRANCH}~${DISTRO_KIND}" in
     ;;
     # EL-ish, 9+
     *~*centos*|*~fedora*|*~rocky*|*~alma*)
-        dnf install -y /usr/bin/{rpmbuild,wget,curl}
+        dnf -y install 'dnf-command(config-manager)' || true
+        dnf config-manager --set-enabled crb || true
+        dnf -y install epel-release || true
+        dnf install -y ccache /usr/bin/{rpmbuild,wget,curl}
         install_container_deps
         dnf_clean
     ;;
     *~*ubuntu*|*~*debian*)
         apt-get update
-        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev
+        apt-get install -y wget reprepro curl software-properties-common lksctp-tools libsctp-dev protobuf-compiler ragel libc-ares-dev ccache
         install_container_deps
     ;;
     *)
