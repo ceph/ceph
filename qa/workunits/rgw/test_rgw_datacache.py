@@ -184,19 +184,23 @@ def main():
     # list the files in the cache dir for troubleshooting
     out = exec_cmd('ls -l %s' % (cache_dir))
     # get name of cached object and check if it exists in the cache
-    out = exec_cmd('find %s -name "*%s1"' % (cache_dir, cached_object_name))
+    out = exec_cmd('find %s -type f -name "*" | tail -1' % (cache_dir))
     cached_object_path = get_cmd_output(out)
     log.debug("Path of file in datacache is: %s", cached_object_path)
-    out = exec_cmd('basename %s' % (cached_object_path))
-    basename_cmd_out = get_cmd_output(out)
-    log.debug("Name of file in datacache is: %s", basename_cmd_out)
+    out = exec_cmd("sha1sum %s  | awk '{ print $1 }'" % (cached_object_path))
+    cached_object_sha1 = get_cmd_output(out)
+    log.debug("SHA1 of file in datacache is: %s", cached_object_sha1)
 
     # check to see if the cached object is in Ceph
     out = exec_cmd('rados ls -p default.rgw.buckets.data')
     rados_ls_out = get_cmd_output(out)
     log.debug("rados ls output is: %s", rados_ls_out)
 
-    assert(basename_cmd_out in rados_ls_out)
+    out = exec_cmd("dd status=none if=%s of=/dev/stdout bs=1M skip=4 | sha1sum | awk '{ print $1 }'" % (outfile))
+    org_object_sha1 = get_cmd_output(out)
+    log.debug("SHA1 of original file is: %s", org_object_sha1)
+
+    assert(cached_object_sha1 == org_object_sha1)  # Datacache test failed if sha1 of cached object does not match original object sha1"
     log.debug("RGW Datacache test SUCCESS")
 
     # remove datacache dir
