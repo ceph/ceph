@@ -364,7 +364,7 @@ BtreeLBAManager::reserve_region(
   );
   ceph_assert(p.second);
   iter = p.first;
-  co_return LBAMapping::create_direct(iter.get_cursor(c));
+  co_return iter.get_cursor(c);
 }
 
 BtreeLBAManager::alloc_extents_ret
