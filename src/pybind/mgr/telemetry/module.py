@@ -745,8 +745,7 @@ class Module(MgrModule):
         return self.get('io_rate')
 
     def get_stats_per_pool(self) -> dict:
-        result = self.get('pg_dump')['pool_stats']
-
+        result = self.get('pool_stats', mutable=True)
         # collect application metadata from osd_map
         osd_map = self.get('osd_map')
         application_metadata = {pool['pool']: pool['application_metadata'] for pool in osd_map['pools']}
