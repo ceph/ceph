@@ -360,7 +360,7 @@ BtreeLBAManager::reserve_region(
     iter.get_leaf_pos(),
     get_reserved_ptr<LBALeafNode, laddr_t>(),
     leaf_node.get_size() - 1 /*the size before the insert*/);
-  co_return LBAMapping::create_direct(iter.get_cursor(c));
+  co_return iter.get_cursor(c);
 }
 
 BtreeLBAManager::alloc_extents_ret
