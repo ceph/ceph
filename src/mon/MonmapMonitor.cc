@@ -919,11 +919,32 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (pending_map.stretch_mode_enabled) {
+        err = -EINVAL;
+        ss << "Stretch mode is enabled, so you cannot change the election strategy; please disable stretch mode first!";
+        ceph_assert(pending_map.strategy == MonMap::CONNECTIVITY);
+        goto reply_no_propose;
+    }
     if (strat == "classic") {
+      if (pending_map.strategy == MonMap::CLASSIC) {
+        err = 0;
+        ss << "You are already in classic election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CLASSIC;
     } else if (strat == "disallow") {
+      if (pending_map.strategy == MonMap::DISALLOW) {
+          err = 0;
+          ss << "You are already in disallow election strategy";
+          goto reply_no_propose;
+      }
       strategy = MonMap::DISALLOW;
     } else if (strat == "connectivity") {
+      if (pending_map.strategy == MonMap::CONNECTIVITY) {
+        err = 0;
+        ss << "You are already in connectivity election strategy";
+        goto reply_no_propose;
+      }
       strategy = MonMap::CONNECTIVITY;
     } else {
       err = -EINVAL;
