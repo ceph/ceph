@@ -4,7 +4,11 @@
   <cds-table-header *ngIf="headerTitle">
     <h4 cdsTableHeaderTitle
         i18n>
-      {{headerTitle}}
+      @if (isHeaderTitleString) {
+        {{ headerTitle }}
+    } @else {
+      <ng-container *ngTemplateOutlet="headerTitle"></ng-container>
+    }
     </h4>
     <p cdsTableHeaderDescription
        i18n
