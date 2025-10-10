@@ -134,8 +134,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     private rgwZoneService: RgwZoneService
   ) {
     super();
-    this.resource = $localize`Tiering Storage Class`;
-    this.editing = this.router.url.startsWith(`/rgw/tiering/${URLVerbs.EDIT}`);
+    this.resource = $localize`Storage Class`;
+    this.editing = this.router.url.startsWith(`/rgw/storage-class/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
 
@@ -619,7 +619,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
     }
   }
   goToListView() {
-    this.router.navigate([`rgw/tiering`]);
+    this.router.navigate([`rgw/storage-class`]);
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {
