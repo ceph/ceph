@@ -69,18 +69,15 @@ class TestVolumesHelper(CephFSTestCase):
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
 
-    def _get_subvolume_snapshot_path(self, subvolume, snapshot, source_group, subvol_path, source_version):
-        if source_version == 2:
-            # v2
-            if subvol_path is not None:
-                (base_path, uuid_str) = os.path.split(subvol_path)
-            else:
-                (base_path, uuid_str) = os.path.split(self._get_subvolume_path(self.volname, subvolume, group_name=source_group))
-            return os.path.join(base_path, ".snap", snapshot, uuid_str)
+    def _get_subvolume_snapshot_path(self, subvol_name, snap_name, group_name):
+        cmd = (f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+               f'{snap_name}')
+        if group_name:
+            cmd += f' {group_name}'
 
-        # v1
-        base_path = self._get_subvolume_path(self.volname, subvolume, group_name=source_group)
-        return os.path.join(base_path, ".snap", snapshot)
+        cephfs_snap_path = self.get_ceph_cmd_stdout(cmd).strip()
+        # remove leading '/' from cephfs_snap_path
+        return os.path.join(self.mount_a.hostfs_mntpt, cephfs_snap_path[1:])
 
     def _verify_clone_attrs(self, source_path, clone_path):
         path1 = source_path
@@ -142,7 +139,7 @@ class TestVolumesHelper(CephFSTestCase):
                       subvol_path=None, source_version=2, timo=120):
         # pass in subvol_path (subvolume path when snapshot was taken) when subvolume is removed
         # but snapshots are retained for clone verification
-        path1 = self._get_subvolume_snapshot_path(subvolume, snapshot, source_group, subvol_path, source_version)
+        path1 = self._get_subvolume_snapshot_path(subvolume, snapshot, source_group)
         path2 = self._get_subvolume_path(self.volname, clone, group_name=clone_group)
 
         check = 0
@@ -5905,6 +5902,224 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         self._wait_for_trash_empty()
         # Clean tmp config file
         self.mount_a.run_shell(['sudo', 'rm', '-f', tmp_meta_path], omit_sudo=False)
+
+
+class TestSubvolumeSnapshotGetpath(TestVolumesHelper):
+
+    def get_subvol_uuid(self, subvol_name, group_name=None):
+        '''
+        Return the UUID directory component obtained from the path of
+        subvolume.
+        '''
+        if group_name:
+            cmd = (f'fs subvolume getpath {self.volname} {subvol_name} '
+                   f'{group_name}')
+        else:
+            cmd = f'fs subvolume getpath {self.volname} {subvol_name}'
+
+        subvol_path = self.get_ceph_cmd_stdout(cmd).strip()
+
+        subvol_uuid = os.path.basename(subvol_path)
+        return subvol_uuid
+
+    def construct_snap_path_for_v2(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, '.snap',
+                            snap_name, uuid)
+
+    def construct_snap_path_for_v1(self, subvol_name, snap_name, uuid,
+                                   group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, uuid,
+                            '.snap', snap_name)
+
+    def construct_snap_path_for_legacy(self, subvol_name, snap_name,
+                                       group_name='_nogroup'):
+        return os.path.join('/volumes', group_name, subvol_name, '.snap',
+                            snap_name)
+
+    def test_snapshot_getpath(self):
+        '''
+        Test that "ceph fs subvolume snapshot getpath" command returns path to
+        the specified snapshot in the specified subvolume.
+        '''
+        subvol_name = self._gen_subvol_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
+        sv_uuid = self.get_subvol_uuid(subvol_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
+                                             f'{self.volname} {subvol_name} '
+                                             f'{snap_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+                                                        sv_uuid)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_in_group(self):
+        '''
+        Test that "ceph fs subvolume snapshot getpath" command returns path to
+        the specified snapshot in the specified subvolume in the specified
+        group.
+        '''
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
+                          f'{group_name}')
+        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
+                                             f'{self.volname} {subvol_name} '
+                                             f'{snap_name} {group_name}')\
+                                             .strip()
+        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+                                                        sv_uuid, group_name)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_on_retained_subvol(self):
+        '''
+        Test that "ceph fs subvolume snapshot getpath" command returns path to
+        the specified snapshot in the specified subvolume that was deleted but
+        snapshots on which is retained.
+        '''
+        subvol_name = self._gen_subvol_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name}')
+        sv_uuid = self.get_subvol_uuid(subvol_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name}')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
+                           '--retain-snapshots')
+
+        snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
+                                             f'{self.volname} {subvol_name} '
+                                             f'{snap_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+                                                        sv_uuid)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_on_retained_subvol_in_group(self):
+        '''
+        Test that "ceph fs subvolume snapshot getpath" command returns path to
+        the specified snapshot in the specified subvolume that was deleted but
+        snapshots on which is retained. And the deleted subvolume is located on
+        a non-default group.
+        '''
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} {group_name}')
+        self.run_ceph_cmd(f'fs subvolume create {self.volname} {subvol_name} '
+                          f'{group_name}')
+        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+        self.run_ceph_cmd(f'fs subvolume rm {self.volname} {subvol_name} '
+                          f'{group_name} --retain-snapshots')
+
+        snap_path = self.get_ceph_cmd_stdout(f'fs subvolume snapshot getpath '
+                                             f'{self.volname} {subvol_name} '
+                                             f'{snap_name} {group_name}')\
+                                             .strip()
+        exp_snap_path = self.construct_snap_path_for_v2(subvol_name, snap_name,
+                                                        sv_uuid, group_name)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_for_v1(self):
+        subvol_name = self._gen_subvol_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self._create_v1_subvolume(subvol_name)
+        sv_uuid = self.get_subvol_uuid(subvol_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(
+            f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+            f'{snap_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_v1(subvol_name, snap_name,
+                                                        sv_uuid)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_in_group_for_v1(self):
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        self.run_ceph_cmd(f'fs subvolumegroup create {self.volname} '
+                          f'{group_name}')
+        self._create_v1_subvolume(subvol_name, group_name)
+        sv_uuid = self.get_subvol_uuid(subvol_name, group_name)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(
+            f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+            f'{snap_name} {group_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_v1(subvol_name, snap_name,
+                                                        sv_uuid, group_name)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_for_upgraded_legacy(self):
+        subvol_name = self._gen_subvol_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        sv_path = os.path.join('.', 'volumes', '_nogroup', subvol_name)
+        self.mount_a.run_shell(f'sudo mkdir -p {sv_path}', omit_sudo=False)
+
+        sv_getpath = self.get_ceph_cmd_stdout(
+            f'fs subvolume getpath {self.volname} {subvol_name}').strip()
+        self.assertNotEqual(sv_getpath, None)
+        # remove '/' at the beginning
+        self.assertEqual(sv_path[1:], sv_getpath)
+        self._assert_meta_location_and_version(self.volname, subvol_name,
+                                               version=1, legacy=True)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(
+            f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+            f'{snap_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_legacy(subvol_name,
+                                                            snap_name)
+        self.assertEqual(snap_path, exp_snap_path)
+
+    def test_snapshot_getpath_in_group_for_upgraded_legacy(self):
+        subvol_name = self._gen_subvol_name()
+        group_name = self._gen_subvol_grp_name()
+        snap_name = self._gen_subvol_snap_name()
+
+        sv_path = os.path.join('.', 'volumes', group_name, subvol_name)
+        self.mount_a.run_shell(f'sudo mkdir -p {sv_path}', omit_sudo=False)
+
+        sv_getpath = self.get_ceph_cmd_stdout(
+            f'fs subvolume getpath {self.volname} {subvol_name} '
+            f'{group_name}').strip()
+        self.assertNotEqual(sv_getpath, None)
+        # remove '/' at the beginning
+        self.assertEqual(sv_path[1:], sv_getpath)
+        self._assert_meta_location_and_version(self.volname, subvol_name,
+                                               subvol_group=group_name,
+                                               version=1, legacy=True)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {self.volname} '
+                          f'{subvol_name} {snap_name} {group_name}')
+
+        snap_path = self.get_ceph_cmd_stdout(
+            f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
+            f'{snap_name} {group_name}').strip()
+        exp_snap_path = self.construct_snap_path_for_legacy(subvol_name, snap_name,
+                                                            group_name)
+        self.assertEqual(snap_path, exp_snap_path)
 
 
 class TestSubvolumeSnapshotClones(TestVolumesHelper):
