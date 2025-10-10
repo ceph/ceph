@@ -104,7 +104,7 @@ public:
     auto cursors = co_await alloc_contiguous_mappings(
       t, hint, alloc_infos, alloc_policy_t::linear_search);
     assert(cursors.size() == 1);
-    co_return LBAMapping::create_direct(std::move(cursors.front()));
+    co_return std::move(cursors.front());
   }
 
   clone_mapping_ret clone_mapping(
@@ -146,7 +146,7 @@ public:
       t, hint, alloc_infos, alloc_policy_t::linear_search
     );
     assert(cursors.size() == 1);
-    co_return LBAMapping::create_direct(std::move(cursors.front()));
+    co_return std::move(cursors.front());
   }
 
   alloc_extents_ret alloc_extents(
