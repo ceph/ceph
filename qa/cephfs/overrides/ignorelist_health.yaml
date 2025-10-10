@@ -20,3 +20,6 @@ overrides:
       - Replacing daemon
       - deprecated feature inline_data
       - MGR_MODULE_ERROR
+      - BLUESTORE_SLOW_OP_ALERT
+      - slow operation indications in BlueStore
+      - experiencing slow operations in BlueStore
