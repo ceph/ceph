@@ -442,54 +442,43 @@ public:
     LOG_PREFIX(TransactionManager::alloc_data_extents);
     SUBDEBUGT(seastore_tm, "{} hint {}~0x{:x} phint={} ...",
               t, T::TYPE, laddr_hint, len, placement_hint);
-    return seastar::do_with(
-      cache->alloc_new_data_extents<T>(
+    auto exts = cache->alloc_new_data_extents<T>(
+      t,
+      len,
+      placement_hint,
+      INIT_GENERATION);
+    // user must initialize the logical extent themselves
+    assert(is_user_transaction(t.get_src()));
+    for (auto& ext : exts) {
+      ext->set_seen_by_users();
+    }
+    if (pos) {
+      // laddr_hint is determined
+      auto off = laddr_hint;
+      for (auto &extent : exts) {
+	extent->set_laddr(off);
+	off = (off + extent->get_length()).checked_to_laddr();
+      }
+    }
+    if (pos) {
+      auto npos = co_await pos->refresh();
+      co_await lba_manager->alloc_extents(
 	t,
-	len,
-	placement_hint,
-	INIT_GENERATION),
-      [pos=std::move(pos), this, &t,
-      FNAME, laddr_hint](auto &exts) mutable {
-      // user must initialize the logical extent themselves
-      assert(is_user_transaction(t.get_src()));
-      for (auto& ext : exts) {
-	ext->set_seen_by_users();
-      }
-      if (pos) {
-	// laddr_hint is determined
-	auto off = laddr_hint;
-	for (auto &extent : exts) {
-	  extent->set_laddr(off);
-	  off = (off + extent->get_length()).checked_to_laddr();
-	}
-      }
-      auto fut = alloc_extents_iertr::make_ready_future<
-	std::vector<LBAMapping>>();
-      if (pos) {
-	fut = pos->refresh(
-	).si_then([&t, &exts, this](auto pos) {
-	  return lba_manager->alloc_extents(
-	    t,
-	    std::move(pos),
-	    std::vector<LogicalChildNodeRef>(
-	      exts.begin(), exts.end()));
-	});
-      } else {
-	fut = lba_manager->alloc_extents(
-	  t,
-	  laddr_hint,
-	  std::vector<LogicalChildNodeRef>(
-	    exts.begin(), exts.end()),
-	  EXTENT_DEFAULT_REF_COUNT);
-      }
-      return fut.si_then([&exts, &t, FNAME](auto &&) mutable {
-	for (auto &ext : exts) {
-	  SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
-	}
-	return alloc_extent_iertr::make_ready_future<
-	  std::vector<TCachedExtentRef<T>>>(std::move(exts));
-      });
-    });
+	std::move(npos),
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()));
+    } else {
+      co_await lba_manager->alloc_extents(
+	t,
+	laddr_hint,
+	std::vector<LogicalChildNodeRef>(
+	  exts.begin(), exts.end()),
+	EXTENT_DEFAULT_REF_COUNT);
+    }
+    for (auto &ext : exts) {
+      SUBDEBUGT(seastore_tm, "allocated {}", t, *ext);
+    }
+    co_return exts;
   }
 
   template <typename T>
