@@ -988,8 +988,9 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
       rc = send_mon_command(allow_ec_optimisations_request, rados,
                             "OSDPoolSetRequest", inbl, &outbl, formatter.get());
       if (rc != 0) {
-        throw std::invalid_argument(fmt::format("ec optimisations may not be enabled "
-                                                "for the specified plugin type"));
+        throw std::invalid_argument(fmt::format("Failed to enable EC optimisations, "
+                                                "the specified plugin type may not "
+                                                "support them"));
       }
     }
 
