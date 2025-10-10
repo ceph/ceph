@@ -70,6 +70,13 @@
    - https://tracker.ceph.com/issues/67179
    - https://tracker.ceph.com/issues/66867
 
+* CephFS: Format of name of pool namespace for CephFS volumes has been changed
+  from `fsvolumens__<subvol-name>` to `fsvolumens__<subvol-grp-name>_<subvol-name>`
+  to avoid namespace collision when two subvolumes located in different
+  subvolume groups have the same name. Even with namespace collision, there were
+  no security issues since the MDS auth cap is restricted to the subvolume path.
+  Now, with this change, the namespaces are completely isolated.
+
 * RBD: Moving an image that is a member of a group to trash is no longer
   allowed.  `rbd trash mv` command now behaves the same way as `rbd rm` in this
   scenario.
