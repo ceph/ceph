@@ -600,10 +600,13 @@ ceph::io_sequence::tester::SelectErasureProfile::SelectErasureProfile(
 
 bool ecOptimisationsSupported(
   ceph::io_sequence::tester::Profile profile) {
-  if (profile.plugin == "lrc") {
+  if (profile.technique != "reed_sol_van") {
     return false;
   }
-  return true;
+  if (profile.plugin == "jerasure" || profile.plugin == "isa") {
+    return true;
+  }
+  return false;
 }
 
 const ceph::io_sequence::tester::Profile
@@ -617,15 +620,16 @@ ceph::io_sequence::tester::SelectErasureProfile::select() {
   } else {
     profile.plugin = spl.select();
 
+    SelectErasureTechnique set{rng, vm, profile.plugin, first_use};
+    profile.technique = set.select();
+
     bool ecOptimisationsEnabled = !vm.contains("disable_pool_ec_optimizations");
     if (!ecOptimisationsSupported(profile) && ecOptimisationsEnabled) {
       throw std::invalid_argument(fmt::format("ec optimisations may not be enabled "
-                                                  "if using {} plugin type",
-                                                  profile.plugin));
+                                                  "if using {} plugin type "
+                                                  "with technique {}",
+                                                  profile.plugin, profile.technique));
     }
-
-    SelectErasureTechnique set{rng, vm, profile.plugin, first_use};
-    profile.technique = set.select();
 
     SelectErasureKM skm{rng, vm, profile.plugin, profile.technique, first_use};
     profile.km = skm.select();
