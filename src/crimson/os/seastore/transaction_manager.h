@@ -528,8 +528,8 @@ public:
       hint,
       len
     );
-    SUBDEBUGT(seastore_tm, "reserved {}", t, pin);
-    co_return pin;
+    SUBDEBUGT(seastore_tm, "reserved {}", t, *pin);
+    co_return LBAMapping::create_direct(std::move(pin));
   }
 
   reserve_extent_ret reserve_region(
@@ -546,7 +546,7 @@ public:
       hint,
       len
     );
-    co_return pin;
+    co_return LBAMapping::create_direct(std::move(pin));
   }
 
   /*

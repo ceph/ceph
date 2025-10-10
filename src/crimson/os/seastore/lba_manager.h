@@ -103,7 +103,7 @@ public:
    * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBACursorRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,

@@ -687,14 +687,14 @@ TransactionManager::rewrite_logical_extent(
 	);
       } else {
 	ceph_assert(refcount != 0);
-	auto mapping = co_await lba_manager->alloc_extent(
+	auto cursor = co_await lba_manager->alloc_extent(
 	  t,
 	  (extent->get_laddr() + off).checked_to_laddr(),
 	  *nextent,
 	  refcount
 	);
-	ceph_assert(mapping.get_key() == extent->get_laddr() + off);
-	ceph_assert(mapping.get_val() == nextent->get_paddr());
+	ceph_assert(cursor->get_laddr() == extent->get_laddr() + off);
+	ceph_assert(cursor->get_paddr() == nextent->get_paddr());
       }
       off += nextent->get_length();
       left -= nextent->get_length();
