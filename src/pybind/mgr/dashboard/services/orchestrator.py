@@ -234,6 +234,11 @@ class MonitoringManager(ResourceManager):
         """Get Alertmanager access information"""
         return self.api.get_alertmanager_access_info()
 
+    @wait_api_result
+    def get_security_config(self) -> Dict[str, str]:
+        """Get security config information"""
+        return self.api.get_security_config()
+
 
 class OrchClient(object):
 
