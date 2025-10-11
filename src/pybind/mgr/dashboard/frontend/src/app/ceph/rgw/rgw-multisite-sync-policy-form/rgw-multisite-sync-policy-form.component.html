@@ -1,13 +1,10 @@
-<cd-modal [pageURL]="pageURL">
-  <span class="modal-title"
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+<cd-modal title="{{ action | titlecase }} {{ resource | upperFirst }}">
   <ng-container class="modal-content">
     <form
       #frm="ngForm"
       [formGroup]="syncPolicyForm"
       *cdFormLoading="loading"
       novalidate>
-      <div class="modal-body">
         <!-- Group Id -->
         <div class="form-group row">
           <label
@@ -80,16 +77,14 @@
               i18n>The bucket with chosen name does not exist.</span>
           </div>
         </div>
-      </div>
-
-      <div class="modal-footer">
-        <div class="text-right">
-          <cd-form-button-panel (submitActionEvent)="submit()"
-                                [form]="syncPolicyForm"
-                                [disabled]="syncPolicyForm.pending || syncPolicyForm.pristine || syncPolicyForm.invalid"
-                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
-        </div>
-      </div>
     </form>
+  </ng-container>
+
+  <ng-container class="modal-footer">
+    <cd-form-button-panel (submitActionEvent)="submit()"
+                          [form]="syncPolicyForm"
+                          [modalForm]="true"
+                          [disabled]="syncPolicyForm.pending || syncPolicyForm.pristine || syncPolicyForm.invalid"
+                          [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
   </ng-container>
 </cd-modal>

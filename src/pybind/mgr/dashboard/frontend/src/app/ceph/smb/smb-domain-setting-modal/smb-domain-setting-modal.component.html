@@ -1,13 +1,9 @@
-<cds-modal size="md"
+<cd-modal size="md"
            [open]="open"
-           [hasScrollingContent]="true"
-           (overlaySelected)="closeModal()">
-  <cds-modal-header (closeSelect)="closeModal()">
-    <h3 cdsModalHeaderHeading
-        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-  </cds-modal-header>
-  <ng-container *cdFormLoading="loading">
-    <div cdsModalContent>
+           title="{{ action | titlecase }} {{ resource | upperFirst }}">
+
+  <ng-container class="modal-content">
+    <ng-container *cdFormLoading="loading">
       <form name="domainSettingsForm"
             #formDir="ngForm"
             [formGroup]="domainSettingsForm"
@@ -115,8 +111,10 @@
           </div>
         </div>
       </form>
-    </div>
+    </ng-container>
+  </ng-container>
 
+  <ng-container class="modal-footer">
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="domainSettingsForm"
@@ -125,4 +123,4 @@
     >
     </cd-form-button-panel>
   </ng-container>
-</cds-modal>
+</cd-modal>

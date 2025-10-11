@@ -1,24 +1,23 @@
 import { Component, EventEmitter, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { RgwRealm, RgwZonegroup, RgwZone, SystemKey } from '../models/rgw-multisite';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { Subscription } from 'rxjs';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-create-rgw-service-entities',
   templateUrl: './create-rgw-service-entities.component.html',
   styleUrls: ['./create-rgw-service-entities.component.scss']
 })
-export class CreateRgwServiceEntitiesComponent {
+export class CreateRgwServiceEntitiesComponent extends BaseModal {
   public sub = new Subscription();
   createMultisiteEntitiesForm: CdFormGroup;
   realm: RgwRealm;
@@ -29,15 +28,14 @@ export class CreateRgwServiceEntitiesComponent {
   submitAction = new EventEmitter();
 
   constructor(
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwMultisiteService: RgwMultisiteService,
     public rgwZoneService: RgwZoneService,
     public notificationService: NotificationService,
     public rgwZonegroupService: RgwZonegroupService,
     public rgwRealmService: RgwRealmService,
-    public modalService: ModalService
   ) {
+    super();
     this.createForm();
   }
 
@@ -85,7 +83,7 @@ export class CreateRgwServiceEntitiesComponent {
                   $localize`Realm/Zonegroup/Zone created successfully`
                 );
                 this.submitAction.emit();
-                this.activeModal.close();
+                this.closeModal();
               })
               .catch(() => {
                 this.notificationService.show(
