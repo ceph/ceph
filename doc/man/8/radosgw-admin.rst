@@ -491,6 +491,12 @@ as follows:
 :command:`topic dump`
   Dump (in JSON format) all pending bucket notifications of a persistent topic
 
+:command:`restore list`
+  List restore status of each object in a bucket
+
+:command:`restore status`
+  Show restoration status of an object in the bucket
+
 Options
 =======
 
@@ -879,6 +885,14 @@ Options
    scan the bucket index, e.g., listing, deletion, and all scan/search
    operations such as finding orphans or checking the bucket index.
    The default is 32.
+
+.. option:: --restore-status
+
+   Filter objects return by the 'restore list' command by status.
+
+.. option:: --show-restore-stats
+
+   Shows restore stats in a bucket stat command. Here the bucket name need be provided.
 
 Quota Options
 =============
