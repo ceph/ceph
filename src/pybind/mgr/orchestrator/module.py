@@ -263,8 +263,8 @@ def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
         to_yaml = to_yaml_n if many else to_yaml_1
 
         if many:
-            return yaml.dump_all(to_yaml(copy), default_flow_style=False)
-        return yaml.dump(to_yaml(copy), default_flow_style=False)
+            return yaml.dump_all(to_yaml(copy))
+        return yaml.dump(to_yaml(copy))
     elif format == Format.xml or format == Format.xml_pretty:
         raise OrchestratorError(f"format '{format.name}' is not implemented.")
     else:
@@ -1187,7 +1187,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(bindings_ls, format, many=False, cls=None))
         else:
-            result_str = yaml.dump(bindings_ls, default_flow_style=False, sort_keys=False)
+            result_str = yaml.dump(bindings_ls, sort_keys=False)
             return HandleCommandResult(stdout=result_str)
 
     @_cli_read_command('orch certmgr cert check')
