@@ -113,12 +113,21 @@ export class SmbJoinAuthListComponent implements OnInit {
       itemDescription: $localize`Active directory access resource`,
       itemNames: [authId],
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${JOIN_AUTH_PATH}/${URLVerbs.DELETE}`, {
-            authId: authId
-          }),
-          call: this.smbService.deleteJoinAuth(authId)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask(`${JOIN_AUTH_PATH}/${URLVerbs.DELETE}`, {
+              authId: authId
+            }),
+            call: this.smbService.deleteJoinAuth(authId)
+          })
+          .subscribe({
+            error: () => {
+              this.modalService.dismissAll();
+            },
+            complete: () => {
+              this.modalService.dismissAll();
+            }
+          })
     });
   }
 
