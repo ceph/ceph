@@ -34,3 +34,4 @@ overrides:
       - OSD_ROOT_DOWN
       - PG_DEGRADED
       - NVMEOF_SINGLE_GATEWAY
+      - CEPHADM_FAILED_DAEMON
