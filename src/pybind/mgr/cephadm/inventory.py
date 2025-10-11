@@ -1194,12 +1194,15 @@ class HostCache():
         ``_refresh_host_daemons()`` was called, but *before*
         ``_apply_all_specs()`` was called. thus we end up with a hosts
         where daemons might be running, but we have not yet detected them.
+        
+        Excludes paused hosts as they should not have new daemons scheduled.
         """
         return [
             h for h in self.mgr.inventory.all_specs()
             if (
                 self.host_had_daemon_refresh(h.hostname)
                 and SpecialHostLabels.DRAIN_DAEMONS not in h.labels
+                and h.status.lower() != 'paused'
             )
         ]
 
@@ -1230,10 +1233,11 @@ class HostCache():
 
         Useful for the agent who needs this specific list rather than the
         schedulable_hosts since the agent needs to be deployed on hosts with
-        no daemon refresh
+        no daemon refresh, but should respect paused status for consistency
+        with global pause behavior.
         """
         return [
-            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS not in h.labels
+            h for h in self.mgr.inventory.all_specs() if SpecialHostLabels.DRAIN_DAEMONS not in h.labels and h.status.lower() != 'paused'
         ]
 
     def get_draining_hosts(self) -> List[HostSpec]:
@@ -1283,6 +1287,22 @@ class HostCache():
     def is_host_draining(self, hostname: str) -> bool:
         # take hostname and return if it matches the hostname of a draining host
         return hostname in [h.hostname for h in self.get_draining_hosts()]
+
+    def is_host_paused(self, hostname: str) -> bool:
+        # take hostname and return if it matches the hostname of a paused host
+        return hostname in [h.hostname for h in self.get_paused_hosts()]
+
+    def get_paused_hosts(self) -> List[HostSpec]:
+        """
+        Return all hosts that are in paused state.
+        
+        Paused hosts are reachable but administratively paused from
+        orchestrator operations.
+        """
+        return [
+            h for h in self.mgr.inventory.all_specs()
+            if h.status.lower() == 'paused'
+        ]
 
     def get_facts(self, host: str) -> Dict[str, Any]:
         return self.facts.get(host, {})
