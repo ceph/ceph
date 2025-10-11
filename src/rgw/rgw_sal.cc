@@ -42,6 +42,10 @@
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
 
+#if defined(WITH_RADOSGW_D4N) && defined(D4N_USE_FDB_SINK)
+#include "driver/fdb/fdb_d4n.h"
+#endif
+
 #ifdef WITH_RADOSGW_MOTR
 #include "driver/motr/rgw_sal_motr.h"
 #endif
@@ -72,6 +76,9 @@ extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+#endif
+#if defined(WITH_RADOSGW_D4N) && defined(D4N_USE_FDB_SINK)
+extern rgw::sal::Driver* newD4N_FDB_Filter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 }
 
@@ -413,6 +420,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {
     cfg.filter_name= "d4n";
+  }
+#endif
+#if defined(WITH_RADOSGW_D4N) && defined(D4N_USE_FDB_SINK)
+  else if (config_filter == "d4n-fdb") {
+    cfg.filter_name= "d4n-fdb";
   }
 #endif
 
