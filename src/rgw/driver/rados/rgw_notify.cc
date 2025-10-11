@@ -509,6 +509,7 @@ private:
               needs_migration_vector[entry_idx - 1] = (result == EntryProcessingResult::Migrating);
               notifs_persistency_tracker.erase(entry.marker);
               is_idle = false;
+              if (result == EntryProcessingResult::Expired && perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
               return;
             }
             if (set_min_marker(end_marker, entry.marker) < 0) {
