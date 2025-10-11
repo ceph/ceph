@@ -1,0 +1,58 @@
+name: PR Comment Dispatcher
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  trigger-all-make-check:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test all'
+      jenkins_job: 'ceph-pull-requests'
+
+  trigger-all-make-check-arm64:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test all'
+      jenkins_job: 'ceph-pull-requests-arm64'
+
+  trigger-all-windows:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test all'
+      jenkins_job: 'ceph-windows-pull-requests'
+
+  trigger-all-api:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test all'
+      jenkins_job: 'ceph-api'
+
+  trigger-make-check:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test make check'
+      jenkins_job: 'ceph-pull-requests'
+
+  trigger-make-check-arm64:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test make check arm64'
+      jenkins_job: 'ceph-pull-requests-arm64'
+
+  trigger-windows:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test windows'
+      jenkins_job: 'ceph-windows-pull-requests'
+
+  trigger-api:
+    uses: ./.github/workflows/trigger-jenkins-on-comment.yml
+    with:
+      trigger_phrase: 'jenkins test api'
+      jenkins_job: 'ceph-api'
