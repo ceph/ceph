@@ -4254,7 +4254,9 @@
    "schemaVersion": 38,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "protocol",
+      "overview"
    ],
    "templating": {
       "list": [
@@ -4435,7 +4437,7 @@
       ]
    },
    "timezone": "",
-   "title": "Ceph - Filesystem Overview",
+   "title": "Ceph Filesystem - Overview",
    "uid": "718Bruins",
    "version": 0
 }
