@@ -9366,10 +9366,10 @@ paths:
   /api/nvmeof/subsystem/{nqn}/namespace:
     get:
       parameters:
-      - description: NVMeoF subsystem NQN
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN
         in: path
         name: nqn
-        required: true
         schema:
           type: string
       - allowEmptyValue: true
