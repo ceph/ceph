@@ -899,7 +899,9 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     pull_info.stat.num_objects_recovered++;
     auto manager = pg.obc_loader.get_obc_manager(
       recovery_waiter.obc);
-    manager.lock_excl_sync(); /* cannot already be locked */
+    // Call lock_excl_wait if the lock is already held by load_and_lock_(head|clone)
+    // and has not been released yet.
+    co_await interruptor::make_interruptible(manager.lock_excl_wait());
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
       false, t
@@ -1024,7 +1026,9 @@ ReplicatedRecoveryBackend::handle_push(
     auto ptiter = replica_push_targets.find(push_op.recovery_info.soid);
     ceph_assert(ptiter != replica_push_targets.end());
     auto manager = pg.obc_loader.get_obc_manager(ptiter->second);
-    manager.lock_excl_sync(); /* cannot already be locked */
+    // Call lock_excl_wait if the lock is already held by load_and_lock_(head|clone)
+    // and has not been released yet.
+    co_await interruptor::make_interruptible(manager.lock_excl_wait());
 
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.recovery_info.soid, push_op.recovery_info,
