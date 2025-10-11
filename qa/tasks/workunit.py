@@ -2,7 +2,6 @@
 Workunit task -- Run ceph on sets of specific clients
 """
 import logging
-import pipes
 import os
 import re
 import shlex
@@ -405,7 +404,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 ]
                 if env is not None:
                     for var, val in env.items():
-                        quoted_val = pipes.quote(val)
+                        quoted_val = shlex.quote(val)
                         env_arg = '{var}={val}'.format(var=var, val=quoted_val)
                         args.append(run.Raw(env_arg))
                 if coverage_and_limits:
