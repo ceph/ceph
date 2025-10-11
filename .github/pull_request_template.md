@@ -26,6 +26,8 @@
 
 - When filling out the below checklist, you may click boxes directly in the GitHub web UI.  When entering or editing the entire PR message in the GitHub web UI editor, you may also select a checklist item by adding an `x` between the brackets: `[x]`.  Spaces and capitalization matter when checking off items this way.
 
+- Please do not remove the "Show available Jenkins commands" section below.
+
 ## Checklist
 - Tracker (select at least one)
   - [ ] References tracker ticket
