@@ -558,6 +558,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
+option(WITH_RADOSGW_FDB "FoundationDB support for RADOS Gateway (experimental)" OFF)
 option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
@@ -566,6 +567,10 @@ option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
+
+# D4N can use Redis or FDB as sink:
+CMAKE_DEPENDENT_OPTION(D4N_USE_FDB_SINK "Use FoundationDB as a sink for D4N (experimental)" OFF
+                       "WITH_RADOSGW_D4N; WITH_RADOSGW_FDB" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
@@ -619,6 +624,18 @@ if(WITH_RADOSGW)
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
+
+if(WITH_RADOSGW_FDB)
+ include(${CMAKE_MODULE_PATH}/CPM.cmake)
+
+# JFW: sadly, I'm having trouble getting FoundationDB to build, but this is VERY close
+# to "just working", and I'd sure like it to...
+# CPMAddPackage("gh:apple/foundationdb@7.3.63")
+# message("-- enabled FoundationDB")
+
+ CPMAddPackage("gh:eyalz800/zpp_bits@4.5.1")
+ message("-- enabled zpp_bits")
+endif()
 
 #option for CephFS
 option(WITH_CEPHFS "CephFS is enabled" ON)
