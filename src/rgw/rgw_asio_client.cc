@@ -18,7 +18,9 @@ ClientIO::ClientIO(parser_type& parser, bool is_ssl,
   : parser(parser), is_ssl(is_ssl),
     local_endpoint(local_endpoint),
     remote_endpoint(remote_endpoint),
-    txbuf(*this)
+    txbuf(*this),
+    keepalive(parser.keep_alive()),
+    expect100continue(parser.get()[beast::http::field::expect] == "100-continue")
 {
 }
 
@@ -108,6 +110,17 @@ void ClientIO::flush()
 
 size_t ClientIO::send_status(int status, const char* status_name)
 {
+  if (expect100continue && !sent100continue) {
+    // a client expecting 100-continue is not required to wait for the
+    // '100 Continue' response before sending the request body. if we
+    // complete the request before sending 100 Continue (for example, due
+    // to an authorization error), we don't know whether any following
+    // bytes on this connection correspond to this request's body or the
+    // next request's header. so we must disable keepalive and require the
+    // client to use a new tcp connection for any subsequent requests
+    keepalive = false;
+  }
+
   static constexpr size_t STATUS_BUF_SIZE = 128;
 
   char statusbuf[STATUS_BUF_SIZE];
@@ -149,7 +162,7 @@ size_t ClientIO::complete_header()
     sent += txbuf.sputn(timestr, strlen(timestr));
   }
 
-  if (parser.keep_alive()) {
+  if (keep_alive()) {
     constexpr char CONN_KEEP_ALIVE[] = "Connection: Keep-Alive\r\n";
     sent += txbuf.sputn(CONN_KEEP_ALIVE, sizeof(CONN_KEEP_ALIVE) - 1);
   } else {
