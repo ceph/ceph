@@ -26,6 +26,7 @@
 #include "ConfigMonitor.h"
 #include "HealthMonitor.h"
 #include "Monitor.h"
+#include "Paxos.h"
 
 #include "common/TextTable.h"
 #include "include/stringify.h"
