@@ -449,7 +449,7 @@ cdef nogil:
         pass
     void rados_read_op_set_flags(rados_read_op_t read_op, int flags):
         pass
-    int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len):
+    int rados_omap_get_next(rados_omap_iter_t iter, char ** key, char ** val, size_t * len):
         pass
     void rados_omap_get_end(rados_omap_iter_t iter):
         pass

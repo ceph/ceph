@@ -116,7 +116,7 @@ cdef nogil:
 
     int rgw_readdir(rgw_fs *fs,
                     rgw_file_handle *parent_fh, uint64_t *offset,
-                    libcpp.bool (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
+                    int (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
                     void *cb_arg, libcpp.bool *eof, uint32_t flags) except? -9000:
         pass
 
