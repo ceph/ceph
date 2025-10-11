@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <expected>
 #include <functional>
 #include <optional>
 #include <ostream>
@@ -10,7 +11,6 @@
 #include <system_error>
 #include <utility>
 
-#include "include/expected.hpp"
 #include "include/function2.hpp"
 
 #include "rgw_common.h"
@@ -119,7 +119,7 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             sal::Driver* driver,
                             sal::User* user,
                             std::vector<IAM::Policy>* policies_ = nullptr)
-  -> tl::expected<std::unique_ptr<Identity>, int>;
+  -> std::expected<std::unique_ptr<Identity>, int>;
 
 // Load the user account and all user/group policies. May throw
 // PolicyParseException on malformed policy.
