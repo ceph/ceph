@@ -396,7 +396,8 @@ class CephadmServe:
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         with_lsm = self.mgr.device_enhanced_scan
         list_all = self.mgr.inventory_list_all
-        inventory_args = ['--', 'inventory',
+        inventory_args = ['--log-level', self.mgr.ceph_volume_log_level,
+                          '--', 'inventory',
                           '--format=json-pretty',
                           '--filter-for-batch']
         if with_lsm:
@@ -406,14 +407,14 @@ class CephadmServe:
 
         try:
             try:
-                with self.mgr.async_timeout_handler(host, 'cephadm ceph-volume -- inventory'):
+                with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume --log-level {self.mgr.ceph_volume_log_level} -- inventory'):
                     devices = self.mgr.wait_async(self._run_cephadm_json(
                         host, 'osd', 'ceph-volume', inventory_args, log_output=self.mgr.log_refresh_metadata))
             except OrchestratorError as e:
                 if 'unrecognized arguments: --filter-for-batch' in str(e):
                     rerun_args = inventory_args.copy()
                     rerun_args.remove('--filter-for-batch')
-                    with self.mgr.async_timeout_handler(host, 'cephadm ceph-volume -- inventory'):
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume --log-level {self.mgr.ceph_volume_log_level} -- inventory'):
                         devices = self.mgr.wait_async(self._run_cephadm_json(
                             host, 'osd', 'ceph-volume', rerun_args, log_output=self.mgr.log_refresh_metadata))
                 else:
