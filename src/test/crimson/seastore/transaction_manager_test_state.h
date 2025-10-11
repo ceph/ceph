@@ -294,7 +294,7 @@ protected:
     }
 #endif
     shard_stats = {};
-    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, true);
+    tm = make_transaction_manager(p_dev, sec_devices, shard_stats, 0, true);
     epm = tm->get_epm();
     lba_manager = tm->get_lba_manager();
     cache = tm->get_cache();
@@ -432,7 +432,7 @@ class SeaStoreTestState : public EphemeralTestState {
 
 protected:
   std::unique_ptr<SeaStore> seastore;
-  FuturizedStore::Shard *sharded_seastore;
+  FuturizedStore::StoreShardRef sharded_seastore;
 
   SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
@@ -452,12 +452,13 @@ protected:
     return fut.then([this] {
       return seastore->test_start(devices->get_primary_device_ref());
     }).then([this] {
-      sharded_seastore = &(seastore->get_sharded_store());
+      sharded_seastore = seastore->get_sharded_store();
     });
   }
 
   virtual seastar::future<> _destroy() final {
     devices->set_primary_device_ref(seastore->get_primary_device_ref());
+    sharded_seastore.reset();
     return seastore->stop().then([this] {
       seastore.reset();
     });
