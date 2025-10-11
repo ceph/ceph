@@ -1070,19 +1070,30 @@ def read_dedup_stats(dry_run):
 
 
 #-------------------------------------------------------------------------------
+def set_bucket_index_throttling(limit):
+    cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
+    result = admin(cmd)
+    assert result[1] == 0
+    log.debug(result[0])
+
+#-------------------------------------------------------------------------------
 def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
+    ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+    limit=random.randint(50, 200)
+    set_bucket_index_throttling(limit)
+
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
         result = admin(['dedup', 'estimate'])
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'restart', '--yes-i-really-mean-it'])
+        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
 
     dedup_time = 0
-    dedup_timeout = 5
+    dedup_timeout = 3
     dedup_stats = Dedup_Stats()
     dedup_ratio=Dedup_Ratio()
     wait_for_completion = True
@@ -1095,7 +1106,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
             wait_for_completion = False
             log.info("dedup completed in %d seconds", dedup_time)
             return (dedup_time, ret[1], ret[2], ret[3])
-
+        else:
+            ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+            limit=random.randint(50, 200)
+            set_bucket_index_throttling(limit)
 
 #-------------------------------------------------------------------------------
 def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
@@ -1308,14 +1322,14 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'restart', '--yes-i-really-mean-it'])
+    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
     if result[1] == 0:
-        log.info("full dedup is enabled!")
+        log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
         result = admin(['dedup', 'abort'])
         assert result[1] == 0
     else:
-        log.info("full dedup is disabled, skip all full dedup tests")
+        log.debug("full dedup is disabled, skip all full dedup tests")
         full_dedup_state_disabled = True
 
     full_dedup_state_was_checked = True
@@ -2039,7 +2053,7 @@ def test_dedup_inc_with_remove_multi_tenants():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
-        valid_hash=0
+        valid_sha=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -2052,7 +2066,7 @@ def test_dedup_inc_with_remove_multi_tenants():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
-                    valid_hash += num_copies_2
+                    valid_sha += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -2076,7 +2090,7 @@ def test_dedup_inc_with_remove_multi_tenants():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_hash=valid_hash
+        dedup_stats.valid_hash=valid_sha
         dedup_stats.invalid_hash=0
         dedup_stats.set_hash=0
 
@@ -2119,7 +2133,7 @@ def test_dedup_inc_with_remove():
         # REMOVE some objects and update stats/expected
         src_record=0
         shared_manifest=0
-        valid_hash=0
+        valid_sha=0
         object_keys=[]
         files_sub=[]
         dedup_stats = Dedup_Stats()
@@ -2132,7 +2146,7 @@ def test_dedup_inc_with_remove():
             log.debug("objects::%s::size=%d, num_copies=%d", filename, obj_size, num_copies_2);
             if num_copies_2:
                 if num_copies_2 > 1 and obj_size > RADOS_OBJ_SIZE:
-                    valid_hash += num_copies_2
+                    valid_sha += num_copies_2
                     src_record += 1
                     shared_manifest += (num_copies_2 - 1)
 
@@ -2163,7 +2177,7 @@ def test_dedup_inc_with_remove():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_hash=valid_hash
+        dedup_stats.valid_hash=valid_sha
         dedup_stats.invalid_hash=0
         dedup_stats.set_hash=0
 
@@ -2322,7 +2336,7 @@ def test_dedup_small_multipart():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale_with_tenants():
-    #return
+    return
 
     if full_dedup_is_disabled():
         return
@@ -2342,7 +2356,7 @@ def test_dedup_large_scale_with_tenants():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_dedup_large_scale():
-    #return
+    return
 
     if full_dedup_is_disabled():
         return
@@ -2362,7 +2376,7 @@ def test_dedup_large_scale():
 #-------------------------------------------------------------------------------
 @pytest.mark.basic_test
 def test_empty_bucket():
-    #return
+    return
 
     if full_dedup_is_disabled():
         return
