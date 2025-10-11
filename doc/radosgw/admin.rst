@@ -890,7 +890,6 @@ Options include:
 .. note:: You can specify time to a precision of minutes and seconds, but the
    specified time is stored only with a one-hour resolution.
 
-
 Show Usage
 ----------
 
@@ -924,4 +923,33 @@ example commands:
    radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
    radosgw-admin usage trim --uid=johndoe	
    radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
+
+Usage Log Key Transition
+-------------------------
+
+.. versionadded:: Umbrella
+
+The ``rgw_usage_log_key_transition`` configuration option controls how RGW handles
+usage log keys in the Umbrella release. This option is enabled by default to ensure
+compatibility with existing usage logs.
+
+In previous versions, usage log keys for user/payer IDs starting with '0' could interfere
+with time-based log keys, causing issues with log trimming and iteration. The new key format
+adds a '~' prefix to prevent this conflict.
+
+When ``rgw_usage_log_key_transition`` is enabled (default: ``true``), RGW will:
+
+- Handle both old and new usage log key formats
+- Automatically migrate old keys to the new format during normal operations
+- Ensure proper trimming and reading of usage logs during the transition period
+
+You can disable this option once all old usage logs have been migrated to improve performance:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_usage_log_key_transition false
+
+.. note:: Only disable ``rgw_usage_log_key_transition`` after confirming that no old
+   usage log entries remain in your system, as this will prevent RGW from handling
+   the old key format and may result in incomplete usage statistics or failed trim operations.
 
