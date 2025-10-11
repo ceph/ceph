@@ -79,7 +79,7 @@ export class SmbService {
     return this.http.post(`${this.baseURL}/cluster`, requestModel);
   }
 
-  removeCluster(clusterId: string) {
+  deleteCluster(clusterId: string) {
     return this.http.delete(`${this.baseURL}/cluster/${clusterId}`, {
       observe: 'response'
     });
