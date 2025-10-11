@@ -1,0 +1,14 @@
+PyYAML
+boto >=2.6.0
+boto3 >=1.0.0
+botocore
+munch >=2.0.0
+# 0.14 switches to libev, that means bootstrap needs to change too
+gevent >=1.0
+isodate >=0.4.4
+requests >=2.23.0
+pytz
+httplib2
+lxml
+pytest
+tox
