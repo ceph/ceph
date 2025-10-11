@@ -1,7 +1,7 @@
 ---
 name: "Check for missing .qa links"
 on:
-  pull_request:
+  pull_request_target:
     types:
       - opened
       - synchronize
@@ -12,18 +12,20 @@ jobs:
   pull_request:
     name: "Check for missing .qa links"
     runs-on: ubuntu-latest
+    if: github.repository == 'ceph/ceph'
     steps:
-      - name: checkout PR HEAD
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - name: Checkout main branch for pull_request_target
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          path: head
+          ref: 'refs/heads/main'
+          path: main
 
-      - name: checkout base
-        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
+      - name: checkout PR HEAD
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          path: base
-          ref: ${{ github.base_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: pull_request
 
       - name: verify .qa links
-        run: ../base/src/script/verify-qa
-        working-directory: head/
+        run: ../main/src/script/verify-qa
+        working-directory: pull_request/
