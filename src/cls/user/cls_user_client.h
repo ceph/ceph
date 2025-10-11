@@ -18,7 +18,7 @@ public:
  * user objclass
  */
 
-void cls_user_set_buckets(librados::ObjectWriteOperation& op, std::list<cls_user_bucket_entry>& entries, bool add);
+void cls_user_set_buckets(librados::ObjectWriteOperation& op, std::list<cls_user_bucket_entry>& entries, bool add, bool reset);
 void cls_user_complete_stats_sync(librados::ObjectWriteOperation& op);
 void cls_user_remove_bucket(librados::ObjectWriteOperation& op,  const cls_user_bucket& bucket);
 void cls_user_bucket_list(librados::ObjectReadOperation& op,
