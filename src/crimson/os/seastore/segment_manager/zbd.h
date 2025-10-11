@@ -74,15 +74,15 @@ namespace crimson::os::seastore::segment_manager::zbd {
     }
 
     void validate() const {
-      ceph_assert_always(shard_num == seastar::smp::count);
+      ceph_assert(shard_num == seastar::smp::count);
       for (unsigned int i = 0; i < seastar::smp::count; i++) {
-        ceph_assert_always(shard_infos[i].size > 0);
-        ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
-        ceph_assert_always(shard_infos[i].segments > 0);
-        ceph_assert_always(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
+        ceph_assert(shard_infos[i].size > 0);
+        ceph_assert(shard_infos[i].size <= DEVICE_OFF_MAX);
+        ceph_assert(shard_infos[i].segments > 0);
+        ceph_assert(shard_infos[i].segments <= DEVICE_SEGMENT_ID_MAX);
       }
-      ceph_assert_always(segment_capacity > 0);
-      ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
+      ceph_assert(segment_capacity > 0);
+      ceph_assert(segment_capacity <= SEGMENT_OFF_MAX);
     }
   };
 

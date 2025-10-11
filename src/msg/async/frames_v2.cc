@@ -320,7 +320,7 @@ Tag FrameAssembler::disassemble_preamble(bufferlist& preamble_bl) {
   m_flags = preamble->flags;
   // If frame has been compressed, 
   // we need to make sure the compression handler has been setup
-  ceph_assert_always(!is_compressed() || m_compression->rx);
+  ceph_assert(!is_compressed() || m_compression->rx);
 
   return static_cast<Tag>(preamble->tag);
 }
