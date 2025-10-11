@@ -24,7 +24,8 @@ std::ostream &operator<<(std::ostream &out,
              << ")";
 }
 
-CircularJournalSpace::CircularJournalSpace(RBMDevice * device) : device(device) {}
+CircularJournalSpace::CircularJournalSpace(RBMDevice * device, int stream_id) 
+  : device(device), stream_id(stream_id) {}
   
 bool CircularJournalSpace::needs_roll(std::size_t length) const {
   if (length + get_rbm_addr(get_written_to()) >= get_journal_end()) {
@@ -167,7 +168,7 @@ CircularJournalSpace::device_write_bl(
     "overwrite in CircularJournalSpace, offset {}, length {}",
     offset,
     length);
-  return device->writev(offset, bl
+  return device->writev(offset, bl, stream_id
   ).handle_error(
     submit_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error device->write" }
@@ -231,7 +232,7 @@ CircularJournalSpace::write_header()
   assert(bl.length() < get_block_size());
   bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
   iter.copy(bl.length(), bp.c_str());
-  return device->write(device->get_shard_journal_start(), std::move(bp)
+  return device->write(device->get_shard_journal_start(), std::move(bp), stream_id
   ).handle_error(
     submit_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error device->write" }

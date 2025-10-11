@@ -55,7 +55,8 @@ constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 class CircularBoundedJournal : public Journal, RecordScanner {
 public:
   CircularBoundedJournal(
-      JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
+      JournalTrimmer &trimmer, RBMDevice* device, const std::string &path,
+      int stream_id = 0);
   ~CircularBoundedJournal() {}
 
   JournalTrimmer &get_trimmer() final {
