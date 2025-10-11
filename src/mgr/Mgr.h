@@ -67,6 +67,7 @@ protected:
 
   bool initialized;
   bool initializing;
+  ceph::coarse_mono_time initialization_start_time;
 
 public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
@@ -76,6 +77,7 @@ public:
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
+  bool exceeded_initialization_expiration();
   entity_addrvec_t get_server_addrs() const {
     return server.get_myaddrs();
   }
