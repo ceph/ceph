@@ -908,6 +908,11 @@ class OSDThrasher(Thrasher):
         pool = self.ceph_manager.get_pool()
         if pool is None:
             return
+        no_pg_change = self.ceph_manager.get_pool_property(pool, 'nopgchange')
+        if no_pg_change:
+            self.log("Pool %s has nopgchange set to true" % (pool,))
+            self.ceph_manager.set_pool_property(pool, 'nopgchange', 0)
+
         self.log("Growing pool %s" % (pool,))
         if self.ceph_manager.expand_pool(pool,
                                          self.config.get('pool_grow_by', 10),
