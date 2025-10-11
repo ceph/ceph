@@ -3,7 +3,6 @@
 
 #include "rgw_service.h"
 
-#include "services/svc_finisher.h"
 #include "services/svc_bi_rados.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bucket_sobj.h"
@@ -57,7 +56,6 @@ int RGWServices_Def::init(CephContext *cct,
                           rgw::sal::ConfigStore* cfgstore,
                           const rgw::SiteConfig* site)
 {
-  finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
   bucket_sync_sobj = std::make_unique<RGWSI_Bucket_Sync_SObj>(cct);
   bi_rados = std::make_unique<RGWSI_BucketIndex_RADOS>(cct);
@@ -66,7 +64,9 @@ int RGWServices_Def::init(CephContext *cct,
   config_key_rados = std::make_unique<RGWSI_ConfigKey_RADOS>(cct);
   datalog_rados = std::make_unique<RGWDataChangesLog>(driver);
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync, cfgstore);
-  notify = std::make_unique<RGWSI_Notify>(cct);
+  if (have_cache) {
+    notify = std::make_unique<RGWSI_Notify>(cct);
+  }
   zone = std::make_unique<RGWSI_Zone>(cct, cfgstore, site);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
@@ -82,7 +82,6 @@ int RGWServices_Def::init(CephContext *cct,
   }
 
   async_processor->start();
-  finisher->init();
   bi_rados->init(zone.get(), driver->getRados()->get_rados_handle(),
 		 bilog_rados.get(), datalog_rados.get());
   bilog_rados->init(bi_rados.get());
@@ -97,8 +96,9 @@ int RGWServices_Def::init(CephContext *cct,
   config_key_rados->init(driver->getRados()->get_rados_handle());
   mdlog->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(),
 	      cls.get(), async_processor.get());
-  notify->init(zone.get(), driver->getRados()->get_rados_handle(),
-	       finisher.get());
+  if (notify) {
+    notify->init(zone.get(), driver->getRados()->get_rados_handle());
+  }
   zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
 	     sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(driver->getRados()->get_rados_handle(), zone.get());
@@ -116,13 +116,9 @@ int RGWServices_Def::init(CephContext *cct,
 
   can_shutdown = true;
 
-  int r = finisher->start(y, dpp);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to start finisher service (" << cpp_strerror(-r) << dendl;
-    return r;
-  }
+  int r = 0;
 
-  if (!raw) {
+  if (notify) {
     r = notify->start(y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to start notify service (" << cpp_strerror(-r) << dendl;
@@ -240,7 +236,9 @@ void RGWServices_Def::shutdown()
   datalog_rados.reset();
   user_rados->shutdown();
   sync_modules->shutdown();
-  notify->shutdown();
+  if (notify) {
+    notify->shutdown();
+  }
   mdlog->shutdown();
   config_key_rados->shutdown();
   cls->shutdown();
@@ -248,11 +246,9 @@ void RGWServices_Def::shutdown()
   bi_rados->shutdown();
   bucket_sync_sobj->shutdown();
   bucket_sobj->shutdown();
-  finisher->shutdown();
 
   sysobj->shutdown();
   sysobj_core->shutdown();
-  notify->shutdown();
   if (sysobj_cache) {
     sysobj_cache->shutdown();
   }
@@ -274,7 +270,6 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
     return r;
   }
 
-  finisher = _svc.finisher.get();
   bi_rados = _svc.bi_rados.get();
   bi = bi_rados;
   bilog_rados = _svc.bilog_rados.get();
@@ -287,7 +282,6 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
   config_key = config_key_rados;
   datalog_rados = _svc.datalog_rados.get();
   mdlog = _svc.mdlog.get();
-  notify = _svc.notify.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();
