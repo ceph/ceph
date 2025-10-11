@@ -250,7 +250,7 @@ public:
   
   // copy cons
   CDentry(const CDentry& m);
-  const CDentry& operator= (const CDentry& right);
+  CDentry& operator=(const CDentry& right) = delete;
 
   // misc
   void make_trimmed_path_string(std::string& s, bool projected,
