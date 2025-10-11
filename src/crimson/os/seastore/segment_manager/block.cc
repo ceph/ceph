@@ -267,6 +267,9 @@ open_device_ret open_device(
     ).then([stat, &path, FNAME](auto file) mutable {
       return file.size().then([stat, file, &path, FNAME](auto size) mutable {
         stat.size = size;
+        // Use Seastar's DMA alignment requirement instead of stat's block_size
+        // to ensure writes are properly aligned for optimal performance
+        stat.block_size = file.disk_write_dma_alignment();
         INFO("path={} successful, size=0x{:x}, block_size=0x{:x}",
              path, stat.size, stat.block_size);
         return std::make_pair(file, stat);
