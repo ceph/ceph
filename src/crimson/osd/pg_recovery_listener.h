@@ -18,7 +18,7 @@ class PGRecovery;
 class PGRecoveryListener {
 public:
   virtual crimson::osd::ShardServices& get_shard_services() = 0;
-  virtual DoutPrefixProvider& get_dpp() = 0;
+  virtual DoutPrefixProvider* get_dpp() = 0;
   virtual PGRecovery* get_recovery_handler() = 0;
   virtual epoch_t get_osdmap_epoch() const = 0;
   virtual bool is_primary() const = 0;
