@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-ignorelist:
+      - MIRRORING_FAILURE
     conf:
       mgr:
         debug client: 10
