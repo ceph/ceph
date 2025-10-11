@@ -1087,3 +1087,27 @@ __public int64_t ceph_ll_nonblocking_readv_writev(
 
 	return ans.res;
 }
+
+__public int64_t ceph_ll_nonblocking_fsync(struct ceph_mount_info *cmount,
+					   Inode *in,
+					   struct ceph_ll_io_info *io_info)
+{
+	CEPH_REQ(ceph_ll_nonblocking_fsync, req, 0, ans, 0);
+	int32_t err;
+
+	if ((cmount->neg.v1.enabled & PROXY_FEAT_ASYNC_IO) == 0) {
+		return -EOPNOTSUPP;
+	}
+
+	req.info = ptr_checksum(&cmount->async.random, io_info);
+	req.inode = ptr_value(in);
+	req.syncdataonly = io_info->syncdataonly;
+
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC, req,
+			   ans);
+	if (err < 0) {
+		return err;
+	}
+
+	return ans.res;
+}
