@@ -4508,6 +4508,20 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_ratelimit_interval
+  type: uint
+  level: advanced
+  desc: Time window for rate limiting in seconds
+  long_desc: This option sets the time window for rate limiting accumulation in seconds.
+    Requests that exceed the configured rate limits within this time window will be rejected.
+    The default is a 60 second token bucket.
+  default: 60
+  min: 1
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_redis_connection_pool_size
   type: int
   level: basic
