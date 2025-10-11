@@ -310,8 +310,14 @@ namespace rgw::dedup {
                          this->non_default_storage_class_objs_bytes);
       }
       else {
-        ceph_assert(this->default_storage_class_objs == this->ingress_obj);
-        ceph_assert(this->default_storage_class_objs_bytes == this->ingress_obj_bytes);
+        if (this->default_storage_class_objs != this->ingress_obj) {
+          f->dump_unsigned("default storage class objs",
+                           this->default_storage_class_objs);
+        }
+        if (this->default_storage_class_objs_bytes != this->ingress_obj_bytes) {
+          f->dump_unsigned("default storage class objs bytes",
+                           this->default_storage_class_objs_bytes);
+        }
       }
     }
 
