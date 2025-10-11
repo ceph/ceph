@@ -112,6 +112,7 @@ class D4NFilterBucket : public FilterBucket {
       uint16_t flags;
     };
     D4NFilterDriver* filter;
+    bool cache_request{false};
 
   public:
     D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
@@ -129,6 +130,7 @@ class D4NFilterBucket : public FilterBucket {
 				const std::string& oid,
 				std::optional<std::string> upload_id=std::nullopt,
 				ACLOwner owner={}, ceph::real_time mtime=real_clock::now()) override;
+    void set_cache_request() { cache_request = true; }
 };
 
 class D4NFilterObject : public FilterObject {
@@ -144,6 +146,7 @@ class D4NFilterObject : public FilterObject {
     bool exists_in_cache{false};
     bool load_from_store{false};
     bool attrs_read_from_cache{false};
+    bool cache_request{false};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -297,6 +300,9 @@ class D4NFilterObject : public FilterObject {
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
     void set_load_obj_from_store(bool load_from_store) { this->load_from_store = load_from_store; }
+    int delete_cache_entry(const DoutPrefixProvider* dpp, const std::string key, optional_yield y);
+    void set_cache_request() { cache_request = true; }
+    bool is_cache_request() { return cache_request; }
 };
 
 class D4NFilterWriter : public FilterWriter {
@@ -335,6 +341,7 @@ class D4NFilterWriter : public FilterWriter {
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+   void set_cache_request() { object->set_cache_request(); }
 };
 
 class D4NFilterMultipartUpload : public FilterMultipartUpload {
