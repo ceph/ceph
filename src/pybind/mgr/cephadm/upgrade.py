@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+import datetime
 import uuid
 from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast
 from cephadm.services.service_registry import service_registry
@@ -346,6 +347,12 @@ class CephadmUpgrade:
 
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
+
+        if not self.mgr.bootstrap_version_stored:
+            if self.mgr.db_ready():
+                self.mgr.version_tracker.add_bootstrap_cluster_version()
+            else:
+                self.mgr.log.debug('Version Tracker, Cluster bootstrap version "' +  self.mgr._version + '" could not be added during upgrade: mgr db not ready')
 
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
@@ -1090,6 +1097,10 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+        if self.mgr.version_tracker.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc))):
+            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + self.mgr._version + '" added successfully')
+        else:
+            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + self.mgr._version + '" could not be added')
         self.upgrade_state = None
         self._save_upgrade_state()
 

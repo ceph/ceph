@@ -120,6 +120,12 @@ class CephadmServe:
 
                     self._check_for_moved_osds()
 
+                    if not self.mgr.bootstrap_version_stored:
+                        if self.mgr.db_ready():
+                            self.mgr.version_tracker.add_bootstrap_cluster_version()
+                        else:
+                            self.mgr.log.debug('Version Tracker, Cluster bootstrap version "' +  self.mgr._version + '" could not be added during serve: mgr db not ready')
+                        
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
 
