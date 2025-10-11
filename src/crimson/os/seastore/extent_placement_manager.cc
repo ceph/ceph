@@ -448,21 +448,34 @@ ExtentPlacementManager::open_ertr::future<>
 ExtentPlacementManager::open_for_write()
 {
   LOG_PREFIX(ExtentPlacementManager::open_for_write);
-  INFO("started with {} devices", num_devices);
+  DEBUG("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
-  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+
+#ifndef UNIT_TESTS_BUILT
+  auto total_writers_num =
+    data_writers_by_gen.size() + md_writers_by_gen.size();
+  if (auto segments = background_process.get_segments_info();
+      segments && // Only valid for SegmentCleaner
+      std::cmp_less(segments->get_num_empty(), total_writers_num)) {
+    ERROR("Not enough EMPTY segments! "
+          "Consider increasing the device size (needed {} got {})",
+          total_writers_num, segments->get_num_empty());
+    co_await open_ertr::future<>(crimson::ct_error::enospc::make());
+  }
+#endif
+
+  DEBUG("opening DATA writers", num_devices);
+  for (auto& writer : data_writers_by_gen) {
     if (writer) {
-      return writer->open();
+      co_await writer->open();
     }
-    return open_ertr::now();
-  }).safe_then([this] {
-    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      if (writer) {
-	return writer->open();
-      }
-      return open_ertr::now();
-    });
-  });
+  }
+  DEBUG("opening METADATA writers", num_devices);
+  for (auto& writer : md_writers_by_gen) {
+    if (writer) {
+      co_await writer->open();
+    }
+  }
 }
 
 ExtentPlacementManager::dispatch_result_t
@@ -584,6 +597,22 @@ void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) co
   }
 }
 
+ExtentPlacementManager::mount_ret ExtentPlacementManager::BackgroundProcess::mount() {
+  LOG_PREFIX(BackgroundProcess::mount);
+  DEBUG("start");
+  ceph_assert(state == state_t::STOP);
+  state = state_t::MOUNT;
+  trimmer->reset();
+  stats = {};
+  register_metrics();
+  DEBUG("mounting main cleaner");
+  co_await main_cleaner->mount();
+  if (has_cold_tier()) {
+    DEBUG("mounting cold cleaner");
+    co_await cold_cleaner->mount();
+  }
+}
+
 void ExtentPlacementManager::BackgroundProcess::start_background()
 {
   LOG_PREFIX(BackgroundProcess::start_background);
@@ -672,7 +701,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {
   if (!is_ready()) {
-    return seastar::now();
+    co_return;
   }
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
@@ -681,7 +710,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
 
   auto res = try_reserve_io(usage);
   if (res.is_successful()) {
-    return seastar::now();
+    co_return;
   } else {
     LOG_PREFIX(BackgroundProcess::reserve_projected_usage);
     DEBUG("blocked: inline={}, main={}, cold={}, usage={}",
@@ -702,37 +731,36 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
 
     blocking_io = seastar::promise<>();
     auto begin_time = seastar::lowres_system_clock::now();
-    return blocking_io->get_future(
-    ).then([this, usage, FNAME, begin_time] {
-      return seastar::repeat([this, usage, FNAME, begin_time] {
-        ceph_assert(!blocking_io);
-        auto res = try_reserve_io(usage);
-        if (res.is_successful()) {
-          DEBUG("unblocked");
-          assert(stats.io_blocking_num == 1);
-          --stats.io_blocking_num;
-          auto end_time = seastar::lowres_system_clock::now();
-          auto duration = end_time - begin_time;
-          stats.io_blocked_time += std::chrono::duration_cast<
-            std::chrono::milliseconds>(duration).count();
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        } else {
-          DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
-                res.reserve_inline_success,
-                res.cleaner_result.reserve_main_success,
-                res.cleaner_result.reserve_cold_success,
-                usage);
-          abort_io_usage(usage, res);
-          blocking_io = seastar::promise<>();
-          return blocking_io->get_future(
-          ).then([] {
-            return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
-          });
+    // we just blocked this IO, now wait until
+    // maybe_wake_blocked_io will set value to blocking_io
+    do {
+      co_await blocking_io->get_future();
+      ceph_assert(!blocking_io);
+      auto res = try_reserve_io(usage);
+      if (res.is_successful()) {
+        DEBUG("unblocked");
+        assert(stats.io_blocking_num == 1);
+        --stats.io_blocking_num;
+        auto end_time = seastar::lowres_system_clock::now();
+        auto duration = end_time - begin_time;
+        stats.io_blocked_time += std::chrono::duration_cast<
+        std::chrono::milliseconds>(duration).count();
+      } else {
+        DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
+              res.reserve_inline_success,
+              res.cleaner_result.reserve_main_success,
+              res.cleaner_result.reserve_cold_success,
+              usage);
+        abort_io_usage(usage, res);
+        if (!res.reserve_inline_success) {
+          ++stats.io_retried_blocked_count_trim;
         }
-      });
-    });
+          if (!res.cleaner_result.is_successful()) {
+          ++stats.io_retried_blocked_count_clean;
+        }
+        blocking_io = seastar::promise<>();
+      }
+    } while (blocking_io);
   }
 }
 
@@ -988,6 +1016,10 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
                      sm::description("IOs that are blocked by gc")),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
                      sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_retried_blocked_count_clean", stats.io_blocked_count_clean,
+                     sm::description("Retried IOs that are blocked by cleaning")),
+    sm::make_counter("io_retried_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("Retried IOs that are blocked by trimming")),
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
