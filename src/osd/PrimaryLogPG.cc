@@ -552,7 +552,7 @@ common::intrusive_timer &PrimaryLogPG::get_pg_timer()
   return osd->pg_timer;
 }
 
-void PrimaryLogPG::replica_clear_repop_obc(
+void PrimaryLogPG::clear_repop_obc(
   const vector<pg_log_entry_t> &logv,
   ObjectStore::Transaction &t)
 {
@@ -2064,6 +2064,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->handle_misdirected_op(this, op);
       return;
     }
+    op->set_balance_read();
   } else {
     // normal case; must be primary
     if (!is_primary()) {
@@ -2346,15 +2347,20 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (!is_primary()) {
-    if (!recovery_state.can_serve_replica_read(oid)) {
+    if (!recovery_state.can_serve_read(oid)) {
+      std::string_view storage_object = "replica";
+      if (pool.info.is_erasure()) {
+        storage_object = "shard";
+      }
       dout(20) << __func__
-               << ": unstable write on replica, bouncing to primary "
+               << ": unstable write on " << storage_object
+               << ", bouncing to primary "
 	       << *m << dendl;
       osd->logger->inc(l_osd_replica_read_redirect_conflict);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
-    dout(20) << __func__ << ": serving replica read on oid " << oid
+    dout(20) << __func__ << ": serving read on oid " << oid
              << dendl;
     osd->logger->inc(l_osd_replica_read_served);
   }
@@ -5883,6 +5889,13 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
+
+    if (ctx->op->balance_read()) {
+      result = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+
+        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
     ctx->pending_async_reads.push_back(
       make_pair(
         boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
@@ -5894,6 +5907,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5953,7 +5967,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.is_erasure()) {
+  if (pool.info.is_erasure() && !ctx->op->balance_read()) {
     // translate sparse read to a normal one if not supported
 
     if (length > 0) {
@@ -5976,9 +5990,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
+    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
-			       offset, length, m);
+			       shard_offset, shard_length, m);
     if (r < 0)  {
       return r;
     }
@@ -5989,6 +6004,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
+      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
       return r;
     }
 
@@ -5996,7 +6012,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for spare-read add
     // checksum make sense.
-    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
+    // For now, we do not check the CRC for EC ever. We could implement this,
+    // but it would only work for very small objects and as such is probably
+    // not very useful.
+    if ((uint64_t)r == oi.size && oi.is_data_digest() && pool.info.is_erasure()) {
       uint32_t crc = data_bl.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
