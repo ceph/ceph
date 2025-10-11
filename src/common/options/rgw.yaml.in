@@ -4028,6 +4028,7 @@ options:
   - none
   - base
   - d4n
+  - d4n_fdb
 - name: dbstore_db_dir
   type: str
   level: advanced
