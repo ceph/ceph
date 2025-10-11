@@ -68,7 +68,7 @@ protected:
   void handle_mgr_map(ceph::ref_t<MMgrMap> m);
   void _update_log_config();
   void send_beacon();
-
+  void update_active_module_perf_counters() const;
   bool available_in_map;
 
 public:
