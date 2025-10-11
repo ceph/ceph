@@ -1070,6 +1070,97 @@ following command.
 
 .. _subvol-pinning:
 
+Controlling Subvolume Snapshot Visibility
+-----------------------------------------
+
+.. note:: This functionality is currently supported only for FUSE/libcephfs clients.
+          Kernel client support is planned: progress can be tracked at
+          https://tracker.ceph.com/issues/72589.
+
+Snapshots of a subvolume can be hidden from compatible clients by
+performing two actions:
+    1) Set the subvolume's ``snapshot_visibility`` flag to ``false`` (default is ``true``).
+    2) Set the client-side configuration option ``client_respect_subvolume_snapshot_visibility``
+       to ``true`` for the intended client(s) (default is ``false``).
+
+The CLI command for toggling ``snapshot_visibility`` is as follows:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot_visibility set <vol_name> <sub_volname> [--group-name <subvol_group_name>] <true|false>
+
+This command updates the internal vxattr ``ceph.dir.subvolume.snaps.visible``
+and sets the ``is_snapdir_visible`` flag within the dirinode(i.e. subvolume’s)
+SnapRealm.
+
+.. note:: Although direct modification is possible, using the subvolume API is
+          recommended. It is more convenient and avoids potential ``EPERM``
+          (Permission Denied) errors when setting vxattrs, especially if the
+          client lacks the required capabilities. The way to set this vxattr
+          is:
+
+          .. prompt:: bash #
+
+             setfattr -n ceph.dir.subvolume.snaps.visible -v 0|1 <subvolume_path>
+
+The ``client_respect_subvolume_snapshot_visibility`` setting determines whether
+a client honors the subvolume's visibility flag. This can be set per-client
+using:
+
+.. prompt:: bash #
+
+   ceph config set client.<id> client_respect_subvolume_snapshot_visibility <true|false>
+
+.. note:: The `id` over here is a CephX user.
+
+To set the ``client_respect_subvolume_snapshot_visibility`` config globally
+across all the clients, issue the command without specifying an ``id``:
+
+.. prompt:: bash #
+
+   ceph config set client client_respect_subvolume_snapshot_visibility <true|false>
+
+.. note:: The MGR daemon operates as a privileged CephFS client and therefore
+          bypasses snapshot visibility restrictions. This behavior is required
+          to ensure the reliable execution of operations such as snap-schedule
+          and snapshot cloning. As a result, modifying the
+          ``client_respect_subvolume_snapshot_visibility`` configuration option
+          has no effect on the CephFS instance running within the MGR daemon.
+
+How to disable snapshot visibility on a subvolume?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Say, for instance, to prevent snapshots of subvolume ``sv1`` under a volume
+``vol1`` from being visible to a client authenticated with the CephX user
+``client.user1``, first disable the ``snapshot_visibility`` flag on ``sv1``
+using:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot_visibility set vol1 sv1 false
+
+Then toggle the client config using:
+
+.. prompt:: bash #
+
+   ceph config set client.user1 client_respect_subvolume_snapshot_visibility true
+
+This effectively prevents the client mounted using ``client.user1`` from
+performing a ``lookup()`` call on the ``.snap`` directory of the ``sv1``
+subvolume, thereby hiding its snapshots.
+
+.. note:: When a subvolume's snapshot visibility is disabled, any snapshot
+          operations including snapshot creation, deletion, or renaming are
+          prevented, since they rely on a successful ``.snap`` directory
+          lookup.
+
+.. note:: A subvolume’s snapshot visibility is determined entirely by whether
+          the client is configured to respect the subvolume’s ``snapshot_visibility``
+          flag. That is, regardless of whether the flag is set to ``true`` or
+          ``false`` on the subvolume, it will be ignored unless the client’s
+          ``client_respect_subvolume_snapshot_visibility`` setting is
+          explicitly set to ``true``.
+
 Pinning Subvolumes and Subvolume Groups
 ---------------------------------------
 

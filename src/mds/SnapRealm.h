@@ -152,6 +152,8 @@ private:
   mutable ceph::buffer::list cached_snap_trace;
   mutable ceph::buffer::list cached_snap_trace_new;
   mutable inodeno_t cached_subvolume_ino = 0;
+  mutable utime_t cached_last_modified = utime_t();
+  mutable uint64_t cached_change_attr = 0;
 };
 
 std::ostream& operator<<(std::ostream& out, const SnapRealm &realm);

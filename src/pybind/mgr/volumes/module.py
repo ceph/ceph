@@ -576,6 +576,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Cancel an pending or ongoing clone operation.",
             'perm': 'r'
         },
+        {
+            'cmd': 'fs subvolume snapshot_visibility set'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=value,type=CephString,req=true'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Set snapdir visibility for subvolume",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolume snapshot_visibility get'
+                   ' name=vol_name,type=CephString'
+                   ' name=sub_name,type=CephString'
+                   ' name=group_name,type=CephString,req=false',
+            'desc': "Get snapdir visibility for subvolume",
+            'perm': 'rw'
+        },
         # volume ls [recursive]
         # subvolume ls <volume>
         # volume authorize/deauthorize
@@ -1097,3 +1114,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         return self.vc.subvolume_info(vol_name=vol_name,
                                       sub_name=subvol,
                                       group_name=group_name)
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_visibility_set(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_visibility_set(vol_name=cmd['vol_name'],
+                                                        sub_name=cmd['sub_name'],
+                                                        value=cmd['value'],
+                                                        group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_snapshot_visibility_get(self, inbuf, cmd):
+        return self.vc.subvolume_snapshot_visibility_get(vol_name=cmd['vol_name'],
+                                                        sub_name=cmd['sub_name'],
+                                                        group_name=cmd.get('group_name', None))

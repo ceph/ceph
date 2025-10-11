@@ -432,6 +432,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   injected_write_delay_secs = std::chrono::duration<int>(
     cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
 
+  respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
+    "client_respect_subvolume_snapshot_visibility");
+
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
 
@@ -5315,13 +5318,16 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 }
 
 struct SnapRealmInfoMeta {
-  SnapRealmInfoMeta(utime_t last_modified, uint64_t change_attr)
+  SnapRealmInfoMeta(utime_t last_modified,
+                    uint64_t change_attr,
+                    bool is_snapdir_visible)
     : last_modified(last_modified),
-      change_attr(change_attr) {
-  }
+      change_attr(change_attr),
+      is_snapdir_visible(is_snapdir_visible) {}
 
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible;
 };
 
 static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm_info(
@@ -5329,7 +5335,8 @@ static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm
   if (session->mds_features.test(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
     SnapRealmInfoNew ninfo;
     decode(ninfo, p);
-    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified, ninfo.change_attr));
+    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified,
+                          ninfo.change_attr, ninfo.flags & SnapRealmInfoNew::SNAPDIR_VISIBILITY));
   } else {
     SnapRealmInfo info;
     decode(info, p);
@@ -5387,6 +5394,7 @@ void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapR
       if (realm_info_meta) {
         realm->last_modified = (*realm_info_meta).last_modified;
         realm->change_attr = (*realm_info_meta).change_attr;
+        realm->is_snapdir_visible = (*realm_info_meta).is_snapdir_visible;
       }
       realm->my_snaps = info.my_snaps;
       invalidate = true;
@@ -7603,6 +7611,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == cct->_conf->client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
+    if (respect_subvolume_snapshot_visibility &&
+        !dir->snaprealm->is_snapdir_visible) {
+      r = -EPERM;
+      goto done;
+    }
     *target = open_snapdir(dir);
     goto done;
   }
@@ -13348,6 +13361,10 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
   if (int rc = path_walk(cwd, filepath(relpath), &wdr, perm, {}); rc < 0) {
     return rc;
   }
+  if (respect_subvolume_snapshot_visibility &&
+      !wdr.target->snaprealm->is_snapdir_visible) {
+      return -EPERM;
+  }
   auto snapdir = open_snapdir(wdr.target);
   if (int rc = path_walk(std::move(snapdir), filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
     return rc;
@@ -13365,6 +13382,10 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   InodeRef in;
   if (int rc = path_walk(cwd, filepath(relpath), &in, perms, {}); rc < 0) {
     return rc;
+  }
+  if (respect_subvolume_snapshot_visibility &&
+      !in->snaprealm->is_snapdir_visible) {
+      return -EPERM;
   }
   auto snapdir = open_snapdir(in.get());
   return _rmdir(snapdir.get(), name, perms, check_perms);
@@ -17672,6 +17693,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_oc_size",
     "client_oc_target_dirty",
     "client_permissions",
+    "client_respect_subvolume_snapshot_visibility",
     "fuse_default_permissions"
   });
   static_assert(std::is_sorted(begin(as_sv), end(as_sv)));
@@ -17729,6 +17751,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_inject_write_delay_secs")) {
     injected_write_delay_secs = std::chrono::duration<int>(
       cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
+  }
+  if (changed.count("client_respect_subvolume_snapshot_visibility")) {
+    respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
+      "client_respect_subvolume_snapshot_visibility");
   }
 }
 
