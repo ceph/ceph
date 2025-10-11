@@ -19,7 +19,7 @@ import { MdsDashboardSummaryPipe } from './mds-dashboard-summary.pipe';
 import { MgrDashboardSummaryPipe } from './mgr-dashboard-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
 import { osdDashboardSummaryPipe } from './osd-dashboard-summary.pipe';
-import { ToggletipModule } from 'carbon-components-angular';
+import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -32,7 +32,10 @@ import { ToggletipModule } from 'carbon-components-angular';
     ReactiveFormsModule,
     DashboardV3Module,
     BaseChartDirective,
-    ToggletipModule
+    ToggletipModule,
+    ModalModule,
+    InputModule,
+    SelectModule
   ],
   declarations: [
     HealthComponent,
