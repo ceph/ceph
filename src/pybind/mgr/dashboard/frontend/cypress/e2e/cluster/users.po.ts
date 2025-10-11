@@ -49,7 +49,7 @@ export class UsersPageHelper extends PageHelper {
     this.getTableCell(this.columnIndex.entity, entityName)
       .click()
       .parent()
-      .find(`[cdstabledata]:nth-child(${this.columnIndex.capabilities}) .badge`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.capabilities}) cds-tag`)
       .should(($ele) => {
         const newCaps = $ele.toArray().map((v) => v.innerText);
         for (const cap of capabilities) {

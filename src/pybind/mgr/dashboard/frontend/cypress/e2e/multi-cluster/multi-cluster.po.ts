@@ -64,7 +64,7 @@ export class MultiClusterPageHelper extends PageHelper {
 
     this.getTableCell(aliasIndex, alias)
       .parent()
-      .find(`[cdstabledata]:nth-child(${statusIndex}) .badge`)
+      .find(`[cdstabledata]:nth-child(${statusIndex}) cds-tag`)
       .should(($ele) => {
         const status = $ele.toArray().map((v) => v.innerText);
         expect(status).to.include(expectedStatus);
