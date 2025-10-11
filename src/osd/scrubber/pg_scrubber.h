@@ -365,6 +365,11 @@ class PgScrubber : public ScrubPgIF,
     ceph::Formatter* f,
     scrub_level_t scrub_level) final;
 
+  void on_operator_defer_request(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    bool starting_now) final;
+
   void dump_scrubber(ceph::Formatter* f) const final;
 
   // used if we are a replica
