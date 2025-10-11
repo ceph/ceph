@@ -427,11 +427,14 @@ std::set<std::pair<unsigned, unsigned>> ConnectionTracker::get_netsplit(
     }
     // For debugging purposes:
     if (cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
-      ldout(cct, 30) << "Netsplit pairs: " << dendl;
+      ldout(cct, 30) << "Netsplit pairs: {";
+      bool first = true;
       for (const auto& nsp_pair : nsp_pairs) {
-        ldout(cct, 30) << "(" << nsp_pair.first << ", "
-          << nsp_pair.second << ") " << dendl;
+        if (!first) *_dout << ", ";
+        first = false;
+        *_dout << "(" << nsp_pair.first << ", " << nsp_pair.second << ")";
       }
+      *_dout << "}" << dendl;
     }
     return nsp_pairs;
 }
