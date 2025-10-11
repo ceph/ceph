@@ -969,6 +969,11 @@ void MonClient::tick()
 {
   ldout(cct, 10) << __func__ << dendl;
 
+  if (stopping) {
+    ldout(cct, 1) << "skipping tick on shutdown" << dendl;
+    return;
+  }
+
   utime_t now = ceph_clock_now();
 
   auto reschedule_tick = make_scope_guard([this] {
