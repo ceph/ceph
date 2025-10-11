@@ -84,9 +84,8 @@ void LazyOmapStatsTest::init(const int argc, const char** argv)
       "size": )" + to_string(conf.replica_count) +
                    R"(
     })";
-  librados::bufferlist inbl;
   string output;
-  ret = rados.mon_command(command, inbl, nullptr, &output);
+  ret = rados.mon_command(std::move(command), {}, nullptr, &output);
   if (output.length()) cout << output << endl;
   if (ret < 0) {
     ret = -ret;
@@ -197,7 +196,7 @@ void LazyOmapStatsTest::scrub()
   sleep(5);
 
   string command = R"({"prefix": "osd deep-scrub", "who": "all"})";
-  auto output = get_output(command);
+  auto output = get_output(std::move(command));
   cout << output << endl;
 
   cout << "Waiting for deep-scrub to complete..." << endl;
@@ -232,17 +231,17 @@ const int LazyOmapStatsTest::find_matches(string& output, boost::regex& reg) con
   return x;
 }
 
-const string LazyOmapStatsTest::get_output(const string command,
+const string LazyOmapStatsTest::get_output(std::string&& command,
                                            const bool silent,
                                            const CommandTarget target)
 {
-  librados::bufferlist inbl, outbl;
+  librados::bufferlist outbl;
   string output;
   int ret = 0;
   if (target == CommandTarget::TARGET_MON) {
-    ret = rados.mon_command(command, inbl, &outbl, &output);
+    ret = rados.mon_command(std::move(command), {}, &outbl, &output);
   } else {
-    ret = rados.mgr_command(command, inbl, &outbl, &output);
+    ret = rados.mgr_command(std::move(command), {}, &outbl, &output);
   }
   if (output.length() && !silent) {
     cout << output << endl;
@@ -262,7 +261,7 @@ void LazyOmapStatsTest::get_pool_id(const string& pool)
 
   string command = R"({"prefix": "osd pool ls", "detail": "detail", "format": "json"})";
   librados::bufferlist inbl, outbl;
-  auto output = get_output(command, false, CommandTarget::TARGET_MON);
+  auto output = get_output(std::move(command), false, CommandTarget::TARGET_MON);
   JSONParser parser;
   parser.parse(output.c_str(), output.size());
   for (const auto& pool : parser.get_array_elements()) {
@@ -285,7 +284,7 @@ void LazyOmapStatsTest::get_pool_id(const string& pool)
 map<string, string> LazyOmapStatsTest::get_scrub_stamps() {
   map<string, string> stamps;
   string command = R"({"prefix": "pg dump", "format": "json"})";
-  auto output = get_output(command);
+  auto output = get_output(std::move(command));
   JSONParser parser;
   parser.parse(output.c_str(), output.size());
   auto* obj = parser.find_obj("pg_map")->find_obj("pg_stats");
@@ -454,7 +453,7 @@ void LazyOmapStatsTest::check_pg_dump_summary()
   cout << R"(Checking "pg dump summary" output)" << endl;
 
   string command = R"({"prefix": "pg dump", "dumpcontents": ["summary"]})";
-  string dump_output = get_output(command);
+  string dump_output = get_output(std::move(command));
   cout << dump_output << endl;
 
   boost::regex reg(
@@ -484,7 +483,7 @@ void LazyOmapStatsTest::check_pg_dump_pgs()
   cout << R"(Checking "pg dump pgs" output)" << endl;
 
   string command = R"({"prefix": "pg dump", "dumpcontents": ["pgs"]})";
-  string dump_output = get_output(command);
+  string dump_output = get_output(std::move(command));
   cout << dump_output << endl;
 
   boost::regex reg(R"(^(PG_STAT\s.*))"
@@ -510,7 +509,7 @@ void LazyOmapStatsTest::check_pg_dump_pools()
   cout << R"(Checking "pg dump pools" output)" << endl;
 
   string command = R"({"prefix": "pg dump", "dumpcontents": ["pools"]})";
-  string dump_output = get_output(command);
+  string dump_output = get_output(std::move(command));
   cout << dump_output << endl;
 
   boost::regex reg(R"(^(POOLID\s.*))"
@@ -540,7 +539,7 @@ void LazyOmapStatsTest::check_pg_ls()
   cout << R"(Checking "pg ls" output)" << endl;
 
   string command = R"({"prefix": "pg ls"})";
-  string dump_output = get_output(command);
+  string dump_output = get_output(std::move(command));
   cout << dump_output << endl;
 
   boost::regex reg(R"(^(PG\s.*))"
@@ -573,7 +572,7 @@ void LazyOmapStatsTest::wait_for_active_clean()
   string command = R"({"prefix": "pg dump"})";
   int num_not_clean;
   do {
-    string dump_output = get_output(command, true);
+    string dump_output = get_output(std::move(command), true);
     if (index == -1) {
       boost::regex ireg(
           "\n"

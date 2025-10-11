@@ -54,13 +54,12 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
 
     if (mostly_omap) {
       // set pg_autoscale_bias
-      bufferlist inbl;
       float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
       int r = rados->mon_command(
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"pg_autoscale_bias\", \"val\": \"" +
 	stringify(bias) + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set pg_autoscale_bias on "
 		 << pool.name << dendl;
@@ -71,7 +70,7 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
 	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
 	pool.name + "\", \"var\": \"recovery_priority\": \"" +
 	stringify(p) + "\"}",
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
       if (r < 0) {
 	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
@@ -79,11 +78,10 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
     }
     if (bulk) {
       // set bulk
-      bufferlist inbl;
       int r = rados->mon_command(
         "{\"prefix\": \"osd pool set\", \"pool\": \"" +
         pool.name + "\", \"var\": \"bulk\", \"val\": \"true\"}",
-        inbl, NULL, NULL);
+        {}, NULL, NULL);
       if (r < 0) {
         ldpp_dout(dpp, 10) << __func__ << " warning: failed to set 'bulk' on "
                  << pool.name << dendl;
@@ -355,8 +353,7 @@ int rgw_clog_warn(librados::Rados* h, const string& msg)
       "\"logtext\": [\"" + msg + "\"]"
     "}";
 
-  bufferlist inbl;
-  return h->mon_command(cmd, inbl, nullptr, nullptr);
+  return h->mon_command(std::move(cmd), {}, nullptr, nullptr);
 }
 
 int rgw_list_pool(const DoutPrefixProvider *dpp,
