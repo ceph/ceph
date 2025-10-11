@@ -17,6 +17,7 @@
 #include "common/Formatter.h"
 #include "common/Checksummer.h"
 #include "include/stringify.h"
+#include "BlueStore_objects.h"
 
 using std::list;
 using std::map;
@@ -409,6 +410,7 @@ bluestore_blob_use_tracker_t::bluestore_blob_use_tracker_t(
  : au_size{tracker.au_size},
    num_au(0),
    alloc_au(0),
+   onode(tracker.onode),
    bytes_per_au{nullptr}
 {
   if (tracker.num_au > 0) {
@@ -427,6 +429,7 @@ bluestore_blob_use_tracker_t::operator=(const bluestore_blob_use_tracker_t& rhs)
   }
   clear();
   au_size = rhs.au_size;
+  onode = rhs.onode;
   if (rhs.num_au > 0) {
     allocate( rhs.num_au);
     std::copy(rhs.bytes_per_au, rhs.bytes_per_au + num_au, bytes_per_au);
@@ -442,7 +445,12 @@ void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
   ceph_assert(num_au == 0);
   ceph_assert(alloc_au == 0);
   num_au = alloc_au = au_count;
-  bytes_per_au = new uint32_t[alloc_au];
+  if (onode) {
+    bytes_per_au = onode->LocalBytesPerAuAllocator.allocate(alloc_au);
+  }
+  else{
+    bytes_per_au = new uint32_t[alloc_au];
+  }
   mempool::get_pool(
     mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
       adjust_count(alloc_au, sizeof(uint32_t) * alloc_au);
@@ -454,7 +462,12 @@ void bluestore_blob_use_tracker_t::allocate(uint32_t au_count)
 
 void bluestore_blob_use_tracker_t::release(uint32_t au_count, uint32_t* ptr) {
   if (au_count) {
-    delete[] ptr;
+    if (onode) {
+      onode->LocalBytesPerAuAllocator.deallocate(ptr, au_count);
+    }
+    else {
+      delete[] ptr;
+    }
     mempool::get_pool(
       mempool::pool_index_t(mempool::mempool_bluestore_cache_other)).
         adjust_count(-(int32_t)au_count, -(int32_t)(sizeof(uint32_t) * au_count));
