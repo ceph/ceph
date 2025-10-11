@@ -12,7 +12,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { FeedbackComponent } from '../shared/feedback/feedback.component';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
-import { ToggletipModule } from 'carbon-components-angular';
+import { InputModule, ModalModule, SelectModule, ToggletipModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -25,7 +25,10 @@ import { ToggletipModule } from 'carbon-components-angular';
     ReactiveFormsModule,
     DashboardV3Module,
     BaseChartDirective,
-    ToggletipModule
+    ToggletipModule,
+    ModalModule,
+    InputModule,
+    SelectModule
   ],
   declarations: [DashboardComponent, HealthPieComponent, FeedbackComponent],
   providers: [provideCharts(withDefaultRegisterables())]
