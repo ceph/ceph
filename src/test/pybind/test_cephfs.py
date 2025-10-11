@@ -1531,6 +1531,9 @@ class TestRmtree:
         # this will change return value of should_cancel and therefore halt
         # execution of rmtree()
         cancel_flag.set()
+        # give a little time for cephs.rmtree() to catch exception raised due to
+        # cancel flag and reset the directory
+        time.sleep(0.1)
         # ensure dir6 wasn't deleted
         cephfs.stat('dir6')
         # ensure that deletion had begun but hadn't finished and was halted
