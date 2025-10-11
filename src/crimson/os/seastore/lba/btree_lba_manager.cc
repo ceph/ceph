@@ -684,12 +684,12 @@ BtreeLBAManager::insert_mappings(
     return trans_intr::do_for_each(
       alloc_infos.begin(),
       alloc_infos.end(),
-      [c, &btree, &iter, &ret](auto &info)
+      [c, &btree, &iter](auto &info)
     {
       assert(info.key != L_ADDR_NULL);
       return btree.insert(
 	c, iter, info.key, info.value
-      ).si_then([c, &iter, &ret, &info](auto p) {
+      ).si_then([c, &iter, &info](auto p) {
 	ceph_assert(p.second);
 	iter = std::move(p.first);
 	auto &leaf_node = *iter.get_leaf_node();
@@ -716,9 +716,18 @@ BtreeLBAManager::insert_mappings(
 	    info.extent->set_laddr(iter.get_key());
 	  }
 	}
-	ret.push_back(iter.get_cursor(c));
 	return iter.next(c).si_then([&iter](auto p) {
 	  iter = std::move(p);
+	});
+      });
+    }).si_then([&ret, &iter, alloc_infos, c] {
+      return trans_intr::do_for_each(
+	boost::make_counting_iterator<size_t>(0),
+	boost::make_counting_iterator<size_t>(alloc_infos.size()),
+	[&ret, &iter, c](auto) {
+	return iter.prev(c).si_then([c, &ret, &iter](auto it) {
+	  ret.push_front(it.get_cursor(c));
+	  iter = std::move(it);
 	});
       });
     }).si_then([&ret] {
