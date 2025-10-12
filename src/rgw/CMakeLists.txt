@@ -194,6 +194,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_log_backing.cc
           driver/rados/rgw_metadata.cc
           driver/rados/rgw_notify.cc
+          driver/rados/rgw_bucketlogging.cc
           driver/rados/rgw_obj_manifest.cc
           driver/rados/rgw_object_expirer_core.cc
           driver/rados/rgw_otp.cc
@@ -304,6 +305,7 @@ target_link_libraries(rgw_common
     cls_rgw_client
     cls_rgw_gc_client
     cls_timeindex_client
+    cls_queue_client
     cls_user_client
     cls_version_client
     librados
