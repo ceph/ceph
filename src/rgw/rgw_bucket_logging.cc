@@ -373,16 +373,19 @@ int rollover_logging_object(const configuration& conf,
   auto old_obj = obj_name.empty() ? std::nullopt : std::optional<std::string>(obj_name);
 
   auto handle_error = [&dpp, &old_obj, &target_bucket, err_message](int ret) {
-    if (ret == -ECANCELED) {
-      ldpp_dout(dpp, 20) << "INFO: rollover already performed for logging object '" << old_obj <<  "' to logging bucket '" <<
-        target_bucket->get_key() << "'. ret = " << ret << dendl;
-      return 0;
-    }
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: failed to rollover logging object '" << old_obj << "' to logging bucket '" <<
-        target_bucket->get_key() << "'. ret = " << ret << dendl;
-      if (err_message) {
-        *err_message = fmt::format("Failed to rollover logging object of logging bucket '{}'", target_bucket->get_name());
+      if (ret == -ECANCELED) {
+        ldpp_dout(dpp, 20) << "INFO: rollover already performed for logging object '" << old_obj <<  "' to logging bucket '" <<
+          target_bucket->get_key() << "'. ret = " << ret << dendl;
+        if (err_message) {
+          *err_message = fmt::format("Rollover already performed on logging bucket '{}'", target_bucket->get_name());
+        }
+      } else {
+        ldpp_dout(dpp, 1) << "ERROR: failed to rollover logging object '" << old_obj << "' to logging bucket '" <<
+          target_bucket->get_key() << "'. ret = " << ret << dendl;
+        if (err_message) {
+          *err_message = fmt::format("Failed to rollover logging object of logging bucket '{}'", target_bucket->get_name());
+        }
       }
     }
     return ret;
@@ -515,7 +518,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to logging bucket '" <<
         target_bucket_id << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, nullptr, &err_message); ret < 0) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
         set_journal_err(err_message);
         return ret;
       }
@@ -666,7 +669,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to logging bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, nullptr, &err_message); ret < 0 ) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
       set_journal_err(err_message);
       return ret;
     }

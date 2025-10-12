@@ -311,6 +311,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
       // conf changed - do cleanup
       RGWObjVersionTracker objv_tracker;
       std::string obj_name;
+      if (int ret = target_bucket->get_logging_object_name(obj_name, old_conf->target_prefix, y, this, nullptr); ret < 0 && ret != -ENOENT) {
+        ldpp_dout(this, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
+        target_bucket_id << "' and prefix '" << configuration.target_prefix << "', ret = " << ret << dendl;
+        op_ret = ret;
+        return;
+      }
       const auto region = driver->get_zone()->get_zonegroup().get_api_name();
       if (const auto ret = rollover_logging_object(*old_conf,
             target_bucket,
@@ -324,8 +330,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
             &old_obj); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
             << " to target bucket '" << target_bucket_id << "'. "
-            << " last committed object is '" << old_obj <<
-            "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
+            << "' when updating logging configuration of bucket '" << src_bucket->get_key() << ". error: " << ret << dendl;
       } else {
         ldpp_dout(this, 20) << "INFO: flushed pending logging object '" << old_obj
           << "' to target bucket '" << target_bucket_id << "' when updating logging configuration of bucket '"
