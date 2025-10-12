@@ -2212,7 +2212,7 @@ paths:
                         - xml:
                             name: Rule
                           description: The container element for an ownership control rule.
-  '/{Bucket}#policy':
+  '/{Bucket}?policy':
     delete:
       operationId: DeleteBucketPolicy
       description: '<p>This implementation of the DELETE action uses the policy subresource to delete the policy of a specified bucket. If you are using an identity other than the root user of the Amazon Web Services account that owns the bucket, the calling identity must have the <code>DeleteBucketPolicy</code> permissions on the specified bucket and belong to the bucket owner''s account to use this operation. </p> <p>If you don''t have <code>DeleteBucketPolicy</code> permissions, Amazon S3 returns a <code>403 Access Denied</code> error. If you have the correct permissions, but you''re not using an identity that belongs to the bucket owner''s account, Amazon S3 returns a <code>405 Method Not Allowed</code> error. </p> <important> <p>To ensure that bucket owners don''t inadvertently lock themselves out of their own buckets, the root principal in a bucket owner''s Amazon Web Services account can perform the <code>GetBucketPolicy</code>, <code>PutBucketPolicy</code>, and <code>DeleteBucketPolicy</code> API actions, even if their bucket policy explicitly denies the root principal''s access. Bucket owner root principals can only be blocked from performing these API actions by VPC endpoint policies and Amazon Web Services Organizations policies.</p> </important> <p>For more information about bucket policies, see <a href="https://docs.aws.amazon.com/AmazonS3/latest/dev/using-iam-policies.html">Using Bucket Policies and UserPolicies</a>. </p> <p>The following operations are related to <code>DeleteBucketPolicy</code> </p> <ul> <li> <p> <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_CreateBucket.html">CreateBucket</a> </p> </li> <li> <p> <a href="https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteObject.html">DeleteObject</a> </p> </li> </ul>'
@@ -11841,3 +11841,33 @@ x-restler-global-annotations:
     consumer_param: "Key"
     description: "Pass object key from PutObject to HeadObject"
     tags: ["object-operations"]
+    
+  # 11. CreateBucket → GetBucketPolicy (pass Bucket)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}?policy"
+    consumer_method: "GET"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to GetBucketPolicy"
+    tags: ["bucket-policy"]
+
+  # 12. CreateBucket → PutBucketPolicy (pass Bucket)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}?policy"
+    consumer_method: "PUT"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to PutBucketPolicy"
+    tags: ["bucket-policy"]
+
+  # 13. CreateBucket → DeleteBucketPolicy (pass Bucket)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}?policy"
+    consumer_method: "DELETE"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to DeleteBucketPolicy"
+    tags: ["bucket-policy"]
