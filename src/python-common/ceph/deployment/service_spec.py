@@ -2057,6 +2057,10 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_positive_int(self.max_hosts, "Max hosts")
         verify_positive_int(self.max_namespaces, "Max namespaces")
         verify_positive_int(self.max_namespaces_per_subsystem, "Max namespaces per subsystem")
+        max_per_subsys = self.max_namespaces_per_subsystem
+        if max_per_subsys is not None and max_per_subsys > 2048:
+            raise SpecValidationError("Max namespaces per subsystem can't be "
+                                      "greater than 2048")
         verify_positive_int(self.max_hosts_per_subsystem, "Max hosts per subsystem")
         verify_non_negative_number(self.subsystem_cache_expiration,
                                    "Subsystem cache expiration period")
