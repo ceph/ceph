@@ -113,6 +113,8 @@ cdef nogil:
         pass
     int ceph_unlink(ceph_mount_info *cmount, const char *path):
         pass
+    int ceph_unlinkat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags):
+        pass
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname):
         pass
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size):
