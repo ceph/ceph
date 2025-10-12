@@ -11739,3 +11739,105 @@ components:
               description: A map of metadata to store with the object in S3.
 security:
   - hmac: []
+
+# RESTler Global Annotations - 
+x-restler-global-annotations:
+  # 1. CreateBucket → PutObject (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT" 
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "PUT"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to PutObject"
+    tags: ["bucket-to-object"]
+
+  # 2. CreateBucket → GetObject (pass Bucket name)  
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "GET"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to GetObject"
+    tags: ["bucket-to-object"]
+
+  # 3. CreateBucket → DeleteObject (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "DELETE"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to DeleteObject"
+    tags: ["bucket-to-object"]
+
+  # 4. CreateBucket → HeadObject (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "HEAD"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to HeadObject"
+    tags: ["bucket-to-object"]
+
+  # 5. CreateBucket → ListObjects (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}"
+    consumer_method: "GET"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to ListObjects"
+    tags: ["bucket-operations"]
+
+  # 6. CreateBucket → HeadBucket (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}"
+    consumer_method: "HEAD"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to HeadBucket"
+    tags: ["bucket-operations"]
+
+  # 7. CreateBucket → DeleteBucket (pass Bucket name)
+  - producer_endpoint: "/{Bucket}"
+    producer_method: "PUT"
+    producer_resource_name: "Bucket"
+    consumer_endpoint: "/{Bucket}"
+    consumer_method: "DELETE"
+    consumer_param: "Bucket"
+    description: "Pass bucket name from CreateBucket to DeleteBucket"
+    tags: ["bucket-operations"]
+
+  # 8. PutObject → GetObject (pass Key)
+  - producer_endpoint: "/{Bucket}/{Key}"
+    producer_method: "PUT"
+    producer_resource_name: "Key"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "GET"
+    consumer_param: "Key"
+    description: "Pass object key from PutObject to GetObject"
+    tags: ["object-operations"]
+
+  # 9. PutObject → DeleteObject (pass Key)
+  - producer_endpoint: "/{Bucket}/{Key}"
+    producer_method: "PUT"
+    producer_resource_name: "Key"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "DELETE"
+    consumer_param: "Key"
+    description: "Pass object key from PutObject to DeleteObject"
+    tags: ["object-operations"]
+
+  # 10. PutObject → HeadObject (pass Key)
+  - producer_endpoint: "/{Bucket}/{Key}"
+    producer_method: "PUT"
+    producer_resource_name: "Key"
+    consumer_endpoint: "/{Bucket}/{Key}"
+    consumer_method: "HEAD"
+    consumer_param: "Key"
+    description: "Pass object key from PutObject to HeadObject"
+    tags: ["object-operations"]
