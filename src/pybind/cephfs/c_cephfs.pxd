@@ -88,6 +88,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_rename(ceph_mount_info *cmount, const char *from_, const char *to)
     int ceph_link(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
+    int ceph_unlinkat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,

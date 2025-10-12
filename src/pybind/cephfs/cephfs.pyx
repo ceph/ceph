@@ -32,10 +32,12 @@ log = getLogger(__name__)
 
 
 AT_SYMLINK_NOFOLLOW = 0x0100
+AT_REMOVEDIR =  0x200
 AT_STATX_SYNC_TYPE  = 0x6000
 AT_STATX_SYNC_AS_STAT = 0x0000
 AT_STATX_FORCE_SYNC = 0x2000
 AT_STATX_DONT_SYNC = 0x4000
+AT_FDCWD = -100
 cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
 CEPH_STATX_BASIC_STATS = 0x7ff
 cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
@@ -2291,6 +2293,20 @@ cdef class LibCephFS(object):
             ret = ceph_unlink(self.cluster, _path)
         if ret < 0:
             raise make_ex(ret, "error in unlink: {}".format(path.decode('utf-8')))
+
+    def unlinkat(self, dirfd, relpath, flags):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            char* relpath_ = relpath
+            int flags_ = flags
+
+        with nogil:
+            ret = ceph_unlinkat(self.cluster, dirfd_, relpath_, flags_)
+        if ret < 0:
+            raise make_ex(ret, f"error in unlinkat: {relpath.decode('utf-8')}")
 
     def rename(self, src, dst):
         """
