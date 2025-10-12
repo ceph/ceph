@@ -409,14 +409,14 @@ else:
         @EndpointDoc(
             "List all NVMeoF namespaces in a subsystem",
             parameters={
-                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nqn": Param(str, "NVMeoF subsystem NQN", True, None),
                 "nsid": Param(str, "NVMeoF Namespace ID to filter by", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
-        def list(self, nqn: str, nsid: Optional[str] = None,
+        def list(self, nqn: Optional[str] = None, nsid: Optional[str] = None,
                  gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_namespaces(
                 NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn,
