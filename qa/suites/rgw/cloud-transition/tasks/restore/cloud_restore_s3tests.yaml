@@ -16,7 +16,7 @@ tasks:
       cloud_retain_head_object: "true"
       cloud_target_path: "teuthology-client0"
       cloud_allow_read_through: "true"
-      cloud_read_through_restore_days: "1"
+      cloud_read_through_restore_days: "5"
       cloudtier_user:
         # cloud-user creds to be created on cloud-client
         cloud_secret: "abcefgh"
