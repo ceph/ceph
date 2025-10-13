@@ -15,13 +15,61 @@ from typing import (
 )
 
 import orchestrator
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, HostPlacementSpec
 from orchestrator._interface import DaemonDescription
 from orchestrator import OrchestratorValidationError
 from .utils import RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES
 
 logger = logging.getLogger(__name__)
 T = TypeVar('T')
+
+
+def get_placement_hosts(
+    spec: ServiceSpec,
+    hosts: List[orchestrator.HostSpec],
+    draining_hosts: List[orchestrator.HostSpec]
+) -> List[HostPlacementSpec]:
+    """
+    Get the list of candidate host placement specs based on placement specifications.
+    Args:
+        spec: The service specification
+        hosts: List of available hosts
+        draining_hosts: List of hosts that are draining
+    Returns:
+        List[HostPlacementSpec]: List of host placement specs that match the placement criteria
+    """
+    if spec.placement.hosts:
+        host_specs = [
+            h for h in spec.placement.hosts
+            if h.hostname not in [dh.hostname for dh in draining_hosts]
+        ]
+    elif spec.placement.label:
+        labeled_hosts = [h for h in hosts if spec.placement.label in h.labels]
+        host_specs = [
+            HostPlacementSpec(hostname=x.hostname, network='', name='')
+            for x in labeled_hosts
+        ]
+        if spec.placement.host_pattern:
+            matching_hostnames = spec.placement.filter_matching_hostspecs(hosts)
+            host_specs = [h for h in host_specs if h.hostname in matching_hostnames]
+    elif spec.placement.host_pattern:
+        matching_hostnames = spec.placement.filter_matching_hostspecs(hosts)
+        host_specs = [
+            HostPlacementSpec(hostname=hostname, network='', name='')
+            for hostname in matching_hostnames
+        ]
+    elif (
+            spec.placement.count is not None
+            or spec.placement.count_per_host is not None
+    ):
+        host_specs = [
+            HostPlacementSpec(hostname=x.hostname, network='', name='')
+            for x in hosts
+        ]
+    else:
+        raise OrchestratorValidationError(
+            "placement spec is empty: no hosts, no label, no pattern, no count")
+    return host_specs
 
 
 class DaemonPlacement(NamedTuple):
@@ -453,39 +501,16 @@ class HostAssignment(object):
         return None
 
     def get_candidates(self) -> List[DaemonPlacement]:
-        if self.spec.placement.hosts:
-            ls = [
-                DaemonPlacement(daemon_type=self.primary_daemon_type,
-                                hostname=h.hostname, network=h.network, name=h.name,
-                                ports=self.ports_start)
-                for h in self.spec.placement.hosts if h.hostname not in [dh.hostname for dh in self.draining_hosts]
-            ]
-        elif self.spec.placement.label:
-            ls = [
-                DaemonPlacement(daemon_type=self.primary_daemon_type,
-                                hostname=x.hostname, ports=self.ports_start)
-                for x in self.hosts_by_label(self.spec.placement.label)
-            ]
-            if self.spec.placement.host_pattern:
-                ls = [h for h in ls if h.hostname in self.spec.placement.filter_matching_hostspecs(self.hosts)]
-        elif self.spec.placement.host_pattern:
-            ls = [
-                DaemonPlacement(daemon_type=self.primary_daemon_type,
-                                hostname=x, ports=self.ports_start)
-                for x in self.spec.placement.filter_matching_hostspecs(self.hosts)
-            ]
-        elif (
-                self.spec.placement.count is not None
-                or self.spec.placement.count_per_host is not None
-        ):
-            ls = [
-                DaemonPlacement(daemon_type=self.primary_daemon_type,
-                                hostname=x.hostname, ports=self.ports_start)
-                for x in self.hosts
-            ]
-        else:
-            raise OrchestratorValidationError(
-                "placement spec is empty: no hosts, no label, no pattern, no count")
+        host_specs = get_placement_hosts(self.spec, self.hosts, self.draining_hosts)
+
+        ls = [
+            DaemonPlacement(daemon_type=self.primary_daemon_type,
+                            hostname=h.hostname,
+                            network=h.network,
+                            name=h.name,
+                            ports=self.ports_start)
+            for h in host_specs
+        ]
 
         # allocate an IP?
         if self.host_selector:

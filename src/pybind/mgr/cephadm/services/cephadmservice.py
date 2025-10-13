@@ -834,6 +834,9 @@ class CephadmService(metaclass=ABCMeta):
     def get_blocking_daemon_hosts(self, service_name: str) -> List[HostSpec]:
         return []
 
+    def has_placement_changed(self, deps: List[str], spec: ServiceSpec) -> bool:
+        return False
+
 
 class CephService(CephadmService):
 

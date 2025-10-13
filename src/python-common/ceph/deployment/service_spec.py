@@ -2217,6 +2217,7 @@ class IngressSpec(ServiceSpec):
                  monitor_cert_source: Optional[str] = MonitorCertSource.REUSE_SERVICE_CERT.value,
                  monitor_networks: Optional[List[str]] = None,
                  monitor_ip_addrs: Optional[Dict[str, str]] = None,
+                 use_tcp_mode_over_rgw: bool = False,
                  ):
         assert service_type == 'ingress'
 
@@ -2261,6 +2262,7 @@ class IngressSpec(ServiceSpec):
         self.monitor_cert_source = monitor_cert_source
         self.monitor_networks = monitor_networks
         self.monitor_ip_addrs = monitor_ip_addrs
+        self.use_tcp_mode_over_rgw = use_tcp_mode_over_rgw
 
     def get_port_start(self) -> List[int]:
         ports = []
