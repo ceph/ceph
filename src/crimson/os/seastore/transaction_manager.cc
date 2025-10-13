@@ -650,7 +650,7 @@ TransactionManager::rewrite_logical_extent(
      * extents since we're going to do it again once we either do the ool write
      * or allocate a relative inline addr.  TODO: refactor AsyncCleaner to
      * avoid this complication. */
-    auto mapping = co_await lba_manager->get_mapping(
+    auto cursor = co_await lba_manager->get_cursor(
       t, *extent
     ).handle_error_interruptible(
       rewrite_extent_iertr::pass_further{},
@@ -658,7 +658,7 @@ TransactionManager::rewrite_logical_extent(
     );
     co_await lba_manager->update_mapping(
       t,
-      std::move(mapping),
+      std::move(cursor),
       extent->get_length(),
       extent->get_paddr(),
       *nextent
@@ -694,7 +694,7 @@ TransactionManager::rewrite_logical_extent(
        * avoid this complication. */
       if (first_extent) {
 	assert(off == 0);
-	auto mapping = co_await lba_manager->get_mapping(
+	auto cursor = co_await lba_manager->get_cursor(
 	  t, *extent
 	).handle_error_interruptible(
 	  rewrite_extent_iertr::pass_further{},
@@ -702,7 +702,7 @@ TransactionManager::rewrite_logical_extent(
 	);
 	refcount = co_await lba_manager->update_mapping(
 	  t,
-	  std::move(mapping),
+	  std::move(cursor),
 	  extent->get_length(),
 	  extent->get_paddr(),
 	  *nextent
