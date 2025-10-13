@@ -585,7 +585,7 @@ source_type
     Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
-    ``ceph.smb.join.auth`` resource
+    ``ceph.smb.usersgroups`` resource
 
 .. _tls-source-fields:
 
