@@ -3489,6 +3489,9 @@ void Objecter::_send_op(Op *op)
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
   }
+  if (op->target.force_shard) {
+    ceph_assert(op->target.osd == op->target.acting[(int)*op->target.force_shard]);
+  }
   op->session->con->send_message(m);
 }
 
