@@ -184,37 +184,6 @@ BtreeLBAManager::get_cursor(
   co_return btree.get_cursor(c, leaf, extent.get_laddr());
 }
 
-BtreeLBAManager::get_mappings_ret
-BtreeLBAManager::get_mappings(
-  Transaction &t,
-  laddr_t laddr,
-  extent_len_t length)
-{
-  LOG_PREFIX(BtreeLBAManager::get_mappings);
-  TRACET("{}~0x{:x} ...", t, laddr, length);
-  auto c = get_context(t);
-
-  lba_mapping_list_t ret;
-  auto btree = co_await get_btree<LBABtree>(cache, c);
-
-  auto cursors = co_await get_cursors(c, btree, laddr, length);
-  for (auto &cursor: cursors) {
-    assert(!cursor->is_end());
-    if (!cursor->is_indirect()) {
-      ret.emplace_back(LBAMapping::create_direct(std::move(cursor)));
-    } else {
-      assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
-      assert(cursor->val->checksum == 0);
-      auto direct = co_await this->resolve_indirect_cursor(c, btree, *cursor);
-      ret.emplace_back(LBAMapping::create_indirect(
-			 std::move(direct), std::move(cursor)));
-    }
-    TRACET("{}~0x{:x} got {}",
-	   c.trans, laddr, length, ret.back());
-  }
-  co_return ret;
-}
-
 BtreeLBAManager::get_cursors_ret
 BtreeLBAManager::get_cursors(
   op_context_t c,
@@ -265,76 +234,6 @@ BtreeLBAManager::resolve_indirect_cursor(
 	   >= intermediate_key + indirect_cursor.get_length());
     return std::move(direct_cursor);
   });
-}
-
-BtreeLBAManager::get_mapping_ret
-BtreeLBAManager::get_mapping(
-  Transaction &t,
-  laddr_t laddr,
-  bool search_containing)
-{
-  LOG_PREFIX(BtreeLBAManager::get_mapping);
-  TRACET("{} ... search_containing={}", t, laddr, search_containing);
-  auto c = get_context(t);
-  auto btree = co_await get_btree<LBABtree>(cache, c);
-
-  LBACursorRef cursor = co_await (
-    search_containing ?
-    get_containing_cursor(c, btree, laddr) :
-    get_cursor(c, btree, laddr));
-
-  assert(!cursor->is_end());
-  if (!cursor->is_indirect()) {
-    TRACET("{} got direct cursor {}",
-	   c.trans, laddr, *cursor);
-    co_return LBAMapping::create_direct(std::move(cursor));
-  }
-
-  if (search_containing) {
-    assert(cursor->contains(laddr));
-  } else {
-    assert(laddr == cursor->get_laddr());
-  }
-  assert(cursor->val->refcount == EXTENT_DEFAULT_REF_COUNT);
-  assert(cursor->val->checksum == 0);
-  auto direct = co_await resolve_indirect_cursor(c, btree, *cursor);
-  auto mapping = LBAMapping::create_indirect(
-    std::move(direct), std::move(cursor));
-  TRACET("{} got indirect mapping {}",
-	 c.trans, laddr, mapping);
-  co_return mapping;
-}
-
-BtreeLBAManager::get_mapping_ret
-BtreeLBAManager::get_mapping(
-  Transaction &t,
-  LogicalChildNode &extent)
-{
-  LOG_PREFIX(BtreeLBAManager::get_mapping);
-  TRACET("{}", t, extent);
-#ifndef NDEBUG
-  if (extent.is_mutation_pending()) {
-    auto &prior = static_cast<LogicalChildNode&>(
-      *extent.get_prior_instance());
-    assert(prior.peek_parent_node()->is_valid());
-  } else {
-    assert(extent.peek_parent_node()->is_valid());
-  }
-#endif
-  auto c = get_context(t);
-  auto btree = co_await get_btree<LBABtree>(cache, c);
-
-  auto leaf = co_await extent.get_parent_node(c.trans, c.cache);
-
-  if (leaf->is_pending()) {
-    TRACET("find pending extent {} for {}",
-	   c.trans, (void*)leaf.get(), extent);
-  }
-#ifndef NDEBUG
-  auto it = leaf->lower_bound(extent.get_laddr());
-  assert(it != leaf->end() && it.get_key() == extent.get_laddr());
-#endif
-  co_return LBAMapping::create_direct(btree.get_cursor(c, leaf, extent.get_laddr()));
 }
 
 BtreeLBAManager::alloc_extent_ret
@@ -1161,7 +1060,7 @@ BtreeLBAManager::get_containing_cursor(
     }
     TRACET("{} got {}, {}",
 	   c.trans, laddr, iter.get_key(), iter.get_val());
-    return get_mapping_iertr::make_ready_future<
+    return get_cursor_iertr::make_ready_future<
       LBACursorRef>(iter.get_cursor(c));
   });
 }
