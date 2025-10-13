@@ -21,9 +21,164 @@
 #include <condition_variable>
 #include <memory_resource>
 #include <new>
+#include <map>
+#include <set>
 
 #include "bluestore_types.h"
 #include "BlueStore.h"
+
+class FixedPoolMemoryResource : public std::pmr::memory_resource {
+  struct Slab {
+    Slab* next;
+    size_t size;
+    size_t offset;
+    void* data() { return reinterpret_cast<char*>(this + 1); }
+  };
+
+  struct FreeBlock {
+    uintptr_t ptr;
+    size_t size;
+    bool operator<(const FreeBlock& o) const {
+      return size < o.size || (size == o.size && ptr < o.ptr);
+    }
+  };
+
+  Slab* head = nullptr;
+  Slab* current_slab = nullptr;
+  size_t default_slab_size;
+  std::set<FreeBlock> size_freelist;
+  std::map<uintptr_t, size_t> ptr_map;
+
+public:
+  FixedPoolMemoryResource(void* start, size_t size) : default_slab_size(size) {
+    head = init_slab(start, size);
+    current_slab = head;
+  }
+
+  ~FixedPoolMemoryResource() {
+    Slab* slab = head->next;
+    while (slab) {
+      Slab* next = slab->next;
+      free(slab);
+      slab = next;
+    }
+  }
+
+protected:
+  void* do_allocate(size_t bytes, size_t alignment) override {
+    assert((alignment & (alignment - 1)) == 0);
+    if (bytes == 0) return static_cast<char*>(current_slab->data()) + current_slab->offset;
+
+    FreeBlock key{0, bytes};
+    auto it = size_freelist.lower_bound(key);
+    while (it != size_freelist.end()) {
+      void* p = reinterpret_cast<void*>(it->ptr);
+      size_t block_size = it->size;
+      size_t padding = (alignment - (reinterpret_cast<uintptr_t>(p) & (alignment - 1))) & (alignment - 1);
+      size_t used = bytes + padding;
+      if (block_size >= used) {
+        ptr_map.erase(it->ptr);
+        auto to_erase = it++;
+        size_freelist.erase(to_erase);
+        void* aligned_ptr = static_cast<char*>(p) + padding;
+        if (block_size > used) {
+          void* rem_ptr = static_cast<char*>(p) + used;
+          size_t rem_size = block_size - used;
+          size_freelist.insert(FreeBlock{reinterpret_cast<uintptr_t>(rem_ptr), rem_size});
+          ptr_map[reinterpret_cast<uintptr_t>(rem_ptr)] = rem_size;
+        }
+        return aligned_ptr;
+      } else {
+        ++it;
+      }
+    }
+
+    size_t aligned_offset = (current_slab->offset + alignment - 1) & ~(alignment - 1);
+
+    if (aligned_offset + bytes <= current_slab->size) {
+      void* result = static_cast<char*>(current_slab->data()) + aligned_offset;
+      current_slab->offset = aligned_offset + bytes;
+      return result;
+    }
+
+    size_t new_slab_size = std::max(bytes, default_slab_size);
+    size_t slab_bytes = sizeof(Slab) + new_slab_size;
+    constexpr size_t SLAB_ALIGN = alignof(Slab);
+    void* mem = std::aligned_alloc(SLAB_ALIGN, slab_bytes);
+    if (!mem) throw std::bad_alloc();
+    Slab* new_slab = new (mem) Slab{nullptr, new_slab_size, 0};
+    current_slab->next = new_slab;
+    current_slab = new_slab;
+
+    aligned_offset = (current_slab->offset + alignment - 1) & ~(alignment - 1);
+    void* result = static_cast<char*>(current_slab->data()) + aligned_offset;
+    current_slab->offset = aligned_offset + bytes;
+    return result;
+  }
+
+  void do_deallocate(void* p, size_t bytes, size_t) override {
+    if (bytes == 0 || p == nullptr) return;
+    uintptr_t addr = reinterpret_cast<uintptr_t>(p);
+    if (ptr_map.find(addr) != ptr_map.end()) throw std::runtime_error("Double deallocation detected");
+    coalesce(addr, bytes);
+  }
+
+  bool do_is_equal(const std::pmr::memory_resource& other) const noexcept override {
+    return this == &other;
+  }
+
+  void reset() {
+    for (Slab* s = head; s; s = s->next) s->offset = 0;
+    size_freelist.clear();
+    ptr_map.clear();
+  }
+
+private:
+  static Slab* init_slab(void* start, size_t size) {
+    constexpr size_t SLAB_ALIGN = alignof(Slab);
+    uintptr_t p = reinterpret_cast<uintptr_t>(start);
+    uintptr_t aligned = (p + (SLAB_ALIGN - 1)) & ~(SLAB_ALIGN - 1);
+
+    size_t adjust = aligned - p;
+    if (size < adjust + sizeof(Slab))
+      throw std::bad_alloc();
+
+    size -= adjust;
+    start = reinterpret_cast<void*>(aligned);
+    return new (start) Slab{nullptr, size - sizeof(Slab), 0};
+  }
+
+  void coalesce(uintptr_t p, size_t sz) {
+    uintptr_t addr = p;
+    size_t size = sz;
+    auto left_it = ptr_map.lower_bound(addr);
+    if (left_it != ptr_map.begin()) {
+      --left_it;
+      uintptr_t left_addr = left_it->first;
+      size_t left_size = left_it->second;
+      if (left_addr + left_size == addr) {
+        size += left_size;
+        size_freelist.erase(FreeBlock{left_addr, left_size});
+        ptr_map.erase(left_it);
+        addr = left_addr;
+      }
+    }
+
+    auto right_it = ptr_map.upper_bound(addr);
+    if (right_it != ptr_map.end()) {
+      uintptr_t right_addr = right_it->first;
+      size_t right_size = right_it->second;
+      if (addr + size == right_addr) {
+        size += right_size;
+        size_freelist.erase(FreeBlock{right_addr, right_size});
+        ptr_map.erase(right_it);
+      }
+    }
+    ptr_map[addr] = size;
+    size_freelist.insert(FreeBlock{addr, size});
+  }
+};
+
 
 namespace bluestore {
 
@@ -37,7 +192,9 @@ namespace bluestore {
     bluestore::Onode* onode;
 
     void set_shared_blob(BlueStore::SharedBlobRef sb);
-    Blob(bluestore::Onode* onode) : onode(onode) {}
+    Blob(bluestore::Onode* onode)
+     : onode(onode),
+     used_in_blob(onode) {}
   private:
     BlueStore::SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -207,8 +364,6 @@ namespace bluestore {
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
     uint16_t prev_spanning_cnt = 0; /// spanning blobs count
-    BlueStore::ExtentMap extent_map;
-    BlueStore::BufferSpace bc;             ///< buffer cache
 
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
@@ -218,6 +373,13 @@ namespace bluestore {
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
+
+    static constexpr size_t pool_size = sizeof(uint32_t) * 128;
+    alignas(uint32_t) std::byte pool[pool_size];
+    FixedPoolMemoryResource mem_resource;
+    std::pmr::polymorphic_allocator<uint32_t> LocalBytesPerAuAllocator;
+    BlueStore::ExtentMap extent_map;
+    BlueStore::BufferSpace bc;             ///< buffer cache
 
     Onode(BlueStore::Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_meta::string& k);
