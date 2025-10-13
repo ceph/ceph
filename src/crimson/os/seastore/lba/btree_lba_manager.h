@@ -75,19 +75,6 @@ public:
     Transaction &t,
     LogicalChildNode &extent) final;
 
-  get_mappings_ret get_mappings(
-    Transaction &t,
-    laddr_t offset, extent_len_t length) final;
-
-  get_mapping_ret get_mapping(
-    Transaction &t,
-    laddr_t offset,
-    bool search_containing = false) final;
-
-  get_mapping_ret get_mapping(
-    Transaction &t,
-    LogicalChildNode &extent) final;
-
   alloc_extent_ret reserve_region(
     Transaction &t,
     LBAMapping pos,
@@ -506,7 +493,7 @@ private:
     laddr_t offset,
     extent_len_t length);
 
-  using resolve_indirect_cursor_ret = get_mappings_iertr::future<LBACursorRef>;
+  using resolve_indirect_cursor_ret = base_iertr::future<LBACursorRef>;
   resolve_indirect_cursor_ret resolve_indirect_cursor(
     op_context_t c,
     LBABtree& btree,
