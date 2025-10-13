@@ -201,7 +201,9 @@ def _run(cmd, *args, **kwargs):
     return subprocess.run(cmd, *args, **kwargs)
 
 
-def _container_cmd(ctx, args, *, workdir=None, interactive=False):
+def _container_cmd(
+    ctx, args, *, workdir=None, interactive=False, extra_args=None
+):
     rm_container = not ctx.cli.keep_container
     cmd = [
         ctx.container_engine,
@@ -241,8 +243,8 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
-    for extra_arg in ctx.cli.extra or []:
-        cmd.append(extra_arg)
+    cmd.extend(extra_args or [])
+    cmd.extend(ctx.cli.extra or [])
     if ctx.npm_cache_dir:
         # use :z so that other builds can use the cache
         cmd.extend([
@@ -331,6 +333,11 @@ class ImageSource(StrEnum):
         return ", ".join(s.value for s in cls)
 
 
+class ImageVariant(StrEnum):
+    DEFAULT = 'default'  # build everything + make check
+    PACKAGES = 'packages'  # test deps. ignored, only for packages
+
+
 class Context:
     """Command context."""
 
@@ -373,6 +380,8 @@ class Context:
                 branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
+        if self.cli.image_variant is not ImageVariant.DEFAULT:
+            suffix = f".{self.cli.image_variant}{suffix}"
         return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
@@ -578,6 +587,8 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
+    if ctx.cli.image_variant is ImageVariant.PACKAGES:
+        cmd.append("--build-arg=FOR_MAKE_CHECK=false")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
@@ -689,6 +700,9 @@ def bc_build_tests(ctx):
             "-c",
             f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && build tests",
         ],
+        # for compatibility with earlier versions that baked this env var
+        # into the build images
+        extra_args=['-eFOR_MAKE_CHECK=1'],
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -1040,6 +1054,13 @@ def parse_cli(build_step_names):
         type=ImageSource.argument,
         help="Specify a set of valid image sources. "
         f"May be a comma separated list of {ImageSource.hint()}",
+    )
+    g_image.add_argument(
+        "--image-variant",
+        type=ImageVariant,
+        choices=sorted(v.value for v in ImageVariant),
+        default=ImageVariant.DEFAULT.value,
+        help="Specify the variant of the build image desired.",
     )
     g_image.add_argument(
         "--base-image",
