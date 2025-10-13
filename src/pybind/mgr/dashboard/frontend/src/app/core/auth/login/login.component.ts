@@ -6,7 +6,7 @@ import _ from 'lodash';
 import { AuthService } from '~/app/shared/api/auth.service';
 import { Credentials } from '~/app/shared/models/credentials';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-login',
@@ -22,7 +22,7 @@ export class LoginComponent implements OnInit {
   constructor(
     private authService: AuthService,
     private authStorageService: AuthStorageService,
-    private modalService: ModalService,
+    private modalService: ModalCdsService,
     private route: ActivatedRoute,
     private router: Router
   ) {}

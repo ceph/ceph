@@ -1,6 +1,7 @@
-import { Component, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
+import { Component, EventEmitter, Inject, OnDestroy, OnInit, Optional, Output } from '@angular/core';
 import { AbstractControl, FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
@@ -16,7 +17,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './multi-cluster-form.component.html',
   styleUrls: ['./multi-cluster-form.component.scss']
 })
-export class MultiClusterFormComponent implements OnInit, OnDestroy {
+export class MultiClusterFormComponent extends BaseModal implements OnInit, OnDestroy {
   @Output()
   submitAction = new EventEmitter();
   clusterApiUrlCmd = 'ceph mgr services';
@@ -24,9 +25,6 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
   connectionVerified: boolean;
   connectionMessage = '';
   private subs = new Subscription();
-  action: string;
-  cluster: MultiCluster;
-  clustersData: MultiCluster[];
   clusterAliasNames: string[];
   clusterUrls: string[];
   clusterUsers: string[];
@@ -37,8 +35,13 @@ export class MultiClusterFormComponent implements OnInit, OnDestroy {
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public notificationService: NotificationService,
-    private multiClusterService: MultiClusterService
+    private multiClusterService: MultiClusterService,
+
+    @Optional() @Inject('action') public action: string,
+    @Optional() @Inject('cluster') public cluster: MultiCluster,
+    @Optional() @Inject('clustersData') public clustersData: MultiCluster[]
   ) {
+    super();
     this.subs.add(
       this.multiClusterService.subscribe((resp: any) => {
         this.hubUrl = resp['hub_url'];

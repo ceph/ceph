@@ -1,7 +1,6 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
@@ -18,13 +17,16 @@ import {
 } from '../models/rgw-bucket-encryption';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { KmipConfig, VaultConfig } from '~/app/shared/models/rgw-encryption-config-keys';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-rgw-config-modal',
   templateUrl: './rgw-config-modal.component.html',
   styleUrls: ['./rgw-config-modal.component.scss']
 })
-export class RgwConfigModalComponent implements OnInit {
+export class RgwConfigModalComponent extends BaseModal implements OnInit {
+  readonly vaultAddress = /^((https?:\/\/)|(www.))(?:([a-zA-Z]+)|(\d+\.\d+.\d+.\d+)):\d{4}$/;
+
   kmsProviders: string[];
 
   configForm: CdFormGroup;
@@ -43,11 +45,11 @@ export class RgwConfigModalComponent implements OnInit {
   KMS_PROVIDER = KMS_PROVIDER;
   constructor(
     private formBuilder: CdFormBuilder,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     private rgwBucketService: RgwBucketService,
     private notificationService: NotificationService
   ) {
+    super();
     this.createForm();
   }
   ngOnInit(): void {
@@ -228,7 +230,7 @@ export class RgwConfigModalComponent implements OnInit {
         this.configForm.setErrors({ cdSubmitButton: true });
       },
       complete: () => {
-        this.activeModal.close();
+        this.closeModal();
         this.table?.refreshBtn();
       }
     });

@@ -6,13 +6,13 @@ import { SharedModule } from '~/app/shared/shared.module';
 
 import { NvmeofService } from '../../../shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
 import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { ComboBoxModule, GridModule } from 'carbon-components-angular';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 const mockSubsystems = [
   {
@@ -98,7 +98,7 @@ describe('NvmeofSubsystemsComponent', () => {
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
         { provide: AuthStorageService, useClass: MockAuthStorageService },
-        { provide: ModalService, useClass: MockModalService },
+        { provide: ModalCdsService, useClass: MockModalService },
         { provide: TaskWrapperService, useClass: MockTaskWrapperService }
       ]
     }).compileComponents();

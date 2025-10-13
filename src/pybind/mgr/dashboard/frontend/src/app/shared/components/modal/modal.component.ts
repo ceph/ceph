@@ -1,18 +1,32 @@
+import { Location } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
-import { Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { BaseModal } from 'carbon-components-angular';
 
 @Component({
   selector: 'cd-modal',
   templateUrl: './modal.component.html',
   styleUrls: ['./modal.component.scss']
 })
-export class ModalComponent {
+export class ModalComponent extends BaseModal {
   @Input()
-  modalRef: NgbActiveModal;
+  open = true;
+
   @Input()
-  pageURL: string;
+  size: "sm" | "md" | "lg" = "md";
+
+  @Input()
+  hasScrollingContent = true;
+
+  @Input()
+  title = '';
+
+  @Input()
+  titleHelperText = '';
+
+  @Input()
+  formAllFieldsRequired = false;
 
   /**
    * Should be a function that is triggered when the modal is hidden.
@@ -20,12 +34,16 @@ export class ModalComponent {
   @Output()
   hide = new EventEmitter();
 
-  constructor(private router: Router) {}
+  constructor(
+    private route: ActivatedRoute,
+    private location: Location
+  ) {
+    super();
+    this.open = this.route.outlet === 'modal' || true;
+  }
 
-  close() {
-    this.pageURL
-      ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
-      : this.modalRef?.close();
-    this.hide.emit();
+  closeModal() {
+    if (this.route.outlet === 'modal') this.location.back();
+    else this.open = false;
   }
 }
