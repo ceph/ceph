@@ -40,9 +40,7 @@ class Raw(BaseObjectStore):
 
             if device:
                 kname = disk.lsblk(device)['KNAME']
-                mapping = 'ceph-{}-{}-{}-dmcrypt'.format(self.osd_fsid,
-                                                         kname,
-                                                         device_type)
+                mapping = f'ceph-{self.osd_fsid}-{kname}-{device_type}-dmcrypt'
                 # format data device
                 encryption_utils.luks_format(
                     self.dmcrypt_key,
@@ -57,7 +55,7 @@ class Raw(BaseObjectStore):
                     self.with_tpm
                 )
                 self.__dict__[f'{device_type}_device_path'] = \
-                    '/dev/mapper/{}'.format(mapping)  # TODO(guits): need to preserve path or find a way to get the parent device from the mapper ?
+                    f'/dev/mapper/{mapping}'  # TODO(guits): need to preserve path or find a way to get the parent device from the mapper ?
 
     def safe_prepare(self,
                      args: Optional["argparse.Namespace"] = None) -> None:
@@ -78,9 +76,8 @@ class Raw(BaseObjectStore):
             rollback_osd(self.osd_id)
             raise
         dmcrypt_log = 'dmcrypt' if hasattr(args, 'dmcrypt') else 'clear'
-        terminal.success("ceph-volume raw {} prepare "
-                         "successful for: {}".format(dmcrypt_log,
-                                                     self.args.data))
+        terminal.success(f"ceph-volume raw {dmcrypt_log} prepare "
+                         f"successful for: {self.args.data}")
 
     @decorators.needs_root
     def prepare(self) -> None:
@@ -108,7 +105,7 @@ class Raw(BaseObjectStore):
 
     def _activate(self, osd_id: str, osd_fsid: str) -> None:
         # mount on tmpfs the osd directory
-        self.osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+        self.osd_path = f'/var/lib/ceph/osd/{conf.cluster}-{osd_id}'
         if not system.path_is_mounted(self.osd_path):
             # mkdir -p and mount as tmpfs
             prepare_utils.create_osd_path(osd_id, tmpfs=not self.args.no_tmpfs)
@@ -143,8 +140,8 @@ class Raw(BaseObjectStore):
             prepare_utils.link_wal(self.wal_device_path, osd_id, osd_fsid)
 
         system.chown(self.osd_path)
-        terminal.success("ceph-volume raw activate "
-                         "successful for osd ID: %s" % osd_id)
+        terminal.success(f"ceph-volume raw activate "
+                         f"successful for osd ID: {osd_id}")
 
     @decorators.needs_root
     def activate(self) -> None:
