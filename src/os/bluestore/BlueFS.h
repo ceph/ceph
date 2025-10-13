@@ -33,6 +33,7 @@ enum {
   l_bluefs_wal_used_bytes,
   l_bluefs_slow_total_bytes,
   l_bluefs_slow_used_bytes,
+  l_bluefs_meta_ratio,
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
@@ -811,6 +812,7 @@ public:
   int revert_wal_to_plain();
 
   uint64_t get_used();
+  int64_t get_used_non_bluefs();
   uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
