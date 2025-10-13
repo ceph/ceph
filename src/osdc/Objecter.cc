@@ -3114,7 +3114,7 @@ int Objecter::_calc_target(op_target_t *t, bool any_change)
       // Optimized EC pools need to be careful when calculating the shard
       // because an OSD may have multiple shards and the primary shard
       // might not be the first one in the acting set. The lookup
-      // therefoere has to be done in primaryfirst order.
+      // therefore has to be done in primaryfirst order.
       std::vector<int> pg_temp = t->acting;
       if (osdmap->has_pgtemp(actual_pgid)) {
 	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
