@@ -804,15 +804,16 @@ TransactionManager::get_extents_if_live(
     std::list<CachedExtentRef> res;
     res.emplace_back(std::move(extent));
   } else if (is_logical_type(type)) {
-    auto pin_list = co_await lba_manager->get_mappings(
+    auto pin_list = co_await lba_manager->get_cursors(
       t,
       laddr,
       len
     );
     auto paddr_seg_id = paddr.as_seg_paddr().get_segment_id();
     for (auto &pin : pin_list) {
-      DEBUGT("got pin, try read in parallel ... -- {}", t, pin);
-      auto pin_paddr = pin.get_val();
+      ceph_assert(pin->is_direct());
+      DEBUGT("got pin, try read in parallel ... -- {}", t, *pin);
+      auto pin_paddr = pin->get_paddr();
       if (!pin_paddr.is_absolute_segmented()) {
 	continue;
       }
@@ -838,7 +839,7 @@ TransactionManager::get_extents_if_live(
       //        recognize committed segments: https://tracker.ceph.com/issues/66941
       // ceph_assert(pin_seg_paddr >= paddr &&
       //             pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-      auto ret = co_await read_pin_by_type(t, std::move(pin), type);
+      auto ret = co_await read_cursor_by_type(t, std::move(pin), type);
       res.emplace_back(std::move(ret));
     }
     DEBUGT("{} {}~0x{:x} {} is alive as {} extents",

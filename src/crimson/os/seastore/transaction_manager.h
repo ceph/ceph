@@ -1180,15 +1180,14 @@ private:
       t, cursor.ctx.cache, cursor.pos, cursor.key);
   }
 
-  base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
+  base_iertr::future<LogicalChildNodeRef> read_cursor_by_type(
     Transaction &t,
-    LBAMapping pin,
+    LBACursorRef cursor,
     extent_types_t type)
   {
-    ceph_assert(pin.is_viewable());
-    assert(!pin.is_indirect());
+    assert(cursor->is_direct());
     // Note: pin might be a clone
-    auto v = pin.get_logical_extent(t);
+    auto v = get_extent_if_linked(t, *cursor);
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
@@ -1199,8 +1198,8 @@ private:
       ceph_assert(ext->get_type() == type);
       co_return ext;
     } else {
-      auto extent = co_await pin_to_extent_by_type(
-	t, pin, v.get_child_pos(), type);
+      auto extent = co_await cursor_to_extent_by_type(
+	t, cursor, v.get_child_pos(), type);
       co_return extent;
     }
   }
@@ -1442,30 +1441,30 @@ private:
   }
 
   /**
-   * pin_to_extent_by_type
+   * cursor_to_extent_by_type
    *
-   * Get extent mapped at pin.
+   * Get extent mapped at cursor.
    */
-  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
+  using cursor_to_extent_by_type_ret = pin_to_extent_iertr::future<
     LogicalChildNodeRef>;
-  pin_to_extent_by_type_ret pin_to_extent_by_type(
+  cursor_to_extent_by_type_ret cursor_to_extent_by_type(
       Transaction &t,
-      LBAMapping pin,
+      LBACursorRef cursor,
       child_pos_t<LBALeafNode> child_pos,
       extent_types_t type)
   {
-    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
-    SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
-              t, pin, type);
-    assert(pin.is_viewable());
+    LOG_PREFIX(TransactionManager::cursor_to_extent_by_type);
+    SUBTRACET(seastore_tm, "getting absent extent from cursor {} type {} ...",
+              t, *cursor, type);
     assert(is_logical_type(type));
     assert(is_background_transaction(t.get_src()));
-    laddr_t direct_key = pin.get_intermediate_base();
-    extent_len_t direct_length = pin.get_intermediate_length();
+    ceph_assert(cursor->is_direct());
+    laddr_t direct_key = cursor->get_laddr();
+    extent_len_t direct_length = cursor->get_length();
     auto ref = co_await cache->get_absent_extent_by_type(
       t,
       type,
-      pin.get_val(),
+      cursor->get_paddr(),
       direct_key,
       direct_length,
       // extent_init_func
@@ -1483,7 +1482,7 @@ private:
         // for background cleaning.
       }
     ),
-    pin.get_checksum());
+    cursor->get_checksum());
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
     assert(ref->is_fully_loaded());
