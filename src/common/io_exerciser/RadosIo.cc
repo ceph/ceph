@@ -16,6 +16,8 @@
 using RadosIo = ceph::io_exerciser::RadosIo;
 using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
+using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
+
 namespace {
 template <typename S>
 int send_osd_command(int osd, S& s, librados::Rados& rados, const char* name,
@@ -46,13 +48,13 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
-                 bool ec_optimizations)
+                 bool ec_optimizations, GenerationType data_generation_type)
     : Model(primary_oid, secondary_oid, block_size),
       rados(rados),
       asio(asio),
       om(std::make_unique<ObjectModel>(primary_oid, secondary_oid, block_size, seed)),
       db(data_generation::DataGenerator::create_generator(
-          data_generation::GenerationType::HeaderedSeededRandom, *om)),
+          data_generation_type, *om)),
       pool(pool),
       threads(threads),
       lock(lock),
