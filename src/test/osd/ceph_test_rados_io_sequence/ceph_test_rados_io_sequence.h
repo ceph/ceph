@@ -460,7 +460,8 @@ class TestObject {
              bool verbose,
              std::optional<int> seqseed,
              bool testRecovery,
-             bool checkConsistency);
+             bool checkConsistency,
+             bool dontDeleteObjects);
 
   int get_num_io();
   bool readyForIo();
@@ -484,6 +485,10 @@ class TestObject {
       pool_mappinglayers;
   bool testrecovery;
   bool checkconsistency;
+  bool dontdeleteobjects;
+  std::string primary_oid;
+  std::string secondary_oid;
+  int object_counter;
 };
 
 class TestRunner {
@@ -518,6 +523,7 @@ class TestRunner {
 
   bool verbose;
   bool dryrun;
+  bool dont_delete_objects;
   std::optional<int> seqseed;
   bool interactive;
 

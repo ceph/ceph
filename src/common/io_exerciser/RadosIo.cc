@@ -68,6 +68,16 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
 
 RadosIo::~RadosIo() {}
 
+void RadosIo::set_primary_oid(const std::string& new_oid) {
+  Model::set_primary_oid(new_oid);
+  om->set_primary_oid(new_oid);
+}
+
+void RadosIo::set_secondary_oid(const std::string& new_oid) {
+  Model::set_secondary_oid(new_oid);
+  om->set_secondary_oid(new_oid);
+}
+
 void RadosIo::start_io() {
   std::lock_guard l(lock);
   outstanding_io++;

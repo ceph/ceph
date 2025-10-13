@@ -12,6 +12,18 @@ ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& seco
   rng.seed(seed);
 }
 
+void ObjectModel::set_primary_oid(const std::string& new_oid) {
+  Model::set_primary_oid(new_oid);
+  primary_created = false;
+  primary_contents.resize(0);
+}
+
+void ObjectModel::set_secondary_oid(const std::string& new_oid) {
+  Model::set_secondary_oid(new_oid);
+  secondary_created = false;
+  secondary_contents.resize(0);
+}
+
 int ObjectModel::get_seed(uint64_t offset) const {
   ceph_assert(offset < primary_contents.size());
   return primary_contents[offset];

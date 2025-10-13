@@ -33,9 +33,6 @@ class Model {
   std::string secondary_oid;
   uint64_t block_size;
 
-  void set_primary_oid(const std::string& new_oid);
-  void set_secondary_oid(const std::string& new_oid);
-
  public:
   Model(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size);
   virtual ~Model() = default;
@@ -43,6 +40,8 @@ class Model {
   virtual bool readyForIoOp(IoOp& op) = 0;
   virtual void applyIoOp(IoOp& op) = 0;
 
+  virtual void set_primary_oid(const std::string& new_oid);
+  virtual void set_secondary_oid(const std::string& new_oid);
   const std::string get_primary_oid() const;
   const std::string get_secondary_oid() const;
   void swap_primary_secondary_oid();
