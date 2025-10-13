@@ -83,6 +83,7 @@ describe('SmbShareFormComponent', () => {
     component.smbShareForm.setValue({
       share_id: 'share1',
       volume: 'fs1',
+      name: 'My Share',
       subvolume_group: 'group1',
       subvolume: 'subvol1',
       prefixedPath: '/volumes/fs1/group1/subvol1',
