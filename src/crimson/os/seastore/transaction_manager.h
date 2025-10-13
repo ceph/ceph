@@ -161,9 +161,13 @@ public:
     extent_len_t length) {
     LOG_PREFIX(TransactionManager::get_pins);
     SUBDEBUGT(seastore_tm, "{}~0x{:x} ...", t, offset, length);
-    auto pins = co_await lba_manager->get_mappings(t, offset, length);
-    SUBDEBUGT(seastore_tm, "got {} pins", t, pins.size());
-    co_return pins;
+    auto cursors = co_await lba_manager->get_cursors(t, offset, length);
+    std::list<LBAMapping> ret;
+    for (auto &cursor: cursors) {
+      ret.emplace_back(co_await resolve_cursor_to_mapping(t, cursor));
+    }
+    SUBDEBUGT(seastore_tm, "got {} pins", t, ret.size());
+    co_return ret;
   }
 
   /**
