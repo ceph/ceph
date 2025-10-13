@@ -656,24 +656,24 @@ struct btree_lba_manager_test : btree_test_base {
       auto ret_list = with_trans_intr(
 	*t.t,
 	[=, this](auto &t) {
-	  return lba_manager->get_mappings(
+	  return lba_manager->get_cursors(
 	    t, laddr, len);
 	}).unsafe_get();
       EXPECT_EQ(ret_list.size(), 1);
       auto &ret = *ret_list.begin();
-      EXPECT_EQ(i.second.addr, ret.get_val());
-      EXPECT_EQ(laddr, ret.get_key());
-      EXPECT_EQ(len, ret.get_length());
+      EXPECT_EQ(i.second.addr, ret->get_paddr());
+      EXPECT_EQ(laddr, ret->get_laddr());
+      EXPECT_EQ(len, ret->get_length());
 
       auto ret_pin = with_trans_intr(
 	*t.t,
 	[=, this](auto &t) {
-	  return lba_manager->get_mapping(
+	  return lba_manager->get_cursor(
 	    t, laddr);
 	}).unsafe_get();
-      EXPECT_EQ(i.second.addr, ret_pin.get_val());
-      EXPECT_EQ(laddr, ret_pin.get_key());
-      EXPECT_EQ(len, ret_pin.get_length());
+      EXPECT_EQ(i.second.addr, ret_pin->get_paddr());
+      EXPECT_EQ(laddr, ret_pin->get_laddr());
+      EXPECT_EQ(len, ret_pin->get_length());
     }
     with_trans_intr(
       *t.t,
