@@ -1178,15 +1178,14 @@ private:
       t, cursor.ctx.cache, cursor.pos, cursor.key);
   }
 
-  base_iertr::future<LogicalChildNodeRef> read_pin_by_type(
+  base_iertr::future<LogicalChildNodeRef> read_cursor_by_type(
     Transaction &t,
-    LBAMapping pin,
+    LBACursorRef cursor,
     extent_types_t type)
   {
-    ceph_assert(pin.is_viewable());
-    assert(!pin.is_indirect());
+    assert(cursor->is_direct());
     // Note: pin might be a clone
-    auto v = pin.get_logical_extent(t);
+    auto v = get_extent_if_linked(t, *cursor);
     // checking the lba child must be atomic with creating
     // and linking the absent child
     if (v.has_child()) {
@@ -1197,8 +1196,8 @@ private:
       ceph_assert(ext->get_type() == type);
       co_return ext;
     } else {
-      auto extent = co_await pin_to_extent_by_type(
-	t, pin, v.get_child_pos(), type);
+      auto extent = co_await cursor_to_extent_by_type(
+	t, cursor, v.get_child_pos(), type);
       co_return extent;
     }
   }
@@ -1450,30 +1449,30 @@ private:
   }
 
   /**
-   * pin_to_extent_by_type
+   * cursor_to_extent_by_type
    *
-   * Get extent mapped at pin.
+   * Get extent mapped at cursor.
    */
-  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
+  using cursor_to_extent_by_type_ret = pin_to_extent_iertr::future<
     LogicalChildNodeRef>;
-  pin_to_extent_by_type_ret pin_to_extent_by_type(
+  cursor_to_extent_by_type_ret cursor_to_extent_by_type(
       Transaction &t,
-      LBAMapping pin,
+      LBACursorRef cursor,
       child_pos_t<LBALeafNode> child_pos,
       extent_types_t type)
   {
-    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
-    SUBTRACET(seastore_tm, "getting absent extent from pin {} type {} ...",
-              t, pin, type);
-    assert(pin.is_viewable());
+    LOG_PREFIX(TransactionManager::cursor_to_extent_by_type);
+    SUBTRACET(seastore_tm, "getting absent extent from cursor {} type {} ...",
+              t, *cursor, type);
     assert(is_logical_type(type));
     assert(is_background_transaction(t.get_src()));
-    laddr_t direct_key = pin.get_intermediate_base();
-    extent_len_t direct_length = pin.get_intermediate_length();
+    ceph_assert(cursor->is_direct());
+    laddr_t direct_key = cursor->get_laddr();
+    extent_len_t direct_length = cursor->get_length();
     auto ref = co_await cache->get_absent_extent_by_type(
       t,
       type,
-      pin.get_val(),
+      cursor->get_paddr(),
       direct_key,
       direct_length,
       [direct_key, child_pos=std::move(child_pos),
@@ -1495,21 +1494,21 @@ private:
       "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
       t,
       *ref,
-      pin.get_checksum(),
+      cursor->get_checksum(),
       crc);
     assert(ref->is_fully_loaded());
     bool inconsistent = false;
     if (full_extent_integrity_check) {
-      inconsistent = (pin.get_checksum() != crc);
+      inconsistent = (cursor->get_checksum() != crc);
     } else { // !full_extent_integrity_check: remapped extent may be skipped
-      inconsistent = !(pin.get_checksum() == 0 ||
-		       pin.get_checksum() == crc);
+      inconsistent = !(cursor->get_checksum() == 0 ||
+		       cursor->get_checksum() == crc);
     }
     if (unlikely(inconsistent)) {
       SUBERRORT(seastore_tm,
 		"extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
 		t,
-		pin.get_checksum(),
+		cursor->get_checksum(),
 		crc,
 		*ref);
       ceph_abort();
