@@ -107,8 +107,9 @@ public:
    *
    * Get the logical pin at offset
    */
-  using get_pin_iertr = LBAManager::get_mapping_iertr;
-  using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAMapping>;
+  using get_pin_iertr = base_iertr::extend<
+    crimson::ct_error::enoent>;
+  using get_pin_ret = get_pin_iertr::future<LBAMapping>;
   get_pin_ret get_pin(
     Transaction &t,
     laddr_t offset) {
@@ -151,7 +152,7 @@ public:
    *
    * Get logical pins overlapping offset~length
    */
-  using get_pins_iertr = LBAManager::get_mappings_iertr;
+  using get_pins_iertr = base_iertr;
   using get_pins_ret = get_pins_iertr::future<lba_mapping_list_t>;
   get_pins_ret get_pins(
     Transaction &t,
