@@ -52,43 +52,6 @@ public:
     Transaction &t,
     LogicalChildNode &extent) = 0;
 
-  /**
-   * Fetches mappings for laddr_t in range [offset, offset + len)
-   *
-   * Future will not resolve until all pins have resolved (set_paddr called)
-   * For indirect lba mappings, get_mappings will always retrieve the original
-   * lba value.
-   */
-  using get_mappings_iertr = base_iertr;
-  using get_mappings_ret = get_mappings_iertr::future<lba_mapping_list_t>;
-  virtual get_mappings_ret get_mappings(
-    Transaction &t,
-    laddr_t offset, extent_len_t length) = 0;
-
-  /**
-   * Fetches the mapping for laddr_t
-   *
-   * Future will not resolve until the pin has resolved (set_paddr called)
-   * For indirect lba mappings, get_mapping will always retrieve the original
-   * lba value.
-   */
-  using get_mapping_iertr = base_iertr::extend<
-    crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
-  virtual get_mapping_ret get_mapping(
-    Transaction &t,
-    laddr_t offset,
-    bool search_containing = false) = 0;
-
-  /*
-   * Fetches the mapping corresponding to the "extent"
-   *
-   */
-  virtual get_mapping_ret get_mapping(
-    Transaction &t,
-    LogicalChildNode &extent) = 0;
-
-
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
   using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
