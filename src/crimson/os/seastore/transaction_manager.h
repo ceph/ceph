@@ -1470,7 +1470,7 @@ private:
     assert(is_background_transaction(t.get_src()));
     laddr_t direct_key = pin.get_intermediate_base();
     extent_len_t direct_length = pin.get_intermediate_length();
-    return cache->get_absent_extent_by_type(
+    auto ref = co_await cache->get_absent_extent_by_type(
       t,
       type,
       pin.get_val(),
@@ -1488,36 +1488,33 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) {
-      auto crc = ref->calc_crc32c();
-      SUBTRACET(
-	seastore_tm,
-	"got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	t,
-	*ref,
-	pin.get_checksum(),
-	crc);
-      assert(ref->is_fully_loaded());
-      bool inconsistent = false;
-      if (full_extent_integrity_check) {
-	inconsistent = (pin.get_checksum() != crc);
-      } else { // !full_extent_integrity_check: remapped extent may be skipped
-	inconsistent = !(pin.get_checksum() == 0 ||
-			 pin.get_checksum() == crc);
-      }
-      if (unlikely(inconsistent)) {
-	SUBERRORT(seastore_tm,
-	  "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	  t,
-	  pin.get_checksum(),
-	  crc,
-	  *ref);
-	ceph_abort();
-      }
-      return pin_to_extent_by_type_ret(
-	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalChildNode>()));
-    });
+    );
+    auto crc = ref->calc_crc32c();
+    SUBTRACET(
+      seastore_tm,
+      "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
+      t,
+      *ref,
+      pin.get_checksum(),
+      crc);
+    assert(ref->is_fully_loaded());
+    bool inconsistent = false;
+    if (full_extent_integrity_check) {
+      inconsistent = (pin.get_checksum() != crc);
+    } else { // !full_extent_integrity_check: remapped extent may be skipped
+      inconsistent = !(pin.get_checksum() == 0 ||
+		       pin.get_checksum() == crc);
+    }
+    if (unlikely(inconsistent)) {
+      SUBERRORT(seastore_tm,
+		"extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
+		t,
+		pin.get_checksum(),
+		crc,
+		*ref);
+      ceph_abort();
+    }
+    co_return ref->template cast<LogicalChildNode>();
   }
 
   bool get_checksum_needed(paddr_t paddr) {
