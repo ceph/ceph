@@ -4547,6 +4547,15 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_remote_cache_address
+  type: str
+  level: advanced
+  desc: Address of the remote cache driver 
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_bucket_persistent_notif_num_shards
   type: uint
   level: advanced

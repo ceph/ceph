@@ -22,6 +22,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_ssd_driver.h"
 #include "rgw_redis_driver.h"
+#include "rgw_rest_conn.h"
 
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
@@ -50,6 +51,16 @@ inline std::string get_key_in_cache(const std::string& prefix, const std::string
 }
 
 using boost::redis::connection;
+
+class RGWRemoteD4NGetCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:
+  bufferlist *in_bl;                                  
+  RGWRemoteD4NGetCB(bufferlist* _bl): in_bl(_bl) {}
+  int handle_data(bufferlist& bl, bool *pause) override {
+    this->in_bl->append(bl);
+    return 0;
+  }
+};
 
 class D4NFilterDriver : public FilterDriver {
   private:
@@ -136,6 +147,7 @@ class D4NFilterObject : public FilterObject {
     D4NFilterDriver* driver;
     std::string version;
     std::string prefix;
+    Attrs attrs_d4n;
     rgw_obj obj;
     rgw::sal::Object* dest_object{nullptr}; //for copy-object
     rgw::sal::Bucket* dest_bucket{nullptr}; //for copy-object
@@ -193,6 +205,9 @@ class D4NFilterObject : public FilterObject {
 	}
 	virtual ~D4NFilterReadOp() = default;
 
+  int getRemote(const DoutPrefixProvider* dpp, long long start, long long end, std::string key, std::string remoteCacheAddress, bufferlist *bl, optional_yield y);
+  int remoteFlush(const DoutPrefixProvider* dpp, bufferlist bl, uint64_t ofs, uint64_t len, uint64_t read_ofs, std::string creationTime, optional_yield y);
+
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			     RGWGetDataCB* cb, optional_yield y) override;
@@ -206,7 +221,12 @@ class D4NFilterObject : public FilterObject {
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
 	std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
+  std::map<off_t, std::tuple<off_t, bool, bufferlist>> read_data;
+  bool last_part_done = false;
+  uint64_t last_adjusted_ofs = -1;
+  bool first_block = true; //is it first_block
 
+  void set_first_block(bool val) {first_block = val;}
 	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
 	int drain(const DoutPrefixProvider* dpp, optional_yield y);
@@ -281,6 +301,8 @@ class D4NFilterObject : public FilterObject {
 
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
+    void set_object_attrs(Attrs attrs) { this->attrs_d4n = attrs; }
+    Attrs get_object_attrs() { return this->attrs_d4n; }
     int get_obj_attrs_from_cache(const DoutPrefixProvider* dpp, optional_yield y);
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
@@ -334,7 +356,19 @@ class D4NFilterWriter : public FilterWriter {
 			 const req_context& rctx,
 			 uint32_t flags) override;
    bool is_atomic() { return atomic; };
+   int sendRemote(const DoutPrefixProvider* dpp, rgw::d4n::CacheObj *object, std::string remoteCacheAddress, std::string key, bufferlist*
+    out_bl, optional_yield y);
    const DoutPrefixProvider* get_dpp() { return this->dpp; } 
+};
+
+class D4NGetObjectCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+public:                                                     
+  bufferlist *in_bl;
+  D4NGetObjectCB(bufferlist* _bl): in_bl(_bl) {}
+  int handle_data(bufferlist& bl, bool *pause) override {
+    this->in_bl->append(bl);
+    return 0;
+  }
 };
 
 class D4NFilterMultipartUpload : public FilterMultipartUpload {
