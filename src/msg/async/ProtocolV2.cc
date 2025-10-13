@@ -2225,7 +2225,9 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
   std::vector<uint32_t> allowed_methods;
   std::vector<uint32_t> allowed_modes;
   messenger->auth_server->get_supported_auth_methods(
-    connection->get_peer_type(), &allowed_methods, &allowed_modes);
+    connection->get_peer_type(), &allowed_methods);
+  messenger->auth_server->get_supported_con_modes(
+    connection->get_peer_type(), auth_meta->auth_method, &allowed_modes);
   ldout(cct, 1) << __func__ << " auth_method " << auth_meta->auth_method
 		<< " r " << cpp_strerror(r)
 		<< ", allowed_methods " << allowed_methods
