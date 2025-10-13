@@ -98,7 +98,7 @@ export class ServicesComponent extends ListWithDetails implements OnChanges, OnI
         permission: 'create',
         icon: Icons.add,
         click: () => this.openModal(),
-        name: this.actionLabels.CREATE,
+        name: `${this.actionLabels.CREATE} service`,
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
         // disable: (selection: CdTableSelection) => this.getDisable('create', selection)
       },
