@@ -486,6 +486,7 @@ class TestObject {
   bool testrecovery;
   bool checkconsistency;
   bool dontdeleteobjects;
+  std::string primary_oid_base;
   std::string primary_oid;
   std::string secondary_oid;
   int object_counter;

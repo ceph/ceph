@@ -1063,6 +1063,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
   curseq = seq_range.first;
 
   object_counter = 0;
+  primary_oid_base = primary_oid;
 
   if (testrecovery) {
     seq = ceph::io_exerciser::EcIoSequence::generate_sequence(
@@ -1096,8 +1097,8 @@ bool ceph::io_sequence::tester::TestObject::next() {
     }
     if (dontdeleteobjects && op->getOpType() == ceph::io_exerciser::OpType::Remove) {
       // Change the primary_oid so that the next object will be created with a different name
-      std::string new_oid = primary_oid + "_" + std::to_string(object_counter++);
-      exerciser_model->set_primary_oid(new_oid);
+      primary_oid = primary_oid_base + "_" + std::to_string(object_counter++);
+      exerciser_model->set_primary_oid(primary_oid);
     } else {
       exerciser_model->applyIoOp(*op);
     }
