@@ -479,9 +479,10 @@ environments from experiencing log file bloat by default.
 Run the following two commands in order to enable in-memory log dumping: 
 
 #. 
-   .. prompt:: bash $
+   .. prompt:: bash #
 
       ceph config set mds debug_mds <log_level>/<gather_level>
+
    Set ``log_level`` to a value of less than ``10``. Set ``gather_level`` to a
    value greater than ``10``. When those two values have been set,  in-memory
    log dump is enabled.
@@ -489,6 +490,7 @@ Run the following two commands in order to enable in-memory log dumping:
    .. prompt:: bash #
 
       ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+
    When in-memory log dumping is enabled, the MDS checks for
    extraordinary events every ``mds_extraordinary_events_dump_interval``
    seconds. If any extraordinary event occurs, the MDS dumps the in-memory logs
