@@ -214,19 +214,39 @@ TEST_P(CompressorTest, compress_decompress)
   bufferlist in, out;
   bufferlist after;
   bufferlist exp;
+
   in.append(test, len);
+  exp.append(test);
   std::optional<int32_t> compressor_message;
   res = compressor->compress(in, out, compressor_message);
   EXPECT_EQ(res, 0);
   res = compressor->decompress(out, after, compressor_message);
   EXPECT_EQ(res, 0);
-  exp.append(test);
   EXPECT_TRUE(exp.contents_equal(after));
   after.clear();
   size_t compressed_len = out.length();
   out.append_zero(12);
   auto it = out.cbegin();
   res = compressor->decompress(it, compressed_len, after, compressor_message);
+  EXPECT_EQ(res, 0);
+  EXPECT_TRUE(exp.contents_equal(after));
+
+  //compressing bl which has got empty bufferptr at the end
+  in.clear();
+  out.clear();
+  after.clear();
+  exp.clear();
+
+  const size_t PREALLOC_SIZE = 1;  // any non-zero value would suffice here
+  bufferlist dummy(PREALLOC_SIZE); // this appends an empty preallocated ptr to the end of the bufferlist
+  EXPECT_TRUE(dummy.buffers().back().length() == 0); // make sure we have empty ptr at the end
+  in.append(test, len);
+  in.append(dummy);
+  exp.append(test);
+
+  res = compressor->compress(in, out, compressor_message);
+  EXPECT_EQ(res, 0);
+  res = compressor->decompress(out, after, compressor_message);
   EXPECT_EQ(res, 0);
   EXPECT_TRUE(exp.contents_equal(after));
 

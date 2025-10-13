@@ -52,7 +52,7 @@ class ZstdCompressor : public Compressor {
 	return -EINVAL;
       }
     }
-    ceph_assert(p.end());
+    ceph_assert(p.get_remaining() == 0);
 
     ZSTD_freeCStream(s);
 
