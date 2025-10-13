@@ -17,7 +17,6 @@ COPY \
 
 
 FROM $DISTRO
-ENV FOR_MAKE_CHECK=1
 ARG DISTRO
 ARG CEPH_CTR_SRC=/usr/local/src/ceph
 ARG CLEAN_DNF=yes
@@ -25,6 +24,7 @@ ARG CEPH_BASE_BRANCH=main
 ARG SCCACHE_VERSION=v0.8.2
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
+ARG FOR_MAKE_CHECK=1
 COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
 # Note that we do not use ENV for the following. This is because we do not
 # want them permamently stored in the container's layer.
@@ -33,6 +33,7 @@ RUN DISTRO=$DISTRO \
     CLEAN_DNF=$CLEAN_DNF \
     CEPH_CTR_SRC=${CEPH_CTR_SRC} \
     WITH_CRIMSON=${WITH_CRIMSON} \
+    FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
     SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl.tar.gz"; \
