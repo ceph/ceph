@@ -208,23 +208,22 @@ struct __attribute__((packed)) backref_map_val_le_t {
  * a key-value mapping's location and the snapshot of its data at construction
  * time.
  */
-template <typename key_t, typename val_t>
+template <typename key_t, typename val_t, typename ParentT>
 struct BtreeCursor
   : public boost::intrusive_ref_counter<
-      BtreeCursor<key_t, val_t>, boost::thread_unsafe_counter> {
+      BtreeCursor<key_t, val_t, ParentT>, boost::thread_unsafe_counter> {
   BtreeCursor(
     op_context_t &ctx,
-    CachedExtentRef parent,
+    TCachedExtentRef<ParentT> parent,
     uint64_t modifications,
-    key_t key,
-    std::optional<val_t> val,
-    btreenode_pos_t pos)
+    ParentT::iterator &&iter)
       : ctx(ctx),
 	parent(std::move(parent)),
 	modifications(modifications),
-	key(key),
-	val(std::move(val)),
-	pos(pos)
+	iter(std::move(iter)),
+	key(iter == this->parent->end()
+	    ? min_max_t<key_t>::max
+	    : iter.get_key())
   {
     if constexpr (std::is_same_v<key_t, laddr_t>) {
       static_assert(std::is_same_v<val_t, lba::lba_map_val_t>,
@@ -238,11 +237,10 @@ struct BtreeCursor
   }
 
   op_context_t ctx;
-  CachedExtentRef parent;
+  TCachedExtentRef<ParentT> parent;
   uint64_t modifications;
-  key_t key;
-  std::optional<val_t> val;
-  btreenode_pos_t pos;
+  ParentT::iterator iter;
+  key_t key = min_max_t<key_t>::null;
 
   // NOTE: The overhead of calling is_viewable() might be not negligible in the
   // case of the parent extent is stable and shared by multiple transactions.
@@ -251,75 +249,28 @@ struct BtreeCursor
   bool is_viewable() const;
 
   bool is_end() const {
-    auto max_key = min_max_t<key_t>::max;
-    assert((key != max_key) == (bool)val);
-    return key == max_key;
+    assert(is_viewable());
+    return iter == parent->end();
   }
 
   extent_len_t get_length() const {
+    assert(is_viewable());
     assert(!is_end());
-    return val->len;
+    return iter.get_val().len;
   }
-};
 
-struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
-  using Base = BtreeCursor<laddr_t, lba::lba_map_val_t>;
-  using Base::BtreeCursor;
-  bool is_indirect() const {
-    return !is_end() && val->pladdr.is_laddr();
+  uint16_t get_pos() const {
+    return iter.get_offset();
   }
-  laddr_t get_laddr() const {
+
+  key_t get_key() const {
     return key;
   }
-  paddr_t get_paddr() const {
-    assert(!is_indirect());
-    assert(!is_end());
-    return val->pladdr.get_paddr();
-  }
-  laddr_t get_intermediate_key() const {
-    assert(is_indirect());
-    assert(!is_end());
-    return val->pladdr.get_laddr();
-  }
-  checksum_t get_checksum() const {
-    assert(!is_end());
-    assert(!is_indirect());
-    return val->checksum;
-  }
-  bool contains(laddr_t laddr) const {
-    return get_laddr() <= laddr && get_laddr() + get_length() > laddr;
-  }
-  extent_ref_count_t get_refcount() const {
-    assert(!is_end());
-    assert(!is_indirect());
-    return val->refcount;
-  }
-
-  base_iertr::future<> refresh();
 };
-using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
-struct BackrefCursor : BtreeCursor<paddr_t, backref::backref_map_val_t> {
-  using Base = BtreeCursor<paddr_t, backref::backref_map_val_t>;
-  using Base::BtreeCursor;
-  paddr_t get_paddr() const {
-    assert(key.is_absolute());
-    return key;
-  }
-  laddr_t get_laddr() const {
-    assert(!is_end());
-    return val->laddr;
-  }
-  extent_types_t get_type() const {
-    assert(!is_end());
-    return val->type;
-  }
-};
-using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
-
-template <typename key_t, typename val_t>
+template <typename key_t, typename val_t, typename ParentT>
 std::ostream &operator<<(
-  std::ostream &out, const BtreeCursor<key_t, val_t> &cursor)
+  std::ostream &out, const BtreeCursor<key_t, val_t, ParentT> &cursor)
 {
   if constexpr (std::is_same_v<key_t, laddr_t>) {
     out << "LBACursor(";
@@ -327,20 +278,18 @@ std::ostream &operator<<(
     out << "BackrefCursor(";
   }
   out << (void*)cursor.parent.get()
-      << "@" << cursor.pos
-      << "#" << cursor.modifications
-      << ",";
-  if (cursor.is_end()) {
-    return out << "END)";
+      << "@" << cursor.iter.get_offset()
+      << "#" << cursor.modifications;
+  if (cursor.is_viewable()) {
+    out << ",";
+    if (cursor.is_end()) {
+      return out << "END)";
+    }
+    return out << "," << cursor.iter.get_key()
+	       << "~" << cursor.iter.get_val()
+	       << ")";
   }
-  return out << "," << cursor.key
-	     << "~" << *cursor.val
-	     << ")";
+  return out;
 }
 
 } // namespace crimson::os::seastore
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<crimson::os::seastore::LBACursor> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::BackrefCursor> : fmt::ostream_formatter {};
-#endif
