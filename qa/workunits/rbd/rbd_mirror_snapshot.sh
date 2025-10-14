@@ -410,6 +410,31 @@ for i in ${image2} ${image4}; do
     remove_image_retry ${CLUSTER2} ${POOL} ${i}
 done
 
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  testlog "TEST: demote image while daemon is offline"
+  demote_image=test_demote_image
+  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${demote_image}
+  write_image ${CLUSTER2} ${POOL} ${demote_image} 100
+  wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${demote_image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+replaying'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+stopped'
+  stop_mirrors ${CLUSTER1}
+  write_image ${CLUSTER2} ${POOL} ${demote_image} 100
+  demote_image ${CLUSTER2} ${POOL} ${demote_image}
+  start_mirrors ${CLUSTER1}
+  wait_for_snapshot_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+unknown'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+unknown'
+  compare_images ${POOL} ${demote_image}
+  promote_image ${CLUSTER1} ${POOL} ${demote_image}
+  wait_for_image_replay_started ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+stopped'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+replaying'
+  remove_image_retry ${CLUSTER1} ${POOL} ${demote_image}
+fi
+
 testlog "TEST: request image resync when remote is not primary"
 test_resync_image=test_resync_image
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${test_resync_image} ${RBD_MIRROR_MODE}
@@ -562,6 +587,36 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   testlog "TEST: no blocklists"
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
+fi
+
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  testlog "TEST: test partially synced demote snapshot sync after daemon restart"
+  demote_image=test_demote_image
+  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${demote_image} ${MIRROR_IMAGE_MODE} 10G
+  write_image ${CLUSTER2} ${POOL} ${demote_image} 100
+  wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${demote_image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+replaying'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+stopped'
+  write_image ${CLUSTER2} ${POOL} ${demote_image} 2560 4194304
+  demote_image ${CLUSTER2} ${POOL} ${demote_image}
+  get_newest_complete_mirror_snapshot_id ${CLUSTER2} ${POOL} ${demote_image} primary_snap_id
+  wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${demote_image} ${primary_snap_id}
+  sleep $((RANDOM % 6))
+  stop_mirrors ${CLUSTER1} -KILL
+  SNAPS=$(get_snaps_json ${CLUSTER1} ${POOL} ${demote_image})
+  jq -e '.[-1].namespace["type"] == "mirror" and .[-1].namespace["state"] == "demoted" and .[-1].namespace["complete"] == false' <<< ${SNAPS}
+  start_mirrors ${CLUSTER1}
+  wait_for_snapshot_sync_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+unknown'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+unknown'
+  compare_images ${POOL} ${demote_image}
+  promote_image ${CLUSTER1} ${POOL} ${demote_image}
+  wait_for_image_replay_started ${CLUSTER2} ${POOL} ${demote_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${demote_image} 'up+stopped'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${demote_image} 'up+replaying'
+  remove_image_retry ${CLUSTER1} ${POOL} ${demote_image}
 fi
 
 testlog "TEST: force promote with a user snapshot"
