@@ -842,7 +842,6 @@ wait_for_replay_complete()
     fi
 }
 
-
 test_status_in_pool_dir()
 {
     local cluster=$1
