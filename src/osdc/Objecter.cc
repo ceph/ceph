@@ -63,6 +63,8 @@
 
 #include "neorados/RADOSImpl.h"
 
+#include "osdc/SplitOp.h"
+
 using std::list;
 using std::make_pair;
 using std::map;
@@ -2332,7 +2334,12 @@ void Objecter::op_submit(Op *op, ceph_tid_t *ptid, int *ctx_budget)
   if (!ptid)
     ptid = &tid;
   op->trace.event("op submit");
-  _op_submit_with_budget(op, rl, ptid, ctx_budget);
+
+  bool was_split = SplitOp::create(op, *this, rl, ptid, ctx_budget, cct);
+
+  if (!was_split) {
+    _op_submit_with_budget(op, rl, ptid, ctx_budget);
+  }
 }
 
 void Objecter::_op_submit_with_budget(Op *op,
