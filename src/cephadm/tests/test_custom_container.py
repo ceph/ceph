@@ -124,6 +124,7 @@ def test_deploy_custom_container(cephadm_fs):
         ctx.config_blobs = {
             'envs': ['FOO=1', 'BAR=77'],
         }
+        ctx.limit_core_infinity = False
 
         _cephadm._common_deploy(ctx)
 
@@ -193,6 +194,7 @@ def test_deploy_custom_container_and_inits(cephadm_fs):
                 'data2': '/srv',
             },
         }
+        ctx.limit_core_infinity = False
 
         _cephadm._common_deploy(ctx)
 
