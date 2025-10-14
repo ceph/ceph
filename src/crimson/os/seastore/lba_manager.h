@@ -238,20 +238,6 @@ public:
     extent_len_t prev_len,
     paddr_t prev_addr,
     LogicalChildNode& nextent) = 0;
-  update_mapping_ret update_mapping(
-    Transaction& t,
-    LBAMapping mapping,
-    extent_len_t prev_len,
-    paddr_t prev_addr,
-    LogicalChildNode& nextent) {
-    assert(!mapping.is_indirect());
-    return update_mapping(
-      t,
-      mapping.direct_cursor,
-      prev_len,
-      prev_addr,
-      nextent);
-  }
 
   /**
    * update_mappings
