@@ -23,6 +23,8 @@ class BtreeLBAManager;
 }
 
 class LBAMapping {
+  using LBACursorRef = lba::LBACursorRef;
+  using LBACursor = lba::LBACursor;
   LBAMapping(LBACursorRef direct, LBACursorRef indirect)
     : direct_cursor(std::move(direct)),
       indirect_cursor(std::move(indirect))
@@ -31,8 +33,8 @@ class LBAMapping {
     assert(!indirect_cursor || indirect_cursor->is_indirect());
     // if the mapping is indirect, it mustn't be at the end
     if (is_indirect() && is_linked_direct()) {
-      assert((bool)direct_cursor->val
-	    && direct_cursor->key != L_ADDR_NULL);
+      assert(!direct_cursor->is_end()
+	    && direct_cursor->get_laddr() != L_ADDR_NULL);
     }
   }
 
@@ -78,13 +80,9 @@ public:
   }
 
   bool is_end() const {
-    bool end = !is_indirect() && !direct_cursor->val;
     // if the mapping is at the end, it can't be indirect and
     // the physical cursor must be L_ADDR_NULL
-    assert(end
-      ? (!indirect_cursor && direct_cursor->key == L_ADDR_NULL)
-      : true);
-    return end;
+    return !is_indirect() && direct_cursor->is_end();
   }
 
   bool is_indirect() const {
@@ -143,10 +141,8 @@ public:
   laddr_t get_key() const {
     assert(!is_null());
     if (is_indirect()) {
-      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_laddr();
     }
-    assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
   }
 
