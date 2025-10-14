@@ -12,21 +12,24 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 set -e
+
+if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    CEPH_ROOT="${SCRIPT_DIR}"
+    . "${CEPH_ROOT}/src/script/lib-build.sh" || exit 2
+fi
+
+
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
-if test $(id -u) != 0 ; then
-    SUDO=sudo
-fi
+wrap_sudo
 # enable UTF-8 encoding for programs like pip that expect to
 # print more than just ascii chars
 export LC_ALL=C.UTF-8
 
 ARCH=$(uname -m)
 
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
 
 function munge_ceph_spec_in {
     local with_seastar=$1
@@ -459,6 +462,8 @@ EOF
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
+                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                    $SUDO dnf config-manager --set-enabled crb
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"

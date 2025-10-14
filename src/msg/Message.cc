@@ -225,7 +225,7 @@
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
+void Message::encode(uint64_t features, int crcflags, bool skip_header_crc, CephContext *cct)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -255,46 +255,17 @@ void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 
   if (crcflags & MSG_CRC_DATA) {
     calc_data_crc();
-
-#ifdef ENCODE_DUMP
-    bufferlist bl;
-    encode(get_header(), bl);
-
-    // dump the old footer format
-    ceph_msg_footer_old old_footer;
-    old_footer.front_crc = footer.front_crc;
-    old_footer.middle_crc = footer.middle_crc;
-    old_footer.data_crc = footer.data_crc;
-    old_footer.flags = footer.flags;
-    encode(old_footer, bl);
-
-    encode(get_payload(), bl);
-    encode(get_middle(), bl);
-    encode(get_data(), bl);
-
-    // this is almost an exponential backoff, except because we count
-    // bits we tend to sample things we encode later, which should be
-    // more representative.
-    static int i = 0;
-    i++;
-    int bits = 0;
-    for (unsigned t = i; t; bits++)
-      t &= t - 1;
-    if (bits <= 2) {
-      char fn[200];
-      int status;
-      snprintf(fn, sizeof(fn), ENCODE_STRINGIFY(ENCODE_DUMP) "/%s__%d.%x",
-	       abi::__cxa_demangle(typeid(*this).name(), 0, 0, &status),
-	       getpid(), i++);
-      int fd = ::open(fn, O_WRONLY|O_TRUNC|O_CREAT|O_CLOEXEC|O_BINARY, 0644);
-      if (fd >= 0) {
-	bl.write_fd(fd);
-	::close(fd);
-      }
-    }
-#endif
   } else {
     footer.flags = (unsigned)footer.flags | CEPH_MSG_FOOTER_NOCRC;
+  }
+  if (header.type == MSG_PGSTATS) {
+    if (cct && cct->_conf->ms_msg_pgstats_verbose) {
+      ldout(cct, 0) << "Encoding MSG_PGSTATS payload tid= " << header.tid
+        << " payload len=" << get_payload().length() << " bytes\n"
+        << "PGSTATS_ENC BEGIN tid=" << header.tid << "\n";
+        get_payload().hexdump(*_dout);
+        *_dout << "PGSTATS_ENC END tid=" << header.tid << dendl;
+    }
   }
 }
 
@@ -966,6 +937,15 @@ Message *decode_message(CephContext *cct,
   m->set_data(data);
 
   try {
+    if (header.type == MSG_PGSTATS) {
+      if (cct && cct->_conf->ms_msg_pgstats_verbose) {
+        ldout(cct, 0) << "Decoding MSG_PGSTATS payload tid= " << m->get_header().tid
+          << " payload len=" << m->get_payload().length() << " bytes\n"
+          << "PGSTATS_DEC BEGIN tid=" << m->get_header().tid << "\n";
+          m->get_payload().hexdump(*_dout);
+          *_dout << "PGSTATS_DEC END tid=" << m->get_header().tid << dendl;
+        }
+    }
     m->decode_payload();
   }
   catch (const ceph::buffer::error &e) {
