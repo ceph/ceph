@@ -423,7 +423,7 @@ def _has_python_venv(executable):
 
 def _has_python_pip(executable):
     res = _run(
-        [executable, '-m', 'venv', '--help'], stdout=subprocess.DEVNULL
+        [executable, '-m', 'pip', '--help'], stdout=subprocess.DEVNULL
     )
     return res.returncode == 0
 
