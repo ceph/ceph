@@ -154,6 +154,7 @@ class PipEnv(enum.Enum):
 class DependencyMode(enum.Enum):
     pip = enum.auto()
     rpm = enum.auto()
+    deb = enum.auto()
     none = enum.auto()
 
 
@@ -169,6 +170,8 @@ class Config:
             self._setup_pip()
         elif self.deps_mode == DependencyMode.rpm:
             self._setup_rpm()
+        elif self.deps_mode == DependencyMode.deb:
+            self._setup_deb()
 
     def _setup_pip(self):
         if self._maj_min == (3, 6):
@@ -178,6 +181,9 @@ class Config:
         self.pip_venv = PipEnv[self.cli_args.pip_use_venv]
 
     def _setup_rpm(self):
+        self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
+
+    def _setup_deb(self):
         self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
 
 
@@ -333,7 +339,9 @@ def _install_deps(tempdir, config):
         return _install_pip_deps(tempdir, config)
     if config.deps_mode == DependencyMode.rpm:
         return _install_rpm_deps(tempdir, config)
-    raise ValueError(f'unexpected deps mode: {deps.mode}')
+    if config.deps_mode == DependencyMode.deb:
+        return _install_deb_deps(tempdir, config)
+    raise ValueError(f'unexpected deps mode: {config.deps_mode}')
 
 
 def _install_pip_deps(tempdir, config):
@@ -434,7 +442,26 @@ def _install_rpm_deps(tempdir, config):
     return dinfo
 
 
-def _gather_rpm_package_dirs(paths):
+def _install_deb_deps(tempdir, config):
+    log.info("Installing dependencies using Debian packages")
+    dinfo = DependencyInfo(config)
+    for pkg in config.requirements:
+        log.info(f"Looking for debian package for: {pkg.name!r}")
+        _deps_from_deb(tempdir, config, dinfo, pkg.name)
+    return dinfo
+
+
+def _gather_package_dirs(paths, expected_parent_dir):
+    """Parse package file listing to find Python package directories.
+
+    Args:
+        paths: List of file paths from package listing
+        expected_parent_dir: Expected parent directory name (e.g., 'site-packages' for RPM,
+                           'dist-packages' for Debian)
+
+    Returns:
+        Tuple of (metadata_dir, package_dirs)
+    """
     # = The easy way =
     # the top_level.txt file can be used to determine where the python packages
     # actually are. We need all of those and the meta-data dir (parent of
@@ -453,7 +480,7 @@ def _gather_rpm_package_dirs(paths):
     # = The hard way =
     # loop through the directories to find the .dist-info dir (containing the
     # mandatory METADATA file, according to the spec) and once we know the
-    # location of dist info we find the sibling paths from the rpm listing
+    # location of dist info we find the sibling paths from the package listing
     dist_info = None
     ppaths = []
     for path in paths:
@@ -464,15 +491,40 @@ def _gather_rpm_package_dirs(paths):
             break
     if not dist_info:
         raise ValueError('no .dist-info METADATA found')
-    if not dist_info.parent.name == 'site-packages':
+    if dist_info.parent.name != expected_parent_dir:
         raise ValueError(
-            'unexpected parent directory (not site-packages):'
+            f'unexpected parent directory (not {expected_parent_dir}):'
             f' {dist_info.parent.name}'
         )
     siblings = [
         p for p in ppaths if p.parent == dist_info.parent and p != dist_info
     ]
     return dist_info, siblings
+
+
+def _copy_package_files(tempdir, paths, expected_parent_dir):
+    """Copy package files to the build directory.
+
+    Args:
+        tempdir: Temporary directory to copy files to
+        paths: List of file paths from package listing
+        expected_parent_dir: Expected parent directory name per packaging convention:
+            - 'site-packages' for RPM-based distributions
+            - 'dist-packages' for Debian-based distributions
+
+    Returns:
+        None
+    """
+    meta_dir, pkg_dirs = _gather_package_dirs(paths, expected_parent_dir)
+    meta_dest = tempdir / meta_dir.name
+    log.info(f"Copying {meta_dir} to {meta_dest}")
+    # copy the meta data directory
+    shutil.copytree(meta_dir, meta_dest, ignore=_ignore_cephadmlib)
+    # copy all the package directories
+    for pkg_dir in pkg_dirs:
+        pkg_dest = tempdir / pkg_dir.name
+        log.info(f"Copying {pkg_dir} to {pkg_dest}")
+        shutil.copytree(pkg_dir, pkg_dest, ignore=_ignore_cephadmlib)
 
 
 def _deps_from_rpm(tempdir, config, dinfo, pkg):
@@ -510,16 +562,92 @@ def _deps_from_rpm(tempdir, config, dinfo, pkg):
         ['rpm', '-ql', rpmname], check=True, stdout=subprocess.PIPE
     )
     paths = [l.decode('utf8') for l in res.stdout.splitlines()]
-    meta_dir, pkg_dirs = _gather_rpm_package_dirs(paths)
-    meta_dest = tempdir / meta_dir.name
-    log.info(f"Copying {meta_dir} to {meta_dest}")
-    # copy the meta data directory
-    shutil.copytree(meta_dir, meta_dest, ignore=_ignore_cephadmlib)
-    # copy all the package directories
-    for pkg_dir in pkg_dirs:
-        pkg_dest = tempdir / pkg_dir.name
-        log.info(f"Copying {pkg_dir} to {pkg_dest}")
-        shutil.copytree(pkg_dir, pkg_dest, ignore=_ignore_cephadmlib)
+    # RPM-based distributions use 'site-packages' for Python packages
+    _copy_package_files(tempdir, paths, 'site-packages')
+
+
+def _deps_from_deb(tempdir, config, dinfo, pkg):
+    """Extract Python dependencies from Debian packages.
+
+    Args:
+        tempdir: Temporary directory to copy package files to
+        config: Build configuration
+        dinfo: DependencyInfo instance to track dependencies
+        pkg: Python package name (e.g., 'MarkupSafe', 'Jinja2', 'PyYAML')
+    """
+    # Convert Python package name to Debian package name
+    # Python packages are typically named python3-<lowercase-name>
+    # Handle special cases: PyYAML -> python3-yaml, MarkupSafe -> python3-markupsafe
+    pkg_lower = pkg.lower()
+    if pkg_lower == 'pyyaml':
+        deb_pkg_name = 'python3-yaml'
+    else:
+        deb_pkg_name = f'python3-{pkg_lower}'
+
+    # First, try to find the package using apt-cache
+    # This helps verify the package exists before trying to list its files
+    try:
+        res = subprocess.run(
+            ['apt-cache', 'show', deb_pkg_name],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError:
+        # Package not found, try alternative naming
+        log.warning(f"Package {deb_pkg_name} not found via apt-cache, trying dpkg -S")
+        # Try to search for files that might belong to this package
+        # Search for the Python module in site-packages
+        search_pattern = f'/usr/lib/python3*/dist-packages/{pkg.lower()}*'
+        try:
+            res = subprocess.run(
+                ['dpkg', '-S', search_pattern],
+                check=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+            # dpkg -S output format: "package: /path/to/file"
+            deb_pkg_name = res.stdout.decode('utf8').split(':')[0].strip()
+        except subprocess.CalledProcessError as err:
+            log.error(f"Could not find Debian package for {pkg}")
+            log.error(f"Tried: {deb_pkg_name} and pattern search")
+            sys.exit(1)
+
+    # Get version information using dpkg-query
+    try:
+        res = subprocess.run(
+            ['dpkg-query', '-W', '-f=${Version}\\n', deb_pkg_name],
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+        version = res.stdout.decode('utf8').strip()
+    except subprocess.CalledProcessError as err:
+        log.error(f"Could not query version for package {deb_pkg_name}: {err}")
+        sys.exit(1)
+
+    log.info(f"Debian Package: {deb_pkg_name} (version: {version})")
+    dinfo.add(
+        pkg,
+        deb_name=deb_pkg_name,
+        version=version,
+        package_source='deb',
+    )
+
+    # Get the list of files provided by the Debian package
+    try:
+        res = subprocess.run(
+            ['dpkg', '-L', deb_pkg_name],
+            check=True,
+            stdout=subprocess.PIPE,
+        )
+    except subprocess.CalledProcessError as err:
+        log.error(f"Could not list files for package {deb_pkg_name}: {err}")
+        sys.exit(1)
+
+    paths = [l.decode('utf8') for l in res.stdout.splitlines()]
+    # Debian-based distributions use 'dist-packages' for system-managed Python packages
+    # per Debian Python Policy: https://www.debian.org/doc/packaging-manuals/python-policy/
+    _copy_package_files(tempdir, paths, 'dist-packages')
 
 
 def generate_version_file(versioning_vars, dest):
