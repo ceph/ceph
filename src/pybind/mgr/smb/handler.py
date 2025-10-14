@@ -793,10 +793,7 @@ def _generate_config(
         cluster_global_opts['workgroup'] = wg
         cluster_global_opts['idmap config * : backend'] = 'autorid'
         cluster_global_opts['idmap config * : range'] = '2000-9999999'
-    if cluster.is_clustered() and cluster.custom_ports:
-        # a ctdb enabled cluster (w/ host networking) with custom ports needs
-        # to change the port at the smbd level
-        cluster_global_opts['smb ports'] = str(_smb_port(cluster))
+    cluster_global_opts['smb ports'] = str(_smb_port(cluster))
 
     share_configs = {
         share.name: _generate_share(share, resolver, cephx_entity)
