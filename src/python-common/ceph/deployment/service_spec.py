@@ -953,6 +953,7 @@ class ServiceSpec(object):
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ip_addrs: Optional[Dict[str, str]] = None,
                  ssl_ca_cert: Optional[str] = None,
+                 termination_grace_period_seconds: Optional[int] = None,
                  ):
 
         #: See :ref:`orchestrator-cli-placement-spec`.
@@ -1013,6 +1014,15 @@ class ServiceSpec(object):
         # ip_addrs is a dict where each key is a hostname and the corresponding value
         # is the IP address {hostname: ip} that the NFS service should bind to on that host.
         self.ip_addrs = ip_addrs
+
+        self.termination_grace_period_seconds = termination_grace_period_seconds
+        if (
+            self.termination_grace_period_seconds is not None
+            and self.termination_grace_period_seconds < 0
+        ):
+            raise SpecValidationError(
+                'termination_grace_period_seconds must be >= 0'
+            )
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -1171,6 +1181,9 @@ class ServiceSpec(object):
                 val = val.to_json()
             if val:
                 c[key] = val
+
+        if getattr(self, 'termination_grace_period_seconds', None) is not None:
+            c['termination_grace_period_seconds'] = self.termination_grace_period_seconds
 
         if self.service_type in self.REQUIRES_CERTIFICATES:
 
