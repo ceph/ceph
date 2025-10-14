@@ -1191,7 +1191,7 @@ void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
 
         if (!is_prime(w+1)){
           ostringstream ds;
-          ds << "The w+1 value for the EC profile " << erasure_code_profile.first << " is not prime";
+          ds << "The w+1="<< w+1 << " for the EC profile " << erasure_code_profile.first << " is not prime and could lead to data corruption";
           details.push_back(ds.str());
       }
     }

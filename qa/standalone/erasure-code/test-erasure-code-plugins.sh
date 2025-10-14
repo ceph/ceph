@@ -115,4 +115,37 @@ function TEST_ec_profile_warning() {
     teardown $dir || return 1
 }
 
+function TEST_ec_profile_blaum_roth_warning() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for id in $(seq 0 2) ; do
+        run_osd $dir $id || return 1
+    done
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    echo "Starting test for blaum-roth profile health warning"
+
+    #Check that the health warn for incorrect blaum-roth profiles is correct.
+    ceph osd erasure-code-profile set prof-${plugin} plugin=jerasure k=3 m=1 technique=blaum_roth w=7 --yes-i-really-mean-it
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path mon.a) log flush || return 1
+    sleep 10
+    grep -F "1 EC profile has a w value such that w+1 is not prime. This can result in data corruption" $dir/mon.a.log || return 1
+    grep -F "The w+1=8 for the EC profile prof-${plugin} is not prime and could lead to data corruption" $dir/mon.a.log || return 1
+
+    #There is slightly different wording for when there is more than one incorrect blaum-roth profile, so we also check that.
+    ceph osd erasure-code-profile set prof-${plugin}2 plugin=jerasure k=3 m=1 technique=blaum_roth w=5 --yes-i-really-mean-it
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path mon.a) log flush || return 1
+    sleep 10
+    grep -F "2 EC profiles have a w value such that w+1 is not prime. This can result in data corruption" $dir/mon.a.log || return 1
+    grep -F "The w+1=8 for the EC profile prof-${plugin} is not prime and could lead to data corruption" $dir/mon.a.log || return 1
+    grep -F "The w+1=6 for the EC profile prof-${plugin}2 is not prime and could lead to data corruption" $dir/mon.a.log || return 1
+
+    teardown $dir || return 1
+    return 0
+}
+
 main test-erasure-code-plugins "$@"
