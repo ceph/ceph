@@ -13,6 +13,7 @@ tasks:
 
 - cephadm.wait_for_service:
     service: nvmeof.mypool.mygroup0
+    refresh: True
 
 - workunit:
     no_coverage_and_limits: true

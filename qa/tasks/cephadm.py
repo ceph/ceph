@@ -1523,14 +1523,15 @@ def apply(ctx, config):
 
 
 
-def _orch_ls(ctx, cluster_name):
+def _orch_ls(ctx, cluster_name, refresh=False):
+    args = ['ceph', 'orch', 'ls', '-f', 'json']
+    if refresh:
+        args += ['--refresh']
     r = _shell(
         ctx=ctx,
         cluster_name=cluster_name,
         remote=ctx.ceph[cluster_name].bootstrap_remote,
-        args=[
-            'ceph', 'orch', 'ls', '-f', 'json',
-        ],
+        args=args,
         stdout=StringIO(),
     )
     return json.loads(r.stdout.getvalue())
@@ -1544,11 +1545,13 @@ def wait_for_service(ctx, config):
         - cephadm.wait_for_service:
             service: rgw.foo
             timeout: 60    # defaults to 300
+            refresh: True  # defaults to False
 
     """
     cluster_name = config.get('cluster', 'ceph')
     timeout = config.get('timeout', 300)
     service = config.get('service')
+    refresh = config.get('refresh', False)
     assert service
 
     log.info(
@@ -1556,7 +1559,7 @@ def wait_for_service(ctx, config):
     )
     with contextutil.safe_while(sleep=1, tries=timeout) as proceed:
         while proceed():
-            j = _orch_ls(ctx, cluster_name)
+            j = _orch_ls(ctx, cluster_name, refresh)
             svc = None
             for s in j:
                 if s['service_name'] == service:
