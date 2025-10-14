@@ -1150,14 +1150,22 @@ double SegmentCleaner::calc_gc_benefit_cost(
           (2 * age_factor - 2) * util + 1);
 }
 
-SegmentCleaner::do_reclaim_space_ret
-SegmentCleaner::do_reclaim_space(
+using do_reclaim_space_ertr = base_ertr;
+using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
+do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
     const backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
-    std::size_t &runs)
+    std::size_t &runs,
+    ExtentCallbackInterface &extent_callback,
+    bool is_cold,
+    BackrefManager &backref_manager,
+    sea_time_point modify_time,
+    paddr_t start_pos,
+    paddr_t end_pos,
+    rewrite_gen_t target_generation)
 {
-  auto& shard_stats = extent_callback->get_shard_stats();
+  auto& shard_stats = extent_callback.get_shard_stats();
   if (is_cold) {
     ++(shard_stats.cleaner_cold_num);
   } else {
@@ -1174,8 +1182,10 @@ SegmentCleaner::do_reclaim_space(
   // 	tree doesn't match the extent's paddr
   // 3. the extent is physical and doesn't exist in the
   // 	lba tree, backref tree or backref cache;
-  return repeat_eagain([this, &backref_extents, &shard_stats,
-                        &pin_list, &reclaimed, &runs] {
+  return repeat_eagain([&extent_callback, &backref_extents,
+			&shard_stats, &pin_list, &reclaimed,
+			&runs, is_cold, &backref_manager,
+			modify_time, start_pos, end_pos, target_generation] {
     reclaimed = 0;
     runs++;
     transaction_type_t src;
@@ -1186,21 +1196,23 @@ SegmentCleaner::do_reclaim_space(
       src = Transaction::src_t::CLEANER_MAIN;
       ++(shard_stats.repeat_cleaner_main_num);
     }
-    return extent_callback->with_transaction_intr(
+    return extent_callback.with_transaction_intr(
       src,
       "clean_reclaim_space",
       CACHE_HINT_NOCACHE,
-      [this, &backref_extents, &pin_list, &reclaimed](auto &t)
+      [&extent_callback, &backref_extents, &pin_list, modify_time,
+      &backref_manager, &reclaimed, start_pos, end_pos,
+      target_generation](auto &t)
     {
       return seastar::do_with(
         std::vector<CachedExtentRef>(backref_extents),
-        [this, &t, &reclaimed, &pin_list](auto &extents)
+        [&extent_callback, &t, &reclaimed, &pin_list, modify_time,
+	&backref_manager, start_pos, end_pos, target_generation](auto &extents)
       {
         LOG_PREFIX(SegmentCleaner::do_reclaim_space);
         // calculate live extents
         auto cached_backref_entries =
-          backref_manager.get_cached_backref_entries_in_range(
-            reclaim_state->start_pos, reclaim_state->end_pos);
+          backref_manager.get_cached_backref_entries_in_range(start_pos, end_pos);
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
           backref_entries.emplace(
@@ -1223,10 +1235,10 @@ SegmentCleaner::do_reclaim_space(
                t, backref_entries.size(), extents.size());
 	return seastar::do_with(
 	  std::move(backref_entries),
-	  [this, &extents, &t](auto &backref_entries) {
+	  [&extent_callback, &extents, &t](auto &backref_entries) {
 	  return trans_intr::parallel_for_each(
 	    backref_entries,
-	    [this, &extents, &t](auto &ent)
+	    [&extent_callback, &extents, &t](auto &ent)
 	  {
 	    LOG_PREFIX(SegmentCleaner::do_reclaim_space);
 	    TRACET("getting extent of type {} at {}~0x{:x}",
@@ -1234,7 +1246,7 @@ SegmentCleaner::do_reclaim_space(
 	      ent.type,
 	      ent.paddr,
 	      ent.len);
-	    return extent_callback->get_extents_if_live(
+	    return extent_callback.get_extents_if_live(
 	      t, ent.type, ent.paddr, ent.laddr, ent.len
 	    ).si_then([FNAME, &extents, &ent, &t](auto list) {
 	      if (list.empty()) {
@@ -1246,21 +1258,22 @@ SegmentCleaner::do_reclaim_space(
 	      }
 	    });
 	  });
-	}).si_then([FNAME, &extents, this, &reclaimed, &t] {
+	}).si_then([FNAME, &extents, &extent_callback,
+		    &reclaimed, &t, modify_time, target_generation] {
           DEBUGT("reclaim {} extents", t, extents.size());
           // rewrite live extents
-          auto modify_time = segments[reclaim_state->get_segment_id()].modify_time;
           return trans_intr::do_for_each(
             extents,
-            [this, modify_time, &t, &reclaimed](auto ext)
+            [&extent_callback, modify_time, &t,
+	    &reclaimed, target_generation](auto ext)
           {
             reclaimed += ext->get_length();
-            return extent_callback->rewrite_extent(
-                t, ext, reclaim_state->target_generation, modify_time);
+            return extent_callback.rewrite_extent(
+                t, ext, target_generation, modify_time);
           });
         });
-      }).si_then([this, &t] {
-        return extent_callback->submit_transaction_direct(t);
+      }).si_then([&extent_callback, &t] {
+        return extent_callback.submit_transaction_direct(t);
       });
     });
   }).finally([&shard_stats] {
@@ -1352,7 +1365,14 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
           backref_extents,
           pin_list,
           reclaimed,
-          runs
+          runs,
+	  *extent_callback,
+	  is_cold,
+	  backref_manager,
+	  segments[reclaim_state->get_segment_id()].modify_time,
+	  reclaim_state->start_pos,
+	  reclaim_state->end_pos,
+	  reclaim_state->target_generation
       ).safe_then([this, FNAME, pavail_ratio, start, &reclaimed, &runs] {
         stats.reclaiming_bytes += reclaimed;
         auto d = seastar::lowres_system_clock::now() - start;
