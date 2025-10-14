@@ -187,6 +187,17 @@ struct BackrefCursor :
     assert(!is_end());
     return iter.get_val().type;
   }
+
+  BackrefCursor* renew_cursor(Transaction &t) {
+    auto c = op_context_t{ctx.cache, t};
+    t.maybe_add_to_read_set(parent);
+    return new BackrefCursor(
+      c,
+      std::move(parent),
+      modifications,
+      std::move(iter));
+  }
+
 };
 using BackrefCursorRef = boost::intrusive_ptr<BackrefCursor>;
 

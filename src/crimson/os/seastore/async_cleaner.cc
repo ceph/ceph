@@ -1154,7 +1154,7 @@ using do_reclaim_space_ertr = base_ertr;
 using do_reclaim_space_ret = do_reclaim_space_ertr::future<>;
 do_reclaim_space_ret do_reclaim_space(
     const std::vector<CachedExtentRef> &backref_extents,
-    const backref_mapping_list_t &pin_list,
+    backref_mapping_list_t &pin_list,
     std::size_t &reclaimed,
     std::size_t &runs,
     ExtentCallbackInterface &extent_callback,
@@ -1215,6 +1215,7 @@ do_reclaim_space_ret do_reclaim_space(
           backref_manager.get_cached_backref_entries_in_range(start_pos, end_pos);
         backref_entry_query_set_t backref_entries;
         for (auto &pin : pin_list) {
+	  pin.renew_cursor(t);
           backref_entries.emplace(
             pin.get_key(),
             pin.get_val(),
