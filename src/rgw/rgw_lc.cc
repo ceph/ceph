@@ -454,10 +454,18 @@ public:
   }
 
   boost::optional<std::string> next_key_name() {
-    if (obj_iter == list_results.objs.end() ||
-	(obj_iter + 1) == list_results.objs.end()) {
-      /* this should have been called after get_obj() was called, so this should
-       * only happen if is_truncated is false */
+    if (obj_iter == list_results.objs.end()) {
+      return boost::none;
+    }
+    if ((obj_iter + 1) == list_results.objs.end()) {
+      /* At the last object in the current page */
+      if (list_results.is_truncated) {
+        /* More pages exist. Cannot determine if next object has same name
+         * without fetching next page. Return current object name to indicate
+         * uncertainty and prevent incorrect DM deletion at page boundaries. */
+        return obj_iter->key.name;
+      }
+      /* No more pages, definitively no next object */
       return boost::none;
     }
 
