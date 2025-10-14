@@ -91,8 +91,8 @@ status_log() {
     sudo nvme list-subsys
     for device in $selected_drives; do
         echo "Processing device: $device"
-        sudo nvme list-subsys /dev/$device
-        sudo nvme id-ns /dev/$device
+        sudo nvme list-subsys $device
+        sudo nvme id-ns $device
     done
     sudo dmesg -T > $TESTDIR/archive/dmesg-fio_tests.log 
 }
