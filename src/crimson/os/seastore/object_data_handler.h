@@ -85,6 +85,9 @@ struct clone_range_t {
   laddr_t dest_base = L_ADDR_NULL;
   extent_len_t offset = 0;
   extent_len_t len = 0;
+  base_iertr::future<> refresh() {
+    first_src_mapping = co_await first_src_mapping.refresh();
+  }
 };
 std::ostream& operator<<(std::ostream &out, const clone_range_t &);
 

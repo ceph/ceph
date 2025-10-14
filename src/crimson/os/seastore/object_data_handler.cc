@@ -324,10 +324,11 @@ ObjectDataHandler::write_ret do_zero(
 ObjectDataHandler::clone_ret do_clonerange(
   context_t ctx,
   LBAMapping write_pos,
-  const overwrite_range_t &overwrite_range,
+  overwrite_range_t &overwrite_range,
   data_t &data)
 {
   LOG_PREFIX(ObjectDataHandler::do_clonerange);
+  co_await overwrite_range.clonerange_info->refresh();
   DEBUGT("{} {} write_pos={}", ctx.t, overwrite_range, data, write_pos);
   ceph_assert(overwrite_range.clonerange_info.has_value());
   assert(write_pos.is_end() ||
@@ -362,6 +363,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     );
   }
   // clone the src mappings
+  co_await overwrite_range.clonerange_info->refresh();
   auto src = overwrite_range.clonerange_info->first_src_mapping;
   auto offset = overwrite_range.clonerange_info->offset;
   auto len = overwrite_range.clonerange_info->len;
