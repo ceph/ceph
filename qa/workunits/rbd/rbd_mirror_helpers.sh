@@ -795,6 +795,32 @@ get_newest_mirror_snapshot()
         ${log} || true
 }
 
+get_newest_complete_mirror_snapshot_id_on_primary()
+{
+    local primary_cluster=$1
+    local pool=$2
+    local image=$3
+    local -n _snap_id=$4
+
+    _snap_id=$(rbd --cluster "${primary_cluster}" snap list --all "${pool}/${image}" --format xml | \
+               xmlstarlet sel -t -v "(//snapshots/snapshot[namespace/complete='true']/id)[last()]")
+}
+
+wait_for_non_primary_snap_present_on_secondary()
+{
+    local secondary_cluster=$1
+    local pool=$2
+    local image=$3
+    local primary_snap_id=$4
+    local s
+
+    for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+        rbd --cluster ${secondary_cluster} snap list --all "${pool}/${image}" --format xml | \
+            xmlstarlet sel -t -c "//snapshots/snapshot/namespace[primary_snap_id='${primary_snap_id}']" && return 0
+    done
+
+    return 1
+}
 wait_for_snapshot_sync_complete()
 {
     local local_cluster=$1
@@ -841,7 +867,6 @@ wait_for_replay_complete()
         return 1
     fi
 }
-
 
 test_status_in_pool_dir()
 {
