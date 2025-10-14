@@ -4444,6 +4444,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_d4n_local_rgw_address
+  type: str
+  level: advanced
+  desc: local RGW address 
+  long_desc: This is the address used to represent the local RGW in a distributed D4N
+    system that involves remote RGWs. 
+  default: 127.0.0.1:8000
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_d4n_l1_datacache_address
   type: str
   level: advanced
