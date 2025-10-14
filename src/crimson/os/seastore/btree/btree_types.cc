@@ -8,81 +8,6 @@
 
 namespace crimson::os::seastore {
 
-base_iertr::future<> LBACursor::refresh()
-{
-  LOG_PREFIX(LBACursor::refresh);
-  return with_btree<lba::LBABtree>(
-    ctx.cache,
-    ctx,
-    [this, FNAME, c=ctx](auto &btree) {
-    c.trans.cursor_stats.num_refresh_parent_total++;
-
-    if (!parent->is_valid()) {
-      c.trans.cursor_stats.num_refresh_invalid_parent++;
-      SUBTRACET(
-	seastore_lba,
-	"cursor {} parent is invalid, re-search from scratch",
-	 c.trans, *this);
-      return btree.lower_bound(c, this->get_laddr()
-      ).si_then([this](lba::LBABtree::iterator iter) {
-	auto leaf = iter.get_leaf_node();
-	parent = leaf;
-	modifications = leaf->modifications;
-	pos = iter.get_leaf_pos();
-	if (!is_end()) {
-	  ceph_assert(!iter.is_end());
-	  ceph_assert(iter.get_key() == get_laddr());
-	  val = iter.get_val();
-	  assert(is_viewable());
-	}
-      });
-    }
-    assert(parent->is_stable() ||
-      parent->is_pending_in_trans(c.trans.get_trans_id()));
-    auto leaf = parent->cast<lba::LBALeafNode>();
-    if (leaf->is_pending_in_trans(c.trans.get_trans_id())) {
-      if (leaf->modified_since(modifications)) {
-	c.trans.cursor_stats.num_refresh_modified_viewable_parent++;
-      } else {
-	// no need to refresh
-	return base_iertr::now();
-      }
-    } else {
-      auto [viewable, l] = leaf->resolve_transaction(c.trans, key);
-      SUBTRACET(
-	seastore_lba,
-	"cursor: {} viewable: {}",
-	c.trans, *this, viewable);
-      if (!viewable) {
-	leaf = l;
-	c.trans.cursor_stats.num_refresh_unviewable_parent++;
-	parent = leaf;
-      } else {
-	assert(leaf.get() == l.get());
-	assert(leaf->is_stable());
-	return base_iertr::now();
-      }
-    }
-
-    modifications = leaf->modifications;
-    if (is_end()) {
-      pos = leaf->get_size();
-      assert(!val);
-    } else {
-      auto i = leaf->lower_bound(get_laddr());
-      pos = i.get_offset();
-      val = i.get_val();
-
-      auto iter = lba::LBALeafNode::iterator(leaf.get(), pos);
-      ceph_assert(iter.get_key() == key);
-      ceph_assert(iter.get_val() == val);
-      assert(is_viewable());
-    }
-
-    return base_iertr::now();
-  });
-}
-
 namespace lba {
 
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
@@ -126,8 +51,8 @@ bool modified_since(T &&extent, uint64_t iter_modifications) {
 }
 }
 
-template <typename key_t, typename val_t>
-bool BtreeCursor<key_t, val_t>::is_viewable() const {
+template <typename key_t, typename val_t, typename ParentT>
+bool BtreeCursor<key_t, val_t, ParentT>::is_viewable() const {
   LOG_PREFIX(BtreeCursor::is_viewable());
   if (!parent->is_valid() ||
       modified_since<key_t>(parent, modifications)) {
@@ -140,7 +65,7 @@ bool BtreeCursor<key_t, val_t>::is_viewable() const {
   return viewable;
 }
 
-template struct BtreeCursor<laddr_t, lba::lba_map_val_t>;
-template struct BtreeCursor<paddr_t, backref::backref_map_val_t>;
+template struct BtreeCursor<laddr_t, lba::lba_map_val_t, lba::LBALeafNode>;
+template struct BtreeCursor<paddr_t, backref::backref_map_val_t, backref::BackrefLeafNode>;
 
 } // namespace crimson::os::seastore
