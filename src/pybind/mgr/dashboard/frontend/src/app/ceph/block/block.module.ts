@@ -64,7 +64,8 @@ import {
   SelectModule,
   UIShellModule,
   TreeviewModule,
-  TabsModule
+  TabsModule,
+  TagModule
 } from 'carbon-components-angular';
 
 // Icons
@@ -101,7 +102,8 @@ import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
     ModalModule,
     DatePickerModule,
     ComboBoxModule,
-    TabsModule
+    TabsModule,
+    TagModule
   ],
   declarations: [
     RbdListComponent,

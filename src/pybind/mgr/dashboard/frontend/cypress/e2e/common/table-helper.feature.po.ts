@@ -79,7 +79,7 @@ And('I should see row {string} have {string}', (row: string, options: string) =>
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .badge`, option).should('exist');
+      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('exist');
     }
   }
 });
@@ -96,7 +96,7 @@ And('I should see row {string} does not have {string}', (row: string, options: s
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .badge`, option).should('not.exist');
+      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('not.exist');
     }
   }
 });

@@ -15,7 +15,8 @@ import {
   ModalModule,
   ToggleModule,
   ButtonModule,
-  PlaceholderModule
+  PlaceholderModule,
+  TagModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -70,7 +71,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
     ModalModule,
     ToggleModule,
     ButtonModule,
-    PlaceholderModule
+    PlaceholderModule,
+    TagModule
   ],
   declarations: [
     AboutComponent,

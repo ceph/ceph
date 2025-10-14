@@ -324,21 +324,28 @@
   <span *ngIf="row.cdExecuting"
         [ngClass]="column?.customTemplateConfig?.executingClass ? column?.customTemplateConfig.executingClass : 'text-muted italic'">({{ row.cdExecuting }})</span>
 </ng-template>
-
 <ng-template #classAddingTpl
              let-value="data.value">
-  <span class="{{ value | pipeFunction:useCustomClass:this }}">{{ value }}</span>
+  <span *ngIf="value">
+    <span *ngIf="!(value=='active')||(value=='expired')||(value=='pending')">
+      {{ value }}
+    </span>
+    <cds-tag *ngIf="(value==='active')||(value=== 'expired')||(value=== 'pending')"
+             class="{{ value | pipeFunction:useCustomClass:this }}">
+       {{value}}
+    </cds-tag>
+  </span>
 </ng-template>
-
-<ng-template #badgeTpl
+<ng-template #tagTpl
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array); last as last">
-    <span class="badge"
-          [ngClass]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'badge-primary')"
-          *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
-      {{ (column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
-    </span>
+    <cds-tag [size]="'md'"
+             class="table-tag"
+             [class]="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : (column?.customTemplateConfig?.class ? column.customTemplateConfig.class : 'tags-primary')"
+             *ngIf="(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item">
+      {{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.value) ? column.customTemplateConfig.map[item].value : column?.customTemplateConfig?.prefix ? column.customTemplateConfig.prefix + item : item }}
+    </cds-tag>
     <span *ngIf="!last">&nbsp;</span>
   </span>
 </ng-template>
@@ -353,13 +360,13 @@
              let-column="data.column"
              let-value="data.value">
   <span *ngFor="let item of (value | array);">
-    <span
+    <cds-tag
       i18n
       i18n-ngbTooltip
       class="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.class) ? column.customTemplateConfig.map[item].class : ''}}"
       ngbTooltip="{{(column?.customTemplateConfig?.map && column?.customTemplateConfig?.map[item]?.tooltip) ? column.customTemplateConfig.map[item].tooltip : ''}}">
       {{value}}
-    </span>
+  </cds-tag>
   </span>
 </ng-template>
 
