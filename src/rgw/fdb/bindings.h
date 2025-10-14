@@ -40,9 +40,35 @@ inline database_handle create_database(const std::filesystem::path dbfile)
  return std::make_shared<database>(dbfile);
 }
 
-inline database_handle create_database(const std::filesystem::path dbfile, const database_options& opts)
+inline database_handle create_database(const std::filesystem::path dbfile, const database_options& dbopts, const network_options& netopts)
 {
- return std::make_shared<database>(dbfile, opts);
+ return std::make_shared<database>(dbfile, dbopts, netopts);
+}
+
+//JFW: inline database_handle create_database(const database_options&& dbopts, const network_options&& netopts)
+inline database_handle create_database(const database_options& dbopts, const network_options& netopts)
+{
+ return std::make_shared<database>(dbopts, netopts);
+}
+
+inline database_handle create_database(const database_options& opts)
+{
+ return std::make_shared<database>(opts, network_options{});
+}
+
+inline database_handle create_database(const std::filesystem::path dbfile, const database_options& dbopts)
+{
+ return std::make_shared<database>(dbfile, dbopts, network_options{});
+}
+
+inline tenant_handle make_tenant(database_handle dbh, std::string_view name)
+{
+ return std::make_shared<tenant>(dbh, name);
+}
+
+inline tenant_handle make_tenant(std::string_view name)
+{
+ return std::make_shared<tenant>(create_database(), name);
 }
 
 inline transaction_handle make_transaction(database_handle dbh)
@@ -55,7 +81,20 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return std::make_shared<transaction>(dbh, opts);
 }
 
-// Note only rarely is a direct call to this.
+inline transaction_handle make_transaction(tenant_handle dbth)
+{
+ return std::make_shared<transaction>(dbth);
+}
+
+inline transaction_handle make_transaction(tenant_handle dbth, const transaction_options& opts)
+{
+ return std::make_shared<transaction>(dbth, opts);
+}
+
+// Note: only rarely is a direct call to this needed.
+// Note: after a transaction is committed, it cannot be used again; but right now, that is NOT
+// an error with respect to the object. So, don't do operations on the object after you've committed
+// it or the behavior could be surpising.
 // On false, the client should retry the transaction:
 [[nodiscard]] inline bool commit(transaction_handle& txn)
 {
@@ -66,48 +105,6 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 
 namespace ceph::libfdb::detail {
 
-/* Equivalence with FDBStreamingMode:
- *
-FDB_STREAMING_MODE_ITERATOR
-
-The caller is implementing an iterator (most likely in a binding to a higher level language). The amount of data returned depends on the value of the iteration parameter to fdb_transaction_get_range().
-
-FDB_STREAMING_MODE_SMALL
-
-Data is returned in small batches (not much more expensive than reading individual key-value pairs).
-
-FDB_STREAMING_MODE_MEDIUM
-
-Data is returned in batches between _SMALL and _LARGE.
-
-FDB_STREAMING_MODE_LARGE
-
-Data is returned in batches large enough to be, in a high-concurrency environment, nearly as efficient as possible. If the caller does not need the entire range, some disk and network bandwidth may be wasted. The batch size may be still be too small to allow a single client to get high throughput from the database.
-
-FDB_STREAMING_MODE_SERIAL
-
-Data is returned in batches large enough that an individual client can get reasonable read bandwidth from the database. If the caller does not need the entire range, considerable disk and network bandwidth may be wasted.
-
-FDB_STREAMING_MODE_WANT_ALL
-
-The caller intends to consume the entire range and would like it all transferred as early as possible.
-
-FDB_STREAMING_MODE_EXACT
-
-The caller has passed a specific row limit and wants that many rows delivered in a single batch.
-
-enum struct streaming_mode_t : int {
- iterator	= FDB_STREAMING_MODE_ITERATOR,
- small		= FDB_STREAMING_MODE_SMALL,
- medium		= FDB_STREAMING_MODE_MEDIUM,
- large		= FDB_STREAMING_MODE_LARGE,
- serial		= FDB_STREAMING_MODE_SERIAL,
- all		= FDB_STREAMING_MODE_WANT_ALL,
-3F exact		= FDB_STREAMING_MODE_EXACT
-};
-
-...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
-*/
 // The alternatives were "spanlike" or even "Span-ish", but that was a little /too/ cute; thanks
 // to Adam Emerson for the coinage:
 auto ptr_and_sz(const auto& spanoid)
@@ -145,8 +142,6 @@ struct maybe_commit final
 
 } // namespace ceph::libfdb::detail
 
-// JFW: these can maybe go away (or move?):
-
 namespace ceph::libfdb::detail {
 
 // Core dispatch from internal DB value to external concrete value:
@@ -169,6 +164,11 @@ inline void set(transaction_handle txn, std::string_view k, const auto& v, const
 inline void set(transaction_handle txn, std::string_view k, const auto& v)
 {
  return set(txn, k, v, commit_after_op::no_commit);
+}
+
+inline void set(tenant_handle tnth, std::string_view k, const auto& v)
+{
+ return set(make_transaction(tnth), k, v, commit_after_op::commit);
 }
 
 inline void set(database_handle dbh, std::string_view k, const auto& v)
@@ -276,6 +276,11 @@ inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto
  return get(txn, key, out_value, commit_after_op::no_commit);
 }
 
+inline bool get(ceph::libfdb::tenant_handle tnth, std::string_view key, auto& out_value)
+{
+ return get(ceph::libfdb::make_transaction(tnth), key, out_value, commit_after_op::commit);
+}
+
 inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto& out_value)
 {
  return get(ceph::libfdb::make_transaction(dbh), key, out_value, commit_after_op::commit);
@@ -293,6 +298,11 @@ inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto
 inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto&& fn)
 {
  return get(txn, key, fn, commit_after_op::commit);
+}
+
+inline bool get(ceph::libfdb::tenant_handle tnth, std::string_view key, auto&& fn)
+{
+ return get(ceph::libfdb::make_transaction(tnth), key, fn, commit_after_op::commit);
 }
 
 inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto&& fn)
@@ -317,6 +327,11 @@ inline bool key_exists(transaction_handle txn, std::string_view k)
  return key_exists(txn, k, commit_after_op::no_commit);
 }
 
+inline bool key_exists(tenant_handle tnth, std::string_view k)
+{
+ return key_exists(ceph::libfdb::make_transaction(tnth), k, commit_after_op::commit);
+}
+
 inline bool key_exists(database_handle dbh, std::string_view k)
 {
  return key_exists(ceph::libfdb::make_transaction(dbh), k, commit_after_op::commit);
@@ -326,3 +341,4 @@ inline bool key_exists(database_handle dbh, std::string_view k)
 
 
 #endif
+
