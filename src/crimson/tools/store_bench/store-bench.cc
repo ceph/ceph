@@ -121,7 +121,7 @@ public:
 };
 
 
-class PGLogWorkload : public StoreBenchWorkload {
+class PGLogWorkload final : public StoreBenchWorkload {
   unsigned num_logs = 4;
   unsigned log_size = 1024;
   unsigned log_length = 256;
@@ -146,7 +146,7 @@ public:
   ~PGLogWorkload() final {}
 };
 
-class RGWIndexWorkload : public StoreBenchWorkload {
+class RGWIndexWorkload final : public StoreBenchWorkload {
   unsigned num_indices = 16;
   uint64_t key_size = 1024;
   uint64_t value_size = 1024;
@@ -581,7 +581,7 @@ seastar::future<results_t> RGWIndexWorkload::run(
  *
  * Performs a simple random write workload.
  */
-class RandomWriteWorkload : public StoreBenchWorkload {
+class RandomWriteWorkload final : public StoreBenchWorkload {
   uint64_t prefill_size = 128<<10;
   uint64_t io_size = 4<<10;
   uint64_t size_per_shard = 64<<20;
