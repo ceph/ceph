@@ -1069,6 +1069,7 @@ ceph::io_sequence::tester::TestObject::TestObject(
   }
 
   op = seq->next();
+  exerciser_model->set_test_step(curseq, seq->get_step());
   done = false;
   dout(0) << "== " << exerciser_model->get_primary_oid() << " " << curseq << " "
           << seq->get_name_with_seqseed() << " ==" << dendl;
@@ -1115,6 +1116,7 @@ bool ceph::io_sequence::tester::TestObject::next() {
       op = seq->next();
     }
   }
+  exerciser_model->set_test_step(curseq, seq->get_step());
   return done;
 }
 

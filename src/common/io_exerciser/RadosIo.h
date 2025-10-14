@@ -38,8 +38,6 @@ class RadosIo : public Model {
   ceph::condition_variable& cond;
   librados::IoCtx io;
   int outstanding_io;
-  ceph::io_exerciser::Sequence curseq;
-  std::unique_ptr<ceph::io_exerciser::IoSequence> seq;
 
   void start_io();
   void finish_io();
@@ -50,8 +48,7 @@ class RadosIo : public Model {
           const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
           uint64_t block_size, int seed, int threads, ceph::mutex& lock,
           ceph::condition_variable& cond, bool is_replicated_pool,
-          bool ec_optimizations, ceph::io_exerciser::Sequence curseq,
-          std::unique_ptr<ceph::io_exerciser::IoSequence> seq);
+          bool ec_optimizations);
 
   ~RadosIo();
 
