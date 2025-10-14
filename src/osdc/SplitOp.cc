@@ -3,7 +3,7 @@
 #include "osd/osd_types.h"
 
 #define dout_subsys ceph_subsys_objecter
-#define DBG_LVL 0
+#define DBG_LVL 20
 
 namespace {
 inline boost::system::error_code osdcode(int r) {
