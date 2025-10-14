@@ -59,7 +59,7 @@ namespace lfdb = ceph::libfdb;
 
 namespace {
 // make a database handle:
-auto dbh = lfdb::create_database();
+//JFW: auto dbh = lfdb::create_database();
 } // namespace
 
 // Be nice to Catch2's template-test macros:
@@ -89,7 +89,7 @@ auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
  return out_values.size();
 };
 
-auto key_count(const auto& selector) {
+auto key_count(auto& dbh, const auto& selector) {
  std::map<std::string, std::string> _;
  return key_counter(lfdb::make_transaction(dbh), selector, _);
 }
@@ -139,7 +139,7 @@ struct janitor final
    // included, but we'll assume it is (again, for our purposes):
    const char begin_key[] = { (char)0x00 };
    const char end_key[]   = { (char)0xFF };
-   lfdb::erase(lfdb::make_transaction(dbh),
+   lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
               lfdb::select { begin_key, end_key }, 
               lfdb::commit_after_op::commit);
    }
@@ -152,20 +152,13 @@ TEST_CASE()
                    ceph::libfdb::libfdb_exception);
 }
 
-TEST_CASE("fdb configuration", "[rgw][fdb]") {
-
-std::map<std::string, ceph::libfdb::option_t> dbo {
-    { "
-  };
-
-}
-
 TEST_CASE("fdb simple", "[rgw][fdb]") {
  janitor j;
 
  const string_view k = "key";
  const string v = fmt::format("value-{:%c}", std::chrono::system_clock::now());
 
+ auto dbh = lfdb::create_database();
  REQUIRE(nullptr != dbh);
 
  SECTION("read missing key") {
@@ -249,26 +242,28 @@ TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
 
  const auto selector = lfdb::select { make_key(0), make_key(25) };
 
+ auto dbh = lfdb::create_database();
+
  // Make sure there's nothing in the database:
- CHECK(0 == key_count(selector));
+ CHECK(0 == key_count(dbh, selector));
 
  // Write a bunch of kvs:
  const auto kvs = make_monotonic_kvs(20);
 
  lfdb::set(lfdb::make_transaction(dbh), begin(kvs), end(kvs), lfdb::commit_after_op::commit);
- CHECK(20 == key_count(selector));
+ CHECK(20 == key_count(dbh, selector));
 
  // Erase some more of the range:
  lfdb::erase(lfdb::make_transaction(dbh), lfdb::select { make_key(10), make_key(15) }, lfdb::commit_after_op::commit);
- CHECK(15 == key_count(selector));
+ CHECK(15 == key_count(dbh, selector));
 
  // Erase a single value:
  lfdb::erase(lfdb::make_transaction(dbh), make_key(5), lfdb::commit_after_op::commit);
- CHECK(14 == key_count(selector));
+ CHECK(14 == key_count(dbh, selector));
 
  // Erase the entire range:
  lfdb::erase(lfdb::make_transaction(dbh), selector, lfdb::commit_after_op::commit);
- CHECK(0 == key_count(selector));
+ CHECK(0 == key_count(dbh, selector));
 }
 
 TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]", 
@@ -276,6 +271,7 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
 {
  janitor j;
 
+ auto dbh = lfdb::create_database();
  CHECK(nullptr != dbh);
 
  // Write a sequence of keys so we have some data to work with:
@@ -312,6 +308,53 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
     CHECK(std::end(out_values) != std::ranges::find(out_values, string_pair { make_key(i), make_value(i) }));
   }
  }
+}
+
+/* JFW: 
+ * Unfortunately, tenants have a number of special rules and require some special keys and other support
+ * before they're fully-baked-- for instance "\xff\xff/management/tenant/map/<tenant_name>" for deleting
+ * tenants ("https://apple.github.io/foundationdb/tenants.html"); the C API documentation is frustratingly
+ * sparse on this topic, I'm going to have to spend more time on it. Most of these tests current work
+ * and pass, but we must consider tenant support experimental for now-- */
+TEST_CASE("fdb tenants", "[fdb][rgw][!shouldfail]") {
+ janitor j;
+
+ auto dbh = lfdb::create_database();
+
+ SECTION("basic ops") {
+  auto t0 = lfdb::make_tenant(dbh, "foo_tenant");
+
+  // ...make a transaction with some options:
+  auto txn = lfdb::make_transaction(t0, {});
+ }
+
+ SECTION("tenant writes are separate") {
+  auto t0 = lfdb::make_tenant(dbh, "tenant 0");
+  auto t1 = lfdb::make_tenant(dbh, "tenant 1");
+ 
+  auto txn0 = lfdb::make_transaction(t0);
+  auto txn1 = lfdb::make_transaction(t1);
+ 
+  CHECK_FALSE(lfdb::key_exists(txn0, "key"));
+  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
+
+  lfdb::set(txn0, "key", "value");
+
+// JFW: these will not all yet work as expected, see discussion of tenants above: 
+  // As we have not fiddled with read-your-writes, this is not visible: 
+  CHECK_FALSE(lfdb::key_exists(txn0, "key"));
+
+  // ...and it should also not be visible here:
+  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
+
+  CHECK(lfdb::commit(txn0));
+  CHECK(lfdb::key_exists(txn0, "key"));
+  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
+ }
+
+ CHECK_FALSE(lfdb::key_exists(dbh, "key"));
+ CHECK_FALSE(lfdb::key_exists(lfdb::make_tenant(dbh, "tenant 0"), "key"));
+ CHECK_FALSE(lfdb::key_exists(lfdb::make_tenant(dbh, "tenant 1"), "key"));
 }
 
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
@@ -360,6 +403,8 @@ TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
 
 TEST_CASE("fdb conversions (round-trip)", "[fdb][rgw]") {
  janitor j;
+
+ auto dbh = lfdb::create_database();
 
  // string_view -> string
  {
@@ -416,6 +461,8 @@ TEMPLATE_PRODUCT_TEST_CASE("associative data", "[fdb][rgw]",
 (std::map, std::unordered_map), ((std::string, std::string)))
 {
  janitor j;
+
+ auto dbh = lfdb::create_database();
 
  TestType kvs{
       { "hello", "world" },
@@ -475,7 +522,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
 
   REQUIRE_FALSE(lfdb::get(dbh, k, ov));
  }
- 
+
  SECTION("implicitly create and complete transactions-- selection operations") {
   // With an implicit transaction, transactions should commit by default:
   const auto selector = lfdb::select { make_key(0), make_key(20) };
@@ -485,7 +532,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
   CHECK_NOTHROW(lfdb::set(dbh, begin(kvs), end(kvs)));
 
   lfdb::erase(dbh, lfdb::select { make_key(1), make_key(6) });
-  CHECK(15 == key_count(selector));
+  CHECK(15 == key_count(dbh, selector));
 
   CHECK_FALSE(lfdb::key_exists(dbh, "key_03"));
  }
@@ -517,7 +564,7 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
  SECTION("round trip") {
   using namespace ceph::libfdb;
   
-  auto dbh = make_database();
+  auto dbh = create_database();
   
   set(dbh, "key", "value");
   
@@ -535,31 +582,35 @@ SCENARIO("options", "[fdb]")
 
   // check that the types supported for FDB options are supported by
   // the library:
-  lfdb::options o {
-      0,        true,                           // flag
-      1,        42,                             // integer
-      2,        "hi",                           // string
-      3,        (const std::uint8_t *)"whee"    // data
-    }; 
-
-  CHECK(bool(true) == o.find(0));
-  CHECK(std::int_64(42) == o.find(1));
-  CHECK(std::string("hi") == o.find(2));
-  CHECK(std::vector<std::uint8_t> { 'w', 'h', 'e', 'e' } == o.find(3));
+  lfdb::option_value ov;
+  ov = true;                              // flag
+  ov = 42;                                // integer
+  ov = std::string("hi");                 // string
+  ov = std::vector<std::uint8_t>(         // data
+        (const std::uint8_t *)pearl_msg, 
+        (const std::uint8_t *)(pearl_msg + sizeof(pearl_msg)));
  }
 
- auto dbh = lfdb::create_database({ FDB_DB_LOCATION_CACHE_SIZE, 200'000 }, { FDB_NETWORK_TRACE_ENABLE, false });
+  auto dbh0 = lfdb::create_database(
+                { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },  
+                { { FDB_NET_OPTION_TRACE_ENABLE, false } });         
 
- auto txn = lfdb::make_transaction(dbh, {
-              { FDB_TXN_READ_YOUR_WRITES_DISABLE, true },
-              { FDB_TRANSACTION_LOGGING_ENABLE, "my_nifty_transaction" }
-            });
+  auto dbh1 = lfdb::create_database("fishing for databass!",       // name
+               { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } }, // database options
+               { { FDB_NET_OPTION_TRACE_ENABLE, false } });        // network options
+ 
+  auto txn = lfdb::make_transaction(dbh0, 
+               { { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, true } });
 
- SECTION("make_database()") {
-  auto dbh = make_database();
-  auto dbh = make_database("");
-  auto dbh = make_database(fdb_options {}, database_options {});
-  auto dbh = make_database("", fdb_options {}, database_options {});
+  auto tnth = lfdb::make_tenant(dbh0, "test-tenant");
+  auto tnt_txn = lfdb::make_transaction(tnth, 
+                  { { FDB_TR_OPTION_RETRY_LIMIT, -1 } });
+
+ SECTION("create_database()") {
+  lfdb::create_database();
+  lfdb::create_database("");
+  lfdb::create_database("", {}, {});
+  lfdb::create_database(lfdb::database_options {}, lfdb::network_options {});
  }
 }
 

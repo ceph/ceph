@@ -86,10 +86,12 @@ concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
 namespace ceph::libfdb {
 
 struct database;
+struct tenant;
 struct transaction;
 struct future_value;
 
 using database_handle = std::shared_ptr<database>;
+using tenant_handle = std::shared_ptr<tenant>;
 using transaction_handle = std::shared_ptr<transaction>;
 
 // Should we commit after the (possibly) mutating operation?
@@ -209,21 +211,25 @@ overload(Ts...) -> overload<Ts...>;
 
 // JFW: TODO: Concept-ify these:
 // Note that these are specific to FDB's needs (see return type, casts):
-const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return (std::uint8_t *)xs.data(); }
-const std::uint8_t *data_of(const std::string& xs) { return (std::uint8_t *)xs.data(); }
-const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
-const std::uint8_t *data_of(const bool& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
+constexpr const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return (std::uint8_t *)xs.data(); }
+constexpr const std::uint8_t *data_of(const std::string& xs) { return (std::uint8_t *)xs.data(); }
+constexpr const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
+constexpr const std::uint8_t *data_of(const bool& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
 
-// JFW: TODO: Concept-ify these:
+// JFW: TODO: Concept-ify these variant types:
 // Note that these are specific to FDB's needs (see return type, casts):
-const int size_of(const std::vector<std::uint8_t>& xs) { return static_cast<int>(xs.size()); }
-const int size_of(const std::string& xs) { return static_cast<int>(xs.size()); }
-const int size_of(const std::int64_t x) { return static_cast<int>(x); }
-const int size_of(const bool x) { return static_cast<int>(x); }
+constexpr const int size_of(const std::vector<std::uint8_t>& xs) { return static_cast<int>(xs.size()); }
+constexpr const int size_of(const std::string& xs) { return static_cast<int>(xs.size()); }
+constexpr const int size_of(const std::int64_t x) { return 8; } // JFW: static_cast<int>(x); }
+constexpr const int size_of(const bool x) { return static_cast<int>(x); }
+
+// ...also used:
+constexpr const std::uint8_t *data_of(std::string_view xs) { return (std::uint8_t *)xs.data(); }
+constexpr const int size_of(std::string_view xs) { return static_cast<int>(xs.size()); }
 
 // JFW: it would be nice to unify these two nearly-identical implementations:
 // JFW: some FDB option-setting functions do not operate on handles:
-void apply_options(const auto& option_map, auto& set_option_fn)
+inline void apply_options(const auto& option_map, auto& set_option_fn)
 {
  std::ranges::for_each(option_map, [&set_option_fn](const auto& option) {
     // JFW: tuple-fy this:
@@ -286,9 +292,17 @@ class database_system final
   // Launch network thread:
   fdb_network_thread = std::jthread { &fdb_run_network };
  
-  // Okie-dokie, we're all set:
+  // Okie-dokie, we're all set (distinct from fdb_was_initialized):
   was_initialized = true;
  }
+
+ private:
+ database_system(const network_options& network_opts)
+ {
+   std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, 
+                  ceph::libfdb::detail::database_system::initialize_fdb, 
+                  network_opts);
+ } 
 
  public:
  static bool& initialized() { return was_initialized; } 
@@ -326,31 +340,53 @@ class database_system final
 namespace ceph::libfdb {
 
 struct database;
+struct tenant;
 struct transaction;
 
 class database final
 {
+ detail::database_system db_system;
+
  private:
+
+//JFW: prolly should be shared
  std::unique_ptr<FDBDatabase, decltype(&fdb_database_destroy)> db_handle;
 
  FDBDatabase *create_database_ptr(const std::filesystem::path cluster_file_path) {
+    FDBDatabase *fdbp = nullptr;
 
-  FDBDatabase *fdbp = nullptr;
-  if(fdb_error_t r = fdb_create_database(cluster_file_path.c_str(), &fdbp); 0 != r) {
-    throw libfdb_exception(r);
-  }
+    if(fdb_error_t r = fdb_create_database(cluster_file_path.c_str(), &fdbp); 0 != r) {
+      throw libfdb_exception(r);
+    }
+    
+    return fdbp;
+ }
 
-  return fdbp;
+ FDBTenant *create_tenant(std::string_view tenant_name) {
+    FDBTenant *fdbtp = nullptr;
+    
+    if(fdb_error_t r = fdb_database_open_tenant(raw_handle(), detail::data_of(tenant_name), detail::size_of(tenant_name), &fdbtp); 0 != r) { 
+      throw libfdb_exception(r);
+    }
+    
+    return fdbtp;
+ }
+
+ FDBTransaction *create_transaction() {
+    FDBTransaction *txn_p = nullptr;
+    
+    if(fdb_error_t r = fdb_database_create_transaction(raw_handle(), &txn_p); 0 != r) {
+     throw libfdb_exception(r);
+    }
+    
+    return txn_p;
  }
 
  public:
  database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts, const network_options& network_opts)
-  : db_handle(create_database_ptr(cluster_file_path), &fdb_database_destroy)
+  : db_system(network_opts),
+    db_handle(create_database_ptr(cluster_file_path), &fdb_database_destroy)
  {
-  std::call_once(ceph::libfdb::detail::database_system::fdb_was_initialized, 
-                 ceph::libfdb::detail::database_system::initialize_fdb, 
-                 network_opts);
-
   detail::apply_options(raw_handle(), db_opts, fdb_database_set_option);
  }
 
@@ -358,12 +394,20 @@ class database final
   : database(cluster_file_path, db_opts, {})
  {}
 
+ database(const ceph::libfdb::database_options& db_opts, const ceph::libfdb::network_options& net_opts)
+  : database("", db_opts, net_opts)
+ {}
+
+ database(const ceph::libfdb::database_options& db_opts)
+  : database("", db_opts, {})
+ {}
+
  database(const std::filesystem::path cluster_file_path)
-  : database({}, {})
+  : database(cluster_file_path, {}, {})
  {}
 
  database()
-  : database(std::filesystem::path {})
+  : database(std::filesystem::path {}, {}, {})
  {}
 
  public:
@@ -373,32 +417,54 @@ class database final
  FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
  private:
+ friend tenant;
  friend transaction;
 
  private:
  friend inline database_handle create_database();
  friend inline database_handle create_database(const std::filesystem::path);
  friend inline database_handle create_database(const std::filesystem::path, const database_options&);
+};
 
+class tenant final
+{
+ private:
+ database_handle dbh;
+
+ private:
+ std::unique_ptr<FDBTenant, decltype(&fdb_tenant_destroy)> tnt_handle;
+
+ FDBTransaction *create_transaction() {
+    FDBTransaction *txn_p;
+    
+    if(fdb_error_t r = fdb_tenant_create_transaction(raw_handle(), &txn_p); 0 != r) {
+     throw libfdb_exception(r);
+    }
+    
+    return txn_p;
+ }
+
+ public:
+ tenant(database_handle dbh_, std::string_view tenant_name)
+  : dbh(dbh_),
+    tnt_handle(dbh->create_tenant(tenant_name), &fdb_tenant_destroy)
+ {}
+
+ public:
+ operator bool() { return dbh && nullptr != raw_handle(); }
+
+ public:
+ FDBTenant *raw_handle() const noexcept { return tnt_handle.get(); }
+
+ private:
+ friend transaction;
 };
 
 class transaction final
 {
  database_handle dbh;
 
- std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_ptr;
-
- private:
- FDBTransaction *create_transaction() {
-
-  FDBTransaction *txn_p;
-
-  if(fdb_error_t r = fdb_database_create_transaction(dbh->raw_handle(), &txn_p); 0 != r) {
-   throw libfdb_exception(r);
-  }
-
-  return txn_p;
- }
+ std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
 
  private:
  inline bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output);
@@ -406,13 +472,24 @@ class transaction final
  inline future_value get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
 
  public:
- transaction(database_handle& dbh_)
+ transaction(database_handle dbh_)
  : dbh(dbh_),
-   txn_ptr(create_transaction(), &fdb_transaction_destroy)
+   txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
  {}
 
- transaction(database_handle& dbh_, const transaction_options& opts)
+ transaction(database_handle dbh_, const transaction_options& opts) 
   : transaction(dbh_)
+ {
+  detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
+ }
+
+ transaction(tenant_handle tnth)
+  : dbh(tnth->dbh),
+    txn_handle(tnth->create_transaction(), &fdb_transaction_destroy)
+ {}
+
+ transaction(tenant_handle& dbth_, const transaction_options& opts)
+  : transaction(dbth_)
  {
   detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
  }
@@ -422,7 +499,7 @@ class transaction final
  operator bool() { return dbh && nullptr != raw_handle(); }
 
  public:
- FDBTransaction *raw_handle() const noexcept { return txn_ptr.get(); }
+ FDBTransaction *raw_handle() const noexcept { return txn_handle.get(); }
 
  private:
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
@@ -461,7 +538,7 @@ class transaction final
  }
 
  bool commit();
- void destroy() { txn_ptr.reset(); }
+ void destroy() { txn_handle.reset(); }
 
  private:
  friend transaction_handle make_transaction(database_handle dbh);
@@ -586,72 +663,6 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
  return true;
 }
 
-/* Equivalence with FDBStreamingMode:
- *
-FDB_STREAMING_MODE_ITERATOR
-
-The caller is implementing an iterator (most likely in a binding to a higher level language). The amount of data returned depends on the value of the iteration parameter to fdb_transaction_get_range().
-
-FDB_STREAMING_MODE_SMALL
-
-Data is returned in small batches (not much more expensive than reading individual key-value pairs).
-
-FDB_STREAMING_MODE_MEDIUM
-
-Data is returned in batches between _SMALL and _LARGE.
-
-FDB_STREAMING_MODE_LARGE
-
-Data is returned in batches large enough to be, in a high-concurrency environment, nearly as efficient as possible. If the caller does not need the entire range, some disk and network bandwidth may be wasted. The batch size may be still be too small to allow a single client to get high throughput from the database.
-
-FDB_STREAMING_MODE_SERIAL
-
-Data is returned in batches large enough that an individual client can get reasonable read bandwidth from the database. If the caller does not need the entire range, considerable disk and network bandwidth may be wasted.
-
-FDB_STREAMING_MODE_WANT_ALL
-
-The caller intends to consume the entire range and would like it all transferred as early as possible.
-
-FDB_STREAMING_MODE_EXACT
-
-The caller has passed a specific row limit and wants that many rows delivered in a single batch.
-
-enum struct streaming_mode_t : int {
- iterator	= FDB_STREAMING_MODE_ITERATOR,
- small		= FDB_STREAMING_MODE_SMALL,
- medium		= FDB_STREAMING_MODE_MEDIUM,
- large		= FDB_STREAMING_MODE_LARGE,
- serial		= FDB_STREAMING_MODE_SERIAL,
- all		= FDB_STREAMING_MODE_WANT_ALL,
-3F exact		= FDB_STREAMING_MODE_EXACT
-};
-
-...these are not defined in terms of int or enum as far as I can tell, needs more exploring.
-*/
-
-/* JFW: key selectors are another area of FDB that I need to give more thought to before exposing to the public interface--
-it may be that some operator overloading is natural and pleasant, or that it's got some critical issue. This doesn't feel
-bad, for instance:
-  get(txn, begin_key < end_key);
-  get(txn, begin_key <= end_key);
-
-FDBFuture *fdb_transaction_get_key(
-  FDBTransaction *transaction, 
-  uint8_t const *key_name, int key_name_length, 
-  fdb_bool_t or_equal, 
-  int offset, 
-  fdb_bool_t snapshot)
-
-...for now, we're going to offer just one query and an overload to handle the interval (as there currently are
-no standard intervals that I'm aware of).
-
-Details (looks simple, but like many things in here gets complex quickly):
-https://apple.github.io/foundationdb/developer-guide.html#key-selectors
-
-Ok, some forward motion- instead of thinking of this as an interval, I'm getting milage from the selector idea 
-in the library, and especially std::string::compare();
-
-*/
 // JFW: TODO: implement/expose remaining features (key selectors, batching and chunking, etc.):
 inline ceph::libfdb::future_value ceph::libfdb::transaction::get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
 {

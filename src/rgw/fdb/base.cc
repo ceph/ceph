@@ -75,7 +75,9 @@ database::~database()
   return false;
  }
 
- // Ok: 
+ // Ok:
+ // Note: the internal handle will still be valid, but (according to FDB's rules) will be in an usuable
+ // state.
  return true;
 }
 
