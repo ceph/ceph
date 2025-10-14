@@ -2887,6 +2887,7 @@ cdef class LibCephFS(object):
             # so that user is not left confused at the end of this call.
             path = self.getcwd()
             try:
+                trash_path = trash_path.encode('utf-8')
                 NonRecursiveRmtree(self, trash_path, should_cancel,
                                    suppress_errors).rmtree()
             finally:
@@ -2918,6 +2919,18 @@ class NonRecursiveRmtree:
         self.should_cancel = should_cancel
         self.suppress_errors = suppress_errors
 
+        try:
+            # st_root_fd = subtree root fd. fd = file descriptor.
+            self.st_root_fd = self.fs.open(self.trash_path, os.O_RDONLY | os.O_DIRECTORY,
+                                           0o755)
+        except Exception as e:
+            if self.suppress_errors:
+                log.error('In attempt to get the file descriptor of '
+                          f'"{self.trash_path}", exception "{e}" was raised.')
+                return
+            else:
+                raise
+
         # Stack needed for traversing the file heirarchy under trash_path in
         # depth-first, non-recursive fashion. Each stack member is an instance
         # of class RmtreeDir.
@@ -2938,7 +2951,8 @@ class NonRecursiveRmtree:
         assert self.curr_dir is self.stack[-1]
 
         try:
-            self.stack.append(RmtreeDir(self.fs, de_name))
+            rel_path = os.path.join(self.curr_dir.rel_path, de_name)
+            self.stack.append(RmtreeDir(self, rel_path))
             return True
         except Error as e:
             if self.suppress_errors:
@@ -2971,8 +2985,7 @@ class NonRecursiveRmtree:
         This is where depth-first, non-recursive traversal is done.
         '''
         try:
-            self.fs.chdir(os.path.dirname(self.trash_path))
-            self.stack.append(RmtreeDir(self.fs, os.path.basename(self.trash_path)))
+            self.stack.append(RmtreeDir(self, b''))
         except Exception as e:
             log.error('opening root dir of the file tree failed with exception '
                       f'"{e}", exiting.')
@@ -3034,16 +3047,20 @@ class RmtreeDir:
     helper for class NonRecursiveRmtree.
     '''
 
-    def __init__(self, fs, name):
-        self.fs = fs
+    def __init__(self, rmtree_run_obj, rel_path):
+        self.fs = rmtree_run_obj.fs
+        self.st_root_fd = rmtree_run_obj.st_root_fd
+        self.trash_path = rmtree_run_obj.trash_path
+        self.rel_path = rel_path
+        self.abs_path = os.path.join(self.trash_path, self.rel_path)
 
-        self.name = name
+        self.name = os.path.basename(self.rel_path)
         if isinstance(self.name, str):
             self.name = self.name.encode('utf-8')
+
         # XXX: exception (if) raised here should be handled by caller based on
         # the context.
-        self.fs.chdir(name)
-        self.handle = self.fs.opendir(b'.')
+        self.handle = self.fs.opendir(self.abs_path)
 
         # Is this directory empty? It will be set by self.read_dir().
         self.is_empty = None
@@ -3127,8 +3144,7 @@ class RmtreeDir:
         return value.
         '''
         try:
-            self.fs.chdir(b'..')
-            self.fs.rmdir(self.name)
+            self.fs.rmdir(self.abs_path)
             self.de_has_been_removed = True
         except ObjectNotEmpty:
             # done in the caller method
@@ -3146,7 +3162,8 @@ class RmtreeDir:
         Unlink given file and add it to the ignore list if that fails.
         '''
         try:
-            self.fs.unlink(de_name)
+            file_path = os.path.join(self.rel_path, de_name)
+            self.fs.unlinkat(self.st_root_fd, file_path, 0)
             self.de_has_been_removed = True
         except Error as e:
             log.error('Following exception occured while calling unlink() for '
