@@ -553,6 +553,9 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
     "sample per OSD segment, so avgcount can exceed the true number of "
     "distinct redundancy-loss incidents",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
+  rs_perf.add_u64_counter(rs_stats_invalidated, "stats_invalidated", "Number of times pg stats received invalidations");
+  rs_perf.add_time_avg(rs_waitlocalpoolmigrationreserved_latency, "waitlocalpoolmigrationreserved_latency", "Wait local pool migration reserved recovery state latency");
+  rs_perf.add_time_avg(rs_waitremotepoolmigrationreserved_latency, "waitremotepoolmigrationreserved_latency", "Wait remote pool migration reserved recovery state latency");
 
   return rs_perf.create_perf_counters();
 }

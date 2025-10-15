@@ -224,4 +224,12 @@ struct DeferBackfill : boost::statechart::event<DeferBackfill> {
   }
 };
 
+struct DeferPoolMigration : boost::statechart::event<DeferPoolMigration> {
+  float delay;
+  explicit DeferPoolMigration(float delay) : delay(delay) {}
+  void print(std::ostream *out) const {
+    *out << "DeferPoolMigration: delay " << delay;
+  }
+};
+
 TrivialEvent(RenewLease)
