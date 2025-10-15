@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -21,11 +21,12 @@ import {
 import { Permission } from '~/app/shared/models/permissions';
 import { AlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '~/app/shared/services/time-diff.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-prometheus-form',
@@ -33,7 +34,7 @@ import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-m
   styleUrls: ['./silence-form.component.scss'],
   standalone: false
 })
-export class SilenceFormComponent {
+export class SilenceFormComponent extends CdForm implements OnInit {
   icons = Icons;
   permission: Permission;
   form: CdFormGroup;
@@ -67,7 +68,7 @@ export class SilenceFormComponent {
 
   datetimeFormat = 'YYYY-MM-DD HH:mm';
   isNavigate = true;
-
+  @Output() endDateChanged = new EventEmitter<string>();
   constructor(
     private router: Router,
     private authStorageService: AuthStorageService,
@@ -76,15 +77,15 @@ export class SilenceFormComponent {
     private notificationService: NotificationService,
     private route: ActivatedRoute,
     private timeDiff: TimeDiffService,
-    private modalService: ModalService,
+    private modalCdsService: ModalCdsService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
   ) {
-    this.init();
+    super();
   }
 
-  private init() {
+  ngOnInit(): void {
     this.chooseMode();
     this.authenticate();
     this.createForm();
@@ -193,6 +194,7 @@ export class SilenceFormComponent {
               (acc, group) => _.concat<PrometheusRule>(acc, group.rules),
               []
             );
+            this.validateMatchers();
           },
           () => {
             this.prometheusService.disablePrometheusConfig();
@@ -249,12 +251,13 @@ export class SilenceFormComponent {
     this.validateMatchers();
   }
 
-  private validateMatchers() {
-    if (!this.rules) {
-      window.setTimeout(() => this.validateMatchers(), 100);
+  validateMatchers() {
+    if (!this.form) {
       return;
     }
-    this.matcherMatch = this.silenceMatcher.multiMatch(this.matchers, this.rules);
+    const safeRules = this.rules || [];
+    this.matcherMatch = this.silenceMatcher.multiMatch(this.matchers, safeRules);
+
     this.form.markAsDirty();
     this.form.updateValueAndValidity();
   }
@@ -278,13 +281,12 @@ export class SilenceFormComponent {
   }
 
   showMatcherModal(index?: number) {
-    const modalRef = this.modalService.show(SilenceMatcherModalComponent);
-    const modalComponent = modalRef.componentInstance as SilenceMatcherModalComponent;
-    modalComponent.rules = this.rules;
-    if (_.isNumber(index)) {
-      modalComponent.editMode = true;
-      modalComponent.preFillControls(this.matchers[index]);
-    }
+    const modalRef = this.modalCdsService.show(SilenceMatcherModalComponent, {
+      rules: this.rules,
+      editMode: _.isNumber(index) ? true : false,
+      prefillMatcher: this.matchers[index]
+    });
+    const modalComponent = modalRef as SilenceMatcherModalComponent;
     modalComponent.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
       this.setMatcher(matcher, index);
     });
@@ -323,12 +325,13 @@ export class SilenceFormComponent {
   private getSubmitData(): AlertmanagerSilence {
     const payload = this.form.value;
     delete payload.duration;
-    payload.startsAt = moment(payload.startsAt, this.datetimeFormat).toISOString();
-    payload.endsAt = moment(payload.endsAt, this.datetimeFormat).toISOString();
+    payload.startsAt = moment(payload.startsAt, this.datetimeFormat);
+    payload.endsAt = moment(payload.endsAt, this.datetimeFormat);
     payload.matchers = this.matchers;
     if (this.edit) {
       payload.id = this.id;
     }
+
     return payload;
   }
 
@@ -346,5 +349,21 @@ export class SilenceFormComponent {
       msg = msg.concat(` ${matcher.name} - ${matcher.value},`);
     }
     return `${action} ${this.resource} for ${msg.slice(0, -1)}`;
+  }
+
+  onChange(event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+    this.form.get('duration')?.setValue(value);
+    this.updateDate();
+    const start = moment(this.form.get('startsAt')?.value, this.datetimeFormat);
+    const duration = this.form.get('duration')?.value;
+    const newEndsAt = this.timeDiff.calculateDate(start.toDate(), duration);
+    const formattedEnd = moment(newEndsAt).format(this.datetimeFormat);
+    this.form.get('endsAt')?.setValue(formattedEnd);
+    this.endDateChanged.emit(formattedEnd);
+  }
+
+  onEndDateChanged(value: string) {
+    this.form.get('endsAt')?.setValue(value);
   }
 }

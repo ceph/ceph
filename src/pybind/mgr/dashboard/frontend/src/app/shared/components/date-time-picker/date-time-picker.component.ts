@@ -43,6 +43,7 @@ export class DateTimePickerComponent implements OnInit {
   ampm: string;
   sub: Subscription;
   @Input() defaultDate: boolean = false;
+
   constructor(private calendar: NgbCalendar) {}
 
   ngOnInit() {
@@ -55,28 +56,37 @@ export class DateTimePickerComponent implements OnInit {
       this.format = 'YYYY-MM-DD HH:mm';
     }
 
-    let mom = moment(this.control?.value, this.format);
+    if (this.control) {
+      this.sub = this.control.valueChanges.subscribe((val) => {
+        this.setDateFromControl(val);
+      });
+    }
 
-    if (!mom.isValid() || mom.isBefore(moment())) {
+    this.onModelChange();
+  }
+
+  private setDateFromControl(value: string) {
+    let mom = moment(value, this.format);
+
+    if (!mom.isValid() || (this.defaultDate && mom.isBefore(moment()))) {
       mom = moment();
     }
+
+    this.date = [];
     if (this.defaultDate) {
       this.date.push([]);
     } else {
       this.date.push(mom.format('YYYY-MM-DD'));
     }
 
-    const time = mom.format('HH:mm:ss');
-    this.time = mom.format('hh:mm');
-    this.ampm = mom.hour() >= 12 ? 'PM' : 'AM';
+    this.time = mom.format('hh:mm:ss');
+    this.ampm = mom.format('A');
 
     this.datetime = {
       date: this.date[0],
-      time: time,
+      time: this.time,
       ampm: this.ampm
     };
-
-    this.onModelChange();
   }
 
   onModelChange(event?: any) {
@@ -91,20 +101,24 @@ export class DateTimePickerComponent implements OnInit {
           'hour',
           (initialMoment.hour() % 12) + (event === 'PM' ? 12 : 0)
         );
-        this.datetime.time = moment(updatedMoment).format('HH:mm:ss');
+        this.datetime.time = moment(updatedMoment).format('hh:mm:ss');
         this.datetime.ampm = event;
       } else {
         const time = event;
         this.datetime.time = moment(`${this.datetime.date} ${time} ${this.datetime.ampm}`).format(
-          'HH:mm:ss'
+          'hh:mm:ss'
         );
       }
     }
+
     if (this.datetime) {
-      const datetime = moment(`${this.datetime.date} ${this.datetime.time}`).format(this.format);
+      const datetime = moment(
+        `${this.datetime.date} ${this.datetime.time} ${this.datetime.ampm}`,
+        'YYYY-MM-DD hh:mm:ss A'
+      ).format('YYYY-MM-DD hh:mm:ss A');
 
       setTimeout(() => {
-        this.control.setValue(datetime);
+        this.control.setValue(datetime, { emitEvent: true });
       });
     } else {
       setTimeout(() => {
