@@ -38,8 +38,18 @@
 #include "driver/posix/rgw_sal_posix.h"
 #include "driver/dbstore/config/store.h"
 #endif
+
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
+
+#ifndef D4N_USE_FDB_SINK
+#error oops JFW
+#endif
+
+#ifdef D4N_USE_FDB_SINK
+#include "driver/fdb/sal_d4n-fdb.h" 
+#endif
+
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
@@ -54,6 +64,14 @@
 //#define dout_context g_ceph_context
 
 extern "C" {
+
+// TODO: JFW: basically, none of these are going to work reliably because C++ name mangling
+// isn't standard, so when you try to do this across different compilers the symbols
+// may not resolve. Fairly easy to fix, but let's remember to do it. Better yet, let's decide
+// if these should be dynamic plugins or not (since this hasn't been encountered yet, I
+// suspect nobody's actually tried it so far-- also, there will be other things to worry 
+// about...).
+
 #ifdef WITH_RADOSGW_RADOS
 extern rgw::sal::Driver* newRadosStore(void* io_context, CephContext* cct);
 #endif
@@ -72,6 +90,9 @@ extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+#endif
+#ifdef D4N_USE_FDB_SINK
+extern rgw::sal::Driver* newFDB_D4NFilter(CephContext *cct, rgw::sal::Driver* next);
 #endif
 }
 
@@ -108,6 +129,8 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool background_tasks,
 						    optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
+ldpp_dout(dpp, 0) << "JFW: I'm alive! init_storage_provider()" << dendl;
+
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
@@ -238,6 +261,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
   ldpp_dout(dpp, 20) << "Filter name: " << cfg.filter_name << dendl;
+ldpp_dout(dpp, 0) << "JFW: filter name is: " << cfg.filter_name << dendl;
 
   if (cfg.filter_name.compare("base") == 0) {
     rgw::sal::Driver* next = driver;
@@ -250,15 +274,33 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   } 
 #ifdef WITH_RADOSGW_D4N 
-  else if (cfg.filter_name.compare("d4n") == 0) {
+  else if ((cfg.filter_name.compare("d4n") == 0) or (0 == cfg.filter_name.compare("d4n_fdb"))) {
+ldpp_dout(dpp, 0) << "JFW: starting D4NFilter" << dendl;
     rgw::sal::Driver* next = driver;
     driver = newD4NFilter(next, io_context, admin);
 
     if (driver->initialize(cct, dpp) < 0) {
+ldpp_dout(dpp, 0) << "JFW: D4NFilter did not initialize" << dendl;
       delete driver;
       delete next;
       return nullptr;
     }
+  }
+#endif
+#ifdef D4N_USE_FDB_SINK
+  if (cfg.filter_name.compare("d4n_fdb") == 0) {
+ldpp_dout(dpp, 0) << "JFW: Activating oscillation overthruster! (d4n_fdb active)" << dendl;
+    rgw::sal::Driver* next = driver;
+    driver = newFDB_D4NFilter(cct, next);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      delete next;      // JFW: is this meant to cascade..? Has anyone actually tried it? I'll bet it doesn't...
+      return nullptr;
+    }
+ldpp_dout(dpp, 0) << "JFW: FDB driver INIT OK" << dendl;
+  } else {
+ldpp_dout(dpp, 0) << "JFW: no FDB configuration with d4n_fdb" << dendl;
   }
 #endif
 
@@ -414,6 +456,9 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   else if (config_filter == "d4n") {
     cfg.filter_name= "d4n";
   }
+#endif
+#ifdef D4N_USE_FDB_SINK
+  cfg.filter_name = config_filter;
 #endif
 
   return cfg;
