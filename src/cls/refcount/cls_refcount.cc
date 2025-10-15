@@ -19,14 +19,14 @@ CLS_NAME(refcount)
 
 static string wildcard_tag;
 
-static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refcount *objr)
+static int read_refcount(cls_method_context_t hctx, const std::string& src_tag, obj_refcount *objr)
 {
   bufferlist bl;
   objr->refs.clear();
   int ret = cls_cxx_getxattr(hctx, REFCOUNT_ATTR, &bl);
   if (ret == -ENODATA) {
-    if (implicit_ref) {
-      objr->refs[wildcard_tag] = true;
+    if (!src_tag.empty()) {
+      objr->refs[src_tag] = true;
     }
     return 0;
   }
@@ -69,12 +69,31 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
+  CLS_LOG(10, "cls_rc_refcount_get() tag=%s src_tag=%s\n",
+          op.tag.c_str(), op.src_tag.c_str());
+  // tag must be non-empty strings
+  if (unlikely(op.tag.empty() || op.src_tag.empty())) {
+    CLS_LOG(1, "ERROR: cls_rc_refcount_get(): empty tag\n");
+    return -EINVAL;
+  }
+
+  // tags must be different
+  if (unlikely(op.tag == op.src_tag)) {
+    CLS_LOG(1, "ERROR: cls_rc_refcount_get(): equal tags\n");
+    return -EINVAL;
+  }
+
   obj_refcount objr;
-  int ret = read_refcount(hctx, op.implicit_ref, &objr);
+  int ret = read_refcount(hctx, op.src_tag, &objr);
   if (ret < 0)
     return ret;
 
-  CLS_LOG(10, "cls_rc_refcount_get() tag=%s\n", op.tag.c_str());
+  // this is legal since refcount are idempotent, simply do nothing
+  if (objr.refs[op.tag]) {
+    CLS_LOG(10, "cls_rc_refcount_get() tag=%s already exists -> do nothing\n",
+            op.tag.c_str());
+    return 0;
+  }
 
   objr.refs[op.tag] = true;
 
@@ -96,33 +115,42 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
     CLS_LOG(1, "ERROR: cls_rc_refcount_put(): failed to decode entry\n");
     return -EINVAL;
   }
+  CLS_LOG(10, "cls_rc_refcount_put() tag=%s\n", op.tag.c_str());
 
-  obj_refcount objr;
-  int ret = read_refcount(hctx, op.implicit_ref, &objr);
-  if (ret < 0)
-    return ret;
-
-  if (objr.refs.empty()) {// shouldn't happen!
-    CLS_LOG(0, "ERROR: cls_rc_refcount_put() was called without any references!\n");
+  // tag must be non-empty strings
+  if (unlikely(op.tag.empty())) {
+    CLS_LOG(1, "ERROR: cls_rc_refcount_put(): empty tag\n");
     return -EINVAL;
   }
 
-  CLS_LOG(10, "cls_rc_refcount_put() tag=%s\n", op.tag.c_str());
+  obj_refcount objr;
+  int ret = read_refcount(hctx, "", &objr);
+  if (ret < 0)
+    return ret;
 
-  bool found = false;
-  auto iter = objr.refs.find(op.tag);
-  if (iter != objr.refs.end()) {
-    found = true;
-  } else if (op.implicit_ref) {
-    iter = objr.refs.find(wildcard_tag);
-    if (iter != objr.refs.end()) {
-      found = true;
+  // if refcount was not set on this object it can remove with no further checks
+  if (objr.refs.empty()) {
+    CLS_LOG(10, "cls_rc_refcount_put() tag=%s was called without any references\n",
+            op.tag.c_str());
+    ret = cls_cxx_remove(hctx);
+    if (unlikely(ret != 0)) {
+      CLS_LOG(1, "ERROR: cls_rc_refcount_put::cls_cxx_remove() ret=%d\n", ret);
     }
+    return ret;
   }
 
-  if (!found ||
-      objr.retired_refs.find(op.tag) != objr.retired_refs.end())
+  auto iter = objr.refs.find(op.tag);
+  bool active = (iter != objr.refs.end());
+  bool retired = (objr.retired_refs.find(op.tag) != objr.retired_refs.end());
+
+  if (!active && !retired) {
+    CLS_LOG(0, "ERROR: cls_rc_refcount_put() tag=%s doesn't exist!\n",
+	    op.tag.c_str());
+    return -EINVAL;
+  }
+  else if (!active) {
     return 0;
+  }
 
   objr.retired_refs.insert(op.tag);
   objr.refs.erase(iter);
@@ -156,6 +184,15 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
 
   obj_refcount objr;
   for (auto iter = op.refs.begin(); iter != op.refs.end(); ++iter) {
+    // tag must be non-empty strings
+    if (unlikely(iter->empty())) {
+      CLS_LOG(1, "ERROR: cls_rc_refcount_set(): empty tag\n");
+      return -EINVAL;
+    }
+    if (unlikely(objr.refs[*iter])) {
+      CLS_LOG(1, "ERROR: cls_rc_refcount_set(): repeated tag %s\n", iter->c_str());
+      return -EEXIST;
+    }
     objr.refs[*iter] = true;
   }
 
@@ -181,7 +218,7 @@ static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, buffe
   obj_refcount objr;
 
   cls_refcount_read_ret read_ret;
-  int ret = read_refcount(hctx, op.implicit_ref, &objr);
+  int ret = read_refcount(hctx, "", &objr);
   if (ret < 0)
     return ret;
 

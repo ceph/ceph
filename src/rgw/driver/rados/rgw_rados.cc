@@ -5196,11 +5196,12 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
     if (tail_placement.bucket.name.empty()) {
       manifest.set_tail_placement(tail_placement.placement_rule, src_obj.bucket);
     }
+    string src_tag = (astate->tail_tag.length() > 0 ? astate->tail_tag.to_str() : astate->obj_tag.to_str());
     string ref_tag;
     for (; miter != amanifest->obj_end(dpp); ++miter) {
       ObjectWriteOperation op;
       ref_tag = tag + '\0';
-      cls_refcount_get(op, ref_tag, true);
+      cls_refcount_get(op, ref_tag, src_tag);
 
       rgw_rados_ref obj;
       ret = rgw_get_rados_ref(dpp, driver->getRados()->get_rados_handle(),
@@ -5290,7 +5291,7 @@ done_ret:
       obj.ioctx.set_pool_full_try();  // allow deletion at pool quota limit
 
       ObjectWriteOperation op;
-      cls_refcount_put(op, ref_tag, true);
+      cls_refcount_put(op, ref_tag);
 
       static constexpr uint64_t cost = 1; // 1 throttle unit per request
       static constexpr uint64_t id = 0; // ids unused
@@ -6153,7 +6154,7 @@ void RGWRados::delete_objs_inline(const DoutPrefixProvider *dpp, cls_rgw_obj_cha
 
   for (; obj != chain.objs.end(); ++obj) {
     ObjectWriteOperation op;
-    cls_refcount_put(op, tag, true);
+    cls_refcount_put(op, tag);
 
     rgw_raw_obj raw;
     raw.pool = std::move(obj->pool);
@@ -11611,7 +11612,7 @@ int RGWRados::delete_tail_obj_aio(const DoutPrefixProvider *dpp,
   }
 
   ObjectWriteOperation op;
-  cls_refcount_put(op, tag, true);
+  cls_refcount_put(op, tag);
 
   AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   ret = ref.ioctx.aio_operate(ref.obj.oid, c, &op);
