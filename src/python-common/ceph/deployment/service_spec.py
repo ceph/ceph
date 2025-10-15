@@ -1690,7 +1690,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_namespaces: Optional[int] = 4096,
                  max_namespaces_per_subsystem: Optional[int] = 512,
                  max_hosts_per_subsystem: Optional[int] = 128,
-                 subsystem_cache_expiration: Optional[int] = 5,
+                 subsystem_cache_expiration: Optional[int] = 30,
                  force_tls: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
