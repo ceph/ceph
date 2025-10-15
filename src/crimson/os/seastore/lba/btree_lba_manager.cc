@@ -1075,7 +1075,7 @@ BtreeLBAManager::get_end_mapping(
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
   auto iter = co_await btree.end(c);
-  co_return LBAMapping::create_direct(iter.get_cursor(c));
+  co_return iter.get_cursor(c);
 }
 #endif
 
