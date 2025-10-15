@@ -16,7 +16,13 @@ function(build_arrow)
   list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
 
   # transitive dependencies
-  list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
+  if (thrift_VERSION VERSION_GREATER_EQUAL 0.17)
+    # build arrow with system thrift, and include the transitive dependency on the Arrow::Arrow target
+    list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
+  else()
+    # build arrow with bundled thrift to work around missing boost dependency
+    list(APPEND arrow_CMAKE_ARGS -DThrift_SOURCE=BUNDLED -DARROW_THRIFT_USE_SHARED=OFF)
+  endif()
 
   if (NOT WITH_SYSTEM_UTF8PROC)
     # forward utf8proc_ROOT from build_utf8proc()
