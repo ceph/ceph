@@ -532,14 +532,15 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
       sstrm.str("");
     } 
     else {
-      std::map<std::string, std::list<BeaconListener>> subsystem_listeners;
+      std::map<std::string, std::list<std::pair<BeaconListener, std::string>>> subsystem_listeners;
       for (auto& gw_created_pair: map.created_gws[group_key]) {
+        auto& gw_id = gw_created_pair.first;
         auto& state = gw_created_pair.second;
         if (state.availability == gw_availability_t::GW_AVAILABLE) {
           for (auto &subs: state.subsystems) {
             auto& lst = subsystem_listeners[subs.nqn];
             for (auto& listener : subs.listeners) {
-                lst.push_back(listener);
+                lst.push_back({listener, gw_id});
             }
           }
         }
@@ -549,11 +550,12 @@ bool NVMeofGwMon::preprocess_command(MonOpRequestRef op)
         auto& subsystem_nqn = listener_pair.first;
         auto& listeners = listener_pair.second;
         f->open_array_section(subsystem_nqn);
-        for (auto& listener : listeners) {
+        for (auto& [listener, gw_id] : listeners) {
           f->open_object_section("stat");
           f->dump_string("address_family", listener.address_family);
           f->dump_string("address", listener.address);
           f->dump_string("svcid", listener.svcid);
+          f->dump_string("gw_id", gw_id);
           f->close_section();
         }
         f->close_section();
