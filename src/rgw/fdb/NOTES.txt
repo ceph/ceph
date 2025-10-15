@@ -1,0 +1,23 @@
+
+
+* right now, functions that take a commit parameter generally only commit on success; should we also commit on failure? 
+
+Suggested implementation: a RAII wrapper that hecks commit_after_op::commit and possibly calls h->commit() on scope exit,
+something like the below (we probably don't want to do this on DB failure, either). One way or another, simplifying all
+the code so it doesn't have that redundant check would be nice in general.
+
+inline bool get(..., commit_after)
+{
+ maybe_commit mc(h, commit_after);
+
+ auto r = ceph::libfdb::detail::get_single_value_from_transaction(txn, ceph::libfdb::to::convert(key));
+
+ if(!r.key_was_found)
+  return false;
+
+ fn(r.out_data.data(), r.out_data.size());
+
+ return true;
+}
+
+
