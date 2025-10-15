@@ -1578,6 +1578,17 @@ void PG::on_recovery_reserved()
   queue_recovery();
 }
 
+void PG::on_pool_migration_reserved()
+{
+  //TODO:
+  //queue_pool_migration();
+}
+
+void PG::on_pool_migration_suspended()
+{
+  //TODO:
+}
+
 void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)
 {
   osd->set_not_ready_to_merge_target(pgid, src);

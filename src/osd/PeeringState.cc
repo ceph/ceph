@@ -1210,6 +1210,21 @@ unsigned PeeringState::get_backfill_priority()
   return static_cast<unsigned>(ret);
 }
 
+unsigned PeeringState::get_pool_migration_priority()
+{
+  // a higher value -> a higher priority
+  int ret = OSD_POOL_MIGRATION_PRIORITY_BASE;
+  int base = ret;
+
+  int64_t pool_recovery_priority = 0;
+  pool.info.opts.get(pool_opts_t::RECOVERY_PRIORITY, &pool_recovery_priority);
+
+  ret = clamp_recovery_priority(ret, pool_recovery_priority, max_prio_map[base]);
+
+  psdout(20) << "pool migration priority is " << ret << dendl;
+  return static_cast<unsigned>(ret);
+}
+
 unsigned PeeringState::get_delete_priority()
 {
   auto state = get_osdmap()->get_state(pg_whoami.osd);
@@ -1546,6 +1561,19 @@ bool PeeringState::needs_backfill() const
 
   psdout(10) << "does not need backfill" << dendl;
   return false;
+}
+
+bool PeeringState::needs_pool_migration() const
+{
+  ceph_assert(is_primary());
+
+  bool migrating = pool.info.migrating_pgs.contains(spgid.pgid);
+  if (migrating) {
+    psdout(10) << "needs pool migration" << dendl;
+  } else {
+    psdout(10) << "does not need pool migration" << dendl;
+  }
+  return migrating;
 }
 
 /**
@@ -5642,6 +5670,13 @@ PeeringState::Backfilling::react(const Backfilled &c)
 }
 
 boost::statechart::result
+PeeringState::Backfilling::react(const DoPoolMigration &c)
+{
+  backfill_release_reservations();
+  return transit<WaitLocalPoolMigrationReserved>();
+}
+
+boost::statechart::result
 PeeringState::Backfilling::react(const DeferBackfill &c)
 {
   DECLARE_LOCALS;
@@ -5922,6 +5957,61 @@ void PeeringState::NotRecovering::exit()
   ps->state_clear(PG_STATE_RECOVERY_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_notrecovering_latency, dur);
+}
+
+/*--WaitRemotePoolMigrationReserved--*/
+PeeringState::WaitRemotePoolMigrationReserved::WaitRemotePoolMigrationReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitRemotePoolMigrationReserved")
+{
+  context< PeeringMachine >().log_enter(state_name);
+  DECLARE_LOCALS;
+
+  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  pl->publish_stats_to_osd();
+
+  // FIXME: Stub - release local reservations
+  pl->cancel_local_background_io_reservation();
+  post_event(AllPoolMigrationsReserved());
+}
+
+void PeeringState::WaitRemotePoolMigrationReserved::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  DECLARE_LOCALS;
+
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_waitremotepoolmigrationreserved_latency, dur);
+}
+
+/*--WaitLocalPoolMigrationReserved--*/
+PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitLocalPoolMigrationReserved")
+{
+  context< PeeringMachine >().log_enter(state_name);
+  DECLARE_LOCALS;
+
+  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  pl->request_local_background_io_reservation(
+    ps->get_pool_migration_priority(),
+    std::make_unique<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      LocalPoolMigrationReserved()),
+    std::make_unique<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      DeferPoolMigration(0.0)));
+  pl->publish_stats_to_osd();
+}
+
+void PeeringState::WaitLocalPoolMigrationReserved::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  DECLARE_LOCALS;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_waitlocalpoolmigrationreserved_latency, dur);
 }
 
 /*---RepNotRecovering----*/
@@ -6377,6 +6467,27 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
     ps->choose_acting(get_log_shard, true);
   }
   return transit<WaitLocalBackfillReserved>();
+}
+
+boost::statechart::result
+PeeringState::Recovering::react(const DoPoolMigration &evt)
+{
+  DECLARE_LOCALS;
+
+  release_reservations();
+
+  ps->state_clear(PG_STATE_FORCED_RECOVERY);
+  pl->cancel_local_background_io_reservation();
+  pl->publish_stats_to_osd();
+  // transit any async_recovery_targets back into acting
+  // so pg won't have to stay undersized for long
+  // as pool migration might take a long time to complete..
+  if (!ps->async_recovery_targets.empty()) {
+    pg_shard_t get_log_shard;
+    // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
+    ps->choose_acting(get_log_shard, true);
+  }
+  return transit<WaitLocalPoolMigrationReserved>();
 }
 
 boost::statechart::result

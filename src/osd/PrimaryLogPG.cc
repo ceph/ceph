@@ -13090,6 +13090,14 @@ void PrimaryLogPG::on_activate_complete()
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  PeeringState::RequestBackfill())));
+  } else if (needs_pool_migration()) {
+    dout(10) << "activate queueing pool migration" << dendl;
+    queue_peering_event(
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  get_osdmap_epoch(),
+	  get_osdmap_epoch(),
+	  PeeringState::DoPoolMigration())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
     queue_peering_event(
@@ -13452,6 +13460,14 @@ bool PrimaryLogPG::start_recovery_ops(
             get_osdmap_epoch(),
             get_osdmap_epoch(),
             PeeringState::RequestBackfill())));
+    } else if (needs_pool_migration()) {
+      dout(10) << "recovery done, queuing pool migration" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::DoPoolMigration())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
       state_clear(PG_STATE_FORCED_BACKFILL);
@@ -13466,13 +13482,23 @@ bool PrimaryLogPG::start_recovery_ops(
     state_clear(PG_STATE_BACKFILLING);
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
-    dout(10) << "recovery done, backfill done" << dendl;
-    queue_peering_event(
-      PGPeeringEventRef(
-        std::make_shared<PGPeeringEvent>(
-          get_osdmap_epoch(),
-          get_osdmap_epoch(),
-          PeeringState::Backfilled())));
+    if (needs_pool_migration()) {
+      dout(10) << "backfill done, queuing pool migration" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::DoPoolMigration())));
+    } else {
+      dout(10) << "recovery done, backfill done" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::Backfilled())));
+    }
   }
 
   return false;

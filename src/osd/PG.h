@@ -626,6 +626,8 @@ public:
   void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
+  void on_pool_migration_suspended() override;
+  void on_pool_migration_reserved() override;
 
   bool is_forced_recovery_or_backfill() const {
     return recovery_state.is_forced_recovery_or_backfill();
@@ -1120,6 +1122,9 @@ protected:
   }
   bool needs_backfill() const {
     return recovery_state.needs_backfill();
+  }
+  bool needs_pool_migration() const {
+    return recovery_state.needs_pool_migration();
   }
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;
