@@ -82,43 +82,43 @@ Membership
 Current Members
 ^^^^^^^^^^^^^^^
 
+ * Adam C. Emerson <aemerson@redhat.com>
  * Adam King <adking@redhat.com>
+ * Afreen Misbah <afreen@ibm.com>
+ * Anthony D'Atri <anthony.datri@gmail.com>
  * Casey Bodley <cbodley@redhat.com>
  * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@1111systems.com>
  * Ernesto Puerta <epuertat@redhat.com>
+ * Gaurav Sitlani <gsitlani@ibm.com>
  * Gregory Farnum <gfarnum@redhat.com>
+ * Guillaume Abrioux <gabrioux@redhat.com>
  * Haomai Wang <haomai@xsky.com>
- * Ilya Dryomov <idryomov@redhat.com>
  * Igor Fedotov <igor.fedotov@croit.io>
+ * Ilya Dryomov <idryomov@redhat.com>
  * Jeff Layton <jlayton@redhat.com>
+ * Joseph Mundackal <jmundackal@bloomberg.net>
  * Josh Durgin <jdurgin@redhat.com>
  * João Eduardo Luis <joao@clyso.com>
  * Ken Dreyer <kdreyer@redhat.com>
+ * Laura Flores <lflores@redhat.com>
  * Mark Nelson <mark.nelson@clyso.com>
+ * Matan Breizman <mbreizma@redhat.com>
  * Matt Benjamin <mbenjami@redhat.com>
  * Mike Perez <miperez@redhat.com>
  * Myoungwon Oh <myoungwon.oh@samsung.com>
  * Neha Ojha <nojha@redhat.com>
  * Patrick Donnelly <pdonnell@ibm.com>
+ * Radoslaw Zarzynski <rzarzyns@redhat.com>
  * Sam Just <sjust@redhat.com>
+ * Venky Shankar <vshankar@redhat.com>
  * Vikhyat Umrao <vikhyat@redhat.com>
  * Xie Xingguo <xie.xingguo@zte.com.cn>
+ * Yaarit Hatuka <yhatuka@ibm.com>
  * Yehuda Sadeh <yehuda@redhat.com>
  * Yingxin Cheng <yingxin.cheng@intel.com>
  * Yuri Weinstein <yweinste@redhat.com>
  * Zac Dover <zac.dover@proton.me>
- * Laura Flores <lflores@redhat.com>
- * Venky Shankar <vshankar@redhat.com>
- * Guillaume Abrioux <gabrioux@redhat.com>
- * Anthony D'Atri <anthony.datri@gmail.com>
- * Joseph Mundackal <jmundackal@bloomberg.net>
- * Gaurav Sitlani <gsitlani@ibm.com>
- * Afreen Misbah <afreen@ibm.com>
- * Radoslaw Zarzynski <rzarzyns@redhat.com>
- * Matan Breizman <mbreizma@redhat.com>
- * Yaarit Hatuka <yhatuka@ibm.com>
- * Adam C. Emerson <aemerson@redhat.com>
 
 .. _ctl:
 
