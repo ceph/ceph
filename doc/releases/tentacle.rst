@@ -1,0 +1,395 @@
+========
+Tentacle
+========
+
+Tentacle is the 20th stable release of Ceph.
+
+v20.2.0 Tentacle
+================
+
+
+Highlights
+----------
+
+*See the sections below for more details on these items.*
+
+RADOS
+
+* FastEC: Long expected performance optimizations were added for EC pools.
+* BlueStore: Users can expect to see improved compression and a new,
+  faster WAL (write-ahead-log).
+* Data Availability Score: Users can now track a data availability score
+  for each pool in their cluster.
+
+Dashboard
+
+* Support has been added for NVMe/TCP (gateway groups, multiple
+  namespaces), multi-cluster management, oAuth2 integration, and enhanced
+  RGW/SMB features including multi-site automation, tiering, policies,
+  lifecycles, notifications, and granular replication.
+
+RBD
+
+* New live migration features: RBD images can now be instantly imported
+  from another Ceph cluster (native format) or from a wide variety of
+  external sources/formats.
+* There is now support for RBD namespace remapping while mirroring between
+  Ceph clusters.
+* Several commands related to group and snap info were added or improved,
+  and `rbd device map` now defaults to msgr2.
+
+MGR
+
+* Users now have the ability to force-disable always-on modules.
+* The restful and zabbix modules (deprecated since 2020) have been
+  officially removed.
+
+RGW
+
+* Lua scripts will not run against health checks, properly quoted ETag
+  values returned by S3 CopyPart, PostObject and CompleteMultipartUpload
+  responses.
+* IAM policy evaluation now supports conditions ArnEquals and ArnLike,
+  along with their Not and IfExists variants.
+
+CephFS
+
+* Directories may now be configured with case-insensitive or normalized
+  directory entry names.
+* Modifying the FS setting variable "max_mds" when a cluster is unhealthy
+  now requires users to pass the confirmation flag (--yes-i-really-mean-it).
+* EOPNOTSUPP (Operation not supported) is now returned by the CephFS fuse
+  client for `fallocate` for the default case (i.e. mode == 0).
+
+Ceph
+----
+
+* Integrated SMB support Ceph clusters now support an smb manager module
+  that works similarly to the existing nfs subsystem. The new smb support
+  allows the Ceph cluster to automatically create Samba-backed SMB file
+  shares connected to CephFS. The smb module can configure both basic
+  Active Directory domain or standalone user authentication. The Ceph
+  cluster can host one or more virtual smb cluster which can be truly
+  clustered using Samba's CTDB technology. The smb module requires a
+  cephadm enabled Ceph cluster and deploys container images provided by
+  the samba-container project. The Ceph dashboard can be used to configure
+  smb clusters and shares. A new cephfs-proxy daemon is automatically
+  deployed to improve the scalibilty and memory usage when connecting
+  Samba to CephFS.
+
+CephFS
+------
+
+* Directories may now be configured with case-insensitive or normalized
+  directory entry names. This is an inheritable configuration making
+  it apply to an entire directory tree. For more information, see
+  https://docs.ceph.com/en/latest/cephfs/charmap/
+* Modifying the FS setting variable "max_mds" when a cluster is
+  unhealthy now requires users to pass the confirmation flag
+  (--yes-i-really-mean-it). This has been added as a precaution to tell the
+  users that modifying "max_mds" may not help with troubleshooting or recovery
+  effort. Instead, it might further destabilize the cluster.
+* EOPNOTSUPP (Operation not supported) is now returned by the CephFS
+  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  CephFS does not support disk space reservation. The only flags supported are
+  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+
+Dashboard
+---------
+
+* There is now added support for NVMe/TCP (gateway groups, multiple
+  namespaces), multi-cluster management, oAuth2 integration, and enhanced
+  RGW/SMB features including multi-site automation, tiering, policies,
+  lifecycles, notifications, and granular replication.
+
+MGR
+---
+
+* Users now have the ability to force-disable always-on modules and the
+  removal of the restful and zabbix modules (both deprecated since 2020).
+  Note that the dashboard module's richer and better-maintained RESTful
+  API can be used as an alternative to the restful module, and the
+  prometheus module can be used as an alternative monitoring solution for
+  zabbix.
+
+
+RADOS
+-----
+
+* Long expected performance optimizations (FastEC) have been added for EC pools,
+  including partial reads and partial writes.
+* A new implementation of the Erasure Coding I/O code provides substantial performance
+  improvements and some capacity improvements. The new code is designed to optimize
+  performance when using Erasure Coding with block storage (RBD) and file storage
+  (CephFS) but will have some benefits for object (RGW) storage, in particular when
+  using smaller sized objects. A new flag ``allow_ec_optimizations`` needs to be set
+  on each pool to switch to using the new code. Existing pools can be upgraded once
+  the OSD and MON daemons have been updated. There is no need to update the clients.
+* The default erasure code plugin has been switched from Jerasure to ISA-L.
+* BlueStore now has better compression and a new, faster WAL (write-ahead-log).
+* All components have been switched to the faster OMAP iteration interface.
+* It is now possible to bypass ceph_assert()s in extreme cases to help with disaster
+  recovery.
+* mClock has received several bug fixes and and improved configuration defaults.
+* Testing improvements for dencoding verification were added.
+* Users can now track the data availability score for each pool in their cluster. This
+  feature is currently in tech preview. A pool is considered unavailable if any PG in
+  the pool is not in active state or if there are unfound objects. Otherwise the pool
+  is considered available. The score is updated every one second by default. The
+  feature is on by default.
+
+RBD
+---
+
+* New live migration features: RBD images can now be instantly imported
+  from another Ceph cluster (native format) or from a wide variety of
+  external sources/formats with the help of the new NBD stream and an
+  appropriately capable NBD server such as `qemu-nbd`.
+* There is now support for RBD namespace remapping while mirroring
+  between Ceph clusters.
+* New commands include `rbd group info` and `rbd group snap info`.
+* The `rbd group snap ls` command was enhanced.
+* The `rbd device map` command now defaults to msgr2.
+
+RGW
+---
+
+* Multiple fixes: Lua scripts will not run against health checks,
+  properly quoted ETag values returned by S3 CopyPart, PostObject and
+  CompleteMultipartUpload responses.
+* IAM policy evaluation now supports conditions ArnEquals and ArnLike,
+  along with their Not and IfExists variants.
+
+Telemetry
+---------
+
+* The ``basic`` channel in telemetry now captures the `ec_optimizations`
+  flag, which will allow us to understand feature adoption for the new
+  FastEC improvments.
+  To opt in to telemetry, run ``ceph telemetry on``.
+
+Upgrading from Reef or Squid
+--------------------------------
+
+Before starting, make sure your cluster is stable and healthy (no down or recovering OSDs).
+(This is optional, but recommended.) You can disable the autoscaler for all pools during the
+upgrade using the noautoscale flag.
+
+.. note::
+
+   You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what ceph version(s) are running for each type of daemon.
+
+Upgrading cephadm clusters
+--------------------------
+
+If your cluster is deployed with cephadm (first introduced in Octopus), then the upgrade process is entirely automated. To initiate the upgrade,
+
+  .. prompt:: bash #
+
+    ceph orch upgrade start --image quay.io/ceph/ceph:v20.2.0
+
+The same process is used to upgrade to future minor releases.
+
+Upgrade progress can be monitored with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade status
+
+Upgrade progress can also be monitored with `ceph -s` (which provides a simple progress bar) or more verbosely with
+
+  .. prompt:: bash #
+
+    ceph -W cephadm
+
+The upgrade can be paused or resumed with
+
+  .. prompt:: bash #
+
+    ceph orch upgrade pause  # to pause
+    ceph orch upgrade resume # to resume
+
+or canceled with
+
+.. prompt:: bash #
+
+    ceph orch upgrade stop
+
+Note that canceling the upgrade simply stops the process; there is no ability to downgrade back to Reef or Squid.
+
+Upgrading non-cephadm clusters
+------------------------------
+
+.. note::
+
+   1. If your cluster is running Reef (18.2.x) or later, you might choose
+      to first convert it to use cephadm so that the upgrade to Tentacle is automated (see above).
+      For more information, see https://docs.ceph.com/en/tentacle/cephadm/adoption/.
+
+   2. If your cluster is running Reef (18.2.x) or later, systemd unit file
+      names have changed to include the cluster fsid. To find the correct
+      systemd unit file name for your cluster, run following command:
+
+      ::
+
+        systemctl -l | grep <daemon type>
+
+      Example:
+
+      .. prompt:: bash $
+
+        systemctl -l | grep mon | grep active
+
+      ::
+
+        ceph-6ce0347c-314a-11ee-9b52-000af7995d6c@mon.f28-h21-000-r630.service                                           loaded active running   Ceph mon.f28-h21-000-r630 for 6ce0347c-314a-11ee-9b52-000af7995d6c
+
+#. Set the `noout` flag for the duration of the upgrade. (Optional, but recommended.)
+
+   .. prompt:: bash #
+
+      ceph osd set noout
+
+#. Upgrade monitors by installing the new packages and restarting the monitor daemons. For example, on each monitor host
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-mon.target
+
+   Once all monitors are up, verify that the monitor upgrade is complete by looking for the `tentacle` string in the mon map. The command
+
+   .. prompt:: bash #
+
+      ceph mon dump | grep min_mon_release
+
+   should report:
+
+   .. prompt:: bash #
+
+      min_mon_release 20 (tentacle)
+
+   If it does not, that implies that one or more monitors hasn't been upgraded and restarted and/or the quorum does not include all monitors.
+
+#. Upgrade `ceph-mgr` daemons by installing the new packages and restarting all manager daemons. For example, on each manager host,
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-mgr.target
+
+   Verify the `ceph-mgr` daemons are running by checking `ceph -s`:
+
+   .. prompt:: bash #
+
+      ceph -s
+
+   ::
+
+     ...
+       services:
+        mon: 3 daemons, quorum foo,bar,baz
+        mgr: foo(active), standbys: bar, baz
+     ...
+
+#. Upgrade all OSDs by installing the new packages and restarting the ceph-osd daemons on all OSD hosts
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-osd.target
+
+#. Upgrade all CephFS MDS daemons. For each CephFS file system,
+
+   #. Disable standby_replay:
+
+         .. prompt:: bash #
+
+            ceph fs set <fs_name> allow_standby_replay false
+
+   #. Reduce the number of ranks to 1. (Make note of the original number of MDS daemons first if you plan to restore it later.)
+
+      .. prompt:: bash #
+
+         ceph status # ceph fs set <fs_name> max_mds 1
+
+   #. Wait for the cluster to deactivate any non-zero ranks by periodically checking the status
+
+      .. prompt:: bash #
+
+         ceph status
+
+   #. Take all standby MDS daemons offline on the appropriate hosts with
+
+      .. prompt:: bash #
+
+         systemctl stop ceph-mds@<daemon_name>
+
+   #. Confirm that only one MDS is online and is rank 0 for your FS
+
+      .. prompt:: bash #
+
+         ceph status
+
+   #. Upgrade the last remaining MDS daemon by installing the new packages and restarting the daemon
+
+      .. prompt:: bash #
+
+         systemctl restart ceph-mds.target
+
+   #. Restart all standby MDS daemons that were taken offline
+
+      .. prompt:: bash #
+
+         systemctl start ceph-mds.target
+
+   #. Restore the original value of `max_mds` for the volume
+
+      .. prompt:: bash #
+
+         ceph fs set <fs_name> max_mds <original_max_mds>
+
+#. Upgrade all radosgw daemons by upgrading packages and restarting daemons on all hosts
+
+   .. prompt:: bash #
+
+      systemctl restart ceph-radosgw.target
+
+#. Complete the upgrade by disallowing pre-Tentacle OSDs and enabling all new Tentacle-only functionality
+
+   .. prompt:: bash #
+
+      ceph osd require-osd-release tentacle
+
+#. If you set `noout` at the beginning, be sure to clear it with
+
+   .. prompt:: bash #
+
+      ceph osd unset noout
+
+#. Consider transitioning your cluster to use the cephadm deployment and orchestration framework to simplify
+   cluster management and future upgrades. For more information on converting an existing cluster to cephadm,
+   see https://docs.ceph.com/en/tentacle/cephadm/adoption/.
+
+Post-upgrade
+------------
+
+#. Verify the cluster is healthy with `ceph health`.
+
+#. Consider enabling the `telemetry module <https://docs.ceph.com/en/tentacle/mgr/telemetry/>`_ to send anonymized usage
+   statistics and crash information to the Ceph upstream developers. To see what would be reported (without actually
+   sending any information to anyone),
+
+   .. prompt:: bash #
+
+      ceph telemetry preview-all
+
+   If you are comfortable with the data that is reported, you can opt-in to automatically report the high-level cluster metadata with
+
+   .. prompt:: bash #
+
+      ceph telemetry on
+
+   The public dashboard that aggregates Ceph telemetry can be found at https://telemetry-public.ceph.com/.
+
+Upgrading from pre-Reef releases (like Quincy)
+-------------------------------------------------
+
+You **must** first upgrade to Reef (18.2.z) or Squid (19.2.z) before upgrading to Tentacle.
