@@ -93,7 +93,7 @@ when deploying a single configuration across multiple datacenters).
 If configured, executed, and parsed successfully, the hook's output replaces
 any previously set CRUSH location.
 
-The hook hook can be enabled in ``ceph.conf`` by providing a path to an
+The hook can be enabled in the central configuration store or in the legacy ``ceph.conf`` by providing a path to an
 executable file (often a script), example::
 
    crush_location_hook = /path/to/customized-ceph-crush-location
