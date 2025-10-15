@@ -7737,6 +7737,7 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_PG_INFO2:
   case MSG_OSD_BACKFILL_RESERVE:
   case MSG_OSD_RECOVERY_RESERVE:
+  case MSG_OSD_POOLMIGRATION_RESERVE:
   case MSG_OSD_PG_LEASE:
   case MSG_OSD_PG_LEASE_ACK:
     {
@@ -10062,17 +10063,20 @@ void OSD::dequeue_peering_evt(
       derr << __func__ << " unrecognized pg-less event " << evt->get_desc() << dendl;
       ceph_abort();
     }
-  } else if (PeeringCtx rctx;
-	     advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
-    pg->do_peering_event(evt, rctx);
-    if (pg->is_deleted()) {
+  } else {
+    PeeringCtx rctx;
+    rctx.handle = &handle;
+    if (advance_pg(curmap->get_epoch(), pg, handle, rctx)) {
+      pg->do_peering_event(evt, rctx);
+      if (pg->is_deleted()) {
+	pg->unlock();
+	return;
+      }
+      dispatch_context(rctx, pg, curmap, &handle);
+      need_up_thru = pg->get_need_up_thru();
+      same_interval_since = pg->get_same_interval_since();
       pg->unlock();
-      return;
     }
-    dispatch_context(rctx, pg, curmap, &handle);
-    need_up_thru = pg->get_need_up_thru();
-    same_interval_since = pg->get_same_interval_since();
-    pg->unlock();
   }
 
   if (need_up_thru) {

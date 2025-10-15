@@ -55,6 +55,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MPoolMigrationReserve.h"
 
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
@@ -475,6 +476,9 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_RECOVERY_RESERVE:
     m = make_message<MRecoveryReserve>();
+    break;
+  case MSG_OSD_POOLMIGRATION_RESERVE:
+    m = make_message<MPoolMigrationReserve>();
     break;
   case MSG_OSD_FORCE_RECOVERY:
     m = make_message<MOSDForceRecovery>();
