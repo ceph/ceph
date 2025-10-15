@@ -70,7 +70,7 @@ class CircularJournalSpace : public JournalAllocator {
   open_ret open(bool is_mkfs) final;
 
  public:
-  CircularJournalSpace(RBMDevice * device);
+  CircularJournalSpace(RBMDevice * device, int stream_id = 0);
 
   struct cbj_header_t;
   using submit_ertr = Journal::submit_record_ertr;
@@ -254,6 +254,7 @@ class CircularJournalSpace : public JournalAllocator {
   RBMDevice* device;
   journal_seq_t written_to;
   bool initialized = false;
+  int stream_id = 0;
 };
 
 std::ostream &operator<<(std::ostream &out, const CircularJournalSpace::cbj_header_t &header);

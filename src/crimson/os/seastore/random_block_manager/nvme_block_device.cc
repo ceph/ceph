@@ -67,11 +67,21 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   const std::string& in_path,
   seastar::open_flags mode) {
   io_device.resize(stream_id_count);
-  return seastar::do_for_each(io_device, [=, this](auto &target_device) {
+  return crimson::do_for_each(io_device, [=, this](auto &target_device) {
     return seastar::open_file_dma(in_path, mode).then([this](
-      auto file) {
+      auto file) -> open_ertr::future<> {
       assert(io_device.size() > stream_index_to_open);
-      io_device[stream_index_to_open] = std::move(file);
+      if (stream_index_to_open > 0) {
+	return file.fcntl(F_SET_FILE_RW_HINT, stream_index_to_open
+	).then([this, file=std::move(file)](int ret) -> open_ertr::future<> {
+	  if (ret != 0) {
+	    return crimson::ct_error::input_output_error::make();
+	  }
+	  io_device[stream_index_to_open++] = std::move(file);
+	  return seastar::now();
+	});
+      } 
+      io_device[stream_index_to_open++] = std::move(file);
       return seastar::now();
     });
   });
