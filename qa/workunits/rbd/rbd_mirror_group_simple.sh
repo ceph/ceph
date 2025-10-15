@@ -3677,6 +3677,61 @@ test_demote_snap_sync()
   check_daemon_running "${secondary_cluster}"
 }
 
+declare -a test_demote_snap_sync_after_restart_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'wait_after_restart' 2)
+
+test_demote_snap_sync_after_restart_scenarios=1
+
+test_demote_snap_sync_after_restart()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local scenario=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  start_mirrors "${primary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}" 1G
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped'
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+
+  write_image "${primary_cluster}" "${pool}" "${image_prefix}1" 256 4194304
+  mirror_group_demote "${primary_cluster}" "${pool}/${group0}"
+  local group_snap_id
+  get_newest_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  wait_for_test_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 1
+
+  stop_mirrors "${secondary_cluster}" '-9'
+  # check that demote snap is incomplete
+  test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+  start_mirrors "${secondary_cluster}"
+
+  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group0}" 'up+unknown'
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}/${group0}" 'up+unknown'
+  compare_images "${primary_cluster}" "${secondary_cluster}" "${pool}" "${pool}" "${image_prefix}1"
+  mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_replay_started "${primary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+stopped'
+  group_remove "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+
+  images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${primary_cluster}"
+  wait_for_no_keys "${secondary_cluster}"
+  stop_mirrors "${primary_cluster}"
+  check_daemon_running "${secondary_cluster}"
+}
+
 check_for_no_keys()
 {
   local primary_cluster=$1
@@ -3861,6 +3916,7 @@ run_all_tests()
   run_test_all_scenarios test_image_snapshots_with_group
   run_test_all_scenarios test_group_rename
   run_test_all_scenarios test_demote_snap_sync
+  run_test_all_scenarios test_demote_snap_sync_after_restart
   # TODO this test is disabled - policing is missing for actions against groups on the secondary - not MVP
   #run_test_all_scenarios test_invalid_actions
   run_test_all_scenarios test_remote_namespace
