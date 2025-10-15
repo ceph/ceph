@@ -29,8 +29,8 @@ class ObjectModel : public Model {
   bool secondary_created;
   std::vector<int> primary_contents;
   std::vector<int> secondary_contents;
-  ceph::util::random_number_generator<int> rng =
-      ceph::util::random_number_generator<int>();
+  std::mt19937_64 rng =
+      std::mt19937_64();
 
   // Track read and write I/Os that can be submitted in
   // parallel to detect violations:
