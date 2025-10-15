@@ -5,7 +5,6 @@ import stat
 import time
 import json
 from ceph_volume import process, allow_loop_devices
-from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
 from typing import Dict, List, Any, Union, Optional
 
@@ -802,9 +801,12 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             continue
 
         # If the mapper device is a logical volume it gets excluded
-        if is_mapper_device(diskname):
-            if lvm.get_device_lvs(diskname):
+        try:
+            if UdevData(diskname).is_lvm:
                 continue
+        except RuntimeError:
+            logger.debug("get_devices(): device {} couldn't be found.".format(diskname))
+            continue
 
         # all facts that have no defaults
         # (<name>, <path relative to _sys_block_path>)
