@@ -808,6 +808,21 @@ hobject_t PGRecovery::get_temp_recovery_object(
   return pg->get_recovery_backend()->get_temp_recovery_object(
     target,
     version);
+void PGRecovery::on_pool_migration_suspended()
+
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_suspended);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
+}
+
+void PGRecovery::on_pool_migration_reserved()
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_reserved);
+  DEBUGDPP("", pg->get_dpp());
+  // TODO
+}
+
 }
 
 } // namespace crimson::osd
