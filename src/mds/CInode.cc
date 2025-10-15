@@ -567,6 +567,7 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
     dout(20) << __func__ << ": inheriting change_attr from " << *sr
              << dendl;
     new_srnode->change_attr = sr->srnode.change_attr;
+    new_srnode->flags = sr->srnode.flags;
   }
   return new_srnode;
 }

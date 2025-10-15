@@ -6609,6 +6609,27 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
     pi.snapnode->change_attr++;
 
     mdr->no_early_reply = true;
+    adjust_realm = false;
+    for (auto child_snaprealm: cur->snaprealm->open_children) {
+      if (val) {
+        child_snaprealm->srnode.set_snapdir_visibility();
+      } else {
+        child_snaprealm->srnode.unset_snapdir_visibility();
+      }
+      child_snaprealm->srnode.last_modified = mdr->get_op_stamp();
+      child_snaprealm->srnode.change_attr++;
+      // send snap update to reflect changes on client side
+      CInode *child_in = child_snaprealm->inode;
+      CInode::projected_inode child_pi = child_in->project_inode(mdr, false, adjust_realm);
+      CInode::mempool_inode *child_pip = child_pi.inode.get();
+      child_pip->change_attr++;
+      child_pip->ctime = mdr->get_op_stamp();
+      if (mdr->get_op_stamp() > child_pip->rstat.rctime) {
+        child_pip->rstat.rctime = mdr->get_op_stamp();
+      }
+      child_pip->version = child_in->pre_dirty();
+      journal_and_update_child_snaprealm(mdr, child_in);
+    }
     pip = pi.inode.get();
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
@@ -6850,6 +6871,18 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
   journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
 								   false, false, adjust_realm));
   return;
+}
+
+void Server::journal_and_update_child_snaprealm(const MDRequestRef& mdr, CInode *in) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+  mdr->ls = mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mdlog, "update child snaprealm");
+  le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
+  mdcache->predirty_journal_parents(mdr, &le->metablob, in, 0, PREDIRTY_PRIMARY);
+  mdcache->journal_dirty_inode(mdr.get(), &le->metablob, in);
+
+  journal_and_reply(mdr, in, 0, le, new C_MDS_inode_update_finish(this, mdr, in,
+								   false, false, true));
 }
 
 const Server::XattrHandler Server::xattr_handlers[] = {
