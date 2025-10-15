@@ -267,6 +267,12 @@ enum {
   rs_pg_vulnerability_duration_min,
   rs_pg_rebuild_duration,
   rs_pg_rebuild_duration_min,
+  rs_stats_invalidated,
+  rs_waitlocalpoolmigrationreserved_latency,
+  rs_waitremotepoolmigrationreserved_latency,
+  rs_notmigrating_latency,
+  rs_repwaitmigrationreserved_latency,
+  rs_migratingsource_latency,
   rs_last,
 };
 
