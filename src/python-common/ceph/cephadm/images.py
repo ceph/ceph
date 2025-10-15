@@ -24,12 +24,12 @@ def _create_image(image_ref: str, key: str) -> ContainerImage:
 
 
 class DefaultImages(Enum):
-    PROMETHEUS = _create_image('quay.io/prometheus/prometheus:v2.51.0', 'prometheus')
+    PROMETHEUS = _create_image('quay.io/prometheus/prometheus:v3.6.0', 'prometheus')
     LOKI = _create_image('docker.io/grafana/loki:3.0.0', 'loki')
     PROMTAIL = _create_image('docker.io/grafana/promtail:3.0.0', 'promtail')
-    NODE_EXPORTER = _create_image('quay.io/prometheus/node-exporter:v1.7.0', 'node_exporter')
-    ALERTMANAGER = _create_image('quay.io/prometheus/alertmanager:v0.27.0', 'alertmanager')
-    GRAFANA = _create_image('quay.io/ceph/grafana:11.6.0', 'grafana')
+    NODE_EXPORTER = _create_image('quay.io/prometheus/node-exporter:v1.9.1', 'node_exporter')
+    ALERTMANAGER = _create_image('quay.io/prometheus/alertmanager:v0.28.1', 'alertmanager')
+    GRAFANA = _create_image('quay.io/ceph/grafana:12.2.0', 'grafana')
     HAPROXY = _create_image('quay.io/ceph/haproxy:2.3', 'haproxy')
     KEEPALIVED = _create_image('quay.io/ceph/keepalived:2.2.4', 'keepalived')
     NVMEOF = _create_image('quay.io/ceph/nvmeof:1.5', 'nvmeof')
