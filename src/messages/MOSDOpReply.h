@@ -187,7 +187,7 @@ public:
       head.flags = flags;
       head.osdmap_epoch = osdmap_epoch;
       head.reassert_version = bad_replay_version;
-      head.result = result;
+      head.result = result.get_host_to_wire();
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
       encode(head, payload);
@@ -269,7 +269,7 @@ public:
       }
       ceph::decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
-      result = (int32_t)head.result;
+      result.set_wire_to_host((int32_t)head.result);
       flags = head.flags;
       replay_version = head.reassert_version;
       user_version = replay_version.version;
