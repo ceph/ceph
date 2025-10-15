@@ -238,7 +238,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
 seastar::future<> ClientRequest::with_pg_process(
   Ref<PG> pgref)
 {
-  ceph_assert_always(shard_services);
+  ceph_assert(shard_services);
   LOG_PREFIX(ClientRequest::with_pg_process);
 
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
@@ -651,7 +651,7 @@ bool ClientRequest::is_misdirected_replica_read(const PG& pg) const
 
 void ClientRequest::put_historic() const
 {
-  ceph_assert_always(shard_services);
+  ceph_assert(shard_services);
   shard_services->get_registry().put_historic(*this);
 }
 

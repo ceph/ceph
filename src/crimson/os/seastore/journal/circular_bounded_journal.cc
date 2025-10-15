@@ -399,7 +399,7 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	return scan_valid_record_delta(std::move(call_d_handler_if_valid), tail
 	).safe_then([&crc_info]() {
 	  for (auto p : crc_info) {
-	    ceph_assert_always(p.second.first->get_last_committed_crc() == p.second.second);	
+	    ceph_assert(p.second.first->get_last_committed_crc() == p.second.second);	
 	  }
 	  crc_info.clear();
 	  return replay_ertr::now();

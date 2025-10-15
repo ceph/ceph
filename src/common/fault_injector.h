@@ -118,7 +118,7 @@ class FaultInjector {
       }
       int operator()(const InjectAbort&) const {
         if (check_location == this_location) {
-          ceph_assert_always(!"FaultInjector");
+          ceph_assert(!"FaultInjector");
         }
         return 0;
       }

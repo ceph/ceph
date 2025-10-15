@@ -525,7 +525,7 @@ int CephContext::_do_command(
   int r = 0;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << cmdmap << "'"
 			 << dendl;
-  ceph_assert_always(!(command == "assert" && _conf->debug_asok_assert_abort));
+  ceph_assert(!(command == "assert" && _conf->debug_asok_assert_abort));
   if (command == "abort") {
     if (_conf->debug_asok_assert_abort) {
       ceph_abort();

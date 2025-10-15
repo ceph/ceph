@@ -76,7 +76,7 @@ struct rbm_superblock_t {
     for (unsigned int i = 0; i < seastar::smp::count; i ++) {
       ceph_assert(shard_infos[i].size > block_size &&
                   shard_infos[i].size % block_size == 0);
-      ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
+      ceph_assert(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert(journal_size > 0 &&
                   journal_size % block_size == 0);
       ceph_assert(shard_infos[i].start_offset < size &&

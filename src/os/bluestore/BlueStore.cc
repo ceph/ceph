@@ -7775,7 +7775,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
-  ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
+  ceph_assert(bluefs->maybe_verify_layout(bluefs_layout) == 0);
   return r;
 }
 

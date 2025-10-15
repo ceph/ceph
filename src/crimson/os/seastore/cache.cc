@@ -2154,11 +2154,11 @@ Cache::replay_delta(
 
       if (delta.paddr.is_absolute_segmented() ||
 	  !can_inplace_rewrite(delta.type)) {
-	ceph_assert_always(extent->last_committed_crc == delta.prev_crc);
+	ceph_assert(extent->last_committed_crc == delta.prev_crc);
 	assert(extent->version == delta.pversion);
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);
-	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
+	ceph_assert(extent->last_committed_crc == delta.final_crc);
       } else {
 	assert(delta.paddr.is_absolute_random_block());
 	// see prepare_record(), inplace rewrite might cause version mismatch

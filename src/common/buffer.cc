@@ -2262,7 +2262,7 @@ bool buffer::ptr_node::dispose_if_hypercombined(
   const bool is_hypercombined =
     reinterpret_cast<std::uintptr_t>(delete_this) == bptr;
   if (is_hypercombined) {
-    ceph_assert_always("hypercombining is currently disabled" == nullptr);
+    ceph_abort_msg("hypercombining is currently disabled");
     delete_this->~ptr_node();
     return true;
   } else {
