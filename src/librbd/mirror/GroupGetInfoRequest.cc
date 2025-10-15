@@ -184,9 +184,14 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
         if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
           continue;
         }
-        [[fallthrough]];
-      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
         *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
+        if (it->state == cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE) {
+          *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        } else {
+          *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        }
         break;
       }
       break;
