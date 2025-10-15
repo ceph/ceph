@@ -198,6 +198,20 @@ void Inode::get_cap_ref(int cap)
   }
 }
 
+bool Inode::is_last_cap_ref(int c)
+{
+  if (c != CEPH_CAP_FILE_BUFFER) {
+    return cap_refs[c] == 0;
+  }
+
+  int nref = 0;
+  if (is_write_delegated()) {
+    ++nref;
+  }
+
+  return cap_refs[c] == nref;
+}
+
 int Inode::put_cap_ref(int cap)
 {
   int last = 0;
@@ -209,7 +223,8 @@ int Inode::put_cap_ref(int cap)
 	lderr(client->cct) << "put_cap_ref " << ccap_string(c) << " went negative on " << *this << dendl;
 	ceph_assert(cap_refs[c] > 0);
       }
-      if (--cap_refs[c] == 0)
+      --cap_refs[c];
+      if (is_last_cap_ref(c))
         last |= c;
       //cout << "inode " << *this << " put " << cap_string(c) << " " << (cap_refs[c]+1) << " -> " << cap_refs[c] << std::endl;
     }
