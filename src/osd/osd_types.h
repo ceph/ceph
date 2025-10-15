@@ -85,6 +85,9 @@
 /// min recovery priority for MBackfillReserve
 #define OSD_RECOVERY_PRIORITY_MIN 0
 
+// base pool-migration priority
+#define OSD_POOL_MIGRATION_PRIORITY_BASE 60
+
 /// base backfill priority for MBackfillReserve
 #define OSD_BACKFILL_PRIORITY_BASE 100
 

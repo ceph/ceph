@@ -258,6 +258,8 @@ enum {
   rs_waitupthru_latency,
   rs_notrecovering_latency,
   rs_stats_invalidated,
+  rs_waitlocalpoolmigrationreserved_latency,
+  rs_waitremotepoolmigrationreserved_latency,
   rs_last,
 };
 
