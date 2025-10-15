@@ -67,11 +67,13 @@ struct rbm_test_t :
   }
 
   seastar::future<> tear_down_fut() final {
-    rbm_manager->close().unsafe_get();
-    device->close().unsafe_get();
+    co_await rbm_manager->close().handle_error(
+      crimson::ct_error::assert_all{});
+    co_await device->close().handle_error(
+      crimson::ct_error::assert_all{});
     rbm_manager.reset();
     device.reset();
-    return seastar::now();
+    co_return;
   }
 
   auto mkfs() {
