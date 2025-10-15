@@ -54,7 +54,7 @@ public:
 
 #ifdef UNIT_TESTS_BUILT
   using get_end_mapping_iertr = base_iertr;
-  using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
+  using get_end_mapping_ret = get_end_mapping_iertr::future<LBACursorRef>;
   virtual get_end_mapping_ret get_end_mapping(Transaction &t) = 0;
 #endif
 
