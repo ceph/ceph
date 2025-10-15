@@ -360,6 +360,8 @@ namespace {
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
   auto &t = op->target;
   ldout(cct, DBG_LVL) << str
+    << " pool=" << t.base_oloc.pool
+    << " pgid=" << t.actual_pgid
     << " osd=" << t.osd
     << " shard=" << (t.force_shard ? *t.force_shard : shard_id_t(-1))
     << " balance_reads=" << ((t.flags & CEPH_OSD_FLAG_BALANCE_READS) != 0)
