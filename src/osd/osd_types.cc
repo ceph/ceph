@@ -2433,9 +2433,9 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.expected_num_objects = 123456;
   a.fast_read = false;
   a.nonprimary_shards.clear();
-  a.migration_src = -1; //TODO what should these be?
-  a.migration_target = -1;
-  a.migrating_pgs;
+  a.migration_src = 4;
+  a.migration_target = 5;
+  a.migrating_pgs = { pg_t(1,2), pg_t(3,4) };
 
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(pg_pool_t(a));
