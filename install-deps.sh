@@ -362,13 +362,22 @@ function preload_wheels_for_tox() {
 }
 
 for_make_check=false
-if tty -s; then
+if [ "$FOR_MAKE_CHECK" ]; then
+    case "$FOR_MAKE_CHECK" in
+        true|1|yes)
+            for_make_check=true
+        ;;
+        false|0|no)
+            for_make_check=false
+        ;;
+        *)
+            echo "error: unexpected FOR_MAKE_CHECK value: ${FOR_MAKE_CHECK}"
+            exit 2
+        ;;
+    esac
+elif tty -s; then
     # interactive
     for_make_check=true
-elif [ $FOR_MAKE_CHECK ]; then
-    for_make_check=true
-else
-    for_make_check=false
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
