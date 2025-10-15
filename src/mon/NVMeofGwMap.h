@@ -67,6 +67,8 @@ public:
     const BeaconSubsystems&  subs, bool &propose_pending);
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+  void check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
