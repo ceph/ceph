@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -21,21 +21,22 @@ import {
 import { Permission } from '~/app/shared/models/permissions';
 import { AlertmanagerAlert, PrometheusRule } from '~/app/shared/models/prometheus-alerts';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '~/app/shared/services/time-diff.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @Component({
   selector: 'cd-prometheus-form',
   templateUrl: './silence-form.component.html',
   styleUrls: ['./silence-form.component.scss']
 })
-export class SilenceFormComponent {
+export class SilenceFormComponent extends CdForm implements OnInit {
   icons = Icons;
   permission: Permission;
-  form: CdFormGroup;
+  silenceForm: CdFormGroup;
   rules: PrometheusRule[];
   matchName = '';
   matchValue = '';
@@ -75,15 +76,15 @@ export class SilenceFormComponent {
     private notificationService: NotificationService,
     private route: ActivatedRoute,
     private timeDiff: TimeDiffService,
-    private modalService: ModalService,
+    private modalCdsService: ModalCdsService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
     private succeededLabels: SucceededActionLabelsI18n
   ) {
-    this.init();
+    super();
   }
 
-  private init() {
+  ngOnInit(): void {
     this.chooseMode();
     this.authenticate();
     this.createForm();
@@ -117,7 +118,7 @@ export class SilenceFormComponent {
       const result = expiresAt === '' || moment(expiresAt, this.datetimeFormat).isValid();
       return !result;
     });
-    this.form = this.formBuilder.group(
+    this.silenceForm = this.formBuilder.group(
       {
         startsAt: ['', [Validators.required, formatValidator]],
         duration: ['2h', [Validators.min(1)]],
@@ -133,38 +134,42 @@ export class SilenceFormComponent {
 
   private setupDates() {
     const now = moment().format(this.datetimeFormat);
-    this.form.silentSet('startsAt', now);
+    this.silenceForm.silentSet('startsAt', now);
     this.updateDate();
     this.subscribeDateChanges();
   }
 
   private updateDate(updateStartDate?: boolean) {
     const date = moment(
-      this.form.getValue(updateStartDate ? 'endsAt' : 'startsAt'),
+      this.silenceForm.getValue(updateStartDate ? 'endsAt' : 'startsAt'),
       this.datetimeFormat
     ).toDate();
-    const next = this.timeDiff.calculateDate(date, this.form.getValue('duration'), updateStartDate);
+    const next = this.timeDiff.calculateDate(
+      date,
+      this.silenceForm.getValue('duration'),
+      updateStartDate
+    );
     if (next) {
       const nextDate = moment(next).format(this.datetimeFormat);
-      this.form.silentSet(updateStartDate ? 'startsAt' : 'endsAt', nextDate);
+      this.silenceForm.silentSet(updateStartDate ? 'startsAt' : 'endsAt', nextDate);
     }
   }
 
   private subscribeDateChanges() {
-    this.form.get('startsAt').valueChanges.subscribe(() => {
+    this.silenceForm.get('startsAt').valueChanges.subscribe(() => {
       this.onDateChange();
     });
-    this.form.get('duration').valueChanges.subscribe(() => {
+    this.silenceForm.get('duration').valueChanges.subscribe(() => {
       this.updateDate();
     });
-    this.form.get('endsAt').valueChanges.subscribe(() => {
+    this.silenceForm.get('endsAt').valueChanges.subscribe(() => {
       this.onDateChange(true);
     });
   }
 
   private onDateChange(updateStartDate?: boolean) {
-    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat);
-    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat);
+    const startsAt = moment(this.silenceForm.getValue('startsAt'), this.datetimeFormat);
+    const endsAt = moment(this.silenceForm.getValue('endsAt'), this.datetimeFormat);
     if (startsAt.isBefore(endsAt)) {
       this.updateDuration();
     } else {
@@ -173,9 +178,9 @@ export class SilenceFormComponent {
   }
 
   private updateDuration() {
-    const startsAt = moment(this.form.getValue('startsAt'), this.datetimeFormat).toDate();
-    const endsAt = moment(this.form.getValue('endsAt'), this.datetimeFormat).toDate();
-    this.form.silentSet('duration', this.timeDiff.calculateDuration(startsAt, endsAt));
+    const startsAt = moment(this.silenceForm.getValue('startsAt'), this.datetimeFormat).toDate();
+    const endsAt = moment(this.silenceForm.getValue('endsAt'), this.datetimeFormat).toDate();
+    this.silenceForm.silentSet('duration', this.timeDiff.calculateDuration(startsAt, endsAt));
   }
 
   private getData() {
@@ -239,23 +244,23 @@ export class SilenceFormComponent {
     this.id = silence.id;
     if (this.edit) {
       ['startsAt', 'endsAt'].forEach((attr) =>
-        this.form.silentSet(attr, moment(silence[attr]).format(this.datetimeFormat))
+        this.silenceForm.silentSet(attr, moment(silence[attr]).format(this.datetimeFormat))
       );
       this.updateDuration();
     }
-    ['createdBy', 'comment'].forEach((attr) => this.form.silentSet(attr, silence[attr]));
+    ['createdBy', 'comment'].forEach((attr) => this.silenceForm.silentSet(attr, silence[attr]));
     this.matchers = silence.matchers;
     this.validateMatchers();
   }
 
-  private validateMatchers() {
+  validateMatchers() {
     if (!this.rules) {
       window.setTimeout(() => this.validateMatchers(), 100);
       return;
     }
     this.matcherMatch = this.silenceMatcher.multiMatch(this.matchers, this.rules);
-    this.form.markAsDirty();
-    this.form.updateValueAndValidity();
+    this.silenceForm.markAsDirty();
+    this.silenceForm.updateValueAndValidity();
   }
 
   private fillFormByAlert(alert: AlertmanagerAlert) {
@@ -277,13 +282,12 @@ export class SilenceFormComponent {
   }
 
   showMatcherModal(index?: number) {
-    const modalRef = this.modalService.show(SilenceMatcherModalComponent);
-    const modalComponent = modalRef.componentInstance as SilenceMatcherModalComponent;
-    modalComponent.rules = this.rules;
-    if (_.isNumber(index)) {
-      modalComponent.editMode = true;
-      modalComponent.preFillControls(this.matchers[index]);
-    }
+    const modalRef = this.modalCdsService.show(SilenceMatcherModalComponent, {
+      rules: this.rules,
+      editMode: _.isNumber(index) ? true : false,
+      prefillMatcher: this.matchers[index]
+    });
+    const modalComponent = modalRef as SilenceMatcherModalComponent;
     modalComponent.submitAction.subscribe((matcher: AlertmanagerSilenceMatcher) => {
       this.setMatcher(matcher, index);
     });
@@ -295,7 +299,7 @@ export class SilenceFormComponent {
   }
 
   submit(data?: any) {
-    if (this.form.invalid) {
+    if (this.silenceForm.invalid) {
       return;
     }
     this.prometheusService.setSilence(this.getSubmitData()).subscribe(
@@ -315,19 +319,20 @@ export class SilenceFormComponent {
         );
         this.matchers = [];
       },
-      () => this.form.setErrors({ cdSubmitButton: true })
+      () => this.silenceForm.setErrors({ cdSubmitButton: true })
     );
   }
 
   private getSubmitData(): AlertmanagerSilence {
-    const payload = this.form.value;
+    const payload = this.silenceForm.value;
     delete payload.duration;
-    payload.startsAt = moment(payload.startsAt, this.datetimeFormat).toISOString();
-    payload.endsAt = moment(payload.endsAt, this.datetimeFormat).toISOString();
+    payload.startsAt = moment(payload.startsAt, this.datetimeFormat);
+    payload.endsAt = moment(payload.endsAt, this.datetimeFormat);
     payload.matchers = this.matchers;
     if (this.edit) {
       payload.id = this.id;
     }
+    console.log('payload', payload);
     return payload;
   }
 
