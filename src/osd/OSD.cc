@@ -9962,7 +9962,8 @@ void OSD::dequeue_op(
   pg->do_request(op, handle);
 
   // finish
-  dout(10) << "dequeue_op " << *op->get_req() << " finish" << dendl;
+  dout(10) << "dequeue_op " << *op->get_req() << " finish"
+    << " latency " << (ceph_clock_now() - now) << dendl;
   OID_EVENT_TRACE_WITH_MSG(m, "DEQUEUE_OP_END", false);
 }
 
