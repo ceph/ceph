@@ -496,7 +496,7 @@ max_hosts = 2048
 max_namespaces = 4096
 max_namespaces_per_subsystem = 512
 max_hosts_per_subsystem = 128
-subsystem_cache_expiration = 5
+subsystem_cache_expiration = 30
 force_tls = False
 
 [gateway-logs]
