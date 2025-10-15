@@ -1,85 +1,97 @@
-<cd-modal [modalRef]="activeModal">
-  <span class="modal-title"
-        i18n>{editMode, select, true {Edit} other {Add}} Matcher</span>
-
-  <ng-container class="modal-content">
-    <form class="form"
+  <cds-modal size="md"
+             [open]="open"
+             (overlaySelected)="closeModal()">
+<cds-modal-header (closeSelect)="closeModal()"
+                  i18n>
+  {{editMode ? 'Edit' : 'Add'}} matcher
+<cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+</cds-modal-header>
+<ng-container>
+  <section cdsModalContent>
+    <form name="form"
           #formDir="ngForm"
           [formGroup]="form"
           novalidate>
-      <div class="modal-body">
-        <!-- Name -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="name"
-                 i18n>Name</label>
-          <div class="cd-col-form-input">
-            <select class="form-select"
-                    id="name"
+    <!-- Name -->
+    <div cdsRow
+         class="form-item">
+      <div cdsCol>
+        <cds-select id="name"
                     formControlName="name"
-                    name="name">
-              <option [ngValue]="null"
-                      i18n>-- Select an attribute to match against --</option>
-              <option *ngFor="let attribute of nameAttributes"
-                      [value]="attribute">
-                {{ attribute }}
-              </option>
-            </select>
-            <span class="help-block"
-                  *ngIf="form.showError('name', formDir, 'required')"
-                  i18n>This field is required!</span>
-          </div>
-        </div>
-
-        <!-- Value -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="value"
-                 i18n>Value</label>
-          <div class="cd-col-form-input">
-            <input id="value"
-                   (focus)="valueFocus.next($any($event).target.value)"
-                   (click)="valueClick.next($any($event).target.value)"
-                   class="form-control"
-                   type="text"
-                   [ngbTypeahead]="search"
-                   formControlName="value"
-                   #instance="ngbTypeahead">
-            <span *ngIf="form.showError('value', formDir, 'required')"
-                  class="help-block"
-                  i18n>This field is required!</span>
-          </div>
+                    label="Name"
+                    i18n-label
+                    [invalid]="form.controls.name.invalid && form.controls.name.dirty"
+                    [invalidText]="nameError"
+                    helperText="This name will define and control the matcher settings"
+                    i18n-helperText>
+        <option [ngValue]="null"
+                i18n>-- Select an attribute to match against --</option>
+        <option *ngFor="let attribute of nameAttributes"
+                [value]="attribute">
+        {{ attribute }}
+        </option>
+        </cds-select>
+        <ng-template #nameError>
+          <span *ngIf="form.showError('name', formDir, 'required')"
+                class="invalid-feedback">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+        </ng-template>
+      </div>
+    </div>
+    <div cdsRow
+         class="form-item ">
+    <!-- Value -->
+      <div cdsCol>
+        <cds-combo-box label="Value"
+                       cdsRequiredField="Value"
+                       for="value"
+                       formControlName="value"
+                       id="value"
+                       cdDynamicInputCombobox
+                       [appendInline]="false"
+                       [items]="allPossibleValues"
+                       itemValueKey="content"
+                       [helperText]="valueMatch"
+                       (updatedItems)="allPossibleValues = $event"
+                       i18n>
+        <cds-dropdown-list></cds-dropdown-list>
+        </cds-combo-box>
+        <!-- Error Message -->
+        <ng-template #valueError>
+          <span *ngIf="form.showError('value', formDir, 'required')"
+                class="invalid-feedback">
+            <ng-container i18n>This field is required.</ng-container>
+          </span>
+        </ng-template>
+        <ng-template #valueMatch>
           <div *ngIf="form.getValue('value') && !form.getValue('isRegex') && matcherMatch"
-               class="cd-col-form-offset {{matcherMatch.cssClass}}"
                id="match-state">
             <span class="text-muted {{matcherMatch.cssClass}}">
-              {{matcherMatch.status}}
+            {{matcherMatch.status}}
             </span>
           </div>
-        </div>
-
-        <!-- isRegex -->
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input type="checkbox"
-                     class="custom-control-input"
-                     formControlName="isRegex"
-                     name="is-regex"
-                     id="is-regex">
-              <label for="is-regex"
-                     class="custom-control-label"
-                     i18n>Use regular expression</label>
-            </div>
-          </div>
-        </div>
+        </ng-template>
       </div>
-
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="form"
-                              [submitText]="getMode()"></cd-form-button-panel>
+    </div>
+    <div cdsRow
+         class="form-item form-item-append">
+      <div cdsCol>
+        <!-- Is Regex -->
+        <cds-checkbox id="isRegex"
+                      cdOptionalField="Use regular expression"
+                      formControlName="isRegex"
+                      i18n>
+          Use regular expression
+        </cds-checkbox>
       </div>
+    </div>
     </form>
-  </ng-container>
-</cd-modal>
+  </section>
+</ng-container>
+<!-- Submit Button -->
+<cd-form-button-panel (submitActionEvent)="onSubmit()"
+                      [form]="form"
+                      [submitText]="getMode()"
+                      [modalForm]="true"> </cd-form-button-panel>
+</cds-modal>
