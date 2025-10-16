@@ -40,7 +40,7 @@ class Identity;
 namespace rgw {
 namespace IAM {
 
-enum {
+enum action_t {
   s3GetObject,
   s3GetObjectVersion,
   s3PutObject,
@@ -337,7 +337,7 @@ inline int op_to_perm(std::uint64_t op) {
 }
 }
 
-const char* action_bit_string(uint64_t action);
+const char* action_bit_string(action_t action);
 
 enum class PolicyPrincipal {
   Role,

@@ -1288,7 +1288,7 @@ Effect Statement::eval_conditions(const Environment& e) const {
   return Effect::Deny;
 }
 
-const char* action_bit_string(uint64_t action) {
+const char* action_bit_string(action_t action) {
   switch (action) {
   case s3GetObject:
     return "s3:GetObject";
@@ -1416,8 +1416,8 @@ const char* action_bit_string(uint64_t action) {
   case s3PutBucketLogging:
     return "s3:PutBucketLogging";
 
-    case s3PostBucketLogging:
-      return "s3:PostBucketLogging";
+  case s3PostBucketLogging:
+    return "s3:PostBucketLogging";
 
   case s3GetBucketTagging:
     return "s3:GetBucketTagging";
@@ -1487,6 +1487,27 @@ const char* action_bit_string(uint64_t action) {
 
   case s3BypassGovernanceRetention:
     return "s3:BypassGovernanceRetention";
+
+  case s3GetBucketPolicyStatus:
+    return "s3:GetBucketPolicyStatus";
+
+  case s3PutPublicAccessBlock:
+    return "s3:PutPublicAccessBlock";
+
+  case s3GetPublicAccessBlock:
+    return "s3:GetPublicAccessBlock";
+
+  case s3DeletePublicAccessBlock:
+    return "s3:DeletePublicAccessBlock";
+
+  case s3PutBucketPublicAccessBlock:
+    return "s3:PutBucketPublicAccessBlock";
+
+  case s3GetBucketPublicAccessBlock:
+    return "s3:GetBucketPublicAccessBlock";
+
+  case s3DeleteBucketPublicAccessBlock:
+    return "s3:DeleteBucketPublicAccessBlock";
 
   case s3GetObjectAttributes:
     return "s3:GetObjectAttributes";
@@ -1751,22 +1772,31 @@ const char* action_bit_string(uint64_t action) {
 
   case organizationsListTargetsForPolicy:
     return "organizations:ListTargetsForPolicy";
+
+  case s3All:
+  case s3objectlambdaAll:
+  case iamAll:
+  case stsAll:
+  case snsAll:
+  case organizationsAll:
+  case allCount:
+    return "{invalidSentinel}";
   }
-  return "s3Invalid";
+  return "{invalidUnknown}";
 }
 
 namespace {
 ostream& print_actions(ostream& m, const Action_t a) {
   bool begun = false;
   m << "[ ";
-  for (auto i = 0U; i < allCount; ++i) {
+  for (std::underlying_type_t<action_t> i = 0; i < allCount; ++i) {
     if (a[i] == 1) {
       if (begun) {
         m << ", ";
       } else {
         begun = true;
       }
-      m << action_bit_string(i);
+      m << action_bit_string(action_t(i));
     }
   }
   if (begun) {
