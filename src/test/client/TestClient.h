@@ -127,7 +127,7 @@ public:
     int walk(std::string_view path, struct walk_dentry_result* result, const UserPerm& perms, bool followsym=true) {
       return Client::walk(path, result, perms, followsym);
     }
-
+#if defined(__linux__)
     bool encrypt(const UserPerm& myperm) {
       if (!fscrypt_enabled || fse->encrypted) {
         return false;
@@ -198,7 +198,7 @@ public:
 
       return true;
     }
-
+#endif
     int do_mount(const std::string &mount_root, const UserPerm& perms,
                  bool require_mds=false, const std::string &fs_name="") {
       int r;
@@ -214,14 +214,14 @@ public:
         std::clog << __func__ << "() do_mount r=" << r << std::endl;
         return r;
       }
-
+#if defined(__linux__)
       char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
       r = add_fscrypt_key(fse->key, sizeof(fse->key), keyid);
       if (r < 0) {
         std::clog << __func__ << "() ceph_mount add_fscrypt_key r=" << r << std::endl;
         return r;
       }
-
+#endif
       return 0;
     }
 };
@@ -235,7 +235,7 @@ public:
     static void TearDownTestSuite() {
       icp.stop();
     }
-
+#if defined(__linux__)
     bool encrypt() {
       bool encrypted = client->encrypt(myperm);
       if (encrypted) {
@@ -244,7 +244,7 @@ public:
       }
       return encrypted;
     }
-
+#endif
     void SetUp() override {
       messenger = Messenger::create_client_messenger(g_ceph_context, "client");
       if (messenger->start() != 0) {
@@ -266,12 +266,14 @@ public:
       objecter->init();
       messenger->add_dispatcher_tail(objecter);
       objecter->start();
-
+#if defined(__linux__)
       do {
+#endif
         client = new ClientScaffold(messenger, mc, objecter, &fse);
         client->init();
+#if defined(__linux__)
       } while (encrypt());
-
+#endif
       client->do_mount("/", myperm, true);
     }
     void TearDown() override {

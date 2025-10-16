@@ -3820,6 +3820,7 @@ TEST(LibCephFS, SetMountTimeout) {
   ceph_shutdown(cmount);
 }
 
+#if defined(__linux__)
 TEST(LibCephFS, FsCrypt) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
@@ -3871,6 +3872,7 @@ TEST(LibCephFS, EncTag) {
   ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "user.ceph.subvolume.enctag", enctagbuf, sizeof(enctagbuf), CEPH_XATTR_CREATE));
 
   char enctagread[4];
+
   ASSERT_EQ(1, ceph_is_encrypted(cmount, fd, enctagread));
   ASSERT_EQ(0, strcmp(enctagbuf, enctagread));
   ASSERT_EQ(0, ceph_close(cmount, fd));
@@ -3878,7 +3880,7 @@ TEST(LibCephFS, EncTag) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
-
+#endif
 TEST(LibCephFS, SnapdirAttrs) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);

@@ -46,7 +46,10 @@
 #include "InodeRef.h"
 #include "MetaSession.h"
 #include "UserPerm.h"
+
+#if defined(__linux__)
 #include "FSCrypt.h"
+#endif
 
 #include <fstream>
 #include <locale>
@@ -382,15 +385,16 @@ public:
   }
 
   /* fscrypt */
+#if defined(__linux__)
   int add_fscrypt_key(const char *key_data, int key_len, char* keyid, int user = 0);
   int remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user = 0);
   int get_fscrypt_key_status(fscrypt_get_key_status_arg* arg);
 
-  int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
-
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
   int get_fscrypt_policy_v2(int fd, struct fscrypt_policy_v2* policy);
   int is_encrypted(int fd, UserPerm& perms, char* enctag);
+#endif
+  int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
 
   int mds_command(
     const std::string &mds_spec,
@@ -751,10 +755,11 @@ public:
   bool ll_handle_umask() {
     return acl_type != NO_ACL;
   }
-
+#if defined(__linux__)
   int ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy);
   int ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy);
   int ll_is_encrypted(Inode *in, UserPerm& perms, char* enctag);
+#endif
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			file_layout_t* layout);
@@ -1033,9 +1038,9 @@ public:
 
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
-
+#if defined(__linux__)
   std::unique_ptr<FSCrypt> fscrypt;
-
+#endif
   bool _collect_and_send_global_metrics;
 
 
@@ -1494,8 +1499,9 @@ private:
     }
 
     void start();
+#if defined(__linux__)
     FSCryptFDataDencRef fscrypt_denc;
-
+#endif
   private:
     Client *clnt;
     Context *onfinish;
@@ -1532,11 +1538,17 @@ private:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                           bufferlist *bl,
                           uint64_t fpos, uint64_t off, uint64_t len,
+#if defined(__linux__)
                           FSCryptFDataDencRef denc,
-                          uint64_t read_start,
+#endif
+     			  uint64_t read_start,
                           uint64_t read_len)
       : clnt(clnt), onfinish(onfinish), f(f), in(in), bl(bl), off(off), len(len),
-        start_time(mono_clock_now()), denc(denc), read_start(read_start), read_len(read_len) {}
+        start_time(mono_clock_now()), 
+#if defined(__linux__)
+	denc(denc), 
+#endif
+	read_start(read_start), read_len(read_len) {}
 
   private:
     Client *clnt;
@@ -1548,7 +1560,9 @@ private:
     uint64_t len;
     utime_t start_time;
 
+#if defined(__linux__)
     FSCryptFDataDencRef denc;
+#endif
     uint64_t read_start;
     uint64_t read_len;
 
@@ -1701,8 +1715,9 @@ private:
     client_t const whoami;
 
     CephContext *cct;
+#if defined(__linux__)
     FSCrypt *fscrypt;
-
+#endif
     ceph::mutex lock = ceph::make_mutex("Client::WriteEncMgr");
 
     Fh *f;
@@ -1719,8 +1734,9 @@ private:
 
     bool async;
 
+#if defined(__linux__)
     FSCryptFDataDencRef denc;
-
+#endif
     uint64_t start_block;
     uint64_t start_block_ofs;
     uint64_t ofs_in_start_block;
@@ -1782,7 +1798,11 @@ private:
     }
 
     bool encrypted() const {
+#if defined(__linux__)
       return !!denc;
+#else
+      return 0;
+#endif
     }
 
     int read_modify_write(Context *iofinish);
@@ -2068,8 +2088,10 @@ private:
 
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
+#if defined(__linux__)
   int get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& kh);
   bool is_inode_locked(const InodeRef& to_check);
+#endif
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
