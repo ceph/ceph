@@ -96,10 +96,10 @@ public:
 
   clone_mapping_ret clone_mapping(
     Transaction &t,
-    LBAMapping pos,
-    LBAMapping mapping,
+    LBACursorRef pos,
+    LBACursorRef mapping,
     laddr_t laddr,
-    extent_len_t offset,
+    laddr_t inter_key,
     extent_len_t len,
     bool updateref) final;
 

@@ -312,46 +312,30 @@ BtreeLBAManager::alloc_extents(
 BtreeLBAManager::clone_mapping_ret
 BtreeLBAManager::clone_mapping(
   Transaction &t,
-  LBAMapping pos,
-  LBAMapping mapping,
+  LBACursorRef pos,
+  LBACursorRef mapping,
   laddr_t laddr,
-  extent_len_t offset,
+  laddr_t inter_key,
   extent_len_t len,
   bool updateref)
 {
   LOG_PREFIX(BtreeLBAManager::clone_mapping);
-  assert(pos.is_viewable());
-  assert(mapping.is_viewable());
-  DEBUGT("pos={}, mapping={}, laddr={}, {}~{} updateref={}",
-    t, pos, mapping, laddr, offset, len, updateref);
-  assert(offset + len <= mapping.get_length());
+  assert(pos->is_viewable());
+  assert(mapping->is_viewable());
+  DEBUGT("pos={}, mapping={}, laddr={}~{}, inter_key={} updateref={}",
+	 t, *pos, *mapping, laddr, len, inter_key, updateref);
+  assert(inter_key.get_byte_distance<extent_len_t>(mapping->get_laddr()) + len
+	 <= mapping->get_length());
   auto c = get_context(t);
   if (updateref) {
-    if (!mapping.direct_cursor) {
-      mapping.direct_cursor = co_await resolve_indirect_cursor(
-	c, *mapping.indirect_cursor);
-    }
-    assert(mapping.direct_cursor->is_viewable());
-    auto res = co_await update_refcount(
-      c.trans, mapping.direct_cursor.get(), 1
-    ).handle_error_interruptible(
-      clone_mapping_iertr::pass_further{},
-      crimson::ct_error::assert_all{"unexpected error"}
-    );
-    assert(!res.mapping.is_indirect());
-    mapping.direct_cursor = std::move(res.mapping.direct_cursor);
+    mapping = co_await update_mapping_refcount(c.trans, mapping, 1);
   }
   auto btree = co_await get_btree<LBABtree>(cache, c);
-  auto &cursor = pos.get_effective_cursor();
-  co_await cursor.refresh();
-  assert(laddr + len <= cursor.key);
-  auto inter_key = mapping.is_indirect()
-    ? mapping.get_intermediate_key()
-    : mapping.get_key();
-  inter_key = (inter_key + offset).checked_to_laddr();
+  co_await pos->refresh();
+  assert(laddr + len <= pos->get_laddr());
   auto p = co_await btree.insert(
     c,
-    btree.make_partial_iter(c, cursor),
+    btree.make_partial_iter(c, *pos),
     laddr,
     lba_map_val_t{len, inter_key, EXTENT_DEFAULT_REF_COUNT, 0});
   auto &[iter, inserted] = p;
@@ -360,9 +344,9 @@ BtreeLBAManager::clone_mapping(
     iter.get_leaf_pos(),
     get_reserved_ptr<LBALeafNode, laddr_t>(),
     leaf_node.get_size() - 1 /*the size before the insert*/);
-  mapping = co_await mapping.refresh();
+  co_await mapping->refresh();
   co_return clone_mapping_ret_t{
-    LBAMapping(mapping.direct_cursor, iter.get_cursor(c)),
+    iter.get_cursor(c),
     mapping};
 }
 
