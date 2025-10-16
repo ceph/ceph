@@ -60,18 +60,6 @@ public:
 	state = RWState::RWEXCL;
       }
 
-      seastar::future<> lock_excl_wait() {
-        // Try immediate lock first
-        if (obc->lock.try_lock_for_excl()) {
-          state = RWState::RWEXCL;
-          return seastar::now();
-        }
-        // Otherwise, wait asynchronously
-        return obc->lock.lock_for_excl().then([this] {
-          state = RWState::RWEXCL;
-        });
-      }
-
       void demote_excl_to(RWState::State lock_type) {
 	assert(state == RWState::RWEXCL);
 	switch (lock_type) {
@@ -178,10 +166,6 @@ public:
 
     void lock_excl_sync() {
       target_state.lock_excl_sync();
-    }
-
-    seastar::future<> lock_excl_wait() {
-      return target_state.lock_excl_wait();
     }
 
     ObjectContextRef &get_obc() {
