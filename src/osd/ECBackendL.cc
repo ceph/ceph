@@ -1056,6 +1056,10 @@ void ECBackendL::handle_sub_read(
              m += sinfo.get_chunk_size()) {
           for (auto &&k:op.subchunks.find(i->first)->second) {
             bufferlist bl0;
+            dout(20) << __func__ << " JAKE reading subchunk: "
+                     << "OFFSET=" << (j->get<0>() + m + (k.first)*subchunk_size)
+                     << " LENGTH=" << (k.second)*subchunk_size
+                     << dendl
             r = switcher->store->read(
                 switcher->ch,
                 ghobject_t(i->first, ghobject_t::NO_GEN, shard),
