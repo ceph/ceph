@@ -84,6 +84,14 @@ common_args: Dict[str, Any] = {
         'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
     },
+    '--dmcrypt-format-opts': {
+        'default': None,
+        'type': str,
+    },
+    '--dmcrypt-open-opts': {
+        'default': None,
+        'type': str,
+    },
     '--with-tpm': {
         'dest': 'with_tpm',
         'help': 'Whether encrypted OSDs should be enrolled with TPM.',
