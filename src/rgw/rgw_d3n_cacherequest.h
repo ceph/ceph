@@ -20,6 +20,8 @@
 #include "rgw_aio.h"
 #include "rgw_cache.h"
 
+#include "xxhash.h"
+
 
 struct D3nGetObjData {
   std::mutex d3n_lock;
@@ -137,12 +139,18 @@ struct D3nL1CacheRequest {
     }
   };
 
+  static std::string generate_oid_digest(const std::string& oid) {
+    XXH128_hash_t hash = XXH3_128bits(oid.c_str(), oid.size());
+    std::string digest = fmt::format("{:016x}{:016x}", hash.high64, hash.low64);
+    return std::string(digest);
+  }
+
   void file_aio_read_abstract(const DoutPrefixProvider *dpp, boost::asio::yield_context yield,
                               std::string& cache_location, off_t read_ofs, off_t read_len,
                               rgw::Aio* aio, rgw::AioResult& r) {
     auto ex = yield.get_executor();
     ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): oid=" << r.obj.oid << dendl;
-    async_read(dpp, ex, cache_location+"/"+url_encode(r.obj.oid, true), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    async_read(dpp, ex, cache_location+"/"+generate_oid_digest(r.obj.oid), read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
   }
 
 };
