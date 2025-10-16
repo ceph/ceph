@@ -51,6 +51,12 @@ export class SystemKey {
   secret_key: string;
 }
 
+export interface RgwEntities {
+  realm_name: string;
+  zonegroup_name: string;
+  zone_name: string;
+}
+
 export enum RgwMultisiteSyncPolicyStatus {
   ENABLED = 'enabled',
   FORBIDDEN = 'forbidden',
