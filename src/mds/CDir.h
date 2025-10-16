@@ -783,7 +783,8 @@ private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void finish_old_fragment(MDSContext::vec& waiters, bool replay);
   void init_fragment_pins();
-  std::string get_path() const;
+  std::string get_trimmed_path() const;
+  std::string get_path(bool trim_path=false) const;
 
   // -- authority --
   /*
