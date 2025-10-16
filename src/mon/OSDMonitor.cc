@@ -7449,6 +7449,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+			 false,
 			 &ss);
 
   if (ret < 0) {
@@ -8092,6 +8093,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+				 bool migrate,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8344,7 +8346,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     // This will fail if the pool cannot support ec optimizations.
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
-
+  if (migrate) {
+    dout(0) << "Configuring pool migration for PG " << pg_t(0, pool) << dendl;
+    pi->migration_target = 1;
+    pi->migrating_pgs = { pg_t(0, pool) };
+  }
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -13740,6 +13746,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
 
+    bool migrate = cmd_getval_or<bool>(cmdmap, "migrate", false);
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -13751,6 +13759,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+			   migrate,
 			   &ss);
     if (err < 0) {
       switch(err) {
