@@ -553,8 +553,12 @@ public:
    * for the definition of "indirect lba mapping" and "direct lba mapping".
    * Note that the cloned extent must be stable
    */
-  using clone_extent_iertr = LBAManager::clone_mapping_iertr;
-  using clone_extent_ret = LBAManager::clone_mapping_ret;
+  struct clone_pin_ret {
+    LBAMapping cloned_mapping;
+    LBAMapping orig_mapping;
+  };
+  using clone_extent_iertr = base_iertr;
+  using clone_extent_ret = clone_extent_iertr::future<clone_pin_ret>;
   clone_extent_ret clone_pin(
     Transaction &t,
     LBAMapping pos,
@@ -566,19 +570,27 @@ public:
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "{} clone to hint {} ... pos={}, updateref={}",
       t, mapping, hint, pos, updateref);
+    ceph_assert(!pos.is_indirect());
     pos = co_await pos.refresh();
-    mapping = co_await mapping.refresh();
+    mapping = co_await complete_mapping(t, mapping);
+    laddr_t inter_key = mapping.is_indirect() ?
+      mapping.get_intermediate_key() :
+      mapping.get_key();
+    inter_key = (inter_key + offset).checked_to_laddr();
     auto ret = co_await lba_manager->clone_mapping(
       t,
-      std::move(pos),
-      std::move(mapping),
+      pos.get_effective_cursor_ref(),
+      std::move(mapping.direct_cursor),
       hint,
-      offset,
+      inter_key,
       len,
       updateref
     );
-    SUBDEBUGT(seastore_tm, "cloned as {}", t, ret.cloned_mapping);
-    co_return ret;
+    SUBDEBUGT(seastore_tm, "cloned as {}", t, *ret.cloned_mapping);
+    co_return clone_pin_ret{
+      LBAMapping::create_indirect(ret.orig_mapping, ret.cloned_mapping),
+      LBAMapping(ret.orig_mapping, std::move(mapping.indirect_cursor))
+    };
   }
 
   struct clone_range_ret_t {
