@@ -781,6 +781,8 @@ Print active connections and their TCP round trip time and retransmission counte
     248     89      1       mgr.0   863     1677    0
     3       86      2       mon.0   230     278     0
 
+.. _data_availability_score:
+
 Tracking Data Availability Score of a Cluster
 =============================================
 
