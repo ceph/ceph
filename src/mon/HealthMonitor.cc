@@ -1177,44 +1177,31 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
 
 void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
 {
-  dout(20) << "IM HERE" << dendl; 
   list<string> details;
   
   //This is a loop that will go through all the erasure code profiles 
   for (auto& erasure_code_profile : mon.osdmon()->osdmap.get_erasure_code_profiles()) {
-    dout(20) << erasure_code_profile << dendl;
+    dout(20) << "check_erasure_code_profiles" << "checking" << erasure_code_profile << dendl;
 
     //This will look at the erasure code profiles technique is blaum_roth and will check that the w key exists 
-      if (erasure_code_profile.second.at("technique") == "blaum_roth" && erasure_code_profile.second.count("w") == 1){
+      if (erasure_code_profile.second.at("technique") == "blaum_roth" && 
+      erasure_code_profile.second.count("w") == 1) {
         //Read the w value from the profile and convert it to an int 
         int w = std::stoi(erasure_code_profile.second.at("w"));
 
-        if (!is_prime(w+1)){
+        if (!mon.is_prime(w + 1)) {
           ostringstream ds;
-          ds << "w+1="<< w+1 << " for the EC profile " << erasure_code_profile.first << " is not prime and could lead to data corruption";
+          ds << "w+1="<< w+1 << " for the EC profile " << erasure_code_profile.first 
+            << " is not prime and could lead to data corruption";
           details.push_back(ds.str());
       }
     }
   }
   if (!details.empty()) {
             ostringstream ss;
-            ss << "1 or more EC profiles have a w value such that w+1 is not prime. This can result in data corruption";
+            ss << "1 or more EC profiles have a w value such that w+1 is not prime."
+              << " This can result in data corruption";
             auto &d = checks->add("BLAUM_ROTH_W_IS_NOT_PRIME", HEALTH_WARN, ss.str(), details.size());
             d.detail.swap(details);
         }
-}
-
-bool HealthMonitor::is_prime(int value)
-{
-  int prime55[] = {
-    2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,
-    73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,
-    151,157,163,167,173,179,
-    181,191,193,197,199,211,223,227,229,233,239,241,251,257
-  };
-  int i;
-  for (i = 0; i < 55; i++)
-    if (value == prime55[i])
-      return true;
-  return false;
 }
