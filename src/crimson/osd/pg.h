@@ -439,6 +439,13 @@ public:
     recovery_handler->backfill_suspended();
   }
 
+  void on_pool_migration_reserved() final {
+    recovery_handler->on_pool_migration_reserved();
+  }
+  void on_pool_migration_suspended() final {
+    recovery_handler->on_pool_migration_suspended();
+  }
+
   void on_recovery_cancelled() final {
     cancel_pglog_based_recovery_op();
   }
