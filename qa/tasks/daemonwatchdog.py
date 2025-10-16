@@ -117,10 +117,12 @@ class DaemonWatchdog(Greenlet):
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
                     self.log("{name} failed".format(name=thrasher.name))
-                    thrasher.stop_and_join()
                     bark = True
 
             if bark:
+                for thrasher in self.thrashers:
+                    # Either thrasher failed or we've hit daemon_timeout
+                    thrasher.stop_and_join()
                 self.bark()
                 return
 
