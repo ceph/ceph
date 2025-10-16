@@ -267,6 +267,7 @@ public:
       pgid = pg_t(head.layout.ol_pgid);
       result.set_wire_to_host((int32_t)head.result);
       flags = head.flags;
+      bad_replay_version = head.reassert_version;
       replay_version = head.reassert_version;
       user_version = replay_version.version;
       osdmap_epoch = head.osdmap_epoch;
