@@ -48,11 +48,11 @@ MGR
 
 RGW
 
-* RGW: Added support for S3 GetObjectAttributes.
-* RGW: For compatibility with AWS S3, LastModified timestamps are now truncated
+* Added support for S3 GetObjectAttributes.
+* For compatibility with AWS S3, LastModified timestamps are now truncated
   to the second. Note that during upgrade, users may observe these timestamps
   moving backwards as a result.
-* RGW: Bucket resharding now does most of its processing before it starts to block
+* Bucket resharding now does most of its processing before it starts to block
   write operations. This should significantly reduce the client-visible impact
   of resharding on large buckets.
 
@@ -235,15 +235,40 @@ RADOS
 RBD
 ---
 
-* New live migration features: RBD images can now be instantly imported
-  from another Ceph cluster (native format) or from a wide variety of
-  external sources/formats with the help of the new NBD stream and an
-  appropriately capable NBD server such as `qemu-nbd`.
-* There is now support for RBD namespace remapping while mirroring
-  between Ceph clusters.
-* New commands include `rbd group info` and `rbd group snap info`.
-* The `rbd group snap ls` command was enhanced.
-* The `rbd device map` command now defaults to msgr2.
+* All Python APIs that produce timestamps now return "aware" ``datetime``
+  objects instead of "naive" ones (i.e., those including time zone information
+  instead of those not including it). All timestamps remain in UTC, but
+  including ``timezone.utc`` makes it explicit and avoids the potential of the
+  returned timestamp getting misinterpreted. In Python 3, many ``datetime``
+  methods treat "naive" ``datetime`` objects as local times.
+
+* ``rbd group info`` and ``rbd group snap info`` commands are introduced to
+  show information about a group and a group snapshot respectively.
+
+* ``rbd group snap ls`` output now includes the group snapshot IDs. The header
+  of the column showing the state of a group snapshot in the unformatted CLI
+  output is changed from ``STATUS`` to ``STATE``. The state of a group snapshot
+  that was shown as ``ok`` is now shown as ``complete``, which is more
+  descriptive.
+
+* Moving an image that is a member of a group to trash is no longer
+  allowed. The ``rbd trash mv`` command now behaves the same way as ``rbd rm``
+  in this scenario.
+
+* Fetching the mirroring mode of an image is invalid if the image is
+  disabled for mirroring. The public APIs -- C++ ``mirror_image_get_mode()``,
+  C ``rbd_mirror_image_get_mode()``, and Python ``Image.mirror_image_get_mode()``
+  -- will return EINVAL when mirroring is disabled.
+
+* Promoting an image is invalid if the image is not enabled for mirroring.
+  The public APIs -- C++ ``mirror_image_promote()``,
+  C ``rbd_mirror_image_promote()``, and Python ``Image.mirror_image_promote()``
+  -- will return EINVAL instead of ENOENT when mirroring is not enabled.
+
+* Requesting a resync on an image is invalid if the image is not enabled
+  for mirroring. The public APIs -- C++ ``mirror_image_resync()``,
+  C ``rbd_mirror_image_resync()``, and Python ``Image.mirror_image_resync()``
+  -- will return EINVAL instead of ENOENT when mirroring is not enabled.
 
 RGW
 ---
