@@ -959,6 +959,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
     }
     break;
+#if defined(__linux__)
     case FS_IOC_GET_ENCRYPTION_POLICY_EX_RESTRICTED:
     case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
       generic_dout(10) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << dendl;
@@ -1127,6 +1128,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
     }
     break;
+#endif
     default:
       fuse_reply_err(req, EINVAL);
   }
