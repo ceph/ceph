@@ -8,7 +8,7 @@
 # after push.  If you want to save local image copies, set this to false.
 
 
-CFILE=${1:-Containerfile}
+CFILE=${1:-Containerfile.el10}
 shift || true
 
 usage() {
@@ -115,7 +115,6 @@ echo -e "\
     PRERELEASE_PASSWORD=${PRERELEASE_PASSWORD}\n " > prerelease.secret.txt
 
 podman build --pull=newer --squash -f $CFILE -t build.sh.output \
-    --build-arg FROM_IMAGE=${FROM_IMAGE:-quay.io/centos/centos:stream9} \
     --build-arg CEPH_SHA1=${CEPH_SHA1} \
     --build-arg CEPH_GIT_REPO=${CEPH_GIT_REPO} \
     --build-arg CEPH_REF=${BRANCH:-main} \
