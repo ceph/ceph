@@ -140,7 +140,7 @@ The output will resemble the following::
   The system's calculations use whichever of these two ratios (that is, the 
   target ratio and the effective ratio) is greater.
 
-- **BIAS** is used as a multiplier to manually adjust a pool's PG in accordance
+- **BIAS** is the ``pg_autoscale_bias`` and is used as a multiplier to manually adjust a pool's pg_num in accordance
   with prior information about how many PGs a specific pool is expected to
   have.  This is important for pools that primarily store data in omaps vs
   RADOS objects, notably RGW index and CephFS / RBD EC metadata pools. When
