@@ -9,7 +9,7 @@ jobs:
   stale:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/stale@v5
+      - uses: actions/stale@f7176fd3007623b69d27091f9b9d4ab7995f0a06 # v5
         with:
           # PAT for GitHub API authentication
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
