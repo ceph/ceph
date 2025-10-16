@@ -1038,106 +1038,75 @@ BtreeLBAManager::remap_mappings(
   assert(mapping.is_viewable());
   assert(mapping.is_indirect() == mapping.is_complete_indirect());
   auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [mapping=std::move(mapping), c, this,
-    remaps=std::move(remaps)](auto &btree) mutable {
-    auto &cursor = mapping.get_effective_cursor();
-    return seastar::do_with(
-      std::move(remaps),
-      std::move(mapping),
-      btree.make_partial_iter(c, cursor),
-      std::vector<LBAMapping>(),
-      [c, &btree, this, &cursor](auto &remaps, auto &mapping, auto &iter, auto &ret) {
-      auto val = iter.get_val();
-      assert(val.refcount == EXTENT_DEFAULT_REF_COUNT);
-      assert(mapping.is_indirect() ||
-	(val.pladdr.is_paddr() &&
-	 val.pladdr.get_paddr().is_absolute()));
-      return update_refcount(c.trans, &cursor, -1
-      ).si_then([&mapping, &btree, &iter, c, &ret,
-		&remaps, pladdr=val.pladdr](auto r) {
-	assert(r.refcount == 0);
-	auto &cursor = r.mapping.get_effective_cursor();
-	iter = btree.make_partial_iter(c, cursor);
-	return trans_intr::do_for_each(
-	  remaps,
-	  [&mapping, &btree, &iter, c, &ret, pladdr](auto &remap) {
-	  assert(remap.offset + remap.len <= mapping.get_length());
-	  assert((bool)remap.extent == !mapping.is_indirect());
-	  lba_map_val_t val;
-	  auto old_key = mapping.get_key();
-	  auto new_key = (old_key + remap.offset).checked_to_laddr();
-	  val.len = remap.len;
-	  if (pladdr.is_laddr()) {
-	    auto laddr = pladdr.get_laddr();
-	    val.pladdr = (laddr + remap.offset).checked_to_laddr();
-	  } else {
-	    auto paddr = pladdr.get_paddr();
-	    val.pladdr = paddr + remap.offset;
-	  }
-	  val.refcount = EXTENT_DEFAULT_REF_COUNT;
-	  val.checksum = 0; // the checksum should be updated later when
-			    // committing the transaction
-	  return btree.insert(c, iter, new_key, std::move(val)
-	  ).si_then([c, &remap, &mapping, &ret, &iter](auto p) {
-	    auto &[it, inserted] = p;
-	    ceph_assert(inserted);
-	    auto &leaf_node = *it.get_leaf_node();
-	    if (mapping.is_indirect()) {
-	      leaf_node.insert_child_ptr(
-		it.get_leaf_pos(),
-		get_reserved_ptr<LBALeafNode, laddr_t>(),
-		leaf_node.get_size() - 1 /*the size before the insert*/);
-	      ret.push_back(
-		LBAMapping::create_indirect(nullptr, it.get_cursor(c)));
-	    } else {
-	      leaf_node.insert_child_ptr(
-		it.get_leaf_pos(),
-		remap.extent,
-		leaf_node.get_size() - 1 /*the size before the insert*/);
-	      ret.push_back(
-		LBAMapping::create_direct(it.get_cursor(c)));
-	    }
-	    return it.next(c).si_then([&iter](auto it) {
-	      iter = std::move(it);
-	    });
-	  });
-	});
-      }).si_then([&mapping, &ret] {
-	if (mapping.is_indirect()) {
-	  auto &cursor = mapping.direct_cursor;
-	  return cursor->refresh(
-	  ).si_then([&ret, &mapping] {
-	    for (auto &m : ret) {
-	      m.direct_cursor = mapping.direct_cursor;
-	    }
-	  });
-	}
-	return base_iertr::now();
-      }).si_then([this, c, &mapping, &remaps] {
-	if (remaps.size() > 1 && mapping.is_indirect()) {
-	  auto &cursor = mapping.direct_cursor;
-	  assert(cursor->is_viewable());
-	  return update_refcount(
-	    c.trans, cursor.get(), 1).discard_result();
-	}
-	return update_refcount_iertr::now();
-      }).si_then([&ret] {
-	return trans_intr::parallel_for_each(
-	  ret,
-	  [](auto &remapped_mapping) {
-	  return remapped_mapping.refresh(
-	  ).si_then([&remapped_mapping](auto mapping) {
-	    remapped_mapping = std::move(mapping);
-	  });
-	});
-      }).si_then([&ret] {
-	return std::move(ret);
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto iter = btree.make_partial_iter(c, mapping.get_effective_cursor());
+  std::vector<LBAMapping> ret;
+  auto val = iter.get_val();
+  assert(val.refcount == EXTENT_DEFAULT_REF_COUNT);
+  assert(mapping.is_indirect() ||
+	 (val.pladdr.is_paddr() &&
+	  val.pladdr.get_paddr().is_absolute()));
+  auto updated_cursor = co_await update_mapping_refcount(
+    c.trans, mapping.get_effective_cursor_ref(), -1);
+  iter = btree.make_partial_iter(c, *updated_cursor);
+  for (auto &remap : remaps) {
+    assert(remap.offset + remap.len <= mapping.get_length());
+    assert((bool)remap.extent == !mapping.is_indirect());
+    lba_map_val_t val;
+    auto old_key = mapping.get_key();
+    auto new_key = (old_key + remap.offset).checked_to_laddr();
+    val.len = remap.len;
+    if (val.pladdr.is_laddr()) {
+      auto laddr = val.pladdr.get_laddr();
+      val.pladdr = (laddr + remap.offset).checked_to_laddr();
+    } else {
+      auto paddr = val.pladdr.get_paddr();
+      val.pladdr = paddr + remap.offset;
+    }
+    val.refcount = EXTENT_DEFAULT_REF_COUNT;
+    val.checksum = 0; // the checksum should be updated later when
+    // committing the transaction
+    auto p = co_await btree.insert(c, iter, new_key, std::move(val));
+    auto &[it, inserted] = p;
+    ceph_assert(inserted);
+    auto &leaf_node = *it.get_leaf_node();
+    if (mapping.is_indirect()) {
+      leaf_node.insert_child_ptr(
+	it.get_leaf_pos(),
+	get_reserved_ptr<LBALeafNode, laddr_t>(),
+	leaf_node.get_size() - 1 /*the size before the insert*/);
+      ret.push_back(
+	LBAMapping::create_indirect(nullptr, it.get_cursor(c)));
+    } else {
+      leaf_node.insert_child_ptr(
+	it.get_leaf_pos(),
+	remap.extent,
+	leaf_node.get_size() - 1 /*the size before the insert*/);
+      ret.push_back(
+	LBAMapping::create_direct(it.get_cursor(c)));
+    }
+    it = co_await it.next(c);
+    iter = std::move(it);
+  }
+  if (mapping.is_indirect()) {
+    co_await mapping.direct_cursor->refresh();
+    for (auto &m : ret) {
+      m.direct_cursor = mapping.direct_cursor;
+    }
+  }
+  if (remaps.size() > 1 && mapping.is_indirect()) {
+    assert(mapping.direct_cursor->is_viewable());
+    co_await update_mapping_refcount(c.trans, mapping.direct_cursor, 1);
+  }
+  co_await trans_intr::parallel_for_each(
+    ret,
+    [](auto &remapped_mapping) {
+      return remapped_mapping.refresh(
+      ).si_then([&remapped_mapping](auto mapping) {
+	remapped_mapping = std::move(mapping);
       });
     });
-  });
+  co_return ret;
 }
 
 }
