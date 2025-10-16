@@ -38,7 +38,7 @@ RBD
 * There is now support for RBD namespace remapping while mirroring between
   Ceph clusters.
 * Several commands related to group and snap info were added or improved,
-  and `rbd device map` now defaults to msgr2.
+  and ``rbd device map`` now defaults to ``msgr2``.
 
 MGR
 
@@ -267,6 +267,11 @@ RADOS
 
   - Tracker ticket: https://tracker.ceph.com/issues/70774
   - :ref:`Documentation <override_max_iops_capacity>`
+
+* pybind/rados: Fixes WriteOp.zero() in the original reversed order of arguments
+  ``offset`` and ``length``. When pybind calls WriteOp.zero(), the argument passed
+  does not match rados_write_op_zero, and offset and length are swapped, which
+  results in an unexpected response.
 
 RBD
 ---
