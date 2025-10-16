@@ -1540,9 +1540,15 @@ out:
   }
 }
 
-bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
+bool MDSMonitor::has_health_warnings(const vector<mds_metric_t>& warnings, const mds_gid_t& gid)
 {
-  for (auto& [gid, health] : pending_daemon_health) {
+  for (auto& [_gid, health] : pending_daemon_health) {
+    if (gid != MDS_GID_NONE) {
+      if (gid != mds_gid_t(_gid)) {
+	continue;
+      }
+    }
+
     for (auto& metric : health.metrics) {
       // metric.type here is the type of health warning. We are only
       // looking for types of health warnings passed to this func member
@@ -1554,6 +1560,17 @@ bool MDSMonitor::has_health_warnings(vector<mds_metric_t> warnings)
     }
   }
 
+  return false;
+}
+
+bool MDSMonitor::has_health_warnings(const vector<mds_metric_t>& warnings,
+				     const std::vector<mds_gid_t>& gids)
+{
+  for (auto& gid : gids) {
+    if (has_health_warnings(warnings, gid)) {
+      return true;
+    }
+  }
   return false;
 }
 
@@ -1616,7 +1633,7 @@ int MDSMonitor::filesystem_command(
     }
 
     if (!confirm &&
-        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED})) {
+        has_health_warnings({MDS_HEALTH_TRIM, MDS_HEALTH_CACHE_OVERSIZED}, gid)) {
       ss << errmsg_for_unhealthy_mds;
       return -EPERM;
     }
