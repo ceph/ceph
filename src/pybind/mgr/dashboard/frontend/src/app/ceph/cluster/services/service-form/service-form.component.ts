@@ -3,14 +3,14 @@ import { Component, Input, OnInit, ViewChild } from '@angular/core';
 import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { NgbActiveModal, NgbModalRef, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
+import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import { ListItem } from 'carbon-components-angular';
 import _ from 'lodash';
 import { forkJoin, merge, Observable, Subject, Subscription } from 'rxjs';
 import { debounceTime, distinctUntilChanged, filter, map } from 'rxjs/operators';
 import { Pool } from '~/app/ceph/pool/pool';
 import { CreateRgwServiceEntitiesComponent } from '~/app/ceph/rgw/create-rgw-service-entities/create-rgw-service-entities.component';
-import { RgwRealm, RgwZonegroup, RgwZone } from '~/app/ceph/rgw/models/rgw-multisite';
+import { RgwRealm, RgwZonegroup, RgwZone, RgwEntities } from '~/app/ceph/rgw/models/rgw-multisite';
 
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
@@ -36,7 +36,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
-import { ModalService } from '~/app/shared/services/modal.service';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 
@@ -88,7 +88,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
-  bsModalRef: NgbModalRef;
   defaultZonegroup: RgwZonegroup;
   showRealmCreationForm = false;
   defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
@@ -125,7 +124,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     public rgwMultisiteService: RgwMultisiteService,
     private route: ActivatedRoute,
     public activeModal: NgbActiveModal,
-    public modalService: ModalService
+    public modalService: ModalCdsService
   ) {
     super();
     this.resource = $localize`service`;
@@ -1364,11 +1363,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   createMultisiteSetup() {
-    this.bsModalRef = this.modalService.show(CreateRgwServiceEntitiesComponent, {
-      size: 'lg'
-    });
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      this.setRgwFields();
+    const modalRef = this.modalService.show(CreateRgwServiceEntitiesComponent);
+    const modalComponent = modalRef as CreateRgwServiceEntitiesComponent;
+    modalComponent.submitAction.subscribe((item: RgwEntities) => {
+      this.setRgwFields(item.realm_name, item.zonegroup_name, item.zone_name);
     });
   }
 }
