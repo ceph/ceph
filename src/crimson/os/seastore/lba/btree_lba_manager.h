@@ -96,8 +96,8 @@ public:
 
   clone_mapping_ret clone_mapping(
     Transaction &t,
-    LBAMapping pos,
-    LBAMapping mapping,
+    LBACursorRef pos,
+    LBACursorRef mapping,
     laddr_t laddr,
     extent_len_t offset,
     extent_len_t len,
