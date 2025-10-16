@@ -45,7 +45,7 @@
 using namespace std;
 
 rados_t cluster;
-
+#if defined(__linux__)
 static string fscrypt_dir;
 
 static char fscrypt_key[32];
@@ -1152,13 +1152,16 @@ TEST(FSCrypt, FSCryptDummyEncryptionNoExistingRegularPolicy) {
 
   ceph_shutdown(cmount);
 }
+#endif
 
 int main(int argc, char **argv)
 {
-  int r = update_root_mode();
+  int r;
+#if defined(__linux__)
+  r = update_root_mode();
   if (r < 0)
     exit(1);
-
+#endif
   ::testing::InitGoogleTest(&argc, argv);
 
   srand(getpid());
@@ -1176,10 +1179,11 @@ int main(int argc, char **argv)
   if (r < 0)
     exit(1);
 
+#if defined(__linux__)
   r = init_fscrypt();
   if (r < 0)
     exit(1);
-
+#endif
   r = RUN_ALL_TESTS();
 
   rados_shutdown(cluster);

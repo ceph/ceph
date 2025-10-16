@@ -2503,7 +2503,7 @@ extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
 {
   cmount->get_client()->finish_reclaim();
 }
-
+#if defined(__linux__)
 extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
                                     const char *key_data, int key_len,
 				    char* out_keyid,
@@ -2587,7 +2587,7 @@ extern "C" int ceph_ll_is_encrypted(struct ceph_mount_info *cmount,
 
   return cmount->get_client()->ll_is_encrypted(in, cmount->default_perms, enctag);
 }
-
+#endif
 // This is deprecated, use ceph_ll_register_callbacks2 instead.
 extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
 					   struct ceph_client_callback_args *args)

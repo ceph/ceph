@@ -1,3 +1,5 @@
+
+#if defined(__linux__)
 #pragma once
 
 #include "fscrypt_uapi.h"
@@ -140,7 +142,6 @@ public:
 
     return true;
   }
-
   void init(const struct fscrypt_policy_v2& policy) {
     version = policy.version;
     contents_encryption_mode = policy.contents_encryption_mode;
@@ -424,3 +425,4 @@ public:
                          uint64_t *read_len,
                          FSCryptFDataDencRef *denc);
 };
+#endif
