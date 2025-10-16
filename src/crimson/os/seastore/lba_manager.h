@@ -91,8 +91,8 @@ public:
     std::vector<LogicalChildNodeRef> ext) = 0;
 
   struct clone_mapping_ret_t {
-    LBAMapping cloned_mapping;
-    LBAMapping orig_mapping;
+    LBACursorRef cloned_mapping;
+    LBACursorRef orig_mapping;
   };
   using clone_mapping_iertr = alloc_extent_iertr;
   using clone_mapping_ret = clone_mapping_iertr::future<clone_mapping_ret_t>;
@@ -101,8 +101,8 @@ public:
    */
   virtual clone_mapping_ret clone_mapping(
     Transaction &t,
-    LBAMapping pos,		// the destined position
-    LBAMapping mapping,		// the mapping to be cloned
+    LBACursorRef pos,		// the destined position
+    LBACursorRef mapping,	// the mapping to be cloned
     laddr_t laddr,		// the new lba key of the cloned mapping
     extent_len_t offset,	// the offset of the part to be cloned,
 				// relative to the start of the mapping.
