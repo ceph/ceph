@@ -249,27 +249,36 @@ RGW
 ---
 
 * Multiple fixes: Lua scripts will not run against health checks,
-  properly quoted ETag values returned by S3 CopyPart, PostObject and
+  properly quoted ETag values returned by S3 CopyPart, PostObject, and
   CompleteMultipartUpload responses.
-* IAM policy evaluation now supports conditions ArnEquals and ArnLike,
-  along with their Not and IfExists variants.
-* RGW: Added BEAST frontend option 'so_reuseport' which facilitates running multiple
+
+* IAM policy evaluation now supports conditions ``ArnEquals`` and ``ArnLike``,
+  along with their ``Not`` and ``IfExists`` variants.
+
+* Added BEAST frontend option ``so_reuseport`` which facilitates running multiple
   RGW instances on the same host by sharing a single TCP port.
-* RGW: Replication policies now validate permissions using `s3:ReplicateObject`,
-  `s3:ReplicateDelete`, and `s3:ReplicateTags` for destination buckets. For source
-  buckets, both `s3:GetObjectVersionForReplication` and `s3:GetObject(Version)`
-  are supported. Actions like `s3:GetObjectAcl`, `s3:GetObjectLegalHold`, and
-  `s3:GetObjectRetention` are also considered when fetching the source object.
-  Replication of tags is controlled by the `s3:GetObject(Version)Tagging` permission.
-* RGW: Adding missing quotes to the ETag values returned by S3 CopyPart,
-  PostObject and CompleteMultipartUpload responses.
-* RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
+
+* Replication policies now validate permissions using
+  ``s3:ReplicateObject``, ``s3:ReplicateDelete``, and ``s3:ReplicateTags`` for
+  destination buckets. For source buckets, both
+  ``s3:GetObjectVersionForReplication`` and ``s3:GetObject(Version)`` are
+  supported. Actions like ``s3:GetObjectAcl``, ``s3:GetObjectLegalHold``, and
+  ``s3:GetObjectRetention`` are also considered when fetching the source object.
+  Replication of tags is controlled by the
+  ``s3:GetObject(Version)Tagging`` permission.
+
+* Adding missing quotes to the ETag values returned by S3 CopyPart,
+  PostObject, and CompleteMultipartUpload responses.
+
+* ``PutObjectLockConfiguration`` can now be used to enable S3 Object Lock on an
   existing versioning-enabled bucket that was not created with Object Lock enabled.
-* RGW: The `x-amz-confirm-remove-self-bucket-access` header is now supported by
-  `PutBucketPolicy`. Additionally, the root user will always have access to modify
-  the bucket policy, even if the current policy explicitly denies access.
-* RGW: Added support for the `RestrictPublicBuckets` property of the S3 `PublicAccessBlock`
-  configuration.
+
+* The ``x-amz-confirm-remove-self-bucket-access`` header is now supported by
+  ``PutBucketPolicy``. Additionally, the root user will always have access to
+  modify the bucket policy, even if the current policy explicitly denies access.
+
+* Added support for the ``RestrictPublicBuckets`` property of the S3
+  ``PublicAccessBlock`` configuration.
 
 Telemetry
 ---------
