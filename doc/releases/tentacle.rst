@@ -60,10 +60,10 @@ CephFS
 
 * Directories may now be configured with case-insensitive or normalized
   directory entry names.
-* Modifying the FS setting variable "max_mds" when a cluster is unhealthy
-  now requires users to pass the confirmation flag (--yes-i-really-mean-it).
+* Modifying the FS setting variable ``max_mds`` when a cluster is unhealthy
+  now requires users to pass the confirmation flag (``--yes-i-really-mean-it``).
 * EOPNOTSUPP (Operation not supported) is now returned by the CephFS fuse
-  client for `fallocate` for the default case (i.e. mode == 0).
+  client for ``fallocate`` for the default case (i.e. ``mode == 0``).
 
 Ceph
 ----
@@ -84,19 +84,55 @@ Ceph
 CephFS
 ------
 
-* Directories may now be configured with case-insensitive or normalized
-  directory entry names. This is an inheritable configuration making
-  it apply to an entire directory tree. For more information, see
-  https://docs.ceph.com/en/latest/cephfs/charmap/
-* Modifying the FS setting variable "max_mds" when a cluster is
+* Directories may now be configured with case-insensitive or
+  normalized directory entry names. This is an inheritable configuration,
+  making it apply to an entire directory tree.
+
+  For more information, see the :ref:`documentation <charmap>`.
+
+* It is now possible to pause the threads that asynchronously purge
+  deleted subvolumes by using the config option
+  ``mgr/volumes/pause_purging``.
+
+* It is now possible to pause the threads that asynchronously clone
+  subvolume snapshots by using the config option
+  ``mgr/volumes/pause_cloning``.
+
+* Modifying the setting ``max_mds`` when a cluster is
   unhealthy now requires users to pass the confirmation flag
-  (--yes-i-really-mean-it). This has been added as a precaution to tell the
-  users that modifying "max_mds" may not help with troubleshooting or recovery
-  effort. Instead, it might further destabilize the cluster.
-* EOPNOTSUPP (Operation not supported) is now returned by the CephFS
-  fuse client for `fallocate` for the default case (i.e. mode == 0) since
+  (``--yes-i-really-mean-it``). This has been added as a precaution to inform
+  users that modifying ``max_mds`` may not help with troubleshooting or recovery
+  efforts. Instead, it might further destabilize the cluster.
+
+* ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS
+  FUSE client for ``fallocate`` in the default case (i.e., ``mode == 0``) since
   CephFS does not support disk space reservation. The only flags supported are
-  `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+  ``FALLOC_FL_KEEP_SIZE`` and ``FALLOC_FL_PUNCH_HOLE``.
+
+* The ``ceph fs subvolume snapshot getpath`` command now allows users
+  to get the path of a snapshot of a subvolume. If the snapshot is not present,
+  ``ENOENT`` is returned.
+
+* The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed, or if either is a non-empty pool, the command will abort.
+
+* The format of the pool namespace name for CephFS volumes has been changed
+  from ``fsvolumens__<subvol-name>`` to
+  ``fsvolumens__<subvol-grp-name>_<subvol-name>`` to avoid namespace collisions
+  when two subvolumes located in different subvolume groups have the same name.
+  Even with namespace collisions, there were no security issues, since the MDS
+  auth cap is restricted to the subvolume path. Now, with this change, the
+  namespaces are completely isolated.
+
+* If the subvolume name passed to the command ``ceph fs subvolume info``
+  is a clone, the output will now also contain a "source" field that tells the
+  user the name of the source snapshot along with the name of the volume,
+  subvolume group, and subvolume in which the source snapshot is located.
+  For clones created with Tentacle or an earlier release, the value of this
+  field will be ``N/A``. Regular subvolumes do not have a source subvolume and
+  therefore the output for them will not contain a "source" field regardless of
+  the release.
 
 Dashboard
 ---------
@@ -114,7 +150,7 @@ MGR
   flooded by module commands when Ceph services are down or degraded.
 
 * ``mgr/restful``, ``mgr/zabbix``: both modules, already deprecated since 2020, have been
-  finally removed. They have not been actively maintenance in the last years,
+  finally removed. They have not been actively maintained in the last years,
   and started suffering from vulnerabilities in their dependency chain (e.g.:
   CVE-2023-46136). An alternative for the ``restful`` module is the ``dashboard`` module,
   which provides a richer and better maintained RESTful API. Regarding the ``zabbix`` module,
@@ -304,6 +340,10 @@ RGW
 
 * Added support for the ``RestrictPublicBuckets`` property of the S3
   ``PublicAccessBlock`` configuration.
+
+* The HeadBucket API now reports the ``X-RGW-Bytes-Used`` and ``X-RGW-Object-Count``
+  headers only when the ``read-stats`` querystring is explicitly included in the
+  API request.
 
 Telemetry
 ---------
