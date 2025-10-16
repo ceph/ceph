@@ -279,6 +279,7 @@ class SubvolumeV2(SubvolumeV1):
                 SubvolumeOpType.INFO,
                 SubvolumeOpType.SNAP_REMOVE,
                 SubvolumeOpType.SNAP_LIST,
+                SubvolumeOpType.SNAP_GETPATH,
                 SubvolumeOpType.SNAP_INFO,
                 SubvolumeOpType.SNAP_PROTECT,
                 SubvolumeOpType.SNAP_UNPROTECT,

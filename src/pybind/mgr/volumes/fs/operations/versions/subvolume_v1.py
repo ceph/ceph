@@ -673,6 +673,11 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
+    def get_clone_source(self):
+        src = self._get_clone_source()
+        return (src['volume'], src.get('group', None), src['subvolume'],
+                src['snapshot'])
+
     def _get_clone_failure(self):
         clone_failure = {
             'errno'     : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
