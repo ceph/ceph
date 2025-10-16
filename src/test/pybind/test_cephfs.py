@@ -1,7 +1,8 @@
 # vim: expandtab shiftwidth=4 softtabstop=4
 import collections
 collections.Callable = collections.abc.Callable
-from assertions import assert_raises, assert_equal, assert_not_equal, assert_greater
+from assertions import assert_raises, assert_equal, assert_not_equal, \
+                       assert_greater, assert_lesser
 import cephfs as libcephfs
 import fcntl
 import os
@@ -1929,3 +1930,884 @@ class TestRmtree:
         # occur.
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+
+class TestCptree:
+    '''
+    Test cptree() method of CephFS python bindings.
+    '''
+
+    def test_cptree_on_regfile(self, testdir):
+        '''
+        Test that cptree() copies a regular file too when src path passed to it
+        is that of a regular file.
+        '''
+        src = 'file1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(dst, 0o755)
+
+        fd = cephfs.open(f'{src}', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat(dst)
+        cephfs.stat(f'{dst}/file1')
+
+        # ensure src file was left as it is.
+        cephfs.stat(src)
+
+    def test_cptree_on_regfile_no_perms(self, testdir):
+        '''
+        Test that cptree() fails when src path passed to it is that of a regular
+        file and permissions are not granted on it.
+        '''
+        src = 'file1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(dst, 0o755)
+
+        fd = cephfs.open(src, 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.chmod(src, 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        assert_raises(libcephfs.PermissionDenied, cephfs.cptree, src, dst,
+                      should_cancel, suppress_errors=False)
+
+        # ensure src file was left as it is.
+        cephfs.stat(src)
+
+    def test_cptree_on_symlink(self, testdir):
+        '''
+        Test that cptree() copies a symbolic link too when src path passed to it
+        is that of a symbolic link.
+        '''
+        file = 'file1'
+        slink = 'slink1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(dst, 0o755)
+
+        fd = cephfs.open(file, 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.symlink(file, slink)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(slink, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat(f'{dst}/{slink}', follow_symlink=False)
+        cephfs.stat(file)
+        cephfs.stat(slink)
+
+    def test_cptree_on_symlink_no_perms(self, testdir):
+        file = 'file1'
+        slink = 'slink1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(dst, 0o755)
+
+        fd = cephfs.open(file, 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.symlink(file, slink)
+
+        cephfs.chmod(slink, 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(slink, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat(f'{dst}/{slink}', follow_symlink=False)
+        cephfs.stat(file)
+        cephfs.stat(slink)
+
+    def test_cptree_when_tree_contains_only_regfiles(self, testdir):
+        '''
+        Test cptree() successfully copies entire file hierarchy that contains
+        only regular files.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            fd = cephfs.open(f'/{src}/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat(src)
+        cephfs.stat(dst)
+        for i in range(1, 6):
+            cephfs.stat(f'{src}/file{i}')
+            cephfs.stat(f'{dst}/{src}/file{i}')
+
+    def test_cptree_when_tree_contains_dirs_and_regfiles(self, testdir):
+        '''
+        Test that cptree() successfully copies entire file hierarchy that
+        contains only directories and regular files.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'/{src}/{src}{i}', 0o755)
+            for j in range(1, 6):
+                fd = cephfs.open(f'/{src}/{src}{i}/file{j}', 'w', 0o755)
+                cephfs.write(fd, b'abcd', 0)
+                cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        # verify that files are copied to dst path
+        for i in range(1, 6):
+            cephfs.stat(f'{dst}/{src}/{src}{i}')
+            for j in range(1, 6):
+                cephfs.stat(f'{src}/{src}{i}/file{j}')
+
+        # verify that files are as it is in src path
+        for i in range(1, 6):
+            cephfs.stat(f'{src}/{src}{i}')
+            for j in range(1, 6):
+                cephfs.stat(f'{src}/{src}{i}/file{j}')
+
+    def test_cptree_when_tree_contains_dirs_regfiles_and_symlinks(self, testdir):
+        '''
+        Test that cptree() successfully copies entire file hierarchy that
+        contains directories, regular files as well as symbolic links.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/{src}/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+            file_name = f'file{i}'.encode('utf-8')
+            slink_name = f'/{src}/slink{i}'.encode('utf-8')
+            cephfs.symlink(file_name, slink_name)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        # verify that files are copied to dst path
+        for i in range(1, 6):
+            cephfs.stat(f'{dst}/{src}/file{i}')
+            cephfs.stat(f'{dst}/{src}/slink{i}')
+
+        # verify that files are as it is in src path
+        for i in range(1, 6):
+            cephfs.stat(f'{src}/file{i}')
+            cephfs.stat(f'{src}/slink{i}')
+
+
+    def test_cptree_when_symlink_points_to_parent_dir(self, testdir):
+        '''
+        Test that cptree() successfully copies entire file hierarchy that
+        contains directories, regular files as well as symbolic links.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir3', 0o755)
+        cephfs.mkdir('dir3/dir4', 0o755)
+        cephfs.mkdir('dir5', 0o755)
+        cephfs.symlink('../dir4', 'dir3/dir4/slink1')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree('dir3', 'dir5', should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat('dir3/dir4/slink1')
+        cephfs.stat('dir5/dir3/dir4/slink1')
+
+    def test_cptree_when_tree_contains_only_empty_dirs(self, testdir):
+        '''
+        Test that cptree() successfully copies entire file hierarchy that contains
+        only empty directories.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'/{src}/{src}{i}', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        for i in range(1, 6):
+            cephfs.stat(f'/{dst}/{src}/{src}{i}', 0o755)
+            cephfs.stat(f'/{src}/{src}{i}', 0o755)
+
+    def test_cptree_when_root_is_empty_dir(self, testdir):
+        '''
+        Test that cptree() successfully copies an empty directory too.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        cephfs.stat(src)
+        cephfs.stat(f'{dst}/{src}')
+
+    def test_cptree_when_dirs_are_not_in_cwd(self, testdir):
+        '''
+        Test cptree when src and dst dir are not directly presenmt in CWD.
+        '''
+        should_cancel = lambda: False
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'dir{i}', 0o755)
+            cephfs.chdir(f'dir{i}')
+        for i in range(1, 6):
+            fd = cephfs.open(f'file{i}', 'w', 0o644)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.chdir('/')
+
+        for i in range(6, 11):
+            cephfs.mkdir(f'dir{i}', 0o755)
+            cephfs.chdir(f'dir{i}')
+        cephfs.chdir('/')
+
+        src = 'dir1/dir2/dir3/dir4/dir5'
+        dst = 'dir6/dir7/dir8/dir9/dir10'
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel, suppress_errors=False)
+
+    def test_cptree_simulate_subvol_clone(self, testdir):
+        '''
+        Test cptree when src and dst dir are not directly present in CWD. Also
+        test that cp_src_dir=False leads to copying contents of src dir without
+        copying src dir on dst side.
+
+        This simulates how subvolumes are cloned, src subvol's UUID dir is not
+        copied but rather its contents are copied to dst subvol's UUID  dir.
+        '''
+        should_cancel = lambda: False
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'dir{i}', 0o755)
+            cephfs.chdir(f'dir{i}')
+        for i in range(1, 6):
+            fd = cephfs.open(f'file{i}', 'w', 0o644)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.chdir('/')
+
+        for i in range(6, 11):
+            cephfs.mkdir(f'dir{i}', 0o755)
+            cephfs.chdir(f'dir{i}')
+        cephfs.chdir('/')
+
+        src = 'dir1/dir2/dir3/dir4/dir5'
+        dst = 'dir6/dir7/dir8/dir9/dir10'
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, cp_src_dir=False,
+                      should_cancel=should_cancel, suppress_errors=False)
+
+    def test_cptree_no_perm_on_nonroot_dir_suppress_errors(self, testdir):
+        '''
+        Test that cptree() successfully copies the entire file hierarchy except
+        the branch where permission for one of the (non-root) directories is not
+        granted while suppressing/not raising any errors for the dir for which
+        permission is not granted.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'{src}/{src}{i}', 0o755)
+            for j in range(1, 6):
+                fd = cephfs.open(f'/{src}/{src}{i}/file{j}', 'w', 0o755)
+                cephfs.write(fd, b'abcd', 0)
+                cephfs.close(fd)
+
+        # actual test
+        cephfs.chmod(f'/{src}/{src}3', 0o000)
+        # Errors are expected from call to this method. Set suppress_errors to
+        # True to confirm that this argument works.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=True)
+
+        # ensure /dir1/dir3 wasn't copied
+        for i in range(1, 6):
+            for j in range(1, 6):
+                if i == 3:
+                    cephfs.stat(f'{src}/{src}{i}')
+                    cephfs.stat(f'{dst}/{src}/{src}{i}')
+                    assert_raises(libcephfs.ObjectNotFound, cephfs.stat,
+                                  f'{dst}/{src}/{src}{i}/file{j}')
+                else:
+                    cephfs.stat(f'{src}/{src}{i}/file{j}')
+                    cephfs.stat(f'{dst}/{src}/{src}{i}/file{j}')
+
+        cephfs.chmod(f'/{src}/{src}3', 0o755)
+        cephfs.chmod(f'/{dst}/{src}/{src}3', 0o755)
+
+    def test_cptree_no_perm_on_nonroot_dir_dont_suppress_errors(self, testdir):
+        '''
+        Test that cptree() aborts its attempt to copy the entire file hierarchy
+        when it finds a non-root directory where permission is not granted.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            cephfs.mkdir(f'{src}/{src}{i}', 0o755)
+            for j in range(1, 6):
+                fd = cephfs.open(f'/{src}/{src}{i}/file{j}', 'w', 0o755)
+                cephfs.write(fd, b'abcd', 0)
+                cephfs.close(fd)
+
+        # actual test
+        cephfs.chmod(f'/{src}/{src}3', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        assert_raises(libcephfs.PermissionDenied, cephfs.cptree, src, dst,
+                      should_cancel, suppress_errors=False)
+
+        cephfs.chmod(f'/{src}/{src}3', 0o755)
+        cephfs.chmod(f'/{dst}/{src}/{src}3', 0o755)
+
+    def test_cptree_no_perm_on_root_suppress_errors(self, testdir):
+        '''
+        Test cptree() exits without error when permission is not granted for
+        the root of the file hierarchy.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.chmod(src, 0o000)
+        # Errors are expected from call to this method. Set suppress_errors to
+        # True to confirm that this argument works.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=True)
+
+        # cleanup
+        cephfs.chmod('/dir1', 0o755)
+
+    def test_cptree_no_perm_on_root_dont_suppress_errors(self, testdir):
+        '''
+        Test cptree() aborts with error when permission is not granted for the
+        root of the file hierarchy.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.chmod('/dir1', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        assert_raises(libcephfs.PermissionDenied, cephfs.cptree, src, dst,
+                      should_cancel=should_cancel, suppress_errors=False)
+
+        # cleanup
+        cephfs.chmod('/dir1', 0o755)
+
+    def test_cptree_on_tree_with_snaps(self, testdir):
+        '''
+        Test that cptree() successfully copies the entire file hierarchy except
+        the snapshot.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        cephfs.mkdir('dir1/dir11', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir11/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mksnap('/dir1/dir11', 'snap1', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        for i in range(1, 6):
+            cephfs.stat(f'{dst}/{src}/dir11/file{i}')
+            # ensure src was left as it was.
+            cephfs.stat(f'{src}/dir11/file{i}')
+
+        # cleanup
+        cephfs.rmsnap('/dir1/dir11', 'snap1')
+
+    def test_cptree_on_tree_with_snaps_on_root(self, testdir):
+        '''
+        Test that cptree() successfully copies the entire file hierarchy except
+        the snapshot.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 6):
+            fd = cephfs.open(f'/{src}/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mksnap(src, 'snap1', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        for i in range(1, 6):
+            cephfs.stat(f'{dst}/{src}/file{i}')
+            # ensure src was left as it was.
+            cephfs.stat(f'{src}/file{i}')
+
+        # cleanup
+        cephfs.rmsnap('/dir1', 'snap1')
+
+    def get_file_count(self, dir_path):
+        '''
+        Return the number of files present in the given directory.
+        '''
+        i = 0
+        with cephfs.opendir(dir_path) as dir_handle:
+            de = cephfs.readdir(dir_handle)
+            while de:
+                if de.d_name not in (b'.', b'..'):
+                    i += 1
+                de = cephfs.readdir(dir_handle)
+        return i
+
+    def test_cptree_aborts_when_should_cancel_is_true(self, testdir):
+        '''
+        Test that cptree() stops copying the file hierarchy when the return
+        value of "should_cancel" becomes True.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        # populate with enough files that copying doesn't finish before
+        # cancel fag is set.
+        cephfs.chdir(src)
+        for i in range(1, 101):
+            fd = cephfs.open(f'file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.chdir('/')
+
+        # NOTE: this method is just a wrapper to provide an appropriate location
+        # to catch the exception OpCanceled. If left uncaught the test passes
+        # but pytest fails citing this exception.
+        def cptree_assert_wrapper(src, dst, should_cancel, suppress_error=False):
+            assert_raises(libcephfs.OpCanceled, cephfs.cptree, src, dst, False, True,
+                          should_cancel, suppress_error)
+
+        from threading import Event, Thread
+        cancel_flag = Event()
+        def should_cancel():
+            # this would force libcephfs's cptree() to sleep every time
+            # should_cancel is called. this is necessary to ensure copying
+            # won't finish before cancel flag is set.
+            time.sleep(0.1)
+            return cancel_flag.is_set()
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        Thread(target=cptree_assert_wrapper,
+               args=(src, dst, should_cancel, False)).start()
+        time.sleep(1)
+        # this will change return value of should_cancel and therefore halt
+        # execution of cptree()
+        cancel_flag.set()
+
+        # ensure that copying had begun
+        cephfs.stat(f'{dst}/{src}')
+        # ensure that deletion had begun but hadn't finished and was halted
+        file_count1 = self.get_file_count(f'{dst}/{src}')
+        assertion_msg = f'file_count1 = {file_count1}'
+        assert file_count1 > 0 and file_count1 < 100, assertion_msg
+
+        # ensure that deletion has made no progress since it was halted
+        time.sleep(2)
+        file_count2 = self.get_file_count(f'{dst}/{src}')
+        assertion_msg = f'file_count2 = {file_count2}'
+        assert file_count2 > 0 and file_count2 < 100, assertion_msg
+        assertion_msg = f'file_count1 = {file_count1} file_count2 = {file_count2}'
+        assert file_count1 == file_count2, assertion_msg
+
+    def test_cptree_with_sync_attrs(self, testdir):
+        '''
+        Test that when should_sync_attrs=True for cptree(), attributes
+        specifically uid, gid, owner, mode, atime and mtime) are synced
+        on dst files to match src files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir(b'dir1', 0o755)
+        cephfs.mkdir(b'dir2', 0o755)
+
+        cephfs.mkdir(b'dir1/dir11', 0o755)
+
+        fd = cephfs.open(b'dir1/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.symlink('file1', 'dir1/slink1')
+
+        # sleep before running cptree so that by default atime/mtime on dst
+        # side are different. this allows us to test whether attrs are sync'd
+        # by cptree.
+        time.sleep(2)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree('dir1', 'dir2', should_sync_attrs=True,
+                      should_cancel=should_cancel, suppress_errors=False)
+
+        # assert that attrs were synced
+
+        flags = (libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID |
+                 libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_ATIME |
+                 libcephfs.CEPH_STATX_MTIME)
+
+        src_dir_stx_b = cephfs.statx('dir1/dir11', flags,
+                                     libcephfs.AT_SYMLINK_NOFOLLOW)
+        src_file_stx_b = cephfs.statx('dir1/file1', flags,
+                                      libcephfs.AT_SYMLINK_NOFOLLOW)
+        src_slink_stx_b = cephfs.statx('dir1/slink1', flags,
+                                       libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        dst_dir_stx_b = cephfs.statx('dir2/dir1/dir11', flags,
+                                     libcephfs.AT_SYMLINK_NOFOLLOW)
+        dst_file_stx_b = cephfs.statx('dir2/dir1/file1', flags,
+                                      libcephfs.AT_SYMLINK_NOFOLLOW)
+        dst_slink_stx_b = cephfs.statx('dir2/dir1/slink1', flags,
+                                       libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        assert_equal(src_file_stx_b['uid'], dst_file_stx_b['uid'])
+        assert_equal(src_slink_stx_b['uid'], dst_slink_stx_b['uid'])
+        assert_equal(src_dir_stx_b['uid'], dst_dir_stx_b['uid'])
+
+        assert_equal(src_file_stx_b['gid'], dst_file_stx_b['gid'])
+        assert_equal(src_slink_stx_b['gid'], dst_slink_stx_b['gid'])
+        assert_equal(src_dir_stx_b['gid'], dst_dir_stx_b['gid'])
+
+        assert_equal(src_file_stx_b['mode'], dst_file_stx_b['mode'])
+        assert_equal(src_slink_stx_b['mode'], dst_slink_stx_b['mode'])
+        assert_equal(src_dir_stx_b['mode'], dst_dir_stx_b['mode'])
+
+        assert_equal(src_file_stx_b['atime'], dst_file_stx_b['atime'])
+        assert_equal(src_slink_stx_b['atime'], dst_slink_stx_b['atime'])
+        assert_equal(src_dir_stx_b['atime'], dst_dir_stx_b['atime'])
+
+        assert_equal(src_file_stx_b['mtime'], dst_file_stx_b['mtime'])
+        assert_equal(src_slink_stx_b['mtime'], dst_slink_stx_b['mtime'])
+        assert_equal(src_dir_stx_b['mtime'], dst_dir_stx_b['mtime'])
+
+    def test_cptree_without_sync_attrs(self, testdir):
+        '''
+        Test that when should_sync_attrs=True for cptree(), attributes
+        specifically uid, gid, owner, mode, atime and mtime) are synced
+        on dst files to match src files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir(b'dir1', 0o755)
+        cephfs.mkdir(b'dir2', 0o755)
+
+        cephfs.mkdir(b'dir1/dir11', 0o755)
+
+        fd = cephfs.open(b'dir1/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.symlink('file1', 'dir1/slink1')
+
+        # sleep before running cptree so that by default atime/mtime on dst
+        # side are different. this allows us to test whether attrs are sync'd
+        # by cptree.
+        time.sleep(2)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree('dir1', 'dir2', should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        # assert that attrs were not synced, for this test specifically atime
+        # and mtime would be different.
+
+        flags = (libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID |
+                 libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_ATIME |
+                 libcephfs.CEPH_STATX_MTIME)
+
+        src_dir_stx_b = cephfs.statx('dir1/dir11', flags,
+                                     libcephfs.AT_SYMLINK_NOFOLLOW)
+        src_file_stx_b = cephfs.statx('dir1/file1', flags,
+                                      libcephfs.AT_SYMLINK_NOFOLLOW)
+        src_slink_stx_b = cephfs.statx('dir1/slink1', flags,
+                                       libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        dst_dir_stx_b = cephfs.statx('dir2/dir1/dir11', flags,
+                                     libcephfs.AT_SYMLINK_NOFOLLOW)
+        dst_file_stx_b = cephfs.statx('dir2/dir1/file1', flags,
+                                      libcephfs.AT_SYMLINK_NOFOLLOW)
+        dst_slink_stx_b = cephfs.statx('dir2/dir1/slink1', flags,
+                                       libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        assert_equal(src_file_stx_b['uid'], dst_file_stx_b['uid'])
+        assert_equal(src_slink_stx_b['uid'], dst_slink_stx_b['uid'])
+        assert_equal(src_dir_stx_b['uid'], dst_dir_stx_b['uid'])
+
+        assert_equal(src_file_stx_b['gid'], dst_file_stx_b['gid'])
+        assert_equal(src_slink_stx_b['gid'], dst_slink_stx_b['gid'])
+        assert_equal(src_dir_stx_b['gid'], dst_dir_stx_b['gid'])
+
+        assert_equal(src_file_stx_b['mode'], dst_file_stx_b['mode'])
+        assert_equal(src_slink_stx_b['mode'], dst_slink_stx_b['mode'])
+        assert_equal(src_dir_stx_b['mode'], dst_dir_stx_b['mode'])
+
+        assert_lesser(src_file_stx_b['atime'], dst_file_stx_b['atime'])
+        assert_lesser(src_slink_stx_b['atime'], dst_slink_stx_b['atime'])
+        assert_lesser(src_dir_stx_b['atime'], dst_dir_stx_b['atime'])
+
+        assert_lesser(src_file_stx_b['mtime'], dst_file_stx_b['mtime'])
+        assert_lesser(src_slink_stx_b['mtime'], dst_slink_stx_b['mtime'])
+        assert_lesser(src_dir_stx_b['mtime'], dst_dir_stx_b['mtime'])
+
+    def test_cptree_on_a_200_dir_broad_tree(self, testdir):
+        '''
+        Test that cptree() successfully copies a file hierarchy with 200
+        subdirectories on the same level.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 201):
+            cephfs.mkdir(f'{src}/{src}{i}', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        for i in range(1, 201):
+            cephfs.stat(f'{src}/{src}{i}')
+            cephfs.stat(f'{dst}/{src}/{src}{i}')
+
+    def test_cptree_on_a_2k_dir_broad_tree(self, testdir):
+        '''
+        Test that cptree() successfully copies a file hierarchy with 2000
+        subdirectories on the same level.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        for i in range(1, 201):
+            cephfs.mkdir(f'{src}/{src}{i}', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        for i in range(1, 201):
+            cephfs.stat(f'{src}/{src}{i}')
+            cephfs.stat(f'{dst}/{src}/{src}{i}')
+
+    def test_cptree_on_a_200_dir_deep_tree(self, testdir):
+        '''
+        Test that cptree() successfully copies a file hierarchy with 200
+        levels.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        cephfs.chdir(src)
+        for i in range(1, 201):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        # verify the dst has the entire file hierarchy cloned
+        cephfs.chdir(dst)
+        cephfs.chdir(src)
+        for i in range(1, 201):
+            dirname = f'dir{i}'
+            cephfs.stat(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # verify the src has the entire file hierarchy as it was
+        cephfs.chdir(src)
+        for i in range(1, 201):
+            dirname = f'dir{i}'
+            cephfs.stat(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+    def test_cptree_on_a_2k_dir_deep_tree(self, testdir):
+        '''
+        Test that cptree() successfully copies a file hierarchy with 2000
+        levels.
+        '''
+        src = 'dir1'
+        dst = 'dir2'
+        should_cancel = lambda: False
+
+        cephfs.mkdir(src, 0o755)
+        cephfs.mkdir(dst, 0o755)
+
+        cephfs.chdir(src)
+        for i in range(1, 2001):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.cptree(src, dst, should_cancel=should_cancel,
+                      suppress_errors=False)
+
+        # verify the dst has the entire file hierarchy cloned
+        cephfs.chdir(dst)
+        cephfs.chdir(src)
+        for i in range(1, 2001):
+            dirname = f'dir{i}'
+            cephfs.stat(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # verify the src has the entire file hierarchy as it was
+        cephfs.chdir(src)
+        for i in range(1, 2001):
+            dirname = f'dir{i}'
+            cephfs.stat(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
