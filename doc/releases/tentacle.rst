@@ -20,6 +20,8 @@ RADOS
   faster WAL (write-ahead-log).
 * Data Availability Score: Users can now track a data availability score
   for each pool in their cluster.
+* All components have been switched to the faster OMAP iteration interface,
+  which improves RGW bucket listing and scrub operations.
 
 Dashboard
 
@@ -120,25 +122,112 @@ RADOS
 
 * Long expected performance optimizations (FastEC) have been added for EC pools,
   including partial reads and partial writes.
-* A new implementation of the Erasure Coding I/O code provides substantial performance
-  improvements and some capacity improvements. The new code is designed to optimize
-  performance when using Erasure Coding with block storage (RBD) and file storage
-  (CephFS) but will have some benefits for object (RGW) storage, in particular when
-  using smaller sized objects. A new flag ``allow_ec_optimizations`` needs to be set
-  on each pool to switch to using the new code. Existing pools can be upgraded once
-  the OSD and MON daemons have been updated. There is no need to update the clients.
-* The default erasure code plugin has been switched from Jerasure to ISA-L.
-* BlueStore now has better compression and a new, faster WAL (write-ahead-log).
-* All components have been switched to the faster OMAP iteration interface.
-* It is now possible to bypass ceph_assert()s in extreme cases to help with disaster
-  recovery.
-* mClock has received several bug fixes and and improved configuration defaults.
+
+* A new implementation of the Erasure Coding I/O code provides substantial
+  performance improvements and some capacity improvements. The new code is
+  designed to optimize performance when using Erasure Coding with block storage
+  (RBD) and file storage (CephFS), but will have some benefits for object (RGW)
+  storage, in particular when using smaller sized objects. A new flag
+  ``allow_ec_optimizations`` needs to be set on each pool to switch to using the
+  new code. Existing pools can be upgraded once the OSD and MON daemons have been
+  updated. There is no need to update the clients.
+
+* The default plugin for erasure coded pools has been changed from Jerasure to
+  ISA-L. Clusters created on Tentacle or later releases will use ISA-L as the
+  default plugin when creating a new pool. Clusters that upgrade to the T release
+  will continue to use their existing default values. The default values can be
+  overridden by creating a new erasure code profile and selecting it when creating
+  a new pool. ISA-L is recommended for new pools because the Jerasure library is
+  no longer maintained.
+
+* BlueStore now has better compression and a new, faster WAL (write-ahead log).
+
+* All components have been switched to the faster OMAP iteration interface, which
+  improves RGW bucket listing and scrub operations.
+
+* It is now possible to bypass ``ceph_assert()`` in extreme cases to help with
+  disaster recovery.
+
 * Testing improvements for dencoding verification were added.
-* Users can now track the data availability score for each pool in their cluster. This
-  feature is currently in tech preview. A pool is considered unavailable if any PG in
-  the pool is not in active state or if there are unfound objects. Otherwise the pool
-  is considered available. The score is updated every one second by default. The
-  feature is on by default.
+
+* A new command, ``ceph osd pool availability-status``, has been added that allows
+  users to view the availability score for each pool in a cluster. A pool is
+  considered unavailable if any PG in the pool is not in active state or if there
+  are unfound objects. Otherwise the pool is considered available. The score is
+  updated every one second by default. This interval can be changed using the new
+  config option ``pool_availability_update_interval``. The feature is off by
+  default. A new config option ``enable_availability_tracking`` can be used to
+  turn on the feature if required. Another command is added to clear the
+  availability status for a specific pool:
+
+  ::
+
+    ceph osd pool clear-availability-status <pool-name>
+
+  This feature is in tech preview.
+
+  Related links:
+
+  - Feature ticket: https://tracker.ceph.com/issues/67777
+  - :ref:`Documentation <data_availability_score>`
+
+* Leader monitor and stretch mode status are now included in the ``ceph status``
+  output.
+
+  Related tracker: https://tracker.ceph.com/issues/70406
+
+* The ``ceph df`` command reports incorrect ``MAX AVAIL`` for stretch mode pools
+  when CRUSH rules use multiple ``take`` steps for datacenters.
+  ``PGMap::get_rule_avail`` incorrectly calculates available space from only one
+  datacenter. As a workaround, define CRUSH rules with ``take default`` and
+  ``choose firstn 0 type datacenter``. See
+  https://tracker.ceph.com/issues/56650#note-6 for details.
+
+  Upgrading a cluster configured with a CRUSH rule with multiple ``take`` steps
+  can lead to data shuffling, as the new CRUSH changes may necessitate data
+  redistribution. In contrast, a stretch rule with a single-take configuration
+  will not cause any data movement during the upgrade process.
+
+* Added convenience function ``librados::AioCompletion::cancel()`` with the same
+  behavior as ``librados::IoCtx::aio_cancel()``.
+
+* A new command, ``ceph osd rm-pg-upmap-primary-all``, has been added that allows
+  users to clear all ``pg-upmap-primary`` mappings in the OSD map when desired.
+
+  Related trackers:
+
+  - https://tracker.ceph.com/issues/67179
+  - https://tracker.ceph.com/issues/66867
+
+* The configuration parameter ``osd_repair_during_recovery`` has been removed.
+  That configuration flag used to control whether an operator-initiated "repair
+  scrub" would be allowed to start on an OSD that is performing a recovery. In
+  this Ceph version, operator-initiated scrubs and repair scrubs are never
+  blocked by a repair being performed.
+
+* Fixed issue of recovery/backfill hang due to improper handling of items in the
+  dmclock background clean-up thread.
+
+  Related tracker: https://tracker.ceph.com/issues/61594
+
+* The OSD’s IOPS capacity used by the mClock scheduler is now also checked to
+  determine whether it is below a configured threshold value defined by:
+
+  ``osd_mclock_iops_capacity_low_threshold_hdd`` — set to 50 IOPS
+  ``osd_mclock_iops_capacity_low_threshold_ssd`` — set to 1000 IOPS
+
+  The check is intended to handle cases where the measured IOPS is unrealistically
+  low. If such a case is detected, the IOPS capacity is either set to the last
+  valid value or the configured default to avoid affecting cluster performance
+  (slow or stalled operations).
+
+* Documentation has been updated with steps to override OSD IOPS capacity
+  configuration.
+
+  Related links:
+
+  - Tracker ticket: https://tracker.ceph.com/issues/70774
+  - :ref:`Documentation <override_max_iops_capacity>`
 
 RBD
 ---
