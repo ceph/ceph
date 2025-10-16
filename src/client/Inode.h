@@ -179,10 +179,10 @@ struct Inode : RefCountedObject {
 
   decltype(InodeStat::optmetadata) optmetadata;
   using optkind_t = decltype(InodeStat::optmetadata)::optkind_t;
-
+#if defined(__linux__)
   FSCryptContextRef fscrypt_ctx;
   FSCryptKeyValidatorRef fscrypt_key_validator;
-
+#endif
   uint64_t effective_size() const;
   void set_effective_size(uint64_t size);
 
@@ -192,11 +192,12 @@ struct Inode : RefCountedObject {
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
   }
+#if defined(__linux__)
 
   FSCryptContextRef init_fscrypt_ctx(FSCrypt *fscrypt);
 
   void gen_inherited_fscrypt_auth(std::vector<uint8_t> *ctx);
-
+#endif
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }

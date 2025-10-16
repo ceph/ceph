@@ -344,10 +344,12 @@ int Inode::caps_file_wanted()
     if (cnt) {
       want |= ceph_caps_for_mode(mode);
 
+#if defined(__linux__)
       //want Fr cap during fscrypt rmw
       if ((mode == CEPH_FILE_MODE_WR) && fscrypt_ctx) {
         want |= CEPH_CAP_FILE_RD;
       }
+#endif
     }
   return want;
 }
@@ -851,6 +853,7 @@ void Inode::mark_caps_clean()
   dirty_cap_item.remove_myself();
 }
 
+#if defined(__linux__)
 FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
 {
   return fscrypt->init_ctx(fscrypt_auth);
@@ -873,7 +876,7 @@ void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
   fsa->resize(bl.length());
   memcpy(fsa->data(), bl.c_str(), bl.length());
 }
-
+#endif
 uint64_t Inode::effective_size() const
 {
   if (fscrypt_file.size() < sizeof(uint64_t) || !client->get_fscrypt_as()) {
