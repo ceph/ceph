@@ -103,6 +103,7 @@ class DaemonWatchdog(Greenlet):
                 delta = now-dt[1]
                 self.log("daemon {name} is failed for ~{t:.0f}s".format(name=name, t=delta))
                 if delta > daemon_timeout:
+                    self.log("daemon {name} is failed for over ~{t:.0f}s (timed out)".format(name=name, t=daemon_timeout))
                     bark = True
                 if daemon_restart == 'normal' and daemon.proc.exitstatus == 0:
                     self.log(f"attempting to restart daemon {name}")
@@ -117,10 +118,13 @@ class DaemonWatchdog(Greenlet):
             for thrasher in self.thrashers:
                 if thrasher.exception is not None:
                     self.log("{name} failed".format(name=thrasher.name))
-                    thrasher.stop_and_join()
                     bark = True
 
             if bark:
+                for thrasher in self.thrashers:
+                    # Either thrasher failed or we've hit daemon_timeout
+                    self.log("stopping {name}".format(name=thrasher.name))
+                    thrasher.stop_and_join()
                 self.bark()
                 return
 
