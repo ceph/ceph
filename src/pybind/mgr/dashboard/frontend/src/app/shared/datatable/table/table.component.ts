@@ -1425,15 +1425,19 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   saveCellItem(row: any, colProp: string) {
-    if (this.formGroup?.invalid) {
-      this.formGroup.setErrors({ cdSubmitButton: true });
+    const key = `${row[this.identifier]}-${colProp}`;
+    const control = this.formGroup.get(key);
+
+    if (control?.invalid) {
+      control.setErrors({ cdSubmitButton: true, ...control.errors });
       return;
     }
+
     this.editSubmitAction.emit({
       state: this.editStates[row[this.identifier]],
       row: row
     });
-    this.editingCells.delete(`${row[this.identifier]}-${colProp}`);
+    this.editingCells.delete(key);
     delete this.editStates[row[this.identifier]][colProp];
   }
 
