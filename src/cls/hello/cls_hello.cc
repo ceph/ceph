@@ -87,9 +87,9 @@ static int record_hello(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   // we can write arbitrary stuff to the ceph-osd debug log.  each log
   // message is accompanied by an integer log level.  smaller is
   // "louder".  how much of this makes it into the log is controlled
-  // by the debug_cls option on the ceph-osd, similar to how other log
+  // by the debug_objclass option on the ceph-osd, similar to how other log
   // levels are controlled.  this message, at level 20, will generally
-  // not be seen by anyone unless debug_cls is set at 20 or higher.
+  // not be seen by anyone unless debug_objclass is set at 20 or higher.
   CLS_LOG(20, "in record_hello");
 
   // see if the input data from the client matches what this method
