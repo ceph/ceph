@@ -47,7 +47,7 @@ int register_anchor(const char* name) {
 
 struct read_format {
     uint64_t nr;
-    struct {
+    struct values {
         uint64_t value;
         uint64_t id;
     } values[];
@@ -171,7 +171,11 @@ void HW_read(HW_ctx* ctx, sample_t* measure) {
     if (ctx->parent_fd == -1) {
         return;
     }
-    char buf[256];
+    static constexpr uint64_t MAX_COUNTERS = 5;
+    static constexpr size_t BUFFER_SIZE =
+        sizeof(read_format) + MAX_COUNTERS * sizeof(struct read_format::values);
+    char buf[BUFFER_SIZE];
+
     struct read_format* rf = (struct read_format*)buf;
     if (read(ctx->parent_fd, buf, sizeof(buf)) > 0) {
         for (uint64_t i = 0; i < rf->nr; i++) {
