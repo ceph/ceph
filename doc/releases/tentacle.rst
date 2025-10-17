@@ -15,9 +15,9 @@ Highlights
 
 RADOS
 
-* FastEC: Long expected performance optimizations were added for EC pools.
-* BlueStore: Users can expect to see improved compression and a new,
-  faster WAL (write-ahead-log).
+* FastEC: Long-anticipated performance and space amplification
+  optimizations are added for erasure-coded pools.
+* BlueStore: Improved compression and a new, faster WAL (write-ahead-log).
 * Data Availability Score: Users can now track a data availability score
   for each pool in their cluster.
 * OMAP: All components have been switched to the faster OMAP iteration
@@ -25,8 +25,8 @@ RADOS
 
 Dashboard
 
-* Support has been added for NVMe/TCP (gateway groups, multiple
-  namespaces), multi-cluster management, oAuth2 integration, and enhanced
+* Support has been added for NVMe/TCP gateway groups and multiple
+  namespaces, multi-cluster management, OAuth 2.0 integration, and enhanced
   RGW/SMB features including multi-site automation, tiering, policies,
   lifecycles, notifications, and granular replication.
 
@@ -43,13 +43,13 @@ RBD
 MGR
 
 * Users now have the ability to force-disable always-on modules.
-* The restful and zabbix modules (deprecated since 2020) have been
+* The ``restful`` and ``zabbix`` modules (deprecated since 2020) have been
   officially removed.
 
 RGW
 
-* Added support for S3 GetObjectAttributes.
-* For compatibility with AWS S3, LastModified timestamps are now truncated
+* Added support for S3 ``GetObjectAttributes``.
+* For compatibility with AWS S3, ``LastModified`` timestamps are now truncated
   to the second. Note that during upgrade, users may observe these timestamps
   moving backwards as a result.
 * Bucket resharding now does most of its processing before it starts to block
@@ -62,23 +62,23 @@ CephFS
   directory entry names.
 * Modifying the FS setting variable ``max_mds`` when a cluster is unhealthy
   now requires users to pass the confirmation flag (``--yes-i-really-mean-it``).
-* EOPNOTSUPP (Operation not supported) is now returned by the CephFS fuse
+* ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS FUSE
   client for ``fallocate`` for the default case (i.e. ``mode == 0``).
 
 Ceph
 ----
 
-* Integrated SMB support Ceph clusters now support an smb manager module
-  that works similarly to the existing nfs subsystem. The new smb support
+* Integrated SMB support: Ceph clusters now offer an SMB Manager module
+  that works like the existing NFS subsystem. The new SMB support
   allows the Ceph cluster to automatically create Samba-backed SMB file
-  shares connected to CephFS. The smb module can configure both basic
+  shares connected to CephFS. The ``smb`` module can configure both basic
   Active Directory domain or standalone user authentication. The Ceph
-  cluster can host one or more virtual smb cluster which can be truly
-  clustered using Samba's CTDB technology. The smb module requires a
-  cephadm enabled Ceph cluster and deploys container images provided by
-  the samba-container project. The Ceph dashboard can be used to configure
-  smb clusters and shares. A new cephfs-proxy daemon is automatically
-  deployed to improve the scalibilty and memory usage when connecting
+  cluster can host one or more virtual SMB clusters which can be truly
+  clustered using Samba's CTDB technology. The ``smb`` module requires a
+  cephadm-enabled Ceph cluster and deploys container images provided by
+  the ``samba-container`` project. The Ceph dashboard can be used to configure
+  SMB clusters and shares. A new ``cephfs-proxy`` daemon is automatically
+  deployed to improve scalability and memory usage when connecting
   Samba to CephFS.
 
 CephFS
@@ -137,8 +137,8 @@ CephFS
 Dashboard
 ---------
 
-* There is now added support for NVMe/TCP (gateway groups, multiple
-  namespaces), multi-cluster management, oAuth2 integration, and enhanced
+* There is now added support for NVMe/TCP gateway groups and multiple
+  namespaces, multi-cluster management, OAuth 2.0 integration, and enhanced
   RGW/SMB features including multi-site automation, tiering, policies,
   lifecycles, notifications, and granular replication.
 
@@ -160,17 +160,17 @@ MGR
 RADOS
 -----
 
-* Long expected performance optimizations (FastEC) have been added for EC pools,
-  including partial reads and partial writes.
+* Long-anticipated performance and space amplification optimizations (FastEC)
+  are added for erasure-coded pools, including partial reads and partial writes.
 
 * A new implementation of the Erasure Coding I/O code provides substantial
   performance improvements and some capacity improvements. The new code is
   designed to optimize performance when using Erasure Coding with block storage
-  (RBD) and file storage (CephFS) but will have some benefits for object (RGW)
-  storage, in particular when using smaller sized objects. A new flag
-  ``allow_ec_optimizations`` needs to be set on each pool to switch to using the
-  new code. Existing pools can be upgraded once the OSD and MON daemons have been
-  updated. There is no need to update the clients.
+  (RBD) and file storage (CephFS) but will have benefits for object storage
+  (RGW), in particular when using smaller sized objects. A new flag
+  ``allow_ec_optimizations`` must be set on each pool to switch to using the
+  new code. Existing pools can be upgraded once the OSD and Monitor daemons
+  have been updated. There is no need to update the clients.
 
 * The default plugin for erasure coded pools has been changed from Jerasure to
   ISA-L. Clusters created on Tentacle or later releases will use ISA-L as the
@@ -192,7 +192,7 @@ RADOS
 
 * A new command, ``ceph osd pool availability-status``, has been added that
   allows users to view the availability score for each pool in a cluster. A pool
-  is considered unavailable if any PG in the pool is not in active state or if
+  is considered unavailable if any PG in the pool is not ``active`` or if
   there are unfound objects. Otherwise the pool is considered available. The
   score is updated every one second by default. This interval can be changed
   using the new config option ``pool_availability_update_interval``. The feature
@@ -268,9 +268,9 @@ RADOS
   - Tracker ticket: https://tracker.ceph.com/issues/70774
   - :ref:`Documentation <override_max_iops_capacity>`
 
-* pybind/rados: Fixes WriteOp.zero() in the original reversed order of arguments
-  ``offset`` and ``length``. When pybind calls WriteOp.zero(), the argument passed
-  does not match rados_write_op_zero, and offset and length are swapped, which
+* pybind/rados: Fixes ``WriteOp.zero()`` in the original reversed order of arguments
+  ``offset`` and ``length``. When pybind calls ``WriteOp.zero()``, the argument passed
+  does not match ``rados_write_op_zero``, and offset and length are swapped, which
   results in an unexpected response.
 
 RBD
@@ -299,7 +299,7 @@ RBD
 * Fetching the mirroring mode of an image is invalid if the image is
   disabled for mirroring. The public APIs -- C++ ``mirror_image_get_mode()``,
   C ``rbd_mirror_image_get_mode()``, and Python ``Image.mirror_image_get_mode()``
-  -- will return EINVAL when mirroring is disabled.
+  -- will return ``EINVAL`` when mirroring is disabled.
 
 * Promoting an image is invalid if the image is not enabled for mirroring.
   The public APIs -- C++ ``mirror_image_promote()``,
@@ -314,9 +314,9 @@ RBD
 RGW
 ---
 
-* Multiple fixes: Lua scripts will not run against health checks,
-  properly quoted ETag values returned by S3 CopyPart, PostObject, and
-  CompleteMultipartUpload responses.
+* Multiple fixes: Lua scripts will no longer run uselessly against health checks,
+  properly quoted ``ETag`` values returned by S3 ``CopyPart``, ``PostObject``, and
+  ``CompleteMultipartUpload`` responses.
 
 * IAM policy evaluation now supports conditions ``ArnEquals`` and ``ArnLike``,
   along with their ``Not`` and ``IfExists`` variants.
@@ -333,8 +333,8 @@ RGW
   Replication of tags is controlled by the
   ``s3:GetObject(Version)Tagging`` permission.
 
-* Adding missing quotes to the ETag values returned by S3 CopyPart,
-  PostObject, and CompleteMultipartUpload responses.
+* Adding missing quotes to the ``ETag`` values returned by S3 ``CopyPart``,
+  ``PostObject``, and ``CompleteMultipartUpload`` responses.
 
 * ``PutObjectLockConfiguration`` can now be used to enable S3 Object Lock on an
   existing versioning-enabled bucket that was not created with Object Lock enabled.
@@ -353,28 +353,31 @@ RGW
 Telemetry
 ---------
 
-* The ``basic`` channel in telemetry now captures the `ec_optimizations`
-  flag, which will allow us to understand feature adoption for the new
-  FastEC improvments.
-  To opt in to telemetry, run ``ceph telemetry on``.
+* The ``basic`` channel in telemetry now captures the ``ec_optimizations``
+  flag, which will allow us to gauge feature adoption for the new
+  FastEC improvements.
+  To opt into telemetry, run ``ceph telemetry on``.
 
 Upgrading from Reef or Squid
---------------------------------
+----------------------------
 
-Before starting, make sure your cluster is stable and healthy (no down or recovering OSDs).
-(This is optional, but recommended.) You can disable the autoscaler for all pools during the
-upgrade using the noautoscale flag.
+Before starting, ensure that your cluster is stable and healthy with no
+``down``, ``recovering``, ``incomplete``, ``undersized`` or ``backfilling`` PGs.
+You can temporarily disable the PG autoscaler for all pools during the upgrade
+by running ``ceph osd pool set noautoscale`` before beginning, and if the
+autoscaler is desired after completion, running ``ceph osd pool unset
+noautoscale`` after upgrade success is confirmed.
 
 .. note::
 
-   You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what ceph version(s) are running for each type of daemon.
+   You can monitor the progress of your upgrade at each stage with the ``ceph versions`` command, which will tell you what Ceph version(s) are running for each type of daemon.
 
-Upgrading cephadm clusters
+Upgrading Cephadm Clusters
 --------------------------
 
 If your cluster is deployed with cephadm (first introduced in Octopus), then the upgrade process is entirely automated. To initiate the upgrade,
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
     ceph orch upgrade start --image quay.io/ceph/ceph:v20.2.0
 
@@ -382,19 +385,19 @@ The same process is used to upgrade to future minor releases.
 
 Upgrade progress can be monitored with
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
     ceph orch upgrade status
 
-Upgrade progress can also be monitored with `ceph -s` (which provides a simple progress bar) or more verbosely with
+Upgrade progress can also be monitored with ``ceph -s`` (which provides a simple progress bar) or more verbosely with
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
     ceph -W cephadm
 
 The upgrade can be paused or resumed with
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
     ceph orch upgrade pause  # to pause
     ceph orch upgrade resume # to resume
@@ -405,9 +408,9 @@ or canceled with
 
     ceph orch upgrade stop
 
-Note that canceling the upgrade simply stops the process; there is no ability to downgrade back to Reef or Squid.
+Note that canceling the upgrade simply stops the process. There is no ability to downgrade back to Reef or Squid.
 
-Upgrading non-cephadm clusters
+Upgrading Non-cephadm Clusters
 ------------------------------
 
 .. note::
@@ -434,19 +437,19 @@ Upgrading non-cephadm clusters
 
         ceph-6ce0347c-314a-11ee-9b52-000af7995d6c@mon.f28-h21-000-r630.service                                           loaded active running   Ceph mon.f28-h21-000-r630 for 6ce0347c-314a-11ee-9b52-000af7995d6c
 
-#. Set the `noout` flag for the duration of the upgrade. (Optional, but recommended.)
+#. Set the ``noout`` flag for the duration of the upgrade. (Optional, but recommended.)
 
    .. prompt:: bash #
 
       ceph osd set noout
 
-#. Upgrade monitors by installing the new packages and restarting the monitor daemons. For example, on each monitor host
+#. Upgrade Monitors by installing the new packages and restarting the Monitor daemons. For example, on each Monitor host
 
    .. prompt:: bash #
 
       systemctl restart ceph-mon.target
 
-   Once all monitors are up, verify that the monitor upgrade is complete by looking for the `tentacle` string in the mon map. The command
+   Once all Monitors are up, verify that the Monitor upgrade is complete by looking for the ``tentacle`` string in the mon map. The command
 
    .. prompt:: bash #
 
@@ -458,15 +461,15 @@ Upgrading non-cephadm clusters
 
       min_mon_release 20 (tentacle)
 
-   If it does not, that implies that one or more monitors hasn't been upgraded and restarted and/or the quorum does not include all monitors.
+   If it does not, that implies that one or more Monitors haven't been upgraded and restarted and/or the quorum does not include all Monitors.
 
-#. Upgrade `ceph-mgr` daemons by installing the new packages and restarting all manager daemons. For example, on each manager host,
+#. Upgrade ``ceph-mgr`` daemons by installing the new packages and restarting all Manager daemons. For example, on each Manager host,
 
    .. prompt:: bash #
 
       systemctl restart ceph-mgr.target
 
-   Verify the `ceph-mgr` daemons are running by checking `ceph -s`:
+   Verify the ``ceph-mgr`` daemons are running by checking ``ceph -s``:
 
    .. prompt:: bash #
 
@@ -480,7 +483,7 @@ Upgrading non-cephadm clusters
         mgr: foo(active), standbys: bar, baz
      ...
 
-#. Upgrade all OSDs by installing the new packages and restarting the ceph-osd daemons on all OSD hosts
+#. Upgrade all OSDs by installing the new packages and restarting the ``ceph-osd`` daemons on all OSD hosts
 
    .. prompt:: bash #
 
@@ -490,9 +493,9 @@ Upgrading non-cephadm clusters
 
    #. Disable standby_replay:
 
-         .. prompt:: bash #
+      .. prompt:: bash #
 
-            ceph fs set <fs_name> allow_standby_replay false
+         ceph fs set <fs_name> allow_standby_replay false
 
    #. Reduce the number of ranks to 1. (Make note of the original number of MDS daemons first if you plan to restore it later.)
 
@@ -530,13 +533,13 @@ Upgrading non-cephadm clusters
 
          systemctl start ceph-mds.target
 
-   #. Restore the original value of `max_mds` for the volume
+   #. Restore the original value of ``max_mds`` for the volume
 
       .. prompt:: bash #
 
          ceph fs set <fs_name> max_mds <original_max_mds>
 
-#. Upgrade all radosgw daemons by upgrading packages and restarting daemons on all hosts
+#. Upgrade all ``radosgw`` daemons by upgrading packages and restarting daemons on all hosts
 
    .. prompt:: bash #
 
@@ -548,7 +551,7 @@ Upgrading non-cephadm clusters
 
       ceph osd require-osd-release tentacle
 
-#. If you set `noout` at the beginning, be sure to clear it with
+#. If you set ``noout`` at the beginning, be sure to clear it with
 
    .. prompt:: bash #
 
@@ -561,17 +564,17 @@ Upgrading non-cephadm clusters
 Post-upgrade
 ------------
 
-#. Verify the cluster is healthy with `ceph health`.
+#. Verify the cluster is healthy with ``ceph health``.
 
-#. Consider enabling the `telemetry module <https://docs.ceph.com/en/tentacle/mgr/telemetry/>`_ to send anonymized usage
-   statistics and crash information to the Ceph upstream developers. To see what would be reported (without actually
-   sending any information to anyone),
+#. Consider enabling the :ref:`telemetry` to send anonymized usage statistics
+   and crash information to Ceph upstream developers. To see what would
+   be reported without actually sending any information to anyone,
 
    .. prompt:: bash #
 
       ceph telemetry preview-all
 
-   If you are comfortable with the data that is reported, you can opt-in to automatically report the high-level cluster metadata with
+   If you are comfortable with the data that is reported, you can opt-in to automatically report high-level cluster metadata with
 
    .. prompt:: bash #
 
@@ -579,7 +582,7 @@ Post-upgrade
 
    The public dashboard that aggregates Ceph telemetry can be found at https://telemetry-public.ceph.com/.
 
-Upgrading from pre-Reef releases (like Quincy)
--------------------------------------------------
+Upgrading from Pre-Reef Releases (like Quincy)
+----------------------------------------------
 
 You **must** first upgrade to Reef (18.2.z) or Squid (19.2.z) before upgrading to Tentacle.
