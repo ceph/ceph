@@ -166,7 +166,7 @@ class LFUDAPolicy : public CachePolicy {
     std::thread tc;
     std::thread lwthread;
     //data structure for accumulating updated blocks
-    std::vector<std::pair<std::string, uint64_t>> updated_blocks;
+    std::unordered_map<std::string, uint64_t> updated_blocks;
     static constexpr size_t LOCALWEIGHT_BATCH_SIZE = 10000;
 
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
