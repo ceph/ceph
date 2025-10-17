@@ -222,26 +222,14 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 #define dout_prefix *_dout << " SplitOp::"
 
 int SplitOp::assemble_rc() {
-  int rc = 0;
-  bool rc_zero = false;
-
-  // This should only happen on a single thread.
+  // Pick the first bad RC, otherwise return 0.
   for (auto & [_, sub_read] : sub_reads) {
-    if (rc >= 0 && sub_read.rc >= 0) {
-      rc += sub_read.rc;
-      if (sub_read.rc == 0) {
-        rc_zero = true;
-      }
-    } else if (rc >= 0) {
-      rc = sub_read.rc;
-    } // else ignore subsequent errors.
+    if (sub_read.rc < 0) {
+      return sub_read.rc;
+    }
   }
 
-  if (rc >= 0 && rc_zero) {
-    return 0;
-  }
-
-  return rc;
+  return 0;
 }
 
 void SplitOp::complete() {
