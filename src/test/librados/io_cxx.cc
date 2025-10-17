@@ -14,6 +14,8 @@
 #include "test/librados/testcase_cxx.h"
 
 #include "crimson_utils.h"
+#include "cls/version/cls_version_ops.h"
+#include "cls/fifo/cls_fifo_ops.h"
 
 using namespace librados;
 using std::string;
@@ -1044,6 +1046,56 @@ TEST_P(LibRadosIoECPP, CmpExtMismatchPP) {
   read.read(0, bl.length(), NULL, NULL);
   ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+}
+
+TEST_P(LibRadosIoECPP, ReadWithVersion) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl;
+  bl.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+
+  bufferlist new_bl;
+  new_bl.append("CEPH");
+  ObjectWriteOperation write2;
+  write2.cmpext(0, new_bl, nullptr);
+  write2.write_full(new_bl);
+  ASSERT_EQ(-MAX_ERRNO, ioctx.operate("foo", &write2));
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+
+  bufferlist exec_inbl, exec_outbl;
+  int exec_rval;
+  read.exec("version", "read", exec_inbl, &exec_outbl, &exec_rval);
+  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+  ASSERT_EQ(0, exec_rval);
+  cls_version_read_ret exec_version;
+  auto iter = exec_outbl.cbegin();
+  decode(exec_version, iter);
+  ASSERT_EQ(0, exec_version.objv.ver);
+  ASSERT_EQ("", exec_version.objv.tag);
+}
+
+TEST_P(LibRadosIoECPP, ReadWithIllegalClsOp) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl;
+  bl.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+
+  bufferlist new_bl;
+  new_bl.append("CEPH");
+  ObjectWriteOperation write2;
+  bufferlist exec_inbl, exec_outbl;
+  int exec_rval;
+  rados::cls::fifo::op::init_part op;
+  encode(op, exec_inbl);
+  write2.exec("fifo", "init_part", exec_inbl, &exec_outbl, &exec_rval);
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.operate("foo", &write2));
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoECPP);

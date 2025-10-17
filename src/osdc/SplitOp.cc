@@ -278,7 +278,8 @@ void SplitOp::complete() {
         }
         case CEPH_OSD_OP_GETXATTRS:
         case CEPH_OSD_OP_CHECKSUM:
-        case CEPH_OSD_OP_GETXATTR: {
+        case CEPH_OSD_OP_GETXATTR:
+        case CEPH_OSD_OP_CALL: {
           out_osd_op.outdata = sub_reads.at(*primary_shard).details[ops_index].bl;
           out_osd_op.rval = sub_reads.at(*primary_shard).details[ops_index].rval;
           break;
@@ -335,6 +336,29 @@ void SplitOp::complete() {
   }
 }
 
+static bool validate_call(const OSDOp &op, std::string_view cls, std::string_view method) {
+  if (cls.size() != op.op.cls.class_len) {
+    return false;
+  }
+  if (method.size() != op.op.cls.method_len) {
+    return false;
+  }
+
+  std::string cname, mname;
+  auto bp = op.indata.begin();
+  bp.copy(op.op.cls.class_len, cname);
+  bp.copy(op.op.cls.method_len, mname);
+
+  if (cname != cls) {
+    return false;
+  }
+  if (mname != method) {
+    return false;
+  }
+
+  return true;
+}
+
 static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
 
   if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0 ) {
@@ -359,6 +383,14 @@ static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
       case CEPH_OSD_OP_GETXATTR: {
         break; // Do not block validate.
       }
+      case CEPH_OSD_OP_CALL: {
+        // Mostly calls should not be passed through. However, here we add
+        // special cases.
+        if (!validate_call(o, "version", "read")) {
+          return false;
+        }
+        break;
+      }
       default: {
         ldout(cct, DBG_LVL) << __func__ <<" REJECT: unsupported op" << dendl;
         return false;
@@ -381,7 +413,8 @@ void SplitOp::init(OSDOp &op, int ops_index) {
     }
     case CEPH_OSD_OP_GETXATTRS:
     case CEPH_OSD_OP_CHECKSUM:
-    case CEPH_OSD_OP_GETXATTR: {
+    case CEPH_OSD_OP_GETXATTR:
+    case CEPH_OSD_OP_CALL: {
       shard_id_t shard = *primary_shard;
       Details &d = sub_reads.at(shard).details[ops_index];
       orig_op->pass_thru_op(sub_reads.at(shard).rd, ops_index, &d.bl, &d.rval);
