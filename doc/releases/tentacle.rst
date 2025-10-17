@@ -228,14 +228,6 @@ RADOS
 * Added convenience function ``librados::AioCompletion::cancel()`` with the same
   behavior as ``librados::IoCtx::aio_cancel()``.
 
-* A new command, ``ceph osd rm-pg-upmap-primary-all``, has been added that allows
-  users to clear all ``pg-upmap-primary`` mappings in the osdmap when desired.
-
-  Related trackers:
-
-  - https://tracker.ceph.com/issues/67179
-  - https://tracker.ceph.com/issues/66867
-
 * The configuration parameter ``osd_repair_during_recovery`` has been removed.
   That configuration flag used to control whether an operator-initiated "repair
   scrub" would be allowed to start on an OSD that is performing a recovery. In
