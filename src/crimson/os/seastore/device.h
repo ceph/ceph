@@ -9,6 +9,7 @@
 
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/common/smp_helpers.h"
 
 namespace crimson::os::seastore {
 
@@ -90,15 +91,16 @@ class Device {
 public:
   virtual ~Device() {}
 
-  virtual seastar::future<> start() {
+  virtual seastar::future<> start(uint32_t shard_nums) {
     return seastar::now();
   }
 
   virtual seastar::future<> stop() {
     return seastar::now();
   }
+
   // called on the shard to get this shard device;
-  virtual Device& get_sharded_device() {
+  virtual Device& get_sharded_device(store_index_t store_index = 0) {
     return *this;
   }
 
@@ -165,6 +167,9 @@ public:
     ).safe_then([ptrref=std::move(ptrref)]() mutable {
       return read_ertr::make_ready_future<bufferptr>(std::move(*ptrref));
     });
+  }
+  virtual read_ertr::future<uint32_t> get_shard_nums() {
+    return read_ertr::make_ready_future<uint32_t>(seastar::smp::count);
   }
 };
 

@@ -11,7 +11,7 @@
 #include <seastar/core/future.hh>
 
 #include "os/Transaction.h"
-#include "crimson/common/smp_helpers.h"
+#include "crimson/common/config_proxy.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
 #include "include/buffer_fwd.h"
@@ -25,6 +25,14 @@ class Transaction;
 
 namespace crimson::os {
 class FuturizedCollection;
+class FuturizedStore;
+struct BackendStore {
+  FuturizedStore &f_store;  // indicate alienstore/seastore/cyanstore, not shard store
+  store_shard_t shard_id;       // indicate on which core it should run
+  store_index_t store_index;    // indicate which shard store on this core
+  BackendStore(FuturizedStore &f_store, store_shard_t shard_id, store_index_t store_index)
+    : f_store(f_store), shard_id(shard_id), store_index(store_index) {}
+};
 
 class FuturizedStore {
 public:
@@ -35,6 +43,14 @@ public:
     // no copying
     explicit Shard(const Shard& o) = delete;
     const Shard& operator=(const Shard& o) = delete;
+
+    bool is_shard_store_active(store_index_t store_index, uint32_t store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+        // store_index is out of range {} - inactivating this store shard
+        return false;
+      }
+      return true;
+    }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -205,7 +221,8 @@ public:
   explicit FuturizedStore(const FuturizedStore& o) = delete;
   const FuturizedStore& operator=(const FuturizedStore& o) = delete;
 
-  virtual seastar::future<> start() = 0;
+  //return the number of store shards
+  virtual seastar::future<uint32_t> start() = 0;
 
   virtual seastar::future<> stop() = 0;
 
@@ -227,13 +244,15 @@ public:
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
+
   // called on the shard and get this FuturizedStore::shard;
-  virtual Shard& get_sharded_store() = 0;
+  virtual BackendStore get_backend_store(store_index_t store_index) = 0;
+  virtual Shard& get_sharded_store(store_index_t store_index = 0) = 0;
 
   virtual seastar::future<std::tuple<int, std::string>> read_meta(
     const std::string& key) = 0;
 
-  using coll_core_t = std::pair<coll_t, core_id_t>;
+  using coll_core_t = std::pair<coll_t, std::pair<core_id_t, store_index_t>>;
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
