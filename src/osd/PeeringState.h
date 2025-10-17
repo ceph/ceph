@@ -379,6 +379,9 @@ public:
     /// Clear queue for a pg_temp of wanted
     virtual void clear_want_pg_temp() = 0;
 
+    /// Send notification that PG has completed a pool migration
+    virtual void send_pg_migrated_pool() = 0;
+
     /// Arrange for stats to be shipped to mon to be updated for this pg
     virtual void publish_stats_to_osd() = 0;
     /// Clear stats to be shipped to mon for this pg
