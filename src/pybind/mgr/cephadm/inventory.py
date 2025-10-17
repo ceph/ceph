@@ -1200,7 +1200,7 @@ class HostCache():
         ``_refresh_host_daemons()`` was called, but *before*
         ``_apply_all_specs()`` was called. thus we end up with a hosts
         where daemons might be running, but we have not yet detected them.
-        
+
         Excludes paused hosts as they should not have new daemons scheduled.
         """
         return [
@@ -1301,7 +1301,7 @@ class HostCache():
     def get_paused_hosts(self) -> List[HostSpec]:
         """
         Return all hosts that are in paused state.
-        
+
         Paused hosts are reachable but administratively paused from
         orchestrator operations.
         """

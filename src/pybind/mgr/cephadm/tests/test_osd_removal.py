@@ -9,8 +9,9 @@ from datetime import datetime
 
 class MockOSD:
 
-    def __init__(self, osd_id):
+    def __init__(self, osd_id, hostname=None):
         self.osd_id = osd_id
+        self.hostname = hostname
 
 
 class TestOSDRemoval:
@@ -59,17 +60,18 @@ class TestOSDRemoval:
         "max_osd_draining_count, draining_osds, idling_osds, ok_to_stop, expected",
         [
             # drain one at a time, one already draining
-            (1, [1], [1], [True], 0),
+            (1, [MockOSD(1)], [MockOSD(1)], [True], 0),
             # drain one at a time, none draining yet
-            (1, [], [1, 2, 3], [True, True, True], 1),
+            (1, [], [MockOSD(1), MockOSD(2), MockOSD(3)], [True, True, True], 1),
             # drain one at a time, one already draining, none ok-to-stop
-            (1, [1], [1], [False], 0),
+            (1, [MockOSD(1)], [MockOSD(1)], [False], 0),
             # drain one at a time, none draining, one ok-to-stop
-            (1, [], [1, 2, 3], [False, False, True], 1),
+            (1, [], [MockOSD(1), MockOSD(2), MockOSD(3)], [False, False, True], 1),
             # drain three at a time, one already draining, all ok-to-stop
-            (3, [1], [1, 2, 3], [True, True, True], 2),
+            (3, [MockOSD(1)], [MockOSD(1), MockOSD(
+                2), MockOSD(3)], [True, True, True], 2),
             # drain two at a time, none already draining, none ok-to-stop
-            (2, [], [1, 2, 3], [False, False, False], 0),
+            (2, [], [MockOSD(1), MockOSD(2), MockOSD(3)], [False, False, False], 0),
             # drain two at a time, none already draining, none idling
             (2, [], [], [], 0),
         ]
@@ -80,7 +82,31 @@ class TestOSDRemoval:
                 with mock.patch("cephadm.services.osd.OSDRemovalQueue.idling_osds", return_value=idling_osds):
                     with mock.patch("cephadm.services.osd.RemoveUtil.ok_to_stop", side_effect=ok_to_stop):
                         removal_queue = OSDRemovalQueue(m)
-                        assert len(removal_queue._ready_to_drain_osds()) == expected
+                        assert len(
+                            removal_queue._ready_to_drain_osds()) == expected
+
+    def test_ready_to_drain_osds_skips_paused_hosts(self):
+        with with_cephadm_module({'max_osd_draining_count': 3}) as m:
+            m.inventory._inventory = {
+                'host1': {'status': 'paused'},
+                'host2': {'status': ''}
+            }
+
+            idling_osds = [
+                MockOSD(1, hostname='host1'),
+                MockOSD(2, hostname='host2'),
+                MockOSD(3, hostname='host2'),
+            ]
+
+            with mock.patch("cephadm.services.osd.OSDRemovalQueue.draining_osds", return_value=[]):
+                with mock.patch("cephadm.services.osd.OSDRemovalQueue.idling_osds", return_value=idling_osds):
+                    with mock.patch("cephadm.services.osd.RemoveUtil.ok_to_stop", return_value=True):
+                        removal_queue = OSDRemovalQueue(m)
+                        ready_osds = removal_queue._ready_to_drain_osds()
+
+                        assert len(ready_osds) == 2
+                        assert all(osd.hostname != 'host1' for osd in ready_osds)
+                        assert all(osd.hostname == 'host2' for osd in ready_osds)
 
     def test_ok_to_stop(self, rm_util):
         rm_util.ok_to_stop([MockOSD(1)])
