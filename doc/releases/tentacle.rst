@@ -88,7 +88,7 @@ CephFS
   normalized directory entry names. This is an inheritable configuration,
   making it apply to an entire directory tree.
 
-  For more information, see the :ref:`documentation <charmap>`.
+  For more information, see the :ref:`charmap`.
 
 * It is now possible to pause the threads that asynchronously purge
   deleted subvolumes by using the config option
@@ -209,7 +209,7 @@ RADOS
   Related links:
 
   - Feature ticket: https://tracker.ceph.com/issues/67777
-  - :ref:`Documentation <data_availability_score>`
+  - Documentation: :ref:`data_availability_score`
 
 * Leader monitor and stretch mode status are now included in the ``ceph status``
   output.
@@ -266,7 +266,7 @@ RADOS
   Related links:
 
   - Tracker ticket: https://tracker.ceph.com/issues/70774
-  - :ref:`Documentation <override_max_iops_capacity>`
+  - Documentation: :ref:`override_max_iops_capacity`
 
 * pybind/rados: Fixes ``WriteOp.zero()`` in the original reversed order of arguments
   ``offset`` and ``length``. When pybind calls ``WriteOp.zero()``, the argument passed
@@ -357,6 +357,11 @@ Telemetry
   flag, which will allow us to gauge feature adoption for the new
   FastEC improvements.
   To opt into telemetry, run ``ceph telemetry on``.
+
+Crimson / Seastore
+------------------
+
+* Check out the latest news on Crimson here: https://ceph.io/en/news/crimson/
 
 Upgrading from Reef or Squid
 ----------------------------
@@ -559,7 +564,7 @@ Upgrading Non-cephadm Clusters
 
 #. Consider transitioning your cluster to use the cephadm deployment and orchestration framework to simplify
    cluster management and future upgrades. For more information on converting an existing cluster to cephadm,
-   see https://docs.ceph.com/en/tentacle/cephadm/adoption/.
+   see :ref:`cephadm-adoption`.
 
 Post-upgrade
 ------------
