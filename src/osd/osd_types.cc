@@ -4303,6 +4303,8 @@ bool PastIntervals::is_new_interval(
   int32_t new_crush_member,
   bool old_allow_ec_optimizations,
   bool new_allow_ec_optimizations,
+  const std::set<pg_t> old_migrating_pgs,
+  const std::set<pg_t> new_migrating_pgs,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -4327,7 +4329,10 @@ bool PastIntervals::is_new_interval(
     old_crush_target != new_crush_target ||
     old_crush_barrier != new_crush_barrier ||
     old_crush_member != new_crush_member ||
-    old_allow_ec_optimizations != new_allow_ec_optimizations;
+    old_allow_ec_optimizations != new_allow_ec_optimizations ||
+    // PG started/finished or pool started/finished migration
+    old_migrating_pgs.contains(pgid) != new_migrating_pgs.contains(pgid) ||
+    old_migrating_pgs.empty() != new_migrating_pgs.empty();
 }
 
 bool PastIntervals::is_new_interval(
@@ -4377,6 +4382,7 @@ bool PastIntervals::is_new_interval(
 		    plast->peering_crush_bucket_barrier, pi->peering_crush_bucket_barrier,
 		    plast->peering_crush_mandatory_member, pi->peering_crush_mandatory_member,
 		    plast->allows_ecoptimizations(), pi->allows_ecoptimizations(),
+		    plast->migrating_pgs, pi->migrating_pgs,
 		    pgid);
 }
 
