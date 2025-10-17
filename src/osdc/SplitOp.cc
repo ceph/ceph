@@ -74,10 +74,16 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
   for (auto &&chunk_info : stripe_view) {
     ldout(cct, DBG_LVL) << __func__ << " chunk info " << chunk_info << dendl;
     auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+    uint64_t src_len = details.bl.length();
+    uint64_t buf_off = buffer_offset[(int)chunk_info.shard];
+    if (src_len <= buf_off) {
+      break;
+    }
+    uint64_t len = std::min(chunk_info.length, src_len - buf_off);
     bufferlist bl;
-    bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], chunk_info.length);
+    bl.substr_of(details.bl, buf_off, len);
     bl_out.append(bl);
-    buffer_offset[(int)chunk_info.shard] += chunk_info.length;
+    buffer_offset[(int)chunk_info.shard] += len;
   }
 }
 
