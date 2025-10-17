@@ -104,7 +104,7 @@ from the Ceph Storage cluster is known as Garbage Collection or GC.
 
 To view the queue of objects awaiting garbage collection, execute the following
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin gc list
 
@@ -230,7 +230,7 @@ Keystone Settings
 .. confval:: rgw_keystone_service_token_accepted_roles
 .. confval:: rgw_keystone_expired_token_cache_expiration
 
-Server-side encryption Settings
+Server-side Encryption Settings
 ===============================
 
 .. confval:: rgw_crypt_s3_kms_backend
@@ -272,12 +272,12 @@ SSE-S3 Settings
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
 
-QoS settings
+QoS Settings
 ============
 
 .. versionadded:: Nautilus
 
-The older and now non-default``civetweb`` frontend has a threading model that uses a thread per
+The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
 connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`
 when accepting connections. The newer and default ``beast`` frontend is
 not limited by the thread pool size when it comes to accepting new
@@ -334,7 +334,7 @@ below.
 .. confval:: rgw_lfuda_sync_frequency
 .. confval:: rgw_d4n_l1_datacache_address
 
-Topic persistency settings
+Topic Persistency Settings
 ==========================
 
 Topic persistency will repeatedly push notifications until they succeed.
@@ -356,7 +356,7 @@ retention is indefinite, and notifications are retried as frequently as possible
 
 .. _Bucket Notifications: ../notifications
    
-Cloud Restore settings
+Cloud Restore Settings
 ======================
 
 Cloud Restore feature currently enables the restoration of objects transitioned to S3-compatible cloud services into Ceph Object Gateway (RGW). The restore requests are asynchronously processed by Restore worker thread in the background. 
