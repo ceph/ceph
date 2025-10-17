@@ -7,6 +7,7 @@
 
 #include <string>
 #include <vector>
+#include <random>
 
 /* Overview
  *
@@ -29,8 +30,7 @@ class ObjectModel : public Model {
   bool secondary_created;
   std::vector<int> primary_contents;
   std::vector<int> secondary_contents;
-  std::mt19937_64 rng =
-      std::mt19937_64();
+  std::mt19937_64 rng;
 
   // Track read and write I/Os that can be submitted in
   // parallel to detect violations:

@@ -5,13 +5,8 @@
 #include <random>
 #include <string>
 
-#include "common/debug.h"
-#include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "include/random.h"
-
-#define dout_subsys ceph_subsys_rados
-#define dout_context g_ceph_context
 
 /* Overview
  *
@@ -114,8 +109,6 @@ class ProgramOptionSelector : public ProgramOptionReader<option_type> {
       uint64_t range = static_cast<uint64_t>(num_selections);
       uint64_t rand_value = rng();
       size_t index = static_cast<size_t>(rand_value % range);
-      dout(0) << "S4 rand_value: " << rand_value << " range: " 
-            << range << " index: " << index  << " addr: " << &rng << dendl;
       return selections_array[index];
     }
   }
@@ -165,15 +158,11 @@ public:
       uint64_t range = static_cast<uint64_t>(num_selections_stable);
       uint64_t rand_value = rng();
       size_t index = static_cast<size_t>(rand_value % range);
-      dout(0) << "S2 rand_value: " << rand_value << " range: " 
-            << range << " index: " << index << " addr: " << &rng << dendl;
       return selections_array_stable[index];
     } else {
       uint64_t range = static_cast<uint64_t>(num_selections);
       uint64_t rand_value = rng();
       size_t index = static_cast<size_t>(rand_value % range);
-      dout(0) << "S6 rand_value: " << rand_value << " range: " 
-            << range << " index: " << index << " addr: " << &rng << dendl;
       return selections_array[index];
     }
   }
@@ -223,8 +212,6 @@ class ProgramOptionGeneratedSelector
       uint64_t range = static_cast<uint64_t>(selection.size());
       uint64_t rand_value = rng();
       size_t index = static_cast<size_t>(rand_value % range);
-      dout(0) << "S3 rand_value: " << rand_value << " range: " 
-            << range << " index: " << index  << " addr: " << &rng << dendl;
       return selection[index];
     } else {
       return std::nullopt;
