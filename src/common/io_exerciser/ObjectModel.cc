@@ -5,6 +5,12 @@
 #include <execution>
 #include <iterator>
 
+#include "common/debug.h"
+#include "common/dout.h"
+
+#define dout_subsys ceph_subsys_rados
+#define dout_context g_ceph_context
+
 using ObjectModel = ceph::io_exerciser::ObjectModel;
 
 ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed)
@@ -47,8 +53,14 @@ bool ObjectModel::readyForIoOp(IoOp& op) { return true; }
 
 void ObjectModel::applyIoOp(IoOp& op) {
   auto generate_random = [&rng = rng]() {
-    std::uniform_int_distribution<long long> distMax(1, std::numeric_limits<int>::max());
-    return distMax(rng);
+    constexpr int64_t min = 1;
+    constexpr int64_t max = static_cast<int64_t>(std::numeric_limits<int>::max());
+    constexpr uint64_t range = static_cast<uint64_t>(max - min + 1);
+    uint64_t rand_value = rng();
+    int64_t result = static_cast<int64_t>(rand_value % range + min);
+    dout(0) << "S1 rand_value: " << rand_value << " range: " 
+            << range << " result: " << result  << " addr: " << &rng << dendl;
+    return result;
   };
 
   auto verify_and_record_read_op =

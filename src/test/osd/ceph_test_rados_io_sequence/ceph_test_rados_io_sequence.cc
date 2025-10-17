@@ -547,25 +547,33 @@ ceph::io_sequence::tester::SelectErasureChunkSize::generate_selections() {
 
   std::vector<uint64_t> choices = {};
 
+  auto generate_random_int = [this](uint64_t range) -> uint64_t {
+    uint64_t rand_value = rng();
+    uint64_t index = rand_value % range;
+    dout(0) << "S5 rand_value: " << rand_value << " range: " 
+            << range << " index: " << index  << " addr: " << &rng << dendl;
+    return index;
+  };
+
   if (4096 % minimum_chunksize == 0) {
     choices.push_back(4096);
   } else {
-    std::uniform_int_distribution<long long> dist4(0, 3);
-    choices.push_back(minimum_chunksize * (dist4(rng) + 1));
+    uint64_t r = generate_random_int(4); // 0–3
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((64 * 1024) % minimum_chunksize == 0) {
     choices.push_back(64 * 1024);
   } else {
-    std::uniform_int_distribution<long long> dist64(0, 63);
-    choices.push_back(minimum_chunksize * (dist64(rng) + 1));
+    uint64_t r = generate_random_int(64); // 0–63
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   if ((256 * 1024) % minimum_chunksize == 0) {
     choices.push_back(256 * 1024);
   } else {
-    std::uniform_int_distribution<long long> dist256(0, 255);
-    choices.push_back(minimum_chunksize * (dist256(rng) + 1));
+    uint64_t r = generate_random_int(256); // 0–255
+    choices.push_back(minimum_chunksize * (r + 1));
   }
 
   return choices;
