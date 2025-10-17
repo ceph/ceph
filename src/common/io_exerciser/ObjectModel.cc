@@ -4,19 +4,12 @@
 #include <algorithm>
 #include <execution>
 #include <iterator>
-
-#include "common/debug.h"
-#include "common/dout.h"
-
-#define dout_subsys ceph_subsys_rados
-#define dout_context g_ceph_context
+#include <random>
 
 using ObjectModel = ceph::io_exerciser::ObjectModel;
 
 ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed)
-    : Model(primary_oid, secondary_oid, block_size), primary_created(false), secondary_created(false) {
-  rng.seed(seed);
-}
+    : Model(primary_oid, secondary_oid, block_size), primary_created(false), secondary_created(false), rng(seed) {}
 
 int ObjectModel::get_seed(uint64_t offset) const {
   ceph_assert(offset < primary_contents.size());
@@ -57,10 +50,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
     constexpr int64_t max = static_cast<int64_t>(std::numeric_limits<int>::max());
     constexpr uint64_t range = static_cast<uint64_t>(max - min + 1);
     uint64_t rand_value = rng();
-    int64_t result = static_cast<int64_t>(rand_value % range + min);
-    dout(0) << "S1 rand_value: " << rand_value << " range: " 
-            << range << " result: " << result  << " addr: " << &rng << dendl;
-    return result;
+    return static_cast<int64_t>(rand_value % range + min);
   };
 
   auto verify_and_record_read_op =
