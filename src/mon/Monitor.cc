@@ -4698,6 +4698,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_REMOVE_SNAPS:
     case MSG_MON_GET_PURGED_SNAPS:
     case MSG_OSD_PG_READY_TO_MERGE:
+    case MSG_OSD_PG_MIGRATED_POOL:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;
 

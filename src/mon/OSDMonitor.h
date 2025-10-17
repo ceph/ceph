@@ -466,6 +466,9 @@ private:
   bool preprocess_pg_ready_to_merge(MonOpRequestRef op);
   bool prepare_pg_ready_to_merge(MonOpRequestRef op);
 
+  bool preprocess_pg_migrated_pool(MonOpRequestRef op);
+  bool prepare_pg_migrated_pool(MonOpRequestRef op);
+
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, std::ostream *ss);
   bool _check_become_tier(
       int64_t tier_pool_id, const pg_pool_t *tier_pool,
