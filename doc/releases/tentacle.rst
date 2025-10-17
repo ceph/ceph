@@ -13,6 +13,20 @@ Highlights
 
 *See the sections below for more details on these items.*
 
+Integrated SMB support
+
+* Ceph clusters now offer an SMB Manager module that works like the existing
+  NFS subsystem. The new SMB support allows the Ceph cluster to automatically
+  create Samba-backed SMB file shares connected to CephFS. The ``smb`` module
+  can configure both basic Active Directory domain or standalone user
+  authentication. The Ceph cluster can host one or more virtual SMB clusters
+  which can be truly clustered using Samba's CTDB technology. The ``smb``
+  module requires a cephadm-enabled Ceph cluster and deploys container images
+  provided by the ``samba-container`` project. The Ceph dashboard can be used
+  to configure SMB clusters and shares. A new ``cephfs-proxy`` daemon is
+  automatically deployed to improve scalability and memory usage when connecting
+  Samba to CephFS.
+
 RADOS
 
 * FastEC: Long-anticipated performance and space amplification
@@ -64,21 +78,6 @@ CephFS
   now requires users to pass the confirmation flag (``--yes-i-really-mean-it``).
 * ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS FUSE
   client for ``fallocate`` for the default case (i.e. ``mode == 0``).
-
-Integrated SMB Support
-----------------------
-
-* Ceph clusters now offer an SMB Manager module that works like the existing
-  NFS subsystem. The new SMB support allows the Ceph cluster to automatically
-  create Samba-backed SMB file shares connected to CephFS. The ``smb`` module
-  can configure both basic Active Directory domain or standalone user
-  authentication. The Ceph cluster can host one or more virtual SMB clusters
-  which can be truly clustered using Samba's CTDB technology. The ``smb``
-  module requires a cephadm-enabled Ceph cluster and deploys container images
-  provided by the ``samba-container`` project. The Ceph dashboard can be used
-  to configure SMB clusters and shares. A new ``cephfs-proxy`` daemon is
-  automatically deployed to improve scalability and memory usage when connecting
-  Samba to CephFS.
 
 CephFS
 ------
