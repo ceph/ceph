@@ -138,6 +138,7 @@ from cephadmlib.logging import (
 )
 from cephadmlib.systemd import check_unit, check_units, terminate_service, enable_service
 from cephadmlib import systemd_unit
+from cephadmlib.signals import send_signal_to_container_entrypoint
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
@@ -3253,6 +3254,17 @@ def command_unit(ctx: CephadmContext) -> int:
     )
     return code
 
+
+@infer_fsid
+def command_signal(ctx: CephadmContext) -> int:
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    container_name = DaemonIdentity.from_name(ctx.fsid, ctx.name).container_name
+
+    return send_signal_to_container_entrypoint(ctx, container_name, ctx.signal_name or ctx.signal_number)
+
+
 ##################################
 
 
@@ -4847,6 +4859,24 @@ def _get_parser():
         '--fsid',
         help='cluster FSID')
     _name_opts(parser_unit_install)
+
+    parser_signal = subparsers.add_parser(
+        'signal', help='Send signal to entrypoint of containerized daemon')
+    parser_signal.set_defaults(func=command_signal)
+    signal_group = parser_signal.add_mutually_exclusive_group(required=True)
+    signal_group.add_argument(
+        '--signal-number',
+        help='Signal number to send',)
+    signal_group.add_argument(
+        '--signal-name',
+        help='Signal to send')
+    parser_signal.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_signal.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
