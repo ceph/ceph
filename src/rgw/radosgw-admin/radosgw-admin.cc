@@ -360,7 +360,7 @@ void usage()
   cout << "  notification rm                  remove a bucket notifications configuration\n";
   cout << "  restore status                   shows restoration status of object in a bucket\n";
   cout << "  restore list                     list restore status of each object in the bucket\n";
-  cout <<"                                    can be filtered with help of --restore-status which shows objects with specified status\n";
+  cout << "                                   can be filtered with help of --restore-status which shows objects with specified status\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>                 tenant name\n";
   cout << "   --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)\n";
