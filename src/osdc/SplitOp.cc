@@ -252,6 +252,8 @@ void SplitOp::complete() {
     // so as to reproduce as much as possible of the IO completion.
     std::vector out_ops(orig_op->ops.begin(), orig_op->ops.end());
 
+    bufferlist *read_bl = nullptr;
+
     for (unsigned ops_index=0; ops_index < out_ops.size(); ++ops_index) {
       auto &out_osd_op = out_ops[ops_index];
       switch (out_osd_op.op.op) {
@@ -259,10 +261,12 @@ void SplitOp::complete() {
           auto [extents, bl] = assemble_buffer_sparse_read(ops_index);
           encode(std::move(extents).detach(), out_osd_op.outdata);
           encode_destructively(bl, out_osd_op.outdata);
+          read_bl = &out_osd_op.outdata;
           break;
         }
         case CEPH_OSD_OP_READ: {
           assemble_buffer_read(out_osd_op.outdata, ops_index);
+          read_bl = &out_osd_op.outdata;
           break;
         }
         case CEPH_OSD_OP_GETXATTRS:
@@ -277,6 +281,40 @@ void SplitOp::complete() {
           break;
         }
       }
+    }
+
+    // Copied from Objecter::handle_osd_op_reply() to make librados test
+    // harness work correctly
+    if (orig_op->outbl) {
+      ceph_assert(read_bl);
+      // Note: Objecter will check for a single buffer here - this will always
+      //       be true. Here, there will frequently be multiple buffers due
+      //       to the splitting and the original buffer still needs to be
+      //       honoured.
+      if (orig_op->outbl->length() == read_bl->length()) {
+        // this is here to keep previous users to *relied* on getting data
+        // read into existing buffers happy.  Notably,
+        // libradosstriper::RadosStriperImpl::aio_read().
+        ldout(cct,10) << __func__ << " copying resulting " << read_bl->length()
+                      << " into existing ceph::buffer of length " << orig_op->outbl->length()
+                      << dendl;
+        // The following seems a little convoluted, but the assumption is that
+        // there is a good reason why Sage Weil wrote it this way in Objecter.
+        bufferlist t;
+        t = std::move(*orig_op->outbl);
+        t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
+        read_bl->begin().copy(read_bl->length(), t.c_str());
+        orig_op->outbl->substr_of(t, 0, read_bl->length());
+      } else {
+        // librados insists that if it provided a buffer and the client is
+        // going to be returning a buffer, that this buffer must be
+        // contiguous.
+        if (orig_op->outbl->length() != 0) {
+          read_bl->rebuild();
+        }
+        orig_op->outbl->substr_of(*read_bl, 0, read_bl->length());
+      }
+      orig_op->outbl = 0;
     }
 
     objecter.handle_osd_op_reply2(orig_op, out_ops);
