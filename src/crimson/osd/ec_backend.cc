@@ -719,8 +719,12 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
 
-      int err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
-                                            nullptr);
+      int err = -EIO; // If attributes needed but not read.
+      if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
+        err = ec_impl->minimum_to_decode(want_to_read, have, dummy_minimum,
+                                         nullptr);
+      }
+
       if (err) {
 	logger().debug("{} minimum_to_decode failed {}", __func__, err);
         if (rop.in_progress.empty()) {
