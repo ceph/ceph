@@ -69,21 +69,28 @@ struct RadosTestECPPNSCleanup : public RadosTestECPPNS {
   RadosTestECPPNSCleanup() : RadosTestECPPNS(true) {}
 };
 
-class RadosTestPP : public ::testing::Test {
+class RadosTestPPBase {
 public:
-  RadosTestPP(bool c=false) : cluster(s_cluster), cleanup(c) {}
+  RadosTestPPBase() : cluster(s_cluster) {};
+  ~RadosTestPPBase() = default;
+protected:
+  static librados::Rados s_cluster;
+  librados::Rados &cluster;
+  static void cleanup_default_namespace(librados::IoCtx ioctx);
+  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
+};
+
+class RadosTestPP : public RadosTestPPBase, public ::testing::Test {
+public:
+  RadosTestPP(bool c=false) : cleanup(c) {}
   ~RadosTestPP() override {}
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
-  static void cleanup_default_namespace(librados::IoCtx ioctx);
-  static void cleanup_namespace(librados::IoCtx ioctx, std::string ns);
-  static librados::Rados s_cluster;
   static std::string pool_name;
 
   void SetUp() override;
   void TearDown() override;
-  librados::Rados &cluster;
   librados::IoCtx ioctx;
   bool cleanup;
   std::string nspace;
@@ -110,7 +117,8 @@ protected:
   std::string nspace;
 };
 
-class RadosTestECPP : public RadosTestPP {
+class RadosTestECPP : public RadosTestPPBase,
+                      public ::testing::TestWithParam<std::tuple<bool, bool>> {
   bool ec_overwrites_set = false;
 public:
   RadosTestECPP(bool c=false) : cluster(s_cluster), cleanup(c) {}
@@ -120,8 +128,11 @@ protected:
   static void TearDownTestCase();
   void set_allow_ec_overwrites();
   static librados::Rados s_cluster;
-  static std::string pool_name;
+  static std::string pool_name_default;
+  static std::string pool_name_fast;
+  static std::string pool_name_fast_split;
 
+  std::string pool_name;
   void SetUp() override;
   void TearDown() override;
   librados::Rados &cluster;

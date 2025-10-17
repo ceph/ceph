@@ -189,7 +189,7 @@ void RadosTestECPPNS::TearDown()
 }
 
 std::string RadosTestPP::pool_name;
-Rados RadosTestPP::s_cluster;
+Rados RadosTestPPBase::s_cluster;
 
 void RadosTestPP::SetUpTestCase()
 {
@@ -223,14 +223,14 @@ void RadosTestPP::TearDown()
   ioctx.close();
 }
 
-void RadosTestPP::cleanup_default_namespace(librados::IoCtx ioctx)
+void RadosTestPPBase::cleanup_default_namespace(librados::IoCtx ioctx)
 {
   // remove all objects from the default namespace to avoid polluting
   // other tests
   cleanup_namespace(ioctx, "");
 }
 
-void RadosTestPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
+void RadosTestPPBase::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 {
   ioctx.snap_set_read(librados::SNAP_HEAD);
   ioctx.set_namespace(ns);
@@ -363,26 +363,49 @@ void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
   }
 }
 
-std::string RadosTestECPP::pool_name;
+std::string RadosTestECPP::pool_name_default;
+std::string RadosTestECPP::pool_name_fast;
+std::string RadosTestECPP::pool_name_fast_split;
 Rados RadosTestECPP::s_cluster;
 
 void RadosTestECPP::SetUpTestCase()
 {
   SKIP_IF_CRIMSON();
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
-  pool_name = get_temp_pool_name(pool_prefix);
-  ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+  pool_name_default = get_temp_pool_name(pool_prefix);
+  pool_name_fast = get_temp_pool_name(pool_prefix);
+  pool_name_fast_split = get_temp_pool_name(pool_prefix);
+  ASSERT_EQ("", connect_cluster_pp(s_cluster));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_fast_split, s_cluster, true));
+  ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
 }
 
 void RadosTestECPP::TearDownTestCase()
 {
   SKIP_IF_CRIMSON();
-  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_default, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast, s_cluster));
+  ASSERT_EQ(0, destroy_ec_pool_pp(pool_name_fast_split, s_cluster));
+  s_cluster.shutdown();
 }
 
 void RadosTestECPP::SetUp()
 {
   SKIP_IF_CRIMSON();
+  const auto& params = GetParam();
+  bool fast_ec = std::get<0>(params);
+  bool split_ops = std::get<1>(params);
+  if (fast_ec && split_ops) {
+    pool_name = pool_name_fast_split;
+  } else if (fast_ec) {
+    pool_name = pool_name_fast;
+  } else if (!split_ops) {
+    pool_name = pool_name_default;
+  } else {
+    GTEST_SKIP() << "Legacy EC does not support split ops";
+  }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
   nspace = get_temp_pool_name();
   ioctx.set_namespace(nspace);

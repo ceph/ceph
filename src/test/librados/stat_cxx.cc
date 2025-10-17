@@ -72,7 +72,7 @@ TEST_F(LibRadosStatPP, PoolStatPP) {
   ASSERT_EQ(0, cluster.get_pool_stats(v, stats));
 }
 
-TEST_F(LibRadosStatECPP, StatPP) {
+TEST_P(LibRadosStatECPP, StatPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -86,13 +86,13 @@ TEST_F(LibRadosStatECPP, StatPP) {
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
 }
 
-TEST_F(LibRadosStatECPP, ClusterStatPP) {
+TEST_P(LibRadosStatECPP, ClusterStatPP) {
   SKIP_IF_CRIMSON();
   cluster_stat_t cstat;
   ASSERT_EQ(0, cluster.cluster_stat(cstat));
 }
 
-TEST_F(LibRadosStatECPP, PoolStatPP) {
+TEST_P(LibRadosStatECPP, PoolStatPP) {
   SKIP_IF_CRIMSON();
   std::string n = ioctx.get_pool_name();
   ASSERT_EQ(n, pool_name);
@@ -136,7 +136,7 @@ TEST_F(LibRadosStatPP, StatPPNS) {
   ASSERT_EQ(-ENOENT, ioctx.stat("foo2", &size, &mtime));
 }
 
-TEST_F(LibRadosStatECPP, StatPPNS) {
+TEST_P(LibRadosStatECPP, StatPPNS) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -166,3 +166,5 @@ TEST_F(LibRadosStatECPP, StatPPNS) {
   ASSERT_EQ(-ENOENT, ioctx.stat("nonexistent", &size, &mtime));
   ASSERT_EQ(-ENOENT, ioctx.stat("foo2", &size, &mtime));
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosStatECPP);
