@@ -486,7 +486,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
     entries_map.emplace(key, e);
 
     if (updateLocalWeight) {
-      updated_blocks.push_back(std::make_pair(key, localWeight));
+      updated_blocks.emplace(key, localWeight);
       if (updated_blocks.size() >= LOCALWEIGHT_BATCH_SIZE) {
         should_notify = true;
       }
@@ -999,7 +999,7 @@ void LFUDAPolicy::localweight_writer(const DoutPrefixProvider* dpp)
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Starting thread " << dendl;
   auto TIMEOUT_DURATION = std::chrono::seconds(dpp->get_cct()->_conf->rgw_d4n_localweight_processing_interval);
   while (!lw_quit.load()) {
-    std::vector<std::pair<std::string, uint64_t>> temp;
+    std::unordered_map<std::string, uint64_t> temp;
     bool woke_up = false;
     //sleep for some duration or till size crosses 10K before processing
     {
