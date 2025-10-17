@@ -78,7 +78,7 @@ tasks:
             - "client.smbdata"
   - cephadm.wait_for_service:
       service: smb.saserv1
-  - cephadm.exec:
+  - template.exec:
       host.b:
         - sleep 30
         - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U smbuser1%insecure321 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
