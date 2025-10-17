@@ -3660,12 +3660,12 @@ options:
 - name: rgw_scheduler_type
   type: str
   level: advanced
-  desc: Set the type of dmclock scheduler, defaults to throttler Other valid values
-    are dmclock which is experimental
+  desc: Set the type of dmclock scheduler, defaults to throttler. Other valid value
+    is dmclock which is experimental.
   fmt_desc: |
-    The RGW scheduler to use. Valid values are ``throttler` and
+    The RGW scheduler to use. Valid values are ``throttler`` and
     ``dmclock``. Currently defaults to ``throttler`` which throttles Beast
-    frontend requests. ``dmclock` is *experimental* and requires the
+    frontend requests. ``dmclock`` is *experimental* and requires
     ``dmclock`` to be included in the ``experimental_feature_enabled``
     configuration option.
 
