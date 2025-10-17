@@ -930,48 +930,31 @@ public:
     std::array<TransactionManager::remap_entry_t, N> remaps)
   {
     if (!mapping.is_indirect() && mapping.is_zero_reserved()) {
-      return seastar::do_with(
-	std::vector<TransactionManager::remap_entry_t>(
-	  remaps.begin(), remaps.end()),
-	std::vector<LBAMapping>(),
-	[&t, mapping=std::move(mapping), this]
-	(auto &remaps, auto &mappings) mutable {
-	auto orig_laddr = mapping.get_key();
-	return remove(t, std::move(mapping)
-	).si_then([&remaps, &t, &mappings, orig_laddr,
-		  this](auto pos) {
-	  return seastar::do_with(
-	    std::move(pos),
-	    [this, &t, &remaps, orig_laddr, &mappings](auto &pos) {
-	    return trans_intr::do_for_each(
-	      remaps.begin(),
-	      remaps.end(),
-	      [&t, &pos, orig_laddr, &mappings, this]
-	      (const auto &remap) mutable {
-	      auto laddr = (orig_laddr + remap.offset).checked_to_laddr();
-	      return this->reserve_region(
-		t,
-		std::move(pos),
-		laddr,
-		remap.len
-	      ).si_then([&mappings](auto new_mapping) {
-		mappings.emplace_back(new_mapping);
-		return new_mapping.next();
-	      }).si_then([&pos](auto new_mapping) {
-		pos = std::move(new_mapping);
-		return seastar::now();
-	      });
-	    });
-	  });
-	}).si_then([&mappings] { return std::move(mappings); });
-      }).handle_error_interruptible(
+      std::vector<LBAMapping> ret;
+      auto orig_laddr = mapping.get_key();
+      auto pos = co_await remove(
+	t, std::move(mapping)
+      ).handle_error_interruptible(
 	remap_mappings_iertr::pass_further{},
-	crimson::ct_error::assert_all{
-	  "remap_mappings hit invalid error"
-	}
+	crimson::ct_error::assert_all{"unexpected error"}
       );
+      for (auto &remap : remaps) {
+	auto laddr = (orig_laddr + remap.offset).checked_to_laddr();
+	auto new_mapping = co_await this->reserve_region(
+	  t,
+	  std::move(pos),
+	  laddr,
+	  remap.len
+	).handle_error_interruptible(
+	  remap_mappings_iertr::pass_further{},
+	  crimson::ct_error::assert_all{"unexpected error"}
+	);
+	ret.emplace_back(new_mapping);
+	pos = co_await new_mapping.next();
+      }
+      co_return ret;
     } else {
-      return remap_pin<T, N>(
+      co_return co_await remap_pin<T, N>(
 	t, std::move(mapping), std::move(remaps));
     }
   }
