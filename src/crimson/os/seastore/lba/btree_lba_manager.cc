@@ -852,43 +852,6 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
-BtreeLBAManager::update_refcount_ret
-BtreeLBAManager::update_refcount(
-  Transaction &t,
-  std::variant<laddr_t, LBACursor*> addr_or_cursor,
-  int delta)
-{
-  auto addr = addr_or_cursor.index() == 0
-    ? std::get<0>(addr_or_cursor)
-    : std::get<1>(addr_or_cursor)->key;
-  LOG_PREFIX(BtreeLBAManager::update_refcount);
-  TRACET("laddr={}, delta={}", t, addr, delta);
-  auto fut = _update_mapping_iertr::make_ready_future<
-    update_mapping_ret_bare_t>();
-  auto update_func =
-    [delta](const lba_map_val_t &in) {
-      lba_map_val_t out = in;
-      ceph_assert((int)out.refcount + delta >= 0);
-      out.refcount += delta;
-      return out;
-    };
-  if (addr_or_cursor.index() == 0) {
-    fut = _update_mapping(t, addr, std::move(update_func), nullptr);
-  } else {
-    auto &cursor = std::get<1>(addr_or_cursor);
-    fut = _update_mapping(t, *cursor, std::move(update_func), nullptr);
-  }
-  return fut.si_then([delta, &t, addr, FNAME, this](auto res) {
-    DEBUGT("laddr={}, delta={} done -- {}",
-	   t, addr, delta,
-	   res.is_alive_mapping()
-	     ? res.get_cursor().val
-	     : res.get_removed_mapping().map_value);
-    return update_mapping_iertr::make_ready_future<
-      mapping_update_result_t>(get_mapping_update_result(res));
-  });
-}
-
 BtreeLBAManager::_update_mapping_ret
 BtreeLBAManager::_update_mapping(
   Transaction &t,
@@ -933,60 +896,6 @@ BtreeLBAManager::_update_mapping(
       });
     }
   });
-}
-
-BtreeLBAManager::_update_mapping_ret
-BtreeLBAManager::_update_mapping(
-  Transaction &t,
-  laddr_t addr,
-  update_func_t &&f,
-  LogicalChildNode* nextent)
-{
-  auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [f=std::move(f), c, addr, nextent](auto &btree) mutable {
-      return btree.lower_bound(
-	c, addr
-      ).si_then([&btree, f=std::move(f), c, addr, nextent](auto iter)
-		-> _update_mapping_ret {
-	if (iter.is_end() || iter.get_key() != addr) {
-	  LOG_PREFIX(BtreeLBAManager::_update_mapping);
-	  ERRORT("laddr={} doesn't exist", c.trans, addr);
-	  return crimson::ct_error::enoent::make();
-	}
-
-	auto ret = f(iter.get_val());
-	if (ret.refcount == 0) {
-	  assert(nextent == nullptr);
-	  return btree.remove(
-	    c,
-	    iter
-	  ).si_then([addr, ret, c](auto iter) {
-	    return update_mapping_ret_bare_t(addr, ret, iter.get_cursor(c));
-	  });
-	} else {
-	  return btree.update(
-	    c,
-	    iter,
-	    ret
-	  ).si_then([c, nextent](auto iter) {
-	    if (nextent) {
-	      // nextent is provided iff unlinked,
-              // also see TM::rewrite_logical_extent()
-	      assert(!nextent->has_parent_tracker());
-	      iter.get_leaf_node()->update_child_ptr(
-		iter.get_leaf_pos(), nextent);
-	    }
-	    assert(!nextent || 
-	           (nextent->has_parent_tracker() &&
-		    nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
-	    return update_mapping_ret_bare_t(iter.get_cursor(c));
-	  });
-	}
-      });
-    });
 }
 
 BtreeLBAManager::get_cursor_ret

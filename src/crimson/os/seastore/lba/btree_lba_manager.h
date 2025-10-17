@@ -181,15 +181,19 @@ public:
     Transaction &t,
     LBACursorRef cursor,
     int delta) final {
-    auto result = co_await update_refcount(t, cursor.get(), delta
+    co_return (co_await _update_mapping(
+      t,
+      *cursor,
+      [delta](lba_map_val_t ret) {
+	ceph_assert((int)ret.refcount + delta >= 0);
+	ret.refcount += delta;
+	return ret;
+      },
+      nullptr
     ).handle_error_interruptible(
       base_iertr::pass_further{},
-      /* ENOENT in particular should be impossible */
-      crimson::ct_error::assert_all{
-	"Invalid enoent in BtreeLBAManager::incref_extent"
-      }
-    );
-    co_return result.mapping.direct_cursor;
+      crimson::ct_error::assert_all{}
+    )).take_cursor();
   }
 
   remap_ret remap_mappings(
@@ -380,14 +384,6 @@ private:
     }
   }
 
-  using update_refcount_iertr = ref_iertr;
-  using update_refcount_ret = update_refcount_iertr::future<
-    mapping_update_result_t>;
-  update_refcount_ret update_refcount(
-    Transaction &t,
-    std::variant<laddr_t, LBACursor*> addr_or_cursor,
-    int delta);
-
   /**
    * _update_mapping
    *
@@ -399,11 +395,6 @@ private:
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
-  _update_mapping_ret _update_mapping(
-    Transaction &t,
-    laddr_t addr,
-    update_func_t &&f,
-    LogicalChildNode*);
   _update_mapping_ret _update_mapping(
     Transaction &t,
     LBACursor &cursor,
