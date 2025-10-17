@@ -17,7 +17,7 @@ overrides:
 tasks:
   # TODO: (jjm) I don't think `install` is necessary for this file. Remove?
   - install:
-  - cephadm.configure_samba_client_container:
+  - smb.configure_samba_client_container:
       role: host.b
   - cephadm:
   - cephadm.shell:
