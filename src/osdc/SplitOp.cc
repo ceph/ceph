@@ -3,7 +3,7 @@
 #include "osd/osd_types.h"
 
 #define dout_subsys ceph_subsys_objecter
-#define DBG_LVL 20
+#define DBG_LVL 0
 
 namespace {
 inline boost::system::error_code osdcode(int r) {
@@ -252,7 +252,10 @@ void SplitOp::complete() {
     // so as to reproduce as much as possible of the IO completion.
     std::vector out_ops(orig_op->ops.begin(), orig_op->ops.end());
 
-    bufferlist *read_bl = nullptr;
+    std::optional<bufferlist> read_bl;
+    if (orig_op->outbl) {
+      read_bl = bufferlist();
+    }
 
     for (unsigned ops_index=0; ops_index < out_ops.size(); ++ops_index) {
       auto &out_osd_op = out_ops[ops_index];
@@ -261,12 +264,16 @@ void SplitOp::complete() {
           auto [extents, bl] = assemble_buffer_sparse_read(ops_index);
           encode(std::move(extents).detach(), out_osd_op.outdata);
           encode_destructively(bl, out_osd_op.outdata);
-          read_bl = &out_osd_op.outdata;
+          if (read_bl) {
+            read_bl->append(out_osd_op.outdata);
+          }
           break;
         }
         case CEPH_OSD_OP_READ: {
           assemble_buffer_read(out_osd_op.outdata, ops_index);
-          read_bl = &out_osd_op.outdata;
+          if (read_bl) {
+            read_bl->append(out_osd_op.outdata);
+          }
           break;
         }
         case CEPH_OSD_OP_GETXATTRS:
