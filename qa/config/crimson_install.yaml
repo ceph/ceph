@@ -1,0 +1,16 @@
+tasks:
+- install:
+    exclude_packages:
+      deb:
+        - ceph-classic-osd
+        - ceph-classic-osd-dbg
+      rpm:
+        - ceph-classic-osd
+        - ceph-classic-osd-dbg
+    extra_packages:
+      deb:
+        - ceph-crimson-osd
+        - ceph-crimson-osd-dbg
+      rpm:
+        - ceph-crimson-osd
+        - ceph-crimson-osd-dbg
