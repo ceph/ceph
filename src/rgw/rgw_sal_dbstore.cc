@@ -546,18 +546,21 @@ namespace rgw::sal {
     return op_target.set_attrs(dpp, setattrs ? *setattrs : empty, delattrs);
   }
 
-  int DBObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
+  int DBObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
   {
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     DB::Object::Read read_op(&op_target);
 
-    return read_attrs(dpp, read_op, y, target_obj);
+    return read_attrs(dpp, read_op, y, nullptr);
   }
 
   int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
   {
     rgw_obj target = get_obj();
-    int r = get_obj_attrs(y, dpp, &target);
+    DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
+    DB::Object::Read read_op(&op_target);
+
+    int r = read_attrs(dpp, read_op, y, &target);
     if (r < 0) {
       return r;
     }

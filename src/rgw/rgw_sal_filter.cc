@@ -1086,10 +1086,9 @@ int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
-int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-				rgw_obj* target_obj)
+int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return next->get_obj_attrs(y, dpp, target_obj);
+  return next->get_obj_attrs(y, dpp);
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
