@@ -199,6 +199,23 @@
   recovery. In this Ceph version, operator-initiated scrubs and repair-scrubs
   are never blocked by a repair being performed.
 
+* Dashboard: NVMe/TCP Gateway group support
+* Dashboard: NVMe/TCP multiple namespaces support
+* Dashboard: Multi-cluster support
+* Dashboard: Management Gateway and oAuth2 integration with dashboard
+* Dashboard: RGW multi-site automation & sync Policies
+* Dashboard: RGW Tiering, Rate Limting and Account management
+* Dashboard: RGW bucket Lifecycles and ACLs
+* Dashboard: RGW Topics and Bucket Notification Management
+* Dashboard: RGW granular bucket replication
+* Dashboard: SMB monitoring and management
+* Monitoring: New monitoring Dashboards for Application, NVMe, CephFS, and SMB Overview
+* Dashboard: Introduces a command `ceph dashboard set-rgw-hostname <daemon> <hostname>`
+  to set custom dns names for each gateways. Once set dashboard will pick up that 
+  address for the selected gateway. And a config can be unset by
+  `ceph dashboard unset-rgw-hostname <daemon>`. 
+  With this dashboard no longer relies on `rgw_dns_name`.
+
 >=19.2.1
 
 * CephFS: Command `fs subvolume create` now allows tagging subvolumes through option
