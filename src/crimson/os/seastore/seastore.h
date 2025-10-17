@@ -18,6 +18,7 @@
 
 #include "os/Transaction.h"
 #include "crimson/common/throttle.h"
+#include "crimson/common/smp_helpers.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
@@ -93,7 +94,9 @@ public:
     Shard(
       std::string root,
       Device* device,
-      bool is_test);
+      bool is_test,
+      unsigned int store_shard_nums,
+      unsigned int store_index = 0);
     ~Shard() = default;
 
     seastar::future<struct stat> stat(
@@ -200,7 +203,7 @@ public:
 
     seastar::future<std::string> get_default_device_class();
 
-    store_statfs_t stat() const;
+    seastar::future<store_statfs_t> stat() const;
 
     uuid_d get_fsid() const;
 
@@ -216,6 +219,13 @@ public:
 
     cache_stats_t get_cache_stats(bool report_detail, double seconds) const;
 
+    unsigned int get_store_index() const {
+      return store_index;
+    }
+
+    bool get_status() const {
+      return store_active;
+    }
   private:
     struct internal_context_t {
       CollectionRef ch;
@@ -522,9 +532,11 @@ public:
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;
+    unsigned int store_index;
+    bool store_active = true;
 
     seastar::metrics::metric_group metrics;
-    void register_metrics();
+    void register_metrics(unsigned int store_index);
 
     mutable shard_stats_t shard_stats;
     mutable seastar::lowres_clock::time_point last_tp =
@@ -538,7 +550,7 @@ public:
     MDStoreRef mdstore);
   ~SeaStore();
 
-  seastar::future<> start() final;
+  seastar::future<unsigned int> start() final;
   seastar::future<> stop() final;
 
   Device::access_ertr::future<> _mount();
@@ -569,7 +581,7 @@ public:
 
   uuid_d get_fsid() const final {
     ceph_assert(seastar::this_shard_id() == primary_core);
-    return shard_stores.local().get_fsid();
+    return shard_stores.local().mshard_stores[0]->get_fsid();
   }
 
   seastar::future<> write_meta(const std::string& key, const std::string& value) final;
@@ -580,8 +592,24 @@ public:
 
   seastar::future<std::string> get_default_device_class() final;
 
-  FuturizedStore::Shard& get_sharded_store() final {
-    return shard_stores.local();
+  FuturizedStore::StoreShardRef get_sharded_store(unsigned int store_index = 0) final {
+    assert(!shard_stores.local().mshard_stores.empty());
+    assert(store_index < shard_stores.local().mshard_stores.size());
+    assert(shard_stores.local().mshard_stores[store_index]->get_status() == true);
+    return make_local_shared_foreign(
+      seastar::make_foreign(seastar::static_pointer_cast<FuturizedStore::Shard>(
+        shard_stores.local().mshard_stores[store_index])));
+  }
+  std::vector<FuturizedStore::StoreShardRef> get_sharded_stores() final {
+    std::vector<FuturizedStore::StoreShardRef> ret;
+    ret.reserve(shard_stores.local().mshard_stores.size());
+    for (auto& mshard_store : shard_stores.local().mshard_stores) {
+      if (mshard_store->get_status() == true) {
+        ret.emplace_back(make_local_shared_foreign(
+          seastar::make_foreign(seastar::static_pointer_cast<FuturizedStore::Shard>(mshard_store))));
+      }
+    }
+    return ret;
   }
 
   static col_obj_ranges_t
@@ -605,12 +633,38 @@ private:
 
   seastar::future<> set_secondaries();
 
+  seastar::future<> get_shard_nums();
+  seastar::future<> shard_stores_start(bool is_test);
+  seastar::future<> shard_stores_stop();
+
 private:
+class MultiShardStores {
+  public:
+    std::vector<seastar::shared_ptr<SeaStore::Shard>> mshard_stores;
+
+  public:
+    MultiShardStores(size_t count,
+                     const std::string& root,
+                     Device* dev,
+                     bool is_test,
+                     unsigned int store_shard_nums)
+    : mshard_stores() {
+      mshard_stores.reserve(count); // Reserve space for the shards
+      for (size_t store_index = 0; store_index < count; ++store_index) {
+        mshard_stores.emplace_back(seastar::make_shared<SeaStore::Shard>(
+          root, dev, is_test, store_shard_nums, store_index));
+      }
+    }
+    ~MultiShardStores() {
+      mshard_stores.clear();
+    }
+  };
   std::string root;
   MDStoreRef mdstore;
   DeviceRef device;
   std::vector<DeviceRef> secondaries;
-  seastar::sharded<SeaStore::Shard> shard_stores;
+  seastar::sharded<SeaStore::MultiShardStores> shard_stores;
+  unsigned int store_shard_nums = 0;
 
   mutable seastar::lowres_clock::time_point last_tp =
     seastar::lowres_clock::time_point::min();

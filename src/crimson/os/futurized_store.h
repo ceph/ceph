@@ -9,8 +9,11 @@
 #include <vector>
 
 #include <seastar/core/future.hh>
+#include <seastar/core/shared_ptr.hh>
+#include <seastar/core/sharded.hh>
 
 #include "os/Transaction.h"
+#include "crimson/common/local_shared_foreign_ptr.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/common/smp_helpers.h"
 #include "crimson/osd/exceptions.h"
@@ -35,6 +38,14 @@ public:
     // no copying
     explicit Shard(const Shard& o) = delete;
     const Shard& operator=(const Shard& o) = delete;
+
+    bool is_shard_store_active(unsigned int store_index, unsigned int store_shard_nums) {
+      if(seastar::this_shard_id() + seastar::smp::count * store_index >= store_shard_nums) {
+        // store_index is out of range {} - inactivating this store shard
+        return false;
+      }
+      return true;
+    }
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
     using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
@@ -205,7 +216,7 @@ public:
   explicit FuturizedStore(const FuturizedStore& o) = delete;
   const FuturizedStore& operator=(const FuturizedStore& o) = delete;
 
-  virtual seastar::future<> start() = 0;
+  virtual seastar::future<unsigned int> start() = 0;
 
   virtual seastar::future<> stop() = 0;
 
@@ -227,13 +238,21 @@ public:
 
   virtual seastar::future<> write_meta(const std::string& key,
 				       const std::string& value) = 0;
+
+  using StoreShardLRef = seastar::shared_ptr<FuturizedStore::Shard>;
+  using StoreShardFRef = seastar::foreign_ptr<StoreShardLRef>;
+  using StoreShardRef = ::crimson::local_shared_foreign_ptr<StoreShardLRef>;
+  using StoreShardFFRef = seastar::foreign_ptr<StoreShardRef>;
+  using StoreShardXcoreRef = ::crimson::local_shared_foreign_ptr<StoreShardRef>;
+
   // called on the shard and get this FuturizedStore::shard;
-  virtual Shard& get_sharded_store() = 0;
+  virtual StoreShardRef get_sharded_store(unsigned int store_index = 0) = 0;
+  virtual std::vector<StoreShardRef> get_sharded_stores() = 0;
 
   virtual seastar::future<std::tuple<int, std::string>> read_meta(
     const std::string& key) = 0;
 
-  using coll_core_t = std::pair<coll_t, core_id_t>;
+  using coll_core_t = std::pair<coll_t, std::pair<core_id_t, unsigned int>>;
   virtual seastar::future<std::vector<coll_core_t>> list_collections() = 0;
 
   virtual seastar::future<std::string> get_default_device_class() = 0;

@@ -57,12 +57,11 @@ struct block_sm_superblock_t {
   }
 
   void validate() const {
-    ceph_assert(shard_num == seastar::smp::count);
     ceph_assert(block_size > 0);
     ceph_assert(segment_size > 0 &&
                 segment_size % block_size == 0);
     ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
-    for (unsigned int i = 0; i < seastar::smp::count; i ++) {
+    for (unsigned int i = 0; i < shard_num; i ++) {
       ceph_assert(shard_infos[i].size > segment_size &&
                   shard_infos[i].size % block_size == 0);
       ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
