@@ -5,8 +5,13 @@
 #include <random>
 #include <string>
 
+#include "common/debug.h"
+#include "common/dout.h"
 #include "include/ceph_assert.h"
 #include "include/random.h"
+
+#define dout_subsys ceph_subsys_rados
+#define dout_context g_ceph_context
 
 /* Overview
  *
@@ -106,10 +111,15 @@ class ProgramOptionSelector : public ProgramOptionReader<option_type> {
     } else if (first_value.has_value()) {
       return *std::exchange(first_value, std::nullopt);
     } else {
-      std::uniform_int_distribution<long long> dist_selections(0, num_selections - 1);
-      return selections_array[dist_selections(rng)];
+      uint64_t range = static_cast<uint64_t>(num_selections);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      dout(0) << "S4 rand_value: " << rand_value << " range: " 
+            << range << " index: " << index  << " addr: " << &rng << dendl;
+      return selections_array[index];
     }
   }
+
 
  protected:
   std::mt19937_64& rng;
@@ -123,7 +133,7 @@ template <typename option_type,
                             num_selections>& selections_array,
           int num_selections_stable,
           const std::array< option_type,
-                            num_selections_stable>& elections_array_stable>
+                            num_selections_stable>& selections_array_stable>
 class StableOptionSelector : public ProgramOptionReader<option_type> {
 public:
   StableOptionSelector(std::mt19937_64& rng,
@@ -136,7 +146,7 @@ public:
     if (select_first) {
       if (stable) {
         ceph_assert(selections_array.size() > 0);
-        first_value = elections_array_stable[0];
+        first_value = selections_array_stable[0];
       } else {
         ceph_assert(selections_array.size() > 0);
         first_value = selections_array[0];
@@ -152,11 +162,19 @@ public:
     } else if (first_value.has_value()) {
       return *std::exchange(first_value, std::nullopt);
     } else if (stable) {
-      std::uniform_int_distribution<long long> dist_selections_stable(0, num_selections_stable - 1);
-      return elections_array_stable[dist_selections_stable(rng)];
+      uint64_t range = static_cast<uint64_t>(num_selections_stable);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      dout(0) << "S2 rand_value: " << rand_value << " range: " 
+            << range << " index: " << index << " addr: " << &rng << dendl;
+      return selections_array_stable[index];
     } else {
-      std::uniform_int_distribution<long long> dist_selections(0, num_selections - 1);
-      return selections_array[dist_selections(rng)];
+      uint64_t range = static_cast<uint64_t>(num_selections);
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      dout(0) << "S6 rand_value: " << rand_value << " range: " 
+            << range << " index: " << index << " addr: " << &rng << dendl;
+      return selections_array[index];
     }
   }
 
@@ -200,9 +218,14 @@ class ProgramOptionGeneratedSelector
 
   virtual const std::optional<option_type> selectRandom() {
     std::vector<option_type> selection = generate_selections();
-    if (selection.size() > 0) {
-      std::uniform_int_distribution<long long> dist_selection(0, selection.size() - 1);
-      return selection[dist_selection(rng)];
+
+    if (!selection.empty()) {
+      uint64_t range = static_cast<uint64_t>(selection.size());
+      uint64_t rand_value = rng();
+      size_t index = static_cast<size_t>(rand_value % range);
+      dout(0) << "S3 rand_value: " << rand_value << " range: " 
+            << range << " index: " << index  << " addr: " << &rng << dendl;
+      return selection[index];
     } else {
       return std::nullopt;
     }
