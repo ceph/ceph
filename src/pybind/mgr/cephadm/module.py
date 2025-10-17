@@ -2398,7 +2398,7 @@ Then run the following:
     def pause_host(self, hostname: str) -> str:
         """
         Pause orchestrator operations on a host.
-        
+
         This prevents the orchestrator from scheduling new daemons on the host
         and marks it as unreachable for scheduling purposes, but does not stop
         existing daemons like maintenance mode does.
@@ -2428,7 +2428,7 @@ Then run the following:
     def resume_host(self, hostname: str) -> str:
         """
         Resume orchestrator operations on a host.
-        
+
         This allows the orchestrator to schedule daemons on the host again.
         """
         tgt_host = self.inventory._inventory[hostname]

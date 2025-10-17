@@ -61,7 +61,8 @@ class OSDService(CephService):
                 drive_group.service_id, host
             ))
             start_ts = datetime_now()
-            env_vars: List[str] = [f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
+            env_vars: List[str] = [
+                f"CEPH_VOLUME_OSDSPEC_AFFINITY={drive_group.service_id}"]
             ret_msg = await self.create_single_host(
                 drive_group, host, cmds,
                 replace_osd_ids=osd_id_claims_for_host, env_vars=env_vars
@@ -134,7 +135,8 @@ class OSDService(CephService):
                     logger.debug(f'osd id {osd_id} daemon already exists')
                     continue
                 if osd_id not in osd_uuid_map:
-                    logger.debug('osd id {} does not exist in cluster'.format(osd_id))
+                    logger.debug(
+                        'osd id {} does not exist in cluster'.format(osd_id))
                     continue
                 if osd_uuid_map.get(osd_id) != osd['tags']['ceph.osd_fsid']:
                     logger.debug('mismatched osd uuid (cluster has %s, osd '
@@ -151,7 +153,8 @@ class OSDService(CephService):
                     daemon_type='osd',
                     network='',  # required arg but only really needed for mons
                 )
-                daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+                daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                    daemon_spec)
                 await CephadmServe(self.mgr)._create_daemon(
                     daemon_spec,
                     osd_uuid_map=osd_uuid_map)
@@ -176,7 +179,8 @@ class OSDService(CephService):
                 logger.debug(f'osd id {osd_id} daemon already exists')
                 continue
             if osd_id not in osd_uuid_map:
-                logger.debug('osd id {} does not exist in cluster'.format(osd_id))
+                logger.debug(
+                    'osd id {} does not exist in cluster'.format(osd_id))
                 continue
             if osd_uuid_map.get(osd_id) != osd_uuid:
                 logger.debug('mismatched osd uuid (cluster has %s, osd '
@@ -193,7 +197,8 @@ class OSDService(CephService):
                 daemon_type='osd',
                 network='',  # required arg but only really needed for mons
             )
-            daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+            daemon_spec.final_config, daemon_spec.deps = self.generate_config(
+                daemon_spec)
             await CephadmServe(self.mgr)._create_daemon(
                 daemon_spec,
                 osd_uuid_map=osd_uuid_map)
@@ -219,17 +224,21 @@ class OSDService(CephService):
             for _host, _inventory in inventory_dict.items():
                 if _host == hostname:
                     return _inventory
-            raise OrchestratorError("No inventory found for host: {}".format(hostname))
+            raise OrchestratorError(
+                "No inventory found for host: {}".format(hostname))
 
         # 3) iterate over matching_host and call DriveSelection
         logger.debug(f"Checking matching hosts -> {matching_hosts}")
         for host in matching_hosts:
-            inventory_for_host = _find_inv_for_host(host, self.mgr.cache.devices)
+            inventory_for_host = _find_inv_for_host(
+                host, self.mgr.cache.devices)
             logger.debug(f"Found inventory for host {inventory_for_host}")
 
             # List of Daemons on that host
-            dd_for_spec = self.mgr.cache.get_daemons_by_service(drive_group.service_name())
-            dd_for_spec_and_host = [dd for dd in dd_for_spec if dd.hostname == host]
+            dd_for_spec = self.mgr.cache.get_daemons_by_service(
+                drive_group.service_name())
+            dd_for_spec_and_host = [
+                dd for dd in dd_for_spec if dd.hostname == host]
 
             drive_selection = DriveSelection(drive_group, inventory_for_host,
                                              existing_daemons=len(dd_for_spec_and_host))
@@ -256,7 +265,8 @@ class OSDService(CephService):
     def driveselection_to_ceph_volume(drive_selection: DriveSelection,
                                       osd_id_claims: Optional[List[str]] = None,
                                       preview: bool = False) -> List[str]:
-        logger.debug(f"Translating DriveGroup <{drive_selection.spec}> to ceph-volume command")
+        logger.debug(
+            f"Translating DriveGroup <{drive_selection.spec}> to ceph-volume command")
         cmds: List[str] = translate.to_ceph_volume(drive_selection,
                                                    osd_id_claims, preview=preview).run()
         logger.debug(f"Resulting ceph-volume cmds: {cmds}")
@@ -315,12 +325,15 @@ class OSDService(CephService):
                 # get preview data from ceph-volume
                 for cmd in cmds:
                     with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
-                        out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
+                        out, err, code = self.mgr.wait_async(
+                            self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
-                            concat_out: Dict[str, Any] = json.loads(' '.join(out))
+                            concat_out: Dict[str, Any] = json.loads(
+                                ' '.join(out))
                         except ValueError:
-                            logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
+                            logger.exception(
+                                'Cannot decode JSON: \'%s\'' % ' '.join(out))
                             concat_out = {}
                         notes = []
                         if (
@@ -359,7 +372,8 @@ class OSDService(CephService):
                      if spec.service_type == 'osd']
         for spec in specs:
             if host in spec.placement.filter_matching_hostspecs(self.mgr.cache.get_schedulable_hosts()):
-                self.mgr.log.debug(f"Found OSDSpecs for host: <{host}> -> <{spec}>")
+                self.mgr.log.debug(
+                    f"Found OSDSpecs for host: <{host}> -> <{spec}>")
                 matching_specs.append(spec)
         return matching_specs
 
@@ -400,7 +414,8 @@ class OSDService(CephService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         config, parent_deps = super().generate_config(daemon_spec)
         if daemon_spec.service_name in self.mgr.spec_store:
-            svc_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+            svc_spec = cast(
+                DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
 
             if hasattr(svc_spec, 'objectstore') and svc_spec.objectstore:
                 config['objectstore'] = svc_spec.objectstore
@@ -437,7 +452,8 @@ class OsdIdClaims(object):
         for node in nodes:
             if node.get('type') == 'host':
                 self.osd_host_map.update(
-                    {node.get('name'): [str(_id) for _id in node.get('children', list())]}
+                    {node.get('name'): [str(_id)
+                                        for _id in node.get('children', list())]}
                 )
         if self.osd_host_map:
             self.mgr.log.info(f"Found osd claims -> {self.osd_host_map}")
@@ -527,7 +543,8 @@ class RemoveUtil(object):
             'ids': [str(osd.osd_id) for osd in osds]
         })
         if ret != 0:
-            self.mgr.log.error(f"Could not set {flag} flag for {osds}. <{err}>")
+            self.mgr.log.error(
+                f"Could not set {flag} flag for {osds}. <{err}>")
             return False
         self.mgr.log.info(f"{','.join([str(o) for o in osds])} now {flag}")
         return True
@@ -543,7 +560,8 @@ class RemoveUtil(object):
         j = json.loads(out)
         for n in j.get("nodes", []):
             if n.get("name") == f"osd.{osd.osd_id}":
-                self.mgr.log.info(f"{osd} crush weight is {n.get('crush_weight')}")
+                self.mgr.log.info(
+                    f"{osd} crush weight is {n.get('crush_weight')}")
                 return n.get("crush_weight")
         return None
 
@@ -555,7 +573,8 @@ class RemoveUtil(object):
             'weight': weight,
         })
         if ret != 0:
-            self.mgr.log.error(f"Could not reweight {osd} to {weight}. <{err}>")
+            self.mgr.log.error(
+                f"Could not reweight {osd} to {weight}. <{err}>")
             return False
         self.mgr.log.info(f"{osd} weight is now {weight}")
         return True
@@ -579,9 +598,11 @@ class RemoveUtil(object):
                     error_ok=True))
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             if code:
-                raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
+                raise OrchestratorError('Zap failed: %s' %
+                                        '\n'.join(out + err))
             return '\n'.join(out + err)
-        raise OrchestratorError(f"Failed to zap OSD {osd.osd_id} because host was unknown")
+        raise OrchestratorError(
+            f"Failed to zap OSD {osd.osd_id} because host was unknown")
 
     def safe_to_destroy(self, osd_ids: List[int]) -> bool:
         """ Queries the safe-to-destroy flag for OSDs """
@@ -702,7 +723,8 @@ class OSD:
 
     def start_draining(self) -> bool:
         if self.stopped:
-            logger.debug(f"Won't start draining {self}. OSD draining is stopped.")
+            logger.debug(
+                f"Won't start draining {self}. OSD draining is stopped.")
             return False
         if self.any_replace_params:
             self.rm_util.set_osd_flag([self], 'out')
@@ -813,7 +835,8 @@ class OSD:
             return None
         for date_field in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if inp.get(date_field):
-                inp.update({date_field: str_to_datetime(inp.get(date_field, ''))})
+                inp.update(
+                    {date_field: str_to_datetime(inp.get(date_field, ''))})
         inp.update({'remove_util': rm_util})
         if 'nodename' in inp:
             hostname = inp.pop('nodename')
@@ -907,11 +930,13 @@ class OSDRemovalQueue(object):
             assert osd.hostname is not None
 
             if self.mgr.cache.has_daemon(f'osd.{osd.osd_id}'):
-                CephadmServe(self.mgr)._remove_daemon(f'osd.{osd.osd_id}', osd.hostname)
+                CephadmServe(self.mgr)._remove_daemon(
+                    f'osd.{osd.osd_id}', osd.hostname)
                 logger.info(f"Successfully removed {osd} on {osd.hostname}")
                 result = True
             else:
-                logger.info(f"Daemon {osd} on {osd.hostname} was already removed")
+                logger.info(
+                    f"Daemon {osd} on {osd.hostname} was already removed")
 
             any_replace_params: bool = any([osd.replace,
                                             osd.replace_block,
@@ -929,14 +954,16 @@ class OSDRemovalQueue(object):
             else:
                 # purge from osdmap
                 if not osd.purge():
-                    raise orchestrator.OrchestratorError(f"Could not purge {osd}")
+                    raise orchestrator.OrchestratorError(
+                        f"Could not purge {osd}")
                 logger.info(f"Successfully purged {osd} on {osd.hostname}")
 
             if osd.zap:
                 # throws an exception if the zap fails
                 logger.info(f"Zapping devices for {osd} on {osd.hostname}")
                 osd.do_zap()
-                logger.info(f"Successfully zapped devices for {osd} on {osd.hostname}")
+                logger.info(
+                    f"Successfully zapped devices for {osd} on {osd.hostname}")
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             logger.debug(f"Removing {osd} from the queue.")
 
@@ -963,13 +990,14 @@ class OSDRemovalQueue(object):
         draining_limit = max(1, self.mgr.max_osd_draining_count)
         num_already_draining = len(self.draining_osds())
         num_to_start_draining = max(0, draining_limit - num_already_draining)
-        stoppable_osds = self.rm_util.find_osd_stop_threshold(self.idling_osds())
+        stoppable_osds = self.rm_util.find_osd_stop_threshold(
+            self.idling_osds())
         if stoppable_osds is None:
             return []
         # Skip OSDs on paused hosts
         stoppable_osds = [osd for osd in stoppable_osds
-                          if not (osd.hostname and
-                                  self.mgr.inventory._inventory[osd.hostname].get("status", "").lower() == "paused")]
+                          if not (osd.hostname
+                                  and self.mgr.inventory._inventory[osd.hostname].get("status", "").lower() == "paused")]
         return stoppable_osds[:num_to_start_draining]
 
     def _save_to_store(self) -> None:
