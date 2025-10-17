@@ -179,6 +179,11 @@ class GatewayStub(object):
                 request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.SerializeToString,
                 response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.FromString,
                 )
+        self.get_gateway_stats = channel.unary_unary(
+                '/Gateway/get_gateway_stats',
+                request_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.SerializeToString,
+                response_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.FromString,
+                )
 
 
 class GatewayServicer(object):
@@ -415,6 +420,13 @@ class GatewayServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def get_gateway_stats(self, request, context):
+        """Gets gateway's stats
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GatewayServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -582,6 +594,11 @@ def add_GatewayServicer_to_server(servicer, server):
                     servicer.show_gateway_listeners_info,
                     request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.FromString,
                     response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.SerializeToString,
+            ),
+            'get_gateway_stats': grpc.unary_unary_rpc_method_handler(
+                    servicer.get_gateway_stats,
+                    request_deserializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.FromString,
+                    response_serializer=dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -1151,5 +1168,22 @@ class Gateway(object):
         return grpc.experimental.unary_unary(request, target, '/Gateway/show_gateway_listeners_info',
             dashboard_dot_services_dot_proto_dot_gateway__pb2.show_gateway_listeners_info_req.SerializeToString,
             dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_listeners_info.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def get_gateway_stats(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/Gateway/get_gateway_stats',
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.get_gateway_stats_req.SerializeToString,
+            dashboard_dot_services_dot_proto_dot_gateway__pb2.gateway_stats_info.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
