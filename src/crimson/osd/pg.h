@@ -141,6 +141,10 @@ public:
     return peering_state.get_info();
   }
 
+  const auto& get_pgpool() const {
+    return peering_state.get_pgpool();
+  }
+
   // DoutPrefixProvider
   std::ostream& gen_prefix(std::ostream& out) const final {
     return out << *this;
@@ -361,6 +365,13 @@ public:
     SUBDEBUGDPP(osd, "", *this);
     shard_services.remove_want_pg_temp(orderer, pgid.pgid);
   }
+  void send_pg_migrated_pool() final {
+    LOG_PREFIX(PG::send_pg_migrated_pool);
+    SUBDEBUGDPP(osd, "", *this);
+    shard_services.send_pg_migrated_pool(orderer,
+                                         get_pgpool().info.migration_target,
+                                         pgid.pgid);
+  }
   void check_recovery_sources(const OSDMapRef& newmap) final {
     LOG_PREFIX(PG::check_recovery_sources);
     recovery_backend->for_each_recovery_waiter(
@@ -569,9 +580,6 @@ public:
     return get_info().history.same_interval_since;
   }
 
-  const auto& get_pgpool() const {
-    return peering_state.get_pgpool();
-  }
   pg_shard_t get_primary() const {
     return peering_state.get_primary();
   }

@@ -5970,8 +5970,9 @@ PeeringState::WaitRemotePoolMigrationReserved::WaitRemotePoolMigrationReserved(m
   ps->state_set(PG_STATE_MIGRATION_WAIT);
   pl->publish_stats_to_osd();
 
-  // FIXME: Stub - release local reservations
+  // FIXME: Stub - release local reservations and send migration done message
   pl->cancel_local_background_io_reservation();
+  pl->send_pg_migrated_pool();
   post_event(AllPoolMigrationsReserved());
 }
 

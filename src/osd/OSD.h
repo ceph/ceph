@@ -480,6 +480,9 @@ public:
   void clear_sent_ready_to_merge();
   void prune_sent_ready_to_merge(const OSDMapRef& osdmap);
 
+  // -- pg migrated pool --
+  void send_pg_migrated_pool(int64_t migration_target, pg_t pgid);
+
   // -- pg_temp --
 private:
   ceph::mutex pg_temp_lock = ceph::make_mutex("OSDService::pg_temp_lock");

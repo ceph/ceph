@@ -1331,6 +1331,10 @@ void PG::clear_want_pg_temp() {
   osd->remove_want_pg_temp(get_pgid().pgid);
 }
 
+void PG::send_pg_migrated_pool() {
+  osd->send_pg_migrated_pool(pool.info.migration_target, get_pgid().pgid);
+}
+
 void PG::on_role_change() {
   requeue_ops(waiting_for_peered);
   plpg_on_role_change();

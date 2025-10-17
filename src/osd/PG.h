@@ -510,6 +510,8 @@ public:
   void queue_want_pg_temp(const std::vector<int> &wanted) override;
   void clear_want_pg_temp() override;
 
+  void send_pg_migrated_pool() override;
+
   void on_new_interval() override;
 
   void on_role_change() override;
