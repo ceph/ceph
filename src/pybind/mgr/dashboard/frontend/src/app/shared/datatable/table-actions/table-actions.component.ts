@@ -20,8 +20,9 @@ export class TableActionsComponent implements OnChanges, OnInit {
   @Input()
   tableActions: CdTableAction[];
   @Input()
-  btnColor = 'accent';
-
+  dropDownOnlyBtnColor = 'primary';
+  @Input()
+  dropDownOnlyOffset = { x: 105, y: 0 };
   // Use this if you just want to display a drop down button,
   // labeled with the given text, with all actions in it.
   // This disables the main action button.

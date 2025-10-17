@@ -32,3 +32,13 @@ button.dropdown-item:hover {
   justify-content: center;
   width: 3rem;
 }
+
+// https://github.com/carbon-design-system/carbon-components-angular/blob/v5.56.2/src/dialog/overflow-menu/overflow-menu.component.ts#52
+// Its always applying .cds--btn--icon-only which is making position static and svg color fill to var(--cds-icon-primary, #f8f9fa)
+.override-position-static.cds--btn__icon {
+  position: absolute;
+}
+
+.cds--overflow-menu-options__option {
+  min-width: fit-content;
+}

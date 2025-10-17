@@ -68,8 +68,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];
   migrateTableAction: CdTableAction[];
-  importAction: CdTableAction[];
-  exportAction: CdTableAction[];
   multisiteReplicationActions: CdTableAction[];
   loadingIndicator = true;
 
@@ -236,20 +234,37 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         permission: 'create',
         icon: Icons.add,
         name: this.actionLabels.CREATE + ' Realm',
-        click: () => this.openModal('realm')
+        click: () => this.openModal('realm'),
+        visible: () => !this.showMigrateAndReplicationActions
       },
       {
         permission: 'create',
         icon: Icons.add,
         name: this.actionLabels.CREATE + ' Zone Group',
         click: () => this.openModal('zonegroup'),
-        disable: () => this.getDisable()
+        disable: () => this.getDisable(),
+        visible: () => !this.showMigrateAndReplicationActions
       },
       {
         permission: 'create',
         icon: Icons.add,
         name: this.actionLabels.CREATE + ' Zone',
-        click: () => this.openModal('zone')
+        click: () => this.openModal('zone'),
+        visible: () => !this.showMigrateAndReplicationActions
+      },
+      {
+        permission: 'create',
+        icon: Icons.download,
+        name: this.actionLabels.IMPORT,
+        click: () => this.openImportModal(),
+        disable: () => this.getDisableImport()
+      },
+      {
+        permission: 'create',
+        icon: Icons.upload,
+        name: this.actionLabels.EXPORT,
+        click: () => this.openExportModal(),
+        disable: () => this.getDisableExport()
       }
     ];
     this.migrateTableAction = [
@@ -258,24 +273,6 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         icon: Icons.wrench,
         name: this.actionLabels.MIGRATE,
         click: () => this.openMigrateModal()
-      }
-    ];
-    this.importAction = [
-      {
-        permission: 'create',
-        icon: Icons.download,
-        name: this.actionLabels.IMPORT,
-        click: () => this.openImportModal(),
-        disable: () => this.getDisableImport()
-      }
-    ];
-    this.exportAction = [
-      {
-        permission: 'create',
-        icon: Icons.upload,
-        name: this.actionLabels.EXPORT,
-        click: () => this.openExportModal(),
-        disable: () => this.getDisableExport()
       }
     ];
     this.multisiteReplicationActions = [
