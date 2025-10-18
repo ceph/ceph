@@ -284,8 +284,9 @@ void MDSRank::quiesce_cluster_update() {
         }
         auto addrs = mdsmap->get_info_gid(membership.leader).addrs;
 
-        auto ack_msg = make_message<MMDSQuiesceDbAck>(QuiesceDbPeerAck{me, std::move(ack)});
         dout(10) << "sending ack " << ack << " to the leader " << membership.leader << dendl;
+        auto ack_msg = make_message<MMDSQuiesceDbAck>(
+            QuiesceDbPeerAck{me, std::move(ack)});
         return send_message_mds(ack_msg, addrs);
       }
     };
@@ -297,8 +298,9 @@ void MDSRank::quiesce_cluster_update() {
         return -ENOENT;
       }
       auto addrs = mdsmap->get_info_gid(to).addrs;
-      auto listing_msg = make_message<MMDSQuiesceDbListing>(QuiesceDbPeerListing{me, std::move(db)});
       dout(10) << "sending listing " << db << " to the peer " << to << dendl;
+      auto listing_msg = make_message<MMDSQuiesceDbListing>(
+          QuiesceDbPeerListing{me, std::move(db)});
       return send_message_mds(listing_msg, addrs);
     };
   }
@@ -380,7 +382,7 @@ bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
           dout(10) << "got " << peer_listing << dendl;
           int result = quiesce_db_manager->submit_peer_listing(std::move(peer_listing));
           if (result != 0) {
-            dout(3) << "error (" << result << ") submitting " << peer_listing << dendl;
+            dout(3) << "submit error (" << result << ")" << dendl;
           }
         } else {
           dout(5) << "no db manager to process " << peer_listing << dendl;
@@ -397,7 +399,7 @@ bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
           dout(10) << "got " << peer_ack << dendl;
           int result = quiesce_db_manager->submit_peer_ack(std::move(peer_ack));
           if (result != 0) {
-            dout(3) << "error (" << result << ") submitting and ack from " << peer_ack.origin << dendl;
+            dout(3) << "error (" << result << ") submitting and ack" << dendl;
           }
         } else {
           dout(5) << "no db manager to process " << peer_ack << dendl;
