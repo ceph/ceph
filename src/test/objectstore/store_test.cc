@@ -6141,10 +6141,6 @@ TEST_P(StoreTest, OMapTest) {
     ASSERT_EQ(cur_attrs.size(), size_t(1));
     ASSERT_TRUE(bl_eq(bl1, bl3));
  
-    set<string> keys;
-    r = store->omap_get_keys(ch, hoid, &keys);
-    ASSERT_EQ(r, 0);
-    ASSERT_EQ(keys.size(), size_t(1));
   }
 
   // test omap_clear, omap_rmkey_range

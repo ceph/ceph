@@ -3385,13 +3385,6 @@ public:
     bool allow_eio = false ///< [in] don't assert on eio
     ) override;
 
-  /// Get keys defined on oid
-  int omap_get_keys(
-    CollectionHandle &c,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    std::set<std::string> *keys      ///< [out] Keys defined on oid
-    ) override;
-
   /// Get key values
   int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
