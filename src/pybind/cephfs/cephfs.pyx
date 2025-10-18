@@ -32,10 +32,12 @@ log = getLogger(__name__)
 
 
 AT_SYMLINK_NOFOLLOW = 0x0100
+AT_REMOVEDIR =  0x200
 AT_STATX_SYNC_TYPE  = 0x6000
 AT_STATX_SYNC_AS_STAT = 0x0000
 AT_STATX_FORCE_SYNC = 0x2000
 AT_STATX_DONT_SYNC = 0x4000
+AT_FDCWD = -100
 cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
 CEPH_STATX_BASIC_STATS = 0x7ff
 cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
@@ -2854,6 +2856,20 @@ cdef class LibCephFS(object):
         finally:
            free(buf)
 
+    def unlinkat(self, dirfd, relpath, flags):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            char* relpath_ = relpath
+            int flags_ = flags
+
+        with nogil:
+            ret = ceph_unlinkat(self.cluster, dirfd_, relpath_, flags_)
+        if ret < 0:
+            raise make_ex(ret, f"error in unlinkat: {relpath.decode('utf-8')}")
+
     def rmtree(self, trash_path, should_cancel, suppress_errors=False):
         '''
         Delete entire file hierarchy present under trash_path when trash_path is
@@ -2867,8 +2883,15 @@ cdef class LibCephFS(object):
         # st_b = stat buffer
         st_b = self.stat(trash_path, AT_SYMLINK_NOFOLLOW)
         if stat.S_ISDIR(st_b.st_mode):
-            NonRecursiveRmtree(self, trash_path, should_cancel,
-                               suppress_errors).rmtree()
+            # since rmtree() below will also change CWD, save and restore CWD
+            # so that user is not left confused at the end of this call.
+            path = self.getcwd()
+            try:
+                trash_path = trash_path.encode('utf-8')
+                NonRecursiveRmtree(self, trash_path, should_cancel,
+                                   suppress_errors).rmtree()
+            finally:
+                self.chdir(path)
         else:
             try:
                 self.unlink(trash_path)
@@ -2896,6 +2919,18 @@ class NonRecursiveRmtree:
         self.should_cancel = should_cancel
         self.suppress_errors = suppress_errors
 
+        try:
+            # st_root_fd = subtree root fd. fd = file descriptor.
+            self.st_root_fd = self.fs.open(self.trash_path, os.O_RDONLY | os.O_DIRECTORY,
+                                           0o755)
+        except Exception as e:
+            if self.suppress_errors:
+                log.error('In attempt to get the file descriptor of '
+                          f'"{self.trash_path}", exception "{e}" was raised.')
+                return
+            else:
+                raise
+
         # Stack needed for traversing the file heirarchy under trash_path in
         # depth-first, non-recursive fashion. Each stack member is an instance
         # of class RmtreeDir.
@@ -2915,9 +2950,9 @@ class NonRecursiveRmtree:
         # ensure we are dealing with the dir at the top of the stack.
         assert self.curr_dir is self.stack[-1]
 
-        de_path = os.path.join(self.curr_dir.path, de_name)
         try:
-            self.stack.append(RmtreeDir(self.fs, de_path))
+            rel_path = os.path.join(self.curr_dir.rel_path, de_name)
+            self.stack.append(RmtreeDir(self, rel_path))
             return True
         except Error as e:
             if self.suppress_errors:
@@ -2950,7 +2985,7 @@ class NonRecursiveRmtree:
         This is where depth-first, non-recursive traversal is done.
         '''
         try:
-            self.stack.append(RmtreeDir(self.fs, self.trash_path))
+            self.stack.append(RmtreeDir(self, b''))
         except Exception as e:
             log.error('opening root dir of the file tree failed with exception '
                       f'"{e}", exiting.')
@@ -2972,15 +3007,12 @@ class NonRecursiveRmtree:
                     raise OpCanceled('rmtree')
 
                 if de.is_dir():
-                    try:
-                        self.curr_dir.try_rmdir(de.d_name, self.suppress_errors)
-                    except ObjectNotEmpty:
-                        if self.add_dir_to_stack(de.d_name):
-                            # since adding new dir to stack was successful, stop
-                            # traversing the current dir and start traversing
-                            # the new dir that has been freshly added to the
-                            # stack.
-                            break
+                    if self.add_dir_to_stack(de.d_name):
+                        # since adding new dir to stack was successful, stop
+                        # traversing the current dir and start traversing
+                        # the new dir that has been freshly added to the
+                        # stack.
+                        break
                 else:
                     self.curr_dir.try_unlink(de.d_name, self.suppress_errors)
 
@@ -2992,7 +3024,7 @@ class NonRecursiveRmtree:
 
                 if self.curr_dir.is_empty:
                     try:
-                        self.fs.rmdir(self.curr_dir.path)
+                        self.curr_dir.try_rmdir(self.suppress_errors)
                     except ObjectNotEmpty:
                         log.info(f'removing "{self.curr_dir.name}" failed with '
                                   'with ObjectNotEmpty even though dir empty '
@@ -3005,6 +3037,8 @@ class NonRecursiveRmtree:
 
 class RmtreeDir:
     '''
+    TODO: method has changed, this comment needs an update
+
     Holds the path, name and handle of the directory being traversed for
     rmtree() along with some helper code.
 
@@ -3013,16 +3047,20 @@ class RmtreeDir:
     helper for class NonRecursiveRmtree.
     '''
 
-    def __init__(self, fs, path):
-        self.fs = fs
+    def __init__(self, rmtree_run_obj, rel_path):
+        self.fs = rmtree_run_obj.fs
+        self.st_root_fd = rmtree_run_obj.st_root_fd
+        self.trash_path = rmtree_run_obj.trash_path
+        self.rel_path = rel_path
+        self.abs_path = os.path.join(self.trash_path, self.rel_path)
 
-        self.path = path
-        if isinstance(self.path, str):
-            self.path = self.path.encode('utf-8')
-        self.name = os.path.basename(self.path)
+        self.name = os.path.basename(self.rel_path)
+        if isinstance(self.name, str):
+            self.name = self.name.encode('utf-8')
+
         # XXX: exception (if) raised here should be handled by caller based on
         # the context.
-        self.handle = self.fs.opendir(self.path)
+        self.handle = self.fs.opendir(self.abs_path)
 
         # Is this directory empty? It will be set by self.read_dir().
         self.is_empty = None
@@ -3043,7 +3081,7 @@ class RmtreeDir:
         self.de_has_been_removed = False
 
     def __str__(self):
-        return self.path
+        return self.name
 
     def add_to_de_ignore_list(self, de_name):
         self.de_ignore_list.append(de_name)
@@ -3094,8 +3132,10 @@ class RmtreeDir:
             log.error(f'Exception occured: "{e}"')
             self.set_readdir_error()
 
-    def try_rmdir(self, de_name, suppress_errors=False):
+    def try_rmdir(self, suppress_errors=False):
         '''
+        TODO: method has changed, this comment needs an update
+
         Remove given directory. If that fails because its not empty, raise the
         exception, the caller should handle it.
 
@@ -3103,17 +3143,16 @@ class RmtreeDir:
         and tell caller whether to continue or break loop based through the
         return value.
         '''
-        de_path = os.path.join(self.path, de_name)
         try:
-            self.fs.rmdir(de_path)
+            self.fs.rmdir(self.abs_path)
             self.de_has_been_removed = True
         except ObjectNotEmpty:
-            # XXX: push this dir to stack, done in the caller method
+            # done in the caller method
             raise
         except Error as e:
             log.error('Following exception occured while calling rmdir() for '
                       f'dir "{self.name}": "{e}"')
-            self.add_to_de_ignore_list(de_name)
+            self.add_to_de_ignore_list(self.name)
 
             if not suppress_errors:
                 raise
@@ -3122,9 +3161,9 @@ class RmtreeDir:
         '''
         Unlink given file and add it to the ignore list if that fails.
         '''
-        de_path = os.path.join(self.path, de_name)
         try:
-            self.fs.unlink(de_path)
+            file_path = os.path.join(self.rel_path, de_name)
+            self.fs.unlinkat(self.st_root_fd, file_path, 0)
             self.de_has_been_removed = True
         except Error as e:
             log.error('Following exception occured while calling unlink() for '
