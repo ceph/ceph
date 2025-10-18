@@ -14,6 +14,8 @@ export class BackButtonComponent implements OnInit {
   @Input() disabled = false;
   @Input() modalForm = false;
   @Input() showSubmit = false;
+  @Input() size: 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg';
+  @Input() buttonType = 'secondary';
 
   hasModalOutlet = false;
 
