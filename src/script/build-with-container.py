@@ -372,6 +372,7 @@ class ImageSource(StrEnum):
 class ImageVariant(StrEnum):
     DEFAULT = 'default'  # build everything + make check
     PACKAGES = 'packages'  # test deps. ignored, only for packages
+    PACKAGES_CRIMSON = 'packages.crimson'
 
 
 class Context:
@@ -404,6 +405,24 @@ class Context:
         base = self.cli.image_repo or "ceph-build"
         return f"{base}:{self.target_tag()}"
 
+    @property
+    def packages_only(self):
+        return self.cli.image_variant in {
+            ImageVariant.PACKAGES,
+            ImageVariant.PACKAGES_CRIMSON,
+        }
+
+    @property
+    def crimson(self):
+        if self.cli.image_variant is ImageVariant.PACKAGES_CRIMSON:
+            return True
+        with_crimson = os.environ.get('WITH_CRIMSON')
+        if self.cli.image_variant is ImageVariant.PACKAGES:
+            return bool(with_crimson)
+        if with_crimson is None:
+            return None
+        return bool(with_crimson)
+
     def target_tag(self):
         suffix = ""
         if self.cli.tag and self.cli.tag.startswith("+"):
@@ -416,8 +435,11 @@ class Context:
                 branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
-        if self.cli.image_variant is not ImageVariant.DEFAULT:
-            suffix = f".{self.cli.image_variant}{suffix}"
+        variant = self.cli.image_variant
+        if variant is not ImageVariant.DEFAULT:
+            if self.crimson:
+                variant = ImageVariant.PACKAGES_CRIMSON
+            suffix = f".{variant}{suffix}"
         return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
@@ -623,8 +645,11 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
-    if ctx.cli.image_variant is ImageVariant.PACKAGES:
+    if ctx.packages_only:
         cmd.append("--build-arg=FOR_MAKE_CHECK=false")
+    if ctx.crimson is not None:
+        with_crimson = '1' if ctx.crimson else ''
+        cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
