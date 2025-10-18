@@ -2108,10 +2108,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
   }
   cmd << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  client->mon_command_async(cmds, inbl, nullptr, nullptr,
+  client->mon_command_async({cmd.str()}, {}, nullptr, nullptr,
                             make_lambda_context(CB_PoolAsync_Safe(c)));
 }
 
@@ -2175,10 +2172,7 @@ int librados::IoCtxImpl::application_metadata_set(const std::string& app_name,
       << "\"value\":\"" << value << "\""
       << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  int r = client->mon_command({cmd.str()}, {}, nullptr, nullptr);
   if (r < 0) {
     return r;
   }
@@ -2198,10 +2192,7 @@ int librados::IoCtxImpl::application_metadata_remove(const std::string& app_name
       << "\"key\":\"" << key << "\""
       << "}";
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd.str());
-  bufferlist inbl;
-  int r = client->mon_command(cmds, inbl, nullptr, nullptr);
+  int r = client->mon_command({cmd.str()}, {}, nullptr, nullptr);
   if (r < 0) {
     return r;
   }

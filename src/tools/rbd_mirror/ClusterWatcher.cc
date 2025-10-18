@@ -205,9 +205,8 @@ int ClusterWatcher::resolve_peer_site_config_keys(int64_t pool_id,
         "/" + peer->uuid + "\""
     "}";
 
-  bufferlist in_bl;
   bufferlist out_bl;
-  int r = m_cluster->mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = m_cluster->mon_command(std::move(cmd), {}, &out_bl, nullptr);
   if (r == -ENOENT || out_bl.length() == 0) {
     return 0;
   } else if (r < 0) {

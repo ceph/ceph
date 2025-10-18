@@ -1194,10 +1194,9 @@ int mgr_command(librados::Rados& rados, const std::string& cmd,
       "prefix": ")" + cmd + R"(", )" + mgr_command_args_to_str(args) + R"(
     })";
 
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string outs;
-  int r = rados.mgr_command(command, in_bl, &out_bl, &outs);
+  int r = rados.mgr_command(std::move(command), {}, &out_bl, &outs);
   if (r < 0) {
     (*err_os) << "rbd: " << cmd << " failed: " << cpp_strerror(r);
     if (!outs.empty()) {

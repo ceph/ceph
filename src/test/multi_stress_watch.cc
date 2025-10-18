@@ -100,11 +100,10 @@ void
 test_erasure(Rados &cluster, const std::string &pool_name, const std::string &obj_name)
 {
   string outs;
-  bufferlist inbl;
   int ret;
   ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
-    inbl, NULL, &outs);
+    {}, NULL, &outs);
   if (ret < 0) {
     std::cerr << "mon_command erasure-code-profile set failed with " << ret << std::endl;
     exit(1);
@@ -114,7 +113,7 @@ test_erasure(Rados &cluster, const std::string &pool_name, const std::string &ob
   outs.clear();
   ret = cluster.mon_command(
     "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":12, \"pgp_num\":12, \"erasure_code_profile\":\"testprofile\"}",
-    inbl, NULL, &outs);
+    {}, NULL, &outs);
   if (ret < 0) {
     std::cerr << outs << std::endl;
     std::cerr << "mon_command create pool failed with " << ret << std::endl;
