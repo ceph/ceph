@@ -1332,6 +1332,10 @@ void PG::clear_want_pg_temp() {
   osd->remove_want_pg_temp(get_pgid().pgid);
 }
 
+void PG::send_pg_migrated_pool() {
+  osd->send_pg_migrated_pool(pool.info.migration_target, get_pgid().pgid);
+}
+
 void PG::on_role_change() {
   requeue_ops(waiting_for_peered);
   plpg_on_role_change();
@@ -1577,6 +1581,17 @@ void PG::on_backfill_suspended()
 void PG::on_recovery_reserved()
 {
   queue_recovery();
+}
+
+void PG::on_pool_migration_reserved()
+{
+  //TODO:
+  //queue_pool_migration();
+}
+
+void PG::on_pool_migration_suspended()
+{
+  //TODO:
 }
 
 void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)

@@ -52,6 +52,7 @@
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGMigratedPool.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MRoute.h"
@@ -2720,6 +2721,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_pg_created(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return preprocess_pg_ready_to_merge(op);
+  case MSG_OSD_PG_MIGRATED_POOL:
+    return preprocess_pg_migrated_pool(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -2766,6 +2769,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_pgtemp(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return prepare_pg_ready_to_merge(op);
+  case MSG_OSD_PG_MIGRATED_POOL:
+    return prepare_pg_migrated_pool(op);
   case MSG_OSD_BEACON:
     return prepare_beacon(op);
 
@@ -4225,6 +4230,86 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
   return true;
 }
 
+// -------------
+// pg_migrated_pool
+
+bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MOSDPGMigratedPool>();
+  dout(10) << __func__ << " " << *m << dendl;
+  const pg_pool_t *pi;
+  auto session = op->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    goto ignore;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    goto ignore;
+  }
+  pi = osdmap.get_pg_pool(m->pgid.pool());
+  if (!pi) {
+    // Raced with pool delete
+    dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
+    goto ignore;
+  }
+  if (pi->get_pg_num() <= m->pgid.ps()) {
+    // Duplicated message
+    dout(20) << __func__ << " pg_num " << pi->get_pg_num() << " already < " << m->pgid << dendl;
+    goto ignore;
+  }
+  if (!pi->migrating_pgs.contains(m->pgid) ||
+      (pi->migration_target != m->migration_target)) {
+    // Duplicated message
+    dout(20) << __func__ << " pg_num " << m->pgid << " is not migrating to " << m->migration_target << dendl;
+    goto ignore;
+  }
+  return false;
+
+ ignore:
+  mon.no_reply(op);
+  return true;
+}
+
+bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m  = op->get_req<MOSDPGMigratedPool>();
+  dout(10) << __func__ << " " << *m << dendl;
+  pg_pool_t p;
+  if (pending_inc.new_pools.count(m->pgid.pool()))
+    p = pending_inc.new_pools[m->pgid.pool()];
+  else
+    p = *osdmap.get_pg_pool(m->pgid.pool());
+
+  // Checked in preprocess
+  ceph_assert(p.migrating_pgs.contains(m->pgid));
+  ceph_assert(p.migration_target == m->migration_target);
+
+  //TODO: Need better scheduling of next PG to migrate
+  //this code only copes with 1 PG migrating at a time
+  pg_t pgid = m->pgid;
+  p.migrating_pgs.erase(pgid);
+  if (pgid.ps() == 0) {
+    dout(0) << "Finished pool migration for pool " << pgid.pool() << dendl;
+  } else {
+    dout(0) << "Starting migration of PG " << pg_t(pgid.ps() - 1, pgid.pool()) << dendl;
+    p.migrating_pgs = { pg_t(pgid.ps() - 1, pgid.pool()) };
+  }
+  //TODO: Do we need to update this?
+  p.last_change = pending_inc.epoch;
+
+  //TODO: Do we need this - we won't have any pre-mautilus clients
+  // force pre-nautilus clients to resend their ops, since they
+  // don't understand pg_num_pending changes form a new interval
+  p.last_force_op_resend_prenautilus = pending_inc.epoch;
+
+  pending_inc.new_pools[m->pgid.pool()] = p;
+
+  return true;
+}
 
 // ---
 
@@ -7450,6 +7535,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+			 false,
 			 &ss);
 
   if (ret < 0) {
@@ -8104,6 +8190,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+				 bool migrate,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8356,7 +8443,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     // This will fail if the pool cannot support ec optimizations.
     enable_pool_ec_optimizations(*pi, nullptr, true);
   }
-
+  if (migrate) {
+    dout(0) << "Configuring pool migration for PG " << pg_t(pi->get_pg_num() - 1, pool) << dendl;
+    pi->migration_target = 1;
+    pi->migrating_pgs = { pg_t(pi->get_pg_num() - 1, pool) };
+  }
   pending_inc.new_pool_names[pool] = name;
   return 0;
 }
@@ -13752,6 +13843,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
 
+    bool migrate = cmd_getval_or<bool>(cmdmap, "migrate", false);
+
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -13763,6 +13856,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+			   migrate,
 			   &ss);
     if (err < 0) {
       switch(err) {
