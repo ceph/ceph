@@ -87,10 +87,18 @@ ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR
-if type cmake3 > /dev/null 2>&1 ; then
-    CMAKE=cmake3
-else
-    CMAKE=cmake
+
+# Only set CMAKE variable if not already set by user/environment.
+# This allows users to override with a custom cmake binary via environment variable.
+# Priority order: cmake 4.x+ (if available) -> cmake3 -> cmake (fallback)
+if [ -z "${CMAKE}" ]; then
+  if type cmake > /dev/null 2>&1 && cmake --version | grep -qE 'cmake version [4-9]\.'; then
+      CMAKE=cmake
+  elif type cmake3 > /dev/null 2>&1; then
+      CMAKE=cmake3
+  else
+      CMAKE=cmake
+  fi
 fi
 ${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
 set +x
