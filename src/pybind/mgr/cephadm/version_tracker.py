@@ -61,7 +61,7 @@ class VersionTracker:
         '''
 
         if not self.mgr.db_ready():
-            self.mgr.log.debug('Version Tracker, Cluster version history empty status could not be checked: mgr db not ready')
+            self.mgr.log.debug('Version Tracker, cluster version history empty status could not be checked: mgr db not ready')
             return False
         
         with self.mgr._db_lock, self.mgr.db:
@@ -69,13 +69,16 @@ class VersionTracker:
                 cursor = self.mgr.db.execute(SQL_QUERY)
                 row = cursor.fetchone()
             except sqlite3.Error as error:
-                self.mgr.log.debug('Version Tracker, Cluster version history empty status could not be checked: ' + str(error))
+                self.mgr.log.debug('Version Tracker, cluster version history empty status could not be checked: ' + str(error))
                 return False
         
             if row is None:
                 return True
             
-            return False
+        if not self.mgr.bootstrap_version_stored:
+            self.mgr.bootstrap_version_stored = True
+            
+        return False
     
     def add_cluster_version(self, version: str, time: str) -> bool:
         """
@@ -88,17 +91,17 @@ class VersionTracker:
         '''
 
         if not self.mgr.db_ready():
-            self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" could not be added: mgr db not ready')
+            self.mgr.log.debug('Version Tracker, cluster version "' + version + '" could not be added: mgr db not ready')
             return False
         
         with self.mgr._db_lock, self.mgr.db:
             try:
                 self.mgr.db.execute(SQL_QUERY, (version, time))
             except sqlite3.Error as error:
-                self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" could not be added: ' + str(error))
+                self.mgr.log.debug('Version Tracker, cluster version "' + version + '" could not be added: ' + str(error))
                 return False
         
-        self.mgr.log.debug('Version Tracker, Cluster version "' + version + '" added successfully')
+        self.mgr.log.debug('Version Tracker, cluster version "' + version + '" added successfully')
         
         return True
 
@@ -113,9 +116,9 @@ class VersionTracker:
 
             if status:
                 self.mgr.bootstrap_version_stored = True
-                self.mgr.log.debug('Version Tracker, Cluster bootstrap version added successfully')
+                self.mgr.log.debug('Version Tracker, cluster bootstrap version added successfully')
             else:
-                self.mgr.log.debug('Version Tracker, Cluster bootstrap version could not be added')
+                self.mgr.log.debug('Version Tracker, cluster bootstrap version could not be added')
 
     def get_cluster_version_history(self) -> Tuple[int, str, str]:
         SQL_QUERY = '''
@@ -126,9 +129,6 @@ class VersionTracker:
 
         if not self.mgr.db_ready():
             return -errno.EAGAIN, '', 'mgr db not yet available'
-        
-        if not self.mgr.bootstrap_version_stored:
-            self.add_bootstrap_cluster_version()
 
         res = dict()
 
