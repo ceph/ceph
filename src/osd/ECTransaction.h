@@ -81,7 +81,7 @@ class Generate {
   const ErasureCodeInterfaceRef &ec_impl;
   const pg_t &pgid;
   const ECUtil::stripe_info_t &sinfo;
-  shard_id_map<ceph::os::Transaction> &transactions;
+  shard_id_map<std::pair<ceph::os::Transaction, uint64_t> > &transactions;
   DoutPrefixProvider *dpp;
   const OSDMapRef &osdmap;
   pg_log_entry_t *entry;
@@ -116,7 +116,7 @@ class Generate {
     const ECUtil::stripe_info_t &sinfo,
     const std::map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
     std::map<hobject_t, ECUtil::shard_extent_map_t> *written_map,
-    shard_id_map<ceph::os::Transaction> &transactions,
+    shard_id_map<std::pair<ceph::os::Transaction, uint64_t> > &transactions,
     const OSDMapRef &osdmap,
     const hobject_t &oid, PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
@@ -133,7 +133,7 @@ void generate_transactions(
     const std::map<hobject_t, ECUtil::shard_extent_map_t> &partial_extents,
     std::vector<pg_log_entry_t> &entries,
     std::map<hobject_t, ECUtil::shard_extent_map_t> *written_map,
-    shard_id_map<ceph::os::Transaction> *transactions,
+    shard_id_map<std::pair<ceph::os::Transaction, uint64_t> > *transactions,
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
