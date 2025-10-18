@@ -1,0 +1,5 @@
+tasks:
+- ganesha-client:
+    client.0:
+      cluster_id: nfs-ganesha-test
+      pseudo_path: /nfsganesha
