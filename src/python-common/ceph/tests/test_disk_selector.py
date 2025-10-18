@@ -568,9 +568,9 @@ class TestDeviceSelectionLimit:
         # as a ceph_device. /dev/sdb and /dev/sdc are not being used
         # for OSDs yet. The limit will be set to 2 and the DriveSelection
         # is set to have 1 pre-existing device (corresponding to /dev/sda)
-        dev_a = Device('/dev/sda', ceph_device=True, available=False)
-        dev_b = Device('/dev/sdb', ceph_device=False, available=True)
-        dev_c = Device('/dev/sdc', ceph_device=False, available=True)
+        dev_a = Device('/dev/sda', ceph_device_lvm=True, available=False)
+        dev_b = Device('/dev/sdb', ceph_device_lvm=False, available=True)
+        dev_c = Device('/dev/sdc', ceph_device_lvm=False, available=True)
         all_devices: List[Device] = [dev_a, dev_b, dev_c]
         processed_devices: List[Device] = []
         filter = DeviceSelection(all=True, limit=2)
