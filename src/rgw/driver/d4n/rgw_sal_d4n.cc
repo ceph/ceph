@@ -54,48 +54,21 @@ D4NFilterDriver::~D4NFilterDriver() = default;
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
-  namespace net = boost::asio;
-  using boost::redis::config;
-
-  conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(conn);
-  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(conn);
-  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(conn);
-  policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(conn,
+  dir_conn = std::make_shared<rgw::d4n::DirectoryConnection>(io_context);
+  objDir = std::make_unique<rgw::d4n::ObjectDirectory>(dir_conn);
+  blockDir = std::make_unique<rgw::d4n::BlockDirectory>(dir_conn);
+  bucketDir = std::make_unique<rgw::d4n::BucketDirectory>(dir_conn);
+  policyDriver = std::make_unique<rgw::d4n::PolicyDriver>(dir_conn,
 							  cacheDriver.get(),
 							  "lfuda",
                                                           this->y);
-
-  std::string address = cct->_conf->rgw_d4n_address;
-  config cfg;
-  cfg.addr.host = address.substr(0, address.find(":"));
-  cfg.addr.port = address.substr(address.find(":") + 1, address.length());
-  cfg.clientname = "D4N.Filter";
-
-  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-    ldpp_dout(dpp, 0) << "D4NFilterDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-    return -EDESTADDRREQ;
-  }
-
-  conn->async_run(cfg, {}, net::consign(net::detached, conn));
-
   FilterDriver::initialize(cct, dpp);
-
+  auto ret = dir_conn->initialize(dpp);
+  if (ret < 0) {
+    return ret;
+  }
   cacheDriver->initialize(dpp);
   policyDriver->get_cache_policy()->init(cct, dpp, io_context, next);
-
-  //setting the connection pool size and other parameters
-  uint64_t rgw_redis_connection_pool_size = dpp->get_cct()->_conf->rgw_redis_connection_pool_size;
-  std::shared_ptr<rgw::d4n::RedisPool>redis_pool = nullptr;
-  if(rgw_redis_connection_pool_size>0){
-      redis_pool = std::make_shared<rgw::d4n::RedisPool>(&io_context, cfg, rgw_redis_connection_pool_size);
-      ldpp_dout(dpp, 10) << "redis connection pool created with " << rgw_redis_connection_pool_size << " connections "  << dendl;
-  }
-
-  objDir->set_redis_pool(redis_pool);
-  blockDir->set_redis_pool(redis_pool);
-  bucketDir->set_redis_pool(redis_pool);
-  
   return 0;
 }
 
@@ -1200,9 +1173,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
 
     //dirty objects
     if (dirty) {
-      auto redis_conn = this->driver->get_conn();
-      auto redis_pool = this->driver->get_redis_pool();
-      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+      auto dir_conn = this->driver->get_dir_connection();
+      rgw::d4n::Pipeline p = rgw::d4n::Pipeline(dir_conn);
       p.start();
       auto ret = blockDir->set(dpp, &block, y, &p);
       if (ret < 0) {
@@ -1249,9 +1221,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       auto ret = blockDir->get(dpp, &latest, y);
       if (ret == -ENOENT) {
         if (!(this->get_bucket()->versioned())) {
-          auto redis_conn = this->driver->get_conn();
-          auto redis_pool = this->driver->get_redis_pool();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+          auto dir_conn = this->driver->get_dir_connection();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(dir_conn);
           p.start();
           //we can explore pipelining to send the two 'HSET' commands together
           ret = blockDir->set(dpp, &block, y, &p);
@@ -1283,9 +1254,8 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
         /* even if the head block is found, overwrite existing values with new version in case of non-versioned bucket, clean objects
            and versioned and non-versioned buckets dirty objects */
         if (!(this->get_bucket()->versioned())) {
-          auto redis_conn = this->driver->get_conn();
-          auto redis_pool = this->driver->get_redis_pool();
-          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(redis_conn, redis_pool);
+          auto dir_conn = this->driver->get_dir_connection();
+          rgw::d4n::Pipeline p = rgw::d4n::Pipeline(dir_conn);
           p.start();
           ret = blockDir->set(dpp, &block, y, &p);
           if (ret < 0) {
@@ -1650,9 +1620,7 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 
 void D4NFilterDriver::shutdown()
 {
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
-
+  dir_conn->shutdown();
   cacheDriver.reset();
   objDir.reset();
   blockDir.reset();
