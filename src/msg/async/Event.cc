@@ -38,6 +38,10 @@
 #endif
 #endif
 
+#ifdef __linux__
+#include <sys/eventfd.h>
+#endif
+
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
@@ -49,6 +53,10 @@ class C_handle_notify : public EventCallback {
  public:
   C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
   void do_request(uint64_t fd_or_id) override {
+#ifdef __linux__
+    eventfd_t value;
+    read(fd_or_id, &value, sizeof(value));
+#else
     char c[256];
     int r = 0;
     do {
@@ -62,6 +70,7 @@ class C_handle_notify : public EventCallback {
           ldout(cct, 1) << __func__ << " read notify pipe failed: " << cpp_strerror(ceph_sock_errno()) << dendl;
       }
     } while (r > 0);
+#endif
   }
 };
 
@@ -155,6 +164,16 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
   if (!driver->need_wakeup())
     return 0;
 
+#ifdef __linux__
+  int efd = eventfd(0, EFD_NONBLOCK|EFD_CLOEXEC);
+  if (efd < 0) {
+    const int e = errno;
+    lderr(cct) << __func__ << " can't create eventfd: " << cpp_strerror(e) << dendl;
+    return -e;
+  }
+
+  notify_receive_fd = notify_send_fd = efd;
+#else
   int fds[2];
 
   #ifdef _WIN32
@@ -178,6 +197,7 @@ int EventCenter::init(int nevent, unsigned center_id, const std::string &type)
   if (r < 0) {
     return r;
   }
+#endif
 
   return r;
 }
@@ -198,8 +218,12 @@ EventCenter::~EventCenter()
 
   if (notify_receive_fd >= 0)
     compat_closesocket(notify_receive_fd);
+#ifndef __linux__
+  /* on Linux, notify_receive_fd and notify_send_fd are the same
+     eventfd, therefore we close only one of them */
   if (notify_send_fd >= 0)
     compat_closesocket(notify_send_fd);
+#endif
 
   delete driver;
   if (notify_handler)
@@ -348,7 +372,11 @@ void EventCenter::wakeup()
     return ;
 
   ldout(cct, 20) << __func__ << dendl;
+#ifdef __linux__
+  static constexpr eventfd_t buf = 1;
+#else
   static constexpr char buf = 'c';
+#endif
   // wake up "event_wait"
   #ifdef _WIN32
   int n = send(notify_send_fd, &buf, sizeof(buf), 0);
