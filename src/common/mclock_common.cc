@@ -347,7 +347,7 @@ void MclockConfig::handle_conf_change(const ConfigProxy& conf,
     if (changed.count(key)) {
       set_from_config();
       return;
-    }
+    }  
   }
 }
 

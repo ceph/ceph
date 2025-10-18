@@ -43,6 +43,7 @@ enum class scheduler_class_t : uint8_t {
 
 #ifdef WITH_CRIMSON
 using SchedulerClass = scheduler_class_t;
+using MonClient = crimson::mon::Client;
 #else
 using SchedulerClass = op_scheduler_class;
 #endif
