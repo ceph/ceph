@@ -18,7 +18,9 @@
 
 #include "rgw_common.h"
 #include "rgw_metadata.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_metadata_lister.h"
+#endif
 #include "rgw_tools.h"
 #include "rgw_role.h"
 
