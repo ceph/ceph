@@ -856,46 +856,39 @@ BtreeLBAManager::_update_mapping_ret
 BtreeLBAManager::_update_mapping(
   Transaction &t,
   LBACursor &cursor,
-  update_func_t &&f,
+  update_func_t f,
   LogicalChildNode* nextent)
 {
   assert(cursor.is_viewable());
   auto c = get_context(t);
-  return with_btree<LBABtree>(
-    cache,
-    c,
-    [c, f=std::move(f), &cursor, nextent](auto &btree) {
-    auto iter = btree.make_partial_iter(c, cursor);
-    auto ret = f(iter.get_val());
-    if (ret.refcount == 0) {
-      return btree.remove(
-	c,
-	iter
-      ).si_then([ret, c, laddr=cursor.key](auto iter) {
-	return update_mapping_ret_bare_t{
-	  laddr, std::move(ret), iter.get_cursor(c)};
-      });
-    } else {
-      return btree.update(
-	c,
-	iter,
-	ret
-      ).si_then([c, nextent](auto iter) {
-	// child-ptr may already be correct,
-	// see LBAManager::update_mappings()
-	if (nextent && !nextent->has_parent_tracker()) {
-	  iter.get_leaf_node()->update_child_ptr(
-	    iter.get_leaf_pos(), nextent);
-	}
-	assert(!nextent ||
-	  (nextent->has_parent_tracker()
-	    && nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
-	LBACursorRef cursor = iter.get_cursor(c);
-	assert(cursor->val);
-	return update_mapping_ret_bare_t{std::move(cursor)};
-      });
+  auto btree = co_await get_btree<LBABtree>(cache, c);
+  auto iter = btree.make_partial_iter(c, cursor);
+  auto ret = f(iter.get_val());
+  auto laddr = cursor.key;
+  if (ret.refcount == 0) {
+    iter = co_await btree.remove(
+      c,
+      iter
+    );
+    co_return update_mapping_ret_bare_t{
+      laddr, std::move(ret), iter.get_cursor(c)};
+  } else {
+    iter = co_await btree.update(
+      c,
+      iter,
+      ret
+    );
+    if (nextent && !nextent->has_parent_tracker()) {
+      iter.get_leaf_node()->update_child_ptr(
+	iter.get_leaf_pos(), nextent);
     }
-  });
+    assert(!nextent ||
+	   (nextent->has_parent_tracker()
+	    && nextent->peek_parent_node().get() == iter.get_leaf_node().get()));
+    LBACursorRef cursor = iter.get_cursor(c);
+    assert(cursor->val);
+    co_return update_mapping_ret_bare_t{std::move(cursor)};
+  }
 }
 
 BtreeLBAManager::get_cursor_ret
