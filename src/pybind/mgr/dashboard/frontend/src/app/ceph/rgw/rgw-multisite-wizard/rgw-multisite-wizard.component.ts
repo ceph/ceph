@@ -37,6 +37,11 @@ interface DaemonStats {
   };
 }
 
+interface RealmsInfo {
+  default_info: string;
+  realms: string[];
+}
+
 interface EndpointInfo {
   hostname: string;
   port: number;
@@ -153,8 +158,8 @@ export class RgwMultisiteWizardComponent extends BaseModal implements OnInit {
       this.stepsToSkip[step.label] = false;
     });
 
-    this.rgwRealmService.list().subscribe((realms: string[]) => {
-      this.realmList = realms;
+    this.rgwRealmService.list().subscribe((realmsInfo: RealmsInfo) => {
+      this.realmList = realmsInfo?.realms || [];
       this.showConfigType = this.realmList.length > 0;
       if (this.showConfigType) {
         this.multisiteSetupForm.get('selectedRealm')?.setValue(this.realmList[0]);
