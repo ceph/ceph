@@ -335,7 +335,13 @@ class ImageSource(StrEnum):
 
 class ImageVariant(StrEnum):
     DEFAULT = 'default'  # build everything + make check
-    PACKAGES = 'packages'  # test deps. ignored, only for packages
+    # test dependencies will not be instaled, other parameters
+    # are automatically pulled from the environment (etc)
+    PACKAGES_AUTO = 'packages'
+    # test dependencies will not be installed nor crimson deps
+    PACKAGES_MINIMAL = 'packages.minimal'
+    # test dependencies skipped but crimson deps are included
+    PACKAGES_AND_CRIMSON = 'packages.crimson'
 
 
 class Context:
@@ -368,6 +374,39 @@ class Context:
         base = self.cli.image_repo or "ceph-build"
         return f"{base}:{self.target_tag()}"
 
+    def packages_build(self):
+        """Return true if only packages will be build (not make check)."""
+        return self.cli.image_variant in {
+            ImageVariant.PACKAGES_AUTO,
+            ImageVariant.PACKAGES_MINIMAL,
+            ImageVariant.PACKAGES_AND_CRIMSON,
+        }
+
+    def variant(self):
+        """Return calculated variant. Checks env vars to select between
+        packages with or without crimson.
+        """
+        with_crimson = os.environ.get('WITH_CRIMSON')
+        if (
+            self.cli.image_variant is ImageVariant.PACKAGES_AUTO
+            and with_crimson
+        ):
+            return ImageVariant.PACKAGES_AND_CRIMSON
+        elif self.cli.image_variant is ImageVariant.PACKAGES_AUTO:
+            return ImageVariant.PACKAGES_MINIMAL
+        return self.cli.image_variant
+
+    def crimson_build(self):
+        """Detects if crimson deps should be installed in the build image.
+        Returns True/False if build flag is known or None for default.
+        """
+        if self.variant() is ImageVariant.PACKAGES_AND_CRIMSON:
+            return True
+        if self.variant() is ImageVariant.DEFAULT:
+            with_crimson = os.environ.get('WITH_CRIMSON')
+            return None if with_crimson is None else bool(with_crimson)
+        return False
+
     def target_tag(self):
         suffix = ""
         if self.cli.tag and self.cli.tag.startswith("+"):
@@ -380,8 +419,9 @@ class Context:
                 branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
-        if self.cli.image_variant is not ImageVariant.DEFAULT:
-            suffix = f".{self.cli.image_variant}{suffix}"
+        variant = self.variant()
+        if variant is not ImageVariant.DEFAULT:
+            suffix = f".{variant}{suffix}"
         return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
@@ -573,6 +613,7 @@ def build_container(ctx):
         "-t",
         ctx.image_name,
         f"--label=io.ceph.build-with-container.src={_hash_sources()}",
+        f"--label=io.ceph.build-with-container.image-variant={ctx.variant()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
@@ -587,8 +628,13 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
-    if ctx.cli.image_variant is ImageVariant.PACKAGES:
+    if ctx.packages_build():
         cmd.append("--build-arg=FOR_MAKE_CHECK=false")
+    crimson_build = ctx.crimson_build()
+    if crimson_build is not None:
+        # the WITH_CRIMSON var is false only when empty (in install-deps)
+        with_crimson = '1' if crimson_build else ''
+        cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
