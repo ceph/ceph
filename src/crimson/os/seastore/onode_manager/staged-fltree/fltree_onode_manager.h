@@ -9,6 +9,60 @@
 
 namespace crimson::os::seastore::onode {
 
+struct FakeOnode final : Onode {
+  FakeOnode(const hobject_t &hobj, onode_layout_t layout)
+      : Onode(hobj), layout(layout) {}
+
+  onode_layout_t layout{};
+
+  laddr_hint_t init_hint(extent_len_t block_size, bool is_metadata) const final {
+    ceph_abort("impossible");
+    return LADDR_HINT_NULL;
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    ceph_abort("impossible");
+    return LADDR_HINT_NULL;
+  }
+
+  bool is_alive() const final { return true; }
+  const onode_layout_t &get_layout() const final {
+    return layout;
+  }
+  void update_onode_size(Transaction &, uint32_t) final {
+    ceph_abort("impossible");
+  }
+  void update_omap_root(Transaction &, omap_root_t &root) final {
+    ceph_abort("impossible");
+  }
+  void update_log_root(Transaction &, omap_root_t &root) final {
+    ceph_abort("impossible");
+  }
+  void update_xattr_root(Transaction &, omap_root_t &root) final {
+    ceph_abort("impossible");
+  }
+  void update_object_data(Transaction &, object_data_t &data) final {
+    ceph_abort("impossible");
+  }
+  void update_object_info(Transaction &, ceph::bufferlist &) final {
+    ceph_abort("impossible");
+  }
+  void update_snapset(Transaction &, ceph::bufferlist &) final {
+    ceph_abort("impossible");
+  }
+  void clear_object_info(Transaction &) final { ceph_abort("impossible"); }
+  void clear_snapset(Transaction &) final { ceph_abort("impossible"); }
+  void set_need_cow(Transaction &) final {}
+  void unset_need_cow(Transaction &) final {}
+  void swap_layout(Transaction &, Onode &o) final { ceph_abort("impossible"); }
+  boost::intrusive_ptr<Onode> offload_data_and_md(Transaction &t) final {
+    ceph_abort("impossible");
+    return nullptr;
+  }
+};
+
 struct FLTreeOnode final : Onode, Value {
   static constexpr tree_conf_t TREE_CONF = {
     value_magic_t::ONODE,
@@ -36,13 +90,8 @@ struct FLTreeOnode final : Onode, Value {
   FLTreeOnode& operator=(const FLTreeOnode&) = delete;
 
   template <typename... T>
-  FLTreeOnode(uint32_t ddr, uint32_t dmr, const hobject_t &hobj, T&&... args)
-    : Onode(ddr, dmr, hobj),
-      Value(std::forward<T>(args)...) {}
-
-  template <typename... T>
   FLTreeOnode(const hobject_t &hobj, T&&... args)
-    : Onode(0, 0, hobj),
+    : Onode(hobj),
       Value(std::forward<T>(args)...) {}
 
   struct Recorder : public ValueDeltaRecorder {
@@ -95,6 +144,21 @@ struct FLTreeOnode final : Onode, Value {
 
   void swap_layout(Transaction &t, Onode &onode) final {
     _swap_layout(t, static_cast<FLTreeOnode&>(onode));
+  }
+
+  boost::intrusive_ptr<Onode> offload_data_and_md(Transaction & t) final {
+    assert(status != status_t::DELETED);
+    auto fake_onode = new FakeOnode(hobj, get_layout());
+    object_data_t data{L_ADDR_NULL, 0};
+    update_object_data(t, data);
+    omap_root_t root;
+    root.type = omap_type_t::OMAP;
+    update_omap_root(t, root);
+    root.type = omap_type_t::XATTR;
+    update_xattr_root(t, root);
+    root.type = omap_type_t::LOG;
+    update_log_root(t, root);
+    return fake_onode;
   }
 
   void _swap_layout(Transaction &t, FLTreeOnode &other) {
@@ -321,8 +385,16 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_hint_t init_hint(
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return Value::init_hint(block_size, is_metadata);
+  }
+  laddr_hint_t generate_clone_hint(
+    local_object_id_t object_id,
+    extent_len_t block_size,
+    bool is_metadata) const final {
+    return Value::generate_clone_hint(object_id, block_size, is_metadata);
   }
   ~FLTreeOnode() final {}
 };
@@ -335,16 +407,11 @@ class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
   OnodeTree tree;
 
   uint32_t default_data_reservation = 0;
-  uint32_t default_metadata_offset = 0;
-  uint32_t default_metadata_range = 0;
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
     tree(NodeExtentManager::create_seastore(tm)),
     default_data_reservation(
-      get_conf<uint64_t>("seastore_default_max_object_size")),
-    default_metadata_offset(default_data_reservation),
-    default_metadata_range(
-      get_conf<uint64_t>("seastore_default_object_metadata_reservation"))
+      get_conf<uint64_t>("seastore_default_max_object_size"))
   {}
 
   mkfs_ret mkfs(Transaction &t) {
