@@ -16,10 +16,17 @@
 #ifndef CEPH_PAXOSSERVICE_H
 #define CEPH_PAXOSSERVICE_H
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include "include/Context.h"
-#include "Paxos.h"
-#include "Monitor.h"
+#include "health_check.h"
 #include "MonitorDBStore.h"
+#include "MonOpRequest.h"
+
+class Monitor;
+class Paxos;
 
 /**
  * A Paxos Service is an abstraction that easily allows one to obtain an
@@ -129,11 +136,7 @@ public:
   public:
     C_ReplyOp(PaxosService *s, MonOpRequestRef o, MessageRef r) :
       C_MonOp(o), mon(s->mon), op(o), reply(r) { }
-    void _finish(int r) override {
-      if (r >= 0) {
-	mon.send_reply(op, reply.detach());
-      }
-    }
+    void _finish(int r) override;
   };
 
   /**
@@ -437,13 +440,7 @@ public:
   virtual void tick() {}
 
   void encode_health(const health_check_map_t& next,
-		     MonitorDBStore::TransactionRef t) {
-    using ceph::encode;
-    ceph::buffer::list bl;
-    encode(next, bl);
-    t->put("health", service_name, bl);
-    mon.log_health(next, health_checks, t);
-  }
+		     MonitorDBStore::TransactionRef t);
   void load_health();
 
   /**
@@ -509,11 +506,7 @@ public:
    *
    * @returns true if in state ACTIVE; false otherwise.
    */
-  bool is_active() const {
-    return
-      !is_proposing() &&
-      (paxos.is_active() || paxos.is_updating() || paxos.is_writing());
-  }
+  bool is_active() const;
 
   /**
    * Check if we are readable.
@@ -527,13 +520,7 @@ public:
    * @param ver The version we want to check if is readable
    * @returns true if it is readable; false otherwise
    */
-  bool is_readable(version_t ver = 0) const {
-    if (ver > get_last_committed() ||
-	!paxos.is_readable(0) ||
-	get_last_committed() == 0)
-      return false;
-    return true;
-  }
+  bool is_readable(version_t ver = 0) const;
 
   /**
    * Check if we are writeable.
@@ -584,16 +571,7 @@ public:
    *
    * @param c The callback to be awaken once we become active.
    */
-  void wait_for_active(MonOpRequestRef op, Context *c) {
-    if (op)
-      op->mark_event(service_name + ":wait_for_active");
-
-    if (!is_proposing()) {
-      paxos.wait_for_active(op, c);
-      return;
-    }
-    wait_for_finished_proposal(op, c);
-  }
+  void wait_for_active(MonOpRequestRef op, Context *c);
   void wait_for_active_ctx(Context *c) {
     MonOpRequestRef o;
     wait_for_active(o, c);
@@ -605,27 +583,7 @@ public:
    * @param c The callback to be awaken once we become active.
    * @param ver The version we want to wait on.
    */
-  void wait_for_readable(MonOpRequestRef op, Context *c, version_t ver = 0) {
-    /* This is somewhat of a hack. We only do check if a version is readable on
-     * PaxosService::dispatch(), but, nonetheless, we must make sure that if that
-     * is why we are not readable, then we must wait on PaxosService and not on
-     * Paxos; otherwise, we may assert on Paxos::wait_for_readable() if it
-     * happens to be readable at that specific point in time.
-     */
-    if (op)
-      op->mark_event(service_name + ":wait_for_readable");
-
-    if (is_proposing() ||
-	ver > get_last_committed() ||
-	get_last_committed() == 0)
-      wait_for_finished_proposal(op, c);
-    else {
-      if (op)
-        op->mark_event(service_name + ":wait_for_readable/paxos");
-
-      paxos.wait_for_readable(op, c);
-    }
-  }
+  void wait_for_readable(MonOpRequestRef op, Context *c, version_t ver = 0);
 
   void wait_for_readable_ctx(Context *c, version_t ver = 0) {
     MonOpRequestRef o; // will initialize the shared_ptr to NULL
@@ -637,17 +595,7 @@ public:
    *
    * @param c The callback to be awaken once we become writeable.
    */
-  void wait_for_writeable(MonOpRequestRef op, Context *c) {
-    if (op)
-      op->mark_event(service_name + ":wait_for_writeable");
-
-    if (is_proposing())
-      wait_for_finished_proposal(op, c);
-    else if (!is_writeable())
-      wait_for_active(op, c);
-    else
-      paxos.wait_for_writeable(op, c);
-  }
+  void wait_for_writeable(MonOpRequestRef op, Context *c);
   void wait_for_writeable_ctx(Context *c) {
     MonOpRequestRef o;
     wait_for_writeable(o, c);
@@ -727,9 +675,7 @@ public:
    *
    * @note This function is a wrapper for Paxos::cancel_events
    */
-  void cancel_events() {
-    paxos.cancel_events();
-  }
+  void cancel_events();
 
   /**
    * @defgroup PaxosService_h_store_funcs Back storage interface functions
@@ -782,10 +728,7 @@ public:
    * @param bl A ceph::buffer::list containing the version's value
    */
   void put_version_full(MonitorDBStore::TransactionRef t,
-			version_t ver, ceph::buffer::list& bl) {
-    std::string key = mon.store->combine_strings(full_prefix_name, ver);
-    t->put(get_service_name(), key, bl);
-  }
+			version_t ver, ceph::buffer::list& bl);
   /**
    * Put the version number in @p ver into the key pointing to the latest full
    * version of this service.
@@ -793,10 +736,7 @@ public:
    * @param t The transaction to which we will add this put operation
    * @param ver A version number
    */
-  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver) {
-    std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
-    t->put(get_service_name(), key, ver);
-  }
+  void put_version_latest_full(MonitorDBStore::TransactionRef t, version_t ver);
   /**
    * Put the contents of @p bl into the key @p key.
    *
@@ -864,9 +804,7 @@ public:
    * @param bl The ceph::buffer::list to be populated
    * @return 0 on success; <0 otherwise
    */
-  virtual int get_version(version_t ver, ceph::buffer::list& bl) {
-    return mon.store->get(get_service_name(), ver, bl);
-  }
+  virtual int get_version(version_t ver, ceph::buffer::list& bl);
   /**
    * Get the contents of a given full version of this service.
    *
@@ -874,19 +812,13 @@ public:
    * @param bl The ceph::buffer::list to be populated
    * @returns 0 on success; <0 otherwise
    */
-  virtual int get_version_full(version_t ver, ceph::buffer::list& bl) {
-    std::string key = mon.store->combine_strings(full_prefix_name, ver);
-    return mon.store->get(get_service_name(), key, bl);
-  }
+  virtual int get_version_full(version_t ver, ceph::buffer::list& bl);
   /**
    * Get the latest full version number
    *
    * @returns A version number
    */
-  version_t get_version_latest_full() {
-    std::string key = mon.store->combine_strings(full_prefix_name, full_latest_name);
-    return mon.store->get(get_service_name(), key);
-  }
+  version_t get_version_latest_full();
 
   /**
    * Get a value from a given key.
@@ -894,17 +826,13 @@ public:
    * @param[in] key The key
    * @param[out] bl The ceph::buffer::list to be populated with the value
    */
-  int get_value(const std::string& key, ceph::buffer::list& bl) {
-    return mon.store->get(get_service_name(), key, bl);
-  }
+  int get_value(const std::string& key, ceph::buffer::list& bl);
   /**
    * Get an integer value from a given key.
    *
    * @param[in] key The key
    */
-  version_t get_value(const std::string& key) {
-    return mon.store->get(get_service_name(), key);
-  }
+  version_t get_value(const std::string& key);
 
   /**
    * @}
