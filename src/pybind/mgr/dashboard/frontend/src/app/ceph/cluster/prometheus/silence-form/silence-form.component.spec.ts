@@ -271,7 +271,7 @@ describe('SilenceFormComponent', () => {
       params = { id: 'someExpiredId' };
       expectMode('recreate', false, true, 'Recreate');
       expect(prometheusService.getSilences).toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.silenceForm.value).toEqual({
         comment: `A comment for ${params.id}`,
         createdBy: `Creator of ${params.id}`,
         duration: '2h',
@@ -295,8 +295,8 @@ describe('SilenceFormComponent', () => {
   });
 
   describe('time', () => {
-    const changeEndDate = (text: string) => component.form.patchValue({ endsAt: text });
-    const changeStartDate = (text: string) => component.form.patchValue({ startsAt: text });
+    const changeEndDate = (text: string) => component.silenceForm.patchValue({ endsAt: text });
+    const changeStartDate = (text: string) => component.silenceForm.patchValue({ startsAt: text });
 
     it('have all dates set at beginning', () => {
       expect(form.getValue('startsAt')).toEqual(baseTime);
