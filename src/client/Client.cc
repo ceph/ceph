@@ -11135,6 +11135,11 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  // zero bytes read is not supported by osd
+  if (size < 1) {
+    return -EINVAL;
+  }
+
   int want, have = 0;
   bool movepos = false;
   std::unique_ptr<Context> iofinish = nullptr;
