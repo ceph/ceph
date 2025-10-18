@@ -29,13 +29,16 @@ Skipped Objects
 ***************
 Dedup Estimate process skips the following objects:
 
-- Objects smaller than 4 MB (unless they are multipart).
+- Objects smaller than rgw_dedup_min_obj_size_for_dedup (unless they are multipart).
 - Objects with different placement rules.
 - Objects with different pools.
 - Objects with different storage classes.
 
 The full dedup process skips all the above and it also skips **compressed** and **user-encrypted** objects.
 
+The minimum size object for dedup is controlled by the following config option:
+
+.. confval:: rgw_dedup_min_obj_size_for_dedup
 *******************
 Estimate Processing
 *******************
@@ -71,6 +74,22 @@ If they are, we proceed with the deduplication:
 - incrementing the reference count on the source tail-objects one by one.
 - copying the manifest from the source to the target.
 - removing all tail-objects on the target.
+
+***************
+Split Head Mode
+***************
+Dedup code can split the head object into 2 objects
+
+- one with attributes and no data and
+- a new tail-object with only data.
+
+The new-tail object will be deduped (unlike the head objects which can't be dedup)
+
+The split-Head mode is controlled by the following central configuration option:
+
+.. confval:: rgw_dedup_max_obj_size_for_split
+
+We will split head for objects with size smaller or equal to rgw_dedup_max_obj_size_for_split
 
 ************
 Memory Usage
