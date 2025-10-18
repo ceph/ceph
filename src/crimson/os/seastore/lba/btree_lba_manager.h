@@ -398,7 +398,7 @@ private:
   _update_mapping_ret _update_mapping(
     Transaction &t,
     LBACursor &cursor,
-    update_func_t &&f,
+    update_func_t f,
     LogicalChildNode*);
 
   struct insert_position_t {
