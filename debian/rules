@@ -15,6 +15,9 @@ endif
 ifneq ($(filter pkg.ceph.arrow,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_SYSTEM_ARROW=ON
 endif
+ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_CRIMSON=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_UTF8PROC=ON
