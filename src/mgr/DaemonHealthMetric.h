@@ -12,6 +12,7 @@
 enum class daemon_metric : uint8_t {
   SLOW_OPS,
   PENDING_CREATING_PGS,
+  MIRRORING_FAILURE,
   NONE,
 };
 
@@ -19,6 +20,7 @@ static inline const char *daemon_metric_name(daemon_metric t) {
   switch (t) {
   case daemon_metric::SLOW_OPS: return "SLOW_OPS";
   case daemon_metric::PENDING_CREATING_PGS: return "PENDING_CREATING_PGS";
+  case daemon_metric::MIRRORING_FAILURE: return "MIRRORING_FAILURE";
   case daemon_metric::NONE: return "NONE";
   default: return "???";
   }
@@ -77,6 +79,7 @@ public:
   static std::list<DaemonHealthMetric> generate_test_instances() {
     std::list<DaemonHealthMetric> o;
     o.push_back(DaemonHealthMetric(daemon_metric::SLOW_OPS, 1));
+    o.push_back(DaemonHealthMetric(daemon_metric::MIRRORING_FAILURE, 1));
     o.push_back(DaemonHealthMetric(daemon_metric::PENDING_CREATING_PGS, 1, 2));
     return o;
   }

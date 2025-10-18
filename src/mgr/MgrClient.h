@@ -108,6 +108,9 @@ protected:
   bool mgr_optional = false;
 
 public:
+  std::vector<DaemonHealthMetric>& get_daemon_health_metrics() {
+    return daemon_health_metrics;
+  }
   MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
@@ -169,7 +172,7 @@ public:
     std::map<std::string,std::string>&& status);
   int service_daemon_update_task_status(
     std::map<std::string,std::string> &&task_status);
-  void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
+  int update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
   bool is_initialized() const { return initialized; }
 
