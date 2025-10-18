@@ -455,6 +455,10 @@ public:
     const ObjectState& initial_obs);
 
   void apply_stats();
+  // Clean up any in-memory side effects (e.g., prepared clone OBCs)
+  // created prior to a failed write. This complements the obc metadata
+  // restoration performed by PG::run_executer()'s rollback logic.
+  void on_rollback();
 };
 
 template <class Context, class MainFunc, class EffectFunc>
@@ -532,6 +536,8 @@ void OpsExecuter::RollbackHelper<Func>::rollback_obc_if_modified()
     need_rollback);
   if (need_rollback) {
     func(ox->obc);
+    // Also clean up any prepared clone OBCs and related in-memory state.
+    ox->on_rollback();
   }
 }
 
