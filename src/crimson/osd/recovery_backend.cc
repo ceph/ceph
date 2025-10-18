@@ -6,12 +6,17 @@
 #include "crimson/common/coroutine.h"
 #include "crimson/common/exception.h"
 #include "crimson/common/log.h"
+#include "crimson/osd/ec_backend.h"
+#include "crimson/osd/ec_recovery_backend.h"
 #include "crimson/osd/recovery_backend.h"
+#include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 
 #include "messages/MOSDFastDispatchOp.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "osd/osd_types.h"
 
 SET_SUBSYS(osd);
@@ -442,11 +447,17 @@ RecoveryBackend::handle_scan(
 }
 
 RecoveryBackend::interruptible_future<>
-RecoveryBackend::handle_backfill_op(
+RecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
   crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return handle_recovery_delete(
+	boost::static_pointer_cast<MOSDPGRecoveryDelete>(m));
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return handle_recovery_delete_reply(
+	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   case MSG_OSD_PG_BACKFILL:
     return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m), conn);
   case MSG_OSD_PG_BACKFILL_REMOVE:
@@ -460,4 +471,24 @@ RecoveryBackend::handle_backfill_op(
   }
 }
 
+std::unique_ptr<RecoveryBackend> RecoveryBackend::create(
+  const pg_pool_t& pool,
+  crimson::osd::PG& pg,
+  crimson::osd::ShardServices& shard_services,
+  crimson::os::CollectionRef coll,
+  PGBackend* backend)
+{
+  switch (pool.type) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return std::make_unique<ReplicatedRecoveryBackend>(
+      pg, shard_services, coll, backend);
+  case pg_pool_t::TYPE_ERASURE:
+    return std::make_unique<ECRecoveryBackend>(
+      pg, shard_services, coll, static_cast<ECBackend*>(backend));
+  default:
+    ceph_abort_msg(seastar::format(
+      "unsupported pool type '{}'", pool.type));
+  }
 }
+
+} // namespace crimson::osd
