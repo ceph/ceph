@@ -181,7 +181,7 @@ public:
     Transaction &t,
     LBACursorRef cursor,
     int delta) final {
-    co_return (co_await _update_mapping(
+    co_return co_await _update_mapping(
       t,
       *cursor,
       [delta](lba_map_val_t ret) {
@@ -193,7 +193,7 @@ public:
     ).handle_error_interruptible(
       base_iertr::pass_further{},
       crimson::ct_error::assert_all{}
-    )).take_cursor();
+    );
   }
 
   remap_ret remap_mappings(
@@ -309,89 +309,12 @@ private:
   seastar::metrics::metric_group metrics;
   void register_metrics();
 
-  struct update_mapping_ret_bare_t {
-    update_mapping_ret_bare_t()
-	: update_mapping_ret_bare_t(LBACursorRef(nullptr)) {}
-
-    update_mapping_ret_bare_t(LBACursorRef cursor)
-	: ret(std::move(cursor)) {}
-
-    update_mapping_ret_bare_t(
-      laddr_t laddr, lba_map_val_t value, LBACursorRef &&cursor)
-	: ret(removed_mapping_t{laddr, value, std::move(cursor)}) {}
-
-    struct removed_mapping_t {
-      laddr_t laddr;
-      lba_map_val_t map_value;
-      LBACursorRef next;
-    };
-    std::variant<removed_mapping_t, LBACursorRef> ret;
-
-    bool is_removed_mapping() const {
-      return ret.index() == 0;
-    }
-
-    bool is_alive_mapping() const {
-      if (ret.index() == 1) {
-	assert(std::get<1>(ret));
-	return true;
-      } else {
-	return false;
-      }
-    }
-
-    removed_mapping_t &get_removed_mapping() {
-      assert(is_removed_mapping());
-      return std::get<0>(ret);
-    }
-
-    const removed_mapping_t& get_removed_mapping() const {
-      assert(is_removed_mapping());
-      return std::get<0>(ret);
-    }
-
-    const LBACursor& get_cursor() const {
-      assert(is_alive_mapping());
-      return *std::get<1>(ret);
-    }
-
-    LBACursorRef take_cursor() {
-      assert(is_alive_mapping());
-      return std::move(std::get<1>(ret));
-    }
-  };
-
-  mapping_update_result_t get_mapping_update_result(
-    update_mapping_ret_bare_t &result) {
-    if (result.is_removed_mapping()) {
-      auto &v = result.get_removed_mapping();
-      auto &val = v.map_value;
-      return {v.laddr,
-	      val.refcount,
-	      val.pladdr,
-	      val.len,
-	      v.next->is_indirect()
-		? LBAMapping::create_indirect(nullptr, std::move(v.next))
-		: LBAMapping::create_direct(std::move(v.next))};
-    } else {
-      assert(result.is_alive_mapping());
-      auto &c = result.get_cursor();
-      assert(c.val);
-      ceph_assert(!c.is_indirect());
-      return {c.get_laddr(), c.val->refcount, 
-	c.val->pladdr, c.val->len,
-	LBAMapping::create_direct(result.take_cursor())};
-    }
-  }
-
   /**
    * _update_mapping
    *
    * Updates mapping, removes if f returns nullopt
    */
-  using _update_mapping_iertr = ref_iertr;
-  using _update_mapping_ret = ref_iertr::future<
-    update_mapping_ret_bare_t>;
+  using _update_mapping_ret = ref_iertr::future<LBACursorRef>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
