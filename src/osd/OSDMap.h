@@ -1723,7 +1723,8 @@ private:
     read_balance_info_t &p_rb_info) const;
 
   float rbi_round(float f) const {
-    return (f > 0.0) ? floor(f * 100 + 0.5) / 100 : ceil(f * 100 - 0.5) / 100;
+    // Round to two decimal places away from zero to ensure the result does not become 0
+    return (f > 0.0) ? ceil(f * 100 + 0.5) / 100 : floor(f * 100 - 0.5) / 100;
   }
 
   int64_t has_zero_pa_pgs(
