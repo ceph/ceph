@@ -166,13 +166,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'ssh_config_file',
             type='str',
             default=None,
-            desc='customized SSH config file to connect to managed hosts',
+            desc='Customized SSH config file to distribute to managed hosts',
         ),
         Option(
             'device_cache_timeout',
             type='secs',
             default=30 * 60,
-            desc='seconds to cache device inventory',
+            desc='Seconds for which to cache device inventory',
         ),
         Option(
             'device_enhanced_scan',
@@ -191,32 +191,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'daemon_cache_timeout',
             type='secs',
             default=10 * 60,
-            desc='seconds to cache service (daemon) inventory',
+            desc='Seconds for which to cache service (daemon) inventory',
         ),
         Option(
             'facts_cache_timeout',
             type='secs',
             default=1 * 60,
-            desc='seconds to cache host facts data',
+            desc='Seconds for which to cache host facts data',
         ),
         Option(
             'host_check_interval',
             type='secs',
             default=10 * 60,
-            desc='how frequently to perform a host check',
+            desc='How frequently to perform a host check',
         ),
         Option(
             'stray_daemon_check_interval',
             type='secs',
             default=30 * 60,
-            desc='how frequently cephadm should check for the presence of stray daemons',
+            desc='How frequently cephadm should check for the presence of stray daemons',
         ),
         Option(
             'mode',
             type='str',
             enum_allowed=['root', 'cephadm-package'],
             default='root',
-            desc='mode for remote execution of cephadm',
+            desc='Mode for remote execution of cephadm',
         ),
         Option(
             'container_image_base',
@@ -228,27 +228,27 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'warn_on_stray_hosts',
             type='bool',
             default=True,
-            desc='raise a health warning if daemons are detected on a host '
+            desc='Raise a health warning if daemons are detected on a host '
             'that is not managed by cephadm',
         ),
         Option(
             'warn_on_stray_daemons',
             type='bool',
             default=True,
-            desc='raise a health warning if daemons are detected '
+            desc='Raise a health warning if daemons are detected '
             'that are not managed by cephadm',
         ),
         Option(
             'warn_on_failed_host_check',
             type='bool',
             default=True,
-            desc='raise a health warning if the host check fails',
+            desc='Raise a health warning if the host check fails'
         ),
         Option(
             'log_to_cluster',
             type='bool',
             default=True,
-            desc='log to the "cephadm" cluster log channel"',
+            desc='Log to the "cephadm" cluster log channel"'
         ),
         Option(
             'allow_ptrace',
@@ -256,9 +256,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='allow SYS_PTRACE capability on ceph containers',
             long_desc='The SYS_PTRACE capability is needed to attach to a '
-            'process with gdb or strace.  Enabling this options '
-            'can allow debugging daemons that encounter problems '
-            'at runtime.',
+            'process with gdb or strace. Enabling this option '
+            'can facilitate debugging daemons that encounter runtime problems.'
         ),
         Option(
             'container_init',
@@ -270,32 +269,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'prometheus_alerts_path',
             type='str',
             default='/etc/prometheus/ceph/ceph_default_alerts.yml',
-            desc='location of alerts to include in prometheus deployments',
+            desc='Location of alerts to include in Prometheus Alertmanager'
         ),
         Option(
             'grafana_dashboards_path',
             type='str',
             default='/etc/grafana/dashboards/ceph-dashboard/',
-            desc='location of dashboards to include in grafana deployments',
+            desc='Location of dashboards to include in Grafana'
         ),
         Option(
             'migration_current',
             type='int',
             default=None,
-            desc='internal - do not modify',
+            desc='Internal - do not modify',
             # used to track spec and other data migrations.
         ),
         Option(
             'config_dashboard',
             type='bool',
             default=True,
-            desc='manage configs like API endpoints in Dashboard.'
+            desc='Manage configs like API endpoints in Dashboard.'
         ),
         Option(
             'manage_etc_ceph_ceph_conf',
             type='bool',
             default=False,
-            desc='Manage and own /etc/ceph/ceph.conf on the hosts.',
+            desc='Manage and own /etc/ceph/ceph.conf on hosts.',
         ),
         Option(
             'manage_etc_ceph_ceph_conf_hosts',
@@ -308,7 +307,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'registry_url',
             type='str',
             default=None,
-            desc='Registry url for login purposes. This is not the default registry'
+            desc='Registry URL for login purposes. This is not the default registry.'
         ),
         Option(
             'registry_username',
@@ -333,13 +332,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'use_repo_digest',
             type='bool',
             default=True,
-            desc='Automatically convert image tags to image digest. Make sure all daemons use the same image',
+            desc='Automatically convert image tags to image digest to ensure that all daemons use the same image'
         ),
         Option(
             'config_checks_enabled',
             type='bool',
             default=False,
-            desc='Enable or disable the cephadm configuration analysis',
+            desc='Enable or disable cephadm configuration analysis'
         ),
         Option(
             'default_registry',
@@ -352,37 +351,41 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'max_count_per_host',
             type='int',
             default=10,
-            desc='max number of daemons per service per host',
+            desc='Max number of daemons per service per host: guard against mistakes and runaways',
         ),
         Option(
             'autotune_memory_target_ratio',
             type='float',
             default=.7,
-            desc='ratio of total system memory to divide amongst autotuned daemons'
+            desc='Fraction of total system memory to divide among autotuned daemons. '
+                 'Converged systems hosting both Ceph and compute should set '
+                 'a lower value; systems with more than 10 GiB of memory per '
+                 'OSD may benefit from a slightly larger value so that the '
+                 'abundance of RAM can be fully utilized',
         ),
         Option(
             'autotune_interval',
             type='secs',
             default=10 * 60,
-            desc='how frequently to autotune daemon memory'
+            desc='How frequently to autotune daemon memory'
         ),
         Option(
             'use_agent',
             type='bool',
             default=False,
-            desc='Use cephadm agent on each host to gather and send metadata'
+            desc='Use the cephadm agent on each host to gather and send metadata'
         ),
         Option(
             'agent_refresh_rate',
             type='secs',
             default=20,
-            desc='How often agent on each host will try to gather and send metadata'
+            desc='How often the agent on each host will gather and send metadata'
         ),
         Option(
             'agent_starting_port',
             type='int',
             default=4721,
-            desc='First port agent will try to bind to (will also try up to next 1000 subsequent ports if blocked)'
+            desc='The first TCP port the agent will try to bind to. Up to 1000 subsequent ports will be attempted if this port cannot be bound'
         ),
         Option(
             'agent_down_multiplier',
@@ -394,13 +397,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'hw_monitoring',
             type='bool',
             default=False,
-            desc='Deploy hw monitoring daemon on every host.'
+            desc='Whether the hardware monitoring daemon be deployed on every host?'
         ),
         Option(
             'max_osd_draining_count',
             type='int',
             default=10,
-            desc='max number of osds that will be drained simultaneously when osds are removed'
+            desc='Max number of OSDs that will be drained simultaneously when OSDs are removed'
         ),
         Option(
             'max_parallel_osd_upgrades',
@@ -412,19 +415,19 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'service_discovery_port',
             type='int',
             default=8765,
-            desc='cephadm service discovery port'
+            desc='Cephadm service discovery port'
         ),
         Option(
             'cgroups_split',
             type='bool',
             default=True,
-            desc='Pass --cgroups=split when cephadm creates containers (currently podman only)'
+            desc='Pass --cgroups=split when cephadm creates containers (currently Podman only)'
         ),
         Option(
             'log_refresh_metadata',
             type='bool',
             default=False,
-            desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
+            desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at the debug level'
         ),
         Option(
             'certificate_check_debug_mode',
@@ -451,7 +454,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'certificate_duration_days',
             type='int',
             default=(3 * 365),
-            desc='Specifies the duration of self certificates generated and signed by cephadm root CA',
+            desc='Specifies the duration of self-signed certificates generated and signed by the cephadm root CA',
             min=90,
             max=(10 * 365)
         ),
@@ -467,7 +470,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'secure_monitoring_stack',
             type='bool',
             default=False,
-            desc='Enable TLS security for all the monitoring stack daemons'
+            desc='Enable TLS security for all monitoring stack daemons'
         ),
         Option(
             'default_cephadm_command_timeout',
@@ -480,27 +483,27 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'ssh_keepalive_interval',
             type='int',
             default=7,
-            desc='How often ssh connections are checked for liveness'
+            desc='How often SSH connections are checked for liveness'
         ),
         Option(
             'ssh_keepalive_count_max',
             type='int',
             default=3,
-            desc='How many times ssh connections can fail liveness checks '
+            desc='How many sequential SSH connection liveness check failures '
             'before the host is marked offline'
         ),
         Option(
             'cephadm_log_destination',
             type='str',
             default='',
-            desc="Destination for cephadm command's persistent logging",
+            desc="Destination for cephadm command persistent logging",
             enum_allowed=['file', 'syslog', 'file,syslog'],
         ),
         Option(
             'oob_default_addr',
             type='str',
             default='169.254.1.1',
-            desc="Default address for RedFish API (oob management)."
+            desc="Default IP address for RedFish API (OOB management)."
         ),
     ]
     for image in DefaultImages:
