@@ -798,6 +798,35 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blocklist ls 2>&1 | grep -q "listed 0 entries"
 fi
 
+if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+  if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+    testlog "TEST: test partially synced demote snapshot sync after rbd-mirror restart"
+    image=test_demote_image
+    create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE} 1G
+    write_image ${CLUSTER2} ${POOL} ${image} 100
+    wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
+    wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+    wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
+    wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
+    write_image ${CLUSTER2} ${POOL} ${image} 256 4194304
+    demote_image ${CLUSTER2} ${POOL} ${image}
+    sleep 1
+    stop_mirrors ${CLUSTER1} -KILL
+    SNAPS=$(get_snaps_json ${CLUSTER1} ${POOL} ${image})
+    jq -e '.[-1].namespace["type"] == "mirror" and .[-1].namespace["state"] == "demoted" and .[-1].namespace["complete"] == false' <<< ${SNAPS}
+    start_mirrors ${CLUSTER1}
+    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
+    wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
+    compare_images ${CLUSTER1} ${CLUSTER2} ${POOL} ${POOL} ${image}
+    promote_image ${CLUSTER1} ${POOL} ${image}
+    wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
+    wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
+    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+replaying'
+    remove_image_retry ${CLUSTER1} ${POOL} ${image}
+  fi
+fi
+
 testlog "TEST: force promote with a user snapshot"
 force_promote_image=test_force_promote_user
 create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${force_promote_image} ${RBD_MIRROR_MODE} 10G
