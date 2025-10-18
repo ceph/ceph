@@ -107,6 +107,7 @@ tasks:
       - |
         set -ex
         FSID=$(/home/ubuntu/cephtest/cephadm shell -- ceph fsid)
+        ceph orch redeploy mon --force
         sleep 60
         # check extra container and entrypoint args written to mon unit run file
         grep "\-\-cpus=2" /var/lib/ceph/$FSID/mon.*/unit.run
