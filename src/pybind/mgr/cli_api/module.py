@@ -14,8 +14,20 @@ get_time = time.perf_counter
 
 def pretty_json(obj: Any) -> Any:
     import json
-    return json.dumps(obj, sort_keys=True, indent=2)
+    return json.dumps(_make_serializable(obj), sort_keys=True, indent=2)
 
+def _make_serializable(obj):
+    """Convert non-JSON-serializable objects to serializable equivalents"""
+    if obj.__class__.__name__ == 'mappingproxy':
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, tuple):
+        return [_make_serializable(item) for item in obj]
+    elif isinstance(obj, list):
+        return [_make_serializable(item) for item in obj]
+    elif isinstance(obj, dict):
+        return {k: _make_serializable(v) for k, v in obj.items()}
+    else:
+        return obj
 
 class CephCommander:
     """
@@ -114,6 +126,19 @@ class CLI(MgrModule, metaclass=MgrAPIReflector):
             "min": min(results),
         }
         return HandleCommandResult(stdout=pretty_json(stats))
+
+    @CLICommand('mgr cli cache flush')
+    def erase_cache(self, what: str) -> HandleCommandResult:
+        """
+        Erase a cached map by its name.
+        """
+        r = self.erase(what)
+        if r is False:
+            return HandleCommandResult(
+                errno.EINVAL,
+                stderr=f"no cached map named {what}"
+            )
+        return HandleCommandResult(stdout=f"Cache map {what} erased successfully")
 
 
 class BenchmarkException(Exception):
