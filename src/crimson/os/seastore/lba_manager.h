@@ -126,18 +126,6 @@ public:
     laddr_t hint,
     extent_len_t len) = 0;
 
-  struct mapping_update_result_t {
-    laddr_t key;
-    extent_ref_count_t refcount = 0;
-    pladdr_t addr;
-    extent_len_t length = 0;
-    LBAMapping mapping; // the mapping pointing to the updated lba entry if
-			// refcount is non-zero; the next lba entry or the
-			// end mapping otherwise.
-    bool need_to_remove_extent() const {
-      return refcount == 0 && addr.is_paddr() && !addr.get_paddr().is_zero();
-    }
-  };
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
 
