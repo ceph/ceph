@@ -348,12 +348,6 @@ class CephadmUpgrade:
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
 
-        if not self.mgr.bootstrap_version_stored:
-            if self.mgr.db_ready():
-                self.mgr.version_tracker.add_bootstrap_cluster_version()
-            else:
-                self.mgr.log.debug('Version Tracker, Cluster bootstrap version "' +  self.mgr._version + '" could not be added during upgrade: mgr db not ready')
-
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
