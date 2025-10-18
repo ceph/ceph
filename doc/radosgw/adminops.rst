@@ -372,6 +372,692 @@ Special Error Responses
 
 None.
 
+Create Account
+==============
+.. versionadded:: Squid
+
+Create a new account.
+
+:caps: accounts=write
+
+Syntax
+~~~~~~
+
+::
+
+	POST /{admin}/account?format=json HTTP/1.1
+	Host: {fqdn}
+
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``id``
+
+:Description: The ID of the account to be created.
+:Type: String
+:Example: ``RGW00000000000000001``
+:Required: Yes
+
+An account ID must be 20 characters long, and in the format of the string "RGW" followed by 17 numeric characters.
+
+``name``
+
+:Description: The name of the account to be created.
+:Type: String
+:Example: ``account_name``
+:Required: Yes
+
+``email``
+
+:Description: The email address associated with the account.
+:Type: String
+:Example: ``foo@bar.com``
+:Required: No
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: string
+:Example: tenant1
+:Required: No
+
+``max-users``
+
+:Description: Specifies the maximum number of users the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-roles``
+
+:Description: Specifies the maximum number of roles the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-groups``
+
+:Description: Specifies the maximum number of groups the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-access-keys``
+
+:Description: Specifies the maximum number of access keys the account can own. The default is 4.
+:Type: Integer
+:Example: 1 [4]
+:Required: No
+
+``max-buckets``
+
+:Description: Specifies the maximum number of buckets the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+If successful, the response contains the following account information.
+
+``account``
+
+:Description: A container for the account information.
+:Type: Container
+
+``id``
+
+:Description: The ID of the account created.
+:Type: String
+:Parent: ``account``
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: String
+:Parent: ``account``
+
+``name``
+
+:Description: The name of the account created.
+:Type: String
+:Parent: ``account``
+
+``email``
+
+:Description: The email address associated with the account.
+:Type: String
+:Parent: ``account``
+
+``max_users``
+
+:Description: The maximum number of users the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_roles``
+
+:Description: The maximum number of roles the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_groups``
+
+:Description: The maximum number of groups the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_buckets``
+
+:Description: The maximum number of buckets the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_access_keys``
+
+:Description: The maximum number of access keys the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``quota``
+
+:Description: A container for the account quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the account level.
+:Type: Bool
+:Parent: ``quota``
+
+``check_on_raw``
+
+:Description: Whether quota should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``quota``
+
+``max_size``
+
+:Description: The max quota size in bytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_objects``
+
+:Description: The max number of objects that an account can own.
+:Type: Integer
+:Parent: ``quota``
+
+``bucket_quota``
+
+:Description: A container for the account bucket-level quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the bucket level for the account.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``check_on_raw``
+
+:Description: Whether bucket quota for the account should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``max_size``
+
+:Description: The max quota size in bytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_objects``
+
+:Description: The max number of objects that a bucket under the account can have.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``AccountAlreadyExists``
+
+:Description: Attempt to create existing account. This can happen if the account ID or the email is already in use.
+:Code: 409 Conflict
+
+
+Modify Account
+==============
+.. versionadded:: Squid
+
+Modify an account. Either ``id``, ``name``, or ``email`` must be provided.
+
+:caps: accounts=write
+
+Syntax
+~~~~~~
+
+::
+
+	PUT /{admin}/account?format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``id``
+
+:Description: The ID of the account to be modified.
+:Type: String
+:Example: ``RGW00000000000000001``
+:Required: No
+
+``name``
+
+:Description: The name of the account to be modified.
+:Type: String
+:Example: ``account_name``
+:Required: No
+
+``email``
+
+:Description: The email address of the account to be modified.
+:Type: String
+:Example: ``foo@bar.com``
+:Required: No
+
+``max-users``
+
+:Description: Specifies the maximum number of users the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-roles``
+
+:Description: Specifies the maximum number of roles the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-groups``
+
+:Description: Specifies the maximum number of groups the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+``max-access-keys``
+
+:Description: Specifies the maximum number of access keys the account can own. The default is 4.
+:Type: Integer
+:Example: 1 [4]
+:Required: No
+
+``max-buckets``
+
+:Description: Specifies the maximum number of buckets the account can own. The default is 1000.
+:Type: Integer
+:Example: 500 [1000]
+:Required: No
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+If successful, the response contains the following account information.
+
+``account``
+
+:Description: A container for the account information.
+:Type: Container
+
+``id``
+
+:Description: The account ID.
+:Type: String
+:Parent: ``account``
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: String
+:Parent: ``account``
+
+``name``
+
+:Description: The name of the account created.
+:Type: String
+:Parent: ``account``
+
+``email``
+
+:Description: The email address associated with the account.
+:Type: String
+:Parent: ``account``
+
+``max_users``
+
+:Description: The maximum number of users the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_roles``
+
+:Description: The maximum number of roles the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_groups``
+
+:Description: The maximum number of groups the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_buckets``
+
+:Description: The maximum number of buckets the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_access_keys``
+
+:Description: The maximum number of access keys the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``quota``
+
+:Description: A container for the account quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the account level.
+:Type: Bool
+:Parent: ``quota``
+
+``check_on_raw``
+
+:Description: Whether quota should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``quota``
+
+``max_size``
+
+:Description: The max quota size in bytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_objects``
+
+:Description: The max number of objects that an account can own.
+:Type: Integer
+:Parent: ``quota``
+
+``bucket_quota``
+
+:Description: A container for the account bucket-level quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the bucket level for the account.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``check_on_raw``
+
+:Description: Whether bucket quota for the account should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``max_size``
+
+:Description: The max quota size in bytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_objects``
+
+:Description: The max number of objects that a bucket under the account can have.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
+Get Account Info
+===========
+.. versionadded:: Squid
+
+Get account info. Either an ``id`` or a ``name`` must be provided.
+
+:caps: accounts=write
+
+Syntax
+~~~~~~
+
+::
+
+	GET /{admin}/account?format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``id``
+
+:Description: The ID of the account to get info for.
+:Type: String
+:Example: ``RGW00000000000000001``
+:Required: No
+
+``name``
+
+:Description: The name of the account to get info for.
+:Type: String
+:Example: ``account_name``
+:Required: No
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+If successful, the response contains the following account information.
+
+``account``
+
+:Description: A container for the account information.
+:Type: Container
+
+``id``
+
+:Description: The account ID.
+:Type: String
+:Parent: ``account``
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: String
+:Parent: ``account``
+
+``name``
+
+:Description: The name of the account created.
+:Type: String
+:Parent: ``account``
+
+``email``
+
+:Description: The email address associated with the account.
+:Type: String
+:Parent: ``account``
+
+``max_users``
+
+:Description: The maximum number of users the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_roles``
+
+:Description: The maximum number of roles the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_groups``
+
+:Description: The maximum number of groups the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_buckets``
+
+:Description: The maximum number of buckets the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``max_access_keys``
+
+:Description: The maximum number of access keys the account can own.
+:Type: Integer
+:Parent: ``account``
+
+``quota``
+
+:Description: A container for the account quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the account level.
+:Type: Bool
+:Parent: ``quota``
+
+``check_on_raw``
+
+:Description: Whether quota should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``quota``
+
+``max_size``
+
+:Description: The max quota size in bytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes.
+:Type: Integer
+:Parent: ``quota``
+
+``max_objects``
+
+:Description: The max number of objects that an account can own.
+:Type: Integer
+:Parent: ``quota``
+
+``bucket_quota``
+
+:Description: A container for the account bucket-level quota information.
+:Type: Container
+:Parent: ``account``
+
+``enabled``
+
+:Description: Whether quota is enabled at the bucket level for the account.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``check_on_raw``
+
+:Description: Whether bucket quota for the account should be checked on raw usage instead of the 4 KiB rounded one.
+:Type: Bool
+:Parent: ``bucket_quota``
+
+``max_size``
+
+:Description: The max quota size in bytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_size_kb``
+
+:Description: The max quota size in kilobytes for buckets under the account.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+``max_objects``
+
+:Description: The max number of objects that a bucket under the account can have.
+:Type: Integer
+:Parent: ``bucket_quota``
+
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
+Remove Account
+==============
+.. versionadded:: Squid
+
+Remove an existing account. Either ``id``, ``name``, or ``email`` must be provided.
+
+:caps: accounts=write
+
+Syntax
+~~~~~~
+
+::
+
+	DELETE /{admin}/account?format=json HTTP/1.1
+	Host: {fqdn}
+
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``id``
+
+:Description: The ID of the account to be removed.
+:Type: String
+:Example: ``RGW00000000000000001``
+:Required: No
+
+``tenant``
+
+:Description: The Tenant under which the account exists.
+:Type: String
+:Example: ``tenant``
+:Required: No
+
+``name``
+
+:Description: The name of the account to be removed.
+:Type: String
+:Example: ``account_name``
+:Required: No
+
+``email``
+
+:Description: The email address associated with the account to be removed.
+:Type: String
+:Example: ``foo@bar.com``
+:Required: No
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+None
+
+Special Error Responses
+~~~~~~~~~~~~~~~~~~~~~~~
+
+None.
+
 Create User
 ===========
 
@@ -497,6 +1183,15 @@ A tenant name may also specified as a part of ``uid``, by following the syntax
 :Description: default storage class for the user, default-placement must be defined when setting this option.
 :Type: string
 :Example: STANDARD-1A
+:Required: No
+
+.. versionadded:: Squid
+
+``account-id``
+
+:Description: the account under which a user should exist.
+:Type: string
+:Example: RGW00000000000000001
 :Required: No
 
 Response Entities
@@ -1987,12 +2682,16 @@ Special Error Responses
 Quotas
 ======
 
-The Admin Operations API enables you to set quotas on users and on bucket owned
-by users. See `Quota Management`_ for additional details. Quotas include the
-maximum number of objects in a bucket and the maximum storage size in megabytes.
+The Admin Operations API enables you to set quotas on users and on buckets owned
+by users, and on accounts and on buckets owned by accounts. See `Quota Management`_
+for additional details. Quotas include the maximum number of objects in a bucket 
+and the maximum storage size in megabytes.
 
-To view quotas, the user must have a ``users=read`` capability. To set,
+To view quotas for users, the user must have a ``users=read`` capability. To set,
 modify or disable a quota, the user must have ``users=write`` capability.
+
+To view quotas for accounts, the user must have a ``accounts=read`` capability. To set,
+modify or disable a quota, the user must have ``accounts=write`` capability.
 See the `Admin Guide`_ for details.
 
 Valid parameters for quotas include:
@@ -2008,7 +2707,8 @@ Valid parameters for quotas include:
   to specify it in KiB. A negative value disables this setting.
 
 - **Quota Type:** The ``quota-type`` option sets the scope for the quota.
-  The options are ``bucket`` and ``user``.
+  The options are ``bucket`` and ``user`` for user-level quota.
+  The options are ``bucket`` and ``account`` for account-level quota.
 
 - **Enable/Disable Quota:** The ``enabled`` option specifies whether the
   quota should be enabled. The value should be either 'True' or 'False'.
@@ -2067,6 +2767,22 @@ permission. ::
 The content must include a JSON representation of the quota settings
 as mentioned in Set Bucket Quota section above.
 
+
+Set Account Quota
+~~~~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``accounts`` capability set with ``write``
+permission. ::
+
+	PUT /admin/account?quota&id=<account_id>&quota-type=account
+
+Set Bucket Quota under an Account
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To set a quota, the user must have ``accounts`` capability set with ``write``
+permission. ::
+
+	PUT /admin/account?quota&id=<account_id>&quota-type=bucket
 
 
 Rate Limit
