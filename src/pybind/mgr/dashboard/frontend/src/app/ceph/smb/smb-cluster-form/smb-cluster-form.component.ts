@@ -78,7 +78,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   ) {
     super();
 
-    this.resource = $localize`Cluster`;
+    this.resource = $localize`cluster`;
     this.modalData$ = this.smbService.modalData$;
   }
 

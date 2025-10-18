@@ -38,8 +38,8 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/${JOIN_AUTH_PATH}/${URLVerbs.EDIT}`);
-    this.resource = $localize`Active directory (AD) access resource`;
+    this.editing = this.router.url.startsWith(`${JOIN_AUTH_PATH}/${URLVerbs.EDIT}`);
+    this.resource = $localize`Active Directory access resource`;
   }
 
   ngOnInit() {
