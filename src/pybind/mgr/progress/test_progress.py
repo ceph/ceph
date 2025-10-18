@@ -16,7 +16,7 @@ class TestPgRecoveryEvent(object):
     def setup_method(self):
         # Creating the class and Mocking 
         # a bunch of attributes for testing
-        module._module = mock.Mock() # just so Event._refresh() works
+        module._module = mock.Mock() # just so Event._persist() works
         self.test_event = module.PgRecoveryEvent(None, None, [module.PgId(1,i) for i in range(3)], [0], 30, False)
 
     def test_pg_update(self):
