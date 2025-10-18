@@ -715,7 +715,7 @@
                   "mode": "absolute",
                   "steps": []
                },
-               "unit": "decbytes"
+               "unit": "bytes"
             },
             "overrides": []
          },
@@ -751,7 +751,7 @@
                   "uid": "${datasource}"
                },
                "editorMode": "code",
-               "expr": "rate(smb_smb2_request_inbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "expr": "sum by (operation) (rate(smb_smb2_request_inbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
                "format": "time_series",
                "instant": false,
                "intervalFactor": 1,
@@ -764,7 +764,7 @@
                   "uid": "${datasource}"
                },
                "editorMode": "code",
-               "expr": "rate(smb_smb2_request_outbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "expr": "sum by (operation) (rate(smb_smb2_request_outbytes{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
                "format": "time_series",
                "hide": false,
                "instant": false,
@@ -862,7 +862,7 @@
                   "uid": "${datasource}"
                },
                "editorMode": "code",
-               "expr": "rate(smb_smb2_request_total{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "expr": "sum by (operation) (rate(smb_smb2_request_total{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
                "format": "time_series",
                "instant": false,
                "intervalFactor": 1,
@@ -959,7 +959,7 @@
                   "uid": "${datasource}"
                },
                "editorMode": "code",
-               "expr": "rate(smb_smb2_request_duration_microseconds_sum{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval])",
+               "expr": "sum by (operation) (rate(smb_smb2_request_duration_microseconds_sum{instance=~\"$hostname\", share=~\"$share\", client=~\"$client\"}[$__rate_interval]))",
                "format": "time_series",
                "instant": false,
                "intervalFactor": 1,
