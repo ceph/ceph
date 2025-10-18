@@ -19,6 +19,7 @@
 #include "include/types.h"
 
 #include <iosfwd>
+#include <list>
 #include <map>
 #include <set>
 
