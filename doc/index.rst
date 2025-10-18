@@ -118,6 +118,7 @@ about Ceph, see our `Architecture`_ section.
    governance
    foundation
    ceph-volume/index
+   crimson/crimson
    releases/general
    releases/index
    security/index
