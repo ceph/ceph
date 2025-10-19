@@ -99,6 +99,28 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 ENDOFKEY
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
+
+        # From ceph-build.git:src/scripts/build_utils.sh:setup_gcc_hook.
+        # Do this here instead of in the hook when running in a container
+        # (like build-with-container.py).  Test if pid1 is init or systemd.
+
+        if ! ps -p 1 -o comm= | grep -qE "init|systemd"; then
+            $SUDO update-alternatives --remove-all gcc
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-\${old} 10 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-\${old}
+
+            $SUDO update-alternatives --auto gcc
+
+            # cmake uses the latter by default
+            $SUDO ln -nsf /usr/bin/gcc /usr/bin/\${ARCH}-linux-gnu-gcc
+            $SUDO ln -nsf /usr/bin/g++ /usr/bin/\${ARCH}-linux-gnu-g++
+        fi
     fi
 }
 
