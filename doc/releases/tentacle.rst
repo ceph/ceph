@@ -351,7 +351,22 @@ Telemetry
 Crimson / Seastore
 ------------------
 
-* Check out the latest news on Crimson here: https://ceph.io/en/news/crimson/
+The Crimson project continues to progress, with the Squid release marking the
+first technical preview available for Crimson.
+The Tentacle release introduces a host of improvements and new functionalities
+that enhance the robustness, performance, and usability
+of both Crimson-OSD and the Seastore object store.
+In this release, Seastore can now be deployed alongside the Crimson-OSD!
+Early testing and experimentation are highly encouraged and we’d greatly
+appreciate any initial feedback rounds from the community to help guide future
+improvements.
+Check out the Crimson project updates blog post for Tentacle
+where we highlight some of the work included in the latest release, moving us
+closer to fully replacing the existing Classical OSD in the future: 
+https://ceph.io/en/news/blog/2025/crimson-T-release/
+
+If you're new to the Crimson project, please visit the project
+page for more information and resources: https://ceph.io/en/news/crimson
 
 Upgrading from Reef or Squid
 ----------------------------
