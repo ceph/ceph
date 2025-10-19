@@ -18,10 +18,11 @@
     caps rm                          remove user capabilities
     dedup stats                      Display dedup statistics from the last run
     dedup estimate                   Runs dedup in estimate mode (no changes will be made)
-    dedup restart                    Restart dedup; must include --yes-i-really-mean-it to activate
+    dedup exec                       Execute dedup (duplicated tail objects will be deleted); must include --yes-i-really-mean-it to activate
     dedup abort                      Abort dedup
     dedup pause                      Pause dedup
     dedup resume                     Resume paused dedup
+    dedup throttle                   Throttle dedup execution
     subuser create                   create a new subuser
     subuser modify                   modify subuser
     subuser rm                       remove subuser
@@ -351,6 +352,11 @@
      --disable-feature                 disable a zone/zonegroup feature
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
+  
+  Dedup throttle options:
+     --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited
+     --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited
+     --stat                        display dedup throttle setting
   
   Quota options:
      --max-objects                 specify max objects (negative value to disable)
