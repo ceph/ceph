@@ -1652,15 +1652,15 @@ public:
   shard_id_set nonprimary_shards; ///< EC partial writes: shards that cannot become a primary
 
   // Pool migration
-  int64_t migration_src = -1; ///< pool we are migrating from
-  int64_t migration_target = -1; ///< pool we are migrating to
+  std::optional<int64_t> migration_src; ///< pool we are migrating from
+  std::optional<int64_t> migration_target; ///< pool we are migrating to
   std::set<pg_t> migrating_pgs; ///< PGs currently migrating. Any higher value PGs have completed migration
 
   void clear_migrating_pgs() { migrating_pgs.clear(); }
 
   bool is_migrating() { return migration_src >= 0 || migration_target >= 0; }
-  bool is_migration_src() { return migration_src >= 0; }
-  bool is_migration_target() { return migration_target >= 0; }
+  bool is_migration_src() { return migration_target.has_value(); }
+  bool is_migration_target() { return migration_src.has_value(); }
 
   pool_opts_t opts; ///< options
 

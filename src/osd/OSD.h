@@ -481,7 +481,7 @@ public:
   void prune_sent_ready_to_merge(const OSDMapRef& osdmap);
 
   // -- pg migrated pool --
-  void send_pg_migrated_pool(int64_t migration_target, pg_t pgid);
+  void send_pg_migrated_pool(std::optional<int64_t> migration_target, pg_t pgid);
 
   // -- pg_temp --
 private:

@@ -1674,8 +1674,10 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("expected_num_objects", expected_num_objects);
   f->dump_bool("fast_read", fast_read);
   f->dump_stream("nonprimary_shards") << nonprimary_shards;
-  f->dump_int("migration_src", migration_src);
-  f->dump_int("migration_target", migration_target);
+  if (migration_src.has_value())
+    f->dump_int("migration_src", *migration_src);
+  if (migration_target.has_value())
+    f->dump_int("migration_target", *migration_target);
   f->dump_stream("migrating_pgs") << migrating_pgs;
   f->open_object_section("options");
   opts.dump(f);
