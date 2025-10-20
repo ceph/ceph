@@ -410,6 +410,40 @@ class Context:
         base = self.cli.image_repo or "ceph-build"
         return f"{base}:{self.target_tag()}"
 
+    @ftcache
+    def _env_file(self):
+        if not self.cli.env_file:
+            return None
+        with open(self.cli.env_file) as fh:
+            return fh.readlines()
+
+    @ftcache
+    def lookup_env_file(self, key):
+        """Simplistic env file parser/key lookup function.
+        Finds a value assignment in the env file, returns str unless
+        the env file parameter is not set or the key is not present,
+        in that case None will be returned.
+        """
+        # This script has minimal dependencies and so we avoid using
+        # a 3rd party "env file parser" library.
+        lines = self._env_file()
+        if not lines:
+            return None
+        prefix = f'{key}='
+        found = None
+        for line in lines:
+            if line.startswith(prefix):
+                found = line
+        if not found:
+            return None
+        temp_value = found.strip().split('=', 1)[-1]
+        # ensure there's only one value on this line, otherwise we could be
+        # reading garbage, or an arbitary shell command
+        values = shlex.split(temp_value)
+        if len(values) != 1:
+            raise ValueError(f"unexpected value in env file: {found!r}")
+        return values[0]
+
     def packages_build(self):
         """Return true if only packages will be build (not make check)."""
         return self.cli.image_variant in {
@@ -418,11 +452,29 @@ class Context:
             ImageVariant.PACKAGES_AND_CRIMSON,
         }
 
+    @ftcache
+    def _with_crimson(self):
+        with_crimson = os.environ.get('WITH_CRIMSON')
+        log.debug("Environment WITH_CRIMSON=%r", with_crimson)
+        with_crimson2 = self.lookup_env_file('WITH_CRIMSON')
+        log.debug("Env file WITH_CRIMSON=%r", with_crimson2)
+        if (
+            with_crimson != with_crimson2
+            and (with_crimson is not None)
+            and (with_crimson2 is not None)
+        ):
+            raise ValueError(
+                'conflicting WITH_CRIMSON values in env and env file'
+            )
+        elif with_crimson2 is not None:
+            with_crimson = with_crimson2
+        return with_crimson
+
     def variant(self):
         """Return calculated variant. Checks env vars to select between
         packages with or without crimson.
         """
-        with_crimson = os.environ.get('WITH_CRIMSON')
+        with_crimson = self._with_crimson()
         if (
             self.cli.image_variant is ImageVariant.PACKAGES_AUTO
             and with_crimson
@@ -439,7 +491,7 @@ class Context:
         if self.variant() is ImageVariant.PACKAGES_AND_CRIMSON:
             return True
         if self.variant() is ImageVariant.DEFAULT:
-            with_crimson = os.environ.get('WITH_CRIMSON')
+            with_crimson = self._with_crimson()
             return None if with_crimson is None else bool(with_crimson)
         return False
 
