@@ -6,16 +6,16 @@ After you have a running cluster, you can use the ``ceph`` tool to monitor your
 cluster. Monitoring a cluster typically involves checking OSD status, monitor
 status, placement group status, and metadata server status.
 
-Using the command line
+Using the Command Line
 ======================
 
-Interactive mode
+Interactive Mode
 ----------------
 
 To run the ``ceph`` tool in interactive mode, type ``ceph`` at the command line
 with no arguments. For example:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
     ceph
 
@@ -27,14 +27,14 @@ with no arguments. For example:
     quorum_status
     mon stat
 
-Non-default paths
+Non-default Paths
 -----------------
 
 If you specified non-default locations for your configuration or keyring when
 you install the cluster, you may specify their locations to the ``ceph`` tool
 by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph -c /path/to/conf -k /path/to/keyring health
 
@@ -46,13 +46,13 @@ you should check your cluster's status.
 
 To check a cluster's status, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph status
 
 Alternatively, you can run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph -s
 
@@ -73,13 +73,13 @@ OSD) might print the following:
   cluster:
     id:     477e46f1-ae41-4e43-9c8f-72c918ab0a20
     health: HEALTH_OK
-   
+
   services:
     mon: 3 daemons, quorum a,b,c
     mgr: x(active)
     mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
     osd: 3 osds: 3 up, 3 in
-  
+
   data:
     pools:   2 pools, 16 pgs
     objects: 21 objects, 2.19K
@@ -93,7 +93,7 @@ How Ceph Calculates Data Usage
 The ``usage`` value reflects the *actual* amount of raw storage used. The ``xxx
 GB / xxx GB`` value means the amount available (the lesser number) of the
 overall storage capacity of the cluster. The notional number reflects the size
-of the stored data before it is replicated, cloned or snapshotted.  Therefore,
+of the stored data before it is replicated, cloned or snapshotted. Therefore,
 the amount of data actually stored typically exceeds the notional amount
 stored, because Ceph creates replicas of the data and may also use storage
 capacity for cloning and snapshotting.
@@ -104,38 +104,38 @@ Watching a Cluster
 
 Each daemon in the Ceph cluster maintains a log of events, and the Ceph cluster
 itself maintains a *cluster log* that records high-level events about the
-entire Ceph cluster.  These events are logged to disk on monitor servers (in
+entire Ceph cluster. These events are logged to disk on monitor servers (in
 the default location ``/var/log/ceph/ceph.log``), and they can be monitored via
 the command line.
 
 To follow the cluster log, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph -w
 
 Ceph will print the status of the system, followed by each log message as it is
 added. For example:
 
-:: 
+::
 
   cluster:
     id:     477e46f1-ae41-4e43-9c8f-72c918ab0a20
     health: HEALTH_OK
-  
+
   services:
     mon: 3 daemons, quorum a,b,c
     mgr: x(active)
     mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
     osd: 3 osds: 3 up, 3 in
-  
+
   data:
     pools:   2 pools, 16 pgs
     objects: 21 objects, 2.19K
     usage:   546 GB used, 384 GB / 931 GB avail
     pgs:     16 active+clean
-  
-  
+
+
   2017-07-24 08:15:11.329298 mon.a mon.0 172.21.9.34:6789/0 23 : cluster [INF] osd.0 172.21.9.34:6806/20527 boot
   2017-07-24 08:15:14.258143 mon.a mon.0 172.21.9.34:6789/0 39 : cluster [INF] Activating manager daemon x
   2017-07-24 08:15:15.446025 mon.a mon.0 172.21.9.34:6789/0 47 : cluster [INF] Manager daemon x is now available
@@ -161,7 +161,7 @@ output is updated as follows:
             1 osds down
             Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded
 
-At the same time, cluster log messages are emitted to record the failure of the 
+At the same time, cluster log messages are emitted to record the failure of the
 health checks:
 
 ::
@@ -215,7 +215,7 @@ overridden by providing a number of milliseconds as an argument.
 To show all network performance data with a specified threshold of 0, send the
 following command to the mgr:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon /var/run/ceph/ceph-mgr.x.asok dump_osd_network 0
 
@@ -303,23 +303,23 @@ Muting Health Checks
 Health checks can be muted so that they have no effect on the overall
 reported status of the cluster. For example, if the cluster has raised a
 single health check and then you mute that health check, then the cluster will report a status of ``HEALTH_OK``.
-To mute a specific health check, use the health check code that corresponds to that health check (see :ref:`health-checks`), and 
+To mute a specific health check, use the health check code that corresponds to that health check (see :ref:`health-checks`), and
 run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute <code>
 
 For example, to mute an ``OSD_DOWN`` health check, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute OSD_DOWN
 
 Mutes are reported as part of the short and long form of the ``ceph health`` command's output.
 For example, in the above scenario, the cluster would report:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health
 
@@ -327,7 +327,7 @@ For example, in the above scenario, the cluster would report:
 
    HEALTH_OK (muted: OSD_DOWN)
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health detail
 
@@ -339,13 +339,13 @@ For example, in the above scenario, the cluster would report:
 
 A mute can be removed by running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health unmute <code>
 
 For example:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health unmute OSD_DOWN
 
@@ -354,19 +354,19 @@ associated with it: this means that the mute will automatically expire
 after a specified period of time. The TTL is specified as an optional
 duration argument, as seen in the following examples:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute OSD_DOWN 4h    # mute for 4 hours
    ceph health mute MON_DOWN 15m   # mute for 15 minutes
 
-Normally, if a muted health check is resolved (for example, if the OSD that raised the ``OSD_DOWN`` health check 
+Normally, if a muted health check is resolved (for example, if the OSD that raised the ``OSD_DOWN`` health check
 in the example above has come back up), the mute goes away. If the health check comes
 back later, it will be reported in the usual way.
 
 It is possible to make a health mute "sticky": this means that the mute will remain even if the
 health check clears. For example, to make a health mute "sticky", you might run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
 
@@ -382,7 +382,7 @@ To check a cluster's data usage and data distribution among pools, use the
 ``df`` command. This option is similar to Linux's ``df`` command. Run the
 following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df
 
@@ -393,7 +393,7 @@ The output of ``ceph df`` resembles the following::
    hdd    5.4 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.58
    ssd     22 TiB   19 TiB  2.7 TiB   2.7 TiB      12.36
    TOTAL  5.5 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.32
-   
+
    --- POOLS ---
    POOL                         ID   PGS   STORED  OBJECTS     USED  %USED  MAX AVAIL
    .mgr                         11     1  558 MiB      141  1.6 GiB      0    5.8 TiB
@@ -411,7 +411,7 @@ The output of ``ceph df`` resembles the following::
    default.rgw.buckets.non-ec  102   128  5.6 MiB       13   17 MiB      0    5.8 TiB
    kubedata                    104   256   63 GiB   17.65k  188 GiB   0.03    234 TiB
    kubemeta                    105   256  241 MiB      166  724 MiB      0    5.8 TiB
-   
+
 - **CLASS:** Statistics for each CRUSH device class present, for example, ``ssd`` and ``hdd``.
 - **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
@@ -421,11 +421,11 @@ The output of ``ceph df`` resembles the following::
   overhead, and reserved capacity.
 - **%RAW USED:** The percentage of raw storage used. Watch this number in
   conjunction with ``backfillfull ratio`` and ``near full ratio`` to be forewarned when
-  your cluster approaches the fullness thresholds. See `Storage Capacity`_.
+  your cluster approaches the fullness thresholds. See :ref:`storage-capacity`.
 
 Additional information may be displayed by invoking as below:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph df detail
 
@@ -436,7 +436,7 @@ The output now resembles the below example::
    hdd    5.4 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.58
    ssd     22 TiB   19 TiB  2.7 TiB   2.7 TiB      12.36
    TOTAL  5.5 PiB  1.2 PiB  4.3 PiB   4.3 PiB      78.32
-   
+
    --- POOLS ---
    POOL                         ID   PGS   STORED   (DATA)   (OMAP)  OBJECTS     USED   (DATA)   (OMAP)  %USED  MAX AVAIL  QUOTA OBJECTS  QUOTA BYTES  DIRTY  USED COMPR  UNDER COMPR
    .mgr                         11     1  558 MiB  558 MiB      0 B      141  1.6 GiB  1.6 GiB      0 B      0    5.8 TiB            N/A          N/A    N/A         0 B          0 B
@@ -461,8 +461,8 @@ The output now resembles the below example::
 
 The POOLS section of the output provides a list of pools and the *notional*
 usage of each pool. This section of the output **DOES NOT** reflect replicas,
-clones, or snapshots. For example, if you store an object with 1MB of data,
-then the notional usage will be 1MB, but the actual usage might be 2MB or more
+clones, or snapshots. For example, if you store an object with 1 MB of data,
+then the notional usage will be 1 MB, but the actual usage might be 2 MB or more
 depending on the number of replicas, clones, and snapshots.
 
 - **ID:** The number of the specific node within the pool.
@@ -477,7 +477,7 @@ depending on the number of replicas, clones, and snapshots.
     Gateway) for metadata storage.
 
 - **OBJECTS:** The notional number of objects stored per pool (that is, the
-  number of objects other than replicas, clones, or snapshots). 
+  number of objects other than replicas, clones, or snapshots).
 - **USED:** The space allocated for a pool over all OSDs. This includes space
   for replication, space for allocation granularity, and space for the overhead
   associated with erasure-coding. Compression savings and object-content gaps
@@ -541,7 +541,7 @@ command:
 To print out a CRUSH tree that displays a host, its OSDs, whether the OSDs are
 ``up``, and the weight of the OSDs, run the following command:
 
-.. code-block:: bash
+::
 
    #ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
     -1       3.00000 pool default
@@ -551,13 +551,13 @@ To print out a CRUSH tree that displays a host, its OSDs, whether the OSDs are
      1   ssd 1.00000         osd.1             up  1.00000 1.00000
      2   ssd 1.00000         osd.2             up  1.00000 1.00000
 
-See `Monitoring OSDs and Placement Groups`_.
+See :ref:`rados_operations_monitoring_osd_pg`.
 
 Checking Monitor Status
 =======================
 
 If your cluster has multiple monitors, then you need to perform certain
-"monitor status" checks.  After starting the cluster and before reading or
+"monitor status" checks. After starting the cluster and before reading or
 writing data, you should check quorum status. A quorum must be present when
 multiple monitors are running to ensure proper functioning of your Ceph
 cluster. Check monitor status regularly in order to ensure that all of the
@@ -567,26 +567,26 @@ monitors are running.
 
 To display the monitor map, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph mon stat
 
 Alternatively, you can run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph mon dump
 
 To check the quorum status for the monitor cluster, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph quorum_status
 
 Ceph returns the quorum status. For example, a Ceph cluster that consists of
 three monitors might return the following:
 
-.. code-block:: javascript
+.. code-block:: json
 
     { "election_epoch": 10,
       "quorum": [
@@ -632,13 +632,13 @@ Metadata servers provide metadata services for CephFS. Metadata servers have
 two sets of states: ``up | down`` and ``active | inactive``. To check if your
 metadata servers are ``up`` and ``active``, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph mds stat
 
 To display details of the metadata servers, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph fs dump
 
@@ -647,29 +647,27 @@ Checking Placement Group States
 ===============================
 
 Placement groups (PGs) map objects to OSDs. PGs are monitored in order to
-ensure that they are ``active`` and ``clean``.  See `Monitoring OSDs and
-Placement Groups`_.
-
-.. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
+ensure that they are ``active`` and ``clean``.
+See :ref:`rados_operations_monitoring_osd_pg`.
 
 .. _rados-monitoring-using-admin-socket:
 
 Using the Admin Socket
 ======================
 
-The Ceph admin socket allows you to query a daemon via a socket interface.  By
+The Ceph admin socket allows you to query a daemon via a socket interface. By
 default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon via
 the admin socket, log in to the host that is running the daemon and run one of
 the two following commands:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon {daemon-name}
    ceph daemon {path-to-socket-file}
 
 For example, the following commands are equivalent to each other:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon osd.0 foo
    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
@@ -684,23 +682,20 @@ to the daemon's host.
 Use the ``raise`` command to send a signal to a daemon, as if by running ``kill -X {daemon.pid}``.
 When run via ``ceph tell`` it allows signalling a daemon without access to its host:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon {daemon-name} raise HUP
    ceph tell {daemon-type}.{id} raise -9
 
 To view the available admin-socket commands, run the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph daemon {daemon-name} help
 
 Admin-socket commands enable you to view and set your configuration at runtime.
-For more on viewing your configuration, see `Viewing a Configuration at
-Runtime`_.
-
-.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
-.. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
+For more on viewing your configuration,
+see :ref:`configuring_ceph_runtime_view`.
 
 Messenger Status
 =================
@@ -722,11 +717,11 @@ Examples
 When a command is issued without specifying a messenger to dump, the
 list of available messengers is returned:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph tell osd.0 messenger dump
 
-.. code-block:: javascript
+.. code-block:: json
 
  {
     "messengers": [
@@ -749,18 +744,18 @@ List all current connections on the client messenger:
 
 .. code-block:: bash
 
-	    ceph tell osd.0 messenger dump client \
-	       | jq -r '.messenger.connections[].async_connection |
-	                   [.conn_id, .socket_fd, .worker_id,
-			    if .status.connected then "connected" else "disconnected" end,
-			    .state,
-			    "\(.peer.type).\(.peer.entity_name.id).\(.peer.id)",
-			    .protocol.v2.con_mode, .protocol.v2.crypto.rx, .protocol.v2.compression.rx] |
-			   @tsv'
+        ceph tell osd.0 messenger dump client \
+            | jq -r '.messenger.connections[].async_connection |
+                [.conn_id, .socket_fd, .worker_id,
+                    if .status.connected then "connected" else "disconnected" end,
+                    .state,
+                    "\(.peer.type).\(.peer.entity_name.id).\(.peer.id)",
+                    .protocol.v2.con_mode, .protocol.v2.crypto.rx, .protocol.v2.compression.rx] |
+                @tsv'
 
-.. code-block:: bash
+::
 
-  249     102     0       connected       STATE_CONNECTION_ESTABLISHED    client.admin.6407       crc    PLAIN   UNCOMPRESSED
+  249     102     0       connected       STATE_CONNECTION_ESTABLISHED    client.admin.6407       crc     PLAIN   UNCOMPRESSED
   242     99      1       connected       STATE_CONNECTION_ESTABLISHED    client.rgw.8000.4473    crc     PLAIN   UNCOMPRESSED
   248     89      1       connected       STATE_CONNECTION_ESTABLISHED    mgr..-1 secure  AES-128-GCM     UNCOMPRESSED
   32      101     2       connected       STATE_CONNECTION_ESTABLISHED    client.rgw.8000.4483    crc     PLAIN   UNCOMPRESSED
@@ -772,93 +767,94 @@ Print active connections and their TCP round trip time and retransmission counte
 
 .. code-block:: bash
 
-	    ceph tell osd.0 messenger dump client --tcp-info \
-	       | jq -r '.messenger.connections[].async_connection |
-	                   select(.status.connected) |
-			   select(.peer.type != "client") |
-			   [.conn_id, .socket_fd, .worker_id,
-			    "\(.peer.type).\(.peer.global_id)",
-			    .tcp_info.tcpi_rtt_us, .tcp_info.tcpi_rttvar_us, .tcp_info.tcpi_total_retrans] |
-			    @tsv'
-.. code-block:: bash
+        ceph tell osd.0 messenger dump client --tcp-info \
+            | jq -r '.messenger.connections[].async_connection |
+                select(.status.connected) |
+                select(.peer.type != "client") |
+                [.conn_id, .socket_fd, .worker_id,
+                    "\(.peer.type).\(.peer.global_id)",
+                    .tcp_info.tcpi_rtt_us, .tcp_info.tcpi_rttvar_us, .tcp_info.tcpi_total_retrans] |
+                @tsv'
 
-	248     89      1       mgr.0   863     1677    0
-	3       86      2       mon.0   230     278     0
+::
+
+    248     89      1       mgr.0   863     1677    0
+    3       86      2       mon.0   230     278     0
 
 Tracking Data Availability Score of a Cluster
 =============================================
 
 Ceph internally tracks the data availability of each pool in a cluster.
-To check the data availability score of each pool in a cluster, 
-the following command can be invoked: 
+To check the data availability score of each pool in a cluster,
+the following command can be invoked:
 
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd pool availability-status
 
-Example output:  
+Example output:
 
-.. prompt:: bash $
+::
 
-   POOL       	UPTIME  DOWNTIME  NUMFAILURES  MTBF  MTTR  SCORE 	AVAILABLE
-   rbd             2m     21s        	1	     2m   21s  0.888889      	1
-   .mgr          	86s    	0s        	0	     0s	  0s     	1      	1
-   cephfs.a.meta 	77s    	0s        	0	     0s	  0s     	1      	1
-   cephfs.a.data 	76s    	0s        	0	     0s	  0s     	1      	1
+   POOL         UPTIME  DOWNTIME  NUMFAILURES  MTBF  MTTR  SCORE     AVAILABLE
+   rbd             2m     21s           1        2m   21s  0.888889     1
+   .mgr             86s     0s          0        0s   0s        1       1
+   cephfs.a.meta    77s     0s          0        0s   0s        1       1
+   cephfs.a.data    76s     0s          0        0s   0s        1       1
 
-The time values above are rounded for readability. To see the exact second 
-values, use the option ``--format`` with ``json`` or ``json-pretty`` value. 
+The time values above are rounded for readability. To see the exact second
+values, use the option ``--format`` with ``json`` or ``json-pretty`` value.
 
-A pool is considered ``unavailable`` when at least one PG in the pool 
-becomes inactive or there is at least one unfound object in the pool. 
-Otherwise the pool is considered ``available``. Depending on the 
-current and previous state of the pool we update ``uptime`` and 
-``downtime`` values: 
+A pool is considered ``unavailable`` when at least one PG in the pool
+becomes inactive or there is at least one unfound object in the pool.
+Otherwise the pool is considered ``available``. Depending on the
+current and previous state of the pool we update ``uptime`` and
+``downtime`` values:
 
 ================ =============== =============== =================
- Previous State   Current State   Uptime Update   Downtime Update 
+ Previous State   Current State   Uptime Update   Downtime Update
 ================ =============== =============== =================
- Available        Available       +diff time      no update    
+ Available        Available       +diff time      no update
  Available        Unavailable     +diff time      no update
- Unavailable      Available       +diff time      no update 
- Unavailable      Unavailable     no update       +diff time 
+ Unavailable      Available       +diff time      no update
+ Unavailable      Unavailable     no update       +diff time
 ================ =============== =============== =================
 
-From the updated ``uptime`` and ``downtime`` values, we calculate 
+From the updated ``uptime`` and ``downtime`` values, we calculate
 the Mean Time Between Failures (MTBF) and Mean Time To Recover (MTTR)
-for each pool. The availability score is then calculated by finding 
-the ratio of MTBF to the total time.  
+for each pool. The availability score is then calculated by finding
+the ratio of MTBF to the total time.
 
-The score is updated every one second. Transient changes to pools that 
-occur and are reverted between successive updates will not be captured. 
-It is possible to configure this interval with a command of the following 
-form: 
+The score is updated every one second. Transient changes to pools that
+occur and are reverted between successive updates will not be captured.
+It is possible to configure this interval with a command of the following
+form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon pool_availability_update_interval 2
 
-This will set the update interval to two seconds. Please note that 
+This will set the update interval to two seconds. Please note that
 it is not possible to set this interval less than the config value set
-for ``paxos_propose_interval``. 
+for ``paxos_propose_interval``.
 
 
-This feature is on by default. To turn the feature off, e.g. - for an expected 
-downtime, the ``enable_availability_tracking`` config option can be set to ``false``. 
+This feature is on by default. To turn the feature off, e.g. - for an expected
+downtime, the ``enable_availability_tracking`` config option can be set to ``false``.
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph config set mon enable_availability_tracking false
 
-While the feature is turned off, the last calculated score will be preserved. The 
-score will again start updating once the feature is turned on again. 
+While the feature is turned off, the last calculated score will be preserved. The
+score will again start updating once the feature is turned on again.
 
-It's also possible to clear the data availability score for a specific 
+It's also possible to clear the data availability score for a specific
 pool if needed with a command of the following form:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd pool clear-availability-status <pool-name>
 
-Note: Clearing a score is not allowed if the feature itself is disabled. 
+.. note:: Clearing a score is not allowed if the feature itself is disabled.
