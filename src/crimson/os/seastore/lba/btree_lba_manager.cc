@@ -239,17 +239,16 @@ BtreeLBAManager::resolve_indirect_cursor(
 BtreeLBAManager::alloc_extent_ret
 BtreeLBAManager::reserve_region(
   Transaction &t,
-  LBAMapping pos,
+  LBACursorRef cursor,
   laddr_t addr,
   extent_len_t len)
 {
   LOG_PREFIX(BtreeLBAManager::reserve_region);
-  DEBUGT("{} {}~{}", t, pos, addr, len);
-  assert(pos.is_viewable());
+  DEBUGT("{} {}~{}", t, *cursor, addr, len);
+  assert(cursor->is_viewable());
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
-  auto &cursor = pos.get_effective_cursor();
-  auto iter = btree.make_partial_iter(c, cursor);
+  auto iter = btree.make_partial_iter(c, *cursor);
   lba_map_val_t val{len, P_ADDR_ZERO, EXTENT_DEFAULT_REF_COUNT, 0};
   auto p = co_await btree.insert(c, iter, addr, val);
   ceph_assert(p.second);

@@ -536,7 +536,7 @@ public:
     pos = co_await pos.refresh();
     auto pin = co_await lba_manager->reserve_region(
       t,
-      std::move(pos),
+      pos.get_effective_cursor_ref(),
       hint,
       len
     );
