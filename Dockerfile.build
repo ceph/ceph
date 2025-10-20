@@ -23,7 +23,7 @@ ARG CLEAN_DNF=yes
 ARG CEPH_BASE_BRANCH=main
 ARG SCCACHE_VERSION=v0.8.2
 ARG SCCACHE_REPO=https://github.com/mozilla/sccache
-ARG WITH_CRIMSON=true
+ARG WITH_CRIMSON=false
 ARG FOR_MAKE_CHECK=1
 COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
 # Note that we do not use ENV for the following. This is because we do not
