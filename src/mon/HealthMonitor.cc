@@ -991,6 +991,8 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   // Space Complexity: O(m)
   std::map<std::string, std::set<std::string>> location_to_mons;
   std::unordered_map<std::string, std::vector<std::pair<std::string, std::string>>> mon_loc_map;
+  // Track distinct CRUSH locations per type across all monitors, e.g. {"datacenter": {"dc1","dc2"}}
+  std::map<std::string, std::set<std::string>> distinct_crush_locations;
   for (auto &mon_info : mon.monmap->mon_info) {
       // Create a vector of pairs
       std::vector<std::pair<std::string, std::string>> sorted_crush_loc_vec;
@@ -1027,6 +1029,7 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
       if (!sorted_crush_loc_vec.empty()) {
         if (!mons_down.count(mon_name)) {
           auto& highest_loc = sorted_crush_loc_vec.front();
+          distinct_crush_locations[highest_loc.first].insert(highest_loc.second);
           location_to_mons[highest_loc.second].insert(mon_name);
         } else {
           dout(30) << "mon: " << mon_name << " is down" << dendl;
@@ -1107,15 +1110,15 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   // Check for location-level netsplits and remove individual-level netsplits
   for (auto& kv : location_disconnects) {
     auto& loc_pair = kv.first; // {dc1,dc2}
-    int disconnect_count = kv.second; // Number of disconnects between dc1 and dc2
+    int disconnects_count = kv.second; // Number of disconnects between dc1 and dc2
 
     // The expected number of disconnects between two locations
     // is the product of the number of monitors in each location
     int expected_disconnects = location_to_mons[loc_pair.first].size() *
                                 location_to_mons[loc_pair.second].size();
 
-    // Report location-level netsplits
-    if (disconnect_count == expected_disconnects) {
+    // Update detected_location_netsplits and remove individual monitor disconnects
+    if (disconnects_count == expected_disconnects) {
       detected_location_netsplits.insert(loc_pair);
       // Remove individual monitor disconnects between these locations
       for (const auto& mon1 : location_to_mons[loc_pair.first]) {
@@ -1127,14 +1130,16 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     }
 
   }
-  // Report individual-level netsplits
+  // Update individual-level netsplits, add remaining monitor disconnects.
   for (auto& mon_pair : mon_disconnects) {
     detected_mon_netsplits.insert(mon_pair);
   }
-  
+
+  // Now we workout which netsplits are new, ongoing, or resolved.
   // update/add/erase to pending_mon_netsplits and pending_location_netsplits
   auto now = ceph::coarse_mono_clock::now();
   auto mon_netsplit_grace_period = g_conf().get_val<std::chrono::seconds>("mon_netsplit_grace_period");
+  auto mon_netsplit_auto_resolve = g_conf().get_val<bool>("mon_netsplit_auto_resolve");
   auto pending_location_netsplits_end = pending_location_netsplits.end();
   auto pending_mon_netsplits_end = pending_mon_netsplits.end();
   list<string> details;
@@ -1275,6 +1280,22 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     }
     *_dout << " }" << dendl;
 
+    dout(30) << "distinct_crush_locations: {";
+    bool outer_first = true;
+    for (const auto& loc_pair : distinct_crush_locations) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << loc_pair.first << ": {";
+      bool inner_first = true;
+      for (const auto& location : loc_pair.second) {
+        if (!inner_first) *_dout << ", ";
+        inner_first = false;
+        *_dout << location;
+      }
+      *_dout << "}";
+    }
+    *_dout << "}" << dendl;
+
     dout(30) << "detected_location_netsplits: {";
     bool first = true;
     for (const auto& netsplit : detected_location_netsplits) {
@@ -1312,5 +1333,34 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
       first = false;
     }
     *_dout << "}" << dendl;
+  }
+
+  // Netsplit auto-resolve for stretch clusters (excluding stretch mode)
+  if (current_location_netsplits.size() > 0
+      && mon_netsplit_auto_resolve
+      && !mon.monmap->stretch_mode_enabled) {
+      // Identify if at least one pool is stretched. if so get its failure domain,
+      // this is to ensure we are handling the correct location level.
+      std::string failure_domain = mon.osdmon()->get_stretch_pool_failure_domain();
+      if (!failure_domain.empty()) {
+        dout(20) << "Auto-resolving netsplits for stretch cluster"
+                 << " with failure domain: " << failure_domain << dendl;
+        // check if the failure domain exists in distinct_crush_locations
+        if (distinct_crush_locations.find(failure_domain) != distinct_crush_locations.end()) {
+          std::set<std::string> vertices = distinct_crush_locations[failure_domain];
+          std::set<std::pair<std::string, std::string>> cut_off_edges;
+          // add the netsplit locations to cut_off_edges
+          for (const auto& [cut_off_pair, _] : current_location_netsplits) {
+              if (vertices.find(cut_off_pair.first) != vertices.end() &&
+                vertices.find(cut_off_pair.second) != vertices.end()) {
+                cut_off_edges.insert(cut_off_pair);
+              }
+          }
+          mon.osdmon()->resolve_netsplit_stretch_cluster(vertices, cut_off_edges);
+        } else {
+          dout(5) << "No distinct CRUSH locations found for failure domain "
+                   << failure_domain << dendl;
+        }
+      }
   }
 }
