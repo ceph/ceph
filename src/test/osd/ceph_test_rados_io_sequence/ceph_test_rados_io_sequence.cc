@@ -166,9 +166,12 @@ constexpr std::string_view usage[] = {
     "\t\t remove",
     "\t\t swap",
     "\t\t copy",
-    "\t\t read|write|failedwrite <off> <len>",
-    "\t\t read2|write2|failedwrite2 <off> <len> <off> <len>",
-    "\t\t read3|write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
+    "\t\t read <off> <len> [balanced]",
+    "\t\t write|failedwrite <off> <len>",
+    "\t\t read2 <off> <len> <off> <len> [balanced]",
+    "\t\t write2|failedwrite2 <off> <len> <off> <len>",
+    "\t\t read3 <off> <len> <off> <len> <off> <len> [balanced]",
+    "\t\t write3|failedwrite3 <off> <len> <off> <len> <off> <len>",
     "\t\t append",
     "\t\t truncate",
     "\t\t injecterror <io_type> <shard> <type> <good_count> <fail_count>",
@@ -225,6 +228,9 @@ po::options_description get_options_description() {
       "dont_delete_objects",
       "Stops the IO exerciser from deleting the object it was running the test "
       "against once the test finishes. Does not affect interactive mode")(
+      "balanced_read_percentage", po::value<int>(),
+      "The percentage of read operations that should be performed with "
+      "balanced reads enabled. 100 by default. Doesn't affect interactive mode.")(
       "data_generation_type", po::value<std::string>(),
       "Data generation type to use for write IOs. Default is HeaderedSeededRandom");
 
@@ -1025,6 +1031,8 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
                                     "the specified plugin type may not "
                                     "support them");
       }
+
+      ceph_assert(rc == 0);
     }
 
     if (allow_pool_ec_overwrites) {
@@ -1060,10 +1068,10 @@ ceph::io_sequence::tester::TestObject::TestObject(
     SelectObjectSize& sos, SelectNumThreads& snt, SelectSeqRange& ssr,
     std::mt19937_64& rng, ceph::mutex& lock,
     ceph::condition_variable& cond, bool dryrun, bool verbose,
-    std::optional<int> seqseed, bool testrecovery, bool checkconsistency,
-    bool delete_objects, GenerationType data_generation_type)
-    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery),
-      checkconsistency(checkconsistency), delete_objects(delete_objects),
+    std::optional<int> seqseed, bool testrecovery, bool checkconsistency, bool delete_objects,
+    int balanced_read_percentage, GenerationType data_generation_type)
+    : rng(rng), verbose(verbose), seqseed(seqseed), testrecovery(testrecovery), checkconsistency(checkconsistency),
+      delete_objects(delete_objects), balanced_read_percentage(balanced_read_percentage),
       data_generation_type(data_generation_type) {
   if (dryrun) {
     int model_seed = rng();
@@ -1090,7 +1098,8 @@ ceph::io_sequence::tester::TestObject::TestObject(
     exerciser_model = std::make_unique<ceph::io_exerciser::RadosIo>(
         rados, asio, pool, primary_oid, secondary_oid, sbs.select(), model_seed,
         threads, lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations(), data_generation_type, seq, delete_objects);
+        spo.get_allow_pool_ec_optimizations(), balanced_read_percentage,
+        data_generation_type, seq, delete_objects);
     dout(0) << "= " << primary_oid << " pool=" << pool << " threads=" << threads
             << " blocksize=" << exerciser_model->get_block_size() << " ="
             << dendl;
@@ -1210,6 +1219,21 @@ ceph::io_sequence::tester::TestRunner::TestRunner(
   allow_pool_balancer = vm.contains("allow_pool_balancer");
   allow_pool_deep_scrubbing = vm.contains("allow_pool_deep_scrubbing");
   allow_pool_scrubbing = vm.contains("allow_pool_scrubbing");
+
+  if (vm.contains("balanced_read_percentage")) {
+    balanced_read_percentage = vm["balanced_read_percentage"].as<int>();
+    if (balanced_read_percentage > 100) {
+      balanced_read_percentage = 100;
+    } else if (balanced_read_percentage < 0) {
+      balanced_read_percentage = 0;
+    }
+    if (interactive) {
+      dout(0) << "Balanced read percentage cannot be specified in interactive mode. "
+              << "Use the \"-b\" or \"balanced\" flag to make a balanced read operation in the interactive terminal." << dendl;
+    }
+  } else {
+    balanced_read_percentage = 100;
+  }
 
   if (testrecovery && (num_object_pairs > 1)) {
     throw std::invalid_argument("testrecovery option not allowed if parallel is"
@@ -1362,7 +1386,7 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
         rados, asio, pool, primary_object_name, secondary_object_name, sbs.select(), model_seed,
         1,  // 1 thread
         lock, cond, spo.is_replicated_pool(),
-        spo.get_allow_pool_ec_optimizations(),
+        spo.get_allow_pool_ec_optimizations(), balanced_read_percentage,
         data_generation_type);
   }
 
@@ -1385,13 +1409,23 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
     } else if (op == "read") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
-      ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, true);
+      } else {
+        ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, false);
+      }
     } else if (op == "read2") {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
       uint64_t offset2 = get_numeric_token();
       uint64_t length2 = get_numeric_token();
-      ioop = DoubleReadOp::generate(offset1, length1, offset2, length2);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = DoubleReadOp::generate(offset1, length1, offset2, length2, true);
+      } else {
+        ioop = DoubleReadOp::generate(offset1, length1, offset2, length2, false);
+      }
     } else if (op == "read3") {
       uint64_t offset1 = get_numeric_token();
       uint64_t length1 = get_numeric_token();
@@ -1399,8 +1433,14 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length2 = get_numeric_token();
       uint64_t offset3 = get_numeric_token();
       uint64_t length3 = get_numeric_token();
-      ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
-                                    length3);
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
+                                    length3, true);
+      } else {
+        ioop = TripleReadOp::generate(offset1, length1, offset2, length2, offset3,
+                                    length3, false);
+      }
     } else if (op == "write") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
@@ -1519,8 +1559,8 @@ bool ceph::io_sequence::tester::TestRunner::run_automated_test() {
       test_objects.push_back(
           std::make_shared<ceph::io_sequence::tester::TestObject>(
               primary_name, secondary_name, rados, asio, sbs, spo, sos, snt, ssr, rng, lock, cond,
-              dryrun, verbose, seqseed, testrecovery, checkconsistency,
-              delete_objects, data_generation_type));
+              dryrun, verbose, seqseed, testrecovery, checkconsistency, delete_objects,
+              balanced_read_percentage, data_generation_type));
     }
     catch (const std::runtime_error &e) {
       std::cerr << "Error: " << e.what() << std::endl;

@@ -49,7 +49,8 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
-                 bool ec_optimizations, GenerationType data_generation_type,
+                 bool ec_optimizations, int balanced_read_percentage,
+                 GenerationType data_generation_type,
                  std::shared_ptr<ceph::io_exerciser::IoSequence> seq, bool delete_objects)
     : Model(primary_oid, secondary_oid, block_size, delete_objects),
       rados(rados),
@@ -62,7 +63,9 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       lock(lock),
       cond(cond),
       outstanding_io(0),
-      seq(seq) {
+      seq(seq),
+      rng(seed),
+      balanced_read_percentage(balanced_read_percentage) {
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
@@ -271,8 +274,25 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       }
       finish_io();
     };
+
+    int flags = 0;
+    if (readOp.balanced_read.has_value()) {
+      if (*readOp.balanced_read) {
+        flags = librados::OPERATION_BALANCE_READS;
+      }
+      // Else: keep flags == 0
+    } else {
+      ceph_assert(balanced_read_percentage >= 0);
+      ceph_assert(balanced_read_percentage <= 100);
+      uint64_t range = 100;
+      uint64_t rand_value = rng();
+      int index = rand_value % range;
+      if (index <= balanced_read_percentage) {
+        flags = librados::OPERATION_BALANCE_READS;
+      }
+    }
     librados::async_operate(asio.get_executor(), io, primary_oid,
-                            std::move(rop), 0, nullptr, read_cb);
+                            std::move(rop), flags, nullptr, read_cb);
     num_io++;
   };
 
