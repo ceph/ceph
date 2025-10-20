@@ -77,7 +77,7 @@ public:
 
   alloc_extent_ret reserve_region(
     Transaction &t,
-    LBAMapping pos,
+    LBACursorRef pos,
     laddr_t laddr,
     extent_len_t len) final;
 
