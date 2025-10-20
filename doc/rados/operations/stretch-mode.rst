@@ -96,6 +96,22 @@ configuration across the entire cluster. Conversely, opt for a stretch pool
 when you need only a particular pool to be replicated across more than two data centers,
 providing a more granular level of control.
 
+3 Zones Stretch Clusters
+========================
+
+<Insert description here>
+
+Resolving Netsplits in 3-Zone Stretch Clusters
+--------------------------------------
+
+``mon_netsplit_auto_resolve`` is a configuration option that is `true` by default.
+When enabled, this option allows the cluster to automatically resolve netsplits
+This can be disabled by setting the option to `false`.
+
+.. prompt:: bash $
+
+   ceph config set mon mon_netsplit_auto_resolve false
+
 Limitations
 -----------
 

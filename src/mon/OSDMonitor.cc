@@ -7903,6 +7903,286 @@ int OSDMonitor::get_replicated_stretch_crush_rule()
   return most_used_rule;
 }
 
+std::string OSDMonitor::get_stretch_pool_failure_domain()
+{
+ // Return the failure domain of a stretch pool if any exists.
+  for (const auto& pooli : osdmap.pools) {
+    const pg_pool_t& p = pooli.second;
+    if (p.is_stretch_pool()) {
+      std::string failure_domain = osdmap.crush->get_type_name(p.peering_crush_bucket_barrier);
+      return failure_domain;
+    }
+  }
+  return "";
+}
+
+std::set<std::string> OSDMonitor::run_heuristics_on_largest_cliques(
+  const std::vector<std::set<std::string>>& largest_cliques,
+  const std::set<std::string>& vertices) {
+  /**
+  * Given multiple largest cliques discovered during a netsplit in a stretch
+  * cluster, select the "best" clique to survive. Each clique is scored based
+  * on aggregate bucket metrics:
+  *
+  *   1. Effective OSD weight (higher is better)
+  *   2. Number of up MONs
+  *   3. MON connection score
+  *   4. Lexicographical order of bucket names (deterministic tiebreaker)
+  *
+  * Workflow:
+  *  For each vertex (bucket) we precompute a Score {osd, mon, conn}.
+  *  Each clique's score is the sum of its buckets' scores. The function
+  *  iterates over all candidate cliques and applies the scoring priority
+  *  until a strict winner is found. If scores are tied, the lexicographically
+  *  smallest clique is chosen to ensure deterministic behavior.
+  */
+
+  // Only call this function when there is more than 1 clique
+  ceph_assert(largest_cliques.size() > 1);
+
+  struct Score {
+    float osd = 0.0;
+    int mon = 0;
+    double conn = 0.0;
+  };
+  std::unordered_map<std::string, Score> bucket_score;
+
+  for (const auto& bucket : vertices) {
+    Score s{};
+    s.osd = osdmap.get_total_effective_osd_weight_by_bucket_name(cct, bucket);
+    s.mon = mon.get_total_up_mons_by_bucket_name(bucket);
+    s.conn = mon.get_total_mon_connection_score_by_bucket_name(bucket);
+    bucket_score.emplace(bucket, s);
+  }
+
+  // compare two clique scores by priority (OSD, then MON).
+  auto better = [](
+    const std::set<std::string>& clique_a,
+    const Score& score_a,
+    const std::set<std::string>& clique_b,
+    const Score& score_b,
+    bool& win_on_tie_breaker) {
+    if (score_a.osd != score_b.osd) return score_a.osd > score_b.osd;  // higher effective OSD weights first
+    if (score_a.mon != score_b.mon) return score_a.mon > score_b.mon;  // then higher MON up count
+    if (score_a.conn != score_b.conn) return score_a.conn > score_b.conn;  // then higher MON connection score
+    // tie -> lexicographical compare to see which one lexicographically smaller
+    win_on_tie_breaker = true;
+    return std::lexicographical_compare(
+      clique_a.begin(), clique_a.end(),
+      clique_b.begin(), clique_b.end());
+  };
+
+
+  std::set<std::string> best_clique;
+  Score best_score{
+    -std::numeric_limits<float>::infinity(),
+    std::numeric_limits<int>::min(),
+    -std::numeric_limits<double>::infinity()
+  };
+  bool win_on_tie_breaker = false;
+  for (const auto& clique : largest_cliques) {
+    // Inner loop gets the sum score of the clique
+    // we keep track of the best clique and score.
+    Score current_score{};
+    for (const auto& bucket : clique) {
+      if (auto it = bucket_score.find(bucket); it != bucket_score.end()) {
+        current_score.osd  += it->second.osd;
+        current_score.mon  += it->second.mon;
+        current_score.conn += it->second.conn;
+      }
+      else {
+        derr << __func__ << " bucket " << bucket
+          << " not found in bucket_score map!" << dendl;
+      }
+    }
+    // Debug output of current clique and its score
+    if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+      dout(30) << __func__ << " clique with buckets {";
+      bool first = true;
+      for (const auto& v : clique) {
+          if (!first) *_dout << ", ";
+          first = false;
+          *_dout << v;
+      }
+      *_dout << "} osd score: " << current_score.osd
+            << " mon up score: " << current_score.mon
+            << " mon conn score: " << current_score.conn << dendl;
+    }
+
+    win_on_tie_breaker = false;
+    if (better(clique, current_score, best_clique, best_score, win_on_tie_breaker)) {
+      best_score = current_score;
+      best_clique = clique;
+    }
+    if (win_on_tie_breaker) {
+      dout(5) << __func__ << " found a tie; picking lexicographically smaller clique: " << best_clique << dendl;
+    }
+  }
+  dout(20) << __func__ << "; best clique osd score: "
+           << best_score.osd << "; mon up score: " << best_score.mon
+           << "; mon conn score: " << best_score.conn << dendl;
+  return best_clique;
+}
+
+std::vector<std::set<std::string>> OSDMonitor::get_largest_cliques(
+  const std::vector<std::set<std::string>>& maximal_cliques) {
+  
+  std::vector<std::set<std::string>> largest_cliques;
+  size_t max_size = 0;
+  for (const auto& clique : maximal_cliques) {
+    // found bigger one; replace.
+    if (clique.size() > max_size) {
+      largest_cliques.clear();
+      largest_cliques.push_back(clique);
+      max_size = clique.size();
+    // found same size; append.
+    } else if (clique.size() == max_size) {
+      largest_cliques.push_back(clique);
+    }
+  }
+  return largest_cliques;
+}
+
+static std::set<std::string> intersect_sets(const std::set<std::string>& a,
+                                            const std::set<std::string>& b) {
+  std::set<std::string> out;
+  std::set_intersection(a.begin(), a.end(), b.begin(), b.end(),
+                        std::inserter(out, out.begin()));
+  return out;
+}
+
+void OSDMonitor::bronKerbose(
+  std::set<std::string> current_clique, // we trying to build this
+  std::set<std::string> candidates_set, // {dc1, dc2, dc3}
+  std::set<std::string> excluded_set,
+  std::map<std::string, std::set<std::string>> adj_list,
+  std::vector<std::set<std::string>> &maximal_cliques)
+{
+  if (candidates_set.empty() && excluded_set.empty()) {
+    // current_clique is a maximal clique
+    maximal_cliques.push_back(std::move(current_clique));
+    return;
+  }
+
+  auto snapshot = candidates_set; // iterate over a copy; mutate originals
+  for (const auto& v : snapshot) {
+    auto next_clique = current_clique;
+    next_clique.insert(v);
+
+    const auto& neighbors = adj_list.at(v);
+    auto next_candidates = intersect_sets(candidates_set, neighbors);
+    auto next_excluded   = intersect_sets(excluded_set,   neighbors);
+
+    bronKerbose(next_clique, next_candidates, next_excluded, adj_list, maximal_cliques);
+    // move v from candidates_set -> excluded_set
+    candidates_set.erase(v);
+    excluded_set.insert(v);
+
+  }
+}
+
+void OSDMonitor::resolve_netsplit_stretch_cluster(
+  std::set<std::string> vertices,
+  std::set<std::pair<std::string, std::string>> cut_off_edges) {
+  /*
+  *
+  * This function handles netsplit resolution for a N-AZ stretch cluster
+  * by analyzing the connectivity between "bucket" vertices (datacenters/zones).
+  *
+  * Workflow:
+  *  - Build an adjacency list of all vertices (buckets).
+  *  - Remove cut_off_edges to represent the netsplit.
+  *  - Run the Bron–Kerbosch algorithm to find all maximal cliques.
+  *  - If more than one largest clique exists, apply heuristics to
+  *    choose the "best" clique (prioritizing OSD weights, then MONs,
+  *    then connection scores, then lexicographical as tiebreaker).
+  *  - Compute the set of fence_buckets = (vertices – best_clique),
+  *    which identifies buckets to fence (mark OSDs down) so
+  *    that only the surviving clique continues to serve I/O.
+  */
+  dout(20) << __func__ << " vertices: {" << vertices << "}"
+           << " cut_off_edges: {" << cut_off_edges << "}" << dendl;
+  // Construct the adjacency list by adding
+  // all other vertices as neighbors.
+  std::map<std::string, std::set<std::string>> adj_list;
+  for (const auto& v1 : vertices) {
+    auto& v1_neighbors = adj_list[v1];
+    for (const auto& v2 : vertices) {
+      if (v1 != v2) v1_neighbors.insert(v2);
+    }
+  }
+
+  // Remove the edges that experiences netsplit
+  for (const auto& [v1, v2] : cut_off_edges) {
+    adj_list[v1].erase(v2);
+    adj_list[v2].erase(v1);
+  }
+
+  // execute bronKerbose algorithm to find maximal cliques
+  std::set<std::string> current_clique;
+  std::set<std::string> excluded_set;
+  std::vector<std::set<std::string>> maximal_cliques;
+  bronKerbose(current_clique, vertices, excluded_set, adj_list, maximal_cliques);
+  dout(10) << "bronKerbose" << " found " << maximal_cliques.size()
+    << " maximal cliques." << dendl;
+
+  // Debug output of maximal cliques found from bronKerbose
+  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 20)) {
+    dout(20) << "maximal cliques: {";
+    bool outer_first = true;
+    for (const auto& clique : maximal_cliques) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << "{";
+      bool inner_first = true;
+      for (const auto& vertex : clique) {
+          if (!inner_first) *_dout << ", ";
+          inner_first = false;
+          *_dout << vertex;
+      }
+      *_dout << "}";
+    }
+    *_dout << " }" << dendl;
+  }
+
+  // pick the largest clique or cliques as the surviving stretch cluster
+  // determine best clique via heuristics if multiple largest cliques found.
+  std::set<std::string> best_clique;
+  std::vector<std::set<std::string>> largest_cliques = get_largest_cliques(maximal_cliques);
+  if (largest_cliques.size() > 1) {
+    dout(10) << __func__ << " found multiple largest cliques of size "
+             << largest_cliques[0].size() << "; Running Heuristics."
+             << dendl;
+    best_clique = run_heuristics_on_largest_cliques(largest_cliques, vertices);
+  } else {
+    dout(10) << __func__ << " found 1 largest clique of size "
+             << largest_cliques[0].size() << dendl;
+    best_clique = largest_cliques[0];
+  }
+
+  dout(10) << __func__ << " best clique: {" << best_clique << "}" << dendl;
+
+  // Workout the fence buckets
+  std::set<std::string> fence_buckets;
+  // Sanity check: best_clique should be a subset of vertices
+  if (!std::includes(vertices.begin(), vertices.end(),
+    best_clique.begin(), best_clique.end())) {
+    derr << __func__ << " best_clique is not a subset of vertices! Abort!" << dendl;
+    return;
+  }
+
+  std::set_difference(vertices.begin(), vertices.end(),
+                      best_clique.begin(), best_clique.end(),
+                      std::inserter(fence_buckets, fence_buckets.begin()));
+
+  if (fence_buckets.empty()) {
+    dout(5) << __func__ << " Weird! best_clique has every vertex; No fencing needed." << dendl;
+    return;
+  }
+
+  dout(10) << __func__ << " fence_buckets: {" << fence_buckets << "}" << dendl;
+}
+
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					const string &erasure_code_profile,
 					const string &rule_name,

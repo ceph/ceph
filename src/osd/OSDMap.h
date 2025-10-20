@@ -1105,6 +1105,12 @@ public:
     return -1;
   }
 
+  /**
+   * get total effective osd weight for a given bucket
+   */
+  float get_total_effective_osd_weight_by_bucket_name(
+    CephContext *cct,
+    const std::string& bucket_name) const;
 
   void get_random_up_osds_by_subtree(int n,     // whoami
                                      std::string &subtree,

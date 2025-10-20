@@ -1432,6 +1432,13 @@ options:
   default: 9
   services :
   - mon
+- name: mon_netsplit_auto_resolve
+  type: bool
+  level: advanced
+  desc: flag to enable resolving a netsplit automatically after detection.
+  default: true
+  services:
+  - mon
 - name: pool_availability_update_interval
   type: float
   level: advanced

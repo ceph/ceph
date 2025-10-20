@@ -427,6 +427,11 @@ public:
     ceph_assert(it != mon_info.end());
     it->second.weight = v;
   }
+  std::map<std::string,std::string> get_crush_location_by_name(const std::string& n) const {
+    auto it = mon_info.find(n);
+    ceph_assert(it != mon_info.end());
+    return it->second.crush_loc;
+  }
 
   void encode(ceph::buffer::list& blist, uint64_t con_features) const;
   void decode(ceph::buffer::list& blist) {

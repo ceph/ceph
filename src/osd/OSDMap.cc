@@ -6884,6 +6884,54 @@ int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
   return crush->get_leaves(name, osds);
 }
 
+float OSDMap::get_total_effective_osd_weight_by_bucket_name(CephContext *cct,
+                                           const std::string &bucket_name) const
+{
+  /*
+  * Calculate total effective weight of all OSDs in the given bucket.
+  * Only include OSDs that are UP and IN.
+  * effective weight = crush weight * osdmap weight
+  */
+  set<int> leaves;
+  if (crush->get_leaves(bucket_name, &leaves) < 0) {
+    ldout(cct, 10) << __func__ << " crush->get_leaves(" << bucket_name << ") failed" << dendl;
+    return 0.0f;
+  } else {
+    ldout(cct, 30) << __func__ << " bucket_name=" << bucket_name << " leaves=" << leaves << dendl;
+  }
+  float total = 0.0f;
+  for (int item : leaves) {
+    if (!exists(item)) {
+      ldout(cct, 30) << __func__ << " skipping item " << item << " does not exist" << dendl;
+      continue;
+    }
+    if (is_down(item)) {
+      ldout(cct, 30) << __func__ << " skipping item " << item << " is down" << dendl;
+      continue;
+    }
+    if (is_out(item)) {
+      ldout(cct, 30) << __func__ << " skipping item " << item << " is out" << dendl;
+      continue;
+    }
+    // get osdmap item weight
+    float osdmap_weight = get_weightf(item);
+    ldout(cct, 30) << __func__ << " item " << item << " osdmap_weight=" << osdmap_weight << dendl;
+    // get crush item weight
+    float crush_weight = crush->get_item_weightf(item);
+    ldout(cct, 30) << __func__ << " item " << item << " crush_weight=" << crush_weight << dendl;
+    // calculate effective weight
+    float eff = crush_weight * osdmap_weight;
+    ldout(cct, 30) << __func__
+      << " osd." << item
+      << " crush_weight=" << crush_weight
+      << " osdmap_weight=" << osdmap_weight
+      << " effective=" << eff << dendl;
+    total += eff;
+  }
+  ldout(cct, 20) << __func__ << " " << bucket_name << " total_effective_weight=" << total << dendl;
+  return total;
+}
+
 // get pools whose crush rules might reference the given osd
 void OSDMap::get_pool_ids_by_osd(CephContext *cct,
                                 int osd,

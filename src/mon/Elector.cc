@@ -881,3 +881,10 @@ void Elector::notify_strategy_maybe_changed(int strategy)
 {
   logic.set_election_strategy(static_cast<ElectionLogic::election_strategy>(strategy));
 }
+
+double Elector::get_connection_score_by_rank(int rank) {
+  if (is_current_member(rank)) {
+    return logic.get_connectivity_election_score(rank);
+  }
+  return 0.0;
+}

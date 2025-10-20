@@ -424,6 +424,7 @@ class Elector : public ElectionOwner, RankProvider {
     peer_tracker.dump(f);
     f->close_section();
   }
+  double get_connection_score_by_rank(int rank);
   /**
    * @}
    */
