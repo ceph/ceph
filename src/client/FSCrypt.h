@@ -21,6 +21,10 @@
 
 #define FSCRYPT_DATA_ALIGNMENT 16
 
+// fscrypt maxio_size cannot be INT_MAX as it is not a multiple of fscrypt
+// block size. Set it to nearest fscrypt block without exceeding INT_MAX
+#define FSCRYPT_MAXIO_SIZE fscrypt_block_start(INT_MAX)
+
 static inline uint64_t fscrypt_align_ofs(uint64_t ofs) {
   return (ofs + FSCRYPT_DATA_ALIGNMENT - 1) & ~(FSCRYPT_DATA_ALIGNMENT - 1);
 }
