@@ -13,6 +13,22 @@ Highlights
 
 *See the sections below for more details on these items.*
 
+CephFS
+
+* Directories may now be configured with case-insensitive or normalized
+  directory entry names.
+* Modifying the FS setting variable ``max_mds`` when a cluster is unhealthy
+  now requires users to pass the confirmation flag (``--yes-i-really-mean-it``).
+* ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS FUSE
+  client for ``fallocate`` for the default case (i.e. ``mode == 0``).
+
+Dashboard
+
+* Support has been added for NVMe/TCP gateway groups and multiple
+  namespaces, multi-cluster management, OAuth 2.0 integration, and enhanced
+  RGW/SMB features including multi-site automation, tiering, policies,
+  lifecycles, notifications, and granular replication.
+
 Integrated SMB support
 
 * Ceph clusters now offer an SMB Manager module that works like the existing
@@ -27,6 +43,12 @@ Integrated SMB support
   automatically deployed to improve scalability and memory usage when connecting
   Samba to CephFS.
 
+MGR
+
+* Users now have the ability to force-disable always-on modules.
+* The ``restful`` and ``zabbix`` modules (deprecated since 2020) have been
+  officially removed.
+
 RADOS
 
 * FastEC: Long-anticipated performance and space amplification
@@ -36,13 +58,6 @@ RADOS
   for each pool in their cluster.
 * OMAP: All components have been switched to the faster OMAP iteration
   interface, which improves RGW bucket listing and scrub operations.
-
-Dashboard
-
-* Support has been added for NVMe/TCP gateway groups and multiple
-  namespaces, multi-cluster management, OAuth 2.0 integration, and enhanced
-  RGW/SMB features including multi-site automation, tiering, policies,
-  lifecycles, notifications, and granular replication.
 
 RBD
 
@@ -54,12 +69,6 @@ RBD
 * Several commands related to group and group snap info were added or
   improved, and ``rbd device map`` command now defaults to ``msgr2``.
 
-MGR
-
-* Users now have the ability to force-disable always-on modules.
-* The ``restful`` and ``zabbix`` modules (deprecated since 2020) have been
-  officially removed.
-
 RGW
 
 * Added support for S3 ``GetObjectAttributes``.
@@ -69,15 +78,6 @@ RGW
 * Bucket resharding now does most of its processing before it starts to block
   write operations. This should significantly reduce the client-visible impact
   of resharding on large buckets.
-
-CephFS
-
-* Directories may now be configured with case-insensitive or normalized
-  directory entry names.
-* Modifying the FS setting variable ``max_mds`` when a cluster is unhealthy
-  now requires users to pass the confirmation flag (``--yes-i-really-mean-it``).
-* ``EOPNOTSUPP`` (Operation not supported) is now returned by the CephFS FUSE
-  client for ``fallocate`` for the default case (i.e. ``mode == 0``).
 
 CephFS
 ------
@@ -131,6 +131,26 @@ CephFS
   field will be ``N/A``. Regular subvolumes do not have a source subvolume and
   therefore the output for them will not contain a "source" field regardless of
   the release.
+
+Crimson / SeaStore
+------------------
+
+The Crimson project continues to progress, with the Squid release marking the
+first technical preview available for Crimson.
+The Tentacle release introduces a host of improvements and new functionalities
+that enhance the robustness, performance, and usability
+of both Crimson-OSD and the SeaStore object store.
+In this release, SeaStore can now be deployed alongside the Crimson-OSD!
+Early testing and experimentation are highly encouraged and we’d greatly
+appreciate any initial feedback rounds from the community to help guide future
+improvements.
+Check out the Crimson project updates blog post for Tentacle
+where we highlight some of the work included in the latest release, moving us
+closer to fully replacing the existing Classical OSD in the future: 
+https://ceph.io/en/news/blog/2025/crimson-T-release/
+
+If you're new to the Crimson project, please visit the project
+page for more information and resources: https://ceph.io/en/news/crimson
 
 Dashboard
 ---------
@@ -375,26 +395,6 @@ Telemetry
   flag, which will allow us to gauge feature adoption for the new
   FastEC improvements.
   To opt into telemetry, run ``ceph telemetry on``.
-
-Crimson / SeaStore
-------------------
-
-The Crimson project continues to progress, with the Squid release marking the
-first technical preview available for Crimson.
-The Tentacle release introduces a host of improvements and new functionalities
-that enhance the robustness, performance, and usability
-of both Crimson-OSD and the SeaStore object store.
-In this release, SeaStore can now be deployed alongside the Crimson-OSD!
-Early testing and experimentation are highly encouraged and we’d greatly
-appreciate any initial feedback rounds from the community to help guide future
-improvements.
-Check out the Crimson project updates blog post for Tentacle
-where we highlight some of the work included in the latest release, moving us
-closer to fully replacing the existing Classical OSD in the future: 
-https://ceph.io/en/news/blog/2025/crimson-T-release/
-
-If you're new to the Crimson project, please visit the project
-page for more information and resources: https://ceph.io/en/news/crimson
 
 Upgrading from Reef or Squid
 ----------------------------
