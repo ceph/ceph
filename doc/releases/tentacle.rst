@@ -51,8 +51,8 @@ RBD
   external sources/formats.
 * There is now support for RBD namespace remapping while mirroring between
   Ceph clusters.
-* Several commands related to group and snap info were added or improved,
-  and ``rbd device map`` now defaults to ``msgr2``.
+* Several commands related to group and group snap info were added or
+  improved, and ``rbd device map`` command now defaults to ``msgr2``.
 
 MGR
 
@@ -266,6 +266,23 @@ RADOS
 RBD
 ---
 
+* RBD images can now be instantly imported from another Ceph cluster. The
+  migration source spec for ``native`` format has grown ``cluster_name`` and
+  ``client_name`` optional fields for connecting to the source cluster after
+  parsing the respective ``ceph.conf``-like configuration file.
+
+* With the help of the new NBD stream (``"type": "nbd"``), RBD images can now
+  be instantly imported from a wide variety of external sources/formats. The
+  exact set of supported formats and their features depends on the capabilities
+  of the NBD server.
+
+* While mirroring between Ceph clusters, the local and remote RBD namespaces
+  don't need to be the same anymore (but the pool names still do). Using the
+  new ``--remote-namespace`` option of ``rbd mirror pool enable`` command, it's
+  now possible to pair a local namespace with an arbitrary remote namespace in
+  the respective pool, including mapping a default namespace to a non-default
+  namespace and vice versa, at the time mirroring is configured.
+
 * All Python APIs that produce timestamps now return "aware" ``datetime``
   objects instead of "naive" ones (i.e., those including time zone information
   instead of those not including it). All timestamps remain in UTC, but
@@ -282,9 +299,20 @@ RBD
   that was shown as ``ok`` is now shown as ``complete``, which is more
   descriptive.
 
+* In ``rbd mirror image status`` and ``rbd mirror pool status --verbose``
+  outputs, ``mirror_uuids`` field has been renamed to ``mirror_uuid`` to
+  highlight that the value is always a single UUID and never a list of any
+  kind.
+
 * Moving an image that is a member of a group to trash is no longer
   allowed. The ``rbd trash mv`` command now behaves the same way as ``rbd rm``
   in this scenario.
+
+* ``rbd device map`` command now defaults to ``msgr2`` for all device types.
+  ``-o ms_mode=legacy`` can be passed to continue using ``msgr1`` with krbd.
+
+* The family of diff-iterate APIs has been extended to allow diffing from or
+  between non-user type snapshots which can only be referred to by their IDs.
 
 * Fetching the mirroring mode of an image is invalid if the image is
   disabled for mirroring. The public APIs -- C++ ``mirror_image_get_mode()``,
