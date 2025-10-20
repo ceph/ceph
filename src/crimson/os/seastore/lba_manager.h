@@ -125,7 +125,7 @@ public:
    */
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
-    LBAMapping pos,
+    LBACursorRef cursor,
     laddr_t hint,
     extent_len_t len) = 0;
 
