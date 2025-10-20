@@ -348,15 +348,15 @@ Telemetry
   FastEC improvements.
   To opt into telemetry, run ``ceph telemetry on``.
 
-Crimson / Seastore
+Crimson / SeaStore
 ------------------
 
 The Crimson project continues to progress, with the Squid release marking the
 first technical preview available for Crimson.
 The Tentacle release introduces a host of improvements and new functionalities
 that enhance the robustness, performance, and usability
-of both Crimson-OSD and the Seastore object store.
-In this release, Seastore can now be deployed alongside the Crimson-OSD!
+of both Crimson-OSD and the SeaStore object store.
+In this release, SeaStore can now be deployed alongside the Crimson-OSD!
 Early testing and experimentation are highly encouraged and we’d greatly
 appreciate any initial feedback rounds from the community to help guide future
 improvements.
