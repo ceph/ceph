@@ -46,7 +46,7 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
                  const std::string& pool, const std::string& primary_oid, const std::string& secondary_oid,
                  uint64_t block_size, int seed, int threads, ceph::mutex& lock,
                  ceph::condition_variable& cond, bool is_replicated_pool,
-                 bool ec_optimizations)
+                 bool ec_optimizations, int balanced_read_percentage)
     : Model(primary_oid, secondary_oid, block_size),
       rados(rados),
       asio(asio),
@@ -57,7 +57,9 @@ RadosIo::RadosIo(librados::Rados& rados, boost::asio::io_context& asio,
       threads(threads),
       lock(lock),
       cond(cond),
-      outstanding_io(0) {
+      outstanding_io(0),
+      rng(seed),
+      balanced_read_percentage(balanced_read_percentage) {
   int rc;
   rc = rados.ioctx_create(pool.c_str(), io);
   ceph_assert(rc == 0);
@@ -259,6 +261,23 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       }
       finish_io();
     };
+
+    auto is_balanced_read = [&rng = rng](int balanced_read_percentage) {
+      ceph_assert(balanced_read_percentage >= 0);
+      ceph_assert(balanced_read_percentage <= 100);
+      uint64_t range = 100;
+      uint64_t rand_value = rng();
+      int index = rand_value % range;
+      if (index <= balanced_read_percentage) {
+        return true;
+      }
+      return false;
+    };
+
+    int flags = 0;
+    if (is_balanced_read(balanced_read_percentage)) {
+      flags = librados::OPERATION_BALANCE_READS;
+    }
     librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(rop), 0, nullptr, read_cb);
     num_io++;
