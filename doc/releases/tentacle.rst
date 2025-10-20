@@ -86,7 +86,7 @@ CephFS
   normalized directory entry names. This is an inheritable configuration,
   making it apply to an entire directory tree.
 
-  For more information, see the :ref:`charmap`.
+  For more information, see :ref:`charmap`.
 
 * It is now possible to pause the threads that asynchronously purge
   deleted subvolumes by using the config option
