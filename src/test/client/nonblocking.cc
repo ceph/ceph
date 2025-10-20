@@ -777,14 +777,20 @@ TEST_F(TestClient, LlreadvLlwritevLargeBuffers) {
                                  nullptr);
   ASSERT_EQ(rc, 0);
   bytes_written = writefinish.wait();
+
+  int maxio_size = INT_MAX;
+  if (fse.encrypted) {
+    maxio_size = FSCRYPT_MAXIO_SIZE;
+  }
+
   // total write length is clamped to INT_MAX in write paths
-  ASSERT_EQ(bytes_written, INT_MAX);
+  ASSERT_EQ(bytes_written, maxio_size);
 
   rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, &readfinish, &bl);
   ASSERT_EQ(rc, 0);
   bytes_read = readfinish.wait();
   // total read length is clamped to INT_MAX in read paths
-  ASSERT_EQ(bytes_read, INT_MAX);
+  ASSERT_EQ(bytes_read, maxio_size);
 
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));

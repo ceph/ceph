@@ -26,6 +26,7 @@ if(${WITH_CEPHFS})
     ops.cc
     nonblocking.cc
     fscrypt_conf.cc
+    syncio.cc
     )
   target_link_libraries(ceph_test_client_fscrypt
     client
