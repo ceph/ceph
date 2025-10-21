@@ -679,8 +679,9 @@ time has elapsed, "user A" will be able to send ``GET`` requests again.
 - **User:** The ``--uid`` option allows you to specify a rate limit for a
   user.
 
-- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to limit read
-  bytes per accumulation interval per RGW instance. A ``0`` value disables throttling.
+- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to specify
+  the maximum number of read ops per accumulation interval per RGW instance. A ``0`` value
+  disables throttling.
   
 - **Maximum Read Bytes:** The ``--max-read-bytes`` setting allows you to limit
   read bytes per accumulation interval per RGW instance. A ``0`` value disables throttling.
