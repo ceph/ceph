@@ -18,7 +18,7 @@ TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);
@@ -42,7 +42,7 @@ TEST_P(LibRadosSplitOpECPP, ReadWithIllegalClsOp) {
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   bufferlist new_bl;
   new_bl.append("CEPH");
@@ -52,7 +52,7 @@ TEST_P(LibRadosSplitOpECPP, ReadWithIllegalClsOp) {
   rados::cls::fifo::op::init_part op;
   encode(op, exec_inbl);
   write2.exec("fifo", "init_part", exec_inbl, &exec_outbl, &exec_rval);
-  ASSERT_TRUE(AssertOperateWithSplitOp(-EOPNOTSUPP, "foo", &write2));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(-EOPNOTSUPP, "foo", &write2));
 }
 
 TEST_P(LibRadosSplitOpECPP, XattrReads) {
@@ -66,7 +66,7 @@ TEST_P(LibRadosSplitOpECPP, XattrReads) {
   write1.write(0, bl);
   encode(attr_value, attr_bl);
   write1.setxattr(attr_key.c_str(), attr_bl);
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   ObjectReadOperation read;
   read.read(0, bl.length(), NULL, NULL);
