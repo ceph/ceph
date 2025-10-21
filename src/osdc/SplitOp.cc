@@ -229,14 +229,20 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 #define dout_prefix *_dout << " SplitOp::"
 
 int SplitOp::assemble_rc() {
+  int rc = 0;
   // Pick the first bad RC, otherwise return 0.
-  for (auto & [_, sub_read] : sub_reads) {
+  for (auto & [shard, sub_read] : sub_reads) {
     if (sub_read.rc < 0) {
       return sub_read.rc;
     }
+
+    // The non-primary shards only get reads, which only ever have zero RCs.
+    if (shard == primary_shard) {
+      rc = sub_read.rc;
+    }
   }
 
-  return 0;
+  return rc;
 }
 
 void SplitOp::complete() {
