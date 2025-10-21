@@ -2954,6 +2954,27 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
+  // removing pending resync request
+  group_header_oid = librbd::util::group_header_name(group_id);
+  std::string value;
+  r = librbd::cls_client::metadata_get(&group_ioctx, group_header_oid,
+                                       RBD_GROUP_RESYNC, &value);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed reading metadata: " << RBD_GROUP_RESYNC << " : "
+               << cpp_strerror(r) << dendl;
+    return r;
+  } else if (r == 0) {
+    ldout(cct, 5) << "found resync group request, clearing it"
+                  << dendl;
+    r = cls_client::metadata_remove(&group_ioctx, group_header_oid,
+                                    RBD_GROUP_RESYNC);
+    if (r < 0) {
+      lderr(cct) << "failed removing resync group metadata: " << RBD_GROUP_RESYNC << " : "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+  }
+
   r = MirroringWatcher<I>::notify_group_updated(
         group_ioctx, cls::rbd::MIRROR_GROUP_STATE_DISABLED, group_id,
         mirror_group.global_group_id, image_count);
