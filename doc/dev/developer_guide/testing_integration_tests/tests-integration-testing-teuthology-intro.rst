@@ -339,11 +339,10 @@ subdirectories in the following structure
   qa/suites/ceph-deploy
   ├── %
   ├── distros
-  │   ├── centos_latest.yaml
-  │   └── ubuntu_latest.yaml
+  │   ├── centos_7.0.yaml
+  │   └── ubuntu_16.04.yaml
   └── tasks
-      ├── ceph-admin-commands.yaml
-      └── rbd_import_export.yaml
+      └── ceph-deploy.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests:
 
@@ -440,8 +439,7 @@ tree
   │   └── openstack.yaml
   └── workloads
       ├── rbd_api_tests_copy_on_read.yaml
-      ├── rbd_api_tests.yaml
-      └── rbd_fsx_rate_limit.yaml
+      └── rbd_api_tests.yaml
 
 This creates two tests:
 
