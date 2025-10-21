@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <thread>
+#include <string_view>
 
 #include <errno.h>
 #include <fmt/format.h>
@@ -12,6 +13,9 @@
 #include "test_shared.h"
 #include "crimson_utils.h"
 #include "include/scope_guard.h"
+
+#include "common/ceph_context.h"
+#include "common/perf_counters_collection.h"
 
 using namespace librados;
 
@@ -274,7 +278,6 @@ void RadosTestPPBase::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 
 std::string RadosTestParamPP::pool_name;
 std::string RadosTestParamPP::cache_pool_name;
-Rados RadosTestParamPP::s_cluster;
 
 void RadosTestParamPP::SetUpTestCase()
 {
@@ -370,7 +373,6 @@ void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 std::string RadosTestECPP::pool_name_default;
 std::string RadosTestECPP::pool_name_fast;
 std::string RadosTestECPP::pool_name_fast_split;
-Rados RadosTestECPP::s_cluster;
 
 void RadosTestECPP::SetUpTestCase()
 {
@@ -399,8 +401,8 @@ void RadosTestECPP::SetUp()
 {
   SKIP_IF_CRIMSON();
   const auto& params = GetParam();
-  bool fast_ec = std::get<0>(params);
-  bool split_ops = std::get<1>(params);
+  fast_ec = std::get<0>(params);
+  split_ops = std::get<1>(params);
   if (fast_ec && split_ops) {
     pool_name = pool_name_fast_split;
   } else if (fast_ec) {
@@ -455,4 +457,39 @@ void RadosTestECPP::set_allow_ec_overwrites()
     ASSERT_LT(std::chrono::steady_clock::now(), end);
     std::this_thread::sleep_for(std::chrono::seconds(2));
   }
+}
+
+uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {
+  CephContext* cct = (CephContext*)cluster.cct();
+  PerfCountersCollection *coll = cct->get_perfcounters_collection();
+
+  std::stringstream ss;
+  bool found = false;
+
+  uint64_t value = 0;
+  coll->with_counters([&](const auto& counter_map) {
+    auto it = counter_map.find(std::string(path));
+    if (it != counter_map.end()) {
+      value = it->second.data->u64.load();
+      found = true;
+    }
+  });
+
+  if (!found) {
+    ss << "Performance counter not found: '" << path << "'.\n";
+    ss << "Available counters are:\n";
+    coll->with_counters([&](const auto& counter_map) {
+      if (counter_map.empty()) {
+        ss << "  <none> (The collection is empty, check initialization timing)";
+      } else {
+        for (const auto& pair : counter_map) {
+          ss << "  - " << pair.first << "\n";
+        }
+      }
+    });
+
+    throw(std::range_error(ss.str()));
+  }
+
+  return value;
 }
