@@ -4,7 +4,7 @@
 
 import logging
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import partial
 from typing import Any, Dict
 
@@ -347,9 +347,8 @@ class RbdTrash(RESTController):
                 for trash in images:
                     trash['pool_name'] = pool_name
                     trash['namespace'] = namespace
-                    trash['deletion_time'] = "{}Z".format(trash['deletion_time'].isoformat())
-                    trash['deferment_end_time'] = "{}Z".format(
-                        trash['deferment_end_time'].isoformat())
+                    trash['deletion_time'] = trash['deletion_time'].isoformat()
+                    trash['deferment_end_time'] = trash['deferment_end_time'].isoformat()
                     result.append(trash)
             return result
 
@@ -385,7 +384,7 @@ class RbdTrash(RESTController):
     @allow_empty_body
     def purge(self, pool_name=None):
         """Remove all expired images from trash."""
-        now = "{}Z".format(datetime.utcnow().isoformat())
+        now = datetime.now(timezone.utc).isoformat()
         pools = self._trash_list(pool_name)
 
         for pool in pools:
