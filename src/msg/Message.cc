@@ -897,7 +897,7 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MNVMEOF_GW_BEACON:
     m = make_message<MNVMeofGwBeacon>();
-    break;
+  break;
 
   case MSG_MON_MGR_REPORT:
     m = make_message<MMonMgrReport>();

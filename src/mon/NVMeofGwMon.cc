@@ -578,7 +578,8 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
     auto group_key = std::make_pair(pool, group);
     dout(10) << " id "<< id <<" pool "<< pool << " group "<< group << dendl;
     if (prefix == "nvme-gw create") {
-      rc = pending_map.cfg_add_gw(id, group_key);
+      rc = pending_map.cfg_add_gw(id, group_key,
+		   mon.get_quorum_con_features());
       if (rc == -EINVAL) {
 	err = rc;
 	dout (4) << "Error: GW cannot be created " << id
