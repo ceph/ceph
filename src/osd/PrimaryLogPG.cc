@@ -6024,10 +6024,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for spare-read add
     // checksum make sense.
-    // For now, we do not check the CRC for EC ever. We could implement this,
-    // but it would only work for very small objects and as such is probably
-    // not very useful.
-    if ((uint64_t)r == oi.size && oi.is_data_digest() && !pool.info.is_erasure()) {
+    if ((uint64_t)r == oi.size && oi.is_data_digest()) {
       uint32_t crc = data_bl.crc32c(-1);
       if (oi.data_digest != crc) {
         osd->clog->error() << info.pgid << std::hex
