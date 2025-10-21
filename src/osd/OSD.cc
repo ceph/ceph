@@ -7702,6 +7702,7 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_OSD_PG_INFO2:
   case MSG_OSD_BACKFILL_RESERVE:
   case MSG_OSD_RECOVERY_RESERVE:
+  case MSG_OSD_POOLMIGRATION_RESERVE:
   case MSG_OSD_PG_LEASE:
   case MSG_OSD_PG_LEASE_ACK:
     {

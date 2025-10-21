@@ -13,6 +13,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MPoolMigrationReserve.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGTrim.h"

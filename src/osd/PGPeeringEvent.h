@@ -191,6 +191,18 @@ struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
   }
 };
 
+struct RemotePoolMigrationRequest : boost::statechart::event<RemotePoolMigrationRequest> {
+  unsigned priority;
+  int64_t source_num_bytes;
+  explicit RemotePoolMigrationRequest(unsigned prio, int64_t sbytes) :
+    boost::statechart::event< RemotePoolMigrationRequest >(),
+    priority(prio), source_num_bytes(sbytes) {}
+  void print(std::ostream *out) const {
+    *out << "RemotePoolMigrationRequest: priority " << priority
+         << " source bytes " << source_num_bytes;
+  }
+};
+
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
@@ -207,6 +219,11 @@ TrivialEvent(RemoteReservationRevoked)
 TrivialEvent(RemoteReservationCanceled)
 TrivialEvent(RemoteRecoveryReserved)
 TrivialEvent(RecoveryDone)
+TrivialEvent(RemotePoolMigrationReserved)
+TrivialEvent(RemotePoolMigrationRejectedTooFull)
+TrivialEvent(RemotePoolMigrationReservationCancelled)
+TrivialEvent(RemotePoolMigrationRevokedTooFull)
+TrivialEvent(RemotePoolMigrationRevoked)
 
 struct DeferRecovery : boost::statechart::event<DeferRecovery> {
   float delay;
