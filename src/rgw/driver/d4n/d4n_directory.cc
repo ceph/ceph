@@ -210,14 +210,20 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
 
 int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline)
 {
+  // Add transaction handling
+  RedisTransactionHandling trx_handler(this, dpp, conn, bucket_id,
+                                       D4NTransaction::redis_operation_type::WRITE_OP, y);
+  //the key may be temp key in case of transaction, it build of original key(bucket-id) + trx_id + _temp_write
+  std::string key = trx_handler.get_redis_key();
+
   try {
     boost::system::error_code ec;
     if (pipeline && pipeline->is_pipeline()) {
       request& req = pipeline->get_request();
-      req.push("ZADD", bucket_id, "CH", std::to_string(0), member);
+      req.push("ZADD", key, "CH", std::to_string(0), member);
     } else {
       request req;
-      req.push("ZADD", bucket_id, "CH", std::to_string(0), member);
+      req.push("ZADD", key, "CH", std::to_string(0), member);
 
     response<std::string> resp;
 
@@ -244,10 +250,16 @@ int BucketDirectory::zadd(const DoutPrefixProvider* dpp, const std::string& buck
 
 int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y)
 {
+  // Add transaction handling
+  RedisTransactionHandling trx_handler(this, dpp, conn, bucket_id,
+                                       D4NTransaction::redis_operation_type::WRITE_OP, y);
+  //the key may be temp key in case of transaction, it build of original key(bucket-id) + trx_id + _temp_write
+  std::string key = trx_handler.get_redis_key();
+
   try {
     boost::system::error_code ec;
     request req;
-    req.push("ZREM", bucket_id, member);
+    req.push("ZREM", key, member);
     response<std::string> resp;
 
     redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
@@ -272,13 +284,20 @@ int BucketDirectory::zrem(const DoutPrefixProvider* dpp, const std::string& buck
 
 int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y)
 {
+  // Add transaction handling
+  // in the caseof read operation, the transaction provides read isolation by redirecting the read to the temp read key if exists.
+  RedisTransactionHandling trx_handler(this, dpp, conn, bucket_id,
+                                       D4NTransaction::redis_operation_type::READ_OP, y);
+  //the key may be temp key in case of transaction, it build of original key(bucket-id) + trx_id + _temp_read
+  std::string key = trx_handler.get_redis_key();
+
   try {
     boost::system::error_code ec;
     request req;
     if (offset == 0 && count == 0) {
-      req.push("ZRANGE", bucket_id, start, stop, "bylex");
+      req.push("ZRANGE", key, start, stop, "bylex");
     } else {
-      req.push("ZRANGE", bucket_id, start, stop, "bylex", "LIMIT", offset, count);
+      req.push("ZRANGE", key, start, stop, "bylex", "LIMIT", offset, count);
     }
 
     response<std::vector<std::string> > resp;
@@ -306,11 +325,18 @@ int BucketDirectory::zrange(const DoutPrefixProvider* dpp, const std::string& bu
 
 int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& bucket_id, uint64_t cursor, const std::string& pattern, uint64_t count, std::vector<std::string>& members, uint64_t next_cursor, optional_yield y)
 {
+  // Add transaction handling
+  // in the caseof read operation, the transaction provides read isolation by redirecting the read to the temp read key if exists.
+  RedisTransactionHandling trx_handler(this, dpp, conn, bucket_id,
+                                       D4NTransaction::redis_operation_type::READ_OP, y);
+  //the key may be temp key in case of transaction, it build of original key(bucket-id) + trx_id + _temp_read
+  std::string key = trx_handler.get_redis_key();
+
   try {
     boost::system::error_code ec;
     request req;
 
-    req.push("ZSCAN", bucket_id, cursor, "MATCH", pattern, "COUNT", count);
+    req.push("ZSCAN", key, cursor, "MATCH", pattern, "COUNT", count);
 
     boost::redis::generic_response resp;
     redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
@@ -348,11 +374,18 @@ int BucketDirectory::zscan(const DoutPrefixProvider* dpp, const std::string& buc
 
 int BucketDirectory::zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y)
 {
+  // Add transaction handling
+  // in the caseof read operation, the transaction provides read isolation by redirecting the read to the temp read key if exists.
+  RedisTransactionHandling trx_handler(this, dpp, conn, bucket_id,
+                                       D4NTransaction::redis_operation_type::READ_OP, y);
+  //the key may be temp key in case of transaction, it build of original key(bucket-id) + trx_id + _temp_read
+  std::string key = trx_handler.get_redis_key();
+
   try {
     boost::system::error_code ec;
     request req;
 
-    req.push("ZRANK", bucket_id, member);
+    req.push("ZRANK", key, member);
 
     response<int> resp;
     redis_exec_connection_pool(dpp, redis_pool, conn, ec, req, resp, y);
