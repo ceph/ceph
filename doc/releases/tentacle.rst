@@ -59,6 +59,12 @@ RADOS
 * OMAP: All components have been switched to the faster OMAP iteration
   interface, which improves RGW bucket listing and scrub operations.
 
+Crimson
+
+* SeaStore Tech Preview: Seastore object store is now deployable
+  alongside Crimson-OSD, mainly for early testing and experimentation.
+  Community feedback is encouraged to help with future improvements.
+
 RBD
 
 * New live migration features: RBD images can now be instantly imported
