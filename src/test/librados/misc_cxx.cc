@@ -149,7 +149,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
-  int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
+  int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out, false, false);
   ASSERT_EQ(0, r);
   auto iter = out.cbegin();
   uint64_t all_features;

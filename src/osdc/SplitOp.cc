@@ -381,15 +381,8 @@ static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
       case CEPH_OSD_OP_GETXATTRS:
       case CEPH_OSD_OP_CHECKSUM:
       case CEPH_OSD_OP_GETXATTR:
-      case CEPH_OSD_OP_CMPXATTR: {
-        break; // Do not block validate.
-      }
-      case CEPH_OSD_OP_CALL: {
-        // Mostly calls should not be passed through. However, here we add
-        // special cases.
-        if (!validate_call(o, "version", "read")) {
-          return false;
-        }
+      case CEPH_OSD_OP_CMPXATTR:
+      case CEPH_OSD_OP_CALL_R: {
         break;
       }
       default: {

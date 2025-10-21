@@ -316,7 +316,7 @@ private:
     ip.params = info.params;
     buffer::list in;
     encode(ip, in);
-    op.exec(fifo::op::CLASS, fifo::op::INIT_PART, std::move(in));
+    op.exec(fifo::op::CLASS, fifo::op::INIT_PART, std::move(in), true, true);
     auto oid = info.part_oid(part_num);
     l.unlock();
     return rados.execute(oid, ioc, std::move(op),
@@ -365,7 +365,7 @@ private:
 
     buffer::list in;
     encode(um, in);
-    op.exec(fifo::op::CLASS, fifo::op::UPDATE_META, std::move(in));
+    op.exec(fifo::op::CLASS, fifo::op::UPDATE_META, std::move(in), true, true);
     return rados.execute(obj, ioc, std::move(op),
 			 std::forward<CompletionToken>(token));
   }
@@ -404,7 +404,7 @@ private:
 
     buffer::list in;
     encode(cm, in);
-    op.exec(fifo::op::CLASS, fifo::op::CREATE_META, in);
+    op.exec(fifo::op::CLASS, fifo::op::CREATE_META, in, true, true);
     return rados.execute(std::move(obj), std::move(ioc), std::move(op),
 			 std::forward<CompletionToken>(token));
   }
@@ -452,7 +452,7 @@ private:
            op.exec(fifo::op::CLASS, fifo::op::PUSH_PART, in,
                    [&pushes](sys::error_code, int r, const buffer::list &) {
                      pushes = r;
-                   });
+                   }, true, true);
            op.returnvec();
            co_await f->rados.execute(std::move(oid), f->ioc, std::move(op),
                                      asio::deferred);
@@ -581,7 +581,7 @@ private:
 
 	   buffer::list in;
 	   encode(tp, in);
-	   op.exec(fifo::op::CLASS, fifo::op::TRIM_PART, in);
+	   op.exec(fifo::op::CLASS, fifo::op::TRIM_PART, in, true, true);
            co_await f->rados.execute(std::move(oid), f->ioc, std::move(op),
                                      asio::deferred);
 	   co_return sys::error_code{};

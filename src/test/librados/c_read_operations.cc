@@ -195,7 +195,7 @@ TEST_F(CReadOpsTest, SetOpFlags) {
   char *out = NULL;
   int rval = 0;
   rados_read_op_exec(op, "rbd", "get_id", NULL, 0, &out,
-		     &bytes_read, &rval);
+		     &bytes_read, &rval, true, false);
   rados_read_op_set_flags(op, LIBRADOS_OP_FLAG_FAILOK);
   EXPECT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   EXPECT_EQ(-EIO, rval);
@@ -521,7 +521,7 @@ TEST_F(CReadOpsTest, Exec) {
   char *out = NULL;
   int rval = 0;
   rados_read_op_exec(op, "rbd", "get_all_features", NULL, 0, &out,
-		     &bytes_read, &rval);
+		     &bytes_read, &rval, true, false);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   rados_release_read_op(op);
   EXPECT_EQ(0, rval);
@@ -549,7 +549,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   char out[sizeof(features)];
   int rval = 0;
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
-			      sizeof(out), &bytes_read, &rval);
+			      sizeof(out), &bytes_read, &rval, true, false);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   rados_release_read_op(op);
   EXPECT_EQ(0, rval);
@@ -559,7 +559,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   bytes_read = 1024;
   op = rados_create_read_op();
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", NULL, 0, out,
-			      sizeof(features) - 1, &bytes_read, &rval);
+			      sizeof(features) - 1, &bytes_read, &rval, true, false);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   rados_release_read_op(op);
   EXPECT_EQ(0u, bytes_read);
@@ -568,7 +568,7 @@ TEST_F(CReadOpsTest, ExecUserBuf) {
   // input buffer and no rval or bytes_read
   op = rados_create_read_op();
   rados_read_op_exec_user_buf(op, "rbd", "get_all_features", out, sizeof(out),
-			      out, sizeof(out), NULL, NULL);
+			      out, sizeof(out), NULL, NULL, true, false);
   ASSERT_EQ(0, rados_read_op_operate(op, ioctx, obj, 0));
   rados_release_read_op(op);
 

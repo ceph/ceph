@@ -352,21 +352,40 @@ public:
   void assert_exists();
   void cmp_omap(const std::vector<cmp_assertion>& assertions);
 
+  // void exec(std::string_view cls, std::string_view method,
+	 //    const ceph::buffer::list& inbl,
+	 //    ceph::buffer::list* out,
+	 //    boost::system::error_code* ec = nullptr);
+  // void exec(std::string_view cls, std::string_view method,
+	 //    const ceph::buffer::list& inbl,
+	 //    fu2::unique_function<void(boost::system::error_code,
+		// 		      const ceph::buffer::list&) &&> f);
+  // void exec(std::string_view cls, std::string_view method,
+	 //    const ceph::buffer::list& inbl,
+	 //    fu2::unique_function<void(boost::system::error_code, int,
+		// 		      const ceph::buffer::list&) &&> f);
+  // void exec(std::string_view cls, std::string_view method,
+	 //    const ceph::buffer::list& inbl,
+	 //    boost::system::error_code* ec = nullptr);
+
   void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    ceph::buffer::list* out,
-	    boost::system::error_code* ec = nullptr);
+          const ceph::buffer::list& inbl,
+          ceph::buffer::list* out,
+          bool read, bool write,
+          boost::system::error_code* ec = nullptr);
   void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code,
-				      const ceph::buffer::list&) &&> f);
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code,
+                                      const ceph::buffer::list&) &&> f,
+                                      bool read, bool write);
   void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code, int,
-				      const ceph::buffer::list&) &&> f);
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code, int,
+                                      const ceph::buffer::list&) &&> f,
+                                      bool read, bool write);
   void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    boost::system::error_code* ec = nullptr);
+            const ceph::buffer::list& inbl, bool read, bool write,
+            boost::system::error_code* ec = nullptr);
 
 
   // Flags that apply to all ops in the operation vector
@@ -652,6 +671,7 @@ public:
   ReadOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
 	       ceph::buffer::list* out,
+	       bool read, bool write,
 	       boost::system::error_code* ec = nullptr) & {
     Op::exec(cls, method, inbl, out, ec);
     return *this;
@@ -659,6 +679,7 @@ public:
   ReadOp&& exec(std::string_view cls, std::string_view method,
 		const ceph::buffer::list& inbl,
 		ceph::buffer::list* out,
+		bool read, bool write,
 		boost::system::error_code* ec = nullptr) && {
     Op::exec(cls, method, inbl, out, ec);
     return std::move(*this);
@@ -667,43 +688,49 @@ public:
   ReadOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
 	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
+	       const ceph::buffer::list&) &&> f,
+	       bool read, bool write) & {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return *this;
   }
   ReadOp&& exec(std::string_view cls, std::string_view method,
 		const ceph::buffer::list& inbl,
 	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
+	        const ceph::buffer::list&) &&> f,
+	       bool read, bool write) && {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return std::move(*this);
   }
 
   ReadOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
 	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
+	                                 const ceph::buffer::list&) &&> f,
+	       bool read, bool write) & {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return *this;
   }
   ReadOp&& exec(std::string_view cls, std::string_view method,
 	        const ceph::buffer::list& inbl,
 	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
+	                                  const ceph::buffer::list&) &&> f,
+	        bool read, bool write) && {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return std::move(*this);
   }
 
   ReadOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
+	       bool read, bool write,
 	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
+    Op::exec(cls, method, inbl, read, write, ec);
     return *this;
   }
   ReadOp&& exec(std::string_view cls, std::string_view method,
 		const ceph::buffer::list& inbl,
+		bool read, bool write,
 		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+    Op::exec(cls, method, inbl, read, write, ec);
     return std::move(*this);
   }
 
@@ -1047,43 +1074,49 @@ public:
   WriteOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
 	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
+	                            const ceph::buffer::list&) &&> f,
+	       bool read, bool write) & {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return *this;
   }
   WriteOp&& exec(std::string_view cls, std::string_view method,
 		const ceph::buffer::list& inbl,
 	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
+	        const ceph::buffer::list&) &&> f,
+	        bool read, bool write) && {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return std::move(*this);
   }
 
   WriteOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
 	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
+	       const ceph::buffer::list&) &&> f,
+	        bool read, bool write) & {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return *this;
   }
   WriteOp&& exec(std::string_view cls, std::string_view method,
 	        const ceph::buffer::list& inbl,
 	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
+	        const ceph::buffer::list&) &&> f,
+	        bool read, bool write) && {
+    Op::exec(cls, method, inbl, std::move(f), read, write);
     return std::move(*this);
   }
 
   WriteOp& exec(std::string_view cls, std::string_view method,
 	       const ceph::buffer::list& inbl,
+	       bool read, bool write,
 	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
+    Op::exec(cls, method, inbl, read, write, ec);
     return *this;
   }
   WriteOp&& exec(std::string_view cls, std::string_view method,
 		const ceph::buffer::list& inbl,
+		bool read, bool write,
 		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+    Op::exec(cls, method, inbl, read, write, ec);
     return std::move(*this);
   }
 

@@ -162,7 +162,7 @@ int main(int argc, const char **argv)
   snprintf(id.id, sizeof(id.id), "%.8x", 0x1234);
   cout << "id=" << id.id << std::endl;
 
-  r = io_ctx.exec(oid, "acl", "get", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "get", bl, bl2, true, false);
   cout << "exec(acl get) returned " << r
        << " len=" << bl2.length() << std::endl;
   ObjectACLs oa;
@@ -174,7 +174,7 @@ int main(int argc, const char **argv)
   oa.set_acl(id, ACL_RD);
   bl.clear();
   oa.encode(bl);
-  r = io_ctx.exec(oid, "acl", "set", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "set", bl, bl2, true, true);
   cout << "exec(acl set) returned " << r
        << " len=" << bl2.length() << std::endl;
 

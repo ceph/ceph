@@ -26,10 +26,10 @@ TEST(LibRadosCls, DNE) {
   ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
 
   // call a bogus class
-  ASSERT_EQ(-EOPNOTSUPP, ioctx.exec(oid, "doesnotexistasdfasdf", "method", bl, bl));
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.exec(oid, "doesnotexistasdfasdf", "method", bl, bl, false, false));
 
   // call a bogus method on existent class
-  ASSERT_EQ(-EOPNOTSUPP, ioctx.exec(oid, "lock", "doesnotexistasdfasdfasdf", bl, bl));
+  ASSERT_EQ(-EOPNOTSUPP, ioctx.exec(oid, "lock", "doesnotexistasdfasdfasdf", bl, bl, false, false));
 
   ioctx.close();
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

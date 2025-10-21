@@ -1406,38 +1406,84 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
   }
 
-  // object classes
-  void call(const char *cname, const char *method, ceph::buffer::list &indata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  // // object classes
+  // void call(const char *cname, const char *method, ceph::buffer::list &indata) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  // }
+  //
+  // void call(const char *cname, const char *method, ceph::buffer::list &indata,
+	 //    ceph::buffer::list *outdata, Context *ctx, int *prval) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
+  // }
+  //
+  // void call(std::string_view cname, std::string_view method,
+	 //    const ceph::buffer::list& indata, boost::system::error_code* ec) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  //   out_ec.back() = ec;
+  // }
+
+  // void call(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
+  //         boost::system::error_code* ec, ceph::buffer::list *outdata) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr);
+  //   out_ec.back() = ec;
+  // }
+
+  // void call(std::string_view cname, std::string_view method,
+  //         const ceph::buffer::list& indata,
+  //         fu2::unique_function<void (boost::system::error_code,
+  //                                    const ceph::buffer::list&) &&> f) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+  // }
+  // void call(std::string_view cname, std::string_view method,
+  //           const ceph::buffer::list& indata,
+  //           fu2::unique_function<void (boost::system::error_code, int,
+  //                                      const ceph::buffer::list&) &&> f) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+  // }
+
+  auto _choose_call_op(bool read, bool write) {
+    if (read && write) {
+      return CEPH_OSD_OP_CALL_RW;
+    } else if (read) {
+      return CEPH_OSD_OP_CALL_R;
+    } else if (write) {
+      return CEPH_OSD_OP_CALL_W;
+    }
+
+    return CEPH_OSD_OP_CALL;
+  }
+
+  void call(const char *cname, const char *method, ceph::buffer::list &indata, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, NULL, NULL, NULL);
   }
 
   void call(const char *cname, const char *method, ceph::buffer::list &indata,
-	    ceph::buffer::list *outdata, Context *ctx, int *prval) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
+            ceph::buffer::list *outdata, Context *ctx, int *prval, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, outdata, ctx, prval);
   }
 
   void call(std::string_view cname, std::string_view method,
-	    const ceph::buffer::list& indata, boost::system::error_code* ec) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+            const ceph::buffer::list& indata, boost::system::error_code* ec, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, NULL, NULL, NULL);
     out_ec.back() = ec;
   }
 
   void call(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
-	    boost::system::error_code* ec, ceph::buffer::list *outdata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr);
+	    boost::system::error_code* ec, ceph::buffer::list *outdata, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, outdata, nullptr, nullptr);
     out_ec.back() = ec;
   }
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code,
-				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+				       const ceph::buffer::list&) &&> f, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, std::move(f));
   }
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code, int,
-				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+				       const ceph::buffer::list&) &&> f, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, std::move(f));
   }
 
   // watch/notify

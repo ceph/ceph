@@ -242,7 +242,7 @@ int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
     ret.update_call(call);
 
     encode(call, in);
-    op.exec("user", "reset_user_stats2", in, &out, &rval);
+    op.exec("user", "reset_user_stats2", in, &out, &rval, true, true);
     r = ref.operate(dpp, std::move(op), y, librados::OPERATION_RETURNVEC);
     if (r < 0) {
       return r;

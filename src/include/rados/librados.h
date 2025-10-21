@@ -1851,10 +1851,15 @@ CEPH_RADOS_API int rados_stat2(rados_ioctx_t io, const char *o, uint64_t *psize,
  * methods that don't return data, the return value is
  * method-specific.
  */
+//CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
+//                              const char *cls, const char *method,
+//	                      const char *in_buf, size_t in_len, char *buf,
+//                              size_t out_len);
+
 CEPH_RADOS_API int rados_exec(rados_ioctx_t io, const char *oid,
                               const char *cls, const char *method,
-	                      const char *in_buf, size_t in_len, char *buf,
-                              size_t out_len);
+                              const char *in_buf, size_t in_len, char *buf,
+                              size_t out_len, int read, int write);
 
 
 /** @} Synchronous I/O */
@@ -2266,11 +2271,17 @@ CEPH_RADOS_API int rados_aio_cancel(rados_ioctx_t io,
  * @param out_len length of buf in bytes
  * @returns 0 on success, negative error code on failure
  */
-CEPH_RADOS_API int rados_aio_exec(rados_ioctx_t io, const char *o,
-				  rados_completion_t completion,
-				  const char *cls, const char *method,
-				  const char *in_buf, size_t in_len,
-				  char *buf, size_t out_len);
+//CEPH_RADOS_API int rados_aio_exec(rados_ioctx_t io, const char *o,
+//				  rados_completion_t completion,
+//				  const char *cls, const char *method,
+//				  const char *in_buf, size_t in_len,
+//				  char *buf, size_t out_len);
+  CEPH_RADOS_API int rados_aio_exec(rados_ioctx_t io, const char *o,
+                                    rados_completion_t completion,
+                                    const char *cls, const char *method,
+                                    const char *in_buf, size_t in_len,
+                                    char *buf, size_t out_len,
+                                    int read, int write);
 
 /** @} Asynchronous I/O */
 
@@ -3073,12 +3084,20 @@ CEPH_RADOS_API void rados_write_op_zero(rados_write_op_t write_op,
  * @param in_len length of in_buf in bytes
  * @param prval where to store the return value from the method
  */
+//CEPH_RADOS_API void rados_write_op_exec(rados_write_op_t write_op,
+//			                const char *cls,
+//			                const char *method,
+//			                const char *in_buf,
+//			                size_t in_len,
+//			                int *prval);
 CEPH_RADOS_API void rados_write_op_exec(rados_write_op_t write_op,
-			                const char *cls,
-			                const char *method,
-			                const char *in_buf,
-			                size_t in_len,
-			                int *prval);
+                                        const char *cls,
+                                        const char *method,
+                                        const char *in_buf,
+                                        size_t in_len,
+                                        int *prval,
+                                        int read,
+                                        int write);
 
 /**
  * Set key/value pairs on an object
@@ -3456,6 +3475,14 @@ CEPH_RADOS_API void rados_read_op_checksum(rados_read_op_t read_op,
  * @param out_len length of out_buf in bytes
  * @param prval where to store the return value from the method
  */
+//  CEPH_RADOS_API void rados_read_op_exec(rados_read_op_t read_op,
+//                                         const char *cls,
+//                                         const char *method,
+//                                         const char *in_buf,
+//                                         size_t in_len,
+//                                         char **out_buf,
+//                                         size_t *out_len,
+//                                         int *prval);
 CEPH_RADOS_API void rados_read_op_exec(rados_read_op_t read_op,
 			               const char *cls,
 			               const char *method,
@@ -3463,7 +3490,9 @@ CEPH_RADOS_API void rados_read_op_exec(rados_read_op_t read_op,
 			               size_t in_len,
 			               char **out_buf,
 			               size_t *out_len,
-			               int *prval);
+			               int *prval,
+			               int read,
+			               int write);
 
 /**
  * Execute an OSD class method on an object
@@ -3482,16 +3511,26 @@ CEPH_RADOS_API void rados_read_op_exec(rados_read_op_t read_op,
  * @param used_len where to store the number of bytes read into out_buf
  * @param prval where to store the return value from the method
  */
-CEPH_RADOS_API void rados_read_op_exec_user_buf(rados_read_op_t read_op,
-				                const char *cls,
-				                const char *method,
-				                const char *in_buf,
-				                size_t in_len,
-				                char *out_buf,
-				                size_t out_len,
-				                size_t *used_len,
-				                int *prval);
-
+//CEPH_RADOS_API void rados_read_op_exec_user_buf(rados_read_op_t read_op,
+//				                const char *cls,
+//				                const char *method,
+//				                const char *in_buf,
+//				                size_t in_len,
+//				                char *out_buf,
+//				                size_t out_len,
+//				                size_t *used_len,
+//				                int *prval);
+  CEPH_RADOS_API void rados_read_op_exec_user_buf(rados_read_op_t read_op,
+                                                  const char *cls,
+                                                  const char *method,
+                                                  const char *in_buf,
+                                                  size_t in_len,
+                                                  char *out_buf,
+                                                  size_t out_len,
+                                                  size_t *used_len,
+                                                  int *prval,
+                                                  int read,
+                                                  int write);
 /**
  * Start iterating over key/value pairs on an object.
  *

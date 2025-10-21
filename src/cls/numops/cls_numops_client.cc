@@ -37,7 +37,7 @@ namespace rados {
         encode(stream.str(), in);
 
         librados::ObjectWriteOperation op;
-        op.exec("numops", "add", in);
+        op.exec("numops", "add", in, true, true);
 
         return ioctx->operate(oid, &op);
       }
@@ -64,7 +64,7 @@ namespace rados {
         encode(stream.str(), in);
 
         librados::ObjectWriteOperation op;
-        op.exec("numops", "mul", in);
+        op.exec("numops", "mul", in, true, true);
 
         return ioctx->operate(oid, &op);
       }

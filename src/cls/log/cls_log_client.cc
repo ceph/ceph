@@ -23,7 +23,7 @@ void cls_log_add(librados::ObjectWriteOperation& op, vector<cls::log::entry>& en
   cls::log::ops::add_op call;
   call.entries = entries;
   encode(call, in);
-  op.exec("log", "add", in);
+  op.exec("log", "add", in, true, true);
 }
 
 void cls_log_add(librados::ObjectWriteOperation& op, cls::log::entry& entry)
@@ -32,7 +32,7 @@ void cls_log_add(librados::ObjectWriteOperation& op, cls::log::entry& entry)
   cls::log::ops::add_op call;
   call.entries.push_back(entry);
   encode(call, in);
-  op.exec("log", "add", in);
+  op.exec("log", "add", in, true, true);
 }
 
 void cls_log_add_prepare_entry(cls::log::entry& entry, ceph::real_time timestamp,
@@ -63,7 +63,7 @@ void cls_log_trim(librados::ObjectWriteOperation& op, ceph::real_time from_time,
   call.from_marker = from_marker;
   call.to_marker = to_marker;
   encode(call, in);
-  op.exec("log", "trim", in);
+  op.exec("log", "trim", in, true, true);
 }
 
 int cls_log_trim(librados::IoCtx& io_ctx, const string& oid,
@@ -129,7 +129,7 @@ void cls_log_list(librados::ObjectReadOperation& op, ceph::real_time from,
 
   encode(call, inbl);
 
-  op.exec("log", "list", inbl, new LogListCtx(&entries, out_marker, truncated));
+  op.exec("log", "list", inbl, new LogListCtx(&entries, out_marker, truncated), true, false);
 }
 
 class LogInfoCtx : public ObjectOperationCompletion {
@@ -158,5 +158,5 @@ void cls_log_info(librados::ObjectReadOperation& op, cls::log::header *header)
 
   encode(call, inbl);
 
-  op.exec("log", "info", inbl, new LogInfoCtx(header));
+  op.exec("log", "info", inbl, new LogInfoCtx(header), true, false);
 }

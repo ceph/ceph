@@ -173,6 +173,9 @@ int OpInfo::set_from_op(
     }
 
     switch (iter->op.op) {
+    case CEPH_OSD_OP_CALL_R:
+    case CEPH_OSD_OP_CALL_W:
+    case CEPH_OSD_OP_CALL_RW:
     case CEPH_OSD_OP_CALL:
       {
 	bufferlist::iterator bp = const_cast<bufferlist&>(iter->indata).begin();

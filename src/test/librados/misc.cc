@@ -171,7 +171,7 @@ TEST_P(LibRadosMisc, Exec) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
   char buf2[512];
   int res = rados_exec(ioctx, "foo", "rbd", "get_all_features",
-			  NULL, 0, buf2, sizeof(buf2));
+			  NULL, 0, buf2, sizeof(buf2), false, false);
   ASSERT_GT(res, 0);
   bufferlist bl;
   bl.append(buf2, res);

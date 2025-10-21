@@ -51,7 +51,7 @@ namespace neorados::cls::version {
   call.objv = ver;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "set", in);
+    op.exec("version", "set", in, true, true);
   }};
 }
 
@@ -67,7 +67,7 @@ namespace neorados::cls::version {
   cls_version_inc_op call;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "inc", in);
+    op.exec("version", "inc", in, true, true);
   }};
 }
 
@@ -95,7 +95,7 @@ namespace neorados::cls::version {
 
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("version", "inc_conds", in);
+    op.exec("version", "inc_conds", in, true, true);
   }};
 }
 
@@ -124,7 +124,7 @@ namespace neorados::cls::version {
 
   encode(call, in);
   return ClsOp{[in = std::move(in)](Op& op) {
-    op.exec("version", "check_conds", in);
+    op.exec("version", "check_conds", in, true, false);
   }};
 }
 
@@ -162,7 +162,7 @@ namespace neorados::cls::version {
 		if (objv)
 		  *objv = std::move(ret.objv);
 	      }
-	    });
+	    }, true, false);
   }};
 }
 

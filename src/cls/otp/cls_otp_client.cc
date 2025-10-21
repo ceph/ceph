@@ -37,7 +37,7 @@ namespace rados {
         op.entries.push_back(config);
         bufferlist in;
         encode(op, in);
-        rados_op->exec("otp", "otp_set", in);
+        rados_op->exec("otp", "otp_set", in, true, true);
       }
 
       void OTP::set(librados::ObjectWriteOperation *rados_op,
@@ -46,7 +46,7 @@ namespace rados {
         op.entries = entries;
         bufferlist in;
         encode(op, in);
-        rados_op->exec("otp", "otp_set", in);
+        rados_op->exec("otp", "otp_set", in, true, true);
       }
 
       void OTP::remove(librados::ObjectWriteOperation *rados_op,
@@ -55,7 +55,7 @@ namespace rados {
         op.ids.push_back(id);
         bufferlist in;
         encode(op, in);
-        rados_op->exec("otp", "otp_remove", in);
+        rados_op->exec("otp", "otp_remove", in, true, true);
       }
 
       int OTP::check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
@@ -70,7 +70,7 @@ namespace rados {
         bufferlist out;
         encode(op, in);
         librados::ObjectWriteOperation wop;
-        wop.exec("otp", "otp_check", in);
+        wop.exec("otp", "otp_check", in, true, true);
         int r = ioctx.operate(oid, &wop);
         if (r < 0) {
           return r;
@@ -81,7 +81,7 @@ namespace rados {
         bufferlist in2;
         bufferlist out2;
         encode(op2, in2);
-        r = ioctx.exec(oid, "otp", "otp_get_result", in, out);
+        r = ioctx.exec(oid, "otp", "otp_get_result", in, out, true, false);
         if (r < 0) {
           return r;
         }
@@ -115,7 +115,7 @@ namespace rados {
         bufferlist out;
         int op_ret;
         encode(op, in);
-        rop->exec("otp", "otp_get", in, &out, &op_ret);
+        rop->exec("otp", "otp_get", in, &out, &op_ret, true, false);
         int r = ioctx.operate(oid, rop, nullptr);
         if (r < 0) {
           return r;
@@ -168,7 +168,7 @@ namespace rados {
         int op_ret;
         encode(op, in);
         ObjectReadOperation rop;
-        rop.exec("otp", "get_current_time", in, &out, &op_ret);
+        rop.exec("otp", "get_current_time", in, &out, &op_ret, true, false);
         int r = ioctx.operate(oid, &rop, nullptr);
         if (r < 0) {
           return r;

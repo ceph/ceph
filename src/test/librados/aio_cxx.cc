@@ -1062,7 +1062,7 @@ TEST(LibRadosAio, ExecuteClassPP) {
   ASSERT_TRUE(my_completion2);
   bufferlist in, out;
   ASSERT_EQ(0, test_data.m_ioctx.aio_exec(test_data.m_oid, my_completion2.get(),
-					  "hello", "say_hello", in, &out));
+					  "hello", "say_hello", in, &out, false, false));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, my_completion2->wait_for_complete());
@@ -2081,7 +2081,7 @@ TEST(LibRadosAioEC, ExecuteClassPP) {
   ASSERT_TRUE(my_completion2);
   bufferlist in, out;
   ASSERT_EQ(0, test_data.m_ioctx.aio_exec(test_data.m_oid, my_completion2.get(),
-					  "hello", "say_hello", in, &out));
+					  "hello", "say_hello", in, &out, false, false));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, my_completion2->wait_for_complete());

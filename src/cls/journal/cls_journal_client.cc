@@ -46,7 +46,7 @@ struct C_ClientList : public C_AioExec {
     encode(JOURNAL_MAX_RETURN, inbl);
 
     librados::ObjectReadOperation op;
-    op.exec("journal", "client_list", inbl);
+    op.exec("journal", "client_list", inbl, true, false);
 
     outbl.clear();
     librados::AioCompletion *rados_completion =
@@ -106,9 +106,9 @@ struct C_ImmutableMetadata : public C_AioExec {
   void send() {
     librados::ObjectReadOperation op;
     bufferlist inbl;
-    op.exec("journal", "get_order", inbl);
-    op.exec("journal", "get_splay_width", inbl);
-    op.exec("journal", "get_pool_id", inbl);
+    op.exec("journal", "get_order", inbl, true, false);
+    op.exec("journal", "get_splay_width", inbl, true, false);
+    op.exec("journal", "get_pool_id", inbl, true, false);
 
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_callback);
@@ -147,8 +147,8 @@ struct C_MutableMetadata : public C_AioExec {
   void send() {
     librados::ObjectReadOperation op;
     bufferlist inbl;
-    op.exec("journal", "get_minimum_set", inbl);
-    op.exec("journal", "get_active_set", inbl);
+    op.exec("journal", "get_minimum_set", inbl, true, false);
+    op.exec("journal", "get_active_set", inbl, true, false);
 
     librados::AioCompletion *rados_completion =
       librados::Rados::aio_create_completion(this, rados_callback);
@@ -184,7 +184,7 @@ void create(librados::ObjectWriteOperation *op,
   encode(splay, bl);
   encode(pool_id, bl);
 
-  op->exec("journal", "create", bl);
+  op->exec("journal", "create", bl, true, true);
 }
 
 int create(librados::IoCtx &ioctx, const std::string &oid, uint8_t order,
@@ -221,13 +221,13 @@ void get_mutable_metadata(librados::IoCtx &ioctx, const std::string &oid,
 void set_minimum_set(librados::ObjectWriteOperation *op, uint64_t object_set) {
   bufferlist bl;
   encode(object_set, bl);
-  op->exec("journal", "set_minimum_set", bl);
+  op->exec("journal", "set_minimum_set", bl, true, true);
 }
 
 void set_active_set(librados::ObjectWriteOperation *op, uint64_t object_set) {
   bufferlist bl;
   encode(object_set, bl);
-  op->exec("journal", "set_active_set", bl);
+  op->exec("journal", "set_active_set", bl, true, true);
 }
 
 int get_client(librados::IoCtx &ioctx, const std::string &oid,
@@ -253,7 +253,7 @@ void get_client_start(librados::ObjectReadOperation *op,
                       const std::string &id) {
   bufferlist bl;
   encode(id, bl);
-  op->exec("journal", "get_client", bl);
+  op->exec("journal", "get_client", bl, true, false);
 }
 
 int get_client_finish(bufferlist::const_iterator *iter,
@@ -278,7 +278,7 @@ void client_register(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(id, bl);
   encode(data, bl);
-  op->exec("journal", "client_register", bl);
+  op->exec("journal", "client_register", bl, true, true);
 }
 
 int client_update_data(librados::IoCtx &ioctx, const std::string &oid,
@@ -293,7 +293,7 @@ void client_update_data(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(id, bl);
   encode(data, bl);
-  op->exec("journal", "client_update_data", bl);
+  op->exec("journal", "client_update_data", bl, true, true);
 }
 
 int client_update_state(librados::IoCtx &ioctx, const std::string &oid,
@@ -309,7 +309,7 @@ void client_update_state(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(id, bl);
   encode(static_cast<uint8_t>(state), bl);
-  op->exec("journal", "client_update_state", bl);
+  op->exec("journal", "client_update_state", bl, true, true);
 }
 
 int client_unregister(librados::IoCtx &ioctx, const std::string &oid,
@@ -324,7 +324,7 @@ void client_unregister(librados::ObjectWriteOperation *op,
 
   bufferlist bl;
   encode(id, bl);
-  op->exec("journal", "client_unregister", bl);
+  op->exec("journal", "client_unregister", bl, true, true);
 }
 
 void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
@@ -332,7 +332,7 @@ void client_commit(librados::ObjectWriteOperation *op, const std::string &id,
   bufferlist bl;
   encode(id, bl);
   encode(commit_position, bl);
-  op->exec("journal", "client_commit", bl);
+  op->exec("journal", "client_commit", bl, true, true);
 }
 
 int client_list(librados::IoCtx &ioctx, const std::string &oid,
@@ -369,7 +369,7 @@ int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,
 
 void get_next_tag_tid_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("journal", "get_next_tag_tid", bl);
+  op->exec("journal", "get_next_tag_tid", bl, true, false);
 }
 
 int get_next_tag_tid_finish(bufferlist::const_iterator *iter,
@@ -405,7 +405,7 @@ void get_tag_start(librados::ObjectReadOperation *op,
                    uint64_t tag_tid) {
   bufferlist bl;
   encode(tag_tid, bl);
-  op->exec("journal", "get_tag", bl);
+  op->exec("journal", "get_tag", bl, true, false);
 }
 
 int get_tag_finish(bufferlist::const_iterator *iter, cls::journal::Tag *tag) {
@@ -431,7 +431,7 @@ void tag_create(librados::ObjectWriteOperation *op, uint64_t tag_tid,
   encode(tag_tid, bl);
   encode(tag_class, bl);
   encode(data, bl);
-  op->exec("journal", "tag_create", bl);
+  op->exec("journal", "tag_create", bl, true, true);
 }
 
 int tag_list(librados::IoCtx &ioctx, const std::string &oid,
@@ -474,7 +474,7 @@ void tag_list_start(librados::ObjectReadOperation *op,
   encode(max_return, bl);
   encode(client_id, bl);
   encode(tag_class, bl);
-  op->exec("journal", "tag_list", bl);
+  op->exec("journal", "tag_list", bl, true, false);
 }
 
 int tag_list_finish(bufferlist::const_iterator *iter,
@@ -490,7 +490,7 @@ int tag_list_finish(bufferlist::const_iterator *iter,
 void guard_append(librados::ObjectWriteOperation *op, uint64_t soft_max_size) {
   bufferlist bl;
   encode(soft_max_size, bl);
-  op->exec("journal", "guard_append", bl);
+  op->exec("journal", "guard_append", bl, true, true);
 }
 
 void append(librados::ObjectWriteOperation *op, uint64_t soft_max_size,
@@ -499,7 +499,7 @@ void append(librados::ObjectWriteOperation *op, uint64_t soft_max_size,
   encode(soft_max_size, bl);
   encode(data, bl);
 
-  op->exec("journal", "append", bl);
+  op->exec("journal", "append", bl, true, true);
 }
 
 } // namespace client

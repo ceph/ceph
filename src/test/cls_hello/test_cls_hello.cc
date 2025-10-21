@@ -33,14 +33,14 @@ TEST(ClsHello, SayHello) {
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
   bufferlist in, out;
-  ASSERT_EQ(-ENOENT, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(-ENOENT, ioctx.exec("myobject", "hello", "say_hello", in, out, false, false));
   ASSERT_EQ(0, ioctx.write_full("myobject", in));
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out, false, false));
   ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
 
   out.clear();
   in.append("Tester");
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "say_hello", in, out, false, false));
   ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
 
   out.clear();
@@ -48,7 +48,7 @@ TEST(ClsHello, SayHello) {
   char buf[4096];
   memset(buf, 1, sizeof(buf));
   in.append(buf, sizeof(buf));
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "hello", "say_hello", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "hello", "say_hello", in, out, false, false));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
@@ -61,20 +61,20 @@ TEST(ClsHello, RecordHello) {
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
   bufferlist in, out;
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out));
-  ASSERT_EQ(-EEXIST, ioctx.exec("myobject", "hello", "record_hello", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out, false, false));
+  ASSERT_EQ(-EEXIST, ioctx.exec("myobject", "hello", "record_hello", in, out, false, false));
 
   in.append("Tester");
-  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "record_hello", in, out));
-  ASSERT_EQ(-EEXIST, ioctx.exec("myobject2", "hello", "record_hello", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "record_hello", in, out, false, false));
+  ASSERT_EQ(-EEXIST, ioctx.exec("myobject2", "hello", "record_hello", in, out, false, false));
   ASSERT_EQ(0u, out.length());
 
   in.clear();
   out.clear();
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out, false, false));
   ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
   out.clear();
-  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "replay", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject2", "hello", "replay", in, out, false, false));
   ASSERT_EQ(std::string("Hello, Tester!"), std::string(out.c_str(), out.length()));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
@@ -121,7 +121,7 @@ TEST(ClsHello, WriteReturnData) {
 
   // this will return nothing -- no flag is set
   bufferlist in, out;
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "write_return_data", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "write_return_data", in, out, false, false));
   ASSERT_EQ(std::string(), std::string(out.c_str(), out.length()));
 
   // this will return an error due to unexpected input.
@@ -136,7 +136,7 @@ TEST(ClsHello, WriteReturnData) {
     in.append(buf, sizeof(buf));
     int rval;
     ObjectWriteOperation o;
-    o.exec("hello", "write_return_data", in, &out, &rval);
+    o.exec("hello", "write_return_data", in, &out, &rval, false, false);
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				   librados::OPERATION_RETURNVEC));
@@ -154,7 +154,7 @@ TEST(ClsHello, WriteReturnData) {
     out.clear();
     int rval;
     ObjectWriteOperation o;
-    o.exec("hello", "write_return_data", in, &out, &rval);
+    o.exec("hello", "write_return_data", in, &out, &rval, false, false);
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				 librados::OPERATION_RETURNVEC));
@@ -170,7 +170,7 @@ TEST(ClsHello, WriteReturnData) {
     out.clear();
     int rval;
     ObjectWriteOperation o;
-    o.exec("hello", "write_return_data", in, &out, &rval);
+    o.exec("hello", "write_return_data", in, &out, &rval, false, false);
     ASSERT_EQ(42, ioctx.operate("foo", &o,
 				 librados::OPERATION_RETURNVEC));
     ASSERT_EQ(42, rval);
@@ -184,7 +184,7 @@ TEST(ClsHello, WriteReturnData) {
     out.clear();
     int rval;
     ObjectWriteOperation o;
-    o.exec("hello", "write_too_much_return_data", in, &out, &rval);
+    o.exec("hello", "write_too_much_return_data", in, &out, &rval, false, false);
     librados::AioCompletion *completion = cluster.aio_create_completion();
     ASSERT_EQ(0, ioctx.aio_operate("foo", completion, &o,
 				   librados::OPERATION_RETURNVEC));
@@ -205,12 +205,12 @@ TEST(ClsHello, Loud) {
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
   bufferlist in, out;
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out));
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "record_hello", in, out, false, false));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out, false, false));
   ASSERT_EQ(std::string("Hello, world!"), std::string(out.c_str(), out.length()));
 
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "turn_it_to_11", in, out));
-  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "turn_it_to_11", in, out, false, false));
+  ASSERT_EQ(0, ioctx.exec("myobject", "hello", "replay", in, out, false, false));
   ASSERT_EQ(std::string("HELLO, WORLD!"), std::string(out.c_str(), out.length()));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
@@ -226,8 +226,8 @@ TEST(ClsHello, BadMethods) {
   bufferlist in, out;
 
   ASSERT_EQ(0, ioctx.write_full("myobject", in));
-  ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_reader", in, out));
-  ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_writer", in, out));
+  ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_reader", in, out, false, false));
+  ASSERT_EQ(-EIO, ioctx.exec("myobject", "hello", "bad_writer", in, out, false, false));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

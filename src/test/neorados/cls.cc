@@ -42,12 +42,12 @@ CORO_TEST_F(NeoRadosCls, DNE, NeoRadosTest)
   co_await execute(oid, WriteOp{}.create(true));
   // Call a bogus class
   co_await expect_error_code(
-    execute(oid, ReadOp{}.exec("doesnotexistasdfasdf", "method", {})),
+    execute(oid, ReadOp{}.exec("doesnotexistasdfasdf", "method", {}, false, false)),
     sys::errc::operation_not_supported);
 
   // Call a bogus method on an existent class
   co_await expect_error_code(
-    execute(oid, ReadOp{}.exec("lock", "doesnotexistasdfasdfasdf", {})),
+    execute(oid, ReadOp{}.exec("lock", "doesnotexistasdfasdfasdf", {}, false, false)),
     sys::errc::operation_not_supported);
   co_return;
 }

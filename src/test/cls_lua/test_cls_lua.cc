@@ -1103,7 +1103,7 @@ TEST_F(ClsLua, Json) {
 
   librados::ObjectWriteOperation wop;
   int rval;
-  wop.exec("lua", "eval_json", inbl, &outbl, &rval);
+  wop.exec("lua", "eval_json", inbl, &outbl, &rval, false, false);
   int ret = ioctx.operate(oid, &wop);
   ASSERT_EQ(ret, 0);
 

@@ -378,6 +378,7 @@ void Op::localize_reads() {
 void Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               ceph::buffer::list* out,
+              bool read, bool write,
               boost::system::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
 
@@ -400,6 +401,7 @@ void Op::exec(std::string_view cls, std::string_view method,
 
 void Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
+              bool read, bool write,
               boost::system::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
 

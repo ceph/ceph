@@ -3815,19 +3815,19 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     cls_cas_chunk_get_ref_op call;
     call.source = src_soid.get_head();
     ::encode(call, in);
-    obj_op.call("cas", "chunk_get_ref", in);
+    obj_op.call("cas", "chunk_get_ref", in, true, false);
   } else if (type == refcount_t::DECREMENT_REF) {
     cls_cas_chunk_put_ref_op call;
     call.source = src_soid.get_head();
     ::encode(call, in);
-    obj_op.call("cas", "chunk_put_ref", in);
+    obj_op.call("cas", "chunk_put_ref", in, true, true);
   } else if (type == refcount_t::CREATE_OR_GET_REF) {
     cls_cas_chunk_create_or_get_ref_op get_call;
     get_call.source = src_soid.get_head();
     ceph_assert(chunk);
     get_call.data = std::move(*chunk);
     ::encode(get_call, in);
-    obj_op.call("cas", "chunk_create_or_get_ref", in);
+    obj_op.call("cas", "chunk_create_or_get_ref", in, true, true);
   } else {
     ceph_assert(0 == "unrecognized type");
   }
@@ -6231,6 +6231,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CALL:
+    case CEPH_OSD_OP_CALL_R:
+    case CEPH_OSD_OP_CALL_W:
+    case CEPH_OSD_OP_CALL_RW:
       {
 	string cname, mname;
 	bufferlist indata;
@@ -6270,12 +6273,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	int prev_wr = ctx->num_write;
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 
-	if (ctx->num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
+	if (ctx->num_read > prev_rd && (!(flags & CLS_METHOD_RD) || op.op == CEPH_OSD_OP_CALL_W) ) {
 	  derr << "method " << cname << "." << mname << " tried to read object but is not marked RD" << dendl;
 	  result = -EIO;
 	  break;
 	}
-	if (ctx->num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
+	if (ctx->num_write > prev_wr && !(flags & CLS_METHOD_WR) || op.op == CEPH_OSD_OP_CALL_R) {
 	  derr << "method " << cname << "." << mname << " tried to update object but is not marked WR" << dendl;
 	  result = -EIO;
 	  break;
@@ -10550,7 +10553,7 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
   for (std::map<std::string, bufferlist>::iterator it = src_obj_buffs->begin(); it != src_obj_buffs->end(); it++) {
     std::string oid = it->first;
     ObjectOperation obj_op;
-    obj_op.call(cls, method, inbl);
+    obj_op.call(cls, method, inbl, false, false); // Turn off checking.
     uint32_t flags = 0;
     ceph_tid_t tid = osd->objecter->read(
 					 object_t(oid), oloc, obj_op,

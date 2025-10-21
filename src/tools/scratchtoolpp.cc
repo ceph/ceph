@@ -170,7 +170,7 @@ int main(int argc, const char **argv)
   cout << "rados.trunc returned " << r << std::endl;
   r = io_ctx.read(oid, bl, bl.length(), 0);
   cout << "rados.read returned " << r << std::endl;
-  r = io_ctx.exec(oid, "crypto", "md5", bl, bl2);
+  r = io_ctx.exec(oid, "crypto", "md5", bl, bl2, false, false);
   cout << "exec returned " << r <<  " buf size=" << bl2.length() << std::endl;
   const unsigned char *md5 = (const unsigned char *)bl2.c_str();
   char md5_str[bl2.length()*2 + 1];
@@ -193,16 +193,16 @@ int main(int argc, const char **argv)
   r = io_ctx.read(oid, bl, 0, 1);
   ceph_assert(r == -EOVERFLOW);
 
-  r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2);
+  r = io_ctx.exec(oid, "crypto", "sha1", bl, bl2, true, false);
   cout << "exec returned " << r << std::endl;
   const unsigned char *sha1 = (const unsigned char *)bl2.c_str();
   char sha1_str[bl2.length()*2 + 1];
   buf_to_hex(sha1, bl2.length(), sha1_str);
   cout << "sha1 result=" << sha1_str << std::endl;
 
-  r = io_ctx.exec(oid, "acl", "set", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "set", bl, bl2, true, true);
   cout << "exec (set) returned " << r << std::endl;
-  r = io_ctx.exec(oid, "acl", "get", bl, bl2);
+  r = io_ctx.exec(oid, "acl", "get", bl, bl2, true, false);
   cout << "exec (get) returned " << r << std::endl;
   if (bl2.length() > 0) {
     cout << "attr=" << bl2.c_str() << std::endl;
@@ -224,9 +224,9 @@ int main(int argc, const char **argv)
   cout << "size=" << size << std::endl;
 
   const char *oid2 = "jjj10.rbd";
-  r = io_ctx.exec(oid2, "rbd", "snap_list", bl, bl2);
+  r = io_ctx.exec(oid2, "rbd", "snap_list", bl, bl2, true, false);
   cout << "snap_list result=" << r << std::endl;
-  r = io_ctx.exec(oid2, "rbd", "snap_add", bl, bl2);
+  r = io_ctx.exec(oid2, "rbd", "snap_add", bl, bl2,  true, true);
   cout << "snap_add result=" << r << std::endl;
 
   if (r > 0) {

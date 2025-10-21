@@ -982,7 +982,7 @@ TEST_P(LibRadosAio, ExecuteClass) {
 	      nullptr, &my_completion2));
   char out[128];
   ASSERT_EQ(0, rados_aio_exec(test_data.m_ioctx, "foo", my_completion2,
-			      "hello", "say_hello", NULL, 0, out, sizeof(out)));
+			      "hello", "say_hello", NULL, 0, out, sizeof(out), false, false));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));
@@ -1729,7 +1729,7 @@ TEST_P(LibRadosAioEC, ExecuteClass) {
 	      nullptr, &my_completion2));
   char out[128];
   ASSERT_EQ(0, rados_aio_exec(test_data.m_ioctx, "foo", my_completion2,
-			      "hello", "say_hello", NULL, 0, out, sizeof(out)));
+			      "hello", "say_hello", NULL, 0, out, sizeof(out), false, false));
   {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion2));

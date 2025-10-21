@@ -525,8 +525,18 @@ void IoCtx::dup(const IoCtx& rhs) {
   io_ctx_impl = reinterpret_cast<IoCtxImpl*>(ctx->clone());
 }
 
+// int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
+//                 bufferlist& inbl, bufferlist& outble) {
+//   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+//   return ctx->execute_operation(
+//     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
+//                      librados_test_stub::get_class_handler(), cls,
+//                      method, inbl, &outbl, ctx->get_snap_read(),
+//                      ctx->get_snap_context()));
+// }
+
 int IoCtx::exec(const std::string& oid, const char *cls, const char *method,
-                bufferlist& inbl, bufferlist& outbl) {
+                bufferlist& inbl, bufferlist& outbl, bool read, bool write) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
     oid, std::bind(&TestIoCtxImpl::exec, _1, _2,
@@ -837,7 +847,7 @@ void ObjectOperation::assert_version(uint64_t ver) {
 }
 
 void ObjectOperation::exec(const char *cls, const char *method,
-                           bufferlist& inbl) {
+                           bufferlist& inbl, bool read, bool write) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(std::bind(&TestIoCtxImpl::exec, _1, _2,
 			       librados_test_stub::get_class_handler(), cls,

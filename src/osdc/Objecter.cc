@@ -2448,6 +2448,9 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_OMAPCLEAR:
     case CEPH_OSD_OP_OMAPRMKEYS: code = l_osdc_osdop_omap_del; break;
 
+    case CEPH_OSD_OP_CALL_R:
+    case CEPH_OSD_OP_CALL_W:
+    case CEPH_OSD_OP_CALL_RW:
     case CEPH_OSD_OP_CALL: code = l_osdc_osdop_call; break;
     case CEPH_OSD_OP_WATCH: code = l_osdc_osdop_watch; break;
     case CEPH_OSD_OP_NOTIFY: code = l_osdc_osdop_notify; break;

@@ -14,7 +14,7 @@ void cls_2pc_queue_init(ObjectWriteOperation& op, const std::string& queue_name,
   cls_queue_init_op call;
   call.queue_size = size;
   encode(call, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_INIT, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_INIT, in, true, true);
 }
 
 int cls_2pc_queue_get_capacity_result(const bufferlist& bl, uint64_t& size) {
@@ -49,7 +49,7 @@ int cls_2pc_queue_get_topic_stats_result(const bufferlist& bl, uint32_t& committ
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const std::string& queue_name, uint64_t& size) {
   bufferlist in, out;
-  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, out);
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, out, true, false);
   if (r < 0 ) {
     return r;
   }
@@ -62,13 +62,13 @@ int cls_2pc_queue_get_capacity(IoCtx& io_ctx, const std::string& queue_name, uin
 // after answer is received, call cls_2pc_queue_get_capacity_result() to parse the results
 void cls_2pc_queue_get_capacity(ObjectReadOperation& op, bufferlist* obl, int* prval) {
   bufferlist in;
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, obl, prval);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_CAPACITY, in, obl, prval, true, false);
 }
 
 #ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_2pc_queue_get_topic_stats(IoCtx& io_ctx, const std::string& queue_name, uint32_t& committed_entries, uint64_t& size) {
   bufferlist in, out;
-  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, out);
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, out, true, false);
   if (r < 0 ) {
     return r;
   }
@@ -81,7 +81,7 @@ int cls_2pc_queue_get_topic_stats(IoCtx& io_ctx, const std::string& queue_name, 
 // after answer is received, call cls_2pc_queue_get_topic_stats_result() to parse the results
 void cls_2pc_queue_get_topic_stats(ObjectReadOperation& op, bufferlist* obl, int* prval) {
   bufferlist in;
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, obl, prval);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_GET_TOPIC_STATS, in, obl, prval, true, false);
 }
 
 
@@ -108,7 +108,7 @@ int cls_2pc_queue_reserve(IoCtx& io_ctx, const std::string& queue_name,
   encode(reserve_op, in);
   int rval;
   ObjectWriteOperation op;
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_RESERVE, in, &out, &rval);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_RESERVE, in, &out, &rval, true, true);
   const auto r = io_ctx.operate(queue_name, &op, librados::OPERATION_RETURNVEC);
 
   if (r < 0) {
@@ -125,7 +125,7 @@ void cls_2pc_queue_reserve(ObjectWriteOperation& op, uint64_t res_size,
   reserve_op.size = res_size;
   reserve_op.entries = entries;
   encode(reserve_op, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_RESERVE, in, obl, prval);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_RESERVE, in, obl, prval, true, true);
 }
 
 void cls_2pc_queue_commit(ObjectWriteOperation& op, std::vector<bufferlist> bl_data_vec, 
@@ -135,7 +135,7 @@ void cls_2pc_queue_commit(ObjectWriteOperation& op, std::vector<bufferlist> bl_d
   commit_op.id = res_id;
   commit_op.bl_data_vec = std::move(bl_data_vec);
   encode(commit_op, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_COMMIT, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_COMMIT, in, true, true);
 }
 
 void cls_2pc_queue_abort(ObjectWriteOperation& op, cls_2pc_reservation::id_t res_id) {
@@ -143,7 +143,7 @@ void cls_2pc_queue_abort(ObjectWriteOperation& op, cls_2pc_reservation::id_t res
   cls_2pc_queue_abort_op abort_op;
   abort_op.id = res_id;
   encode(abort_op, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_ABORT, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_ABORT, in, true, true);
 }
 
 int cls_2pc_queue_list_entries_result(const bufferlist& bl, std::vector<cls_queue_entry>& entries,
@@ -176,7 +176,7 @@ int cls_2pc_queue_list_entries(IoCtx& io_ctx,
   op.max = max;
   encode(op, in);
 
-  const auto r  = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_LIST_ENTRIES, in, out);
+  const auto r  = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_LIST_ENTRIES, in, out, true, false);
   if (r < 0) {
     return r;
   }
@@ -191,7 +191,7 @@ void cls_2pc_queue_list_entries(ObjectReadOperation& op, const std::string& mark
   list_op.max = max;
   encode(list_op, in);
 
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_LIST_ENTRIES, in, obl, prval);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_LIST_ENTRIES, in, obl, prval, true, false);
 }
 
 int cls_2pc_queue_list_reservations_result(const bufferlist& bl, cls_2pc_reservations& reservations) {
@@ -212,7 +212,7 @@ int cls_2pc_queue_list_reservations_result(const bufferlist& bl, cls_2pc_reserva
 int cls_2pc_queue_list_reservations(IoCtx& io_ctx, const std::string& queue_name, cls_2pc_reservations& reservations) {
   bufferlist in, out;
 
-  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_LIST_RESERVATIONS, in, out);
+  const auto r = io_ctx.exec(queue_name, TPC_QUEUE_CLASS, TPC_QUEUE_LIST_RESERVATIONS, in, out, true, false);
   if (r < 0) {
     return r;
   }
@@ -232,7 +232,7 @@ void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& e
   rem_op.end_marker = end_marker;
   rem_op.entries_to_remove = entries_to_remove;
   encode(rem_op, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in, true, true);
 }
 
 void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op, ceph::coarse_real_time stale_time) {
@@ -240,6 +240,6 @@ void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op, ceph:
   cls_2pc_queue_expire_op expire_op;
   expire_op.stale_time = stale_time;
   encode(expire_op, in);
-  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_EXPIRE_RESERVATIONS, in);
+  op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_EXPIRE_RESERVATIONS, in, true, true);
 }
 

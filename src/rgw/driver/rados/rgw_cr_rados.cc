@@ -718,7 +718,7 @@ int RGWRadosBILogTrimCR::send_request(const DoutPrefixProvider *dpp)
 
   librados::ObjectWriteOperation op;
   op.assert_exists();
-  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in, true, true);
 
   cn = stack->create_completion_notifier();
   return bs.bucket_obj.aio_operate(cn->completion(), &op);
