@@ -283,16 +283,9 @@ void SplitOp::complete() {
           }
           break;
         }
-        case CEPH_OSD_OP_GETXATTRS:
-        case CEPH_OSD_OP_CHECKSUM:
-        case CEPH_OSD_OP_GETXATTR:
-        case CEPH_OSD_OP_CALL: {
+        default: {
           out_osd_op.outdata = sub_reads.at(*primary_shard).details[ops_index].bl;
           out_osd_op.rval = sub_reads.at(*primary_shard).details[ops_index].rval;
-          break;
-        }
-      default: {
-          ceph_abort_msg("Not supported");
           break;
         }
       }
@@ -418,18 +411,11 @@ void SplitOp::init(OSDOp &op, int ops_index) {
       init_read(op, false, ops_index);
       break;
     }
-    case CEPH_OSD_OP_GETXATTRS:
-    case CEPH_OSD_OP_CHECKSUM:
-    case CEPH_OSD_OP_GETXATTR:
-    case CEPH_OSD_OP_CALL: {
+    default: {
+      // Invalid ops should have been rejected in validate.
       shard_id_t shard = *primary_shard;
       Details &d = sub_reads.at(shard).details[ops_index];
       orig_op->pass_thru_op(sub_reads.at(shard).rd, ops_index, &d.bl, &d.rval);
-      break;
-    }
-    default: {
-      ldout(cct, DBG_LVL) << __func__ <<" ABORT: unsupported" << dendl;
-      abort = true;
       break;
     }
   }
