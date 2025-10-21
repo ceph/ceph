@@ -314,7 +314,7 @@ class BlockDirectory: public Directory {
                            CacheObj* object,
                            D4NTransaction::redis_operation_type op_type,
                            optional_yield y)
-          : m_obj_dir(obj_dir), m_block_dir(nullptr), m_object(object), m_block(nullptr)
+          : m_obj_dir(obj_dir), m_block_dir(nullptr), m_bucket_dir(nullptr), m_object(object), m_block(nullptr), m_bucket_key("")
       {
           initialize_transaction(dpp, conn, op_type, y);
       }
@@ -326,9 +326,21 @@ class BlockDirectory: public Directory {
                            CacheBlock* block,
                            D4NTransaction::redis_operation_type op_type,
                            optional_yield y)
-          : m_obj_dir(nullptr), m_block_dir(block_dir), m_object(nullptr), m_block(block)
+          : m_obj_dir(nullptr), m_block_dir(block_dir), m_bucket_dir(nullptr), m_object(nullptr), m_block(block), m_bucket_key("")
       {
           initialize_transaction(dpp, conn, op_type, y);
+      }
+
+      // Constructor for BucketDirectory
+      RedisTransactionHandling(BucketDirectory* bucket_dir,
+                           const DoutPrefixProvider* dpp,
+                           std::shared_ptr<connection> conn,
+                           const std::string& bucket_id,
+                           D4NTransaction::redis_operation_type op_type,
+                           optional_yield y)
+          : m_obj_dir(nullptr), m_block_dir(nullptr), m_bucket_dir(bucket_dir), m_object(nullptr), m_block(nullptr), m_bucket_key(bucket_id)
+      {
+          initialize_transaction_for_bucket(dpp, conn, op_type, y);
       }
 
       std::string build_temp_key() const {
@@ -337,6 +349,8 @@ class BlockDirectory: public Directory {
               return m_obj_dir->build_index(m_object);
           } else if (m_block_dir && m_block) {
               return m_block_dir->build_index(m_block);
+          } else if (m_bucket_dir && !m_bucket_key.empty()) {
+              return m_bucket_key;  // For bucket, the key IS the bucket_id
           }
           return "";
       }
@@ -356,8 +370,10 @@ class BlockDirectory: public Directory {
   private:
       ObjectDirectory* m_obj_dir;
       BlockDirectory* m_block_dir;
+      BucketDirectory* m_bucket_dir;
       CacheObj* m_object;
       CacheBlock* m_block;
+      std::string m_bucket_key;
       bool m_is_valid = false;
       std::string m_temp_key;
 
@@ -397,6 +413,50 @@ class BlockDirectory: public Directory {
 	      if (m_is_valid) {
 		  m_temp_key = key; // key is now the transaction key (modified by set_transaction_key)
 	      }
+
+          } catch (const std::exception& e) {
+              m_is_valid = false;
+          }
+      }
+
+      void initialize_transaction_for_bucket(const DoutPrefixProvider* dpp,
+                                            std::shared_ptr<connection> conn,
+                                            D4NTransaction::redis_operation_type op_type,
+                                            optional_yield y)
+      {
+          D4NTransaction* d4n_trx = nullptr;
+
+          // Get the transaction object from BucketDirectory
+          if (m_bucket_dir) {
+              d4n_trx = m_bucket_dir->m_d4n_trx;
+          }
+
+          if (!d4n_trx) {
+              m_is_valid = false;
+              return;
+          }
+
+          try {
+              // Get transaction ID (once per request)
+              d4n_trx->get_trx_id(dpp, conn, y);
+
+              // Use bucket_id as the key
+              std::string key = m_bucket_key;
+              if (key.empty()) {
+                  m_is_valid = false;
+                  return;
+              }
+
+              // Note: Create temp keys structure BEFORE set_transaction_key
+              // This creates m_temp_key_read, m_temp_key_write, and m_temp_key_test_write
+              d4n_trx->create_rw_temp_keys(key);
+
+              // Clone the key for read/write operations
+              // Note: set_transaction_key modifies 'key' to the transaction key
+              m_is_valid = d4n_trx->set_transaction_key(dpp, conn, key, op_type, y);
+              if (m_is_valid) {
+                  m_temp_key = key; // key is now the transaction key (modified by set_transaction_key)
+              }
 
           } catch (const std::exception& e) {
               m_is_valid = false;
