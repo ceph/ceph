@@ -159,7 +159,7 @@ public:
     {}
   };
   using remap_iertr = ref_iertr;
-  using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
+  using remap_ret = remap_iertr::future<std::vector<LBACursorRef>>;
 
   /**
    * remap_mappings
@@ -169,7 +169,7 @@ public:
    */
   virtual remap_ret remap_mappings(
     Transaction &t,
-    LBAMapping orig_mapping,
+    LBACursorRef orig_mapping,
     std::vector<remap_entry_t> remaps
     ) = 0;
 
