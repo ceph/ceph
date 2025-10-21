@@ -198,7 +198,7 @@ public:
 
   remap_ret remap_mappings(
     Transaction &t,
-    LBAMapping mapping,
+    LBACursorRef mapping,
     std::vector<remap_entry_t> remaps) final;
 
   /**

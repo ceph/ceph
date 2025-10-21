@@ -1310,9 +1310,10 @@ private:
 	remap.extent = extent.get();
       }
     }
-    auto ret = co_await lba_manager->remap_mappings(
+
+    auto cursors = co_await lba_manager->remap_mappings(
       t,
-      std::move(pin),
+      pin.get_effective_cursor_ref(),
       std::vector<remap_entry_t>(remaps.begin(), remaps.end())
     ).handle_error_interruptible(
       remap_pin_iertr::pass_further{},
@@ -1320,6 +1321,36 @@ private:
 	"TransactionManager::remap_pin hit invalid error"
       }
     );
+
+    std::vector<LBAMapping> ret;
+    if (pin.is_indirect()) {
+      co_await pin.direct_cursor->refresh();
+      for (auto &cursor : cursors) {
+	ret.push_back(
+	  LBAMapping::create_indirect(
+	    pin.direct_cursor,
+	    cursor));
+      }
+    } else {
+      for (auto &cursor : cursors) {
+	ret.push_back(
+	  LBAMapping::create_direct(
+	    cursor));
+      }
+    }
+    if (remaps.size() > 1 && pin.is_indirect()) {
+      assert(pin.direct_cursor->is_viewable());
+      co_await lba_manager->update_mapping_refcount(
+	t, pin.direct_cursor, 1);
+    }
+    co_await trans_intr::parallel_for_each(
+      ret,
+      [](auto &remapped_mapping) {
+	return remapped_mapping.refresh(
+	).si_then([&remapped_mapping](auto mapping) {
+	  remapped_mapping = std::move(mapping);
+	});
+      });
     SUBDEBUGT(seastore_tm, "remapped {} pins", t, ret.size());
     co_return ret;
   }
