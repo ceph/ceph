@@ -300,11 +300,11 @@ yaml facets, followed by an expression in curly braces (``{}``) consisting of
 a list of yaml facets in order of concatenation. For instance the
 test description::
 
-  ceph-deploy/basic/{distros/centos_7.0.yaml tasks/ceph-deploy.yaml}
+  ceph-deploy/basic/{distros/rocky_10.0.yaml tasks/ceph-deploy.yaml}
 
 signifies the concatenation of two files:
 
-* ceph-deploy/basic/distros/centos_7.0.yaml
+* ceph-deploy/basic/distros/rocky_10.0.yaml
 * ceph-deploy/basic/tasks/ceph-deploy.yaml
 
 How tests are built from directories
@@ -339,32 +339,32 @@ subdirectories in the following structure
   qa/suites/ceph-deploy
   ├── %
   ├── distros
-  │   ├── centos_7.0.yaml
-  │   └── ubuntu_16.04.yaml
+  │   ├── rocky_10.0.yaml
+  │   └── ubuntu_24.04.yaml
   └── tasks
       └── ceph-deploy.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests:
 
-1. ceph-deploy/basic/{distros/centos_7.0.yaml tasks/ceph-deploy.yaml}
-2. ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}
+1. ceph-deploy/basic/{distros/rocky_10.0.yaml tasks/ceph-deploy.yaml}
+2. ceph-deploy/basic/{distros/ubuntu_24.04.yaml tasks/ceph-deploy.yaml}
 
-i.e. the concatenation of centos_7.0.yaml and ceph-deploy.yaml and
-the concatenation of ubuntu_16.04.yaml and ceph-deploy.yaml, respectively.
+i.e. the concatenation of rocky_10.0.yaml and ceph-deploy.yaml and
+the concatenation of ubuntu_24.04.yaml and ceph-deploy.yaml, respectively.
 In human terms, this means that the task found in ``ceph-deploy.yaml`` is
-intended to run on both CentOS 7.0 and Ubuntu 16.04.
+intended to run on both Rocky Linux 10.0 and Ubuntu 24.04 LTS.
 
 Without the file percent, the ``ceph-deploy`` tree would be interpreted as
 three standalone tests:
 
-* ceph-deploy/basic/distros/centos_7.0.yaml
-* ceph-deploy/basic/distros/ubuntu_16.04.yaml
+* ceph-deploy/basic/distros/rocky_10.0.yaml
+* ceph-deploy/basic/distros/ubuntu_24.04.yaml
 * ceph-deploy/basic/tasks/ceph-deploy.yaml
 
 (which would of course be wrong in this case).
 
 Referring to the `ceph/qa sub-directory`_, you will notice that the
-``centos_7.0.yaml`` and ``ubuntu_16.04.yaml`` files in the
+``rocky_10.0.yaml`` and ``ubuntu_24.04.yaml`` files in the
 ``suites/ceph-deploy/basic/distros/`` directory are implemented as symlinks.
 By using symlinks instead of copying, a single file can appear in multiple
 suites. This eases the maintenance of the test framework as a whole.
@@ -384,7 +384,7 @@ An individual test from the `ceph-deploy suite`_ can be run by adding the
    teuthology-suite \
       --machine-type smithi \
       --suite ceph-deploy/basic \
-      --filter 'ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}'
+      --filter 'ceph-deploy/basic/{distros/ubuntu_24.04.yaml tasks/ceph-deploy.yaml}'
 
 .. note:: To run a standalone test like the one in `Reading a standalone
    test`_, ``--suite`` alone is sufficient. If you want to run a single
