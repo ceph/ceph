@@ -83,10 +83,10 @@ void NVMeofGwMap::remove_grp_id(
 }
 
 int NVMeofGwMap::cfg_add_gw(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool test)
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, uint64_t features)
 {
   std::set<NvmeAnaGrpId> allocated;
-  if (test || HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHAMAP)) {
+  if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
     auto gw_epoch_it = gw_epoch.find(group_key);
     if (gw_epoch_it == gw_epoch.end()) {
       gw_epoch[group_key] = epoch;
@@ -170,11 +170,8 @@ int NVMeofGwMap::cfg_add_gw(
 }
 
 int NVMeofGwMap::cfg_delete_gw(
-  const NvmeGwId &gw_id, const NvmeGroupKey& group_key, bool test)
+  const NvmeGwId &gw_id, const NvmeGroupKey& group_key)
 {
-  if (test)
-    return do_delete_gw(gw_id, group_key);
-
   if (HAVE_FEATURE(mon->get_quorum_con_features(), NVMEOFHA)) {
     dout(10) << " has NVMEOFHA: 1" << dendl;
     for (auto& gws_states: created_gws[group_key]) {

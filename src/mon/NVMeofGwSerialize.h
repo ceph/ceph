@@ -337,12 +337,10 @@ inline  void decode(
   decode(state.gw_map_epoch, bl);
   decode(state.subsystems, bl);
   uint32_t avail;
-  uint64_t last_beacon_seq_number;
   decode(avail, bl);
   state.availability = (gw_availability_t)avail;
   if (struct_v >= 2) {
-    decode(last_beacon_seq_number, bl);
-    state.last_beacon_seq_number = last_beacon_seq_number;
+    decode(state.last_beacon_seq_number, bl);
     decode(state.last_beacon_seq_ooo, bl);
   }
   DECODE_FINISH(bl);

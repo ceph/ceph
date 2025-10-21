@@ -55,7 +55,7 @@ public:
         uint64_t sequence_ = 0,  // default sequence for backward compatibility
         bool enable_diff = false)  // default to legacy behavior for backward compatibility
     : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON,
-                          static_cast<version_t>(enable_diff ? 1 : 0), // user_version: 1=enhanced, 0=legacy
+                          0,
                           enable_diff ? BEACON_VERSION_ENHANCED :
                           BEACON_VERSION_LEGACY, BEACON_VERSION_LEGACY},// Minimum compatible version
       gw_id(gw_id_), gw_pool(gw_pool_), gw_group(gw_group_), subsystems(subsystems_),

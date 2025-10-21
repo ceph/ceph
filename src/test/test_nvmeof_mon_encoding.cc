@@ -40,9 +40,9 @@ void test_NVMeofGwMap() {
   BeaconSubsystem sub = { nqn, {}, {}, subsystem_change_t::SUBSYSTEM_CHANGED };
   BeaconSubsystems subs = {sub};
 
-  pending_map.cfg_add_gw("GW1" ,group_key, true);
-  pending_map.cfg_add_gw("GW2" ,group_key, true);
-  pending_map.cfg_add_gw("GW3" ,group_key, true);
+  pending_map.cfg_add_gw("GW1" ,group_key, CEPH_FEATURES_ALL);
+  pending_map.cfg_add_gw("GW2" ,group_key, CEPH_FEATURES_ALL);
+  pending_map.cfg_add_gw("GW3" ,group_key, CEPH_FEATURES_ALL);
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
   pending_map.created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
   pending_map.created_gws[group_key]["GW1"].performed_full_startup = true;
@@ -104,9 +104,9 @@ void test_MNVMeofGwMap() {
   int epoch = msg1->get_gwmap_epoch();
   dout(0) << "after decode empty msg: " << *msg1 << " epoch " << epoch <<  dendl;
 
-  pending_map.cfg_add_gw("GW1" ,group_key, true);
-  pending_map.cfg_add_gw("GW2" ,group_key, true);
-  pending_map.cfg_add_gw("GW3" ,group_key, true);
+  pending_map.cfg_add_gw("GW1" ,group_key, CEPH_FEATURES_ALL);
+  pending_map.cfg_add_gw("GW2" ,group_key, CEPH_FEATURES_ALL);
+  pending_map.cfg_add_gw("GW3" ,group_key, CEPH_FEATURES_ALL);
   NvmeNonceVector new_nonces = {"abc", "def","hij"};
   pending_map.created_gws[group_key]["GW1"].nonce_map[1] = new_nonces;
   pending_map.created_gws[group_key]["GW1"].subsystems.push_back(sub);
@@ -139,7 +139,7 @@ void test_MNVMeofGwMap() {
 
   //dout(0) << "delete of wrong gw id" << dendl;
   //pending_map.cfg_delete_gw("wow" ,group_key, true);
-
+/
   //pending_map.cfg_delete_gw("GW3" ,group_key);
   //dout(0) << "deleted GW3 . we should see the empty map " << pending_map << dendl;
 

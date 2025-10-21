@@ -68,14 +68,13 @@ public:
   void check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
     const NvmeGroupKey& group_key);
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    bool test = false);
-  int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
-    bool test = false);
+    uint64_t features);
+  int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
   int process_gw_map_gw_down(
-    const NvmeGwId &gw_id, const Nv/meGroupKey& group_key,
+    const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     bool &propose_pending);
   int process_gw_map_gw_no_subsys_no_listeners(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
