@@ -112,7 +112,13 @@ set(common_srcs
   mclock_common.cc
   tcp_info.cc)
 
+if(WITH_CPUTRACE)
+  list(APPEND common_srcs
+    cputrace.cc)
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
+
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)
