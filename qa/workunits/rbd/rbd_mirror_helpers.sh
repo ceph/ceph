@@ -813,7 +813,6 @@ wait_for_snapshot_sync_complete()
     local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${image}.status)
     local local_status_log=${TEMPDIR}/$(mkfname ${local_cluster}-${pool}-${image}.status)
 
-    mirror_image_snapshot "${cluster}" "${pool}" "${image}"
     get_newest_mirror_snapshot "${cluster}" "${pool}" "${image}" "${status_log}"
     local snapshot_id=$(xmlstarlet sel -t -v "//snapshot/id" < ${status_log})
 
@@ -842,6 +841,7 @@ wait_for_replay_complete()
     if [ "${RBD_MIRROR_MODE}" = "journal" ]; then
         wait_for_journal_replay_complete ${local_cluster} ${cluster} ${pool} ${image}
     elif [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
+        mirror_image_snapshot "${cluster}" "${pool}" "${image}"
         wait_for_snapshot_sync_complete ${local_cluster} ${cluster} ${pool} ${image}
     else
         return 1
