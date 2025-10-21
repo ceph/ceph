@@ -1,0 +1,6 @@
+
+> ceph-dashboard@0.0.0 ng
+> ng generate form-validation-pipes
+
+[1m[31mError: This command is not available when running the Angular CLI outside a workspace.[39m[22m
+⠙[1G[0K

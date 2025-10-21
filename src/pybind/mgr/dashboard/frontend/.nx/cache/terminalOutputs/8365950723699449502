@@ -1,0 +1,218 @@
+- Generating browser application bundles (phase: setup)...
+[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:698) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+[32m✔[39m Browser application bundle generation complete.
+[32m✔[39m Browser application bundle generation complete.
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/s[39m[22m[1m[33mwagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cl[39m[22m[1m[33mi/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-cor[39m[22m[1m[33me.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS[39m[22m[1m[33m or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m2[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'useCssGrid' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m2[0m      [useCssGrid]="true"[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m3[0m:[93m6[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'fullWidth' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m3[0m      [fullWidth]="true">[39m[22m
+[1m[31m[7m [0m [91m     ~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m4[0m:[93m15[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'columnNumbers' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m4[0m   <div cdsCol [columnNumbers]="{'lg': 8, 'md': 8, 'sm': 8}">[39m[22m
+[1m[31m[7m [0m [91m              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/[39m[22m[1m[31mnvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m12[0m:[93m7[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'columnNumbers' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m12[0m       [columnNumbers]="{'lg': 2, 'md': 2, 'sm': 2}"[39m[22m
+[1m[31m[7m  [0m [91m      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m15[0m:[93m11[0m - [91merror[0m[90m NG8001: [0m'cds-progress-indicator' is not a known element:[39m[22m
+[1m[31m1. If 'cds-progress-indicator' is an Angular component, then verify that it is included in the '@Component.imports' of this component.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@Component.schemas' of this component to suppress this message.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m15[0m           <cds-progress-indicator[39m[22m
+[1m[31m[7m  [0m [91m          ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m16[0m               orientation="vertical"[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[7m17[0m               [steps]="steps"[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[[39m[22m[1m[31m7m18[0m               [current]="currentStep">[39m[22m
+[1m[31m[7m  [0m [91m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m17[0m:[93m15[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'steps' since it isn't a known property of 'cds-progress-indicator'.[39m[22m
+[1m[31m1. If 'cds-progress-indicator' is an Angular component and it has 'steps' input, then verify that it is included in the '@Component.imports' of this component.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@Component.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@Component.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m17[0m               [steps]="steps"[39m[22m
+[1m[31m[7m  [0m [91m              ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m18[0m:[93m15[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'current' since it isn't a known property of 'cds-progress-indicator'.[39m[22m
+[1m[31m1. If 'c[39m[22m[1m[31mds-progress-indicator' is an Angular component and it has 'current' input, then verify that it is included in the '@Component.imports' of this component.[39m[22m
+[1m[31m2. If 'cds-progress-indicator' is a Web Component then add 'CUSTOM_ELEMENTS_SCHEMA' to the '@Component.schemas' of this component to suppress this message.[39m[22m
+[1m[31m3. To allow any property add 'NO_ERRORS_SCHEMA' to the '@Component.schemas' of this component.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m18[0m               [current]="currentStep">[39m[22m
+[1m[31m[7m  [0m [91m              ~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m23[0m:[93m10[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'columnNumbers' since it isn't a known property of 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m23[0m          [columnNumbers]="{'lg': 6, 'md': 6, 'sm': 6}"[39m[22m
+[1m[31m[7m  [0m [91m         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.html[0m:[93m24[0m:[93m10[0m - [91merror[0m[90m NG8002: [0mCan't bind to 'ngSwitch' since it isn't a known property o[39m[22m[1m[31mf 'div'.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m          [ngSwitch]="currentStep">[39m[22m
+[1m[31m[7m  [0m [91m         ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[0m:[93m7[0m:[93m16[0m[39m[22m
+[1m[31m    [7m7[0m   templateUrl: './nvme-subsystem-create-form.component.html',[39m[22m
+[1m[31m    [7m [0m [96m               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Error occurs in the template of component NvmeSubsystemCreateFormComponent.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m

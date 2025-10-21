@@ -1,0 +1,256 @@
+- Generating browser application bundles (phase: setup)...
+[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:702) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+[32m✔[39m Browser application bundle generation complete.
+[32m✔[39m Browser application bundle generation complete.
+- Generating localized bundles...
+[32m✔[39m Localized bundle generation complete.
+- Copying assets...
+[32m✔[39m Copying assets complete.
+- Generating index html...
+[32m✔[39m Index html generation complete.
+[37m[0m[0m[39m
+[37m[0m[1mInitial chunk files[22m                                                                                    [2m | [22m[1mNames[22m                [2m | [22m [1mRaw size[22m[0m[39m
+[37m[0m[32mstyles.css[39m[37m                                                                                             [2m | [22m[2mstyles[22m               [2m | [22m  [36m1.72 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mpolyfills.js[39m[37m                                                                                           [2m | [22m[2mpolyfills[22m            [2m | [22m[36m556.43 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mmain.js[39m[37m                                                                                                [2m | [22m[2mmain[22m                 [2m | [22m[36m286.75 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mvendor.js[39m[37m                                                                                              [2m | [22m[2mvendor[22m               [2m | [22m[36m175.31 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[0m[39m
+[37m[0m[1m [22m                                                                                                      [2m | [22m[1mInitial total[22m        [2m | [22m  [1m2.73 MB[22m[0m[39m
+[37m[0m[0m[39m
+[37m[0m[1mLazy chunk files[22m                                                                                       [2m | [22m[1mNames[22m                [2m | [22m [1mRaw size[22m[0m[39m
+[37m[0m[32mdefault-node_modules_swagger-ui_dist_swagger-ui-es-bundle-core_js.js[39m[37m                                   [2m | [22m[2m-[22m                    [2m | [22m  [36m6.19 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32msrc_bootstrap_ts.js[39m[37m                                                                                    [2m | [22m[2mbootstrap[22m            [2m | [22m  [36m6.17 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32msrc_app_ceph_rgw_rgw_module_ts.js[39m[37m                                                                      [2m | [22m[2mceph-rgw-rgw-module[39m[37m[22m  [2m | [22m  [36m2.51 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_angular_core_fesm2022_core_mjs.js[39m[37m                                                         [2m | [22m[2m-[22m                    [2m | [22m  [36m1.55 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-src_app_ceph_block_block_module_ts.js[39m[37m                                                          [2m | [22m[2mceph-pool-pool-module[22m[2m | [22m  [36m1.32 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon_charts-angular_fesm2022_carbon-charts-angular_mjs.js[39m[37m                       [2m | [22m[2m-[22m                    [2m | [22m  [36m1.13 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ng-bootstrap_ng-bootstrap_fesm2022_ng-bootstrap_mjs.js[39m[37m                            [2m | [22m[2m-[22m                    [2m | [22m[36m684.82 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_moment_moment_js.js[39m[37m                                                                       [2m | [22m[2m-[22m                    [2m | [22m[36m593.48 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_lodash_lodash_js.js[39m[37m                                                                       [2m | [22m[2m-[22m                    [2m | [22m[36m541.25 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_chart_js_dist_chart_js.js[39m[37m                                                                 [2m | [22m[2m-[22m                    [2m | [22m[36m495.74 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32msrc_app_ceph_pool_pool_module_ts.js[39m[37m                                                                    [2m | [22m[2mceph-pool-pool-module[22m[2m | [22m[36m423.68 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_xml2js_lib_xml2js_js.js[39m[37m                                                                   [2m | [22m[2m-[22m                    [2m | [22m[36m414.87 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_common_fesm2022_common_mjs.js[39m[37m          [39m[37m                                   [2m | [22m[2m-[22m                    [2m | [22m[36m319.93 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_router_fesm2022_router_mjs.js[39m[37m                                             [2m | [22m[2m-[22m                    [2m | [22m[36m316.32 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_forms_fesm2022_forms_mjs.js[39m[37m                                               [2m | [22m[2m-[22m                    [2m | [22m[36m303.48 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_validator_index_js.js[39m[37m                                                                     [2m | [22m[2m-[22m                    [2m | [22m[36m291.66 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-table_mjs.js[39m[37m         [2m | [22m[2m-[22m                    [2m | [22m[36m247.49 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_rxjs__esm2015_operators_index_js.js[39m[37m                                                       [2m | [22m[2m-[22m                    [2m | [22m[36m217.65 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker_mjs.js[39m[37m    [2m | [22m[2m-[22m                    [2m | [22m[36m212.61 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_animations_fesm2022_browser_mjs.js[39m[37m                                        [2m | [22m[2m-[22m                    [2m | [22m[36m181.33 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mcommon.js[39m[37m                                                                                              [2m | [22m[2mcommon[22m               [2m | [22m[36m152.22 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-input_mjs.js[39m[37m         [2m | [22m[2m-[22m                    [2m | [22m[36m144.25 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdef[39m[37mault-node_modules_rxjs__esm2015_internal_AsyncSubject_js-node_modules_rxjs__esm2015_intern-7c6e1a.js[39m[37m[2m | [22m[2m-[22m                    [2m | [22m[36m142.87 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_popperjs_core_lib_index_js.js[39m[37m                                                             [2m | [22m[2m-[22m                    [2m | [22m[36m135.82 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_common_fesm2022_http_mjs.js[39m[37m                                               [2m | [22m[2m-[22m                    [2m | [22m[36m130.27 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dropdown_mjs.js[39m[37m      [2m | [22m[2m-[22m                    [2m | [22m[36m116.62 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-icon_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m[36m110.50 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ng2-charts_fesm2022_ng2-charts_mjs.js[39m[37m                                             [2m | [22m[2m-[22m                    [2m | [22m[36m109.02 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-ui-shell_mjs.js[39m[37m      [2m | [22m[2m-[22m                    [2m | [22m[36m106.23 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_js-yaml_dist_js-yaml_mjs.js[39m[37m                                                               [2m | [22m[2m-[22m                    [2m | [22m[36m105.96 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ngx-formly_core_fesm2020_ngx-formly-core_mjs.js[39m[37m                                   [2m | [22m[2m-[22m                    [2m | [22m [36m95.94 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_floating-ui_dom_dist_floating-ui_dom_mjs.js[39m[37m                                       [2m | [22m[2m-[22m          [39m[37m          [2m | [22m [36m94.66 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_platform-browser_fesm2022_platform-browser_mjs.js[39m[37m                         [2m | [22m[2m-[22m                    [2m | [22m [36m93.26 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-dialog_mjs.js[39m[37m        [2m | [22m[2m-[22m                    [2m | [22m [36m87.62 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-pagination_mjs.js[39m[37m    [2m | [22m[2m-[22m                    [2m | [22m [36m77.84 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_simplebar-angular_fesm2022_simplebar-angular_mjs.js[39m[37m                               [2m | [22m[2m-[22m                    [2m | [22m [36m77.67 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tabs_mjs.js[39m[37m          [2m | [22m[2m-[22m                    [2m | [22m [36m76.25 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_angular_core_fesm2022_primitives_event-dispatch_mjs.js[39m[37m                                    [2m | [22m[2m-[22m                    [2m | [22m [36m75.59 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-notification_mjs.js[39m[37m  [2m | [22m[2m-[22m                    [2m | [22m [36m70.11 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-combobox_mjs.js[39m[37m      [2m | [22m[2m-[22m                    [2m | [22m [36m62.70 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_rxjs__esm2015_index_js.js[39m[37m                                                                 [2m | [22m[2m-[22m                    [2m | [22m [36m56.81 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-compone[39m[37mnts-angular-modal_mjs.js[39m[37m         [2m | [22m[2m-[22m                    [2m | [22m [36m56.15 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tiles_mjs.js[39m[37m         [2m | [22m[2m-[22m                    [2m | [22m [36m49.70 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_angular_animations_fesm2022_animations_mjs.js[39m[37m                                     [2m | [22m[2m-[22m                    [2m | [22m [36m48.87 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-treeview_mjs.js[39m[37m      [2m | [22m[2m-[22m                    [2m | [22m [36m46.74 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-select_mjs.js[39m[37m        [2m | [22m[2m-[22m                    [2m | [22m [36m44.21 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-file-uploader_mjs.js[39m[37m [2m | [22m[2m-[22m                    [2m | [22m [36m38.89 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-code-snippet_mjs.js[39m[37m  [2m | [22m[2m-[22m                    [2m | [22m [36m38.15 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-breadcrumb_mjs.js[39m[37m    [2m | [22m[2m-[22m                    [2m | [22m [36m38.11 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular_mjs.js[39m[37m                       [2m | [22m[2m-[22m                    [2m | [22m [36m37.86 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-number-input_mjs.js[39m[37m  [2m | [22m[2m-[22m                    [2m | [22m [36m37.48 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32m[39m[37mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-slider_mjs.js[39m[37m        [2m | [22m[2m-[22m                    [2m | [22m [36m37.42 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-radio_mjs.js[39m[37m                 [2m | [22m[2m-[22m                    [2m | [22m [36m37.36 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_lodash-es__arrayLikeKeys_js-node_modules_lodash-es__isPrototype_js-node_-bd9e24.js[39m[37m[2m | [22m[2m-[22m                    [2m | [22m [36m35.76 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ng-block-ui_fesm2020_ng-block-ui_mjs.js[39m[37m                                           [2m | [22m[2m-[22m                    [2m | [22m [36m31.93 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-context-menu_mjs.js[39m[37m  [2m | [22m[2m-[22m                    [2m | [22m [36m31.75 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-utils_mjs.js[39m[37m                 [2m | [22m[2m-[22m                    [2m | [22m [36m31.39 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-tooltip_mjs.js[39m[37m               [2m | [22m[2m-[22m                    [2m | [22m [36m29.73 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-structured--bcaf2f.js[39m[37m[2m | [22m[2m-[22m                    [2m | [22m [36m27.70 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-search_mjs.js[39m[37m        [2m | [22m[2m-[22m                    [2m | [22m [36m26.98 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-datepicker-input_mjs.js[39m[37m      [2m | [22m[2m-[22m       [39m[37m             [2m | [22m [36m26.85 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-button_mjs.js[39m[37m                [2m | [22m[2m-[22m                    [2m | [22m [36m24.72 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-tag_mjs.js[39m[37m           [2m | [22m[2m-[22m                    [2m | [22m [36m24.05 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-contained-l-a8c8b3.js[39m[37m[2m | [22m[2m-[22m                    [2m | [22m [36m23.53 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ngx-formly_core_fesm2020_ngx-formly-core-json-schema_mjs.js[39m[37m                       [2m | [22m[2m-[22m                    [2m | [22m [36m23.36 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_ngx-formly_bootstrap_fesm2020_ngx-formly-bootstrap-select_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m [36m22.54 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_angular_core_fesm2022_primitives_signals_mjs.js[39m[37m                                           [2m | [22m[2m-[22m                    [2m | [22m [36m21.87 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-popover_mjs.js[39m[37m               [2m | [22m[2m-[22m                    [2m | [22m [36m19.49 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_tslib_tslib_es6_mjs.js[39m[37m                                                                    [2m | [22m[2m-[22m                    [2m | [22m [36m19.07 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-grid_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m [36m18.67 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-comp[39m[37monents-angular-menu-button_mjs.js[39m[37m   [2m | [22m[2m-[22m                    [2m | [22m [36m18.38 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-toggle_mjs.js[39m[37m        [2m | [22m[2m-[22m                    [2m | [22m [36m17.63 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-progress-bar_mjs.js[39m[37m  [2m | [22m[2m-[22m                    [2m | [22m [36m16.82 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-checkbox_mjs.js[39m[37m              [2m | [22m[2m-[22m                    [2m | [22m [36m16.62 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker_mjs.js[39m[37m    [2m | [22m[2m-[22m                    [2m | [22m [36m16.09 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-i18n_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m [36m15.99 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-accordion_mjs.js[39m[37m     [2m | [22m[2m-[22m                    [2m | [22m [36m15.83 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-progress-in-6dfd4b.js[39m[37m[2m | [22m[2m-[22m                    [2m | [22m [36m15.74 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-node_modules_carbon-components-angular_fesm2020_carbon-components-angular-toggletip_mjs.js[39m[37m     [2m | [22m[2m-[22m                    [2m | [22m [36m14.91 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-content-switcher_mjs.js[39m[37m      [2m | [22m[2m-[22m                    [2m | [22m [36m14.55 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[[39m[37m32mnode_modules_async-mutex_index_mjs.js[39m[37m                                                                  [2m | [22m[2m-[22m                    [2m | [22m [36m10.79 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-timepicker-select_mjs.js[39m[37m     [2m | [22m[2m-[22m                    [2m | [22m [36m10.34 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-placeholder_mjs.js[39m[37m           [2m | [22m[2m-[22m                    [2m | [22m  [36m8.83 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_detect-browser_es_index_js.js[39m[37m                                                             [2m | [22m[2m-[22m                    [2m | [22m  [36m8.36 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-forms_mjs.js[39m[37m                 [2m | [22m[2m-[22m                    [2m | [22m  [36m7.51 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-skeleton_mjs.js[39m[37m              [2m | [22m[2m-[22m                    [2m | [22m  [36m6.18 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-list_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m  [36m6.16 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-layer_mjs.js[39m[37m                 [2m | [22m[2m-[22m                    [2m | [22m  [36m6.01 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-link_mjs.js[39m[37m                  [2m | [22m[2m-[22m                    [2m | [22m  [36m5.83 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-layout_mjs.js[39m[37m                [2m | [22m[2m-[22m    [39m[37m                [2m | [22m  [36m5.36 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-common_mjs.js[39m[37m                [2m | [22m[2m-[22m                    [2m | [22m  [36m4.54 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_carbon-components-angular_fesm2020_carbon-components-angular-experimental_mjs.js[39m[37m          [2m | [22m[2m-[22m                    [2m | [22m  [36m4.53 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_file-saver_dist_FileSaver_min_js.js[39m[37m                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m4.35 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_babel_runtime_helpers_esm_asyncToGenerator_js-_db250.js[39m[37m                                   [2m | [22m[2m-[22m                    [2m | [22m  [36m1.40 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mnode_modules_babel_runtime_helpers_esm_asyncToGenerator_js-_db251.js[39m[37m                                   [2m | [22m[2m-[22m                    [2m | [22m  [36m1.40 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m |[39m[37m [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m              [39m[37m      [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 byt[39m[37mes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m  [39m[37m                                                                                                     [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m                                                                                                       [2m | [22m[2m-[22m                    [2m | [22m  [36m0 bytes[39m[37m[2m | [22m[0m[39m
+[37m[0m[0m[39m
+[37m[0mBuild at: [1m[37m2025-11-21T10:57:35.906Z[39m[37m[22m - Hash: [1m[37m3ca8d2093dc4c528[39m[37m[22m - Time: [1m[37m86610[39m[37m[22mms[0m[39m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/s[39m[22m[1m[33mwagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cl[39m[22m[1m[33mi/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-cor[39m[22m[1m[33me.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS[39m[22m[1m[33m or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m

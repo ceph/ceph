@@ -1,0 +1,556 @@
+- Generating browser application bundles (phase: setup)...
+[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[1m[33m[7m[1m[36m NX [39m[33m[22m[1m[27m Falling back to ts-node for local typescript execution. This may be a little slower.[39m[22m
+[1m[33m  - To fix this, ensure @swc-node/register and @swc/core have been installed[39m[22m
+[1m[33mCould not find a version for "@rollup/rollup-linux-arm64-gnu" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+[1m[33mCould not find a version for "brace-expansion" in the root "package.json" when collecting shared packages for the Module Federation setup. The package will not be shared.[39m[22m
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/ajax/package.json' of './index.js'. Please either fix that or report it to the module author
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/fetch/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/internal-compatibility/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/operators/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/testing/package.json' of './index.js'. Please either fix that or report it to the module author
+(node:703) [DEP0128] DeprecationWarning: Invalid 'main' field in '/ceph/src/pybind/mgr/dashboard/frontend/node_modules/rxjs/src/webSocket/package.json' of './index.js'. Please either fix that or report it to the module author
+[36m[ Module Federation Manifest Plugin ][39m Manifest will use absolute path resolution via its host at runtime, reason: publicPath='auto'
+[32m✔[39m Browser application bundle generation complete.
+[32m✔[39m Browser application bundle generation complete.
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-ast/src/yaml/schemas/canonical-format.mjs depends on 'unraw'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-core/src/index.mjs depends on 'minim'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/@swagger-api/apidom-reference/src/util/url.mjs depends on 'process'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/l10n/index'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/carbon-components-angular/fesm2020/carbon-components-angular-datepicker.mjs depends on 'flatpickr/dist/plugins/rangePlugin'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/react-redux/es/components/connect.js depends on 'hoist-non-react-statics'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/s[39m[22m[1m[33mwagger-client/es/resolver/specmap/lib/index.js depends on 'deepmerge'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on '@braintree/sanitize-url'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'base64-js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'classnames'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'css.escape'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'dompurify'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'ieee754'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cl[39m[22m[1m[33mi/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'js-file-download'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'prop-types'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'randexp'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-copy-to-clipboard'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'react-debounce-input'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-cor[39m[22m[1m[33me.js depends on 'react-immutable-proptypes'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'redux-immutable'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'serialize-error'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'url-parse'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'xml-but-prettier'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0m/ceph/src/pybind/mgr/dashboard/frontend/node_modules/swagger-ui/dist/swagger-ui-es-bundle-core.js depends on 'zenscroll'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'moment'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'validator'. CommonJS[39m[22m[1m[33m or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[0m[33mWarning: [39m[33m[0mundefined depends on 'xml2js'. CommonJS or AMD dependencies can cause optimization bailouts.[39m[22m
+[1m[33mFor more info see: https://angular.dev/tools/cli/build#configuring-commonjs-dependencies[39m[22m
+[1m[33m[39m[22m
+[1m[33m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[36m./src/app/shared/pipes/pipes.module.ts[39m[31m[0m:[0m[93m43:0-74[39m[31m[0m - [0m[91mError: [39m[31m[0mModule not found: Error: Can't resolve './form-validation-pipes.pipe' in '/ceph/src/pybind/mgr/dashboard/frontend/src/app/shared/pipes'[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m17[0m:[93m13[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m17[0m   exports: [SharedModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m23[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m23[0m     CoreModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/app.module.ts[0m:[93m25[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m25[0m     CephModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m83[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m83[0m     MirroringModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m89[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m89[0m     PipesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m[39m[22m[1m[31m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m90[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m90[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/block.module.ts[0m:[93m340[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m340[0m   imports: [BlockModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m [91m            ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/block/mirroring/mirroring.module.ts[0m:[93m40[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m40[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m15[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m15[0m     ClusterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m16[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m     DashboardModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m17[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m17[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m18[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which [39m[22m[1m[31mmay affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m18[0m     CephfsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m19[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m19[0m     NfsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m20[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m20[0m     SmbModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/ceph.module.ts[0m:[93m21[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m     SharedModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cephfs/cephfs.module.ts[0m:[93m62[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m62[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cephfs/cephfs.module.ts[0m:[93m70[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m70[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m91[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m91[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m93[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect compone[39m[22m[1m[31mnts that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m93[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m98[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m98[0m     MgrModulesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m102[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m102[0m     CephSharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m106[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m106[0m     PipesModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/cluster.module.ts[0m:[93m108[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m108[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/cluster/mgr-modules/mgr-modules.module.ts[0m:[93m14[0m:[93m66[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m14[0m   imports: [AppRoutingModule, CommonModule, ReactiveFormsModule, SharedModule, NgbNavModule],[39m[22m
+[1m[31m[7m  [0m [91m                                                                 ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard-v3/dashboard-v3.module.ts[0m:[93m21[0m:[93m5[39m[22m[1m[31m[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m21[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard-v3/dashboard-v3.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m19[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m19[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m22[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m22[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/dashboard/dashboard.module.ts[0m:[93m26[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m26[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/nfs/nfs.module.ts[0m:[93m35[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m35[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/nfs/nfs.module.ts[0m:[93m49[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m     ClusterModule[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/performance-c[39m[22m[1m[31mounter/performance-counter.module.ts[0m:[93m10[0m:[93m27[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m10[0m   imports: [CommonModule, SharedModule, RouterModule],[39m[22m
+[1m[31m[7m  [0m [91m                          ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     CephSharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m27[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m27[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m31[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m31[0m     BlockModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/pool/pool.module.ts[0m:[93m64[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m64[0m   imports: [PoolModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m123[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m123[0m     CephSharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m124[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m124[0m     [39m[22m[1m[31mSharedModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m127[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m127[0m     PerformanceCounterModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m132[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m132[0m     PipesModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m134[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m134[0m     DataTableModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m135[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m135[0m     DashboardV3Module,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/rgw/rgw.module.ts[0m:[93m460[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m460[0m   imports: [RgwModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m [91m            ~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/ceph-shared.module.ts[0m:[93m16[0m:[93m27[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m   imports: [CommonModule, DataTableModule, Shared[39m[22m[1m[31mModule, NgbNavModule, PipesModule, RouterModule],[39m[22m
+[1m[31m[7m  [0m [91m                          ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/ceph-shared.module.ts[0m:[93m16[0m:[93m44[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m   imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule, RouterModule],[39m[22m
+[1m[31m[7m  [0m [91m                                           ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/shared/ceph-shared.module.ts[0m:[93m16[0m:[93m72[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m16[0m   imports: [CommonModule, DataTableModule, SharedModule, NgbNavModule, PipesModule, RouterModule],[39m[22m
+[1m[31m[7m  [0m [91m                                                                       ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/smb/smb.module.ts[0m:[93m46[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m46[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/ceph/smb/smb.module.ts[0m:[93m51[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m51[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/auth/auth.module.ts[0m:[93m49[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m49[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [[39m[22m[1m[31m39m[0m[96msrc/app/core/auth/auth.module.ts[0m:[93m64[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m64[0m     PipesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/auth/auth.module.ts[0m:[93m129[0m:[93m13[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m129[0m   imports: [AuthModule, RouterModule.forChild(routes)][39m[22m
+[1m[31m[7m   [0m [91m            ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m26[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m26[0m     NavigationModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m29[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m29[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/core.module.ts[0m:[93m35[0m:[93m13[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m35[0m   exports: [NavigationModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/navigation/navigation.module.ts[0m:[93m58[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m58[0m     AuthModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/core/navigation/navigation.module.ts[0m:[93m62[39m[22m[1m[31m[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m62[0m     SharedModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/components/components.module.ts[0m:[93m113[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m113[0m     PipesModule,[39m[22m
+[1m[31m[7m   [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/datatable.module.ts[0m:[93m60[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m60[0m     PipesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/datatable/datatable.module.ts[0m:[93m61[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m61[0m     ComponentsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/pipes/pipes.module.ts[0m:[93m43[0m:[93m44[0m - [91merror[0m[90m TS2307: [0mCannot find module './form-validation-pipes.pipe' or its corresponding type declarations.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m43[0m import { GetErrorPipe, HasErrorPipe } from './form-validation-pipes.pipe';[39m[22m
+[1m[31m[7m  [0m [91m                                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/pipes/pipes.module.ts[0m:[93m47[0m:[93m17[0m - [91merror[0m[90m NG1010: [0mValue[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError[39m[22m[1m[31m: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m24[0m:[93m5[0m - [91merror[0m[90m NG6002: [0m'PipesModule' does not appear to be an NgModule class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m24[0m     PipesModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an @NgModule annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m25[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m25[0m     ComponentsModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m26[0m:[93m5[0m - [91merror[0m[90m NG6002: [0mThis import contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m26[0m     DataTableModule,[39m[22m
+[1m[31m[7m  [0m [91m    ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m42[0m:[93m13[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m42[0m   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],[39m[22m
+[1m[31m[7m  [0m [91m            ~~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.ts[0m:[93m42[0m:[93m31[0m - [91merror[0m[90m NG6003: [0m'PipesModule' does not appear to be an NgModule, Component, Directive, or Pipe class.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m42[0m   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],[39m[22m
+[1m[31m[7m  [0m [91m                              ~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m  [96msrc/app/shared/pipes/pipes.module.ts[0m:[93m168[0m:[93m14[0m[39m[22m
+[1m[31m    [7m168[0m export class PipesModule {}[39m[22m
+[1m[31m    [7m   [0m [96m             ~~~~~~~~~~~[0m[39m[22m
+[1m[31m    Is it missing an Angular annotation?[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[0m[91mError: [39m[31m[0m[96msrc/app/shared/shared.module.[39m[22m[1m[31mts[0m:[93m42[0m:[93m44[0m - [91merror[0m[90m NG6003: [0mThis export contains errors, which may affect components that depend on this NgModule.[39m[22m
+[1m[31m[39m[22m
+[1m[31m[7m42[0m   exports: [ComponentsModule, PipesModule, DataTableModule, DirectivesModule],[39m[22m
+[1m[31m[7m  [0m [91m                                           ~~~~~~~~~~~~~~~[0m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m
+[1m[31m[39m[22m

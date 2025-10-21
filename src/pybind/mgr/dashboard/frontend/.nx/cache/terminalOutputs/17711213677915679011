@@ -1,0 +1,18 @@
+[1m[33m    TypeScript compiler options "target" and "useDefineForClassFields" are set to "ES2022" and "false" respectively by the Angular CLI. To control ECMA version and features use the Browserslist configuration. For more information, see https://angular.dev/tools/cli/build#configuring-browser-compatibility[39m[22m
+[1m[33m    NOTE: You can set the "target" to "ES2022" in the project's tsconfig to remove this warning.[39m[22m
+[37m[0m[0m[39m
+[37m[0m[1mInitial chunk files[22m                          [2m | [22m[1mNames[22m                [2m | [22m [1mRaw size[22m[0m[39m
+[37m[0m[32mpolyfills.js[39m[37m                                 [2m | [22m[2mpolyfills[22m            [2m | [22m[36m173.02 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mruntime.js[39m[37m                                   [2m | [22m[2mruntime[22m              [2m | [22m [36m16.75 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mvendor.js[39m[37m                                    [2m | [22m[2mvendor[22m               [2m | [22m  [36m7.10 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mmain.js[39m[37m                                      [2m | [22m[2mmain[22m                 [2m | [22m  [36m1.29 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[0m[39m
+[37m[0m[1m [22m                                            [2m | [22m[1mInitial total[22m        [2m | [22m[1m198.16 kB[22m[0m[39m
+[37m[0m[0m[39m
+[37m[0m[1mLazy chunk files[22m                             [2m | [22m[1mNames[22m                [2m | [22m [1mRaw size[22m[0m[39m
+[37m[0m[32msrc_bootstrap_ts.js[39m[37m                          [2m | [22m[2mbootstrap[22m            [2m | [22m [36m21.77 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32msrc_app_ceph_rgw_rgw_module_ts.js[39m[37m            [2m | [22m[2mceph-rgw-rgw-module[22m  [2m | [22m  [36m2.93 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32mdefault-src_app_ceph_block_block_module_ts.js[39m[37m[2m | [22m[2mceph-pool-pool-module[22m[2m | [22m  [36m1.31 MB[39m[37m[2m | [22m[0m[39m
+[37m[0m[32msrc_app_ceph_pool_pool_module_ts.js[39m[37m          [2m | [22m[2mceph-pool-pool-module[22m[2m | [22m[36m420.43 kB[39m[37m[2m | [22m[0m[39m
+[37m[0m[0m[39m
+[37m[0mBuild at: [1m[37m2025-11-26T16:46:15.073Z[39m[37m[22m - Hash: [1m[37m065cfe60f1152f23[39m[37m[22m - Time: [1m[37m78454[39m[37m[22mms[0m[39m
