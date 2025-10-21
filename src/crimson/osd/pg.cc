@@ -1604,7 +1604,7 @@ bool PG::can_discard_op(const MOSDOp& m) const {
     return true;
   }
 
-  if ((m.get_flags() & CEPH_OSD_FLAG_DIRECT_READ)
+  if ((m.get_flags() & CEPH_OSD_FLAGS_DIRECT_READ)
     && !is_primary()
     && (m.get_map_epoch() <
         peering_state.get_info().history.same_interval_since))

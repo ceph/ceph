@@ -1938,7 +1938,7 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_DIRECT_READ)) &&
+  if ((m->get_flags() & (CEPH_OSD_FLAGS_DIRECT_READ)) &&
       !is_primary() &&
       m->get_map_epoch() < info.history.same_interval_since) {
     // Note: the Objecter will resend on interval change without the primary
