@@ -53,7 +53,6 @@ public:
   }
 };
 
-class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
 class RGWSI_Bucket_Sync;
@@ -84,7 +83,6 @@ struct RGWServices_Def
   bool can_shutdown{false};
   bool has_shutdown{false};
 
-  std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
   std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
@@ -122,7 +120,6 @@ struct RGWServices
   CephContext *cct;
   const rgw::SiteConfig* site{nullptr};
 
-  RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
   RGWSI_Bucket_Sync *bucket_sync{nullptr};
@@ -135,7 +132,6 @@ struct RGWServices
   RGWSI_ConfigKey *config_key{nullptr};
   RGWDataChangesLog *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
-  RGWSI_Notify *notify{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};
