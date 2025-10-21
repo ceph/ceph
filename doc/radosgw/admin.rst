@@ -840,7 +840,7 @@ An enabled bucket rate limit can be disabled by running a command of the followi
 
 .. prompt:: bash #
 
-   radosgw-admin ratelimit disable --ratelimit-scope=bucket --uid=mybucket
+   radosgw-admin ratelimit disable --ratelimit-scope=bucket --bucket=mybucket
 
 Reading and Writing Global Rate Limit Configuration
 ---------------------------------------------------
