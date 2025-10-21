@@ -928,34 +928,36 @@ BtreeLBAManager::get_end_mapping(
 BtreeLBAManager::remap_ret
 BtreeLBAManager::remap_mappings(
   Transaction &t,
-  LBAMapping mapping,
+  LBACursorRef cursor,
   std::vector<remap_entry_t> remaps)
 {
   LOG_PREFIX(BtreeLBAManager::remap_mappings);
-  DEBUGT("{}", t, mapping);
-  assert(mapping.is_viewable());
-  assert(mapping.is_indirect() == mapping.is_complete_indirect());
+  DEBUGT("{}", t, *cursor);
+  assert(cursor->is_viewable());
+  auto orig_indirect = cursor->is_indirect();
+  auto orig_laddr = cursor->get_laddr();
+  auto orig_len = cursor->get_length();
   auto c = get_context(t);
   auto btree = co_await get_btree<LBABtree>(cache, c);
-  auto iter = btree.make_partial_iter(c, mapping.get_effective_cursor());
-  std::vector<LBAMapping> ret;
-  auto val = iter.get_val();
-  assert(val.refcount == EXTENT_DEFAULT_REF_COUNT);
-  assert(mapping.is_indirect() ||
-	 (val.pladdr.is_paddr() &&
-	  val.pladdr.get_paddr().is_absolute()));
-  auto updated_cursor = co_await update_mapping_refcount(
-    c.trans, mapping.get_effective_cursor_ref(), -1);
-  iter = btree.make_partial_iter(c, *updated_cursor);
+  auto iter = btree.make_partial_iter(c, *cursor);
+  auto orig_val = iter.get_val();
+  std::vector<LBACursorRef> ret;
+  assert(orig_val.refcount == EXTENT_DEFAULT_REF_COUNT);
+  assert(orig_indirect ||
+	 (orig_val.pladdr.is_paddr() &&
+	  orig_val.pladdr.get_paddr().is_absolute()));
+  cursor = co_await update_mapping_refcount(
+    c.trans, cursor, -1);
+  iter = btree.make_partial_iter(c, *cursor);
   for (auto &remap : remaps) {
-    assert(remap.offset + remap.len <= mapping.get_length());
-    assert((bool)remap.extent == !mapping.is_indirect());
-    lba_map_val_t val;
-    auto old_key = mapping.get_key();
-    auto new_key = (old_key + remap.offset).checked_to_laddr();
+    assert(remap.offset + remap.len <= orig_len);
+    assert((bool)remap.extent == !orig_indirect);
+    lba_map_val_t val = orig_val;
+    auto new_key = (orig_laddr + remap.offset).checked_to_laddr();
     val.len = remap.len;
     if (val.pladdr.is_laddr()) {
       auto laddr = val.pladdr.get_laddr();
+      DEBUGT("{} + {:#x}", t, laddr, remap.offset);
       val.pladdr = (laddr + remap.offset).checked_to_laddr();
     } else {
       auto paddr = val.pladdr.get_paddr();
@@ -969,42 +971,21 @@ BtreeLBAManager::remap_mappings(
     auto &[it, inserted] = p;
     ceph_assert(inserted);
     auto &leaf_node = *it.get_leaf_node();
-    if (mapping.is_indirect()) {
+    if (orig_indirect) {
       leaf_node.insert_child_ptr(
 	it.get_leaf_pos(),
 	get_reserved_ptr<LBALeafNode, laddr_t>(),
 	leaf_node.get_size() - 1 /*the size before the insert*/);
-      ret.push_back(
-	LBAMapping::create_indirect(nullptr, it.get_cursor(c)));
+      ret.push_back(it.get_cursor(c));
     } else {
       leaf_node.insert_child_ptr(
 	it.get_leaf_pos(),
 	remap.extent,
 	leaf_node.get_size() - 1 /*the size before the insert*/);
-      ret.push_back(
-	LBAMapping::create_direct(it.get_cursor(c)));
+      ret.push_back(it.get_cursor(c));
     }
-    it = co_await it.next(c);
-    iter = std::move(it);
+    iter = co_await it.next(c);
   }
-  if (mapping.is_indirect()) {
-    co_await mapping.direct_cursor->refresh();
-    for (auto &m : ret) {
-      m.direct_cursor = mapping.direct_cursor;
-    }
-  }
-  if (remaps.size() > 1 && mapping.is_indirect()) {
-    assert(mapping.direct_cursor->is_viewable());
-    co_await update_mapping_refcount(c.trans, mapping.direct_cursor, 1);
-  }
-  co_await trans_intr::parallel_for_each(
-    ret,
-    [](auto &remapped_mapping) {
-      return remapped_mapping.refresh(
-      ).si_then([&remapped_mapping](auto mapping) {
-	remapped_mapping = std::move(mapping);
-      });
-    });
   co_return ret;
 }
 
