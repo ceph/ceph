@@ -3,8 +3,11 @@
 
 #pragma once
 
-namespace rgw {
-namespace IAM {
+#include <string_view>
+
+#include <fmt/format.h>
+
+namespace rgw::IAM {
 
 enum class TokenKind {
   pseudo, top, statement, cond_op, cond_key, version_key, effect_key,
@@ -127,6 +130,25 @@ enum class Effect {
   Pass
 };
 
+inline std::string_view to_string(Effect e)
+{
+  using enum Effect;
+  switch (e) {
+  case Allow:
+    return "Allow";
+  case Pass:
+    return "Pass";
+  case Deny:
+    return "Deny";
+  }
+  return "Unknown Effect";
+}
+
+inline std::ostream& operator <<(std::ostream& m, const Effect& e)
+{
+  return m << to_string(e);
+}
+
 enum class Type {
   string,
   number,
@@ -137,5 +159,13 @@ enum class Type {
   arn,
   null
 };
-}
-}
+} // namespace rgw::IAM
+
+template<>
+struct fmt::formatter<rgw::IAM::Effect> : formatter<std::string_view> {
+  template<typename FormatContext>
+  auto format(const rgw::IAM::Effect& e, FormatContext& ctx) const {
+    auto s = to_string(e);
+    return formatter<std::string_view>::format(s, ctx);
+  }
+};

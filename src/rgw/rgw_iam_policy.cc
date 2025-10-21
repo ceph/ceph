@@ -1,13 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-
 #include <cstring>
 #include <iostream>
 #include <regex>
 #include <sstream>
-#include <stack>
 #include <utility>
+
+#include <fmt/ranges.h>
+#include <fmt/std.h>
 
 #include <arpa/inet.h>
 
@@ -15,15 +16,11 @@
 
 #include "rapidjson/reader.h"
 
-#include "include/expected.hpp"
-
 #include "rgw_auth.h"
 #include "rgw_iam_policy.h"
 
 
-namespace {
-constexpr int dout_subsys = ceph_subsys_rgw;
-}
+inline constexpr int dout_subsys = ceph_subsys_rgw;
 
 using std::dec;
 using std::hex;
@@ -50,6 +47,41 @@ using rapidjson::StringStream;
 
 using rgw::auth::Principal;
 
+using namespace std::literals;
+
+template<typename T>
+struct fmt::formatter<boost::optional<T>> : fmt::formatter<T> {
+  template<typename FormatContext>
+  auto format(const boost::optional<T>& opt, FormatContext& ctx) const {
+    if (opt) {
+      return fmt::formatter<T>::format(*opt, ctx);
+    }
+    return fmt::format_to(ctx.out(), "none");
+  }
+};
+
+template<typename T>
+struct fmt::formatter<boost::optional<T&>> : fmt::formatter<T> {
+  template<typename FormatContext>
+  auto format(const boost::optional<T&>& opt, FormatContext& ctx) const {
+    if (opt) {
+      return fmt::formatter<T>::format(*opt, ctx);
+    }
+    return fmt::format_to(ctx.out(), "none");
+  }
+};
+
+template<typename T>
+struct fmt::formatter<boost::optional<const T&>> : fmt::formatter<T> {
+  template<typename FormatContext>
+  auto format(const boost::optional<const T&>& opt, FormatContext& ctx) const {
+    if (opt) {
+      return fmt::formatter<T>::format(*opt, ctx);
+    }
+    return fmt::format_to(ctx.out(), "none");
+  }
+};
+
 namespace rgw {
 namespace IAM {
 #include "rgw_iam_policy_keywords.frag.cc"
@@ -58,8 +90,6 @@ struct actpair {
   const char* name;
   const uint64_t bit;
 };
-
-
 
 static const actpair actpairs[] =
 {{ "s3:AbortMultipartUpload", s3AbortMultipartUpload },
@@ -224,6 +254,108 @@ static const actpair actpairs[] =
  { "organizations:ListPolicies", organizationsListPolicies},
  { "organizations:ListTargetsForPolicy", organizationsListTargetsForPolicy},
 };
+
+namespace {
+const char* condop_string(const TokenID t) {
+  switch (t) {
+  case TokenID::StringEquals:
+    return "StringEquals";
+
+  case TokenID::StringNotEquals:
+    return "StringNotEquals";
+
+  case TokenID::StringEqualsIgnoreCase:
+    return "StringEqualsIgnoreCase";
+
+  case TokenID::StringNotEqualsIgnoreCase:
+    return "StringNotEqualsIgnoreCase";
+
+  case TokenID::StringLike:
+    return "StringLike";
+
+  case TokenID::StringNotLike:
+    return "StringNotLike";
+
+  // Numeric!
+  case TokenID::NumericEquals:
+    return "NumericEquals";
+
+  case TokenID::NumericNotEquals:
+    return "NumericNotEquals";
+
+  case TokenID::NumericLessThan:
+    return "NumericLessThan";
+
+  case TokenID::NumericLessThanEquals:
+    return "NumericLessThanEquals";
+
+  case TokenID::NumericGreaterThan:
+    return "NumericGreaterThan";
+
+  case TokenID::NumericGreaterThanEquals:
+    return "NumericGreaterThanEquals";
+
+  case TokenID::DateEquals:
+    return "DateEquals";
+
+  case TokenID::DateNotEquals:
+    return "DateNotEquals";
+
+  case TokenID::DateLessThan:
+    return "DateLessThan";
+
+  case TokenID::DateLessThanEquals:
+    return "DateLessThanEquals";
+
+  case TokenID::DateGreaterThan:
+    return "DateGreaterThan";
+
+  case TokenID::DateGreaterThanEquals:
+    return "DateGreaterThanEquals";
+
+  case TokenID::Bool:
+    return "Bool";
+
+  case TokenID::BinaryEquals:
+    return "BinaryEquals";
+
+  case TokenID::IpAddress:
+    return "IpAddress";
+
+  case TokenID::NotIpAddress:
+    return "NotIpAddress";
+
+  case TokenID::ArnEquals:
+    return "ArnEquals";
+
+  case TokenID::ArnNotEquals:
+    return "ArnNotEquals";
+
+  case TokenID::ArnLike:
+    return "ArnLike";
+
+  case TokenID::ArnNotLike:
+    return "ArnNotLike";
+
+  case TokenID::Null:
+    return "Null";
+
+  default:
+    return "InvalidConditionOperator";
+  }
+}
+}
+
+template <typename T>
+inline std::ostream&
+operator<<(std::ostream& out, const boost::optional<T>& t)
+{
+  if (!t)
+    out << "--";
+  else
+    out << ' ' << *t;
+  return out;
+}
 
 struct PolicyParser;
 
@@ -871,19 +1003,28 @@ static bool arn_like(const std::string& input, const std::string& pattern)
   return match_policy(pattern, input, MATCH_POLICY_ARN);
 }
 
-bool Condition::eval(const Environment& env) const {
+bool Condition::eval(const Environment& env, const LogOut& eval_log) const {
   std::vector<std::string> runtime_vals;
   auto i = env.find(key);
   if (op == TokenID::Null) {
-    return i == env.end() ? true : false;
+    auto ret = i == env.end() ? true : false;
+    auto msg = ret ? "Is not present, returning true"sv :
+                     "Is present, returning false"sv;
+    eval_log.format("Null check. key `{}` {}.", key, msg);
+    return ret;
   }
 
   if (i == env.end()) {
     if (op == TokenID::ForAllValuesStringEquals ||
         op == TokenID::ForAllValuesStringEqualsIgnoreCase ||
         op == TokenID::ForAllValuesStringLike) {
+      eval_log.format(
+          "Evaluating `{}` When key `{}` is not present. Vacuously true.",
+          condop_string(op), key);
       return true;
     } else {
+      eval_log.format("Evaluating `{}` when key `{}` is not present. Returning {}.",
+                      condop_string(op), key, ifexists ? "true" : "false");
       return ifexists;
     }
   }
@@ -898,113 +1039,131 @@ bool Condition::eval(const Environment& env) const {
     }
   }
   const auto& s = i->second;
-
-  const auto& itr = env.equal_range(key);
-
+  const auto itr = env.equal_range(key);
+  // Printable range because for fmt::format.
+  const std::ranges::subrange prange(itr.first, itr.second);
+  eval_log.format("Evaluating `{}` for `[{}]` against `[{}]`",
+                  condop_string(op), fmt::join(prange, ","),
+                  fmt::join(isruntime ? runtime_vals : vals, ","));
   switch (op) {
     // String!
   case TokenID::ForAnyValueStringEquals:
   case TokenID::StringEquals:
-    return multimap_any(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(std::equal_to<std::string>(), itr,
+                        isruntime ? runtime_vals : vals,
+                        eval_log);
 
   case TokenID::StringNotEquals:
-    return multimap_none(std::equal_to<std::string>(),
-     itr, isruntime? runtime_vals : vals);
+    return multimap_none(std::equal_to<std::string>(), itr,
+                         isruntime ? runtime_vals : vals, eval_log);
 
   case TokenID::ForAnyValueStringEqualsIgnoreCase:
   case TokenID::StringEqualsIgnoreCase:
-    return multimap_any(ci_equal_to(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(ci_equal_to(), itr, isruntime ? runtime_vals : vals,
+                        eval_log);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return multimap_none(ci_equal_to(), itr, isruntime? runtime_vals : vals);
+    return multimap_none(ci_equal_to(), itr, isruntime ? runtime_vals : vals,
+                         eval_log);
 
   case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
-    return multimap_any(string_like(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(string_like(), itr, isruntime ? runtime_vals : vals,
+                        eval_log);
 
   case TokenID::StringNotLike:
-    return multimap_none(string_like(), itr, isruntime? runtime_vals : vals);
+    return multimap_none(string_like(), itr, isruntime ? runtime_vals : vals,
+                         eval_log);
 
   case TokenID::ForAllValuesStringEquals:
-    return multimap_all(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(std::equal_to<std::string>(), itr,
+                        isruntime ? runtime_vals : vals,
+                        eval_log);
 
   case TokenID::ForAllValuesStringLike:
-    return multimap_all(string_like(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(string_like(), itr, isruntime ? runtime_vals : vals,
+                        eval_log);
 
   case TokenID::ForAllValuesStringEqualsIgnoreCase:
-    return multimap_all(ci_equal_to(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(ci_equal_to(), itr, isruntime ? runtime_vals : vals,
+                        eval_log);
 
     // Numeric
   case TokenID::NumericEquals:
-    return typed_any(std::equal_to<double>(), as_number, s, vals);
+    return typed_any(std::equal_to<double>(), as_number, s, vals, eval_log);
 
   case TokenID::NumericNotEquals:
-    return typed_none(std::equal_to<double>(),
-       as_number, s, vals);
+    return typed_none(std::equal_to<double>(), as_number, s, vals, eval_log);
 
 
   case TokenID::NumericLessThan:
-    return typed_any(std::less<double>(), as_number, s, vals);
+    return typed_any(std::less<double>(), as_number, s, vals, eval_log);
 
 
   case TokenID::NumericLessThanEquals:
-    return typed_any(std::less_equal<double>(), as_number, s, vals);
+    return typed_any(std::less_equal<double>(), as_number, s, vals, eval_log);
 
   case TokenID::NumericGreaterThan:
-    return typed_any(std::greater<double>(), as_number, s, vals);
+    return typed_any(std::greater<double>(), as_number, s, vals, eval_log);
 
   case TokenID::NumericGreaterThanEquals:
-    return typed_any(std::greater_equal<double>(), as_number, s,
-       vals);
+    return typed_any(std::greater_equal<double>(), as_number, s, vals,
+                     eval_log);
 
     // Date!
   case TokenID::DateEquals:
-    return typed_any(std::equal_to<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::equal_to<ceph::real_time>(), as_date, s, vals,
+                     eval_log);
 
   case TokenID::DateNotEquals:
     return typed_none(std::equal_to<ceph::real_time>(),
-       as_date, s, vals);
+                      as_date, s, vals, eval_log);
   case TokenID::DateLessThan:
-    return typed_any(std::less<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::less<ceph::real_time>(), as_date, s, vals, eval_log);
 
 
   case TokenID::DateLessThanEquals:
-    return typed_any(std::less_equal<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::less_equal<ceph::real_time>(), as_date, s, vals,
+                     eval_log);
 
   case TokenID::DateGreaterThan:
-    return typed_any(std::greater<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::greater<ceph::real_time>(), as_date, s, vals,
+                     eval_log);
 
   case TokenID::DateGreaterThanEquals:
     return typed_any(std::greater_equal<ceph::real_time>(), as_date, s,
-		     vals);
+		     vals, eval_log);
 
     // Bool!
   case TokenID::Bool:
-    return typed_any(std::equal_to<bool>(), as_bool, s, vals);
+    return typed_any(std::equal_to<bool>(), as_bool, s, vals, eval_log);
 
     // Binary!
   case TokenID::BinaryEquals:
     return typed_any(std::equal_to<ceph::bufferlist>(), as_binary, s,
-		     vals);
+		     vals, eval_log);
 
     // IP Address!
   case TokenID::IpAddress:
-    return typed_any(std::equal_to<MaskedIP>(), as_network, s, vals);
+    return typed_any(std::equal_to<MaskedIP>(), as_network, s, vals, eval_log);
 
   case TokenID::NotIpAddress:
     return typed_none(std::equal_to<MaskedIP>(),
-      as_network, s, vals);
+                      as_network, s, vals, eval_log);
 
     // Amazon Resource Names!
     // The ArnEquals and ArnLike condition operators behave identically.
   case TokenID::ArnEquals:
   case TokenID::ArnLike:
-    return multimap_any(arn_like, itr, isruntime? runtime_vals : vals);
+    return multimap_any(arn_like, itr, isruntime ? runtime_vals : vals,
+                        eval_log);
   case TokenID::ArnNotEquals:
   case TokenID::ArnNotLike:
-    return multimap_none(arn_like, itr, isruntime? runtime_vals : vals);
+    return multimap_none(arn_like, itr, isruntime ? runtime_vals : vals,
+                         eval_log);
 
   default:
+    eval_log.format("Unknown operation: Returning false.");
     return false;
   }
 }
@@ -1071,96 +1230,6 @@ boost::optional<MaskedIP> Condition::as_network(const string& s) {
   return m;
 }
 
-namespace {
-const char* condop_string(const TokenID t) {
-  switch (t) {
-  case TokenID::StringEquals:
-    return "StringEquals";
-
-  case TokenID::StringNotEquals:
-    return "StringNotEquals";
-
-  case TokenID::StringEqualsIgnoreCase:
-    return "StringEqualsIgnoreCase";
-
-  case TokenID::StringNotEqualsIgnoreCase:
-    return "StringNotEqualsIgnoreCase";
-
-  case TokenID::StringLike:
-    return "StringLike";
-
-  case TokenID::StringNotLike:
-    return "StringNotLike";
-
-  // Numeric!
-  case TokenID::NumericEquals:
-    return "NumericEquals";
-
-  case TokenID::NumericNotEquals:
-    return "NumericNotEquals";
-
-  case TokenID::NumericLessThan:
-    return "NumericLessThan";
-
-  case TokenID::NumericLessThanEquals:
-    return "NumericLessThanEquals";
-
-  case TokenID::NumericGreaterThan:
-    return "NumericGreaterThan";
-
-  case TokenID::NumericGreaterThanEquals:
-    return "NumericGreaterThanEquals";
-
-  case TokenID::DateEquals:
-    return "DateEquals";
-
-  case TokenID::DateNotEquals:
-    return "DateNotEquals";
-
-  case TokenID::DateLessThan:
-    return "DateLessThan";
-
-  case TokenID::DateLessThanEquals:
-    return "DateLessThanEquals";
-
-  case TokenID::DateGreaterThan:
-    return "DateGreaterThan";
-
-  case TokenID::DateGreaterThanEquals:
-    return "DateGreaterThanEquals";
-
-  case TokenID::Bool:
-    return "Bool";
-
-  case TokenID::BinaryEquals:
-    return "BinaryEquals";
-
-  case TokenID::IpAddress:
-    return "case TokenID::IpAddress";
-
-  case TokenID::NotIpAddress:
-    return "NotIpAddress";
-
-  case TokenID::ArnEquals:
-    return "ArnEquals";
-
-  case TokenID::ArnNotEquals:
-    return "ArnNotEquals";
-
-  case TokenID::ArnLike:
-    return "ArnLike";
-
-  case TokenID::ArnNotLike:
-    return "ArnNotLike";
-
-  case TokenID::Null:
-    return "Null";
-
-  default:
-    return "InvalidConditionOperator";
-  }
-}
-
 template<typename Iterator>
 ostream& print_array(ostream& m, Iterator begin, Iterator end) {
   if (begin == end) {
@@ -1181,8 +1250,6 @@ ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
   return m;
 }
 
-}
-
 ostream& operator <<(ostream& m, const Condition& c) {
   m << condop_string(c.op);
   if (c.ifexists) {
@@ -1193,46 +1260,82 @@ ostream& operator <<(ostream& m, const Condition& c) {
   return m << " }";
 }
 
-Effect Statement::eval(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida,
-		       uint64_t act, boost::optional<const ARN&> res, boost::optional<PolicyPrincipal&> princ_type) const {
+Effect
+Statement::eval(
+    const Environment& e,
+    boost::optional<const rgw::auth::Identity&> ida,
+    uint64_t act,
+    boost::optional<const ARN&> res,
+    const LogOut& eval_log,
+    boost::optional<PolicyPrincipal&> princ_type) const {
 
-  if (eval_principal(e, ida, princ_type) == Effect::Deny) {
+  if (eval_principal(e, ida, eval_log, princ_type) == Effect::Deny) {
+    eval_log.format("Passing.");
     return Effect::Pass;
   }
 
   if (res && resource.empty() && notresource.empty()) {
+    eval_log.format("A resource was specified but both Resource and NotResource "
+                    "were empty. Passing.");
     return Effect::Pass;
   }
   if (!res && (!resource.empty() || !notresource.empty())) {
+    eval_log.format("No resource was specified yet neither "
+                    "Resource nor NotResource were empty. Passing.");
     return Effect::Pass;
   }
   if (!resource.empty() && res) {
-    if (!std::any_of(resource.begin(), resource.end(),
-          [&res](const ARN& pattern) {
-            return pattern.match(*res);
-          })) {
+    eval_log.format("Checking Resource for {}:", res);
+    if (!std::any_of(
+            resource.begin(), resource.end(),
+            [&res, &eval_log](const ARN& pattern) {
+              if (pattern.match(*res)) {
+                eval_log.format("Matched {}.", pattern);
+                return true;
+              }
+              return false;
+            })) {
+      eval_log.format("No match in Resource. Passing.");
       return Effect::Pass;
     }
   } else if (!notresource.empty() && res) {
-    if (std::any_of(notresource.begin(), notresource.end(),
-          [&res](const ARN& pattern) {
-            return pattern.match(*res);
+    eval_log.format("Checking NotResource for {}:", res);
+    if (std::any_of(
+          notresource.begin(), notresource.end(),
+          [&res, &eval_log](const ARN& pattern) {
+            if (pattern.match(*res)) {
+              eval_log.format("Matched `{}`.", pattern);
+              return true;
+            }
+            return false;
           })) {
+      eval_log.format("Match found in NotResource. Passing.");
       return Effect::Pass;
     }
   }
 
-  if (!(action[act] == 1) || (notaction[act] == 1)) {
+  if (!(action[act] == 1)) {
+    eval_log.format("{} not found in Action. Passing.",
+                    action_bit_string(action_t(act)));
     return Effect::Pass;
   }
 
-  if (std::all_of(conditions.begin(),
-		  conditions.end(),
-		  [&e](const Condition& c) { return c.eval(e);})) {
+  if (notaction[act] == 1) {
+    eval_log.format("{} found in NotAction. Passing.",
+                    action_bit_string(action_t(act)));
+    return Effect::Pass;
+  }
+
+  eval_log.format("Evaluating conditions:");
+  if (std::all_of(conditions.begin(), conditions.end(),
+                  [&e, &eval_log](const Condition& c) {
+                    return c.eval(e, eval_log);
+                  })) {
+    eval_log.format("Returning {}.", effect);
     return effect;
   }
 
+  eval_log.format("Passing.");
   return Effect::Pass;
 }
 
@@ -1245,26 +1348,43 @@ static bool is_identity(const auth::Identity& ida,
       });
 }
 
-Effect Statement::eval_principal(const Environment& e,
-		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
+Effect
+Statement::eval_principal(
+    const Environment& e,
+    boost::optional<const rgw::auth::Identity&> ida,
+    const LogOut& eval_log,
+    boost::optional<PolicyPrincipal&> princ_type) const {
   if (princ_type) {
     *princ_type = PolicyPrincipal::Other;
   }
+  eval_log.format("Evaluating identity `{}`:", ida);
   if (ida) {
     if (princ.empty() && noprinc.empty()) {
+      eval_log.format("Principal empty and NotPrincipal empty: Denying.");
       return Effect::Deny;
     }
-    if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !is_identity(*ida, princ)) {
+    if (ida->get_identity_type() != TYPE_ROLE &&
+        !princ.empty() && !is_identity(*ida, princ)) {
+      eval_log.format("Identity is not role, Principal is not empty, and "
+                      "the identity is not in Principal.");
       return Effect::Deny;
     }
+    eval_log.format("Checking type of Principal match.");
     if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
       bool princ_matched = false;
-      for (auto p : princ) { // Check each principal to determine the type of the one that has matched
+      // Check each principal to determine the type of the one that has matched
+      for (auto p : princ) {
         if (ida->is_identity(p)) {
           if (p.is_assumed_role() || p.is_user()) {
-            if (princ_type) *princ_type = PolicyPrincipal::Session;
+            if (princ_type) {
+              eval_log.format("Setting principal type to Session.");
+              *princ_type = PolicyPrincipal::Session;
+            }
           } else {
-            if (princ_type) *princ_type = PolicyPrincipal::Role;
+            if (princ_type) {
+              eval_log.format("Setting principal type to Role.");
+              *princ_type = PolicyPrincipal::Role;
+            }
           }
           princ_matched = true;
         }
@@ -1279,16 +1399,23 @@ Effect Statement::eval_principal(const Environment& e,
   return Effect::Allow;
 }
 
-Effect Statement::eval_conditions(const Environment& e) const {
-  if (std::all_of(conditions.begin(),
-		  conditions.end(),
-		  [&e](const Condition& c) { return c.eval(e);})) {
-    return Effect::Allow;
-  }
+Effect Statement::eval_conditions(const Environment& e,
+                                  const LogOut& eval_log) const {
+  if (std::all_of(
+        conditions.begin(), conditions.end(),
+        [&e, &eval_log](const Condition& c) {
+          eval_log.format("Evaluating condition `{}`:", c);
+          return c.eval(e, eval_log);
+        })) {
+      eval_log.format("Returning Allow.");
+      return Effect::Allow;
+    }
+
+  eval_log.format("Returning Deny.");
   return Effect::Deny;
 }
 
-const char* action_bit_string(action_t action) {
+std::string_view action_bit_string(action_t action) {
   switch (action) {
   case s3GetObject:
     return "s3:GetObject";
@@ -1894,45 +2021,70 @@ Policy::Policy(CephContext* cct, const string* tenant,
 }
 
 Effect Policy::eval(const Environment& e,
-		    boost::optional<const rgw::auth::Identity&> ida,
-		    std::uint64_t action, boost::optional<const ARN&> resource,
-        boost::optional<PolicyPrincipal&> princ_type) const {
+                    boost::optional<const rgw::auth::Identity&> ida,
+                    std::uint64_t action,
+                    boost::optional<const ARN&> resource,
+                    const LogOut& eval_log,
+                    boost::optional<PolicyPrincipal&> princ_type) const
+{
   auto allowed = false;
+  eval_log.format("Evaluating policy:\n```\n{}\n```\n"
+                  "Environment: {}\n"
+                  "Principal: {}\n"
+                  "Action: {}\n"
+                  "Resource: {}",
+                  text, e, ida, action_bit_string(action_t(action)),
+                  resource);
+
   for (auto& s : statements) {
-    auto g = s.eval(e, ida, action, resource, princ_type);
+    eval_log.format("Evaluating statement `{}`:", s);
+    auto g = s.eval(e, ida, action, resource, eval_log, princ_type);
     if (g == Effect::Deny) {
+      eval_log.format("Denying.");
       return g;
     } else if (g == Effect::Allow) {
       allowed = true;
     }
   }
+  eval_log.format("{}", allowed ? "Allowing." : "Passing.");
   return allowed ? Effect::Allow : Effect::Pass;
 }
 
-Effect Policy::eval_principal(const Environment& e,
-		    boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
+Effect
+Policy::eval_principal(
+    const Environment& e,
+    boost::optional<const rgw::auth::Identity&> ida,
+    const LogOut& eval_log,
+    boost::optional<PolicyPrincipal&> princ_type) const {
   auto allowed = false;
   for (auto& s : statements) {
-    auto g = s.eval_principal(e, ida, princ_type);
+    eval_log.format("Evaluating identity `{}` in statement `{}`:", ida, s);
+    auto g = s.eval_principal(e, ida, eval_log, princ_type);
     if (g == Effect::Deny) {
+      eval_log.format("Denying.");
       return g;
     } else if (g == Effect::Allow) {
       allowed = true;
     }
   }
+  eval_log.format("{}", allowed ? "Allowing." : "Denying.");
   return allowed ? Effect::Allow : Effect::Deny;
 }
 
-Effect Policy::eval_conditions(const Environment& e) const {
+Effect Policy::eval_conditions(const Environment& e,
+                               const LogOut& eval_log) const {
   auto allowed = false;
   for (auto& s : statements) {
-    auto g = s.eval_conditions(e);
+    eval_log.format("Evaluating conditions in statement `{}`", s);
+    auto g = s.eval_conditions(e, eval_log);
     if (g == Effect::Deny) {
+      eval_log.format("Denying.");
       return g;
     } else if (g == Effect::Allow) {
       allowed = true;
     }
   }
+  eval_log.format("{}", allowed ? "Allowing." : "Denying.");
   return allowed ? Effect::Allow : Effect::Deny;
 }
 
@@ -1967,11 +2119,18 @@ static const Environment iam_all_env = {
 
 struct IsPublicStatement
 {
-  bool operator() (const Statement &s) const {
+  const LogOut& eval_log;
+
+  IsPublicStatement(const LogOut& eval_log) :
+    eval_log(eval_log)
+  {}
+
+  bool operator()(const Statement& s) const {
     if (s.effect == Effect::Allow) {
       for (const auto& p : s.princ) {
         if (p.is_wildcard()) {
-          return s.eval_conditions(iam_all_env) == Effect::Allow;
+          eval_log.format("Evaluating conditions in statement `{}`:", s);
+          return s.eval_conditions(iam_all_env, eval_log) == Effect::Allow;
         }
       }
     }
@@ -1980,10 +2139,10 @@ struct IsPublicStatement
 };
 
 
-bool is_public(const Policy& p)
+bool is_public(const Policy& p, const LogOut& eval_log)
 {
-  return std::any_of(p.statements.begin(), p.statements.end(), IsPublicStatement());
+  return std::any_of(p.statements.begin(), p.statements.end(),
+                     IsPublicStatement(eval_log));
 }
-
 } // namespace IAM
 } // namespace rgw
