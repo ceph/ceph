@@ -108,9 +108,10 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
   for (unsigned i = first_shard; i < first_shard + count; i++) {
+    //FIXME: This is calculating a raw_shard and assuming 1:1 mapping to shard.
     shard_id_t shard(i >= data_chunk_count ? i - data_chunk_count : i);
     int direct_osd = t.acting[(int)shard];
-    if (t.acting_primary == direct_osd) {
+    if (t.actual_pgid.shard == shard) {
       primary_shard.emplace(shard);
     }
     if (!objecter.osdmap->exists(direct_osd)) {
