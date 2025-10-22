@@ -935,6 +935,32 @@ class TestUnlinkat:
         cephfs.close(fd)
 
 
+class TestFdopendir:
+    '''
+    Tests for libcephfs's fdopendir().
+    '''
+
+    def test_fdopendir_for_dir_at_CWD(self, testdir):
+        dirname = 'dir1'
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+    def test_fdopendir_for_dir_not_at_CWD(self, testdir):
+        dirname = 'dir1/dir2/dir3'
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+
 class TestWithRootUser:
 
     def setup_method(self):
@@ -1697,4 +1723,4 @@ class TestRmtree:
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
 
-
+>>>>>>> 3b7f81dc6f3 (test_cephfs.py: add tests for fdopendir())
