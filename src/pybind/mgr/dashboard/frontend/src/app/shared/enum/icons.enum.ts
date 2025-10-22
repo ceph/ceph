@@ -86,6 +86,7 @@ export enum Icons {
   externalUrl = 'fa fa-external-link', // links to external page
   nfsExport = 'fa fa-server', // NFS export
   userAccessLocked = 'user--access-locked', // User access locked
+  chevronDown = 'chevron--down',
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger
   large2x = 'fa fa-2x', // icon becomes 50% larger
