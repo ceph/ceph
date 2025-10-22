@@ -126,6 +126,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
+    int ceph_fdopendir(ceph_mount_info *cmount, int dirfd, ceph_dir_result** dirpp)
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)

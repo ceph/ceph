@@ -183,6 +183,8 @@ cdef nogil:
         pass
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp):
         pass
+    int ceph_fdopendir(ceph_mount_info *cmount, int dirfd, ceph_dir_result** dirpp):
+        pass
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp):
         pass
     int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp):
