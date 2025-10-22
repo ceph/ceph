@@ -144,7 +144,9 @@ set(librgw_common_srcs
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
   rgw_bucket_sync.cc
-  rgw_rest_restore.cc)
+  rgw_rest_restore.cc
+  rgw_rest_s3vector.cc
+  rgw_s3vector.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
