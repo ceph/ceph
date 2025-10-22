@@ -3962,11 +3962,21 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
   key = buf;
 }
 
-static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
+static void usage_record_prefix_by_user_old(const string& user, uint64_t epoch, string& key)
 {
   char buf[user.size() + 32];
   snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
   key = buf;
+}
+
+static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
+{
+  usage_record_prefix_by_user_old(user, epoch, key);
+  if (user.starts_with('0')) {
+    // Use ~ prefix for name_by_user records that have keys that could potentially
+    // put them among name_by_time records.
+    key.insert(0, 1, '~');
+  }
 }
 
 static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
@@ -3976,11 +3986,21 @@ static void usage_record_name_by_time(uint64_t epoch, const string& user, const 
   key = buf;
 }
 
-static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
+static void usage_record_name_by_user_old(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
   key = buf;
+}
+
+static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
+{
+  usage_record_name_by_user_old(user, epoch, bucket, key);
+  if (user.starts_with('0')) {
+    // Use ~ prefix for name_by_user records that have keys that could potentially
+    // put them among name_by_time records.
+    key.insert(0, 1, '~');
+  }
 }
 
 static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
@@ -4009,6 +4029,9 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): failed to decode request\n");
     return -EINVAL;
   }
+
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const bool key_transition = conf->rgw_usage_log_key_transition;
 
   rgw_usage_log_info& info = op.info;
 
@@ -4048,95 +4071,169 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
     ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
+
+    if (key_transition && puser->to_str().starts_with('0')) {
+      string key_by_user_old;
+      usage_record_name_by_user_old(puser->to_str(), entry.epoch, entry.bucket, key_by_user_old);
+      (void)cls_cxx_map_remove_key(hctx, key_by_user_old);
+    }
   }
 
   return 0;
 }
 
-static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end, const string& user,
-                            const string& bucket, string& key_iter, uint32_t max_entries, bool *truncated,
-                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
-                            void *param)
+static int usage_handle_range(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                              const string& start_key, const string& end_key, const string& user_key,
+                              const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                              int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                              void *param)
 {
-  CLS_LOG(10, "entered %s", __func__);
-
-  map<string, bufferlist> keys;
   string filter_prefix;
-  string start_key, end_key;
-  bool by_user = !user.empty();
-  string user_key;
   bool truncated_status = false;
+  map<string, bufferlist> usage_logs;
+  bool by_user = !user_key.empty();
+  int cnt = 0;
 
-  ceph_assert(truncated != nullptr);
-
-  if (!by_user) {
-    usage_record_prefix_by_time(end, end_key);
-  } else {
-    user_key = user;
-    user_key.append("_");
-  }
-
-  if (key_iter.empty()) {
-    if (by_user) {
-      usage_record_prefix_by_user(user, start, start_key);
-    } else {
-      usage_record_prefix_by_time(start, start_key);
-    }
-  } else {
-    start_key = key_iter;
-  }
-
-  CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, &truncated_status);
+  CLS_LOG(20, "usage_handle_range start_key=%s", start_key.c_str());
+  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &usage_logs, &truncated_status);
   if (ret < 0)
     return ret;
 
-  *truncated = truncated_status;
+  truncated = truncated_status;
 
-  auto iter = keys.begin();
-  if (iter == keys.end())
-    return 0;
-
-  for (; iter != keys.end(); ++iter) {
-    const string& key = iter->first;
+  for (auto log : usage_logs) {
+    const string& key = log.first;
     rgw_usage_log_entry e;
 
     key_iter = key;
     if (!by_user && key.compare(end_key) >= 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
-      key_iter = key;
-      return 0;
+      CLS_LOG(20, "usage_handle_range reached key=%s, done", key.c_str());
+      truncated = false;
+      break;
     }
 
     if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
-      key_iter = key;
-      return 0;
+      CLS_LOG(20, "usage_handle_range reached key=%s, done", key.c_str());
+      truncated = false;
+      break;
     }
 
-    ret = usage_record_decode(iter->second, e);
+    ret = usage_record_decode(log.second, e);
     if (ret < 0)
       return ret;
 
     if (!bucket.empty() && bucket.compare(e.bucket))
       continue;
 
-    if (e.epoch < start)
+    if (e.epoch < start_epoch)
       continue;
 
     /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end) {
-      *truncated = false;
-      return 0;
+    if (e.epoch >= end_epoch) {
+      truncated = false;
+      break;
     }
 
     ret = cb(hctx, key, e, param);
     if (ret < 0)
       return ret;
+
+    ++cnt;
   }
+
+  return cnt;
+}
+
+static int usage_iterate_range_by_user(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                            const string& user, const string& bucket, string& key_iter, uint32_t max_entries,
+                            bool& truncated, int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  ceph_assert(!user.empty());
+
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const bool key_transition = conf->rgw_usage_log_key_transition;
+
+  if (key_transition &&
+      user.starts_with('0') &&
+      (key_iter.empty() || key_iter.starts_with('0'))) {
+    // During key transition for records that could have keys that fall within name_by_time records,
+    // we need to go 2 passes to cover both the old keys and the new keys.
+    // Remove this block when key_transition is deprecated.
+    string user_key = user + "_";
+    string start_key;
+    string old_key_iter = key_iter;
+    if (key_iter.empty()) {
+      usage_record_prefix_by_user_old(user, start_epoch, start_key);
+    } else {
+      start_key = key_iter;
+    }
+    int ret = usage_handle_range(hctx, start_epoch, end_epoch, start_key, "", user_key,
+                                 bucket, old_key_iter, max_entries, truncated, cb, param);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (truncated) {
+      key_iter = old_key_iter;
+      return 0;
+    } else {
+      // All old keys have been handled, start fresh on the new keys
+      key_iter.clear();
+    }
+    max_entries -= ret;
+  }
+
+  if (max_entries > 0) {
+    string start_key;
+    string user_key = user.starts_with('0') ? (std::string("~") + user + "_") : (user + "_");
+    // Handle new keys
+    if (key_iter.empty()) {
+      usage_record_prefix_by_user(user, start_epoch, start_key);
+    } else {
+      start_key = key_iter;
+    }
+
+    return usage_handle_range(hctx, start_epoch, end_epoch, start_key, "", user_key,
+                              bucket, key_iter, max_entries, truncated, cb, param);
+  }
+
   return 0;
+}
+
+static int usage_iterate_range_by_time(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                            const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  string start_key, end_key;
+
+  usage_record_prefix_by_time(end_epoch, end_key);
+
+  if (key_iter.empty()) {
+    usage_record_prefix_by_time(start_epoch, start_key);
+  } else {
+    start_key = key_iter;
+  }
+
+  return usage_handle_range(hctx, start_epoch, end_epoch, start_key, end_key, "",
+                            bucket, key_iter, max_entries, truncated, cb, param);
+}
+
+static int usage_iterate_range(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch, const string& user,
+                            const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  if (user.empty()) {
+    return usage_iterate_range_by_time(hctx, start_epoch, end_epoch, bucket, key_iter, max_entries, truncated, cb, param);
+  } else {
+    return usage_iterate_range_by_user(hctx, start_epoch, end_epoch, user, bucket, key_iter, max_entries, truncated, cb, param);
+  }
 }
 
 static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
@@ -4174,7 +4271,8 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter = op.iter;
 #define MAX_ENTRIES 1000
   uint32_t max_entries = (op.max_entries ? op.max_entries : MAX_ENTRIES);
-  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, op.bucket, iter, max_entries, &ret_info.truncated, usage_log_read_cb, (void *)usage);
+
+  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, op.bucket, iter, max_entries, ret_info.truncated, usage_log_read_cb, (void *)usage);
   if (ret < 0)
     return ret;
 
@@ -4185,22 +4283,36 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+struct usage_trim_param
+{
+  bool found = false;
+  const bool key_transition = false;
+};
+
 static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
 {
-  bool *found = (bool *)param;
-  if (found) {
-    *found = true;
-  }
+  usage_trim_param *trim_param = (usage_trim_param *)param;
+
+  ceph_assert(trim_param != nullptr);
+
+  trim_param->found = true;
+
   string key_by_time;
   string key_by_user;
 
-  string o = entry.owner.to_str();
+  string o = entry.payer.empty() ? entry.owner.to_str() : entry.payer.to_str();
   usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
   usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
 
   int ret = cls_cxx_map_remove_key(hctx, key_by_time);
   if (ret < 0)
     return ret;
+
+  if (trim_param->key_transition && o.starts_with('0')) {
+    string key_by_user_old;
+    usage_record_name_by_user_old(o, entry.epoch, entry.bucket, key_by_user_old);
+    (void)cls_cxx_map_remove_key(hctx, key_by_user_old);
+  }
 
   return cls_cxx_map_remove_key(hctx, key_by_user);
 }
@@ -4226,13 +4338,16 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
   string iter;
   bool more;
-  bool found = false;
+  const ConfigProxy& conf = cls_get_config(hctx);
+  usage_trim_param trim_param{false, conf->rgw_usage_log_key_transition};
+
 #define MAX_USAGE_TRIM_ENTRIES 1000
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, more, usage_log_trim_cb, (void *)&trim_param);
+
   if (ret < 0)
     return ret;
 
-  if (!more && !found)
+  if (!more && !trim_param.found)
     return -ENODATA;
 
   return 0;
