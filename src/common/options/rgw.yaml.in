@@ -340,7 +340,7 @@ options:
   note: Enabling the ``s3`` API is a requirement for
     any ``radosgw`` instance that is meant to
     participate in a :ref:`multisite` configuration.
-  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications
+  default: s3, s3control, s3website, swift, swift_auth, admin, sts, iam, notifications, s3vectors
   services:
   - rgw
   with_legacy: true
