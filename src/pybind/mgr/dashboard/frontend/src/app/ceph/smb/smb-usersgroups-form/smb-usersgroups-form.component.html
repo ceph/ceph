@@ -10,7 +10,10 @@
       i18n="form title"
       class="form-header"
     >
-      {{ action | titlecase }} {{ resource | upperFirst }}
+      {{ action | titlecase }} {{ resource }}
+      <cd-help-text>
+        Create users and groups for authorization on standalone servers
+      </cd-help-text>
     </div>
 
     <cds-file-uploader
@@ -37,7 +40,7 @@
         i18n-helperText
         [invalid]="form.controls.usersGroupsId.invalid && form.controls.usersGroupsId.dirty"
         [invalidText]="usersgroupsError"
-      >Users and groups access resource name
+      >Standalone access resource name
         <input
           cdsText
           type="text"
@@ -247,7 +250,7 @@
     <cd-form-button-panel
       (submitActionEvent)="submit()"
       [form]="form"
-      [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
-      wrappingClass="text-right"></cd-form-button-panel>
+      [submitText]="(action | titlecase) + ' ' + resource"
+      wrappingClass="text-right align-stretch"></cd-form-button-panel>
     </form>
   </div>
