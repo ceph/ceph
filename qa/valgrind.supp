@@ -1129,3 +1129,93 @@
    fun:_dl_init
    ...
 }
+{
+   OpenSSL leak still reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:CRYPTO_malloc
+   ...
+   obj:/usr/lib64/libcrypto*
+   ...
+   fun:*ceph*crypto*onwire*create_handler_pair*
+   ...
+   fun:*ProtocolV2*
+   ...
+}
+{
+   RocksDB ObjectLibrary leak still reachable
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*rocksdb*ObjectLibrary*DefaultEv*
+   fun:*static_initialization_and_destruction*
+}
+{  
+   static_initialization_and_destruction leak variation
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:*static_initialization_and_destruction*
+   fun:_sub_I*
+   ...
+}
+{
+   rocksdb leak variation - ObjectLibrary PatternEntry
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   ...
+   fun:UnknownInlinedFun
+   ...
+   fun:*rocksdb*ObjectLibrary*PatternEntry*
+   ...
+   fun:*static_initialization_and_destruction*
+   fun:_sub_I*
+   ...
+}
+{
+   OpenSSL leak variation - realloc create_handler_pair
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:*ceph*crypto*onwire*create_handler_pair*
+   ...
+   fun:*ProtocolV2*
+   ...
+}
+{
+   OpenSSL leak variation - CryptoKeyHandler
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:malloc
+   fun:CRYPTO_malloc
+   ...
+   fun:*CryptoKeyHandler*
+   ...
+   fun:*ProtocolV2*
+   ...
+}
+{
+   OpenSSL leak variation - realloc CryptoKeyHandler
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:realloc
+   ...
+   fun:*CryptoKeyHandler*
+   ...
+   fun:*ProtocolV2*
+   ...
+}
+{
+   OpenSSL leak variation - posix_memalign
+   Memcheck:Leak
+   match-leak-kinds: reachable
+   fun:posix_memalign
+   fun:CRYPTO_aligned_alloc
+   ...
+   fun:*ceph*crypto*onwire*create_handler_pair*
+   ...
+   fun:*ProtocolV2*
+   ...
+}
