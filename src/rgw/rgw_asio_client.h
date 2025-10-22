@@ -29,6 +29,9 @@ class ClientIO : public io::RestfulClient,
   RGWEnv env;
 
   rgw::io::StaticOutputBufferer<> txbuf;
+
+  bool keepalive = false;
+  bool expect100continue = false;
   bool sent100continue = false;
 
  public:
@@ -55,7 +58,7 @@ class ClientIO : public io::RestfulClient,
     return env;
   }
 
-  bool sent_100_continue() const { return sent100continue; }
+  bool keep_alive() const { return keepalive; }
 };
 
 } // namespace asio
