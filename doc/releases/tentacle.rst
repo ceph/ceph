@@ -61,7 +61,7 @@ RADOS
 
 Crimson
 
-* SeaStore Tech Preview: Seastore object store is now deployable
+* SeaStore Tech Preview: SeaStore object store is now deployable
   alongside Crimson-OSD, mainly for early testing and experimentation.
   Community feedback is encouraged to help with future improvements.
 
