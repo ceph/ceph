@@ -4565,3 +4565,13 @@ options:
   services: 
     - rgw
 
+- name: rgw_usage_stats_refresh_interval
+  type: int
+  level: advanced
+  desc: Interval in seconds for background refresh of usage statistics for active buckets/users
+  default: 5_min
+  services:
+  - rgw
+  see_also:
+  - rgw_user_quota_sync_interval
+  with_legacy: true

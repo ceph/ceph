@@ -78,6 +78,8 @@ public:
   int clear_expired_entries();
   size_t get_cache_size() const;
   
+  const Config& get_config() const { return config; }
+  
   // Performance metrics
   uint64_t get_cache_hits() const;
   uint64_t get_cache_misses() const;
