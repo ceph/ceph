@@ -366,7 +366,7 @@ public:
   int remove_data_pool(int64_t poolid) {
     std::vector<int64_t>::iterator p = std::find(data_pools.begin(), data_pools.end(), poolid);
     if (p == data_pools.end())
-      return -CEPHFS_ENOENT;
+      return -ENOENT;
     data_pools.erase(p);
     return 0;
   }

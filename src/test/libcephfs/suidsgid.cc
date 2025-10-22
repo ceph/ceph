@@ -84,7 +84,7 @@ int do_mon_command(string s, string *key)
     std::cout << "key: " << *key << std::endl;
     free(outbuf);
   } else {
-    return -CEPHFS_EINVAL;
+    return -EINVAL;
   }
   if (outs_len) {
     string s(outs, outs_len);
@@ -139,7 +139,7 @@ void run_change_mode_test_case()
   char c_dir[1024];
   sprintf(c_dir, "/mode_test_%d", getpid());
   ASSERT_EQ(0, ceph_mkdirs(admin, c_dir, 0700));
-  ASSERT_EQ(ceph_chmod(cmount, c_dir, 0777), -CEPHFS_EPERM);
+  ASSERT_EQ(ceph_chmod(cmount, c_dir, 0777), -EPERM);
 }
 
 TEST(SuidsgidTest, WriteClearSetuid) {
