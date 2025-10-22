@@ -509,7 +509,9 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+int DaosBucket::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_user,
+                      const std::string& new_owner_name,
                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
