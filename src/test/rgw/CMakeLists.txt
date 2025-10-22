@@ -381,6 +381,15 @@ add_executable(unittest_rgw_usage_perf_counters
                 ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_cache.cc
                 ${CMAKE_SOURCE_DIR}/src/rgw/rgw_usage_perf.cc)
 
+target_include_directories(unittest_rgw_usage_perf_counters PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw
+  ${CMAKE_SOURCE_DIR}/src/rgw/services
+  ${CMAKE_SOURCE_DIR}/src/rgw/driver/rados
+  ${CMAKE_SOURCE_DIR}/src/rgw/store/rados
+  ${CMAKE_SOURCE_DIR}/src/dmclock/support/src
+  ${CMAKE_SOURCE_DIR}/src/dmclock/src
+)
+
 target_link_libraries(unittest_rgw_usage_perf_counters
                       ${UNITTEST_LIBS}
                       global
