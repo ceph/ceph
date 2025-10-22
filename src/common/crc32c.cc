@@ -41,6 +41,10 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
   }
+  #elif defined(__riscv__)
+  if (ceph_arch_riscv_crc32) {
+    return ceph_crc32c_riscv;
+  }
 #elif defined(__s390__)
   if (ceph_arch_s390x_crc32) {
     return ceph_crc32c_s390x;
