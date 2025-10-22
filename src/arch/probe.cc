@@ -18,6 +18,8 @@ int ceph_arch_probe(void)
   ceph_arch_arm_probe();
 #elif defined(__powerpc__) || defined(__ppc__)
   ceph_arch_ppc_probe();
+#elif defined(__riscv__)
+  ceph_arch_riscv_probe();
 #elif defined(__s390__)
   ceph_arch_s390x_probe();
 #endif
