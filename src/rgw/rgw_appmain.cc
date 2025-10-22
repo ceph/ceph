@@ -296,6 +296,7 @@ void rgw::AppMain::cond_init_apis()
     const bool iam_enabled = apis_set.contains("iam");
     const bool pubsub_enabled =
         apis_set.contains("pubsub") || apis_set.contains("notifications");
+    const bool s3vectors_enabled = apis_set.contains("s3vectors");
     // Swift API entrypoint could placed in the root instead of S3
     const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
     if (apis_set.contains("s3") || s3website_enabled) {
@@ -303,7 +304,7 @@ void rgw::AppMain::cond_init_apis()
         rest.register_default_mgr(set_logging(
             rest_filter(env.driver, RGW_REST_S3,
                         new RGWRESTMgr_S3(s3control_enabled, s3website_enabled, sts_enabled,
-                                          iam_enabled, pubsub_enabled))));
+                                          iam_enabled, pubsub_enabled, s3vectors_enabled))));
       } else {
         derr << "Cannot have the S3 or S3 Website enabled together with "
              << "Swift API placed in the root of hierarchy" << dendl;
