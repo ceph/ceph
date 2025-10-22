@@ -824,12 +824,14 @@ private:
   const bool enable_sts;
   const bool enable_iam;
   const bool enable_pubsub;
+  const bool enable_s3vector;
 public:
-  explicit RGWRESTMgr_S3(bool _enable_s3website=false, bool _enable_sts=false, bool _enable_iam=false, bool _enable_pubsub=false)
+  explicit RGWRESTMgr_S3(bool _enable_s3website=false, bool _enable_sts=false, bool _enable_iam=false, bool _enable_pubsub=false, bool _enable_s3vector=false)
     : enable_s3website(_enable_s3website),
       enable_sts(_enable_sts),
       enable_iam(_enable_iam),
-      enable_pubsub(_enable_pubsub) {
+      enable_pubsub(_enable_pubsub),
+      enable_s3vector(_enable_s3vector) {
   }
 
   ~RGWRESTMgr_S3() override = default;

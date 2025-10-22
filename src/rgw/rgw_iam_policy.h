@@ -214,6 +214,24 @@ enum {
   organizationsListTargetsForPolicy,
   organizationsAll,
 
+  s3vectorsCreateIndex,
+  s3vectorsCreateVectorBucket,
+  s3vectorsDeleteIndex,
+  s3vectorsDeleteVectorBucket,
+  s3vectorsDeleteVectorBucketPolicy,
+  s3vectorsDeleteVectors,
+  s3vectorsGetIndex,
+  s3vectorsGetVectorBucket,
+  s3vectorsGetVectorBucketPolicy,
+  s3vectorsGetVectors,
+  s3vectorsListIndexes,
+  s3vectorsListVectorBuckets,
+  s3vectorsListVectors,
+  s3vectorsPutVectorBucketPolicy,
+  s3vectorsPutVectors,
+  s3vectorsQueryVectors,
+  s3vectorsAll,
+
   allCount
 };
 
@@ -240,6 +258,7 @@ static const Action_t iamAllValue = set_cont_bits<allCount>(s3objectlambdaAll+1,
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
 static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll+1, snsAll);
 static const Action_t organizationsAllValue = set_cont_bits<allCount>(snsAll+1,organizationsAll);
+static const Action_t s3vectorsAllValue = set_cont_bits<allCount>(organizationsAll+1, s3vectorsAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
