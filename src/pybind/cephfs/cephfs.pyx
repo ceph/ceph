@@ -1034,6 +1034,23 @@ cdef class LibCephFS(object):
         d.handle = handle
         return d
 
+    def fdopendir(self, dirfd):
+        self.require_state("mounted")
+
+        cdef:
+            int dirfd_ = dirfd
+            ceph_dir_result* handle
+
+        with nogil:
+            ret = ceph_fdopendir(self.cluster, dirfd_, &handle)
+        if ret < 0:
+            raise make_ex(ret, f'error in fdopendir when it was called for fd "{dirfd_}"')
+
+        d = DirResult()
+        d.lib = self
+        d.handle = handle
+        return d
+
     def readdir(self, DirResult handle) -> Optional[DirEntry]:
         """
         Get the next entry in an open directory.
