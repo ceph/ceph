@@ -261,22 +261,22 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       }
       finish_io();
     };
-
-    auto is_balanced_read = [&rng = rng](int balanced_read_percentage) {
+    
+    int flags = 0;
+    if (readOp.balanced_read.has_value()) {
+      if (*readOp.balanced_read) {
+        flags = librados::OPERATION_BALANCE_READS;
+      }
+      // Else: keep flags == 0
+    } else {
       ceph_assert(balanced_read_percentage >= 0);
       ceph_assert(balanced_read_percentage <= 100);
       uint64_t range = 100;
       uint64_t rand_value = rng();
       int index = rand_value % range;
       if (index <= balanced_read_percentage) {
-        return true;
+        flags = librados::OPERATION_BALANCE_READS;
       }
-      return false;
-    };
-
-    int flags = 0;
-    if (is_balanced_read(balanced_read_percentage)) {
-      flags = librados::OPERATION_BALANCE_READS;
     }
     librados::async_operate(asio.get_executor(), io, primary_oid,
                             std::move(rop), 0, nullptr, read_cb);
