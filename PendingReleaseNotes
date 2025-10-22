@@ -90,6 +90,10 @@
   fuse client for `fallocate` for the default case (i.e. mode == 0) since
   CephFS does not support disk space reservation. The only flags supported are
   `FALLOC_FL_KEEP_SIZE` and `FALLOC_FL_PUNCH_HOLE`.
+* CephFS: The ``ceph fs volume create`` command now allows users to pass
+  metadata and data pool names to be used for creating the volume. If either
+  is not passed or if either is a non-empty pool, the command will abort.
+
 
 >=19.0.0
 
