@@ -368,8 +368,10 @@ public:
   void send_pg_migrated_pool() final {
     LOG_PREFIX(PG::send_pg_migrated_pool);
     SUBDEBUGDPP(osd, "", *this);
+    std::optional<int64_t> migration_target = get_pgpool().info.migration_target;
+    ceph_assert(migration_target.has_value());
     shard_services.send_pg_migrated_pool(orderer,
-                                         get_pgpool().info.migration_target,
+                                         *migration_target,
                                          pgid.pgid);
   }
   void check_recovery_sources(const OSDMapRef& newmap) final {
