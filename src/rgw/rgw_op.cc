@@ -2260,128 +2260,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
 }
 
 void RGWOp::update_usage_stats_if_needed() {
-  auto* usage_counters = rgw::get_usage_perf_counters();
-  if (!usage_counters) {
-    return;
-  }
-
-  // Only update for successful operations
-  if (op_ret != 0) {
-    return;
-  }
-
-  // Check if this is an operation that changes usage
-  bool is_put_op = (dynamic_cast<RGWPutObj*>(this) != nullptr) ||
-                   (dynamic_cast<RGWPostObj*>(this) != nullptr) ||
-                   (dynamic_cast<RGWCopyObj*>(this) != nullptr) ||
-                   (dynamic_cast<RGWCompleteMultipart*>(this) != nullptr);
-
-  bool is_delete_op = (dynamic_cast<RGWDeleteObj*>(this) != nullptr) ||
-                      (dynamic_cast<RGWDeleteMultiObj*>(this) != nullptr);
-
-  if (!is_put_op && !is_delete_op) {
-    return;
-  }
-
-  // Update bucket statistics if we have bucket info
-  if (s->bucket && usage_counters) {
-    try {
-      // Use sync_owner_stats to get current bucket stats
-      RGWBucketEnt ent;
-      int ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
-
-      if (ret >= 0) {
-        // Update bucket stats with accurate counts
-        usage_counters->update_bucket_stats(
-          s->bucket->get_name(),
-          ent.size,          // Total bytes used
-          ent.count          // Total number of objects
-        );
-  
-        ldout(s->cct, 20) << "Updated bucket stats for " << s->bucket->get_name()
-                         << ": bytes=" << ent.size
-                         << ", objects=" << ent.count << dendl;
-      } else {
-        ldout(s->cct, 10) << "Failed to sync bucket stats for " 
-                         << s->bucket->get_name() 
-                         << ": " << cpp_strerror(-ret) << dendl;
-      }
-    } catch (const std::exception& e) {
-      ldout(s->cct, 5) << "Exception updating bucket stats: " << e.what() << dendl;
-    }
-  }
-
-  // Update user statistics
-  if (s->user && usage_counters) {
-    try {
-      // Initialize user stats
-      RGWStorageStats user_stats;
-      user_stats.size_utilized = 0;
-      user_stats.num_objects = 0;
-
-      // Try to list buckets and sum up stats
-      rgw::sal::BucketList buckets;
-      rgw_owner owner(s->user->get_id());
-
-      // list_buckets signature: (dpp, owner, marker, end_marker, max, need_stats, buckets, y)
-      int ret = driver->list_buckets(this, owner, "", "", "", 1000, true, buckets, null_yield);
-
-      if (ret >= 0) {
-        // Sum up stats from all buckets
-        // The buckets.buckets container holds RGWBucketEnt objects directly
-        for (const auto& bucket_ent : buckets.buckets) {
-          user_stats.size_utilized += bucket_ent.size;
-          user_stats.num_objects += bucket_ent.count;
-        }
-
-        // Update user stats with the total
-        usage_counters->update_user_stats(
-          s->user->get_id().id,
-          user_stats.size_utilized,
-          user_stats.num_objects
-        );
-
-        ldout(s->cct, 20) << "Updated user stats for " << s->user->get_id().id
-                         << " (from " << buckets.buckets.size() << " buckets)"
-                         << ": bytes=" << user_stats.size_utilized
-                         << ", objects=" << user_stats.num_objects << dendl;
-      } else {
-        // Fallback: Use current bucket stats as approximation
-        if (s->bucket) {
-          RGWBucketEnt ent;
-          ret = s->bucket->sync_owner_stats(this, null_yield, &ent);
-
-          if (ret >= 0) {
-            // Get existing cached user stats
-            auto cached_stats = usage_counters->get_user_stats(s->user->get_id().id);
-
-            uint64_t total_bytes = ent.size;
-            uint64_t total_objects = ent.count;
-
-            // If we have cached stats and this is a different bucket, try to accumulate
-            if (cached_stats.has_value()) {
-              // Use the maximum of cached and current values
-              // This prevents losing data when we can't list all buckets
-              total_bytes = std::max(cached_stats->bytes_used, ent.size);
-              total_objects = std::max(cached_stats->num_objects, ent.count);
-            }
-
-            usage_counters->update_user_stats(
-              s->user->get_id().id,
-              total_bytes,
-              total_objects
-            );
-
-            ldout(s->cct, 20) << "Updated user stats (partial) for " << s->user->get_id().id
-                             << ": bytes=" << total_bytes
-                             << ", objects=" << total_objects << dendl;
-          }
-        }
-      }
-    } catch (const std::exception& e) {
-      ldout(s->cct, 5) << "Exception updating user stats: " << e.what() << dendl;
-    }
-  }
+  // Stats are now updated directly in each operation's execute() method
+  // This method can be left as a no-op.
 }
 
 int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
@@ -5158,6 +5038,54 @@ void RGWPutObj::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+  
+  // Update usage statistics after successful upload
+  if (op_ret == 0 && s->bucket && s->obj_size > 0) {
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters) {
+      std::string bucket_key = s->bucket->get_tenant().empty() ? 
+                               s->bucket->get_name() : 
+                               s->bucket->get_tenant() + "/" + s->bucket->get_name();
+      
+      ldpp_dout(this, 20) << "PUT completed: updating usage for bucket=" 
+                          << bucket_key << " size=" << s->obj_size << dendl;
+      
+      // Increment bucket stats in cache (adds to existing)
+      auto existing = usage_counters->get_bucket_stats(bucket_key);
+      uint64_t new_bytes = s->obj_size;
+      uint64_t new_objects = 1;
+      
+      if (existing) {
+        new_bytes += existing->bytes_used;
+        new_objects += existing->num_objects;
+      }
+      
+      // Update cache with new totals
+      usage_counters->update_bucket_stats(s->bucket->get_name(), 
+                                         new_bytes, new_objects, true);
+      
+      // Mark as active to trigger perf counter update
+      usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                        s->bucket->get_tenant());
+      
+      // Update user stats
+      if (s->user) {
+        auto user_existing = usage_counters->get_user_stats(s->user->get_id().to_str());
+        uint64_t user_bytes = s->obj_size;
+        uint64_t user_objects = 1;
+        
+        if (user_existing) {
+          user_bytes += user_existing->bytes_used;
+          user_objects += user_existing->num_objects;
+        }
+        
+        usage_counters->update_user_stats(s->user->get_id().to_str(),
+                                         user_bytes, user_objects, true);
+        usage_counters->mark_user_active(s->user->get_id().to_str());
+      }
+    }
+  }
+
 } /* RGWPutObj::execute() */
 
 int RGWPostObj::init_processing(optional_yield y)
@@ -5961,6 +5889,40 @@ void RGWDeleteObj::execute(optional_yield y)
   } else {
     op_ret = -EINVAL;
   }
+  
+  // Update usage statistics after successful delete
+  if (op_ret == 0 && s->bucket) {
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters) {
+      std::string bucket_key = s->bucket->get_tenant().empty() ? 
+                               s->bucket->get_name() : 
+                               s->bucket->get_tenant() + "/" + s->bucket->get_name();
+      
+      ldpp_dout(this, 20) << "DELETE completed: updating usage for bucket=" 
+                          << bucket_key << dendl;
+      
+      // Decrement bucket stats in cache
+      auto existing = usage_counters->get_bucket_stats(bucket_key);
+      if (existing && existing->num_objects > 0) {
+        uint64_t obj_size = existing->bytes_used / existing->num_objects; // approximate
+        uint64_t new_bytes = existing->bytes_used > obj_size ? 
+                            existing->bytes_used - obj_size : 0;
+        uint64_t new_objects = existing->num_objects - 1;
+        
+        usage_counters->update_bucket_stats(s->bucket->get_name(),
+                                           new_bytes, new_objects, true);
+      }
+      
+      // Mark as active to trigger perf counter update
+      usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                        s->bucket->get_tenant());
+      
+      if (s->user) {
+        usage_counters->mark_user_active(s->user->get_id().to_str());
+      }
+    }
+  }
+
 }
 
 class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {

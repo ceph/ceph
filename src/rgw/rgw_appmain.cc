@@ -322,6 +322,24 @@ void rgw::AppMain::init_perfcounters()
         ldpp_dout(dpp, 10) << "Usage performance counters initialized successfully" << dendl;
       }
     }
+
+    if (!cache_config.db_path.empty()) {
+      
+      usage_perf_counters = std::make_unique<rgw::UsagePerfCounters>(
+          dpp->get_cct(),
+          env.driver,  // the driver parameter
+          cache_config);
+      
+      int r = usage_perf_counters->init();
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: Failed to initialize usage perf counters: " 
+                          << cpp_strerror(-r) << " (continuing without them)" << dendl;
+        usage_perf_counters.reset();
+      } else {
+        rgw::set_usage_perf_counters(usage_perf_counters.get());
+        ldpp_dout(dpp, 10) << "Usage performance counters initialized successfully" << dendl;
+      }
+    }
   }
 } /* init_perfcounters */
 
