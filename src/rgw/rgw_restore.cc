@@ -27,6 +27,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_restore.h"
+#include "rgw_restore_waiter.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
@@ -114,6 +115,11 @@ int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   cct = _cct;
   driver = _driver;
 
+  // Initialize waiter registry
+  if (!g_restore_waiter_registry) {
+    g_restore_waiter_registry = new RestoreWaiterRegistry();
+  }
+
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing Restore handle" << dendl;
   /* max_objs indicates the number of shards or objects
    * used to store Restore Entries */
@@ -150,6 +156,8 @@ void Restore::finalize()
 {
   sal_restore.reset(nullptr);
   obj_names.clear();
+  delete g_restore_waiter_registry;
+  g_restore_waiter_registry = nullptr;
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize Restore handle" << dendl;
 }
 
@@ -502,6 +510,18 @@ done:
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry << "' failed" << ret << dendl;	  
     entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
   }
+
+  // Notify any waiting GET requests
+  if (g_restore_waiter_registry) {
+    bool success = (ret >= 0 && !in_progress);
+    g_restore_waiter_registry->notify_completion(
+      entry.bucket,
+      entry.obj_key,
+      success,
+      ret
+    );
+  }
+
   return ret;
 }
 
