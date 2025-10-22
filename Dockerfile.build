@@ -13,7 +13,7 @@ COPY \
     install-deps.sh \
     run-make-check.sh \
     src/script/buildcontainer-setup.sh \
-    ${CEPH_CTR_SRC}
+    ${CEPH_CTR_SRC}/
 
 
 FROM $DISTRO
@@ -21,7 +21,8 @@ ARG DISTRO
 ARG CEPH_CTR_SRC=/usr/local/src/ceph
 ARG CLEAN_DNF=yes
 ARG CEPH_BASE_BRANCH=main
-ARG SCCACHE_VERSION=0.8.2
+ARG SCCACHE_VERSION=v0.8.2
+ARG SCCACHE_REPO=https://github.com/mozilla/sccache
 ARG WITH_CRIMSON=true
 ARG FOR_MAKE_CHECK=1
 COPY --from=bootstrap ${CEPH_CTR_SRC} ${CEPH_CTR_SRC}
@@ -35,5 +36,6 @@ RUN DISTRO=$DISTRO \
     FOR_MAKE_CHECK=${FOR_MAKE_CHECK} \
     bash -x ${CEPH_CTR_SRC}/buildcontainer-setup.sh
 RUN \
-    SCCACHE_URL="https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl.tar.gz"; \
-    curl -L $SCCACHE_URL | tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache
+    SCCACHE_URL="${SCCACHE_REPO}/releases/download/${SCCACHE_VERSION}/sccache-${SCCACHE_VERSION}-$(uname -m)-unknown-linux-musl.tar.gz"; \
+    echo "${SCCACHE_URL}"; \
+    curl -sS -L $SCCACHE_URL | tar --no-anchored --strip-components=1 -C /usr/local/bin/ -xzf - sccache
