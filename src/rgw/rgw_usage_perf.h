@@ -14,6 +14,12 @@
 #include "common/perf_counters.h"
 #include "rgw_usage_cache.h"
 
+// To avoid heavy header rgw_sal.h , we are adding a forward declaration here
+namespace rgw::sal {
+  class Driver;
+  class Bucket;
+  class User;
+}
 
 namespace rgw {
 
@@ -34,6 +40,7 @@ enum {
 class UsagePerfCounters {
 private:
   CephContext* cct;
+  rgw::sal::Driver* driver;
   std::unique_ptr<UsageCache> cache;
   
   mutable std::shared_mutex counters_mutex;
@@ -44,22 +51,35 @@ private:
   
   PerfCounters* global_counters;
   
+  // Track active buckets and users for background refresh
+  std::unordered_set<std::string> active_buckets;
+  std::unordered_set<std::string> active_users;
+  mutable std::mutex activity_mutex;
+  
   // Cleanup thread management
   std::thread cleanup_thread;
+  std::thread refresh_thread;
   std::atomic<bool> shutdown_flag{false};
   std::chrono::seconds cleanup_interval{300}; // 5 minutes
+  std::chrono::seconds refresh_interval{60};
   
   void create_global_counters();
   PerfCounters* create_user_counters(const std::string& user_id);
   PerfCounters* create_bucket_counters(const std::string& bucket_name);
   
   void cleanup_worker();
+  void refresh_worker();
+  
+  void refresh_bucket_stats(const std::string& bucket_key);
+  void refresh_user_stats(const std::string& user_id);
 
 public:
   explicit UsagePerfCounters(CephContext* cct, 
                             const UsageCache::Config& cache_config);
-  explicit UsagePerfCounters(CephContext* cct) 
-    : UsagePerfCounters(cct, UsageCache::Config{}) {}
+  UsagePerfCounters(CephContext* cct);
+  UsagePerfCounters(CephContext* cct,
+                    rgw::sal::Driver* driver,
+                    const UsageCache::Config& cache_config);
   ~UsagePerfCounters();
   
   // Lifecycle management
@@ -79,7 +99,12 @@ public:
                           uint64_t bytes_used,
                           uint64_t num_objects,
                           bool update_cache = true);
-  
+
+void mark_bucket_active(const std::string& bucket_name,
+                        const std::string& tenant = "");
+
+void mark_user_active(const std::string& user_id);
+
   // Cache operations
   void refresh_from_cache(const std::string& user_id,
                          const std::string& bucket_name);
@@ -97,6 +122,10 @@ public:
   // Set cleanup interval
   void set_cleanup_interval(std::chrono::seconds interval) {
     cleanup_interval = interval;
+  }
+
+  void set_refresh_interval(std::chrono::seconds interval) {
+    refresh_interval = interval;
   }
 };
 
