@@ -14,9 +14,8 @@ is very safe and you cannot afford authentication, you can disable it.
    man-in-the-middle attack that alters your client/server messages, which
    could have disastrous security effects.
 
-For information about creating users, see `User Management`_. For details on
-the architecture of CephX, see `Architecture - High Availability
-Authentication`_.
+For information about creating users, see :ref:`user-management`. For details on
+the architecture of CephX, see :ref:`arch_high_availability_authentication`.
 
 
 Deployment Scenarios
@@ -52,8 +51,8 @@ Enabling CephX
 When CephX is enabled, Ceph will look for the keyring in the default search
 path: this path includes ``/etc/ceph/$cluster.$name.keyring``. It is possible
 to override this search-path location by adding a ``keyring`` option in the
-``[global]`` section of your `Ceph configuration`_ file, but this is not
-recommended.
+``[global]`` section of your :ref:`Ceph configuration <configuring-ceph>`
+file, but this is not recommended.
 
 To enable CephX on a cluster for which authentication has been disabled, carry
 out the following procedure.  If you (or your deployment utility) have already
@@ -104,7 +103,8 @@ generated the keys, you may skip the steps related to generating keys.
       ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Enable CephX authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file:
+   ``[global]`` section of your :ref:`Ceph configuration <configuring-ceph>`
+   file:
 
    .. code-block:: ini
 
@@ -128,7 +128,8 @@ so.** However, setup and troubleshooting might be easier if authentication is
 temporarily disabled and subsequently re-enabled.
 
 #. Disable CephX authentication by setting the following options in the
-   ``[global]`` section of your `Ceph configuration`_ file:
+   ``[global]`` section of your :ref:`Ceph configuration <configuring-ceph>`
+   file:
 
    .. code-block:: ini
 
@@ -196,7 +197,7 @@ commands and Ceph clients is to include a Ceph keyring under the ``/etc/ceph``
 directory. For Octopus and later releases that use ``cephadm``, the filename is
 usually ``ceph.client.admin.keyring``.  If the keyring is included in the
 ``/etc/ceph`` directory, then it is unnecessary to specify a ``keyring`` entry
-in the Ceph configuration file.
+in the :ref:`Ceph configuration <configuring-ceph>` file.
 
 Because the Ceph Storage Cluster's keyring file contains the ``client.admin``
 key, we recommend copying the keyring file to nodes from which you run
@@ -374,6 +375,3 @@ Time to Live
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
 .. _Operating a Cluster: ../../operations/operating
 .. _Manual Deployment: ../../../install/manual-deployment
-.. _Ceph configuration: ../ceph-conf
-.. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
-.. _User Management: ../../operations/user-management
