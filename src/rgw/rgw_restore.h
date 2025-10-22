@@ -95,6 +95,7 @@ class Restore : public DoutPrefixProvider {
     void *entry() override;
     void stop();
 
+    friend class Restore;
     friend class RGWRados;
   }; // RestoreWorker
 
@@ -116,6 +117,7 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
+  void wake_worker();
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
