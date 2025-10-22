@@ -832,8 +832,9 @@ private:
   const bool enable_sts;
   const bool enable_iam;
   const bool enable_pubsub;
+  const bool enable_s3vector;
 public:
-  RGWRESTMgr_S3(bool enable_s3control, bool _enable_s3website, bool _enable_sts, bool _enable_iam, bool _enable_pubsub);
+  RGWRESTMgr_S3(bool enable_s3control, bool _enable_s3website, bool _enable_sts, bool _enable_iam, bool _enable_pubsub, bool _enable_s3vector);
   ~RGWRESTMgr_S3() override;
 
   RGWHandler_REST *get_handler(rgw::sal::Driver* driver,
