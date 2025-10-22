@@ -349,8 +349,7 @@ class RbdService(object):
             del stat['parent_pool']
             del stat['parent_name']
 
-            stat['timestamp'] = "{}Z".format(img.create_timestamp()
-                                             .isoformat())
+            stat['timestamp'] = img.create_timestamp().isoformat()
 
             stat['stripe_count'] = img.stripe_count()
             stat['stripe_unit'] = img.stripe_unit()
@@ -373,8 +372,7 @@ class RbdService(object):
                 if mirror_mode:
                     snap['mirror_mode'] = mirror_mode
 
-                snap['timestamp'] = "{}Z".format(
-                    img.get_snap_timestamp(snap['id']).isoformat())
+                snap['timestamp'] = img.get_snap_timestamp(snap['id']).isoformat()
 
                 snap['is_protected'] = None
                 if snap['namespace'] == rbd.RBD_SNAP_NAMESPACE_TYPE_USER:
@@ -471,8 +469,8 @@ class RbdService(object):
             img['unique_id'] = img_spec
             img['pool_name'] = pool_name
             img['namespace'] = namespace
-            img['deletion_time'] = "{}Z".format(img['deletion_time'].isoformat())
-            img['deferment_end_time'] = "{}Z".format(img['deferment_end_time'].isoformat())
+            img['deletion_time'] = img['deletion_time'].isoformat()
+            img['deferment_end_time'] = img['deferment_end_time'].isoformat()
             return img
         raise rbd.ImageNotFound('No image {} in status `REMOVING` found.'.format(img_spec),
                                 errno=errno.ENOENT)
