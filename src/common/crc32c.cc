@@ -7,11 +7,13 @@
 #include "arch/arm.h"
 #include "arch/ppc.h"
 #include "arch/s390x.h"
+#include "arch/riscv.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_fast.h"
 #include "common/crc32c_aarch64.h"
 #include "common/crc32c_ppc.h"
 #include "common/crc32c_s390x.h"
+#include "common/crc32c_riscv.h"
 
 /*
  * choose best implementation based on the CPU architecture.
@@ -40,6 +42,10 @@ ceph_crc32c_func_t ceph_choose_crc32(void)
 #elif defined(__powerpc__) || defined(__ppc__)
   if (ceph_arch_ppc_crc32) {
     return ceph_crc32c_ppc;
+  }
+#elif defined(__riscv) && defined(HAVE_RISCV_ZVBC)
+  if (ceph_arch_riscv_zbc && ceph_arch_riscv_zvbc) {
+    return ceph_crc32c_riscv;
   }
 #elif defined(__s390__)
   if (ceph_arch_s390x_crc32) {
