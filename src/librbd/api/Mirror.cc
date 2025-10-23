@@ -743,6 +743,36 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
       req->send();
     });
   ictx->state->refresh(on_refresh);
+
+  // if resync key is set then disabling it
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                   &mirror_image);
+  if (r == -ENOENT) {
+    // mirroring is not enabled for this image
+    ldout(cct, 20) << "ignoring promote command: mirroring is not enabled for "
+                   << "this image" << dendl;
+    return;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve mirror image metadata: "
+               << cpp_strerror(r) << dendl;
+    return;
+  }
+
+  if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "get uuid failed" << dendl;
+      return;
+    }
+
+    mirror::snapshot::ImageMeta image_meta(ictx, mirror_uuid);
+    r = image_meta.set_resync_requested(false);
+    if (r < 0) {
+      lderr(cct) << "failed to disable resync key: " << cpp_strerror(r) << dendl;
+    }
+  }
 }
 
 template <typename I>
@@ -842,23 +872,8 @@ int Mirror<I>::image_resync(I *ictx) {
     }
 
     mirror::snapshot::ImageMeta image_meta(ictx, mirror_uuid);
-
-    C_SaferCond load_meta_ctx;
-    image_meta.load(&load_meta_ctx);
-    r = load_meta_ctx.wait();
-    if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
-                 << dendl;
-      return r;
-    }
-
-    image_meta.resync_requested = true;
-
-    C_SaferCond save_meta_ctx;
-    image_meta.save(&save_meta_ctx);
-    r = save_meta_ctx.wait();
+    r = image_meta.set_resync_requested(true);
     if (r < 0) {
-      lderr(cct) << "failed to request resync: " << cpp_strerror(r) << dendl;
       return r;
     }
   } else {

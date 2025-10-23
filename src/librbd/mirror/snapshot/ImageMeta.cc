@@ -4,6 +4,7 @@
 #include "librbd/mirror/snapshot/ImageMeta.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "json_spirit/json_spirit.h"
 #include "librbd/ImageCtx.h"
@@ -166,6 +167,43 @@ void ImageMeta<I>::handle_notify_update(Context* on_finish, int r) {
                             << cpp_strerror(r) << dendl;
   }
   on_finish->complete(r);
+}
+
+template <typename I>
+bool ImageMeta<I>::get_resync_requested() {
+    C_SaferCond load_meta_ctx;
+    load(&load_meta_ctx);
+    int r = load_meta_ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(m_image_ctx->cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    return resync_requested;
+}
+
+template <typename I>
+int ImageMeta<I>::set_resync_requested(bool is_resync_requested) {
+    C_SaferCond load_meta_ctx;
+    load(&load_meta_ctx);
+    int r = load_meta_ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(m_image_ctx->cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
+                 << dendl;
+      return r;
+    }
+
+    resync_requested = is_resync_requested;
+
+    C_SaferCond save_meta_ctx;
+    save(&save_meta_ctx);
+    r = save_meta_ctx.wait();
+    if (r < 0) {
+      lderr(m_image_ctx->cct) << "failed to update resync: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    return 0;
 }
 
 } // namespace snapshot
