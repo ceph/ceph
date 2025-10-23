@@ -73,7 +73,7 @@ RUN \
     echo "gpgcheck=0" >> /etc/yum.repos.d/ganesha.repo && \
     echo "enabled=1" >> /etc/yum.repos.d/ganesha.repo
 
-RUN curl -sL http://karnak.lan:8016/pulp/content/ceph/el10/jank/x86_64/config.repo -o /etc/yum.repos.d/jank.repo
+RUN curl -sL http://asynchrono.us/files/r/x86_64/config.repo -o /etc/yum.repos.d/jank.repo
 
 # ISCSI repo
 ##:RUN set -ex && \
