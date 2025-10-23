@@ -5,7 +5,7 @@ overrides:
     conf:
       osd:
         osd shutdown pgref assert: true
-        crimson cpu num: 4
+        crimson cpu num: 3
       global:
         osd pool default size: 2
         osd crush chooseleaf type: 0
