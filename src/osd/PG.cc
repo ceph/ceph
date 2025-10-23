@@ -1685,7 +1685,7 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 // However, setting above zero reserves space for backfill and requires
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
-  int64_t primary_bytes, int64_t local_bytes) {
+  int64_t primary_bytes, int64_t local_bytes, int64_t num_objects) {
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
@@ -1702,15 +1702,20 @@ bool PG::try_reserve_recovery_space(
   // statfs using ps->primary_bytes.
   uint64_t pending_adjustment = 0;
   if (primary_bytes) {
+    if (!num_objects) {
+      // backfill uses number of objects from the stats, pool migration
+      // tells the target PG how many objects will be migrated
+      num_objects = info.stats.stats.sum.num_objects;
+    }
     // For erasure coded pool overestimate by a full stripe per object
     // because we don't know how each objected rounded to the nearest stripe
     if (pool.info.is_erasure()) {
       primary_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       primary_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	info.stats.stats.sum.num_objects;
+	num_objects;
       local_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       local_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	info.stats.stats.sum.num_objects;
+	num_objects;
     }
     pending_adjustment = pending_backfill(
       cct,

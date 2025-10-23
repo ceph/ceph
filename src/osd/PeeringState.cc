@@ -6042,55 +6042,6 @@ void PeeringState::RepNotRecovering::exit()
   pl->get_peering_perf().tinc(rs_repnotrecovering_latency, dur);
 }
 
-/*---RepWaitRecoveryReserved--*/
-PeeringState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
-  : my_base(ctx),
-    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitRecoveryReserved")
-{
-  context< PeeringMachine >().log_enter(state_name);
-}
-
-boost::statechart::result
-PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
-{
-  DECLARE_LOCALS;
-  pl->send_cluster_message(
-    ps->primary.osd,
-    TOPNSPC::make_message<MRecoveryReserve>(
-      MRecoveryReserve::GRANT,
-      spg_t(ps->info.pgid.pgid, ps->primary.shard),
-      ps->get_osdmap_epoch()),
-    ps->get_osdmap_epoch());
-  return transit<RepRecovering>();
-}
-
-boost::statechart::result
-PeeringState::RepWaitRecoveryReserved::react(
-  const RemoteReservationCanceled &evt)
-{
-  DECLARE_LOCALS;
-  pl->unreserve_recovery_space();
-
-  pl->cancel_remote_recovery_reservation();
-  return transit<RepNotRecovering>();
-}
-
-void PeeringState::RepWaitRecoveryReserved::exit()
-{
-  context< PeeringMachine >().log_exit(state_name, enter_time);
-  DECLARE_LOCALS;
-  utime_t dur = ceph_clock_now() - enter_time;
-  pl->get_peering_perf().tinc(rs_repwaitrecoveryreserved_latency, dur);
-}
-
-/*-RepWaitBackfillReserved*/
-PeeringState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
-  : my_base(ctx),
-    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitBackfillReserved")
-{
-  context< PeeringMachine >().log_enter(state_name);
-}
-
 boost::statechart::result
 PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
@@ -6148,6 +6099,77 @@ PeeringState::RepNotRecovering::react(const RequestRecoveryPrio &evt)
   return transit<RepWaitRecoveryReserved>();
 }
 
+boost::statechart::result
+PeeringState::RepNotRecovering::react(const RemotePoolMigrationRequest &evt)
+{
+  DECLARE_LOCALS;
+  if (!pl->try_reserve_recovery_space(
+	evt.source_num_bytes, 0, evt.source_num_objects)) {
+    post_event(RemotePoolMigrationRejectedTooFull());
+  } else {
+    pl->request_remote_recovery_reservation(
+      evt.priority,
+      std::make_unique<PGPeeringEvent>(
+	pl->get_osdmap_epoch(),
+	pl->get_osdmap_epoch(),
+        RemotePoolMigrationReserved()),
+      std::make_unique<PGPeeringEvent>(
+	pl->get_osdmap_epoch(),
+	pl->get_osdmap_epoch(),
+	RemotePoolMigrationRevoked()));
+  }
+  return transit<RepWaitPoolMigrationReserved>();
+}
+
+/*---RepWaitRecoveryReserved--*/
+PeeringState::RepWaitRecoveryReserved::RepWaitRecoveryReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitRecoveryReserved")
+{
+  context< PeeringMachine >().log_enter(state_name);
+}
+
+boost::statechart::result
+PeeringState::RepWaitRecoveryReserved::react(const RemoteRecoveryReserved &evt)
+{
+  DECLARE_LOCALS;
+  pl->send_cluster_message(
+    ps->primary.osd,
+    TOPNSPC::make_message<MRecoveryReserve>(
+      MRecoveryReserve::GRANT,
+      spg_t(ps->info.pgid.pgid, ps->primary.shard),
+      ps->get_osdmap_epoch()),
+    ps->get_osdmap_epoch());
+  return transit<RepRecovering>();
+}
+
+boost::statechart::result
+PeeringState::RepWaitRecoveryReserved::react(
+  const RemoteReservationCanceled &evt)
+{
+  DECLARE_LOCALS;
+  pl->unreserve_recovery_space();
+
+  pl->cancel_remote_recovery_reservation();
+  return transit<RepNotRecovering>();
+}
+
+void PeeringState::RepWaitRecoveryReserved::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  DECLARE_LOCALS;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_repwaitrecoveryreserved_latency, dur);
+}
+
+/*-RepWaitBackfillReserved*/
+PeeringState::RepWaitBackfillReserved::RepWaitBackfillReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitBackfillReserved")
+{
+  context< PeeringMachine >().log_enter(state_name);
+}
+
 void PeeringState::RepWaitBackfillReserved::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6200,6 +6222,66 @@ PeeringState::RepWaitBackfillReserved::react(
   DECLARE_LOCALS;
   pl->unreserve_recovery_space();
 
+  pl->cancel_remote_recovery_reservation();
+  return transit<RepNotRecovering>();
+}
+
+/*-RepWaitPoolMigrationReserved*/
+PeeringState::RepWaitPoolMigrationReserved::RepWaitPoolMigrationReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/ReplicaActive/RepWaitPoolMigrationReserved")
+{
+  context< PeeringMachine >().log_enter(state_name);
+}
+
+void PeeringState::RepWaitPoolMigrationReserved::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  DECLARE_LOCALS;
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_repwaitbackfillreserved_latency, dur); // BILL:FIXME wrong stat
+}
+
+boost::statechart::result
+PeeringState::RepWaitPoolMigrationReserved::react(const RemotePoolMigrationReserved &evt)
+{
+  DECLARE_LOCALS;
+
+  pl->send_cluster_message(
+      ps->primary.osd,
+      TOPNSPC::make_message<MPoolMigrationReserve>(
+	MPoolMigrationReserve::GRANT,
+	spg_t(ps->info.pgid.pgid, ps->primary.shard),
+	ps->get_osdmap_epoch()),
+	ps->get_osdmap_epoch());
+  return transit<RepRecovering>();
+}
+
+boost::statechart::result
+PeeringState::RepWaitPoolMigrationReserved::react(
+  const RemotePoolMigrationRejectedTooFull &evt)
+{
+  DECLARE_LOCALS;
+
+  pl->unreserve_recovery_space();
+  pl->cancel_remote_recovery_reservation();
+  pl->send_cluster_message(
+    ps->primary.osd,
+    TOPNSPC::make_message<MPoolMigrationReserve>(
+      MPoolMigrationReserve::REJECT_TOOFULL,
+      spg_t(ps->info.pgid.pgid, ps->primary.shard),
+      ps->get_osdmap_epoch()),
+      ps->get_osdmap_epoch());
+  return transit<RepNotRecovering>();
+}
+
+boost::statechart::result
+PeeringState::RepWaitPoolMigrationReserved::react(
+  const RemotePoolMigrationReservationCanceled &evt)
+{
+  DECLARE_LOCALS;
+
+  pl->unreserve_recovery_space();
   pl->cancel_remote_recovery_reservation();
   return transit<RepNotRecovering>();
 }
@@ -6261,6 +6343,36 @@ PeeringState::RepRecovering::react(const RemoteBackfillPreempted &)
       ps->get_osdmap_epoch()),
     ps->get_osdmap_epoch());
   return discard_event();
+}
+
+boost::statechart::result
+PeeringState::RepRecovering::react(const RemotePoolMigrationRevokedTooFull &)
+{
+  DECLARE_LOCALS;
+
+  pl->send_cluster_message(
+    ps->primary.osd,
+    TOPNSPC::make_message<MPoolMigrationReserve>(
+      MPoolMigrationReserve::REVOKE_TOOFULL,
+      spg_t(ps->info.pgid.pgid, ps->primary.shard),
+      ps->get_osdmap_epoch()),
+      ps->get_osdmap_epoch());
+  return transit<RepNotRecovering>();
+}
+
+boost::statechart::result
+PeeringState::RepRecovering::react(const RemotePoolMigrationRevoked &)
+{
+  DECLARE_LOCALS;
+
+  pl->send_cluster_message(
+    ps->primary.osd,
+    TOPNSPC::make_message<MPoolMigrationReserve>(
+      MPoolMigrationReserve::REVOKE,
+      spg_t(ps->info.pgid.pgid, ps->primary.shard),
+      ps->get_osdmap_epoch()),
+      ps->get_osdmap_epoch());
+  return transit<RepNotRecovering>();
 }
 
 void PeeringState::RepRecovering::exit()

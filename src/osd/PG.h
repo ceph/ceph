@@ -916,7 +916,9 @@ public:
     return primary_num_bytes.load() > 0;
   }
 
-  bool try_reserve_recovery_space(int64_t primary, int64_t local) override;
+  bool try_reserve_recovery_space(int64_t primary,
+				  int64_t local,
+				  int64_t num_objects) override;
   void unreserve_recovery_space() override;
 
   // If num_bytes are inconsistent and local_num- goes negative
