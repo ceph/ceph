@@ -435,7 +435,9 @@ public:
 
     // ================recovery space accounting ================
     virtual bool try_reserve_recovery_space(
-      int64_t primary_num_bytes, int64_t local_num_bytes) = 0;
+      int64_t primary_num_bytes,
+      int64_t local_num_bytes,
+      int64_t num_objects = 0) = 0;
     virtual void unreserve_recovery_space() = 0;
 
     // ================== Peering log events ====================
@@ -691,6 +693,7 @@ public:
   //     RepRecovering
   //     RepWaitBackfillReserved
   //     RepWaitRecoveryReserved
+  //     RepWaitPoolMigrationReserved
   //   Stray
   //   ToDelete
   //     WaitDeleteReserved
@@ -1146,12 +1149,17 @@ public:
       boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
       boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
-      boost::statechart::custom_reaction< RemoteBackfillPreempted >
+      boost::statechart::custom_reaction< RemoteBackfillPreempted >,
+      boost::statechart::transition< RemotePoolMigrationReservationCanceled, RepNotRecovering >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >
       > reactions;
     explicit RepRecovering(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryPreempted &evt);
     boost::statechart::result react(const BackfillTooFull &evt);
     boost::statechart::result react(const RemoteBackfillPreempted &evt);
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull &evt);
+    boost::statechart::result react(const RemotePoolMigrationRevoked &evt);
     void exit();
   };
 
@@ -1188,6 +1196,19 @@ public:
     boost::statechart::result react(const RemoteReservationCanceled &evt);
   };
 
+  struct RepWaitPoolMigrationReserved : boost::statechart::state< RepWaitPoolMigrationReserved, ReplicaActive >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::custom_reaction< RemotePoolMigrationReserved >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationReservationCanceled >
+      > reactions;
+    explicit RepWaitPoolMigrationReserved(my_context ctx);
+    void exit();
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt);
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull &evt);
+    boost::statechart::result react(const RemotePoolMigrationReservationCanceled &evt);
+  };
+
   struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
     typedef boost::mpl::list<
       boost::statechart::custom_reaction< RequestRecoveryPrio >,
@@ -1197,7 +1218,13 @@ public:
       boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
       boost::statechart::custom_reaction< RemoteRecoveryReserved >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
-      boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
+      boost::statechart::transition< RecoveryDone, RepNotRecovering >,  // for compat with pre-reservation peers
+      boost::statechart::custom_reaction< RemotePoolMigrationRequest >,
+      boost::statechart::transition< RemotePoolMigrationReservationCanceled, RepNotRecovering >, // Raced with revoke or revoke_toofull
+      boost::statechart::transition< RemotePoolMigrationReserved, RepNotRecovering >, // Raced with release
+      boost::statechart::transition< RemotePoolMigrationRejectedTooFull, RepNotRecovering >, // Raced with release
+      boost::statechart::transition< RemotePoolMigrationRevokedTooFull, RepNotRecovering >, // Raced with release
+      boost::statechart::transition< RemotePoolMigrationRevoked, RepNotRecovering > // Raced with release
       > reactions;
     explicit RepNotRecovering(my_context ctx);
     boost::statechart::result react(const RequestRecoveryPrio &evt);
@@ -1211,6 +1238,7 @@ public:
       return discard_event();
     }
     boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
+    boost::statechart::result react(const RemotePoolMigrationRequest &evt);
     void exit();
   };
 
