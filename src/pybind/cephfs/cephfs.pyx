@@ -3156,7 +3156,8 @@ class RmtreeDir:
         return value.
         '''
         try:
-            self.fs.rmdir(self.rel_path)
+            self.fs.unlinkat(self.parent_dir_fd, self.name, AT_REMOVEDIR)
+
             self.de_has_been_removed = True
         except ObjectNotEmpty:
             # XXX: push this dir to stack, done in the caller method
