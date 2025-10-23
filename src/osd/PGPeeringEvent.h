@@ -194,12 +194,15 @@ struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
 struct RemotePoolMigrationRequest : boost::statechart::event<RemotePoolMigrationRequest> {
   unsigned priority;
   int64_t source_num_bytes;
-  explicit RemotePoolMigrationRequest(unsigned prio, int64_t sbytes) :
+  int64_t source_num_objects;
+  explicit RemotePoolMigrationRequest(unsigned prio, int64_t sbytes, int64_t sobjs) :
     boost::statechart::event< RemotePoolMigrationRequest >(),
-    priority(prio), source_num_bytes(sbytes) {}
+    priority(prio), source_num_bytes(sbytes),
+    source_num_objects(sobjs) {}
   void print(std::ostream *out) const {
     *out << "RemotePoolMigrationRequest: priority " << priority
-         << " source bytes " << source_num_bytes;
+         << " source bytes " << source_num_bytes
+         << " source objects " << source_num_objects;
   }
 };
 
@@ -221,7 +224,7 @@ TrivialEvent(RemoteRecoveryReserved)
 TrivialEvent(RecoveryDone)
 TrivialEvent(RemotePoolMigrationReserved)
 TrivialEvent(RemotePoolMigrationRejectedTooFull)
-TrivialEvent(RemotePoolMigrationReservationCancelled)
+TrivialEvent(RemotePoolMigrationReservationCanceled)
 TrivialEvent(RemotePoolMigrationRevokedTooFull)
 TrivialEvent(RemotePoolMigrationRevoked)
 

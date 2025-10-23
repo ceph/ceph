@@ -25,6 +25,7 @@ public:
   uint32_t type;
   uint32_t priority;
   int64_t source_num_bytes;
+  int64_t source_num_objects;
 
   spg_t get_spg() const {
     return pgid;
@@ -42,7 +43,7 @@ public:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
-	RemotePoolMigrationRequest(priority, source_num_bytes));
+	RemotePoolMigrationRequest(priority, source_num_bytes, source_num_objects));
     case GRANT:
       return new PGPeeringEvent(
 	query_epoch,
@@ -57,7 +58,7 @@ public:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
-	RemotePoolMigrationReservationCancelled());
+	RemotePoolMigrationReservationCanceled());
     case REVOKE_TOOFULL:
       return new PGPeeringEvent(
 	query_epoch,
@@ -75,15 +76,18 @@ public:
 
   MPoolMigrationReserve()
     : MOSDPeeringOp{MSG_OSD_POOLMIGRATION_RESERVE, HEAD_VERSION, COMPAT_VERSION},
-      query_epoch(0), type(-1), priority(-1), source_num_bytes(0) {}
+      query_epoch(0), type(-1), priority(-1), source_num_bytes(0),
+      source_num_objects(0) {}
   MPoolMigrationReserve(int type,
 			spg_t pgid,
 			epoch_t query_epoch,
 			unsigned prio = -1,
-			int64_t source_num_bytes = 0)
+			int64_t source_num_bytes = 0,
+			int64_t source_num_objects = 0)
     : MOSDPeeringOp{MSG_OSD_POOLMIGRATION_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), query_epoch(query_epoch),
-      type(type), priority(prio), source_num_bytes(source_num_bytes) {}
+      type(type), priority(prio), source_num_bytes(source_num_bytes),
+      source_num_objects(source_num_objects) {}
 
   std::string_view get_type_name() const override {
     return "MPoolMigrationReserve";
@@ -123,6 +127,7 @@ public:
     decode(priority, p);
     decode(pgid.shard, p);
     decode(source_num_bytes, p);
+    decode(source_num_objects, p);
   }
 
   void encode_payload(uint64_t features) override {
@@ -135,5 +140,6 @@ public:
     encode(priority, payload);
     encode(pgid.shard, payload);
     encode(source_num_bytes, payload);
+    encode(source_num_objects, payload);
   }
 };
