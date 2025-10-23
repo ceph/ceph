@@ -566,3 +566,8 @@ bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
   // they win
   return true;
 }
+
+double ElectionLogic::get_connectivity_election_score(int rank)
+{
+  return connectivity_election_score(rank);
+}
