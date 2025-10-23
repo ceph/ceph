@@ -165,7 +165,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     SCHEMA_VERSIONED = SCHEMA_VERSIONED
 
     bootstrap_version_stored = False
-    
+
     _STORE_HOST_PREFIX = "host"
 
     instance = None
@@ -4262,7 +4262,7 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
-    
+
     @CLIRequiresDB
     @CLIReadCommand('cephadm get-cluster-version-history')
     @MgrModuleRecoverDB
@@ -4271,7 +4271,7 @@ Then run the following:
         Shows all previous and current cluster versions ordered chronologically
         '''
         return self.version_tracker.get_cluster_version_history()
-    
+
     @CLIRequiresDB
     @CLIWriteCommand('cephadm remove-cluster-version-history')
     @MgrModuleRecoverDB
@@ -4280,4 +4280,3 @@ Then run the following:
         Delete cluster versions stored in history
         '''
         return self.version_tracker.remove_cluster_version_history(all, before, after)
-    

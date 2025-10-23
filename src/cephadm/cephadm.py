@@ -2775,7 +2775,7 @@ def command_bootstrap(ctx):
 
     # store bootstrap time
     cli(['config-key', 'set', 'mgr/cephadm/bootstrap_time', str(datetime.datetime.now(datetime.timezone.utc))])
-    
+
     enable_cephadm_mgr_module(cli, wait_for_mgr_restart)
 
     # ssh
