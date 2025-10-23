@@ -99,13 +99,13 @@ RUN --mount=type=secret,id=prerelease_creds set -ex && \
     IS_RELEASE=0 ;\
     if [[ "${CI_CONTAINER}" == "true" ]] ; then \
         # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
-        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/9/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
+        REPO_URL=$(curl -fs "https://shaman.ceph.com/api/search/?project=ceph&distros=rocky/10/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
     else \
         IS_RELEASE=1 ;\
         source /run/secrets/prerelease_creds; \
-        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el9/" ;\
+        REPO_URL="https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/rpm-${CEPH_REF}/el10/" ;\
     fi && \
-    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el9.noarch.rpm" ; \
+    rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el10.noarch.rpm" ; \
     if [[ "$IS_RELEASE" == 1 ]] ; then \
         sed -i "s;http://download.ceph.com/;https://${PRERELEASE_USERNAME}:${PRERELEASE_PASSWORD}@download.ceph.com/prerelease/ceph/;" /etc/yum.repos.d/ceph.repo ; \
         dnf clean expire-cache ; \
