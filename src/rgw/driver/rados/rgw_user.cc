@@ -565,6 +565,8 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   }
 
   // finally create the new key
+  new_key.id = id;
+  new_key.key = key;
 
   if (op_state.create_date) {
     new_key.create_date = *op_state.create_date;
@@ -578,8 +580,6 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
       new_key = op_state.op_master_key;
       access_keys->emplace(new_key.id, new_key);
     } else {
-      new_key.id = id;
-      new_key.key = key;
       access_keys->emplace(id, new_key);
       op_state.op_master_key = new_key;
     }
