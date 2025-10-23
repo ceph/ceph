@@ -445,9 +445,9 @@ class KafkaReceiver(object):
         self.topic = topic
         self.stop = False
 
-    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[]):
+    def verify_s3_events(self, keys, exact_match=False, deletions=False, etags=[], expected_sizes={}):
         """verify stored s3 records agains a list of keys"""
-        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags)
+        verify_s3_records_by_elements(self.events, keys, exact_match=exact_match, deletions=deletions, etags=etags, expected_sizes=expected_sizes)
         self.events = []
 
 def kafka_receiver_thread_runner(receiver):
