@@ -26,6 +26,8 @@
 #include "msg/msg_types.h"
 
 using NvmeGwId = std::string;
+using FailbackLocation = std::string;
+using NvmeLocation = std::string;
 using NvmeGroupKey = std::pair<std::string, std::string>;
 using NvmeNqnId = std::string;
 using NvmeAnaGrpId = uint32_t;
@@ -51,6 +53,11 @@ enum class gw_availability_t {
   GW_UNAVAILABLE,
   GW_DELETING,
   GW_DELETED
+};
+
+enum class gw_admin_state_t {
+  GW_ADMIN_ENABLED = 0,
+  GW_ADMIN_DISABLED,
 };
 
 enum class subsystem_change_t {
@@ -167,6 +174,8 @@ struct NvmeGwMonState {
    * it from being overriden by new epochs in monitor's function create_pending -
    * function restore_pending_map_info is called for this purpose
   */
+  gw_admin_state_t gw_admin_state = gw_admin_state_t::GW_ADMIN_ENABLED;
+  std::string location = "";
   std::chrono::system_clock::time_point allow_failovers_ts =
              std::chrono::system_clock::now();
   std::chrono::system_clock::time_point last_gw_down_ts =
