@@ -773,13 +773,12 @@ class TestCertMgr(object):
         assert 'iscsi_ssl_key' in key_store
         assert isinstance(key_store['iscsi_ssl_key'], dict) and len(key_store['iscsi_ssl_key']) == 0
 
-        # Global-scoped key with bad JSON should also not be instantiated (no PrivKey object)
-        # Depending on how you seed known names, it might be absent OR present but falsy.
-        # Accept either: absent OR not a PrivKey instance.
-        if 'mgmt_gateway_ssl_key' in key_store:
-            assert not isinstance(key_store['mgmt_gateway_ssl_key'], PrivKey)
-        else:
-            assert 'mgmt_gateway_ssl_key' not in key_store
+        # Global-scoped key with bad JSON should NOT be hydrated
+        assert 'mgmt_gateway_ssl_key' in key_store
+        obj = key_store.get('mgmt_gateway_ssl_key')
+        # It should be a PrivKey (because globals are pre-seeded) but remain empty/falsy
+        assert isinstance(obj, PrivKey)
+        assert not bool(obj)  # still the tombstone, not parsed content
 
         messages = [r.getMessage() for r in caplog.records
                     if r.levelno >= logging.WARNING and r.name == "cephadm.tlsobject_store"]
