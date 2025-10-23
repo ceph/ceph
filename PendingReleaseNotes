@@ -16,6 +16,14 @@
   the I/O capacity of the OSD.
   The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
 
+* CephFS: The offline CephFS tools (cephfs-data-scan, cephfs-journal-tool,
+  and cephfs-table-tool) now include progress tracking with ETA (Estimated Time of
+  Arrival) for long-running operations. Progress updates are displayed automatically
+  at regular intervals, showing completion percentage, processed items, and time
+  estimates. This feature is enabled by default for relevant commands including
+  scan_extents, scan_inodes, and other state-changing operations.
+  Related Tracker: https://tracker.ceph.com/issues/63191
+
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
