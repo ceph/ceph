@@ -116,8 +116,11 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_preadv(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
+
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
+    int ceph_openat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode)
+
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata)
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name)
