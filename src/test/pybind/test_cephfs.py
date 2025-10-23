@@ -961,6 +961,33 @@ class TestFdopendir:
         dh.close()
 
 
+class TestOpenat:
+
+    def test_openat_for_child_subdir(self, testdir):
+        dir1 = 'dir1'
+        dir2 = 'dir2'
+
+        cephfs.mkdir(dir1, 0o755)
+        cephfs.mkdir(f'{dir1}/{dir2}', 0o755)
+
+        fd1 = cephfs.open(dir1, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, dir2, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+    def test_openat_for_grandchild_subdir(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir('dir1/dir2/dir3', 0o755)
+
+        fd1 = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, 'dir2/dir3', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+
 class TestWithRootUser:
 
     def setup_method(self):
