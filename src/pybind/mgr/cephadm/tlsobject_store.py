@@ -49,6 +49,25 @@ class TLSObjectStore():
     def _set_store(self, obj_name: str, payload: Any) -> None:
         self.mgr.set_store(self._kv_key(obj_name), json.dumps(payload))
 
+    def ensure_tombstone(self, obj_name: str, scope: TLSObjectScope) -> None:
+        """
+        Idempotently ensure a tombstone (empty) KV entry for obj_name so the
+        name is rediscovered after manager restarts (see load method).
+
+        - SERVICE/HOST → `{}` (empty per-target map)
+        - GLOBAL       → minimal JSON for an empty TLS object
+        """
+
+        # Do nothing if the TLS object name already exists in the store
+        if self.mgr.get_store_prefix(self._kv_key(obj_name)):
+            return
+
+        if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
+            self._set_store(obj_name, {})
+        elif scope == TLSObjectScope.GLOBAL:
+            empty = self.tlsobject_class()  # falsy empty instance
+            self._set_store(obj_name, self.tlsobject_class.to_json(empty))
+
     def register_object_name(self, obj_name: str, scope: TLSObjectScope) -> None:
         """
         Register a new TLS object name under the specified scope if it does not already exist.
@@ -59,8 +78,15 @@ class TLSObjectStore():
             ValueError: If an invalid scope is provided.
         """
         if obj_name not in self.objects_by_name:
-            # Initialize an empty dictionary to track TLS objects for this obj_name
-            self.objects_by_name[obj_name] = {}
+            # Initialize an empty dictionary/TLSobj to track TLS objects for this obj_name
+            if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
+                self.objects_by_name[obj_name] = {}
+            elif scope == TLSObjectScope.GLOBAL:
+                self.objects_by_name[obj_name] = self.tlsobject_class()
+            else:
+                raise ValueError(f"Invalid TLSObjectScope '{scope}' for obj_name '{obj_name}'")
+            # Initialize an empty tombstone for the TLS object(s) in the store
+            self.ensure_tombstone(obj_name, scope)
 
         # Add to the appropriate scope list
         if scope == TLSObjectScope.SERVICE and obj_name not in self.service_scoped_objects:
