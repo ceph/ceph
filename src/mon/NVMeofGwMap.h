@@ -61,6 +61,10 @@ public:
    * updating the map with a change affecting gws in group_key.
    */
   std::map<NvmeGroupKey, epoch_t> gw_epoch;
+  /* in stretched cluster configuration
+   * failbacks between locations does not happen automatically
+   * */
+  std::map<NvmeGroupKey, FailbackLocation> failbacks_in_progress;
 
   void to_gmap(std::map<NvmeGroupKey, NvmeGwMonClientStates>& Gmap) const;
   void track_deleting_gws(const NvmeGroupKey& group_key,
@@ -70,6 +74,12 @@ public:
   int cfg_add_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     uint64_t features);
   int cfg_delete_gw(const NvmeGwId &gw_id, const NvmeGroupKey& group_key);
+  int cfg_admin_state_change(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+		  gw_admin_state_t state, bool &propose_pending);
+  int cfg_set_location(const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
+		  std::string &location, bool &propose_pending);
+  int cfg_start_inter_location_failback(const NvmeGroupKey& group_key,
+          std::string &location, bool &propose_pending);
   void process_gw_map_ka(
     const NvmeGwId &gw_id, const NvmeGroupKey& group_key,
     epoch_t& last_osd_epoch,  bool &propose_pending);
@@ -146,6 +156,14 @@ private:
   void validate_gw_map(
     const NvmeGroupKey& group_key);
   void increment_gw_epoch(const NvmeGroupKey& group_key);
+  int find_failover_gw_logic(NvmeGwMonStates& gws_states,
+    NvmeLocation& location, NvmeGwId& min_loaded_gw_id, bool ignore_locations);
+  bool validate_number_locations(int num_gws, int num_locations);
+  void check_relocate_ana_groups(const NvmeGroupKey& group_key,
+           bool &propose);
+  int relocate_ana_grp(const NvmeGwId &src_gw_id,
+   const NvmeGroupKey& group_key, NvmeAnaGrpId grpid,
+   NvmeLocation& location, bool &propose);
 
 public:
   int blocklist_gw(
@@ -156,7 +174,10 @@ public:
     using ceph::encode;
     uint8_t version = 1;
     if (HAVE_FEATURE(features, NVMEOFHAMAP)) {
-       version = 2;
+      version = 2;
+    }
+    if (HAVE_FEATURE(features, NVMEOF_BEACON_DIFF)) {
+      version = 3;
     }
     ENCODE_START(version, version, bl);
     encode(epoch, bl);// global map epoch
@@ -166,18 +187,24 @@ public:
     if (version >= 2) {
       encode(gw_epoch, bl);
     }
+    if (version >=3) {
+      encode(failbacks_in_progress, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
 
     decode(epoch, bl);
     decode(created_gws, bl);
     decode(fsm_timers, bl);
     if (struct_v >= 2) {
       decode(gw_epoch, bl);
+    }
+    if (struct_v >=3) {
+      decode(failbacks_in_progress, bl);
     }
     DECODE_FINISH(bl);
   }
