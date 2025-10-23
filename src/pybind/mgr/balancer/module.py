@@ -1020,10 +1020,9 @@ class Module(MgrModule):
         return pe.show(verbose=verbose)
 
     def optimize(self, plan: Plan) -> Tuple[int, str]:
-        self.log.debug('Optimize plan %s' % plan.name)
         max_misplaced = cast(float, self.get_ceph_option('target_max_misplaced_ratio'))
-        self.log.info('Mode %s, max misplaced %f' %
-                      (plan.mode, max_misplaced))
+        self.log.info('Optimize plan %s, mode %s, max misplaced %f' %
+                      (plan.name, plan.mode, max_misplaced))
 
         info = self.get('pg_status')
         unknown = info.get('unknown_pgs_ratio', 0.0)
@@ -1301,13 +1300,17 @@ class Module(MgrModule):
                 min_pgs = osds * min_pg_per_osd
                 if best_pe.total_by_root[root][key] < min_pgs:
                     self.log.debug('Skipping root %s (pools %s), total pgs %d '
-                                  '< minimum %d (%d per osd)',
-                                  root, pools,
-                                  best_pe.total_by_root[root][key],
-                                  min_pgs, min_pg_per_osd)
+                                   '< minimum %d (%d per osd)',
+                                   root, pools,
+                                   best_pe.total_by_root[root][key],
+                                   min_pgs, min_pg_per_osd)
                     continue
-                self.log.info('Balancing root %s (pools %s) by %s' %
-                              (root, pools, key))
+                if left == max_iterations:
+                    self.log.info('Balancing root %s (pools %s) by %s' %
+                                  (root, pools, key))
+                else:
+                    self.log.debug('Balancing root %s (pools %s) by %s' %
+                                   (root, pools, key))
                 target = best_pe.target_by_root[root]
                 actual = best_pe.actual_by_root[root][key]
                 queue = sorted(actual.keys(),
