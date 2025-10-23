@@ -159,7 +159,7 @@ class StateMachineRenderer(object):
                 if not self.context:
                     raise Exception("no context at line: " + line)
                 self.edges[i.group(1)].append((self.context[-1][0], i.group(2)))
-        i = re.search("return\s+transit<\s*(\w*)\s*>()", line)
+        i = re.search(r'return\s+transit<\s*(\w*)\s*>()', line)
         if i is not None:
             if not self.context:
                 raise Exception("no context at line: " + line)
