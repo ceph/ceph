@@ -43,7 +43,7 @@ CORO_TEST_F(neocls_handler_error, test_handler_error, NeoRadosTest)
     op.exec("version", "read", {},
 	    [](sys::error_code ec, const buffer::list& bl) {
 	      throw buffer::end_of_buffer{};
-	    });
+	    }, false, false);
     co_await expect_error_code(rados().execute(oid, pool(), std::move(op),
 					       nullptr, asio::use_awaitable),
 			       buffer::errc::end_of_buffer);
@@ -54,7 +54,7 @@ CORO_TEST_F(neocls_handler_error, test_handler_error, NeoRadosTest)
     op.exec("version", "read", {},
 	    [](sys::error_code ec, const buffer::list& bl) {
 	      throw std::exception();
-	    });
+	    }, false, false);
     co_await expect_error_code(rados().execute(oid, pool(), std::move(op),
 					       nullptr, asio::use_awaitable),
 			       sys::errc::io_error);

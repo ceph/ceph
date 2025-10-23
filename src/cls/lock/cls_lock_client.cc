@@ -46,7 +46,7 @@ namespace rados {
         op.flags = flags;
         bufferlist in;
         encode(op, in);
-        rados_op->exec("lock", "lock", in);
+        rados_op->exec("lock", "lock", in, true, true);
       }
 
       int lock(IoCtx *ioctx,
@@ -70,7 +70,7 @@ namespace rados {
         bufferlist in;
         encode(op, in);
 
-        rados_op->exec("lock", "unlock", in);
+        rados_op->exec("lock", "unlock", in, true, true);
       }
 
       int unlock(IoCtx *ioctx, const std::string& oid,
@@ -100,7 +100,7 @@ namespace rados {
         op.locker = locker;
         bufferlist in;
         encode(op, in);
-        rados_op->exec("lock", "break_lock", in);
+        rados_op->exec("lock", "break_lock", in, true, true);
       }
 
       int break_lock(IoCtx *ioctx, const std::string& oid,
@@ -115,7 +115,7 @@ namespace rados {
       int list_locks(IoCtx *ioctx, const std::string& oid, std::list<std::string> *locks)
       {
         bufferlist in, out;
-        int r = ioctx->exec(oid, "lock", "list_locks", in, out);
+        int r = ioctx->exec(oid, "lock", "list_locks", in, out, true, false);
         if (r < 0)
           return r;
 
@@ -139,7 +139,7 @@ namespace rados {
         cls_lock_get_info_op op;
         op.name = name;
         encode(op, in);
-        rados_op->exec("lock", "get_info", in);
+        rados_op->exec("lock", "get_info", in, true, false);
       }
 
       int get_lock_info_finish(bufferlist::const_iterator *iter,
@@ -193,7 +193,7 @@ namespace rados {
         op.tag = tag;
         bufferlist in;
         encode(op, in);
-        rados_op->exec("lock", "assert_locked", in);
+        rados_op->exec("lock", "assert_locked", in, true, false);
       }
 
       void set_cookie(librados::ObjectWriteOperation *rados_op,
@@ -209,7 +209,7 @@ namespace rados {
         op.new_cookie = new_cookie;
         bufferlist in;
         encode(op, in);
-        rados_op->exec("lock", "set_cookie", in);
+        rados_op->exec("lock", "set_cookie", in, true, true);
       }
 
       void Lock::assert_locked_shared(ObjectOperation *op)

@@ -51,7 +51,7 @@ int ClsCephFSClient::accumulate_inode_metadata(
   librados::ObjectWriteOperation op;
   bufferlist inbl;
   args.encode(inbl);
-  op.exec("cephfs", "accumulate_inode_metadata", inbl);
+  op.exec("cephfs", "accumulate_inode_metadata", inbl, true, true);
 
   if (obj_pool_id != -1) {
     bufferlist bl;

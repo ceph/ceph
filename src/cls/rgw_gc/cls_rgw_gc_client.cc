@@ -25,13 +25,13 @@ void cls_rgw_gc_queue_init(ObjectWriteOperation& op, uint64_t size, uint64_t num
   call.size = size;
   call.num_deferred_entries = num_deferred_entries;
   encode(call, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_INIT, in);
+  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_INIT, in, true, true);
 }
 
 int cls_rgw_gc_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& size)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out);
+  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out, true, false);
   if (r < 0)
     return r;
 
@@ -55,7 +55,7 @@ void cls_rgw_gc_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs
   call.expiration_secs = expiration_secs;
   call.info = info;
   encode(call, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_ENQUEUE, in);
+  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_ENQUEUE, in, true, true);
 }
 
 int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max, bool expired_only,
@@ -68,7 +68,7 @@ int cls_rgw_gc_queue_list_entries(IoCtx& io_ctx, const string& oid, const string
   op.expired_only = expired_only;
   encode(op, in);
 
-  int r = io_ctx.exec(oid, RGW_GC_CLASS, RGW_GC_QUEUE_LIST_ENTRIES, in, out);
+  int r = io_ctx.exec(oid, RGW_GC_CLASS, RGW_GC_QUEUE_LIST_ENTRIES, in, out, true, false);
   if (r < 0)
     return r;
 
@@ -95,7 +95,7 @@ void cls_rgw_gc_queue_remove_entries(ObjectWriteOperation& op, uint32_t num_entr
   cls_rgw_gc_queue_remove_entries_op rem_op;
   rem_op.num_entries = num_entries;
   encode(rem_op, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_REMOVE_ENTRIES, in);
+  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_REMOVE_ENTRIES, in, true, true);
 }
 
 void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, const cls_rgw_gc_obj_info& info)
@@ -105,5 +105,5 @@ void cls_rgw_gc_queue_defer_entry(ObjectWriteOperation& op, uint32_t expiration_
   defer_op.expiration_secs = expiration_secs;
   defer_op.info = info;
   encode(defer_op, in);
-  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_UPDATE_ENTRY, in);
+  op.exec(RGW_GC_CLASS, RGW_GC_QUEUE_UPDATE_ENTRY, in, true, true);
 }

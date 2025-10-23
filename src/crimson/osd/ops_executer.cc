@@ -108,12 +108,12 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
       logger().debug("do_op_call: method returned ret={}, outdata.length()={}"
                      " while num_read={}, num_write={}",
                      ret, outdata.length(), num_read, num_write);
-      if (num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
+      if (num_read > prev_rd && (!(flags & CLS_METHOD_RD) || osd_op.op.op == CEPH_OSD_OP_CALL_W)) {
         logger().error("method tried to read object but is not marked RD");
         osd_op.rval = -EIO;
         return crimson::ct_error::input_output_error::make();
       }
-      if (num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
+      if (num_write > prev_wr && (!(flags & CLS_METHOD_WR) || osd_op.op.op == CEPH_OSD_OP_CALL_R)) {
         logger().error("method tried to update object but is not marked WR");
         osd_op.rval = -EIO;
         return crimson::ct_error::input_output_error::make();
@@ -716,6 +716,9 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
     });
   }
   case CEPH_OSD_OP_CALL:
+  case CEPH_OSD_OP_CALL_R:
+  case CEPH_OSD_OP_CALL_W:
+  case CEPH_OSD_OP_CALL_RW:
     return this->do_op_call(osd_op);
   case CEPH_OSD_OP_STAT:
     // note: stat does not require RD

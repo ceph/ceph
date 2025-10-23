@@ -184,7 +184,7 @@ TEST(LibRadosCWriteOps, Exec) {
 
   int rval = 1;
   rados_write_op_t op = rados_create_write_op();
-  rados_write_op_exec(op, "hello", "record_hello", "test", 4, &rval);
+  rados_write_op_exec(op, "hello", "record_hello", "test", 4, &rval, false, false);
   ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "test", NULL, 0));
   rados_release_write_op(op);
   ASSERT_EQ(0, rval);

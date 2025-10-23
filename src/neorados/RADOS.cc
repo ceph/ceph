@@ -495,27 +495,31 @@ void Op::cmp_omap(const std::vector<cmp_assertion>& assertions) {
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      cb::list* out,
+	      bool read, bool write,
 	      bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out);
+  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out, read, write);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      fu2::unique_function<void(bs::error_code,
-					const cb::list&) &&> f) {
-  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
+					const cb::list&) &&> f,
+					bool read, bool write) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f), read, write);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      fu2::unique_function<void(bs::error_code, int,
-					const cb::list&) &&> f) {
-  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
+					const cb::list&) &&> f,
+					bool read, bool write) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f), read, write);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
-	      const bufferlist& inbl, bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec);
+	      const bufferlist& inbl, bool read, bool write,
+	      bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, read, write);
 }
 
 void Op::balance_reads() {

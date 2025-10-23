@@ -31,8 +31,37 @@ using ceph::real_time;
 static constexpr int dout_subsys = ceph_subsys_objclass;
 
 
-int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
-	     char *indata, int datalen, char **outdata, int *outdatalen)
+// int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
+// 	     char *indata, int datalen, char **outdata, int *outdatalen)
+// {
+//   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+//   bufferlist idata;
+//   vector<OSDOp> nops(1);
+//   OSDOp& op = nops[0];
+//   int r;
+//
+//   op.op.op = CEPH_OSD_OP_CALL;
+//   op.op.cls.class_len = strlen(cls);
+//   op.op.cls.method_len = strlen(method);
+//   op.op.cls.indata_len = datalen;
+//   op.indata.append(cls, op.op.cls.class_len);
+//   op.indata.append(method, op.op.cls.method_len);
+//   op.indata.append(indata, datalen);
+//   r = (*pctx)->pg->do_osd_ops(*pctx, nops);
+//   if (r < 0)
+//     return r;
+//
+//   *outdata = (char *)malloc(op.outdata.length());
+//   if (!*outdata)
+//     return -ENOMEM;
+//   memcpy(*outdata, op.outdata.c_str(), op.outdata.length());
+//   *outdatalen = op.outdata.length();
+//
+//   return r;
+// }
+
+int cls_call_rw(cls_method_context_t hctx, const char *cls, const char *method,
+                char *indata, int datalen, char **outdata, int *outdatalen, bool read, bool write)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
   bufferlist idata;
@@ -40,7 +69,15 @@ int cls_call(cls_method_context_t hctx, const char *cls, const char *method,
   OSDOp& op = nops[0];
   int r;
 
-  op.op.op = CEPH_OSD_OP_CALL;
+  if (read & write) {
+    op.op.op = CEPH_OSD_OP_CALL_RW;
+  } else if (read) {
+    op.op.op = CEPH_OSD_OP_CALL_R;
+  } else if (write) {
+    op.op.op = CEPH_OSD_OP_CALL_W;
+  } else {
+    op.op.op = CEPH_OSD_OP_CALL;
+  }
   op.op.cls.class_len = strlen(cls);
   op.op.cls.method_len = strlen(method);
   op.op.cls.indata_len = datalen;

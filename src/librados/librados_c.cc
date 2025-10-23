@@ -2196,6 +2196,17 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_tmap_get)(
 }
 LIBRADOS_C_API_DEFAULT(rados_tmap_get, 14.2.0);
 
+// extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_exec)(
+//   rados_ioctx_t io,
+//   const char *o,
+//   const char *cls,
+//   const char *method,
+//   const char *inbuf,
+//   size_t in_len,
+//   char *buf,
+//   size_t out_len)
+// {
+
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_exec)(
   rados_ioctx_t io,
   const char *o,
@@ -2204,7 +2215,9 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_exec)(
   const char *inbuf,
   size_t in_len,
   char *buf,
-  size_t out_len)
+  size_t out_len,
+  bool read,
+  bool write)
 {
   tracepoint(librados, rados_exec_enter, io, o, cls, method, inbuf, in_len, out_len);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -2212,7 +2225,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_exec)(
   bufferlist inbl, outbl;
   int ret;
   inbl.append(inbuf, in_len);
-  ret = ctx->exec(oid, cls, method, inbl, outbl);
+  ret = ctx->exec(oid, cls, method, inbl, outbl, read, write);
   if (ret >= 0) {
     if (outbl.length()) {
       if (outbl.length() > out_len) {
@@ -3047,7 +3060,8 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_exec)(
   rados_completion_t completion,
   const char *cls, const char *method,
   const char *inbuf, size_t in_len,
-  char *buf, size_t out_len)
+  char *buf, size_t out_len,
+  bool read, bool write)
 {
   tracepoint(librados, rados_aio_exec_enter, io, o, completion);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
@@ -3055,7 +3069,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_exec)(
   bufferlist inbl;
   inbl.append(inbuf, in_len);
   int retval = ctx->aio_exec(oid, (librados::AioCompletionImpl*)completion,
-		       cls, method, inbl, buf, out_len);
+		       cls, method, inbl, buf, out_len, read, write);
   tracepoint(librados, rados_aio_exec_exit, retval);
   return retval;
 }
@@ -3848,12 +3862,14 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_exec)(
   const char *method,
   const char *in_buf,
   size_t in_len,
-  int *prval)
+  int *prval,
+  bool read,
+  bool write)
 {
   tracepoint(librados, rados_write_op_exec_enter, write_op, cls, method, in_buf, in_len, prval);
   bufferlist inbl;
   inbl.append(in_buf, in_len);
-  to_object_operation(write_op)->call(cls, method, inbl, NULL, NULL, prval);
+  to_object_operation(write_op)->call(cls, method, inbl, NULL, NULL, prval, read, write);
   tracepoint(librados, rados_write_op_exec_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_exec);
@@ -4302,14 +4318,16 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_exec)(
   size_t in_len,
   char **out_buf,
   size_t *out_len,
-  int *prval)
+  int *prval,
+  bool read,
+  bool write)
 {
   tracepoint(librados, rados_read_op_exec_enter, read_op, cls, method, in_buf, in_len, out_buf, out_len, prval);
   bufferlist inbl;
   inbl.append(in_buf, in_len);
   C_out_buffer *ctx = new C_out_buffer(out_buf, out_len);
   ((::ObjectOperation *)read_op)->call(cls, method, inbl, &ctx->out_bl, ctx,
-				       prval);
+				       prval, read, write);
   tracepoint(librados, rados_read_op_exec_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_exec);
@@ -4323,14 +4341,16 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_read_op_exec_user_buf)(
   char *out_buf,
   size_t out_len,
   size_t *used_len,
-  int *prval)
+  int *prval,
+  bool read,
+  bool write)
 {
   tracepoint(librados, rados_read_op_exec_user_buf_enter, read_op, cls, method, in_buf, in_len, out_buf, out_len, used_len, prval);
   C_bl_to_buf *ctx = new C_bl_to_buf(out_buf, out_len, used_len, prval);
   bufferlist inbl;
   inbl.append(in_buf, in_len);
   ((::ObjectOperation *)read_op)->call(cls, method, inbl, &ctx->out_bl, ctx,
-				       prval);
+				       prval, read, write);
   tracepoint(librados, rados_read_op_exec_user_buf_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_read_op_exec_user_buf);

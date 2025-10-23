@@ -362,7 +362,10 @@ extern const char *ceph_osd_state_name(int s);
 	/** exec **/							    \
 	/* note: the RD bit here is wrong; see special-case below in helper */ \
 	f(CALL,		__CEPH_OSD_OP(RD, EXEC, 1),	"call")		    \
-									    \
+	f(CALL_R,	__CEPH_OSD_OP(RD, EXEC, 2),	"call_r")           \
+        f(CALL_W,	__CEPH_OSD_OP(WR, EXEC, 2),	"call_w")           \
+        f(CALL_RW,	__CEPH_OSD_OP(RMW, EXEC, 2),	"call_rw")          \
+			    \
 	/** pg **/							    \
 	f(PGLS,		__CEPH_OSD_OP(RD, PG, 1),	"pgls")		    \
 	f(PGLS_FILTER,	__CEPH_OSD_OP(RD, PG, 2),	"pgls-filter")	    \
@@ -481,7 +484,11 @@ enum {
 	CEPH_OSD_FLAG_IGNORE_REDIRECT = 0x2000000,  /* ignore redirection */
 	CEPH_OSD_FLAG_RETURNVEC = 0x4000000, /* allow overall result >= 0, and return >= 0 and buffer for each op in opvec */
 	CEPH_OSD_FLAG_SUPPORTSPOOLEIO = 0x8000000,   /* client understands pool EIO flag */
+	CEPH_OSD_FLAG_EC_DIRECT_READ = 0x10000000,  /* Erasure code doing a partial read direct to OSD. */
 };
+
+// Indicates an IO which is direct-to-OSD and may not be on the primary.
+#define CEPH_OSD_FLAGS_DIRECT_READ (CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS | CEPH_OSD_FLAG_EC_DIRECT_READ)
 
 enum {
 	CEPH_OSD_OP_FLAG_EXCL = 0x1,      /* EXCL object create */

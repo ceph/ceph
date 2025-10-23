@@ -33,7 +33,7 @@ void create_image(librados::ObjectWriteOperation *op, uint64_t size,
   encode(object_prefix, bl);
   encode(data_pool_id, bl);
 
-  op->exec("rbd", "create", bl);
+  op->exec("rbd", "create", bl, true, true);
 }
 
 int create_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -51,7 +51,7 @@ void get_features_start(librados::ObjectReadOperation *op, bool read_only)
   bufferlist bl;
   encode(static_cast<uint64_t>(CEPH_NOSNAP), bl);
   encode(read_only, bl);
-  op->exec("rbd", "get_features", bl);
+  op->exec("rbd", "get_features", bl, true, false);
 }
 
 int get_features_finish(bufferlist::const_iterator *it, uint64_t *features,
@@ -91,7 +91,7 @@ void set_features(librados::ObjectWriteOperation *op, uint64_t features,
   encode(features, bl);
   encode(mask, bl);
 
-  op->exec("rbd", "set_features", bl);
+  op->exec("rbd", "set_features", bl, true, true);
 }
 
 int set_features(librados::IoCtx *ioctx, const std::string &oid,
@@ -106,7 +106,7 @@ int set_features(librados::IoCtx *ioctx, const std::string &oid,
 void get_object_prefix_start(librados::ObjectReadOperation *op)
 {
   bufferlist bl;
-  op->exec("rbd", "get_object_prefix", bl);
+  op->exec("rbd", "get_object_prefix", bl, true, false);
 }
 
 int get_object_prefix_finish(bufferlist::const_iterator *it,
@@ -138,7 +138,7 @@ int get_object_prefix(librados::IoCtx *ioctx, const std::string &oid,
 
 void get_data_pool_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "get_data_pool", bl);
+  op->exec("rbd", "get_data_pool", bl, true, false);
 }
 
 int get_data_pool_finish(bufferlist::const_iterator *it, int64_t *data_pool_id) {
@@ -169,7 +169,7 @@ void get_size_start(librados::ObjectReadOperation *op, snapid_t snap_id)
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "get_size", bl);
+  op->exec("rbd", "get_size", bl, true, false);
 }
 
 int get_size_finish(bufferlist::const_iterator *it, uint64_t *size,
@@ -212,13 +212,13 @@ void set_size(librados::ObjectWriteOperation *op, uint64_t size)
 {
   bufferlist bl;
   encode(size, bl);
-  op->exec("rbd", "set_size", bl);
+  op->exec("rbd", "set_size", bl, true, true);
 }
 
 void get_flags_start(librados::ObjectReadOperation *op, snapid_t snap_id) {
   bufferlist in_bl;
   encode(static_cast<snapid_t>(snap_id), in_bl);
-  op->exec("rbd", "get_flags", in_bl);
+  op->exec("rbd", "get_flags", in_bl, true, true);
 }
 
 int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags) {
@@ -253,13 +253,13 @@ void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
   encode(flags, inbl);
   encode(mask, inbl);
   encode(snap_id, inbl);
-  op->exec("rbd", "set_flags", inbl);
+  op->exec("rbd", "set_flags", inbl, true, true);
 }
 
 void op_features_get_start(librados::ObjectReadOperation *op)
 {
   bufferlist in_bl;
-  op->exec("rbd", "op_features_get", in_bl);
+  op->exec("rbd", "op_features_get", in_bl, true, true);
 }
 
 int op_features_get_finish(bufferlist::const_iterator *it, uint64_t *op_features)
@@ -294,7 +294,7 @@ void op_features_set(librados::ObjectWriteOperation *op,
   bufferlist inbl;
   encode(op_features, inbl);
   encode(mask, inbl);
-  op->exec("rbd", "op_features_set", inbl);
+  op->exec("rbd", "op_features_set", inbl, true, true);
 }
 
 int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
@@ -310,7 +310,7 @@ void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id)
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "get_parent", bl);
+  op->exec("rbd", "get_parent", bl, true, false);
 }
 
 int get_parent_finish(bufferlist::const_iterator *it,
@@ -365,7 +365,7 @@ void set_parent(librados::ObjectWriteOperation *op,
   encode(pspec.snap_id, in_bl);
   encode(parent_overlap, in_bl);
 
-  op->exec("rbd", "set_parent", in_bl);
+  op->exec("rbd", "set_parent", in_bl, true, true);
 }
 
 int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
@@ -378,12 +378,12 @@ int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
 void remove_parent(librados::ObjectWriteOperation *op)
 {
   bufferlist inbl;
-  op->exec("rbd", "remove_parent", inbl);
+  op->exec("rbd", "remove_parent", inbl, true, true);
 }
 
 void parent_get_start(librados::ObjectReadOperation* op) {
   bufferlist in_bl;
-  op->exec("rbd", "parent_get", in_bl);
+  op->exec("rbd", "parent_get", in_bl, true, true);
 }
 
 int parent_get_finish(bufferlist::const_iterator* it,
@@ -419,7 +419,7 @@ void parent_overlap_get_start(librados::ObjectReadOperation* op,
                               snapid_t snap_id) {
   bufferlist in_bl;
   encode(snap_id, in_bl);
-  op->exec("rbd", "parent_overlap_get", in_bl);
+  op->exec("rbd", "parent_overlap_get", in_bl, true, true);
 }
 
 int parent_overlap_get_finish(bufferlist::const_iterator* it,
@@ -459,7 +459,7 @@ void parent_attach(librados::ObjectWriteOperation* op,
   encode(parent_image_spec, in_bl);
   encode(parent_overlap, in_bl);
   encode(reattach, in_bl);
-  op->exec("rbd", "parent_attach", in_bl);
+  op->exec("rbd", "parent_attach", in_bl, true, true);
 }
 
 int parent_attach(librados::IoCtx *ioctx, const std::string &oid,
@@ -472,7 +472,7 @@ int parent_attach(librados::IoCtx *ioctx, const std::string &oid,
 
 void parent_detach(librados::ObjectWriteOperation* op) {
   bufferlist in_bl;
-  op->exec("rbd", "parent_detach", in_bl);
+  op->exec("rbd", "parent_detach", in_bl, true, true);
 }
 
 int parent_detach(librados::IoCtx *ioctx, const std::string &oid) {
@@ -502,7 +502,7 @@ void add_child(librados::ObjectWriteOperation *op,
   encode(pspec.snap_id, in);
   encode(c_imageid, in);
 
-  op->exec("rbd", "add_child", in);
+  op->exec("rbd", "add_child", in, true, true);
 }
 
 void remove_child(librados::ObjectWriteOperation *op,
@@ -516,7 +516,7 @@ void remove_child(librados::ObjectWriteOperation *op,
   encode(pspec.image_id, in);
   encode(pspec.snap_id, in);
   encode(c_imageid, in);
-  op->exec("rbd", "remove_child", in);
+  op->exec("rbd", "remove_child", in, true, true);
 }
 
 int remove_child(librados::IoCtx *ioctx, const std::string &oid,
@@ -534,7 +534,7 @@ void get_children_start(librados::ObjectReadOperation *op,
   encode(pspec.pool_id, in_bl);
   encode(pspec.image_id, in_bl);
   encode(pspec.snap_id, in_bl);
-  op->exec("rbd", "get_children", in_bl);
+  op->exec("rbd", "get_children", in_bl, true, true);
 }
 
 int get_children_finish(bufferlist::const_iterator *it,
@@ -567,7 +567,7 @@ void snapshot_get_start(librados::ObjectReadOperation *op, snapid_t snap_id)
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "snapshot_get", bl);
+  op->exec("rbd", "snapshot_get", bl, true, false);
 }
 
 int snapshot_get_finish(bufferlist::const_iterator* it,
@@ -605,14 +605,14 @@ void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
   encode(snap_name, bl);
   encode(snap_id, bl);
   encode(snap_namespace, bl);
-  op->exec("rbd", "snapshot_add", bl);
+  op->exec("rbd", "snapshot_add", bl, true, true);
 }
 
 void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id)
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "snapshot_remove", bl);
+  op->exec("rbd", "snapshot_remove", bl, true, true);
 }
 
 void snapshot_rename(librados::ObjectWriteOperation *op,
@@ -622,7 +622,7 @@ void snapshot_rename(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(src_snap_id, bl);
   encode(dst_name, bl);
-  op->exec("rbd", "snapshot_rename", bl);
+  op->exec("rbd", "snapshot_rename", bl, true, true);
 }
 
 void snapshot_trash_add(librados::ObjectWriteOperation *op,
@@ -630,13 +630,13 @@ void snapshot_trash_add(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "snapshot_trash_add", bl);
+  op->exec("rbd", "snapshot_trash_add", bl, true, true);
 }
 
 void get_snapcontext_start(librados::ObjectReadOperation *op)
 {
   bufferlist bl;
-  op->exec("rbd", "get_snapcontext", bl);
+  op->exec("rbd", "get_snapcontext", bl, true, false);
 }
 
 int get_snapcontext_finish(bufferlist::const_iterator *it,
@@ -674,7 +674,7 @@ void get_snapshot_name_start(librados::ObjectReadOperation *op,
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "get_snapshot_name", bl);
+  op->exec("rbd", "get_snapshot_name", bl, true, false);
 }
 
 int get_snapshot_name_finish(bufferlist::const_iterator *it,
@@ -709,7 +709,7 @@ void get_snapshot_timestamp_start(librados::ObjectReadOperation *op,
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "get_snapshot_timestamp", bl);
+  op->exec("rbd", "get_snapshot_timestamp", bl, true, false);
 }
 
 int get_snapshot_timestamp_finish(bufferlist::const_iterator *it,
@@ -745,7 +745,7 @@ void old_snapshot_add(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(snap_name, bl);
   encode(snap_id, bl);
-  op->exec("rbd", "snap_add", bl);
+  op->exec("rbd", "snap_add", bl, true, true);
 }
 
 void old_snapshot_remove(librados::ObjectWriteOperation *op,
@@ -753,7 +753,7 @@ void old_snapshot_remove(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(snap_name, bl);
-  op->exec("rbd", "snap_remove", bl);
+  op->exec("rbd", "snap_remove", bl, true, true);
 }
 
 void old_snapshot_rename(librados::ObjectWriteOperation *op,
@@ -762,12 +762,12 @@ void old_snapshot_rename(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(src_snap_id, bl);
   encode(dst_name, bl);
-  op->exec("rbd", "snap_rename", bl);
+  op->exec("rbd", "snap_rename", bl, true, true);
 }
 
 void old_snapshot_list_start(librados::ObjectReadOperation *op) {
   bufferlist in_bl;
-  op->exec("rbd", "snap_list", in_bl);
+  op->exec("rbd", "snap_list", in_bl, true, true);
 }
 
 int old_snapshot_list_finish(bufferlist::const_iterator *it,
@@ -813,7 +813,7 @@ int old_snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 
 void get_all_features_start(librados::ObjectReadOperation *op) {
   bufferlist in;
-  op->exec("rbd", "get_all_features", in);
+  op->exec("rbd", "get_all_features", in, true, true);
 }
 
 int get_all_features_finish(bufferlist::const_iterator *it,
@@ -843,7 +843,7 @@ int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
 
 template <typename O>
 void copyup(O* op, ceph::buffer::list data) {
-  op->exec("rbd", "copyup", data);
+  op->exec("rbd", "copyup", data, true, true);
 }
 
 void copyup(neorados::WriteOp* op, ceph::buffer::list data) {
@@ -867,7 +867,7 @@ void sparse_copyup(O* op, const E& extent_map, ceph::buffer::list data) {
   bufferlist bl;
   encode(extent_map, bl);
   encode(data, bl);
-  op->exec("rbd", "sparse_copyup", bl);
+  op->exec("rbd", "sparse_copyup", bl, true, false);
 }
 
 void sparse_copyup(neorados::WriteOp* op,
@@ -896,7 +896,7 @@ void get_protection_status_start(librados::ObjectReadOperation *op,
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "get_protection_status", bl);
+  op->exec("rbd", "get_protection_status", bl, true, false);
 }
 
 int get_protection_status_finish(bufferlist::const_iterator *it,
@@ -941,13 +941,13 @@ void set_protection_status(librados::ObjectWriteOperation *op,
   bufferlist in;
   encode(snap_id, in);
   encode(protection_status, in);
-  op->exec("rbd", "set_protection_status", in);
+  op->exec("rbd", "set_protection_status", in, true, true);
 }
 
 void snapshot_get_limit_start(librados::ObjectReadOperation *op)
 {
   bufferlist bl;
-  op->exec("rbd", "snapshot_get_limit", bl);
+  op->exec("rbd", "snapshot_get_limit", bl, true, false);
 }
 
 int snapshot_get_limit_finish(bufferlist::const_iterator *it, uint64_t *limit)
@@ -980,12 +980,12 @@ void snapshot_set_limit(librados::ObjectWriteOperation *op, uint64_t limit)
 {
   bufferlist in;
   encode(limit, in);
-  op->exec("rbd", "snapshot_set_limit", in);
+  op->exec("rbd", "snapshot_set_limit", in, true, true);
 }
 
 void get_stripe_unit_count_start(librados::ObjectReadOperation *op) {
   bufferlist empty_bl;
-  op->exec("rbd", "get_stripe_unit_count", empty_bl);
+  op->exec("rbd", "get_stripe_unit_count", empty_bl, true, false);
 }
 
 int get_stripe_unit_count_finish(bufferlist::const_iterator *it,
@@ -1026,7 +1026,7 @@ void set_stripe_unit_count(librados::ObjectWriteOperation *op,
   encode(stripe_unit, bl);
   encode(stripe_count, bl);
 
-  op->exec("rbd", "set_stripe_unit_count", bl);
+  op->exec("rbd", "set_stripe_unit_count", bl, true, true);
 }
 
 int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
@@ -1040,7 +1040,7 @@ int set_stripe_unit_count(librados::IoCtx *ioctx, const std::string &oid,
 
 void get_create_timestamp_start(librados::ObjectReadOperation *op) {
   bufferlist empty_bl;
-  op->exec("rbd", "get_create_timestamp", empty_bl);
+  op->exec("rbd", "get_create_timestamp", empty_bl, true, false);
 }
 
 int get_create_timestamp_finish(bufferlist::const_iterator *it,
@@ -1073,7 +1073,7 @@ int get_create_timestamp(librados::IoCtx *ioctx, const std::string &oid,
 
 void get_access_timestamp_start(librados::ObjectReadOperation *op) {
   bufferlist empty_bl;
-  op->exec("rbd", "get_access_timestamp", empty_bl);
+  op->exec("rbd", "get_access_timestamp", empty_bl, true, false);
 }
 
 int get_access_timestamp_finish(bufferlist::const_iterator *it,
@@ -1107,7 +1107,7 @@ int get_access_timestamp(librados::IoCtx *ioctx, const std::string &oid,
 void set_access_timestamp(librados::ObjectWriteOperation *op)
 {
     bufferlist empty_bl;
-    op->exec("rbd","set_access_timestamp",empty_bl);
+    op->exec("rbd","set_access_timestamp",empty_bl, true, true);
 }
 
 int set_access_timestamp(librados::IoCtx *ioctx, const std::string &oid)
@@ -1119,7 +1119,7 @@ int set_access_timestamp(librados::IoCtx *ioctx, const std::string &oid)
 
 void get_modify_timestamp_start(librados::ObjectReadOperation *op) {
   bufferlist empty_bl;
-  op->exec("rbd", "get_modify_timestamp", empty_bl);
+  op->exec("rbd", "get_modify_timestamp", empty_bl, true, false);
 }
 
 int get_modify_timestamp_finish(bufferlist::const_iterator *it,
@@ -1153,7 +1153,7 @@ int get_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid,
 void set_modify_timestamp(librados::ObjectWriteOperation *op)
 {
     bufferlist empty_bl;
-    op->exec("rbd","set_modify_timestamp",empty_bl);
+    op->exec("rbd","set_modify_timestamp",empty_bl, true, true);
 }
 
 int set_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid)
@@ -1168,7 +1168,7 @@ int set_modify_timestamp(librados::IoCtx *ioctx, const std::string &oid)
 
 void get_id_start(librados::ObjectReadOperation *op) {
   bufferlist empty_bl;
-  op->exec("rbd", "get_id", empty_bl);
+  op->exec("rbd", "get_id", empty_bl, true, false);
 }
 
 int get_id_finish(bufferlist::const_iterator *it, std::string *id) {
@@ -1199,7 +1199,7 @@ void set_id(librados::ObjectWriteOperation *op, const std::string &id)
 {
   bufferlist bl;
   encode(id, bl);
-  op->exec("rbd", "set_id", bl);
+  op->exec("rbd", "set_id", bl, true, true);
 }
 
 int set_id(librados::IoCtx *ioctx, const std::string &oid, const std::string &id)
@@ -1217,7 +1217,7 @@ void dir_get_id_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(image_name, bl);
 
-  op->exec("rbd", "dir_get_id", bl);
+  op->exec("rbd", "dir_get_id", bl, true, false);
 }
 
 int dir_get_id_finish(bufferlist::const_iterator *iter, std::string *image_id) {
@@ -1249,7 +1249,7 @@ void dir_get_name_start(librados::ObjectReadOperation *op,
                         const std::string &id) {
   bufferlist in_bl;
   encode(id, in_bl);
-  op->exec("rbd", "dir_get_name", in_bl);
+  op->exec("rbd", "dir_get_name", in_bl, true, true);
 }
 
 int dir_get_name_finish(bufferlist::const_iterator *it, std::string *name) {
@@ -1283,7 +1283,7 @@ void dir_list_start(librados::ObjectReadOperation *op,
   encode(start, in_bl);
   encode(max_return, in_bl);
 
-  op->exec("rbd", "dir_list", in_bl);
+  op->exec("rbd", "dir_list", in_bl, true, true);
 }
 
 int dir_list_finish(bufferlist::const_iterator *it, map<string, string> *images)
@@ -1319,7 +1319,7 @@ void dir_add_image(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(name, bl);
   encode(id, bl);
-  op->exec("rbd", "dir_add_image", bl);
+  op->exec("rbd", "dir_add_image", bl, true, true);
 }
 
 int dir_add_image(librados::IoCtx *ioctx, const std::string &oid,
@@ -1345,7 +1345,7 @@ void dir_state_assert(librados::ObjectOperation *op,
 {
   bufferlist bl;
   encode(directory_state, bl);
-  op->exec("rbd", "dir_state_assert", bl);
+  op->exec("rbd", "dir_state_assert", bl, true, false);
 }
 
 int dir_state_assert(librados::IoCtx *ioctx, const std::string &oid,
@@ -1362,7 +1362,7 @@ void dir_state_set(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(directory_state, bl);
-  op->exec("rbd", "dir_state_set", bl);
+  op->exec("rbd", "dir_state_set", bl, true, true);
 }
 
 int dir_state_set(librados::IoCtx *ioctx, const std::string &oid,
@@ -1381,7 +1381,7 @@ void dir_remove_image(librados::ObjectWriteOperation *op,
   encode(name, bl);
   encode(id, bl);
 
-  op->exec("rbd", "dir_remove_image", bl);
+  op->exec("rbd", "dir_remove_image", bl, true, true);
 }
 
 void dir_rename_image(librados::ObjectWriteOperation *op,
@@ -1392,12 +1392,12 @@ void dir_rename_image(librados::ObjectWriteOperation *op,
   encode(src, in);
   encode(dest, in);
   encode(id, in);
-  op->exec("rbd", "dir_rename_image", in);
+  op->exec("rbd", "dir_rename_image", in, true, true);
 }
 
 void object_map_load_start(librados::ObjectReadOperation *op) {
   bufferlist in_bl;
-  op->exec("rbd", "object_map_load", in_bl);
+  op->exec("rbd", "object_map_load", in_bl, true, true);
 }
 
 int object_map_load_finish(bufferlist::const_iterator *it,
@@ -1434,7 +1434,7 @@ void object_map_save(librados::ObjectWriteOperation *rados_op,
 
   bufferlist in;
   encode(object_map_copy, in);
-  rados_op->exec("rbd", "object_map_save", in);
+  rados_op->exec("rbd", "object_map_save", in, true, true);
 }
 
 void object_map_resize(librados::ObjectWriteOperation *rados_op,
@@ -1443,7 +1443,7 @@ void object_map_resize(librados::ObjectWriteOperation *rados_op,
   bufferlist in;
   encode(object_count, in);
   encode(default_state, in);
-  rados_op->exec("rbd", "object_map_resize", in);
+  rados_op->exec("rbd", "object_map_resize", in, true, true);
 }
 
 void object_map_update(librados::ObjectWriteOperation *rados_op,
@@ -1456,13 +1456,13 @@ void object_map_update(librados::ObjectWriteOperation *rados_op,
   encode(end_object_no, in);
   encode(new_object_state, in);
   encode(current_object_state, in);
-  rados_op->exec("rbd", "object_map_update", in);
+  rados_op->exec("rbd", "object_map_update", in, true, true);
 }
 
 void object_map_snap_add(librados::ObjectWriteOperation *rados_op)
 {
   bufferlist in;
-  rados_op->exec("rbd", "object_map_snap_add", in);
+  rados_op->exec("rbd", "object_map_snap_add", in, true, true);
 }
 
 void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
@@ -1473,7 +1473,7 @@ void object_map_snap_remove(librados::ObjectWriteOperation *rados_op,
 
   bufferlist in;
   encode(object_map_copy, in);
-  rados_op->exec("rbd", "object_map_snap_remove", in);
+  rados_op->exec("rbd", "object_map_snap_remove", in, true, true);
 }
 
 void metadata_set(librados::ObjectWriteOperation *op,
@@ -1482,7 +1482,7 @@ void metadata_set(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(data, bl);
 
-  op->exec("rbd", "metadata_set", bl);
+  op->exec("rbd", "metadata_set", bl, true, true);
 }
 
 int metadata_set(librados::IoCtx *ioctx, const std::string &oid,
@@ -1500,7 +1500,7 @@ void metadata_remove(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(key, bl);
 
-  op->exec("rbd", "metadata_remove", bl);
+  op->exec("rbd", "metadata_remove", bl, true, true);
 }
 
 int metadata_remove(librados::IoCtx *ioctx, const std::string &oid,
@@ -1535,7 +1535,7 @@ void metadata_list_start(librados::ObjectReadOperation *op,
   bufferlist in_bl;
   encode(start, in_bl);
   encode(max_return, in_bl);
-  op->exec("rbd", "metadata_list", in_bl);
+  op->exec("rbd", "metadata_list", in_bl, true, true);
 }
 
 int metadata_list_finish(bufferlist::const_iterator *it,
@@ -1555,7 +1555,7 @@ void metadata_get_start(librados::ObjectReadOperation* op,
   bufferlist bl;
   encode(key, bl);
 
-  op->exec("rbd", "metadata_get", bl);
+  op->exec("rbd", "metadata_get", bl, true, false);
 }
 
 int metadata_get_finish(bufferlist::const_iterator *it,
@@ -1595,7 +1595,7 @@ void child_attach(librados::ObjectWriteOperation *op, snapid_t snap_id,
   bufferlist bl;
   encode(snap_id, bl);
   encode(child_image, bl);
-  op->exec("rbd", "child_attach", bl);
+  op->exec("rbd", "child_attach", bl, true, true);
 }
 
 int child_attach(librados::IoCtx *ioctx, const std::string &oid,
@@ -1618,7 +1618,7 @@ void child_detach(librados::ObjectWriteOperation *op, snapid_t snap_id,
   bufferlist bl;
   encode(snap_id, bl);
   encode(child_image, bl);
-  op->exec("rbd", "child_detach", bl);
+  op->exec("rbd", "child_detach", bl, true, true);
 }
 
 int child_detach(librados::IoCtx *ioctx, const std::string &oid,
@@ -1640,7 +1640,7 @@ void children_list_start(librados::ObjectReadOperation *op,
 {
   bufferlist bl;
   encode(snap_id, bl);
-  op->exec("rbd", "children_list", bl);
+  op->exec("rbd", "children_list", bl, true, false);
 }
 
 int children_list_finish(bufferlist::const_iterator *it,
@@ -1687,7 +1687,7 @@ void migration_set(librados::ObjectWriteOperation *op,
                    const cls::rbd::MigrationSpec &migration_spec) {
   bufferlist bl;
   encode(migration_spec, bl);
-  op->exec("rbd", "migration_set", bl);
+  op->exec("rbd", "migration_set", bl, true, true);
 }
 
 int migration_set_state(librados::IoCtx *ioctx, const std::string &oid,
@@ -1704,12 +1704,12 @@ void migration_set_state(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(state, bl);
   encode(description, bl);
-  op->exec("rbd", "migration_set_state", bl);
+  op->exec("rbd", "migration_set_state", bl, true, true);
 }
 
 void migration_get_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "migration_get", bl);
+  op->exec("rbd", "migration_get", bl, true, false);
 }
 
 int migration_get_finish(bufferlist::const_iterator *it,
@@ -1749,7 +1749,7 @@ int migration_remove(librados::IoCtx *ioctx, const std::string &oid) {
 
 void migration_remove(librados::ObjectWriteOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "migration_remove", bl);
+  op->exec("rbd", "migration_remove", bl, true, true);
 }
 
 template <typename O>
@@ -1758,7 +1758,7 @@ void assert_snapc_seq(O* op, uint64_t snapc_seq,
   bufferlist bl;
   encode(snapc_seq, bl);
   encode(state, bl);
-  op->exec("rbd", "assert_snapc_seq", bl);
+  op->exec("rbd", "assert_snapc_seq", bl, true, false);
 }
 
 void assert_snapc_seq(neorados::WriteOp* op,
@@ -1783,7 +1783,7 @@ int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
 
 void mirror_uuid_get_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "mirror_uuid_get", bl);
+  op->exec("rbd", "mirror_uuid_get", bl, true, false);
 }
 
 int mirror_uuid_get_finish(bufferlist::const_iterator *it,
@@ -1819,7 +1819,7 @@ int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid) {
   encode(uuid, in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_uuid_set", in_bl);
+  op.exec("rbd", "mirror_uuid_set", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -1829,7 +1829,7 @@ int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid) {
 
 void mirror_mode_get_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "mirror_mode_get", bl);
+  op->exec("rbd", "mirror_mode_get", bl, true, false);
 }
 
 int mirror_mode_get_finish(bufferlist::const_iterator *it,
@@ -1873,7 +1873,7 @@ int mirror_mode_set(librados::IoCtx *ioctx,
   encode(static_cast<uint32_t>(mirror_mode), in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_mode_set", in_bl);
+  op.exec("rbd", "mirror_mode_set", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -1887,7 +1887,7 @@ int mirror_remote_namespace_get(librados::IoCtx *ioctx,
   bufferlist out_bl;
 
   int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_remote_namespace_get",
-                      in_bl, out_bl);
+                      in_bl, out_bl, true, false);
   if (r < 0) {
     return r;
   }
@@ -1907,7 +1907,7 @@ int mirror_remote_namespace_set(librados::IoCtx *ioctx,
   encode(mirror_namespace, in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_remote_namespace_set", in_bl);
+  op.exec("rbd", "mirror_remote_namespace_set", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -1917,7 +1917,7 @@ int mirror_remote_namespace_set(librados::IoCtx *ioctx,
 
 void mirror_peer_list_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "mirror_peer_list", bl);
+  op->exec("rbd", "mirror_peer_list", bl, true, false);
 }
 
 int mirror_peer_list_finish(bufferlist::const_iterator *it,
@@ -1972,7 +1972,7 @@ void mirror_peer_ping(librados::ObjectWriteOperation *op,
   encode(fsid, in_bl);
   encode(static_cast<uint8_t>(cls::rbd::MIRROR_PEER_DIRECTION_TX), in_bl);
 
-  op->exec("rbd", "mirror_peer_ping", in_bl);
+  op->exec("rbd", "mirror_peer_ping", in_bl, true, true);
 }
 
 int mirror_peer_add(librados::IoCtx *ioctx,
@@ -1993,7 +1993,7 @@ void mirror_peer_add(librados::ObjectWriteOperation *op,
   bufferlist in_bl;
   encode(mirror_peer, in_bl);
 
-  op->exec("rbd", "mirror_peer_add", in_bl);
+  op->exec("rbd", "mirror_peer_add", in_bl, true, true);
 }
 
 int mirror_peer_remove(librados::IoCtx *ioctx,
@@ -2002,7 +2002,7 @@ int mirror_peer_remove(librados::IoCtx *ioctx,
   encode(uuid, in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_peer_remove", in_bl);
+  op.exec("rbd", "mirror_peer_remove", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -2018,7 +2018,7 @@ int mirror_peer_set_client(librados::IoCtx *ioctx,
   encode(client_name, in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_peer_set_client", in_bl);
+  op.exec("rbd", "mirror_peer_set_client", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -2034,7 +2034,7 @@ int mirror_peer_set_cluster(librados::IoCtx *ioctx,
   encode(cluster_name, in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_peer_set_cluster", in_bl);
+  op.exec("rbd", "mirror_peer_set_cluster", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -2050,7 +2050,7 @@ int mirror_peer_set_direction(
   encode(static_cast<uint8_t>(mirror_peer_direction), in_bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "mirror_peer_set_direction", in_bl);
+  op.exec("rbd", "mirror_peer_set_direction", in_bl, true, true);
   int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
@@ -2064,7 +2064,7 @@ void mirror_image_list_start(librados::ObjectReadOperation *op,
   bufferlist in_bl;
   encode(start, in_bl);
   encode(max_return, in_bl);
-  op->exec("rbd", "mirror_image_list", in_bl);
+  op->exec("rbd", "mirror_image_list", in_bl, true, true);
 }
 
 int mirror_image_list_finish(bufferlist::const_iterator *it,
@@ -2098,7 +2098,7 @@ void mirror_image_get_image_id_start(librados::ObjectReadOperation *op,
                                      const std::string &global_image_id) {
   bufferlist in_bl;
   encode(global_image_id, in_bl);
-  op->exec( "rbd", "mirror_image_get_image_id", in_bl);
+  op->exec( "rbd", "mirror_image_get_image_id", in_bl, true, true);
 }
 
 int mirror_image_get_image_id_finish(bufferlist::const_iterator *it,
@@ -2151,7 +2151,7 @@ void mirror_image_get_start(librados::ObjectReadOperation *op,
   bufferlist in_bl;
   encode(image_id, in_bl);
 
-  op->exec("rbd", "mirror_image_get", in_bl);
+  op->exec("rbd", "mirror_image_get", in_bl, true, true);
 }
 
 int mirror_image_get_finish(bufferlist::const_iterator *iter,
@@ -2171,7 +2171,7 @@ void mirror_image_set(librados::ObjectWriteOperation *op,
   encode(image_id, bl);
   encode(mirror_image, bl);
 
-  op->exec("rbd", "mirror_image_set", bl);
+  op->exec("rbd", "mirror_image_set", bl, true, true);
 }
 
 int mirror_image_set(librados::IoCtx *ioctx, const std::string &image_id,
@@ -2191,7 +2191,7 @@ void mirror_image_remove(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(image_id, bl);
 
-  op->exec("rbd", "mirror_image_remove", bl);
+  op->exec("rbd", "mirror_image_remove", bl, true, true);
 }
 
 int mirror_image_remove(librados::IoCtx *ioctx, const std::string &image_id) {
@@ -2219,7 +2219,7 @@ void mirror_image_status_set(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(global_image_id, bl);
   encode(status, bl);
-  op->exec("rbd", "mirror_image_status_set", bl);
+  op->exec("rbd", "mirror_image_status_set", bl, true, true);
 }
 
 int mirror_image_status_get(librados::IoCtx *ioctx,
@@ -2246,7 +2246,7 @@ void mirror_image_status_get_start(librados::ObjectReadOperation *op,
                                    const std::string &global_image_id) {
   bufferlist bl;
   encode(global_image_id, bl);
-  op->exec("rbd", "mirror_image_status_get", bl);
+  op->exec("rbd", "mirror_image_status_get", bl, true, false);
 }
 
 int mirror_image_status_get_finish(bufferlist::const_iterator *iter,
@@ -2286,7 +2286,7 @@ void mirror_image_status_list_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
-  op->exec("rbd", "mirror_image_status_list", bl);
+  op->exec("rbd", "mirror_image_status_list", bl, true, false);
 }
 
 int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
@@ -2329,7 +2329,7 @@ void mirror_image_status_get_summary_start(
     const std::vector<cls::rbd::MirrorPeer>& mirror_peer_sites) {
   bufferlist bl;
   encode(mirror_peer_sites, bl);
-  op->exec("rbd", "mirror_image_status_get_summary", bl);
+  op->exec("rbd", "mirror_image_status_get_summary", bl, true, false);
 }
 
 int mirror_image_status_get_summary_finish(
@@ -2354,7 +2354,7 @@ void mirror_image_status_remove(librados::ObjectWriteOperation *op,
                                 const std::string &global_image_id) {
   bufferlist bl;
   encode(global_image_id, bl);
-  op->exec("rbd", "mirror_image_status_remove", bl);
+  op->exec("rbd", "mirror_image_status_remove", bl, true, true);
 }
 
 int mirror_image_status_remove_down(librados::IoCtx *ioctx) {
@@ -2365,7 +2365,7 @@ int mirror_image_status_remove_down(librados::IoCtx *ioctx) {
 
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "mirror_image_status_remove_down", bl);
+  op->exec("rbd", "mirror_image_status_remove_down", bl, true, true);
 }
 
 int mirror_image_instance_get(librados::IoCtx *ioctx,
@@ -2392,7 +2392,7 @@ void mirror_image_instance_get_start(librados::ObjectReadOperation *op,
                                      const std::string &global_image_id) {
   bufferlist bl;
   encode(global_image_id, bl);
-  op->exec("rbd", "mirror_image_instance_get", bl);
+  op->exec("rbd", "mirror_image_instance_get", bl, true, false);
 }
 
 int mirror_image_instance_get_finish(bufferlist::const_iterator *iter,
@@ -2431,7 +2431,7 @@ void mirror_image_instance_list_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
-  op->exec("rbd", "mirror_image_instance_list", bl);
+  op->exec("rbd", "mirror_image_instance_list", bl, true, false);
 }
 
 int mirror_image_instance_list_finish(
@@ -2448,7 +2448,7 @@ int mirror_image_instance_list_finish(
 
 void mirror_instances_list_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
-  op->exec("rbd", "mirror_instances_list", bl);
+  op->exec("rbd", "mirror_instances_list", bl, true, false);
 }
 
 int mirror_instances_list_finish(bufferlist::const_iterator *iter,
@@ -2485,7 +2485,7 @@ void mirror_instances_add(librados::ObjectWriteOperation *op,
                           const std::string &instance_id) {
   bufferlist bl;
   encode(instance_id, bl);
-  op->exec("rbd", "mirror_instances_add", bl);
+  op->exec("rbd", "mirror_instances_add", bl, true, true);
 }
 
 int mirror_instances_add(librados::IoCtx *ioctx,
@@ -2499,7 +2499,7 @@ void mirror_instances_remove(librados::ObjectWriteOperation *op,
                              const std::string &instance_id) {
   bufferlist bl;
   encode(instance_id, bl);
-  op->exec("rbd", "mirror_instances_remove", bl);
+  op->exec("rbd", "mirror_instances_remove", bl, true, true);
 }
 
 int mirror_instances_remove(librados::IoCtx *ioctx,
@@ -2516,7 +2516,7 @@ void mirror_image_map_list_start(librados::ObjectReadOperation *op,
   encode(start_after, bl);
   encode(max_read, bl);
 
-  op->exec("rbd", "mirror_image_map_list", bl);
+  op->exec("rbd", "mirror_image_map_list", bl, true, false);
 }
 
 int mirror_image_map_list_finish(bufferlist::const_iterator *iter,
@@ -2553,7 +2553,7 @@ void mirror_image_map_update(librados::ObjectWriteOperation *op,
   encode(global_image_id, bl);
   encode(image_map, bl);
 
-  op->exec("rbd", "mirror_image_map_update", bl);
+  op->exec("rbd", "mirror_image_map_update", bl, true, true);
 }
 
 void mirror_image_map_remove(librados::ObjectWriteOperation *op,
@@ -2561,7 +2561,7 @@ void mirror_image_map_remove(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(global_image_id, bl);
 
-  op->exec("rbd", "mirror_image_map_remove", bl);
+  op->exec("rbd", "mirror_image_map_remove", bl, true, true);
 }
 
 void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
@@ -2571,7 +2571,7 @@ void mirror_image_snapshot_unlink_peer(librados::ObjectWriteOperation *op,
   encode(snap_id, bl);
   encode(mirror_peer_uuid, bl);
 
-  op->exec("rbd", "mirror_image_snapshot_unlink_peer", bl);
+  op->exec("rbd", "mirror_image_snapshot_unlink_peer", bl, true, true);
 }
 
 int mirror_image_snapshot_unlink_peer(librados::IoCtx *ioctx,
@@ -2591,7 +2591,7 @@ void mirror_image_snapshot_set_copy_progress(librados::ObjectWriteOperation *op,
   encode(complete, bl);
   encode(copy_progress, bl);
 
-  op->exec("rbd", "mirror_image_snapshot_set_copy_progress", bl);
+  op->exec("rbd", "mirror_image_snapshot_set_copy_progress", bl, true, true);
 }
 
 int mirror_image_snapshot_set_copy_progress(librados::IoCtx *ioctx,
@@ -2612,7 +2612,7 @@ int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
   bufferlist in, out;
   encode(start, in);
   encode(max_return, in);
-  int r = ioctx->exec(oid, "rbd", "group_dir_list", in, out);
+  int r = ioctx->exec(oid, "rbd", "group_dir_list", in, out, true, false);
   if (r < 0)
     return r;
 
@@ -2633,7 +2633,7 @@ int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
   encode(name, in);
   encode(id, in);
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_dir_add", in);
+  op.exec("rbd", "group_dir_add", in, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2646,7 +2646,7 @@ int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
   encode(dest, in);
   encode(id, in);
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_dir_rename", in);
+  op.exec("rbd", "group_dir_rename", in, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2657,7 +2657,7 @@ int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
   encode(name, in);
   encode(id, in);
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_dir_remove", in);
+  op.exec("rbd", "group_dir_remove", in, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2668,7 +2668,7 @@ int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
   encode(spec, bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_image_remove", bl);
+  op.exec("rbd", "group_image_remove", bl, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2682,7 +2682,7 @@ int group_image_list(librados::IoCtx *ioctx,
   encode(start, bl);
   encode(max_return, bl);
 
-  int r = ioctx->exec(oid, "rbd", "group_image_list", bl, bl2);
+  int r = ioctx->exec(oid, "rbd", "group_image_list", bl, bl2, true, false);
   if (r < 0)
     return r;
 
@@ -2703,7 +2703,7 @@ int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
   encode(st, bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_image_set", bl);
+  op.exec("rbd", "group_image_set", bl, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2714,7 +2714,7 @@ int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
   encode(group_spec, bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "image_group_add", bl);
+  op.exec("rbd", "image_group_add", bl, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2725,14 +2725,14 @@ int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
   encode(group_spec, bl);
 
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "image_group_remove", bl);
+  op.exec("rbd", "image_group_remove", bl, true, true);
   return ioctx->operate(oid, &op);
 }
 
 void image_group_get_start(librados::ObjectReadOperation *op)
 {
   bufferlist in_bl;
-  op->exec("rbd", "image_group_get", in_bl);
+  op->exec("rbd", "image_group_get", in_bl, true, true);
 }
 
 int image_group_get_finish(bufferlist::const_iterator *iter,
@@ -2769,7 +2769,7 @@ int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
   bufferlist inbl;
   encode(snapshot, inbl);
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_snap_set", inbl);
+  op.exec("rbd", "group_snap_set", inbl, true, true);
   int r = ioctx->operate(oid, &op);
   return r;
 }
@@ -2781,7 +2781,7 @@ int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
   bufferlist inbl;
   encode(snap_id, inbl);
   librados::ObjectWriteOperation op;
-  op.exec("rbd", "group_snap_remove", inbl);
+  op.exec("rbd", "group_snap_remove", inbl, true, true);
   return ioctx->operate(oid, &op);
 }
 
@@ -2794,7 +2794,7 @@ int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
   bufferlist inbl, outbl;
 
   encode(snap_id, inbl);
-  int r = ioctx->exec(oid, "rbd", "group_snap_get_by_id", inbl, outbl);
+  int r = ioctx->exec(oid, "rbd", "group_snap_get_by_id", inbl, outbl, true, false);
   if (r < 0) {
     return r;
   }
@@ -2817,7 +2817,7 @@ void group_snap_list_start(librados::ObjectReadOperation *op,
   encode(start, bl);
   encode(max_return, bl);
 
-  op->exec("rbd", "group_snap_list", bl);
+  op->exec("rbd", "group_snap_list", bl, true, false);
 }
 
 int group_snap_list_finish(bufferlist::const_iterator *iter,
@@ -2856,7 +2856,7 @@ void group_snap_list_order_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
-  op->exec("rbd", "group_snap_list_order", bl);
+  op->exec("rbd", "group_snap_list_order", bl, true, false);
 }
 
 int group_snap_list_order_finish(bufferlist::const_iterator *iter,
@@ -2895,7 +2895,7 @@ void trash_add(librados::ObjectWriteOperation *op,
   bufferlist bl;
   encode(id, bl);
   encode(trash_spec, bl);
-  op->exec("rbd", "trash_add", bl);
+  op->exec("rbd", "trash_add", bl, true, true);
 }
 
 int trash_add(librados::IoCtx *ioctx, const std::string &id,
@@ -2912,7 +2912,7 @@ void trash_remove(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(id, bl);
-  op->exec("rbd", "trash_remove", bl);
+  op->exec("rbd", "trash_remove", bl, true, true);
 }
 
 int trash_remove(librados::IoCtx *ioctx, const std::string &id)
@@ -2929,7 +2929,7 @@ void trash_list_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
-  op->exec("rbd", "trash_list", bl);
+  op->exec("rbd", "trash_list", bl, true, false);
 }
 
 int trash_list_finish(bufferlist::const_iterator *it,
@@ -2968,7 +2968,7 @@ void trash_get_start(librados::ObjectReadOperation *op,
 {
   bufferlist bl;
   encode(id, bl);
-  op->exec("rbd", "trash_get", bl);
+  op->exec("rbd", "trash_get", bl, true, false);
 }
 
 int trash_get_finish(bufferlist::const_iterator *it,
@@ -3008,7 +3008,7 @@ void trash_state_set(librados::ObjectWriteOperation *op,
   encode(id, bl);
   encode(trash_state, bl);
   encode(expect_state, bl);
-  op->exec("rbd", "trash_state_set", bl);
+  op->exec("rbd", "trash_state_set", bl, true, true);
 }
 
 int trash_state_set(librados::IoCtx *ioctx, const std::string &id,
@@ -3026,7 +3026,7 @@ void namespace_add(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(name, bl);
-  op->exec("rbd", "namespace_add", bl);
+  op->exec("rbd", "namespace_add", bl, true, true);
 }
 
 int namespace_add(librados::IoCtx *ioctx, const std::string &name)
@@ -3042,7 +3042,7 @@ void namespace_remove(librados::ObjectWriteOperation *op,
 {
   bufferlist bl;
   encode(name, bl);
-  op->exec("rbd", "namespace_remove", bl);
+  op->exec("rbd", "namespace_remove", bl, true, true);
 }
 
 int namespace_remove(librados::IoCtx *ioctx, const std::string &name)
@@ -3059,7 +3059,7 @@ void namespace_list_start(librados::ObjectReadOperation *op,
   bufferlist bl;
   encode(start, bl);
   encode(max_return, bl);
-  op->exec("rbd", "namespace_list", bl);
+  op->exec("rbd", "namespace_list", bl, true, false);
 }
 
 int namespace_list_finish(bufferlist::const_iterator *it,
@@ -3099,7 +3099,7 @@ void sparsify(librados::ObjectWriteOperation *op, uint64_t sparse_size,
   bufferlist bl;
   encode(sparse_size, bl);
   encode(remove_empty, bl);
-  op->exec("rbd", "sparsify", bl);
+  op->exec("rbd", "sparsify", bl, true, true);
 }
 
 int sparsify(librados::IoCtx *ioctx, const std::string &oid, uint64_t sparse_size,

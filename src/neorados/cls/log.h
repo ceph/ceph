@@ -64,7 +64,7 @@ static constexpr auto max_list_entries = 1000u;
   call.entries = std::move(entries);
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec("log", "add", in, true, true);
   }};
 }
 
@@ -82,7 +82,7 @@ static constexpr auto max_list_entries = 1000u;
   call.entries.push_back(std::move(e));
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec("log", "add", in, true, true);
   }};
 }
 
@@ -105,7 +105,7 @@ static constexpr auto max_list_entries = 1000u;
 			    std::move(name), std::move(bl));
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec("log", "add", in, true, true);
   }};
 }
 
@@ -156,7 +156,7 @@ static constexpr auto max_list_entries = 1000u;
 				 std::string{});
 		}
 	      }
-	    });
+	    }, true, false);
   }};
 }
 
@@ -229,7 +229,7 @@ auto list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
 		if (header)
 		*header = std::move(ret.header);
 	      }
-	    });
+	    }, true, false);
   }};
 }
 
@@ -283,7 +283,7 @@ auto info(RADOS& r, Object o, IOContext ioc, CompletionToken&& token)
   call.to_time = to_time;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "trim", in);
+    op.exec("log", "trim", in, true, true);
   }};
 }
 
@@ -325,7 +325,7 @@ inline constexpr std::string_view end_marker{"9"};
   call.to_marker = std::string{to_marker};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "trim", in);
+    op.exec("log", "trim", in, true, true);
   }};
 }
 

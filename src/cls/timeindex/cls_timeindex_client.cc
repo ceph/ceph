@@ -16,7 +16,7 @@ void cls_timeindex_add(
   call.entries = entries;
 
   encode(call, in);
-  op.exec("timeindex", "add", in);
+  op.exec("timeindex", "add", in, true, true);
 }
 
 void cls_timeindex_add(
@@ -28,7 +28,7 @@ void cls_timeindex_add(
   call.entries.push_back(entry);
 
   encode(call, in);
-  op.exec("timeindex", "add", in);
+  op.exec("timeindex", "add", in, true, true);
 }
 
 void cls_timeindex_add_prepare_entry(
@@ -69,7 +69,7 @@ void cls_timeindex_trim(
 
   encode(call, in);
 
-  op.exec("timeindex", "trim", in);
+  op.exec("timeindex", "trim", in, true, true);
 }
 
 int cls_timeindex_trim(
@@ -116,5 +116,5 @@ void cls_timeindex_list(
   encode(call, in);
 
   op.exec("timeindex", "list", in,
-          new TimeindexListCtx(&entries, out_marker, truncated));
+          new TimeindexListCtx(&entries, out_marker, truncated), true, false);
 }

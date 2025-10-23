@@ -28,7 +28,7 @@ void cls_cas_chunk_create_or_get_ref(
   }
   call.data = data;
   encode(call, in);
-  op.exec("cas", "chunk_create_or_get_ref", in);
+  op.exec("cas", "chunk_create_or_get_ref", in, true, true);
 }
 
 void cls_cas_chunk_get_ref(
@@ -39,7 +39,7 @@ void cls_cas_chunk_get_ref(
   cls_cas_chunk_get_ref_op call;
   call.source = soid;
   encode(call, in);
-  op.exec("cas", "chunk_get_ref", in);
+  op.exec("cas", "chunk_get_ref", in, true, true);
 }
 
 void cls_cas_chunk_put_ref(
@@ -50,7 +50,7 @@ void cls_cas_chunk_put_ref(
   cls_cas_chunk_put_ref_op call;
   call.source = soid;
   encode(call, in);
-  op.exec("cas", "chunk_put_ref", in);
+  op.exec("cas", "chunk_put_ref", in, true, true);
 }
 
 int cls_cas_references_chunk(
@@ -60,6 +60,6 @@ int cls_cas_references_chunk(
 {
   bufferlist in, out;
   encode(chunk_oid, in);
-  int r = io_ctx.exec(oid, "cas", "references_chunk", in, out);
+  int r = io_ctx.exec(oid, "cas", "references_chunk", in, out, true, false);
   return r;
 }

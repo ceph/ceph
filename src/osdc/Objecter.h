@@ -161,6 +161,11 @@ struct ObjectOperation {
 
   }
 
+  OSDOp& pass_thru_op(OSDOp& op) {
+    ops.emplace_back(op);
+    return ops.back();
+  }
+
   OSDOp& add_op(int op) {
     ops.emplace_back();
     ops.back().op.op = op;
@@ -1401,38 +1406,84 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPRMKEYRANGE, 0, bl.length(), bl);
   }
 
-  // object classes
-  void call(const char *cname, const char *method, ceph::buffer::list &indata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  // // object classes
+  // void call(const char *cname, const char *method, ceph::buffer::list &indata) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  // }
+  //
+  // void call(const char *cname, const char *method, ceph::buffer::list &indata,
+	 //    ceph::buffer::list *outdata, Context *ctx, int *prval) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
+  // }
+  //
+  // void call(std::string_view cname, std::string_view method,
+	 //    const ceph::buffer::list& indata, boost::system::error_code* ec) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+  //   out_ec.back() = ec;
+  // }
+
+  // void call(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
+  //         boost::system::error_code* ec, ceph::buffer::list *outdata) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr);
+  //   out_ec.back() = ec;
+  // }
+
+  // void call(std::string_view cname, std::string_view method,
+  //         const ceph::buffer::list& indata,
+  //         fu2::unique_function<void (boost::system::error_code,
+  //                                    const ceph::buffer::list&) &&> f) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+  // }
+  // void call(std::string_view cname, std::string_view method,
+  //           const ceph::buffer::list& indata,
+  //           fu2::unique_function<void (boost::system::error_code, int,
+  //                                      const ceph::buffer::list&) &&> f) {
+  //   add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+  // }
+
+  auto _choose_call_op(bool read, bool write) {
+    if (read && write) {
+      return CEPH_OSD_OP_CALL_RW;
+    } else if (read) {
+      return CEPH_OSD_OP_CALL_R;
+    } else if (write) {
+      return CEPH_OSD_OP_CALL_W;
+    }
+
+    return CEPH_OSD_OP_CALL;
+  }
+
+  void call(const char *cname, const char *method, ceph::buffer::list &indata, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, NULL, NULL, NULL);
   }
 
   void call(const char *cname, const char *method, ceph::buffer::list &indata,
-	    ceph::buffer::list *outdata, Context *ctx, int *prval) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
+            ceph::buffer::list *outdata, Context *ctx, int *prval, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, outdata, ctx, prval);
   }
 
   void call(std::string_view cname, std::string_view method,
-	    const ceph::buffer::list& indata, boost::system::error_code* ec) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+            const ceph::buffer::list& indata, boost::system::error_code* ec, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, NULL, NULL, NULL);
     out_ec.back() = ec;
   }
 
   void call(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
-	    boost::system::error_code* ec, ceph::buffer::list *outdata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr);
+	    boost::system::error_code* ec, ceph::buffer::list *outdata, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, outdata, nullptr, nullptr);
     out_ec.back() = ec;
   }
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code,
-				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+				       const ceph::buffer::list&) &&> f, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, std::move(f));
   }
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code, int,
-				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+				       const ceph::buffer::list&) &&> f, bool read, bool write) {
+    add_call(_choose_call_op(read, write), cname, method, indata, std::move(f));
   }
 
   // watch/notify
@@ -1686,6 +1737,10 @@ inline std::ostream& operator <<(std::ostream& m, const ObjectOperation& oo) {
 // ----------------
 
 class Objecter : public md_config_obs_t, public Dispatcher {
+  friend class SplitOp;
+  friend class ECSplitOp;
+  friend class ReplicaSplitOp;
+
   using MOSDOp = _mosdop::MOSDOp<osdc_opvec>;
 public:
   using OpSignature = void(boost::system::error_code);
@@ -1874,6 +1929,7 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
+    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
 
     epoch_t last_force_resend = 0;
 
@@ -2117,6 +2173,26 @@ public:
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
+    }
+
+    void pass_thru_op(::ObjectOperation &other, unsigned index, bufferlist *bl, int *rval) {
+      ceph_assert(index < ops.size());
+
+      other.pass_thru_op(ops[index]);
+      unsigned p = other.ops.size() - 1;
+      ceph_assert(out_bl.size() == ops.size());
+      ceph_assert(out_rval.size() == ops.size());
+      ceph_assert(out_ec.size() == ops.size());
+      ceph_assert(out_handler.size() == ops.size());
+
+      other.out_bl.resize(p + 1);
+      other.out_rval.resize(p + 1);
+      other.out_ec.resize(p + 1);
+      other.out_handler.resize(p + 1);
+
+      other.out_bl[p] = bl;
+      other.out_rval[p] = rval;
+      // We don't copy the out handler here - it must be run by the copied-from op.
     }
 
   private:
@@ -2559,8 +2635,7 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, Connection *con,
-		   bool any_change = false);
+  int _calc_target(op_target_t *t, bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);
 
@@ -2749,6 +2824,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
@@ -2813,6 +2889,7 @@ private:
 			      int *ctx_budget = NULL);
   // public interface
 public:
+  void op_post_submit(Op *op);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);

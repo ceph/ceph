@@ -324,6 +324,7 @@ void PeeringState::query_unfound(Formatter *f, string state)
 void PeeringState::apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
 			      const pg_shard_t &shard,
 			      pg_info_t &info,
+			      peering_stage stage,
 			      pg_log_t *log1,
 			      PGLog *log2)
 {
@@ -331,20 +332,13 @@ void PeeringState::apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
   // knowledge of partial_writes
   const auto & [fromversion, toversion] = pwlc;
   if (toversion > info.last_update) {
-    if (fromversion <= info.last_update) {
-      if (info.last_complete == info.last_update) {
-	psdout(10) << "osd." << shard << " has last_complete"
-		   << "=last_update " << info.last_update
-		   << " pwlc can advance both to " << toversion
-		   << dendl;
-	info.last_complete = toversion;
-      } else {
-	psdout(10) << "osd." << shard << " has last_complete "
-		   << info.last_complete << " and last_update "
-		   << info.last_update
-		   << " pwlc can advance last_update to " << toversion
-		   << dendl;
-      }
+    if ((fromversion <= info.last_update) &&
+	(info.last_complete == info.last_update)) {
+      psdout(10) << "osd." << shard << " has last_complete"
+		 << "=last_update " << info.last_update
+		 << " pwlc can advance both to " << toversion
+		 << dendl;
+      info.last_complete = toversion;
       info.last_update = toversion;
       if (log1 && toversion > log1->head) {
 	log1->head = toversion;
@@ -364,7 +358,8 @@ void PeeringState::apply_pwlc(const std::pair<eversion_t, eversion_t> pwlc,
 }
 
 void PeeringState::update_peer_info(const pg_shard_t &from,
-				    const pg_info_t &oinfo)
+				    const pg_info_t &oinfo,
+				    peering_stage stage)
 {
   // Merge pwlc information from another shard into
   // info.partial_writes_last_complete keeping the newest
@@ -423,14 +418,15 @@ void PeeringState::update_peer_info(const pg_shard_t &from,
   if (is_primary()) {
     for (auto & [shard, peer] : peer_info) {
       if (info.partial_writes_last_complete.contains(shard.shard)) {
-	apply_pwlc(info.partial_writes_last_complete[shard.shard], shard, peer);
+	apply_pwlc(info.partial_writes_last_complete[shard.shard], shard, peer,
+		   stage);
       }
     }
   }
   // Non-primary shards might need to apply pwlc to update info
   if (info.partial_writes_last_complete.contains(pg_whoami.shard)) {
     apply_pwlc(info.partial_writes_last_complete[pg_whoami.shard], pg_whoami,
-	       info, &pg_log);
+	       info, stage, &pg_log);
   }
 }
 
@@ -457,7 +453,7 @@ bool PeeringState::proc_replica_notify(const pg_shard_t &from, const pg_notify_t
   peer_info[from] = oinfo;
   stats_last_update[from] = oinfo.last_update;
 
-  update_peer_info(from, oinfo);
+  update_peer_info(from, oinfo, BEFORE_ACTIVATE);
   might_have_unfound.insert(from);
 
   update_history(oinfo.history);
@@ -1549,17 +1545,21 @@ bool PeeringState::needs_backfill() const
 }
 
 /**
-* Returns whether a particular object can be safely read on this replica
+* Returns whether a particular object can be safely read
 */
-bool PeeringState::can_serve_replica_read(const hobject_t &hoid)
+bool PeeringState::can_serve_read(const hobject_t &hoid)
 {
   ceph_assert(!is_primary());
+  std::string_view storage_object = "replica";
+  if (pool.info.is_erasure()) {
+    storage_object = "shard";
+  }
   if (!pg_log.get_log().has_write_since(
       hoid, pg_committed_to)) {
-    psdout(20) << "can be safely read on this replica" << dendl;
+    psdout(20) << "can be safely read on this " << storage_object << dendl;
     return true;
   } else {
-    psdout(20) << "can't read object on this replica" << dendl;
+    psdout(20) << "can't read object on this " << storage_object << dendl;
     return false;
   }
 }
@@ -2751,8 +2751,16 @@ bool PeeringState::search_for_missing(
   PeeringCtxWrapper &ctx)
 {
   uint64_t num_unfound_before = missing_loc.num_unfound();
+  pg_info_t tinfo(oinfo);
+  tinfo.pgid.shard = pg_whoami.shard;
+  // add partial write from our info
+  tinfo.partial_writes_last_complete = info.partial_writes_last_complete;
+  tinfo.partial_writes_last_complete_epoch = info.partial_writes_last_complete_epoch;
+  if (info.partial_writes_last_complete.contains(from.shard)) {
+    apply_pwlc(info.partial_writes_last_complete[from.shard], from, tinfo, AFTER_ACTIVATE);
+  }
   bool found_missing = missing_loc.add_source_info(
-    from, oinfo, omissing, ctx.handle);
+    from, tinfo, omissing, ctx.handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     pl->publish_stats_to_osd();
   // avoid doing this if the peer is empty.  This is abit of paranoia
@@ -2761,14 +2769,6 @@ bool PeeringState::search_for_missing(
   // last_update=0'0 that's impossible.)
   if (found_missing &&
       oinfo.last_update != eversion_t()) {
-    pg_info_t tinfo(oinfo);
-    tinfo.pgid.shard = pg_whoami.shard;
-    // add partial write from our info
-    tinfo.partial_writes_last_complete = info.partial_writes_last_complete;
-    tinfo.partial_writes_last_complete_epoch = info.partial_writes_last_complete_epoch;
-    if (info.partial_writes_last_complete.contains(from.shard)) {
-      apply_pwlc(info.partial_writes_last_complete[from.shard], from, tinfo);
-    }
     if (!tinfo.partial_writes_last_complete.empty()) {
       psdout(20) << "sending info to " << from
 		 << " pwlc=e" << tinfo.partial_writes_last_complete_epoch
@@ -3191,6 +3191,10 @@ void PeeringState::activate(
 	  ceph_assert(pi_it != peer_info.end());
 	  auto pm_it = peer_missing.find(*i);
 	  ceph_assert(pm_it != peer_missing.end());
+          if (info.partial_writes_last_complete.contains(i->shard)) {
+	    apply_pwlc(info.partial_writes_last_complete[i->shard], *i,
+		       pi_it->second, AFTER_ACTIVATE);
+	  }
 	  missing_loc.add_source_info(
 	    *i,
 	    pi_it->second,
@@ -3368,7 +3372,7 @@ void PeeringState::proc_master_log(
 
   if (info.partial_writes_last_complete.contains(from.shard)) {
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
-	       &olog);
+	       BEFORE_ACTIVATE, &olog);
   }
 
   bool invalidate_stats = false;
@@ -3559,12 +3563,12 @@ void PeeringState::proc_replica_log(
 
   if (info.partial_writes_last_complete.contains(from.shard)) {
     apply_pwlc(info.partial_writes_last_complete[from.shard], from, oinfo,
-	       &olog);
+	       BEFORE_ACTIVATE, &olog);
   }
   pg_log.proc_replica_log(oinfo, olog, omissing, from, pool.info.allows_ecoptimizations());
 
   peer_info[from] = oinfo;
-  update_peer_info(from, oinfo);
+  update_peer_info(from, oinfo, BEFORE_ACTIVATE);
   psdout(10) << " peer osd." << from << " now "
 	     << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
@@ -7070,10 +7074,10 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
   if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
     ps->apply_pwlc(msg->info.partial_writes_last_complete[ps->pg_whoami.shard],
-		   ps->pg_whoami, ps->info, &ps->pg_log);
+		   ps->pg_whoami, ps->info, AFTER_ACTIVATE, &ps->pg_log);
   }
   ps->merge_log(t, logevt.msg->info, std::move(logevt.msg->log), logevt.from);
-  ps->update_peer_info(logevt.from, logevt.msg->info);
+  ps->update_peer_info(logevt.from, logevt.msg->info, AFTER_ACTIVATE);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -7195,10 +7199,10 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   } else {
     if (msg->info.partial_writes_last_complete.contains(ps->pg_whoami.shard)) {
       ps->apply_pwlc(msg->info.partial_writes_last_complete[ps->pg_whoami.shard],
-		     ps->pg_whoami, ps->info, &ps->pg_log);
+		     ps->pg_whoami, ps->info, AFTER_ACTIVATE, &ps->pg_log);
     }
     ps->merge_log(t, msg->info, std::move(msg->log), logevt.from);
-    ps->update_peer_info(logevt.from, msg->info);
+    ps->update_peer_info(logevt.from, msg->info, AFTER_ACTIVATE);
   }
   if (logevt.msg->lease) {
     ps->proc_lease(*logevt.msg->lease);
@@ -7258,7 +7262,7 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
   // Log must be consistent with info
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
   // Update pwlc
-  ps->update_peer_info(infoevt.from, infoevt.info);
+  ps->update_peer_info(infoevt.from, infoevt.info, AFTER_ACTIVATE);
   post_event(Activate(infoevt.info.last_epoch_started));
   return transit<ReplicaActive>();
 }
@@ -8109,7 +8113,7 @@ boost::statechart::result PeeringState::WaitUpThru::react(const MLogRec& logevt)
   psdout(10) << "Noting missing from osd." << logevt.from << dendl;
   ps->peer_missing[logevt.from].claim(std::move(logevt.msg->missing));
   ps->peer_info[logevt.from] = logevt.msg->info;
-  ps->update_peer_info(logevt.from, logevt.msg->info);
+  ps->update_peer_info(logevt.from, logevt.msg->info, BEFORE_ACTIVATE);
   return discard_event();
 }
 

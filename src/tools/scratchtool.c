@@ -252,7 +252,7 @@ static int testrados(void)
 	printf("rados_stat(does_not_exist) = %d\n", r);
 
 	/* exec */
-	rados_exec(io_ctx, oid, "crypto", "md5", buf, strlen(buf) + 1, buf, 128);
+	rados_exec(io_ctx, oid, "crypto", "md5", buf, strlen(buf) + 1, buf, 128, 0, 0);
 	printf("exec result=%s\n", buf);
 	r = rados_read(io_ctx, oid, buf2, 128, 0);
 	printf("read result=%s\n", buf2);

@@ -281,6 +281,7 @@ bool ECBackend::_handle_message(
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
+    reply->pgid.reset_shard(op->op.from.shard);
     get_parent()->send_message_osd_cluster(
       reply, _op->get_req()->get_connection());
     return true;
@@ -1006,7 +1007,90 @@ int ECBackend::objects_read_sync(
     uint64_t len,
     uint32_t op_flags,
     bufferlist *bl) {
-  return -EOPNOTSUPP;
+
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EIO;  // Permission denied (cos its missing)
+  }
+
+  auto [shard_offset, shard_len] = extent_to_shard_extent(off, len);
+
+
+  dout(20) << __func__ << " Submitting sync read: "
+      << " hoid=" << hoid
+      << " shard_offset=" << shard_offset
+      << " shard_len=" << shard_len
+      << " op_flags=" << op_flags
+      << " primary=" << switcher->is_primary()
+      << dendl;
+
+
+  return switcher->store->read(switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+          shard_offset,
+          shard_len, *bl, op_flags);
+}
+
+std::pair<uint64_t, uint64_t> ECBackend::extent_to_shard_extent(uint64_t off, uint64_t len) {
+  // sync reads are supported for sub-chunk reads where no reconstruct is
+  // required.
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  uint64_t start_chunk = off / chunk_size;
+  // This calculation is wrong for length = 0, but it doesn't matter if these reads get sent to the primary
+  uint64_t end_chunk = (off + len - 1) / chunk_size;
+  uint64_t shard_offset, shard_len;
+  shard_id_t shard = get_parent()->whoami_shard().shard;
+  raw_shard_id_t raw_shard = sinfo.get_raw_shard(shard);
+
+  if (end_chunk == start_chunk) {
+    shard_offset = sinfo.ro_offset_to_shard_offset(off, raw_shard);
+    shard_len = len;
+  } else {
+    ECUtil::shard_extent_set_t full_read(sinfo.get_k_plus_m());
+    sinfo.ro_range_to_shard_extent_set(off, len, full_read);
+    shard_offset = full_read[shard].range_start();
+    shard_len = full_read[shard].range_end() - shard_offset;
+  }
+
+  return std::pair(shard_offset, shard_len);
+}
+
+int ECBackend::objects_readv_sync(const hobject_t &hoid,
+     std::map<uint64_t, uint64_t>& m,
+     uint32_t op_flags,
+     ceph::buffer::list *bl) {
+  if (get_parent()->get_local_missing().is_missing(hoid)) {
+    return -EACCES;  // Permission denied (cos its missing)
+  }
+
+  // Not using extent set, since we need the one used by readv.
+
+  auto shard = get_parent()->whoami_shard().shard;
+  interval_set im(std::move(m));
+  m.clear(); // Make m safe to write to again.
+  auto r = switcher->store->readv(switcher->ch, ghobject_t(hoid, ghobject_t::NO_GEN, shard), im, *bl, op_flags);
+  if (r >= 0) {
+    uint64_t chunk_size = sinfo.get_chunk_size();
+    for (auto [off, len] : im) {
+      uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
+      uint64_t to_next_chunk = ((off / chunk_size) + 1) * chunk_size - off;
+      uint64_t ro_len = std::min(to_next_chunk, len);
+      while (len > 0 ) {
+        dout(20) << __func__ << " shard=" << shard << " extent=" << off << "~" << len <<  ">" << ro_offset << "~" << ro_len << dendl;
+        m.emplace(ro_offset, ro_len);
+        len -= ro_len;
+        ro_offset += ro_len + sinfo.get_stripe_width() - chunk_size;
+        ro_len = std::min(len, chunk_size);
+      }
+    }
+  } else {
+    return r;
+  }
+
+  return 0;
 }
 
 void ECBackend::objects_read_async(

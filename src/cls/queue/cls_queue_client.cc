@@ -17,13 +17,13 @@ void cls_queue_init(ObjectWriteOperation& op, const string& queue_name, uint64_t
   call.max_urgent_data_size = 0;
   call.queue_size = size;
   encode(call, in);
-  op.exec(QUEUE_CLASS, QUEUE_INIT, in);
+  op.exec(QUEUE_CLASS, QUEUE_INIT, in, true, true);
 }
 
 int cls_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& size)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out);
+  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out, true, false);
   if (r < 0)
     return r;
 
@@ -46,13 +46,13 @@ void cls_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, vecto
   cls_queue_enqueue_op call;
   call.bl_data_vec = std::move(bl_data_vec);
   encode(call, in);
-  op.exec(QUEUE_CLASS, QUEUE_ENQUEUE, in);
+  op.exec(QUEUE_CLASS, QUEUE_ENQUEUE, in, true, true);
 }
 
 int cls_queue_list_entries_inner(IoCtx& io_ctx, const string& oid, vector<cls_queue_entry>& entries,
                                  bool *truncated, string& next_marker, bufferlist& in, bufferlist& out)
 {
-  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out);
+  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out, true, false);
   if (r < 0)
     return r;
 
@@ -105,5 +105,5 @@ void cls_queue_remove_entries(ObjectWriteOperation& op, const string& end_marker
   cls_queue_remove_op rem_op;
   rem_op.end_marker = end_marker;
   encode(rem_op, in);
-  op.exec(QUEUE_CLASS, QUEUE_REMOVE_ENTRIES, in);
+  op.exec(QUEUE_CLASS, QUEUE_REMOVE_ENTRIES, in, true, true);
 }

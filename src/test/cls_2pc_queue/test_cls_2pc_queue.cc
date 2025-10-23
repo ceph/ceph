@@ -270,7 +270,7 @@ TEST_F(TestCls2PCQueue, UpgradeFromReef)
     cls_queue_remove_op rem_op;
     rem_op.end_marker = end_marker;
     encode(rem_op, in);
-    wop.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
+    wop.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in, false, false);
   };
 
   while (truncated) {

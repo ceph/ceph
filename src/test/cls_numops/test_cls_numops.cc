@@ -36,7 +36,7 @@ TEST(ClsNumOps, Add) {
 
   bufferlist in, out;
 
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "add", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "add", in, out, false, false));
 
   // add a number to a non-existing key
 
@@ -220,7 +220,7 @@ TEST(ClsNumOps, Mul) {
 
   bufferlist in, out;
 
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "mul", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "mul", in, out, false, false));
 
   // multiply a number to a non-existing key
 

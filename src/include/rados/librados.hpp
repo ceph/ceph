@@ -340,9 +340,12 @@ inline namespace v14_2_0 {
     void cmpext(uint64_t off, const bufferlist& cmp_bl, int *prval);
     void cmpxattr(const char *name, uint8_t op, const bufferlist& val);
     void cmpxattr(const char *name, uint8_t op, uint64_t v);
-    void exec(const char *cls, const char *method, bufferlist& inbl);
-    void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
-    void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
+    // void exec(const char *cls, const char *method, bufferlist& inbl);
+    // void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
+    // void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
+    void exec(const char *cls, const char *method, bufferlist& inbl, bool read, bool write);
+    void exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval, bool read, bool write);
+    void exec(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion, bool read, bool write);
     /**
      * Guard operation with a check that object version == ver
      *
@@ -888,8 +891,10 @@ inline namespace v14_2_0 {
     int rmxattr(const std::string& oid, const char *name);
     int stat(const std::string& oid, uint64_t *psize, time_t *pmtime);
     int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
+    // int exec(const std::string& oid, const char *cls, const char *method,
+	   //   bufferlist& inbl, bufferlist& outbl);
     int exec(const std::string& oid, const char *cls, const char *method,
-	     bufferlist& inbl, bufferlist& outbl);
+             bufferlist& inbl, bufferlist& outbl, bool read, bool write);
     /**
      * modify object tmap based on encoded update sequence
      *
@@ -1178,9 +1183,10 @@ inline namespace v14_2_0 {
      */
     int aio_cancel(AioCompletion *c);
 
+    // int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
+	   //       bufferlist& inbl, bufferlist *outbl);
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
-	         bufferlist& inbl, bufferlist *outbl);
-
+                 bufferlist& inbl, bufferlist *outbl, bool read, bool write);
     /*
      * asynchronous version of unlock
      */

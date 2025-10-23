@@ -149,7 +149,8 @@ struct librados::IoCtxImpl {
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
 
-  int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
+  // int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
+  int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl, bool read, bool write);
 
   int getxattr(const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(const object_t& oid, const char *name, bufferlist& bl);
@@ -213,10 +214,14 @@ struct librados::IoCtxImpl {
   int aio_writesame(const object_t &oid, AioCompletionImpl *c,
 		    const bufferlist& bl, size_t write_len, uint64_t off);
   int aio_remove(const object_t &oid, AioCompletionImpl *c, int flags=0);
+  // int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
+	 //       const char *method, bufferlist& inbl, bufferlist *outbl);
+  // int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
+	 //       const char *method, bufferlist& inbl, char *buf, size_t out_len);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
-	       const char *method, bufferlist& inbl, bufferlist *outbl);
+               const char *method, bufferlist& inbl, bufferlist *outbl, bool read, bool write);
   int aio_exec(const object_t& oid, AioCompletionImpl *c, const char *cls,
-	       const char *method, bufferlist& inbl, char *buf, size_t out_len);
+               const char *method, bufferlist& inbl, char *buf, size_t out_len, bool read, bool write);
   int aio_stat(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, time_t *pmtime);
   int aio_stat2(const object_t& oid, AioCompletionImpl *c, uint64_t *psize, struct timespec *pts);
   int aio_getxattr(const object_t& oid, AioCompletionImpl *c,

@@ -552,7 +552,7 @@ common::intrusive_timer &PrimaryLogPG::get_pg_timer()
   return osd->pg_timer;
 }
 
-void PrimaryLogPG::replica_clear_repop_obc(
+void PrimaryLogPG::clear_repop_obc(
   const vector<pg_log_entry_t> &logv,
   ObjectStore::Transaction &t)
 {
@@ -2047,16 +2047,22 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // check for op with rwordered and rebalance or localize reads
-  if ((m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) || m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->rwordered()) {
+  if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
     dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+  if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    if (is_primary() || is_nonprimary()) {
+      op->set_ec_direct_read();
+    } else {
+      osd->handle_misdirected_op(this, op);
+      return;
+    }
+  } else if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+                                CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
@@ -2346,15 +2352,20 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (!is_primary()) {
-    if (!recovery_state.can_serve_replica_read(oid)) {
+    if (!recovery_state.can_serve_read(oid)) {
+      std::string_view storage_object = "replica";
+      if (pool.info.is_erasure()) {
+        storage_object = "shard";
+      }
       dout(20) << __func__
-               << ": unstable write on replica, bouncing to primary "
+               << ": unstable write on " << storage_object
+               << ", bouncing to primary "
 	       << *m << dendl;
       osd->logger->inc(l_osd_replica_read_redirect_conflict);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
-    dout(20) << __func__ << ": serving replica read on oid " << oid
+    dout(20) << __func__ << ": serving read on oid " << oid
              << dendl;
     osd->logger->inc(l_osd_replica_read_served);
   }
@@ -3804,19 +3815,19 @@ ceph_tid_t PrimaryLogPG::refcount_manifest(hobject_t src_soid, hobject_t tgt_soi
     cls_cas_chunk_get_ref_op call;
     call.source = src_soid.get_head();
     ::encode(call, in);
-    obj_op.call("cas", "chunk_get_ref", in);
+    obj_op.call("cas", "chunk_get_ref", in, true, false);
   } else if (type == refcount_t::DECREMENT_REF) {
     cls_cas_chunk_put_ref_op call;
     call.source = src_soid.get_head();
     ::encode(call, in);
-    obj_op.call("cas", "chunk_put_ref", in);
+    obj_op.call("cas", "chunk_put_ref", in, true, true);
   } else if (type == refcount_t::CREATE_OR_GET_REF) {
     cls_cas_chunk_create_or_get_ref_op get_call;
     get_call.source = src_soid.get_head();
     ceph_assert(chunk);
     get_call.data = std::move(*chunk);
     ::encode(get_call, in);
-    obj_op.call("cas", "chunk_create_or_get_ref", in);
+    obj_op.call("cas", "chunk_create_or_get_ref", in, true, true);
   } else {
     ceph_assert(0 == "unrecognized type");
   }
@@ -5883,6 +5894,20 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
+
+    if (ctx->op->ec_direct_read()) {
+      int r = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      if (r >= 0) {
+        op.extent.length = r;
+      } else if (r == -EAGAIN) {
+        result = -EAGAIN;
+      } else {
+        result = r;
+        op.extent.length = 0;
+      }
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
     ctx->pending_async_reads.push_back(
       make_pair(
         boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
@@ -5894,6 +5919,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5953,7 +5979,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.is_erasure()) {
+  if (pool.info.is_erasure() && !ctx->op->ec_direct_read()) {
     // translate sparse read to a normal one if not supported
 
     if (length > 0) {
@@ -5976,9 +6002,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
+    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
-			       offset, length, m);
+			       shard_offset, shard_length, m);
     if (r < 0)  {
       return r;
     }
@@ -5989,6 +6016,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
+      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
       return r;
     }
 
@@ -6203,6 +6231,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_CALL:
+    case CEPH_OSD_OP_CALL_R:
+    case CEPH_OSD_OP_CALL_W:
+    case CEPH_OSD_OP_CALL_RW:
       {
 	string cname, mname;
 	bufferlist indata;
@@ -6242,12 +6273,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	int prev_wr = ctx->num_write;
 	result = method->exec((cls_method_context_t)&ctx, indata, outdata);
 
-	if (ctx->num_read > prev_rd && !(flags & CLS_METHOD_RD)) {
+	if (ctx->num_read > prev_rd && (!(flags & CLS_METHOD_RD) || op.op == CEPH_OSD_OP_CALL_W) ) {
 	  derr << "method " << cname << "." << mname << " tried to read object but is not marked RD" << dendl;
 	  result = -EIO;
 	  break;
 	}
-	if (ctx->num_write > prev_wr && !(flags & CLS_METHOD_WR)) {
+	if (ctx->num_write > prev_wr && !(flags & CLS_METHOD_WR) || op.op == CEPH_OSD_OP_CALL_R) {
 	  derr << "method " << cname << "." << mname << " tried to update object but is not marked WR" << dendl;
 	  result = -EIO;
 	  break;
@@ -10522,7 +10553,7 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
   for (std::map<std::string, bufferlist>::iterator it = src_obj_buffs->begin(); it != src_obj_buffs->end(); it++) {
     std::string oid = it->first;
     ObjectOperation obj_op;
-    obj_op.call(cls, method, inbl);
+    obj_op.call(cls, method, inbl, false, false); // Turn off checking.
     uint32_t flags = 0;
     ceph_tid_t tid = osd->objecter->read(
 					 object_t(oid), oloc, obj_op,

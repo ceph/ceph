@@ -1312,17 +1312,17 @@ int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
 
 int librados::IoCtxImpl::exec(const object_t& oid,
 			      const char *cls, const char *method,
-			      bufferlist& inbl, bufferlist& outbl)
+			      bufferlist& inbl, bufferlist& outbl, bool read, bool write)
 {
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.call(cls, method, inbl);
+  rd.call(cls, method, inbl, read, write);
   return operate_read(oid, &rd, &outbl, 0, objclass_flags_mask);
 }
 
 int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
-				  bufferlist& inbl, bufferlist *outbl)
+				  bufferlist& inbl, bufferlist *outbl, bool read, bool write)
 {
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
@@ -1335,16 +1335,38 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.call(cls, method, inbl);
+  rd.call(cls, method, inbl, read, write);
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc, rd, snap_seq, outbl, extra_op_flags, objclass_flags_mask, oncomplete, &c->objver);
   objecter->op_submit(o, &c->tid);
   return 0;
 }
 
+// int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
+//                                   const char *cls, const char *method,
+//                                   bufferlist& inbl, bufferlist *outbl)
+// {
+//   FUNCTRACE(client->cct);
+//   Context *oncomplete = new C_aio_Complete(c);
+//
+// #if defined(WITH_EVENTTRACE)
+//   ((C_aio_Complete *) oncomplete)->oid = oid;
+// #endif
+//   c->is_read = true;
+//   c->io = this;
+//
+//   ::ObjectOperation rd;
+//   prepare_assert_ops(&rd);
+//   rd.call(cls, method, inbl);
+//   Objecter::Op *o = objecter->prepare_read_op(
+//     oid, oloc, rd, snap_seq, outbl, extra_op_flags, objclass_flags_mask, oncomplete, &c->objver);
+//   objecter->op_submit(o, &c->tid);
+//   return 0;
+// }
+
 int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
-				  bufferlist& inbl, char *buf, size_t out_len)
+				  bufferlist& inbl, char *buf, size_t out_len, bool read, bool write)
 {
   FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
@@ -1361,7 +1383,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 
   ::ObjectOperation rd;
   prepare_assert_ops(&rd);
-  rd.call(cls, method, inbl);
+  rd.call(cls, method, inbl, read, write);
   Objecter::Op *o = objecter->prepare_read_op(
     oid, oloc, rd, snap_seq, &c->bl, extra_op_flags, objclass_flags_mask, oncomplete, &c->objver);
   objecter->op_submit(o, &c->tid);
