@@ -3097,7 +3097,8 @@ class RmtreeDir:
 
         # XXX: exception (if) raised here should be handled by caller based on
         # the context.
-        self.handle = self.fs.opendir(self.path)
+        self.fd = self.fs.open(self.rel_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        self.handle = self.fs.fdopendir(self.fd)
 
         # Is this directory empty? It will be set by self.read_dir().
         self.is_empty = None
