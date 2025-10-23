@@ -427,7 +427,7 @@ void Replayer<I>::handle_refresh_remote_image(int r) {
 
 template <typename I>
 void Replayer<I>::refresh_local_image() {
-  if (m_state_builder->local_image_meta->resync_requested &&
+  if (m_state_builder->local_image_meta->get_resync_requested() &&
       is_remote_primary()) {
     std::unique_lock locker{m_lock};
     m_resync_requested = true;
