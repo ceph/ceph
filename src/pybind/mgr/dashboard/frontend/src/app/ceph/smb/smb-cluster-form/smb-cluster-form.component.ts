@@ -1,4 +1,4 @@
-import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { forkJoin, Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -38,13 +38,14 @@ import { UpperFirstPipe } from '~/app/shared/pipes/upper-first.pipe';
 import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
 import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 import { Host } from '~/app/shared/models/host.interface';
+import { FormStoreService } from '~/app/shared/services/form-store.service';
 
 @Component({
   selector: 'cd-smb-cluster-form',
   templateUrl: './smb-cluster-form.component.html',
   styleUrls: ['./smb-cluster-form.component.scss']
 })
-export class SmbClusterFormComponent extends CdForm implements OnInit {
+export class SmbClusterFormComponent extends CdForm implements OnInit, OnDestroy {
   smbForm: CdFormGroup;
   hostsAndLabels$: Observable<{ hosts: any[]; labels: any[] }>;
   hasOrchestrator: boolean;
@@ -63,6 +64,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   clusterResponse: SMBCluster;
   modalData$!: Observable<DomainSettings>;
   usersGroups$: Observable<SMBUsersGroups[]>;
+  clearFormStore: boolean = true;
 
   constructor(
     private hostService: HostService,
@@ -74,7 +76,8 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     private taskWrapperService: TaskWrapperService,
     private router: Router,
     private cd: ChangeDetectorRef,
-    private route: ActivatedRoute
+    private route: ActivatedRoute,
+    private formStoreService: FormStoreService
   ) {
     super();
 
@@ -180,6 +183,17 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
     this.allClustering = Object.values(CLUSTERING);
     this.loadingReady();
     if (!this.isEdit) this.onAuthModeChange();
+
+    const savedFormData = this.formStoreService.load();
+    if (savedFormData) {
+      this.formStoreService.patchForm(this.smbForm, savedFormData);
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.formStoreService.clearFormData) {
+      this.formStoreService.clear();
+    }
   }
 
   createForm() {
@@ -413,6 +427,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   editDomainSettingsModal() {
+    this.formStoreService.save(this.smbForm);
     this.modalService.show(SmbDomainSettingModalComponent, {
       domainSettingsObject: this.domainSettingsObject
     });
@@ -441,6 +456,7 @@ export class SmbClusterFormComponent extends CdForm implements OnInit {
   }
 
   navigateCreateUsersGroups() {
+    this.formStoreService.save(this.smbForm);
     this.router.navigate([`${USERSGROUPS_PATH}/${URLVerbs.CREATE}`]);
   }
 
