@@ -192,6 +192,23 @@ class Module(MgrModule):
             sort_by_name = sort_by.name if sort_by else OSD_PERF_QUERY_COUNTERS[0]
             return self.perf.get_perf_stats(pool_spec, sort_by_name)
 
+    @CLIReadCommand('rbd test_intermodule_call')
+    @with_latest_osdmap
+    def test_intermodule_call(self):
+        with self.perf.lock:
+            pool = 3
+            group = 4
+            placement = "asdf"
+            from ceph.deployment.service_spec import NvmeofServiceSpec, ServiceSpec, PlacementSpec
+            ret = NvmeofServiceSpec(
+                service_id=f'{pool}.{group}' if group else pool,
+                pool=pool,
+                group=group,
+                placement=PlacementSpec.from_string(placement),
+            )
+            #ret.validate()
+            return ret
+
     @CLIReadCommand('rbd perf image counters')
     @with_latest_osdmap
     def perf_image_counters(self,

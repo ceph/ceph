@@ -430,8 +430,10 @@ class Module(MgrModule):
          "perm": "rw"},
         {"cmd": "progress off",
          "desc": "Disable progress tracking",
-         "perm": "rw"}
-
+         "perm": "rw"},
+        {"cmd": "progress test intermodule call",
+         "desc": "request spec from rbd_suport module DNM",
+         "perm": "r"}
     ]
 
     MODULE_OPTIONS = [
@@ -873,5 +875,13 @@ class Module(MgrModule):
             self.off()
             self.clear()
             return 0, "", "progress disabled"
+        elif cmd['prefix'] == "progress test intermodule call":
+            ret = self.remote('rbd_support', 'test_intermodule_call')
+            try:
+                ret.validate()
+            except Exception as e:
+                self.getLogger().error("validate failed {}".format(e))
+                raise e
+            return 0, "", "worked"
         else:
             raise NotImplementedError(cmd['prefix'])
