@@ -1468,6 +1468,23 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in open {}".format(path.decode('utf-8')))
         return ret
 
+    def openat(self, dirfd, relpath, flags, mode):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            int flags_ = flags
+            char* relpath_ = relpath
+            int mode_ = mode
+
+        with nogil:
+            ret = ceph_openat(self.cluster, dirfd_, relpath_, flags_, mode_)
+        if ret < 0:
+            raise make_ex(ret, f'error in openat {relpath}')
+        return ret
+
+
     def close(self, fd):
         """
         Close the open file.
