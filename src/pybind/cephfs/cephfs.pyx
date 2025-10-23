@@ -2969,7 +2969,7 @@ class NonRecursiveRmtree:
 
         try:
             rel_path = os.path.join(self.curr_dir.rel_path, de_name)
-            self.stack.append(RmtreeDir(self.fs, rel_path))
+            self.stack.append(RmtreeDir(self.fs, rel_path, self.curr_dir.fd))
             return True
         except Error as e:
             if self.suppress_errors:
@@ -3002,7 +3002,7 @@ class NonRecursiveRmtree:
         This is where depth-first, non-recursive traversal is done.
         '''
         try:
-            self.stack.append(RmtreeDir(self.fs, self.trash_path))
+            self.stack.append(RmtreeDir(self.fs, self.trash_path, None))
         except Exception as e:
             log.error('opening root dir of the file tree failed with exception '
                       f'"{e}", exiting.')
@@ -3062,15 +3062,21 @@ class RmtreeDir:
     helper for class NonRecursiveRmtree.
     '''
 
-    def __init__(self, fs, rel_path):
+    def __init__(self, fs, rel_path, parent_dir_fd):
         self.fs = fs
         self.rel_path = rel_path
 
         self.name = os.path.basename(self.rel_path)
 
-        # XXX: exception (if) raised here should be handled by caller based on
-        # the context.
-        self.fd = self.fs.open(self.rel_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        self.parent_dir_fd = parent_dir_fd
+        # XXX: exception (if) raised in following two lines should be handled by
+        # caller based on the context.
+        if self.parent_dir_fd:
+            self.fd = self.fs.openat(self.parent_dir_fd, self.name,
+                                     os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        else:
+            self.fd = self.fs.open(self.rel_path, os.O_RDONLY | os.O_DIRECTORY,
+                                   0o755)
         self.handle = self.fs.fdopendir(self.fd)
 
         # Is this directory empty? It will be set by self.read_dir().
