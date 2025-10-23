@@ -32,7 +32,16 @@
 
   .list-inline {
     margin-bottom: 0;
-    margin-left: 17%;
+  }
+
+  .branding-info {
+    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+
+    img {
+      max-width: 100%;
+    }
   }
 
   a {
