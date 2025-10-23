@@ -45,6 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 REQUIRES_POST_ACTIONS = ['grafana', 'iscsi', 'prometheus', 'alertmanager', 'rgw', 'nvmeof', 'mgmt-gateway']
+DISABLED_SERVICES = ['nfs']
 
 WHICH = ssh.RemoteExecutable('which')
 CEPHADM_EXE = ssh.RemoteExecutable('/usr/bin/cephadm')
@@ -968,10 +969,11 @@ class CephadmServe:
                 for d in daemons_to_remove:
                     assert d.hostname is not None
                     self._remove_daemon(d.name(), d.hostname)
-                daemons_to_remove = []
 
                 # fence them
-                svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                if daemons_to_remove:
+                    svc.fence_old_ranks(spec, rank_map, len(all_slots))
+                daemons_to_remove = []
 
             # create daemons
             daemon_place_fails = []
@@ -1225,6 +1227,12 @@ class CephadmServe:
             action = _ceph_service_next_action(
                 action, dd.daemon_type, dd.name(), self.mgr, last_config
             )
+
+            # If no action is specified, check whether we need to start the daemon
+            if not action and dd.daemon_type in DISABLED_SERVICES:
+                if dd.status == 0 and not dd.user_stopped:
+                    self.log.debug(f'Starting daemon {dd.name()}')
+                    action = 'start'
 
             if action:
                 if scheduled_action == 'redeploy' and action == 'reconfig':
