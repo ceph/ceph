@@ -16,6 +16,7 @@ usage() {
 $0 [containerfile] (defaults to 'Containerfile')
 For a CI build (from ceph-ci.git, built and pushed to shaman):
 CI_CONTAINER: must be 'true'
+FROM_IMAGE: defaults to quay.io/centos/centos9:stream
 FLAVOR (OSD flavor, default or crimson)
 BRANCH (of Ceph. <remote>/<ref>)
 CEPH_SHA1 (of Ceph)
@@ -165,6 +166,16 @@ if [[ ${CI_CONTAINER} == "true" ]] ; then
     full_repo_tag=${repopath}:${BRANCH}-${fromtag}-${ARCH}-devel
     branch_repo_tag=${repopath}:${BRANCH}
     sha1_repo_tag=${repopath}:${CEPH_SHA1}
+
+    # while we have more than just centos9 containers:
+    # anything that's not gets suffixed with its fromtag
+    # for the branch and sha1 tags (for example, <branch>-rocky-10).
+    # The default can change when it needs to.
+
+    if [[ "${fromtag}" != "centos-stream9" ]] ; then
+        branch_repo_tag=${repopath}:${BRANCH}-${fromtag}
+        sha1_repo_tag=${repopath}:${CEPH_SHA1}-${fromtag}
+    fi
 
     if [[ "${ARCH}" == "arm64" ]] ; then
         branch_repo_tag=${branch_repo_tag}-arm64
