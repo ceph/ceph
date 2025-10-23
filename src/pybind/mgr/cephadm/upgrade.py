@@ -1092,9 +1092,9 @@ class CephadmUpgrade:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
         if self.mgr.version_tracker.add_cluster_version(self.mgr._version, str(datetime.datetime.now(datetime.timezone.utc))):
-            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + self.mgr._version + '" added successfully')
+            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + str(self.mgr._version) + '" added successfully')
         else:
-            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + self.mgr._version + '" could not be added')
+            self.mgr.log.debug('Version Tracker, Cluster upgrade version "' + str(self.mgr._version) + '" could not be added')
         self.upgrade_state = None
         self._save_upgrade_state()
 
