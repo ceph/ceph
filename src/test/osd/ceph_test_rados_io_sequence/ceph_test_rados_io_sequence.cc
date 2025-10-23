@@ -994,6 +994,17 @@ void ceph::io_sequence::tester::SelectErasurePool::configureServices(
       rc = send_mon_command(allow_ec_optimisations_request, rados,
                             "OSDPoolSetRequest", {}, &outbl, formatter.get());
       ceph_assert(rc == 0);
+
+      ceph::messaging::osd::OSDPoolSetRequest
+          set_direct_reads_flag_request{pool_name,
+                                        "set_pool_flags",
+                                        std::to_string(1<<20),
+                                        std::nullopt};
+
+      rc = send_mon_command(set_direct_reads_flag_request, rados,
+                            "OSDPoolSetRequest", inbl, &outbl, formatter.get());
+
+      ceph_assert(rc == 0);
     }
 
     if (allow_pool_ec_overwrites) {
