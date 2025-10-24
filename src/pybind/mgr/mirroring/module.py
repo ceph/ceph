@@ -77,9 +77,12 @@ class Module(MgrModule):
     @CLIWriteCommand('fs snapshot mirror add')
     def snapshot_mirror_add_dir(self,
                                 fs_name: str,
-                                path: str):
+                                path: str,
+                                sync_latest_snapshot: Optional[bool] = False,
+                                sync_from_snapshot: Optional[str] = None):
         """Add a directory for snapshot mirroring"""
-        return self.fs_snapshot_mirror.add_dir(fs_name, path)
+        return self.fs_snapshot_mirror.add_dir(fs_name, path, sync_latest_snapshot,
+                                               sync_from_snapshot)
 
     @CLIWriteCommand('fs snapshot mirror remove')
     def snapshot_mirror_remove_dir(self,
