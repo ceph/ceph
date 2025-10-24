@@ -538,7 +538,14 @@ static int os_readdir(const char *path,
   case FN_OBJECT_OMAP:
     {
       set<string> keys;
-      fs->store->omap_get_keys(ch, oid, &keys);
+      fs->store->omap_iterate(
+	ch, oid,
+	ObjectStore::omap_iter_seek_t::min_lower_bound(),
+	[&keys]
+	(std::string_view key, std::string_view) mutable {
+	  keys.emplace(key);
+	  return ObjectStore::omap_iter_ret_t::NEXT;
+	});
       unsigned skip = offset;
       for (auto k : keys) {
 	if (skip) {
