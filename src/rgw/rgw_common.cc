@@ -2872,7 +2872,6 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json_map("subusers", NULL, "subuser", NULL, user_info_dump_subuser,(void *)this, subusers, f);
   encode_json_map("keys", NULL, "key", NULL, user_info_dump_key,(void *)this, access_keys, f);
   encode_json_map("swift_keys", NULL, "key", NULL, user_info_dump_swift_key,(void *)this, swift_keys, f);
-
   encode_json("caps", caps, f);
 
   char buf[256];
