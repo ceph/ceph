@@ -27,6 +27,7 @@
 #include "common/errno.h"
 #include "common/TracepointProvider.h"
 #include "include/Context.h"
+#include "include/buffer_raw.h"
 
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -114,6 +115,15 @@ static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
     buffer::claim_buffer(
       len, const_cast<char*>(buf),
       deleter(new UserBufferDeleter(ictx->cct, aio_completion))));
+}
+
+static auto create_write_raw_with_crc32c(librbd::ImageCtx *ictx, const char *buf,
+                                       size_t len, uint32_t precomputed_crc32c,
+                                       librbd::io::AioCompletion* aio_completion) {
+  auto raw_buffer = create_write_raw(ictx, buf, len, aio_completion);
+  raw_buffer->set_crc(std::make_pair(0, len),
+                      std::make_pair(0, precomputed_crc32c));
+  return raw_buffer;
 }
 
 static int get_iovec_length(const struct iovec *iov, int iovcnt, size_t &len)
@@ -6401,6 +6411,25 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   auto aio_completion = get_aio_completion(comp);
   bufferlist bl;
   bl.push_back(create_write_raw(ictx, buf, len, aio_completion));
+  librbd::api::Io<>::aio_write(
+    *ictx, aio_completion, off, len, std::move(bl), op_flags, true);
+  tracepoint(librbd, aio_write_exit, 0);
+  return 0;
+}
+
+extern "C" int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
+                                         size_t len, const char *buf,
+                                         uint32_t precomputed_crc32c,
+                                         rbd_completion_t c, int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+  tracepoint(librbd, aio_write_with_crc32c_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(),
+         ictx->read_only, off, len, buf, precomputed_crc32c, comp->pc, op_flags);
+
+  auto aio_completion = get_aio_completion(comp);
+  bufferlist bl;
+  bl.push_back(create_write_raw_with_crc32c(ictx, buf, len, precomputed_crc32c, aio_completion));
   librbd::api::Io<>::aio_write(
     *ictx, aio_completion, off, len, std::move(bl), op_flags, true);
   tracepoint(librbd, aio_write_exit, 0);
