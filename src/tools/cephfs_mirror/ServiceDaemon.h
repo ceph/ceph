@@ -14,6 +14,9 @@
 namespace cephfs {
 namespace mirror {
 
+const std::string SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY("mirroring_failed");
+const std::string SERVICE_DAEMON_FAILED_DIR_COUNT_KEY = "failure_count";
+
 class ServiceDaemon {
 public:
   ServiceDaemon(CephContext *cct, RadosRef rados, Messenger* msgr, MonClient* monc);
@@ -32,6 +35,10 @@ public:
   void add_or_update_peer_attribute(fs_cluster_id_t fscid, const Peer &peer,
                                     std::string_view key, AttributeValue value);
   void update_mirror_health(std::vector<DaemonHealthMetric>& health_metrics);
+  void schedule_health_tick();
+  ceph::mutex& get_health_timer_lock() {
+    return h_timer_lock;
+  }
 private:
   struct Filesystem {
     std::string fs_name;
@@ -47,15 +54,20 @@ private:
 
   CephContext *m_cct;
   RadosRef m_rados;
-  SafeTimer *m_timer;
+  SafeTimer *m_timer, *h_timer;
   ceph::mutex m_timer_lock = ceph::make_mutex("cephfs::mirror::ServiceDaemon");
+  ceph::mutex h_timer_lock = ceph::make_mutex("cephfs::mirror::ServiceDaemon");
   ceph::mutex m_lock = ceph::make_mutex("cephfs::mirror::service_daemon");
   Context *m_timer_ctx = nullptr;
+  Context *h_timer_ctx = nullptr;
   std::map<fs_cluster_id_t, Filesystem> m_filesystems;
   MgrClient mgrc;
+  std::vector<DaemonHealthMetric> m_health_metrics;
 
   void schedule_update_status();
   void update_status();
+  void health_tick();
+
 };
 
 } // namespace mirror
