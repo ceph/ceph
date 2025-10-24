@@ -84,6 +84,17 @@ RGW
 * Bucket resharding now does most of its processing before it starts to block
   write operations. This should significantly reduce the client-visible impact
   of resharding on large buckets.
+* RGW: The User Account feature introduced in Squid provides first-class support for
+  IAM APIs and policy. Our preliminary STS support was based on tenants, and
+  exposed some IAM APIs to admins only. This tenant-level IAM functionality is now
+  deprecated in favor of accounts. While we'll continue to support the tenant feature
+  itself for namespace isolation, the following features will be removed no sooner
+  than the V release:
+    * Tenant-level IAM APIs including CreateRole, PutRolePolicy and PutUserPolicy,
+    * Use of tenant names instead of accounts in IAM policy documents,
+    * Interpretation of IAM policy without cross-account policy evaluation,
+    * S3 API support for cross-tenant names such as `Bucket='tenant:bucketname'`
+    * STS Lite and `sts:GetSessionToken`.
 
 CephFS
 ------
