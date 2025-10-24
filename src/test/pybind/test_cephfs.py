@@ -864,6 +864,130 @@ def test_multi_target_command():
             assert(list(mds_sessions.keys())[0].startswith('mds.'))
 
 
+class TestUnlinkat:
+
+    def test_unlinkat_regfile_fd_of_root(self, testdir):
+        regfilename = 'file1'
+
+        fd = cephfs.open(regfilename, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, './' + regfilename, 0)
+        cephfs.close(fd)
+
+    def test_unlinkat_dir_fd_of_root(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        # AT_REMOVEDIR = 0x200
+        cephfs.unlinkat(fd, dirname, 0x200)
+        cephfs.close(fd)
+
+    def test_unlinkat_regfile_fd_of_nonroot(self, testdir):
+        dir1_name = 'dir1'
+        regfile_name = 'file1'
+        regfile_path = 'dir1/file1'
+
+        cephfs.mkdir(dir1_name, 0o755)
+        fd = cephfs.open(regfile_path, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+
+        fd = cephfs.open(dir1_name, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, regfile_name, 0)
+        cephfs.close(fd)
+
+    def test_unlinkat_dir_fd_of_nonroot(self, testdir):
+        dir1_name = 'dir1'
+        dir2_name = 'dir2'
+        dir2_path = 'dir1/dir2'
+
+        cephfs.mkdir(dir1_name, 0o755)
+        cephfs.mkdir(dir2_path, 0o755)
+        fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        cephfs.unlinkat(fd, dir2_name, libcephfs.AT_REMOVEDIR)
+        cephfs.close(fd)
+
+    def test_unlinkat_regfile_AT_FDCWD(self, testdir):
+        regfilename = 'file1'
+
+        fd = cephfs.open(regfilename, 'w', 0o755)
+        cephfs.write(fd, b"abcd", 0)
+        cephfs.close(fd)
+        cephfs.unlinkat(libcephfs.AT_FDCWD, regfilename, 0)
+
+    def test_unlinkat_dir_AT_FDCWD(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        cephfs.unlinkat(libcephfs.AT_FDCWD, dirname, libcephfs.AT_REMOVEDIR)
+
+    def test_unlinkat_for_opened_dir(self, testdir):
+        dirname = 'dir1'
+
+        cephfs.mkdir(dirname, 0o755)
+        fd = cephfs.open('/', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fh = cephfs.opendir(dirname)
+        cephfs.unlinkat(fd, dirname, libcephfs.AT_REMOVEDIR)
+        cephfs.close(fd)
+
+
+class TestFdopendir:
+    '''
+    Tests for libcephfs's fdopendir().
+    '''
+
+    def test_fdopendir_for_dir_at_CWD(self, testdir):
+        dirname = 'dir1'
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+    def test_fdopendir_for_dir_not_at_CWD(self, testdir):
+        dirname = 'dir1/dir2/dir3'
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir(dirname, 0o755)
+
+        fd = cephfs.open(dirname, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        dh = cephfs.fdopendir(fd)
+
+        dh.close()
+
+
+class TestOpenat:
+
+    def test_openat_for_child_subdir(self, testdir):
+        dir1 = 'dir1'
+        dir2 = 'dir2'
+
+        cephfs.mkdir(dir1, 0o755)
+        cephfs.mkdir(f'{dir1}/{dir2}', 0o755)
+
+        fd1 = cephfs.open(dir1, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, dir2, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+    def test_openat_for_grandchild_subdir(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        cephfs.mkdir('dir1/dir2/dir3', 0o755)
+
+        fd1 = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        fd2 = cephfs.openat(fd1, 'dir2/dir3', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        cephfs.close(fd1)
+        cephfs.close(fd2)
+
+
 class TestWithRootUser:
 
     def setup_method(self):
@@ -1531,6 +1655,9 @@ class TestRmtree:
         # this will change return value of should_cancel and therefore halt
         # execution of rmtree()
         cancel_flag.set()
+        # give a little time for cephs.rmtree() to catch exception raised due to
+        # cancel flag and reset the directory
+        time.sleep(0.1)
         # ensure dir6 wasn't deleted
         cephfs.stat('dir6')
         # ensure that deletion had begun but hadn't finished and was halted
