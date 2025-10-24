@@ -3,10 +3,10 @@
 
 #pragma once
 
-#include "include/expected.hpp"
-
 #include "include/buffer.h"
 #include "include/encoding.h"
+
+#include <expected>
 
 namespace crimson::common {
 
@@ -22,7 +22,7 @@ namespace crimson::common {
  *   -EEXIST for CEPH_OSD_TMAP_CREATE on a key that exists
  *   -ENOENT for CEPH_OSD_TMAP_RM on a key that does not exist 
  */
-using do_tmap_up_ret = tl::expected<bufferlist, int>;
+using do_tmap_up_ret = std::expected<bufferlist, int>;
 do_tmap_up_ret do_tmap_up(bufferlist::const_iterator in, bufferlist contents);
 
 /**
@@ -34,7 +34,7 @@ do_tmap_up_ret do_tmap_up(bufferlist::const_iterator in, bufferlist contents);
  * @return buffer containing validated tmap encoded by in
  *   -EINVAL for decoding errors,
  */
-using do_tmap_up_ret = tl::expected<bufferlist, int>;
+using do_tmap_up_ret = std::expected<bufferlist, int>;
 do_tmap_up_ret do_tmap_put(bufferlist::const_iterator in);
 
 }

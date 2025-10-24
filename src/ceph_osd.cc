@@ -13,6 +13,7 @@
  * 
  */
 
+#include <expected>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -391,7 +392,7 @@ int main(int argc, const char **argv)
   // Run a benchmark if specified
   if (run_benchmark) {
     store->mount();
-    tl::expected<std::string, int> res =
+    std::expected<std::string, int> res =
       OSD::run_osd_bench(g_ceph_context, store.get());
     if (!res.has_value()) {
       int ret = res.error();
