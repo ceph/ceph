@@ -188,6 +188,8 @@ public:
     const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
   int service_daemon_update_status(
     std::map<std::string,std::string>&& status);
+  int service_daemon_update_health(
+    std::vector<DaemonHealthMetric>&& health_metrics);
 
   mon_feature_t get_required_monitor_features() const;
 
