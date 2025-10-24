@@ -180,6 +180,10 @@ struct OMapInnerNode
     omap_context_t oc,
     const std::string &key) final;
 
+  rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    key_range_t &key_range) final;
+
   iterate_ret iterate(
     omap_context_t oc,
     ObjectStore::omap_iter_seek_t &start_from,
@@ -434,6 +438,10 @@ struct OMapLeafNode
 
   rm_key_ret rm_key(
     omap_context_t oc, const std::string &key) final;
+
+  rm_key_range_ret rm_key_range(
+    omap_context_t oc,
+    key_range_t &key_range) final;
 
   iterate_ret iterate(
     omap_context_t oc,
