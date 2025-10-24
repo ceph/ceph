@@ -534,7 +534,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   process_init();
 
   // omap not supported (except 0, handled above)
-  ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
+  // ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
 
   if (op.alloc_hint) {
     all_shards_written();

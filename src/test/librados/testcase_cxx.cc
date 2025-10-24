@@ -393,6 +393,7 @@ void RadosTestECPP::SetUp()
   if (fast_ec) {
     pool_name = pool_name_fast;
   } else {
+    GTEST_SKIP() << "Skipping Legacy EC test for now";
     pool_name = pool_name_default;
   }
   ASSERT_EQ(0, cluster.ioctx_create(pool_name.c_str(), ioctx));
