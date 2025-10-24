@@ -4,6 +4,7 @@ See https://ceph.com/ for current information about Ceph.
 
 ## Status
 
+[![LFX Health Score](https://insights.linuxfoundation.org/api/badge/health-score?project=cephfoundation)](https://insights.linuxfoundation.org/project/cephfoundation)
 [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/2220/badge)](https://www.bestpractices.dev/projects/2220)
 [![Issue Backporting](https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml/badge.svg)](https://github.com/ceph/ceph/actions/workflows/create-backport-trackers.yml)
 
