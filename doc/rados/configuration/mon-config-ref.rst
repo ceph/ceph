@@ -8,7 +8,7 @@ Understanding how to configure a :term:`Ceph Monitor` is an important part of
 building a reliable :term:`Ceph Storage Cluster`. **All Ceph Storage Clusters
 have at least one monitor**. The monitor complement usually remains fairly
 consistent, but you can add, remove or replace a monitor in a cluster. See
-`Adding/Removing a Monitor`_ for details.
+:ref:`adding-and-removing-monitors` for details.
 
 
 .. index:: Ceph Monitor; Paxos
@@ -28,7 +28,7 @@ algorithm can compute the location of any RADOS object within the cluster. This
 makes it possible for Ceph clients to talk directly to Ceph OSD Daemons. Direct
 communication between clients and Ceph OSD Daemons improves upon traditional
 storage architectures that required clients to communicate with a central
-component.  See `Scalability and High Availability`_ for more on this subject.
+component.  See :ref:`arch_scalability_and_high_availability` for more on this subject.
 
 The Ceph Monitor's primary function is to maintain a master copy of the cluster
 map. Monitors also provide authentication and logging services. All changes in
@@ -224,7 +224,7 @@ monitors. However, if you decide to change the monitor's IP address, you
 must follow a specific procedure. See :ref:`Changing a Monitor's IP address` for
 details.
 
-Monitors can also be found by clients by using DNS SRV records. See `Monitor lookup through DNS`_ for details.
+Monitors can also be found by clients by using DNS SRV records. See :ref:`mon-dns-lookup` for details.
 
 Cluster ID
 ----------
@@ -641,11 +641,8 @@ NVMe-oF Monitor Client
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys
 .. _Ceph configuration file: ../ceph-conf/#monitors
 .. _Network Configuration Reference: ../network-config-ref
-.. _Monitor lookup through DNS: ../mon-lookup-dns
 .. _ACID: https://en.wikipedia.org/wiki/ACID
-.. _Adding/Removing a Monitor: ../../operations/add-or-rm-mons
 .. _Monitoring a Cluster: ../../operations/monitoring
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg
 .. _Bootstrapping a Monitor: ../../../dev/mon-bootstrap
 .. _Monitor/OSD Interaction: ../mon-osd-interaction
-.. _Scalability and High Availability: ../../../architecture#scalability-and-high-availability
