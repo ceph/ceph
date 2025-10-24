@@ -511,7 +511,7 @@ namespace rgw::dedup {
     unsigned idx = 0;
     std::list<std::string> refs;
     std::string wildcard_tag;
-    int ret = cls_refcount_read(obj.ioctx, oid, &refs, true);
+    int ret = cls_refcount_read(obj.ioctx, oid, &refs);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ << "::ERR: manifest::failed cls_refcount_read()"
                         << " idx=" << idx << dendl;
@@ -583,7 +583,7 @@ namespace rgw::dedup {
       ObjectWriteOperation op;
       d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::dec ref-count on tail object: " << raw_obj.oid << dendl;
-      cls_refcount_put(op, ref_tag, true);
+      cls_refcount_put(op, ref_tag);
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
                                               cost, id);
@@ -593,7 +593,8 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  int Background::inc_ref_count_by_manifest(const string   &ref_tag,
+  int Background::inc_ref_count_by_manifest(const string   &src_tag,
+                                            const string   &tgt_tag,
                                             const string   &oid,
                                             RGWObjManifest &manifest)
   {
@@ -617,8 +618,8 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
-      cls_refcount_get(op, ref_tag, true);
       d_ctl.metadata_access_throttle.acquire();
+      cls_refcount_get(op, tgt_tag, src_tag);
       ldpp_dout(dpp, 20) << __func__ << "::inc ref-count on tail object: " << raw_obj.oid << dendl;
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
@@ -661,7 +662,7 @@ namespace rgw::dedup {
       }
 
       ObjectWriteOperation op;
-      cls_refcount_put(op, ref_tag, true);
+      cls_refcount_put(op, tgt_tag);
       rgw::AioResultList completed = aio->get(obj.obj,
                                               rgw::Aio::librados_op(obj.ioctx, std::move(op), null_yield),
                                               cost, id);
@@ -795,9 +796,11 @@ namespace rgw::dedup {
     }
 
     // TBD: Do we need to remove target RGW_ATTR_TAIL_TAG??
-    string ref_tag = p_tgt_rec->ref_tag;
-    ldpp_dout(dpp, 20) << __func__ << "::ref_tag=" << ref_tag << dendl;
-    int ret = inc_ref_count_by_manifest(ref_tag, src_oid, src_manifest);
+    string src_tag = p_src_rec->ref_tag;
+    string tgt_tag = p_tgt_rec->ref_tag;
+    ldpp_dout(dpp, 20) << __func__ << "::src_tag=" << src_tag
+                       << "::tgt_tag=" << tgt_tag << dendl;
+    int ret = inc_ref_count_by_manifest(src_tag, tgt_tag, src_oid, src_manifest);
     if (ret == 0) {
       d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS (Shared_Manifest)" << dendl;
@@ -805,12 +808,12 @@ namespace rgw::dedup {
       if (unlikely(ret != 0)) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed tgt_ioctx.operate("
                           << tgt_oid << "), err is " << cpp_strerror(-ret) << dendl;
-        rollback_ref_by_manifest(ref_tag, src_oid, src_manifest);
+        rollback_ref_by_manifest(tgt_tag, src_oid, src_manifest);
         return ret;
       }
 
       // free tail objects based on TGT manifest
-      free_tail_objs_by_manifest(ref_tag, tgt_oid, tgt_manifest);
+      free_tail_objs_by_manifest(tgt_tag, tgt_oid, tgt_manifest);
 
       if (!has_shared_manifest_src) {
         // When SRC OBJ A has two or more dups (B, C) we set SHARED_MANIFEST

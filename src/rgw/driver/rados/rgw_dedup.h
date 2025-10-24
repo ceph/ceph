@@ -203,7 +203,8 @@ namespace rgw::dedup {
                             md5_shard_t          md5_shard,
                             md5_stats_t         *p_stats, /* IN-OUT */
                             remapper_t          *remapper);
-    int inc_ref_count_by_manifest(const std::string &ref_tag,
+    int inc_ref_count_by_manifest(const std::string &src_tag,
+                                  const std::string &tgt_tag,
                                   const std::string &oid,
                                   RGWObjManifest    &manifest);
     int rollback_ref_by_manifest(const std::string &ref_tag,
