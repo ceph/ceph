@@ -25,8 +25,8 @@ upgrade-tasks:
         - ceph orch upgrade status
         - ceph health detail
         - ceph versions
-        - ceph versions | jq -e '.overall | length == 1'
-        - ceph versions | jq -e '.overall | keys' | grep $sha1
+        - time timeout 60 bash -c "until ceph versions | jq -e '.overall | length == 1'; do sleep 2; done"
+        - time timeout 60 bash -c "until ceph versions | jq -e '.overall | keys' | grep $sha1; do sleep 2; done"
 
   # this should be a no-op, but confirms nfs.ganesha-foo was remapped to nfs.foo
   - cephadm.wait_for_service:
