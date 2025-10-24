@@ -5,6 +5,7 @@
 
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <boost/url/url.hpp>
 #include <condition_variable>
 #include <deque>
 #include <memory>
@@ -85,6 +86,70 @@ private:
     bool m_is_pool_connected{false};
 };
 
+class MultiRedisPoolManager {
+public:
+    MultiRedisPoolManager(boost::asio::io_context* ioc, 
+                         const std::vector<boost::urls::url>& urls,
+                         std::size_t pool_size_per_host)
+        : m_ioc(ioc), m_pool_size_per_host(pool_size_per_host) {
+
+        for (size_t i = 0; i < urls.size(); ++i) {
+            boost::redis::config cfg;
+            cfg.addr.host = urls[i].host();
+            cfg.addr.port = urls[i].port();
+            
+            auto pool = std::make_shared<RedisPool>(m_ioc, cfg, pool_size_per_host);
+            m_pools.push_back(pool);
+        }
+    }
+
+    ~MultiRedisPoolManager() {
+      cancel_all();
+    }
+
+    std::shared_ptr<connection> acquire_connection(size_t pool_index) {
+      if (is_valid_index(pool_index)) {
+        return m_pools[pool_index]->acquire();
+      }
+      return nullptr;
+    }
+
+    void release_connection(size_t pool_index, std::shared_ptr<connection> conn) {
+      if (is_valid_index(pool_index)) {
+        m_pools[pool_index]->release(conn);
+      }
+    }
+
+    // Get total number of pools (hosts)
+    size_t pool_count() const {
+        return m_pools.size();
+    }
+
+    // Get current pool size for a specific host by index
+    int pool_size(size_t pool_index) const {
+        if (pool_index >= m_pools.size()) {
+            return -EINVAL;
+        }
+        return m_pools[pool_index]->current_pool_size();
+    }
+
+    bool is_valid_index(size_t pool_index) const {
+        return pool_index < m_pools.size();
+    }
+
+    // Cancel all connections across all pools
+    void cancel_all() {
+        for (auto& pool : m_pools) {
+            if (pool) {
+                pool->cancel_all();
+            }
+        }
+    }
+private:
+    boost::asio::io_context* m_ioc;
+    std::size_t m_pool_size_per_host;
+    std::vector<std::shared_ptr<RedisPool>> m_pools;
+};
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -144,34 +209,73 @@ struct CacheBlock {
   /* Blocks use the cacheObj's dirty and hostsList metadata to store their dirty flag values and locations in the block directory. */
 };
 
+class DirectoryConnection {
+public:
+  DirectoryConnection(boost::asio::io_context& io_context) : io_context(io_context) {}
+  int initialize(const DoutPrefixProvider *dpp);
+  void shutdown();
+  template <typename... Types>
+  void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+          int index,
+          boost::system::error_code& ec,
+          const boost::redis::request& req,
+          boost::redis::response<Types...>& resp,
+          optional_yield y);
+  void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
+          int index,
+          boost::system::error_code& ec,
+          const boost::redis::request& req,
+          boost::redis::generic_response& resp,
+          optional_yield y);
+  template <typename... Types>
+  void redis_exec(const DoutPrefixProvider* dpp,
+                  std::string& key,
+                  boost::system::error_code& ec,
+                  const boost::redis::request& req,
+                  boost::redis::response<Types...>& resp, optional_yield y);
+  int findClient(const DoutPrefixProvider* dpp, std::string key);
+  MultiRedisPoolManager* get_redis_pool_manager() {
+    if (redis_pool_manager) {
+      return &(*redis_pool_manager);
+    }
+    return nullptr;
+  }
+
+private:
+  boost::asio::io_context& io_context;
+  std::optional<MultiRedisPoolManager> redis_pool_manager;
+  std::vector<std::shared_ptr<connection>> connections;
+  std::vector<boost::urls::url> urls;
+
+  std::vector<boost::urls::url> parseHostPorts(const DoutPrefixProvider* dpp, std::string_view address);
+};
+
 class Directory {
   public:
-	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
-    	void set_redis_pool(std::shared_ptr<RedisPool> pool) {
-      	redis_pool = pool;
-    }
     Directory() {}
 };
 
 class Pipeline {
   public:
-    Pipeline(std::shared_ptr<connection>& conn, std::shared_ptr<RedisPool> redis_pool) : conn(conn), redis_pool(redis_pool) {}
+    Pipeline(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
     void start() { pipeline_mode = true; }
     //executes all commands and sets pipeline mode to false
     int execute(const DoutPrefixProvider* dpp, optional_yield y);
     bool is_pipeline() { return pipeline_mode; }
-    request& get_request() { return req; }
+    request& get_request(int index) { return requests[index]; }
+    bool has_requests_for_index(int index) const {
+      return requests.contains(index);
+    }
 
   private:
-    std::shared_ptr<connection> conn;
-    std::shared_ptr<RedisPool> redis_pool{nullptr};
-    request req;
+    std::shared_ptr<DirectoryConnection> dir_conn;
+    std::unordered_map<int, request> requests;
     bool pipeline_mode{false};
 };
 
 class BucketDirectory: public Directory {
   public:
-    BucketDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    BucketDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
     int zadd(const DoutPrefixProvider* dpp, const std::string& bucket_id, double score, const std::string& member, optional_yield y, Pipeline* pipeline=nullptr);
     int zrem(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, optional_yield y);
     int zrange(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& start, const std::string& stop, uint64_t offset, uint64_t count, std::vector<std::string>& members, optional_yield y);
@@ -179,12 +283,12 @@ class BucketDirectory: public Directory {
     int zrank(const DoutPrefixProvider* dpp, const std::string& bucket_id, const std::string& member, uint64_t& rank, optional_yield y);
 
   private:
-    std::shared_ptr<connection> conn;
+    std::shared_ptr<DirectoryConnection> dir_conn;
 };
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
+    ObjectDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
 
     int exist_key(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
@@ -198,20 +302,20 @@ class ObjectDirectory: public Directory {
     int zrevrange(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& start, const std::string& stop, std::vector<std::string>& members, optional_yield y);
     int zrem(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, optional_yield y);
     int zremrangebyscore(const DoutPrefixProvider* dpp, CacheObj* object, double min, double max, optional_yield y);
-    int zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& index, optional_yield y);
+    int zrank(const DoutPrefixProvider* dpp, CacheObj* object, const std::string& member, std::string& idx, optional_yield y);
     //Return value is the incremented value, else return error
     int incr(const DoutPrefixProvider* dpp, CacheObj* object, optional_yield y);
 
   private:
-    std::shared_ptr<connection> conn;
+    std::shared_ptr<DirectoryConnection> dir_conn;
 
     std::string build_index(CacheObj* object);
 };
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
-    
+    BlockDirectory(std::shared_ptr<DirectoryConnection> dir_conn) : dir_conn(dir_conn) {}
+
     int exist_key(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y);
 
     //Pipelined version of set
@@ -233,7 +337,7 @@ class BlockDirectory: public Directory {
     int zrem(const DoutPrefixProvider* dpp, CacheBlock* block, const std::string& member, optional_yield y);
 
   private:
-    std::shared_ptr<connection> conn;
+    std::shared_ptr<DirectoryConnection> dir_conn;
     std::string build_index(CacheBlock* block);
 
     template<SeqContainer Container>
