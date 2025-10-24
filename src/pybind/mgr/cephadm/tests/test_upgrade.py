@@ -127,7 +127,11 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                                # capture fields in both mon and osd maps
                                "require_osd_release": "pacific",
                                "min_mon_release": 16,
-                           }):
+                               "pools": [],
+                               "osds": [],
+                           }), \
+                mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option",
+                           return_value=3):
                 version_mock.return_value = 'ceph version 18.2.1 (somehash)'
                 assert wait(cephadm_module, cephadm_module.upgrade_start(
                     'to_image', None)) == 'Initiating upgrade to to_image'
