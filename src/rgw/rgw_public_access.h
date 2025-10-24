@@ -14,34 +14,18 @@
  */
 
 #pragma once
+
+#include <iosfwd>
 #include "include/encoding.h"
 
 class XMLObj;
 namespace ceph { class Formatter; }
 
-class PublicAccessBlockConfiguration {
-  bool BlockPublicAcls;
-  bool IgnorePublicAcls;
-  bool BlockPublicPolicy;
-  bool RestrictPublicBuckets;
- public:
- PublicAccessBlockConfiguration():
-   BlockPublicAcls(false), IgnorePublicAcls(false),
-  BlockPublicPolicy(false), RestrictPublicBuckets(false)
-    {}
-
-  auto block_public_acls() const {
-    return BlockPublicAcls;
-  }
-  auto ignore_public_acls() const {
-    return IgnorePublicAcls;
-  }
-  auto block_public_policy() const {
-    return BlockPublicPolicy;
-  }
-  auto restrict_public_buckets() const {
-    return RestrictPublicBuckets;
-  }
+struct PublicAccessBlockConfiguration {
+  bool BlockPublicAcls = false;
+  bool IgnorePublicAcls = false;
+  bool BlockPublicPolicy = false;
+  bool RestrictPublicBuckets = false;
 
   void encode(ceph::bufferlist& bl) const {
     ENCODE_START(1,1, bl);
@@ -62,7 +46,12 @@ class PublicAccessBlockConfiguration {
   }
 
   void decode_xml(XMLObj *obj);
-  void dump_xml(Formatter *f) const;
+  void dump_xml(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(PublicAccessBlockConfiguration)
 std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration& access_conf);
+
+/// Return the union of two configurations by memberwise logical-or.
+auto config_union(const PublicAccessBlockConfiguration& lhs,
+                  const PublicAccessBlockConfiguration& rhs)
+  -> PublicAccessBlockConfiguration;

@@ -512,27 +512,23 @@ public:
 				 optional_yield y,
 				 std::string_view id,
 				 RGWAccountInfo& info,
-				 Attrs& attrs,
 				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
   virtual int load_account_by_name(const DoutPrefixProvider* dpp,
 				 optional_yield y,
 				 std::string_view tenant,
 				 std::string_view name,
 				 RGWAccountInfo& info,
-				 Attrs& attrs,
 				 RGWObjVersionTracker& objv) override { return -ENOTSUP; }
   virtual int load_account_by_email(const DoutPrefixProvider* dpp,
 				  optional_yield y,
 				  std::string_view email,
 				  RGWAccountInfo& info,
-				  Attrs& attrs,
 				  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
 
   virtual int store_account(const DoutPrefixProvider* dpp,
 			  optional_yield y, bool exclusive,
 			  const RGWAccountInfo& info,
 			  const RGWAccountInfo* old_info,
-			  const Attrs& attrs,
 			  RGWObjVersionTracker& objv) override { return -ENOTSUP; }
 
   virtual int delete_account(const DoutPrefixProvider* dpp,

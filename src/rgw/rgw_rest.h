@@ -835,6 +835,12 @@ inline std::string compute_domain_uri(const req_state *s) {
   return uri;
 }
 
+// Transform S3 virtual-host style requests to a path-style request.
+// When the Host header includes the bucket name as a subdomain, prepend
+// that bucket name to s->info.request_uri then re-url-decode that
+// into s->decoded_uri.
+int rgw_rest_transform_s3_vhost_style(req_state* s);
+
 extern void dump_content_length(req_state *s, uint64_t len);
 extern void dump_etag(req_state *s,
                       const std::string_view& etag,
