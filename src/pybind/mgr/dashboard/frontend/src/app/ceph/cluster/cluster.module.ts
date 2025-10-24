@@ -17,7 +17,8 @@ import {
   ToggletipModule,
   IconModule,
   IconService,
-  TagModule
+  TagModule,
+  DatePickerModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -117,7 +118,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ListModule,
     ToggletipModule,
     IconModule,
-    TagModule
+    TagModule,
+    DatePickerModule
   ],
   declarations: [
     MonitorComponent,
