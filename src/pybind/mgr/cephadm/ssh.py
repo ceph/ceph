@@ -192,6 +192,7 @@ class SSHManager:
         ch = logging.StreamHandler(log_string)
         ch.setLevel(logging.INFO)
         asyncssh_logger.addHandler(ch)
+        asyncssh_logger.setLevel(self.mgr.asyncssh_log_level)
 
         try:
             yield
@@ -203,16 +204,20 @@ class SSHManager:
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
             self.mgr.offline_hosts.add(host)
-            log_content = log_string.getvalue()
-            msg = f'Failed to connect to {host} ({addr}). {str(e)}' + '\n' + f'Log: {log_content}'
+            log_content = ''
+            if asyncssh_logger.getEffectiveLevel() == logging.DEBUG:
+                log_content = '\n' + f'Log: {log_string.getvalue()}'
+            msg = f'Failed to connect to {host} ({addr}). {str(e)}{log_content}'
             logger.debug(msg)
             raise HostConnectionError(msg, host, addr)
         except Exception as e:
             self.mgr.offline_hosts.add(host)
-            log_content = log_string.getvalue()
+            log_content = ''
+            if asyncssh_logger.getEffectiveLevel() == logging.DEBUG:
+                log_content = '\n' + f'Log: {log_string.getvalue()}'
             logger.exception(str(e))
             raise HostConnectionError(
-                f'Failed to connect to {host} ({addr}): {repr(e)}' + '\n' f'Log: {log_content}', host, addr)
+                f'Failed to connect to {host} ({addr}): {repr(e)}{log_content}', host, addr)
         finally:
             log_string.flush()
             asyncssh_logger.removeHandler(ch)
