@@ -6,16 +6,30 @@
 #include "rgw_bucket_layout.h"
 
 #include "rgw_asio_thread.h"
+#include <boost/asio/co_spawn.hpp>
 #include "driver/rados/shard_io.h"
+#include "include/neorados/RADOS.hpp"
 #include "common/errno.h"
 #include "cls/rgw/cls_rgw_client.h"
+
 #include "common/async/blocked_completion.h"
+#include "common/async/blocked_completion.h"
+#include "common/async/co_throttle.h"
+#include "common/async/librados_completion.h"
+#include "common/async/yield_context.h"
+
+#include "rgw_log_backing.h"
+#include "neorados/cls/fifo.h"
+#include "rgw_bilog.h"
+#include "rgw_tools.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 using rgwrados::shard_io::Result;
+namespace asio = boost::asio;
+namespace fifo = neorados::cls::fifo;
 
 RGWSI_BILog_RADOS::RGWSI_BILog_RADOS(CephContext *cct) : RGWServiceInstance(cct)
 {
@@ -390,230 +404,267 @@ int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-// CLS FIFO
+// FIFO interface
+
 void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
   svc.bi = bi_rados_svc;
 }
 
-int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
-               const RGWBucketInfo& bucket_info,
-               const rgw::bucket_log_layout_generation& log_layout,
-               int shard_id,
-               std::string_view marker)
+std::unique_ptr<RGWBILogFIFO>
+RGWSI_BILog_RADOS_FIFO::create_bilog_fifo(const DoutPrefixProvider *dpp,
+                                          const RGWBucketInfo& bucket_info) const {
+  librados::IoCtx index_pool;
+  std::string bucket_oid;
+  int ret = svc.bi->open_bucket_index(dpp, bucket_info, &index_pool, &bucket_oid);
+  if (ret < 0) {
+    throw std::system_error(-ret, std::system_category(),
+                           "Failed to open bucket index");
+  }
+
+  try {
+    
+    auto loc = rgw::init_iocontext(dpp, rados, index_pool,
+                                   rgw::create, ceph::async::use_blocked);
+    
+    return std::make_unique<RGWBILogFIFO>(rados, std::move(loc), bucket_info);
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize ioctx: "
+                      << e.what() << dendl;
+    throw;
+  }
+}
+
+asio::awaitable<void>
+RGWSI_BILog_RADOS_FIFO::log_start(const DoutPrefixProvider *dpp,
+                                         const RGWBucketInfo& bucket_info,
+                                         const rgw::bucket_log_layout_generation& log_layout,
+                                         int shard_id)
 {
   if (shard_id > 0) {
-    // the initial implementation does support single shard only.
-    // this is supposed to change in the future. It's worth to
-    // point out the plan is to decouple the BILog's sharding
-    // policy from the BI's one.
-    return 0;
+    co_return;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  // Lazy initialized upon first use
+  co_return;
+}
+
+asio::awaitable<void>
+RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp,
+                                        const RGWBucketInfo& bucket_info,
+                                        const rgw::bucket_log_layout_generation& log_layout,
+                                        int shard_id)
+{
+  if (shard_id > 0) {
+    co_return;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  // No explicit cleanup required for LazyFIFO
+  co_return;
+}
+
+asio::awaitable<void> 
+RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id, std::string_view marker) {
+  if (shard_id > 0) {
+    co_return;
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto fifo = _open_fifo(dpp, bucket_info);
-  if (!fifo) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to open FIFO: " << ""//get_oid(index)
-               << dendl;
-    return -EIO;
+  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  co_return co_await bilog_fifo->trim(dpp, marker);
+}
+
+asio::awaitable<std::tuple<std::vector<rgw_bi_log_entry>, std::string, bool>>
+RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id, std::string marker, uint32_t max_entries) {
+  ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket
+                     << " marker=" << marker << " shard_id=" << shard_id
+                     << " max_entries=" << max_entries << dendl;
+
+  if (shard_id > 0) {
+    co_return std::make_tuple(std::vector<rgw_bi_log_entry>{}, std::string{}, false);
   }
-  if (int ret = fifo->trim(marker, false, null_yield); ret < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to trim FIFO: " << ""//get_oid(index)
-               << ": " << cpp_strerror(-ret) << dendl;
+  ceph_assert(shard_id == 0 || shard_id == -1);
+
+  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  co_return co_await bilog_fifo->list(dpp, marker, max_entries);
+}
+
+asio::awaitable<std::string>
+RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                           const RGWBucketInfo& bucket_info,
+                                           const std::map<int, rgw_bucket_dir_header>& headers,
+                                           int shard_id) {
+  if (shard_id > 0) {
+    co_return std::string{};
   }
-  return 0;
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  co_return co_await bilog_fifo->get_max_marker(dpp);
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_start(const DoutPrefixProvider *dpp, optional_yield y,
-                const RGWBucketInfo& bucket_info,
-                const rgw::bucket_log_layout_generation& log_layout,
-                int shard_id)
-{
+                                      const RGWBucketInfo& bucket_info,
+                                      const rgw::bucket_log_layout_generation& log_layout,
+                                      int shard_id) {
   if (shard_id > 0) {
-    // the initial implementation does support single shard only.
-    return 0;
+    return 0; // Only shard 0 for FIFO
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  // No-op for FIFO - lazy initialization handles creation
   return 0;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
-               const RGWBucketInfo& bucket_info,
-               const rgw::bucket_log_layout_generation& log_layout,
-               int shard_id)
-{
+                                     const RGWBucketInfo& bucket_info,
+                                     const rgw::bucket_log_layout_generation& log_layout,
+                                     int shard_id) {
   if (shard_id > 0) {
-    // the initial implementation does support single shard only.
+    return 0; // Only shard 0 for FIFO
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  // No-op for FIFO - no explicit cleanup needed
+  return 0;
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
+                                     const RGWBucketInfo& bucket_info,
+                                     const rgw::bucket_log_layout_generation& log_layout,
+                                     int shard_id, std::string_view marker) {
+  if (shard_id > 0) {
     return 0;
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
-  return 0;
-}
 
-std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::open_fifo(const DoutPrefixProvider *dpp,
-                                   const RGWBucketInfo& bucket_info,
-                                   RGWSI_BucketIndex_RADOS& bi_rados)
-{
-  librados::IoCtx index_pool;
-  std::string bucket_oid;
-  if (const int ret = bi_rados.open_bucket_index(dpp, bucket_info,
-                                                &index_pool,
-                                                &bucket_oid);
-      ret < 0) {
-    return nullptr;
+  try {
+    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    
+    if (y) {
+      bilog_fifo->trim(dpp, marker, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      asio::spawn(rados.get_executor(),
+                  [&](asio::yield_context yield) {
+                      bilog_fifo->trim(dpp, marker, yield);
+                    }, ceph::async::use_blocked);
+    }
+
+    return 0;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: trim failed: " << e.what() << dendl;
+    return -EIO;
   }
-
-  static constexpr char BILOG_FIFO_SUFFIX[] = ".bilog_fifo";
-  std::unique_ptr<rgw::cls::fifo::FIFO> ret_fifo;
-  rgw::cls::fifo::FIFO::create(index_pool,
-                               bucket_oid + BILOG_FIFO_SUFFIX,
-                               &ret_fifo,
-                               null_yield /* FIXME */);
-  return ret_fifo;
-}
-
-std::unique_ptr<rgw::cls::fifo::FIFO>
-RGWSI_BILog_RADOS_FIFO::_open_fifo(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info)
-{
-  ceph_assert(svc.bi);
-  return open_fifo(dpp, bucket_info, *svc.bi);
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yield y,
-               const RGWBucketInfo& bucket_info,
-               const rgw::bucket_log_layout_generation& log_layout,
-               int shard_id,
-               std::string& _marker,
-               uint32_t max_entries,
-               std::list<rgw_bi_log_entry>& result,
-               bool *truncated)
-{
-  ldout(cct, 20) << __func__ << ": " << bucket_info.bucket
-                 << " _marker=" << _marker << " shard_id=" << shard_id
-                 << " max_entries=" << max_entries << dendl;
+                                     const RGWBucketInfo& bucket_info,
+                                     const rgw::bucket_log_layout_generation& log_layout,
+                                     int shard_id, std::string& marker,
+                                     uint32_t max_entries,
+                                     std::list<rgw_bi_log_entry>& result,
+                                     bool *truncated) {
+  ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket
+                     << " marker=" << marker << " shard_id=" << shard_id
+                     << " max_entries=" << max_entries << dendl;
+
   if (shard_id > 0) {
-    // the initial implementation does support single shard only.
     return 0;
-  } else {
-    ceph_assert(shard_id == 0 || shard_id == -1);
   }
+  ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto fifo = _open_fifo(dpp, bucket_info);
-  if (!fifo) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to open FIFO: " << ""//get_oid(index)
-               << dendl;
-    return -EIO;
-  }
+  try {
+    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    
+    std::vector<rgw_bi_log_entry> entries;
+    std::string out_marker;
+    bool is_truncated;
 
-  std::optional<std::string_view> marker;
-  if (!_marker.empty()) {
-    marker.emplace(std::move(_marker));
-  }
-
-  std::vector<rgw::cls::fifo::list_entry> raw_entries;
-  bool more = false;
-  auto r = fifo->list(max_entries, marker, &raw_entries, &more,
-                              null_yield);
-  if (r < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to list FIFO: " << ""//get_oid(index)
-               << ": " << cpp_strerror(-r) << dendl;
-    return r;
-  }
-
-  for (const auto& raw_entry : raw_entries) {
-    result.emplace_back();
-    auto& bilog_entry = result.back();
-
-    auto liter = raw_entry.data.cbegin();
-    try {
-      decode(bilog_entry, liter);
-    } catch (const buffer::error& err) {
-      lderr(cct) << __PRETTY_FUNCTION__
-                 << ": failed to decode data changes log entry: "
-                 << err.what() << dendl;
-      return -EIO;
+    if (y) {
+      std::tie(entries, out_marker, is_truncated) = 
+        bilog_fifo->list(dpp, marker, max_entries, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      boost::system::error_code ec;
+      asio::spawn(rados.get_executor(),
+                  [&](asio::yield_context yield) {
+                      std::tie(entries, out_marker, is_truncated) = 
+                      bilog_fifo->list(dpp, marker, max_entries, yield);
+                    }, ceph::async::use_blocked);
     }
-  }
-
-  if (truncated) {
-    *truncated = more;
-  }
-  if (!raw_entries.empty()) {
-    _marker = raw_entries.back().marker;
-  }
-  return 0;
-}
-
-int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
-                                               const RGWBucketInfo& bucket_info,
-                                               const std::map<int, rgw_bucket_dir_header>& headers,
-                                               const int shard_id,
-                                               std::string* max_marker,
-                                               optional_yield y)
-{
-  if (shard_id > 1) {
-    // the initial implementation does support single shard only.
+    
+    result.clear();
+    for (auto& entry : entries) {
+      result.push_back(std::move(entry));
+    }
+    
+    if (truncated) {
+      *truncated = is_truncated;
+    }
+    
+    marker = out_marker;
     return 0;
-  } else {
-    ceph_assert(shard_id == 0 || shard_id == -1);
-  }
-  auto fifo = _open_fifo(dpp, bucket_info);
-  if (!fifo) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to open FIFO: " << ""//get_oid(index)
-               << dendl;
+    
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: list failed: " << e.what() << dendl;
     return -EIO;
   }
-  if (int ret = fifo->read_meta(null_yield); ret < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to read_meta() on FIFO: "
-               << cpp_strerror(-ret)
-               << dendl;
-    return ret;
-  }
-  const auto head_part_num = fifo->meta().head_part_num;
-  rados::cls::fifo::part_header head_part_header;
-  if (int ret = fifo->get_part_info(head_part_num,
-                                    &head_part_header,
-                                    null_yield);
-      ret < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__
-               << ": unable to read_part_header() on FIFO: "
-               << cpp_strerror(-ret)
-               << dendl;
-    return ret;
-  }
-  *max_marker = rgw::cls::fifo::marker{
-    head_part_num,
-    head_part_header.last_ofs
-  }.to_string();
-
-  return 0;
 }
 
 int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
                                                const RGWBucketInfo& bucket_info,
                                                const std::map<int, rgw_bucket_dir_header>& headers,
                                                const int shard_id,
-                                               std::map<int, std::string>* max_markers,
-                                               optional_yield y)
-{
+                                               std::string *max_marker,
+                                               optional_yield y) {
+  if (shard_id > 0) {
+    *max_marker = std::string{};
+    return 0;
+  }
+  ceph_assert(shard_id == 0 || shard_id == -1);
+  
+  try {
+    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    
+    std::string marker;
+    if (y) {
+      marker = bilog_fifo->get_max_marker(dpp, y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      asio::spawn(rados.get_executor(),
+                  [&](asio::yield_context yield) {
+                      marker = bilog_fifo->get_max_marker(dpp, yield);
+                  }, ceph::async::use_blocked);
+    }
+
+    *max_marker = std::move(marker);
+    return 0;
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: get_max_marker failed: " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                               const RGWBucketInfo& bucket_info,
+                                               const std::map<int, rgw_bucket_dir_header>& headers,
+                                               const int shard_id,
+                                               std::map<int, std::string> *max_markers,
+                                               optional_yield y) {
   auto& max_marker = (*max_markers)[0];
   return log_get_max_marker(dpp, bucket_info, headers, shard_id, &max_marker, y);
 }
 
-void RGWSI_BILog_RADOS_BackendDispatcher::init(
-  RGWSI_BucketIndex_RADOS* const bi_rados_svc)
-{
-  backend_inindex.init(bi_rados_svc);
-  backend_fifo.init(bi_rados_svc);
-}
-
+/*
 RGWSI_BILog_RADOS_BackendDispatcher::RGWSI_BILog_RADOS_BackendDispatcher(
   CephContext* cct)
   : RGWSI_BILog_RADOS(cct),
@@ -624,7 +675,7 @@ RGWSI_BILog_RADOS_BackendDispatcher::RGWSI_BILog_RADOS_BackendDispatcher(
 RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
   const RGWBucketInfo& bucket_info)
 {
- if (bucket_info.layout.logs.empty() /* no layout means the old way */ || \
+ if (bucket_info.layout.logs.empty() // no layout means the old way || \
      bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::InIndex) {
     return backend_inindex;
   } else if (bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::FIFO) {
@@ -633,3 +684,4 @@ RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
     ceph_abort_msg("Unknown BILog layout. This shouldn't happen!");
   }
 }
+*/

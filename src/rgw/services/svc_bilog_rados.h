@@ -17,10 +17,31 @@
 #pragma once
 
 #include "rgw_service.h"
-#include "cls_fifo_legacy.h"
+#include "svc_bilog_rados.h"
+#include "rgw_log_backing.h"
+#include "rgw_asio_thread.h"
+#include "rgw_bilog.h"
+#include "neorados/cls/fifo.h"
+#include <boost/asio/awaitable.hpp>
+#include "common/async/yield_context.h"
+#include "common/async/blocked_completion.h"
 
 class RGWSI_BILog_RADOS : public RGWServiceInstance
 {
+
+  // helper function to handle optional_yield blocking/nonblocking
+  template<typename Func>
+  auto with_optional_yield(const DoutPrefixProvider *dpp, optional_yield y, Func&& sync_func)
+      -> decltype(sync_func(y.get_yield_context()))
+  {
+    if (y) {
+      return sync_func(y.get_yield_context());
+    } else {
+      maybe_warn_about_blocking(dpp);
+      return sync_func(ceph::async::use_blocked);
+    }
+  }
+
 public:
   virtual ~RGWSI_BILog_RADOS() {}
 
@@ -119,28 +140,23 @@ int log_get_max_marker(const DoutPrefixProvider *dpp,
 // for BIlog.
 //
 // Responsibilities:
-//   * reading and treaming entries,
+//   * reading and trimming entries,
 //   * discovery of `max_marker` (imporant for our incremental sync feature),
 //   * managing the logging state (on/off).
+
 class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
 {
-  struct Svc {
+  neorados::RADOS rados;
+  struct {
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
-  std::unique_ptr<rgw::cls::fifo::FIFO> _open_fifo(
-    const DoutPrefixProvider *dpp,
-    const RGWBucketInfo& bucket_info);
-
-  static std::unique_ptr<rgw::cls::fifo::FIFO> open_fifo(
-    const DoutPrefixProvider *dpp,
-    const RGWBucketInfo& bucket_info,
-    RGWSI_BucketIndex_RADOS& bi_rados);
-
-  friend struct BILogUpdateBatchFIFO;
+  // helper method to create FIFO wrapprt
+  std::unique_ptr<RGWBILogFIFO> create_bilog_fifo(const DoutPrefixProvider *dpp, 
+                                                   const RGWBucketInfo& bucket_info) const;
 
 public:
-  using RGWSI_BILog_RADOS::RGWSI_BILog_RADOS;
+  RGWSI_BILog_RADOS_FIFO(CephContext *cct, neorados::RADOS r) : RGWSI_BILog_RADOS(cct), rados(std::move(r)) {}
 
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc) override;
 
@@ -148,6 +164,7 @@ public:
                 const RGWBucketInfo& bucket_info,
                 const rgw::bucket_log_layout_generation& log_layout,
                 int shard_id) override;
+
   int log_stop(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
@@ -158,6 +175,7 @@ public:
                const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
                std::string_view marker) override;
+
   int log_list(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
@@ -171,16 +189,44 @@ public:
                          const RGWBucketInfo& bucket_info,
                          const std::map<int, rgw_bucket_dir_header>& headers,
                          const int shard_id,
-                         std::map<int, std::string>* max_markers,
+                         std::string *max_marker,
+                         optional_yield y) override;
+  
+  int log_get_max_marker(const DoutPrefixProvider *dpp,
+                         const RGWBucketInfo& bucket_info,
+                         const std::map<int, rgw_bucket_dir_header>& headers,
+                         const int shard_id,
+                         std::map<int, std::string> *max_markers,
                          optional_yield y) override;
 
-  int log_get_max_marker(const DoutPrefixProvider *dpp,
-                       const RGWBucketInfo& bucket_info,
-                       const std::map<int, rgw_bucket_dir_header>& headers,
-                       const int shard_id,
-                       std::string *max_marker,
-                       optional_yield y) override;
+  asio::awaitable<void>log_start(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id);
+
+  asio::awaitable<void> log_stop(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id);
+
+  asio::awaitable<void> log_trim(const DoutPrefixProvider *dpp,
+                                 const RGWBucketInfo& bucket_info,
+                                 const rgw::bucket_log_layout_generation& log_layout,
+                                 int shard_id, std::string_view marker);
+
+  asio::awaitable<std::tuple<std::vector<rgw_bi_log_entry>, std::string, bool>>
+  log_list(const DoutPrefixProvider *dpp,
+           const RGWBucketInfo& bucket_info,
+           const rgw::bucket_log_layout_generation& log_layout,
+           int shard_id, std::string marker, uint32_t max_entries);
+
+  asio::awaitable<std::string>
+  log_get_max_marker(const DoutPrefixProvider *dpp,
+                     const RGWBucketInfo& bucket_info,
+                     const std::map<int, rgw_bucket_dir_header>& headers,
+                     int shard_id);
 };
+
 
 
 // BackendDispatcher has a single responsibility: redirect the calls
@@ -199,7 +245,7 @@ class RGWSI_BILog_RADOS_BackendDispatcher : public RGWSI_BILog_RADOS
   RGWSI_BILog_RADOS& get_backend(const RGWBucketInfo& bucket_info);
 
 public:
-  RGWSI_BILog_RADOS_BackendDispatcher(CephContext* cct);
+  RGWSI_BILog_RADOS_BackendDispatcher(CephContext* cct, neorados::RADOS rados);
 
   void init(RGWSI_BucketIndex_RADOS *bi_rados_svc) override;
 
