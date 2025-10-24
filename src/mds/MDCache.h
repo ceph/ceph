@@ -25,7 +25,7 @@
 #include "common/MemoryModel.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
-#include "include/filepath.h"
+#include "common/filepath.h"
 #include "include/elist.h"
 #include "include/rados/rados_types.hpp"
 
