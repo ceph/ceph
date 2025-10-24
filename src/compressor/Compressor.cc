@@ -55,6 +55,10 @@ const char *Compressor::get_comp_mode_name(int m) {
     case COMP_PASSIVE: return "passive";
     case COMP_AGGRESSIVE: return "aggressive";
     case COMP_FORCE: return "force";
+    case COMP_PASSIVE_LAZY: return "passive_lazy";
+    case COMP_AGGRESSIVE_LAZY: return "aggressive_lazy";
+    case COMP_FORCE_LAZY: return "force_lazy";
+
     default: return "???";
   }
 }
@@ -66,6 +70,12 @@ Compressor::get_comp_mode_type(std::string_view s) {
     return COMP_AGGRESSIVE;
   if (s == "passive")
     return COMP_PASSIVE;
+  if (s == "force_lazy")
+    return COMP_FORCE_LAZY;
+  if (s == "aggressive_lazy")
+    return COMP_AGGRESSIVE_LAZY;
+  if (s == "passive_lazy")
+    return COMP_PASSIVE_LAZY;
   if (s == "none")
     return COMP_NONE;
   return {};
