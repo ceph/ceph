@@ -182,6 +182,7 @@ class CephfsConnectionPool(object):
             self.fs.conf_set("client_quota", "false")
             self.fs.conf_set("client_respect_subvolume_snapshot_visibility",
                              "false")
+            self.fs.conf_set("client_fscrypt_as", "false")
             logger.debug("CephFS initializing...")
             self.fs.init()
             logger.debug("CephFS mounting...")

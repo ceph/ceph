@@ -176,6 +176,22 @@ if(WITH_LIBCEPHFS)
     ${EXTRALIBS}
     ${CMAKE_DL_LIBS}
     )
+  
+  add_executable(ceph_test_libcephfs_fscrypt
+    fscrypt.cc
+    test.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_fscrypt
+    ceph-common
+    cephfs
+    librados
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
   install(TARGETS ceph_test_libcephfs_perfcounters
     DESTINATION ${CMAKE_INSTALL_BINDIR})
+  install(TARGETS ceph_test_libcephfs_fscrypt
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 endif(WITH_LIBCEPHFS)

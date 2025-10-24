@@ -59,7 +59,10 @@ elif command -v yum &>/dev/null; then
 fi
 
 # Clone the custom fscrypt repository, build, and install
-git clone https://git.ceph.com/fscrypt.git -b wip-ceph-fuse "$WORK_DIR/fscrypt"
+if [ ! -d "$WORK_DIR/fscrypt" ]
+then
+	git clone https://git.ceph.com/fscrypt.git -b wip-ceph-fuse "$WORK_DIR/fscrypt"
+fi
 cd "$WORK_DIR/fscrypt"
 make
 sudo make install PREFIX=/usr/local
