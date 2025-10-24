@@ -81,7 +81,7 @@
 	"S3RepSource": {
 	    "type": "structure",
 	    "members": {
-                "Zones": {
+                "S3Zones": {
                     "shape":"ZoneList",
                     "documentation":"<p>Array of replication source zone names.</p>",
 		    "locationName":"Zone"
@@ -90,7 +90,7 @@
         },
 	"Destination": {
 	    "members": {
-                "Zones": {
+                "S3Zones": {
                     "shape":"ZoneList",
                     "documentation":"<p>Array of replication destination zone names.</p>",
 		    "locationName":"Zone"
@@ -193,6 +193,10 @@
                 "Value":{
                     "shape":"FilterRuleValue",
                     "documentation":"<p>The value that the filter searches for in object key names.</p>"
+                }, 
+                "Exclude": {
+                    "shape":"FilterRuleExclude",
+                    "documentation":"<p>Exclude Flag for filter rule. If true, acts as negative filter. Defaults to false.</p>"
                 }
             },
             "documentation":"<p>Specifies the Amazon S3 object key name to filter on and whether to filter on the suffix, prefix or regex of the key name.</p>"
@@ -204,6 +208,9 @@
                 "suffix",
                 "regex"
             ]
+        },
+        "FilterRuleExclude":{
+            "type":"boolean"
         },
         "NotificationConfigurationFilter":{
             "type":"structure",
@@ -222,8 +229,12 @@
                     "shape":"S3TagsFilter",
                     "documentation":"<p/>",
                     "locationName":"S3Tags"
+                }, 
+                "S3Zones":{
+                    "shape":"S3ZonesFilter",
+                    "documentation":"<p/>",
+                    "locationName":"S3Zones"
                 }
-
             },
             "documentation":"<p>Specifies object key name filtering rules. For information about key name filtering, see <a href=\"https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html\">Configuring Event Notifications</a> in the <i>Amazon Simple Storage Service Developer Guide</i>.</p>"
         },
@@ -259,6 +270,16 @@
                 }
             },
             "documentation":"<p>A container for object tags filtering rules.</p>"
+        },
+        "S3ZonesFilter": {
+            "type":"structure",
+            "members":{
+                "FilterRules":{
+                    "shape":"FilterRuleList",
+                    "documentation":"<p/>",
+                    "locationName":"FilterRule"
+                }
+            }
         },
         "GetUsageStatsOutput": {
             "type": "structure",
