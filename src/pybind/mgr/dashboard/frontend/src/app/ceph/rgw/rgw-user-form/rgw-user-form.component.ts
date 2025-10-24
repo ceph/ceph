@@ -207,7 +207,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(uid));
       observables.push(this.rgwUserService.getQuota(uid));
-      observables.push(this.rgwUserService.getUserRateLimit(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           // Get the default values.
