@@ -89,6 +89,19 @@ options:
   flags:
   - startup
 
+- name: crimson_osd_objectstore
+  type: str
+  level: advanced
+  desc: Back end for new OSDs (like alienstore-bluestore or seastore)
+  default: alienstore-bluestore
+  enum_values:
+  - alienstore-bluestore
+  - alienstore-memstore
+  - seastore
+  - cyanstore
+  flags:
+  - create
+
 # Bluestore options:
 
 - name: crimson_bluestore_num_threads
