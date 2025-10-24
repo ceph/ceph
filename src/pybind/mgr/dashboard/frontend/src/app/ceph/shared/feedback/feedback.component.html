@@ -1,120 +1,183 @@
-<cd-modal [modalRef]="activeModal">
-  <div class="modal-title"
-       i18n>Report an issue</div>
+<cds-modal
+  size="md"
+  [open]="open"
+  [hasScrollingContent]="false"
+  (overlaySelected)="closeModal()"
+  >
+  <cds-modal-header (closeSelect)="closeModal()">
+    <h3 cdsModalHeaderHeading
+        i18n>Report an issue</h3>
+  </cds-modal-header>
 
-  <div class="modal-content">
-    <form name="feedbackForm"
-          [formGroup]="feedbackForm"
-          #formDir="ngForm">
-      <div class="modal-body">
-        <cd-alert-panel *ngIf="!isFeedbackEnabled"
-                        type="error"
-                        i18n>Feedback module is not enabled. Please enable it from <a (click)="redirect()">Cluster-> Manager Modules.</a>
-        </cd-alert-panel>
-        <!-- api_key -->
-        <div class="form-group row mt-3"
-             *ngIf="!isAPIKeySet">
-          <label class="cd-col-form-label required"
-                 for="api_key"
-                 i18n>Ceph Tracker API Key</label>
-          <div class="cd-col-form-input">
-            <input id="api_key"
-                   type="password"
-                   formControlName="api_key"
-                   class="form-control"
-                   placeholder="Add Ceph tracker API key">
-            <span class="invalid-feedback"
-                  *ngIf="feedbackForm.showError('api_key', formDir, 'required')"
-                  i18n>Ceph Tracker API key is required.</span>
-            <span class="invalid-feedback"
-                  *ngIf="feedbackForm.showError('api_key', formDir, 'invalidApiKey')"
-                  i18n>Ceph Tracker API key is invalid.</span>
-          </div>
-        </div>
+  <form name="feedbackForm"
+        [formGroup]="feedbackForm"
+        #formDir="ngForm">
+    <div
+      cdsModalContent
+      class="modal-wrapper"
+    >
+      @if (!isFeedbackEnabled) {
+      <cd-alert-panel type="error"
+                      spacingClass="mb-3"
+                      actionName="Enable"
+                      class="align-items-center"
+                      (action)="enableFeedbackModule()"
+                      i18n-actionName>
+        In order to report an issue, Feedback module must be enabled.
+      </cd-alert-panel>
+      }
+      <!-- api_key -->
+      @if (!isAPIKeySet) {
+      <div class="form-item">
+        <cds-password-label
+          labelInputID="api_key"
+          label="Ceph Tracker API Key"
+          cdRequiredField="Ceph Tracker API Key"
+          [invalid]="!feedbackForm.controls.api_key.valid && feedbackForm.controls.api_key.dirty"
+          [invalidText]="apiKeyError"
+          [helperText]="apiKeyHelperTpl"
+          [disabled]="!isFeedbackEnabled"
+          i18n
+        >
+          <input
+            cdsPassword
+            id="api_key"
+            type="password"
+            formControlName="api_key"
+          />
+        </cds-password-label>
 
-        <!-- project -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="project"
-                 i18n>Project name</label>
-          <div class="cd-col-form-input">
-            <select class="form-control"
-                    id="project"
-                    formControlName="project">
-              <option ngValue=""
-                      i18n>-- Select a project --</option>
-              <option *ngFor="let projectName of project"
-                      [value]="projectName">{{ projectName }}</option>
-            </select>
-            <span class="invalid-feedback"
-                  *ngIf="feedbackForm.showError('project', formDir, 'required')"
-                  i18n>Project name is required.</span>
-          </div>
-        </div>
+        <ng-template #apiKeyError>
+          @if (feedbackForm.showError('api_key', formDir, 'required')) {
+          <span class="invalid-feedback"
+                i18n> Ceph Tracker API key is required. </span>
+          } @if (feedbackForm.showError('api_key', formDir, 'invalidApiKey')) {
+          <span class="invalid-feedback"
+                i18n> Ceph Tracker API key is invalid. </span>
+          }
+        </ng-template>
 
-        <!-- tracker -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="tracker"
-                 i18n>Tracker</label>
-          <div class="cd-col-form-input">
-            <select class="form-control"
-                    id="tracker"
-                    formControlName="tracker">
-              <option ngValue=""
-                      i18n>-- Select a tracker --</option>
-              <option *ngFor="let trackerName of tracker"
-                      [value]="trackerName">{{ trackerName }}</option>
-            </select>
-            <span  class="invalid-feedback"
-                   *ngIf="feedbackForm.showError('tracker', formDir, 'required')"
-                   i18n>Tracker name is required.</span>
-          </div>
-        </div>
-
-        <!-- subject -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="subject"
-                 i18n>Subject</label>
-          <div class="cd-col-form-input">
-            <input id="subject"
-                   type="text"
-                   formControlName="subject"
-                   class="form-control"
-                   placeholder="Add issue title">
-            <span class="invalid-feedback"
-                  *ngIf="feedbackForm.showError('subject', formDir, 'required')"
-                  i18n>Subject is required.</span>
-          </div>
-        </div>
-
-        <!-- description -->
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="description"
-                 i18n>Description</label>
-          <div class="cd-col-form-input">
-            <textarea id="description"
-                      type="text"
-                      formControlName="description"
-                      class="form-control"
-                      placeholder="Add issue description">
-            </textarea>
-            <span class="invalid-feedback"
-                  *ngIf="feedbackForm.showError('description', formDir, 'required')"
-                  i18n>Description is required.</span>
-          </div>
-        </div>
-
+        <ng-template #apiKeyHelperTpl>
+          You can obtain your API key from
+          <a href="https://tracker.ceph.com/my/account"
+             target="_blank">https://tracker.ceph.com/my/account
+          </a>
+        </ng-template>
       </div>
-      <div class="modal-footer">
-        <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [form]="feedbackForm"
-                              [submitText]="actionLabels.SUBMIT"
-                              wrappingClass="text-right">
-        </cd-form-button-panel>
+      }
+
+      <!-- project -->
+      <div class="form-item">
+        <cds-select
+          label="Project name"
+          id="project"
+          formControlName="project"
+          cdRequiredField="Project name"
+          [invalid]="!feedbackForm.controls.project.valid && feedbackForm.controls.project.dirty"
+          [invalidText]="projectError"
+          i18n
+        >
+          <option value="">--- Select a project ---</option>
+          @for (project of projects; track project) {
+          <option [value]="project">{{ project }}</option>
+          }
+        </cds-select>
+
+        <ng-template #projectError>
+          @if (feedbackForm.showError('project', formDir, 'required')) {
+          <span i18n>This field is required!</span>
+          }
+        </ng-template>
       </div>
-    </form>
-  </div>
-</cd-modal>
+
+      <!-- tracker -->
+      <div class="form-item cds-select-label">
+        <cds-select
+          label="Tracker"
+          id="tracker"
+          formControlName="tracker"
+          cdRequiredField="Tracker"
+          [invalid]="!feedbackForm.controls.tracker.valid && feedbackForm.controls.tracker.dirty"
+          [invalidText]="trackerError"
+          i18n
+        > Tracker
+          @for (trackerName of tracker; track trackerName) {
+          <option [value]="trackerName">{{ trackerName }}</option>
+          }
+        </cds-select>
+
+        <ng-template #trackerError>
+          @if (feedbackForm.showError('tracker', formDir, 'required')) {
+          <span i18n>Tracker name is required.</span>
+          }
+        </ng-template>
+      </div>
+
+      <!-- subject -->
+      <div class="form-item">
+        <cds-text-label
+          cdRequiredField="Subject"
+          [invalid]="!feedbackForm.controls.subject.valid && feedbackForm.controls.subject.dirty"
+          [invalidText]="subjectError"
+          [disabled]="!isFeedbackEnabled"
+          i18n
+        >
+          Subject
+          <input
+            cdsText
+            id="subject"
+            type="text"
+            formControlName="subject"
+            placeholder="Add issue title"
+          />
+        </cds-text-label>
+
+        <ng-template #subjectError>
+          @if (feedbackForm.showError('subject', formDir, 'required')) {
+          <span i18n>Subject is required.</span>
+          }
+        </ng-template>
+      </div>
+
+      <!-- description -->
+      <div class="form-item">
+        <cds-text-label
+          cdRequiredField="Description"
+          [invalid]="!feedbackForm.controls.description.valid && feedbackForm.controls.description.dirty"
+          [invalidText]="descriptionError"
+          [disabled]="!isFeedbackEnabled"
+          i18n
+        >
+          Description
+          <input
+            cdsText
+            id="description"
+            type="text"
+            formControlName="description"
+            placeholder="Explain your issue"
+          />
+        </cds-text-label>
+
+        <ng-template #descriptionError>
+          @if (feedbackForm.showError('description', formDir, 'required')) {
+          <span i18n>Description is required.</span>
+          }
+        </ng-template>
+      </div>
+    </div>
+    @if (isFeedbackEnabled) {
+    <cd-form-button-panel
+      (submitActionEvent)="onSubmit()"
+      [form]="feedbackForm"
+      [submitText]="submit"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+    }
+    @else {
+    <cd-form-button-panel
+      [showSubmit]="false"
+      [modalForm]="true"
+    ></cd-form-button-panel>
+    }
+  </form>
+</cds-modal>
