@@ -2105,14 +2105,6 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 
       last_directory_scan = now;
     }
-    int num_failed = 0;
-    for (auto &[dir_root, sync_stat] : m_snap_sync_stats) {
-      if (sync_stat.failed) {
-        std::vector<DaemonHealthMetric> health_metrics;
-        health_metrics.emplace_back(daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE, ++num_failed, ceph_clock_now());
-        m_service_daemon->update_mirror_health(health_metrics);
-      }
-    }
   }
 }
 

@@ -103,3 +103,12 @@ options:
   - cephfs-mirror
   min: 0
   max: 11
+- name: cephfs_mirror_health_tick_interval
+  type: secs
+  level: advanced
+  desc: interval for internal cephfs-mirror background checks
+  long_desc: cephfs-mirror health tick interval in seconds.
+  default: 5
+  services:
+  - cephfs-mirror
+  min: 1

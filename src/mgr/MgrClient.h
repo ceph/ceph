@@ -108,9 +108,6 @@ protected:
   bool mgr_optional = false;
 
 public:
-  std::vector<DaemonHealthMetric>& get_daemon_health_metrics() {
-    return daemon_health_metrics;
-  }
   MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap);
 
   void set_messenger(Messenger *msgr_) { msgr = msgr_; }
