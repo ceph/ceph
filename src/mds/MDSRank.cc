@@ -4271,7 +4271,9 @@ void MDSRank::get_task_status(std::map<std::string, std::string> *status) {
   std::string_view scrub_summary = scrubstack->scrub_summary();
   if (!ScrubStack::is_idle(scrub_summary)) {
     send_status = true;
-    status->emplace(SCRUB_STATUS_KEY, std::move(scrub_summary));
+    // std::move of the variable 'scrub_summary' of the trivially-copyable type 'std::string_view'
+    // (aka 'basic_string_view<char>') has no effect; remove std::move()
+    status->emplace(SCRUB_STATUS_KEY, scrub_summary);
   }
 }
 
