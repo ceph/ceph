@@ -156,6 +156,48 @@ std::string peek_pyerror()
   return exc_msg;
 }
 
+std::span<std::byte const> py_bytes_as_span(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::span<std::byte const>((const std::byte*)buf, size_t(length));
+}
+
+PyObject *py_bytes_from_span(std::span<std::byte const> s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char*>(s.data()), s.size_bytes());
+  assert(ret);
+  return ret;
+}
+
+std::vector<std::byte> py_bytes_as_vec(PyObject *bytes)
+{
+  assert(bytes);
+  assert(PyBytes_CheckExact(bytes));
+  Py_ssize_t length;
+  char *buf;
+  int r = PyBytes_AsStringAndSize(
+    bytes, &buf, &length);
+  assert(r == 0);
+  return std::vector<std::byte>{
+    reinterpret_cast<const std::byte*>(buf),
+    reinterpret_cast<const std::byte*>(buf) + size_t(length)};
+}
+
+PyObject *py_bytes_from_vec(const std::vector<std::byte> &s)
+{
+  auto ret = PyBytes_FromStringAndSize(
+    reinterpret_cast<const char *>(s.data()), s.size());
+  assert(ret);
+  return ret;
+}
+
 
 namespace {
   PyObject* log_write(PyObject*, PyObject* args) {
@@ -311,6 +353,13 @@ int PyModule::load(PyThreadState *pMainThreadState)
     Gil gil(pMyThreadState);
 
     int r;
+
+    pPickleModule = PyImport_ImportModuleNoBlock("pickle");
+    if (!pPickleModule) {
+      derr << "Unable to load pickle" << dendl;
+      return -EINVAL;
+    }
+
     r = load_subclass_of("MgrModule", &pClass);
     if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
@@ -710,6 +759,7 @@ PyModule::~PyModule()
     Gil gil(pMyThreadState, true);
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
+    Py_XDECREF(pPickleModule);
     Py_EndInterpreter(pMyThreadState.ts);
     pMyThreadState.ts = nullptr;
   }
