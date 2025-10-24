@@ -290,7 +290,6 @@ namespace rgw::dedup {
     // temporary solution until we find a way to disable the health warn on replica1
     std::string replica_count(std::to_string(2));
 #endif
-    librados::bufferlist inbl;
     std::string output;
     std::string command = R"(
     {
@@ -303,7 +302,7 @@ namespace rgw::dedup {
     })";
 
     auto rados_handle = store->getRados()->get_rados_handle();
-    int ret = rados_handle->mon_command(command, inbl, nullptr, &output);
+    int ret = rados_handle->mon_command(std::move(command), {}, nullptr, &output);
     if (output.length()) {
       if (output != "pool 'rgw_dedup_pool' already exists") {
         ldpp_dout(dpp, 10) << __func__ << "::" << output << dendl;

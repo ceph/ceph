@@ -33,9 +33,8 @@ void update_pool_timestamp(librados::IoCtx& io_ctx) {
     R"(})";
 
   librados::Rados rados(io_ctx);
-  bufferlist in_bl;
   std::string ss;
-  int r = rados.mon_command(cmd, in_bl, nullptr, &ss);
+  int r = rados.mon_command(std::move(cmd), {}, nullptr, &ss);
   if (r < 0) {
     lderr(cct) << "failed to notify clients of pool config update: "
                << cpp_strerror(r) << dendl;
