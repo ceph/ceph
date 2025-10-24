@@ -956,12 +956,15 @@ def deploy_daemon(
             cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
+                # Disable automatic startup for NFS daemons
+                enable_daemon = daemon_type != 'nfs'
                 deploy_daemon_units(
                     ctx,
                     ident,
                     uid,
                     gid,
                     c,
+                    enable=enable_daemon,
                     osd_fsid=osd_fsid,
                     endpoints=endpoints,
                     init_containers=init_containers,
