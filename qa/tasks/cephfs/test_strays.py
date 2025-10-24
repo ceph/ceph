@@ -350,6 +350,13 @@ class TestStrays(CephFSTestCase):
         That the reintegration is not blocked by full directories.
         """
 
+        # With referent inodes enabled, reintegration would fail when the directory
+        # is full. Since the secondary hardlink has a referent inode, it needs to be
+        # moved to stray during reintegration. If the stray dir is full, this would fail.
+        # Please take a look at https://tracker.ceph.com/issues/72584
+        # The same test for referent inodes is added at qa/tasks/cephfs/test_referent.py
+        self.fs.set_allow_referent_inodes(False)
+
         LOW_LIMIT = 50
         self.config_set('mds', 'mds_bal_fragment_size_max', str(LOW_LIMIT))
         time.sleep(10) # for config to reach MDS; async create is fast!!
