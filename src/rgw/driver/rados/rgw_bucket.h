@@ -700,6 +700,7 @@ public:
                        const rgw_owner& owner,
                        const RGWBucketInfo& bucket_info,
                        optional_yield y,
+                       bool reset,
                        RGWBucketEnt* pent);
 
   /* bucket sync */
