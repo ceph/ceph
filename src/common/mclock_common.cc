@@ -34,23 +34,29 @@ namespace dmc = crimson::dmclock;
 
 std::ostream &operator<<(std::ostream &lhs, const SchedulerClass &c)
 {
-  lhs << static_cast<size_t>(c);
+  lhs << static_cast<size_t>(c) << " (";
   switch (c) {
   case SchedulerClass::background_best_effort:
-    return lhs << "background_best_effort";
+    lhs << "background_best_effort";
+    break;
   case SchedulerClass::background_recovery:
-    return lhs << "background_recovery";
+    lhs << "background_recovery";
+    break;
   case SchedulerClass::client:
-    return lhs << "client";
+    lhs << "client";
+    break;
 #ifdef WITH_CRIMSON
   case SchedulerClass::repop:
-    return lhs << "repop";
+    lhs << "repop";
+    break;
 #endif
   case SchedulerClass::immediate:
-    return lhs << "immediate";
+    lhs << "immediate";
+    break;
   default:
-    return lhs;
+    lhs << "unknown";
   }
+  return lhs << ")";
 }
 
 std::ostream& operator<<(std::ostream& out,
