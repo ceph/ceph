@@ -1,5 +1,6 @@
 @use './src/styles/vendor/variables' as vv;
 @use '@carbon/layout';
+@use './src/styles/ceph-custom/grid'  as *;
 
 .details {
   font-size: larger;
