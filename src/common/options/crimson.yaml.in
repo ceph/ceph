@@ -150,11 +150,6 @@ options:
   level: dev
   desc: default logical address space reservation for seastore objects' data
   default: 16777216
-- name: seastore_default_object_metadata_reservation
-  type: uint
-  level: dev
-  desc: default logical address space reservation for seastore objects' metadata
-  default: 16777216
 # TODO: implement sub-extent checksum and deprecate this configuration.
 - name: seastore_full_integrity_check
   type: bool

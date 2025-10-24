@@ -512,7 +512,7 @@ class NodeExtentAccessorT {
     std::memcpy(to.get_write(), extent->get_read(), get_length());
   }
 
-  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_t hint) {
+  eagain_ifuture<NodeExtentMutable> rebuild(context_t c, laddr_hint_t hint) {
     LOG_PREFIX(OTree::Extent::rebuild);
     assert(!is_retired());
     if (state == nextent_state_t::FRESH) {

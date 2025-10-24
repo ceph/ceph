@@ -63,6 +63,11 @@ public:
     laddr_t offset,
     bool search_containing = false) = 0;
 
+  using lower_bound_ret = base_iertr::future<LBAMapping>;
+  virtual lower_bound_ret lower_bound(
+    Transaction &t,
+    laddr_t laddr) = 0;
+
   /*
    * Fetches the mapping corresponding to the "extent"
    *
@@ -89,7 +94,7 @@ public:
   using alloc_extent_ret = alloc_extent_iertr::future<LBAMapping>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     LogicalChildNode &nextent,
     extent_ref_count_t refcount) = 0;
 
@@ -97,7 +102,7 @@ public:
     std::vector<LBAMapping>>;
   virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
+    laddr_hint_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
   /*
@@ -131,10 +136,59 @@ public:
 				// direct mapping
   ) = 0;
 
+  struct move_mapping_ret_t {
+    LBAMapping src;
+    LBAMapping dest;
+  };
+  /*
+   * move_and_clone_direct_mapping
+   *
+   * move the direct mapping "src" to "dest" and clone it at the
+   * position of "src".
+   *
+   * Return: the new indirect mapping and the moved direct mapping
+   */
+  using move_mapping_iertr = alloc_extent_iertr;
+  using move_mapping_ret = move_mapping_iertr::future<move_mapping_ret_t>;
+  virtual move_mapping_ret move_and_clone_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) = 0;
+
+  /*
+   * move_indirect_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_indirect_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest) = 0;
+
+  /*
+   * move_direct_mapping
+   *
+   * move the indirect mapping "src" to dest, and remove "src".
+   *
+   * Return: the mapping next to "src" and the original "dest"
+   */
+  virtual move_mapping_ret move_direct_mapping(
+    Transaction &t,
+    LBAMapping src,
+    laddr_t dest_laddr,
+    LBAMapping dest,
+    LogicalChildNode &extent) = 0;
+
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len) = 0;
+    laddr_hint_t hint,
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   /*
    * Inserts a zero mapping at the position "pos" with
@@ -144,7 +198,8 @@ public:
     Transaction &t,
     LBAMapping pos,
     laddr_t hint,
-    extent_len_t len) = 0;
+    extent_len_t len,
+    extent_types_t type) = 0;
 
   struct mapping_update_result_t {
     laddr_t key;
