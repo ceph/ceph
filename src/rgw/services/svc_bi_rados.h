@@ -16,9 +16,10 @@
 
 #pragma once
 
-#include "rgw_datalog.h"
-#include "rgw_service.h"
-#include "rgw_tools.h"
+#include "driver/rados/rgw_datalog.h"
+#include "driver/rados/rgw_service.h"
+#include "driver/rados/rgw_tools.h"
+#include "rgw_bucket.h"
 
 #include "svc_bi.h"
 #include "svc_tier_rados.h"
@@ -32,12 +33,6 @@ class RGWSI_BILog_RADOS;
 
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
-
-/*
- * Defined Bucket Index Namespaces
- */
-#define RGW_OBJ_NS_MULTIPART "multipart"
-#define RGW_OBJ_NS_SHADOW    "shadow"
 
 class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {

@@ -23,7 +23,7 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"

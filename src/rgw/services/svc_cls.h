@@ -19,7 +19,7 @@
 #include "cls/otp/cls_otp_types.h"
 #include "cls/log/cls_log_types.h"
 
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 
 #include "driver/rados/rgw_tools.h"
 

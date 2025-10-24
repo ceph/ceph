@@ -9,7 +9,7 @@
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_iam_managed_policy.h"
 #include "rgw_keystone.h"

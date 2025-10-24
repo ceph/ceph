@@ -18,9 +18,8 @@
 
 #include <iomanip>
 
-#include "rgw_service.h"
-
-extern const std::string MP_META_SUFFIX;
+#include "rgw_multipart_meta_filter.h"
+#include "driver/rados/rgw_service.h"
 
 class RGWMPObj {
   std::string oid;
@@ -96,26 +95,6 @@ public:
       ", meta=" << std::quoted(obj.meta) << " }";
   }
 }; // class RGWMPObj
-
-/**
- * A filter to a) test whether an object name is a multipart meta
- * object, and b) filter out just the key used to determine the bucket
- * index shard.
- *
- * Objects for multipart meta have names adorned with an upload id and
- * other elements -- specifically a ".", MULTIPART_UPLOAD_ID_PREFIX,
- * unique id, and MP_META_SUFFIX. This filter will return true when
- * the name provided is such. It will also extract the key used for
- * bucket index shard calculation from the adorned name.
- */
-/**
- * @param name [in] The object name as it appears in the bucket index.
- * @param key [out] An output parameter that will contain the bucket
- *        index key if this entry is in the form of a multipart meta object.
- * @return true if the name provided is in the form of a multipart meta
- *         object, false otherwise
- */
-bool MultipartMetaFilter(const std::string& name, std::string& key);
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance
 {

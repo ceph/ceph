@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_pubsub.h"
-#include "rgw_tools.h"
 #include "rgw_xml.h"
 #include "rgw_s3_filter.h"
 #include "common/errno.h"

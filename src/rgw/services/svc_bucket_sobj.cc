@@ -13,7 +13,7 @@
 #include "rgw_bucket.h"
 #include "rgw_metadata_lister.h"
 #include "rgw_string.h"
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 #include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
