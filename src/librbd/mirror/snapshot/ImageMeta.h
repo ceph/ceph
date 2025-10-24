@@ -29,7 +29,8 @@ public:
   void load(Context* on_finish);
   void save(Context* on_finish);
 
-  bool resync_requested = false;
+  int set_resync_requested(bool is_resync_requested);
+  bool get_resync_requested();
 
 private:
   /**
@@ -55,6 +56,7 @@ private:
    * @endverbatim
    */
 
+  bool resync_requested = false;
   ImageCtxT* m_image_ctx;
   std::string m_mirror_uuid;
 
