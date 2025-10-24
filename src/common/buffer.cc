@@ -632,17 +632,13 @@ static ceph::spinlock debug_lock;
   }
 
   template<bool B>
-  buffer::ptr::iterator_impl<B>& buffer::ptr::iterator_impl<B>::operator +=(size_t len) {
-    pos += len;
-    if (pos > end_ptr)
-      throw end_of_buffer();
-    return *this;
+  void buffer::ptr::iterator_impl<B>::throw_end_of_buffer() {
+    throw ceph::buffer::end_of_buffer();
   }
-
-  template buffer::ptr::iterator_impl<false>&
-  buffer::ptr::iterator_impl<false>::operator +=(size_t len);
-  template buffer::ptr::iterator_impl<true>&
-  buffer::ptr::iterator_impl<true>::operator +=(size_t len);
+  template void
+  buffer::ptr::iterator_impl<false>::throw_end_of_buffer();
+  template void
+  buffer::ptr::iterator_impl<true>::throw_end_of_buffer();
 
   // -- buffer::list::iterator --
   /*
