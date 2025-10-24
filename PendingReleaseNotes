@@ -51,6 +51,7 @@
   normalized directory entry names. This is inheritable and
   applies to an entire directory tree. For more information, see
   https://docs.ceph.com/en/latest/cephfs/charmap/
+* RGW: "STS Lite" and the sts:GetSessionToken operation are now deprecated.
 * Based on tests performed at scale on an HDD based Ceph cluster, it was found
   that scheduling with mClock was not optimal with multiple OSD shards. For
   example, when multiple OSD nodes failed, client
