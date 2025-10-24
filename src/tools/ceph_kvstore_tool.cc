@@ -27,6 +27,9 @@
 #include "global/global_init.h"
 
 #include "kvstore_tool.h"
+#ifdef WITH_BLUESTORE
+#include "os/bluestore/BlueStore_objects.h"
+#endif
 
 using namespace std;
 
