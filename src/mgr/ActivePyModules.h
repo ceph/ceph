@@ -233,11 +233,11 @@ public:
     return modules.at(module_name)->method_exists(method_name);
   }
 
-  PyObject *dispatch_remote(
+  std::optional<std::vector<std::byte>> dispatch_remote(
       const std::string &other_module,
       const std::string &method,
-      PyObject *args,
-      PyObject *kwargs,
+      std::span<std::byte const> pickled_args,
+      std::span<std::byte const> pickled_kwargs,
       std::string *err);
 
   int init();

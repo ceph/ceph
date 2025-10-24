@@ -67,10 +67,10 @@ public:
 
   bool method_exists(const std::string &method) const;
 
-  PyObject *dispatch_remote(
+  std::optional<std::vector<std::byte>> dispatch_remote(
       const std::string &method,
-      PyObject *args,
-      PyObject *kwargs,
+      std::span<std::byte const> pickled_args,
+      std::span<std::byte const> pickled_kwargs,
       std::string *err);
 
   int handle_command(

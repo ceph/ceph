@@ -42,6 +42,7 @@
 
 using std::list;
 using std::string;
+using namespace std::literals;
 
 typedef struct {
   PyObject_HEAD
@@ -830,6 +831,7 @@ ceph_clear_all_progress_events(BaseMgrModule *self, PyObject *args)
 static PyObject *
 ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
 {
+  // PyArgs_ParseTuple doesn't give us refcounts here
   char *other_module = nullptr;
   char *method = nullptr;
   PyObject *remote_args = nullptr;
@@ -848,6 +850,38 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
+  auto pmodule = self->this_module->py_module->pPickleModule;
+  auto pickled_args = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("dumps"),
+    remote_args,
+    nullptr);
+  if (pickled_args == nullptr) {
+    std::string caller = "ceph_dispatch_remote "s + " " + method;
+    std::string err = handle_pyerror(true, other_module, caller);
+    PyErr_SetString(PyExc_RuntimeError, err.c_str());
+    derr << err << dendl;
+    return nullptr;
+  }
+  std::span<std::byte const> pickled_args_span = py_bytes_as_span(pickled_args);
+
+  auto pickled_kwargs = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("dumps"),
+    remote_kwargs,
+    nullptr);
+  if (pickled_kwargs == nullptr) {
+    std::string caller = "ceph_dispatch_remote "s + " " + method;
+    std::string err = handle_pyerror(true, other_module, caller);
+    PyErr_SetString(PyExc_RuntimeError, err.c_str());
+    derr << err << dendl;
+
+    Py_DECREF(pickled_args);
+    return nullptr;
+  }
+  std::span<std::byte const> pickled_kwargs_span =
+    py_bytes_as_span(pickled_kwargs);
+
   // Drop GIL from calling python thread state, it will be taken
   // both for checking for method existence and for executing method.
   PyThreadState *tstate = PyEval_SaveThread();
@@ -855,23 +889,50 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   if (!self->py_modules->method_exists(other_module, method)) {
     PyEval_RestoreThread(tstate);
     PyErr_SetString(PyExc_NameError, "Method not found");
+
+    Py_DECREF(pickled_args);
+    Py_DECREF(pickled_kwargs);
     return nullptr;
   }
 
   std::string err;
-  auto result = self->py_modules->dispatch_remote(other_module, method,
-      remote_args, remote_kwargs, &err);
+  std::optional<std::vector<std::byte>> maybe_pickled_ret =
+    self->py_modules->dispatch_remote(
+      other_module,
+      method,
+      pickled_args_span,
+      pickled_kwargs_span,
+      &err);
 
   PyEval_RestoreThread(tstate);
 
-  if (result == nullptr) {
+  // we retain these references across the dispatch_remote call so that
+  // we can pass string_view and avoid the copy
+  Py_XDECREF(pickled_kwargs);
+  Py_XDECREF(pickled_args);
+
+  if (!maybe_pickled_ret) {
     std::stringstream ss;
     ss << "Remote method threw exception: " << err;
     PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
     derr << ss.str() << dendl;
+    return nullptr;
   }
 
-  return result;
+  auto pickled_ret_bytes = py_bytes_from_vec(*maybe_pickled_ret);
+  auto ret = PyObject_CallMethodObjArgs(
+    pmodule,
+    PyUnicode_FromString("loads"),
+    pickled_ret_bytes,
+    nullptr);
+  if (ret == nullptr) {
+    std::string caller = "ceph_dispatch_remote "s + " " + method;
+    std::string err = handle_pyerror(true, other_module, caller);
+    PyErr_SetString(PyExc_RuntimeError, err.c_str());
+    derr << err << dendl;
+  }
+  Py_XDECREF(pickled_ret_bytes);
+  return ret;
 }
 
 static PyObject*
