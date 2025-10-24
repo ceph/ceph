@@ -394,6 +394,7 @@ public:
     });
   }
 
+  void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami, MonClient *monc);
 private:
   void dump_detail(Formatter *f) const final;
 
@@ -405,6 +406,8 @@ private:
   uint64_t pending = 0;
 
   void wake();
+
+  seastar::future<> wake_set();
 
   seastar::future<> acquire_throttle(
     crimson::osd::scheduler::params_t params);
