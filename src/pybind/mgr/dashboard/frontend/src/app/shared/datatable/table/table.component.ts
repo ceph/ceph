@@ -90,6 +90,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   tableActionTpl: TemplateRef<any>;
   @ViewChild('editingTpl', { static: true })
   editingTpl: TemplateRef<any>;
+  @ViewChild('redirectTpl', { static: true })
+  redirectTpl: TemplateRef<any>;
 
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
@@ -862,6 +864,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.tooltip = this.tooltipTpl;
     this.cellTemplates.copy = this.copyTpl;
     this.cellTemplates.editing = this.editingTpl;
+    this.cellTemplates.redirect = this.redirectTpl;
   }
 
   useCustomClass(value: any): string {

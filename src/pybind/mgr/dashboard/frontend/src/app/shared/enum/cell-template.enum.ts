@@ -99,5 +99,18 @@ export enum CellTemplate {
   Also need to pass forceIdentifer=true and also a unique identifier prop like
   identifier="uid" to the table in some cases to avoid issues.
   */
-  editing = 'editing'
+  editing = 'editing',
+  /*
+  This template let's you provide a redirect url and let you redirect from when you click
+  on the cell item. The redirect link can be provided in the customTemplateConfig
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.redirect,
+  //    customTemplateConfig: {
+  //          redirectLink: ['dashboard', 'overview'],
+  //    }
+  //    ...
+  // }
+  */
+  redirect = 'redirect'
 }
