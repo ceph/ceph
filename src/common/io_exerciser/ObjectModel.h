@@ -47,6 +47,9 @@ class ObjectModel : public Model {
  public:
   ObjectModel(const std::string& primary_oid, const std::string& secondary_oid, uint64_t block_size, int seed);
 
+  void set_primary_oid(const std::string& new_oid) override;
+  void set_secondary_oid(const std::string& new_oid) override;
+
   int get_seed(uint64_t offset) const;
   std::vector<int> get_seed_offsets(int seed) const;
 
