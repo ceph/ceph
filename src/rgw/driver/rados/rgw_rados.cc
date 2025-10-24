@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sstream>
+#include <memory>
+#include <mutex>
+#include <deque>
 
 #include <boost/algorithm/string.hpp>
 #include <string_view>
@@ -14,6 +17,9 @@
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/spawn.hpp>
+#include <boost/asio/use_awaitable.hpp>
 
 #include "common/ceph_json.h"
 
@@ -23,7 +29,6 @@
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
 #include "common/async/blocked_completion.h"
-#include "cls_fifo_legacy.h"
 
 #include "rgw_asio_thread.h"
 #include "rgw_cksum.h"
@@ -101,6 +106,13 @@
 
 #include "rgw_d3n_datacache.h"
 
+#include "include/neorados/RADOS.hpp"
+#include "include/buffer.h"
+#include "neorados/cls/fifo.h"
+#include "rgw/rgw_common.h"
+#include "rgw_bilog.h"
+
+
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
@@ -116,6 +128,8 @@
 
 using namespace std;
 using namespace librados;
+namespace asio = boost::asio;
+namespace fifo = neorados::cls::fifo;
 
 #define ldout_bitx(_bitx, _dpp, _level) if(_bitx) { ldpp_dout(_dpp, 0) << "BITX: "
 #define ldout_bitx_c(_bitx, _ctx, _level) if(_bitx) { ldout(_ctx, 0) << "BITX: "
@@ -8773,127 +8787,37 @@ static uint16_t get_olh_op_bilog_flags()
   return 0;
 }
 
-struct BILogUpdateBatchFIFO {
-  const DoutPrefixProvider *dpp;
-  std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
-
-  BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp, const RGWRados& store, const RGWBucketInfo& bucket_info);
-
-  void add_maybe_flush(const uint64_t olh_epoch, const ceph::real_time set_mtime,
-                       const cls_rgw_bi_log_related_op& bi_log_client_info)
-  {
-    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
-                   << ": the cls_rgw_bi_log_related_op-taking variant"
-                   << dendl;
-    rgw_bi_log_entry entry;
-
-    entry.object = bi_log_client_info.key.name;
-    entry.instance = bi_log_client_info.key.instance;
-    entry.timestamp = set_mtime;
-    entry.op = bi_log_client_info.op;
-    // olh epoch
-    {
-      rgw_bucket_entry_ver ver;
-      ver.epoch = olh_epoch;
-      entry.ver = std::move(ver);
-    }
-    entry.state = CLS_RGW_STATE_COMPLETE;
-    entry.tag = bi_log_client_info.op_tag;
-    entry.bilog_flags = bi_log_client_info.bilog_flags;
-    // owner is non-empty only for OLH_DM
-    entry.owner = decltype(entry.owner){};
-    // owner_display_name is non-empty only for OLH_DM
-    entry.owner_display_name = decltype(entry.owner_display_name){};
-    entry.zones_trace = bi_log_client_info.zones_trace;
-
-#if 0
-    // TODO: handle the entry.id
-    bi_log_index_key(hctx, key, entry.id, index_ver);
-    if (entry.id > max_marker)
-      max_marker = entry.id;
-#endif
-
-    ceph::bufferlist bl;
-    encode(entry, bl);
-    fifo->push(std::move(bl), null_yield /* FIXME */);
-  }
-
-  void add_maybe_flush(const uint64_t olh_epoch,
-                       const cls_rgw_obj_key& key,
-                       const std::string& op_tag,
-                       const bool delete_marker,
-                       const rgw_bucket_olh_log_bi_log_entry& bi_log_replay_data)
-  {
-    ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ": the OLH-specific variant" << dendl;
-    rgw_bi_log_entry entry;
-
-    entry.object = key.name;
-    entry.instance = key.instance;
-    entry.timestamp = bi_log_replay_data.timestamp;
-    entry.op = CLSRGWLinkOLHBase::get_bilog_op_type(delete_marker);
-    // olh epoch
-    {
-      rgw_bucket_entry_ver ver;
-      ver.epoch = olh_epoch;
-      entry.ver = std::move(ver);
-    }
-    entry.state = CLS_RGW_STATE_COMPLETE;
-    entry.tag = op_tag;
-    entry.bilog_flags = get_olh_op_bilog_flags() | RGW_BILOG_FLAG_VERSIONED_OP;
-    if (delete_marker) {
-      entry.owner = bi_log_replay_data.owner;
-      entry.owner_display_name = bi_log_replay_data.owner_display_name;
-    }
-    entry.zones_trace = bi_log_replay_data.zones_trace;
-
-#if 0
-    // TODO: handle the entry.id
-    bi_log_index_key(hctx, key, entry.id, index_ver);
-    if (entry.id > max_marker)
-      max_marker = entry.id;
-#endif
-
-    ceph::bufferlist bl;
-    encode(entry, bl);
-    fifo->push(std::move(bl), null_yield /* FIXME */);
-  }
-
-  void add_maybe_flush(RGWModifyOp op,
-                       const rgw_bucket_dir_entry& list_state,
-                       rgw_zone_set zones_trace) {
-    rgw_bi_log_entry entry;
-    entry.object = list_state.key.name;
-    entry.instance = list_state.key.instance;
-    entry.timestamp = list_state.meta.mtime;
-    entry.op = op;
-    entry.state = CLS_RGW_STATE_COMPLETE;
-    entry.tag = list_state.tag;
-    entry.zones_trace = std::move(zones_trace);
-  }
-};
-
-BILogUpdateBatchFIFO::BILogUpdateBatchFIFO(const DoutPrefixProvider *dpp,
-                                           const RGWRados& store,
-                                           const RGWBucketInfo& bucket_info)
-                    : dpp(dpp) {
-  ceph_assert(store.svc.bi_rados);
-  fifo = RGWSI_BILog_RADOS_FIFO::open_fifo(dpp, bucket_info, *store.svc.bi_rados);
-  if (!fifo) {
-    // TODO: "oops" here
-  }
-}
-
-static BILogUpdateBatchFIFO get_or_create_fifo_bilog_op(const DoutPrefixProvider *dpp,
-                                                        RGWRados& store,
-                                                        const RGWBucketInfo& binfo)
+static RGWBILogUpdateBatch get_or_create_fifo_bilog_op(const DoutPrefixProvider *dpp,
+                                                       RGWRados& store,
+                                                       const RGWBucketInfo& bucket_info)
 {
-  return { dpp, store, binfo };
+  auto r = store.driver->get_neorados();
+  
+  librados::IoCtx index_pool;
+  std::string bucket_oid;
+  int ret = store.svc.bi_rados->open_bucket_index(dpp, bucket_info, std::nullopt,
+                                                  bucket_info.layout.current_index,
+                                                  &index_pool, &bucket_oid);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to open bucket index: " << cpp_strerror(-ret) << dendl;
+    throw std::system_error(-ret, std::system_category(), "Failed to open bucket index");
+  }
+
+  try {
+    auto loc = rgw::init_iocontext(dpp, r, index_pool,
+                                   rgw::create, ceph::async::use_blocked);
+    
+    return RGWBILogUpdateBatch{dpp, r, std::move(loc), bucket_info};
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to initialize ioctx: " << e.what() << dendl;
+    throw;
+  }
 }
 
 struct BILogNopHandler {
   const DoutPrefixProvider *dpp;
   CephContext* const cct;
-  void add_maybe_flush(const uint64_t, ceph::real_time, const cls_rgw_bi_log_related_op&) {
+  void add_maybe_flush(const uint64_t, ceph::real_time, const cls_rgw_bi_log_related_op& bi_log_client_info) {
     ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__
                    << ": the cls_rgw_bi_log_related_op-taking variant"
                    << dendl;
@@ -11472,9 +11396,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
        * marked as !exists and got deleted */
     if (list_state.exists) {
       ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << ": index list state exists" << dendl_bitx;
-      /* FIXME: what should happen now? Work out if there are any
-       * non-bad ways this could happen (there probably are, but annoying
-       * to handle!) */
+      /* FIXME: what should happen now? 
       /* should we add bilog here?
         if (suggest_flag) {
           bilog_handler.add_maybe_flush(CLS_RGW_OP_ADD, list_state,
