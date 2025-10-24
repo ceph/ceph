@@ -35,6 +35,7 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   RGWBucketAdminOpState op_state;
 
   bool fetch_stats;
+  bool fetch_restore_stats;
 
   std::string bucket;
 
@@ -45,6 +46,7 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
 
   RESTArgs::get_string(s, "bucket", bucket, &bucket);
   RESTArgs::get_bool(s, "stats", false, &fetch_stats);
+  RESTArgs::get_bool(s, "restore-stats", false, &fetch_restore_stats);
 
   uint32_t max_entries;
   std::string marker;
@@ -57,6 +59,7 @@ void RGWOp_Bucket_Info::execute(optional_yield y)
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
   op_state.set_fetch_stats(fetch_stats);
+  op_state.set_restore_stats(fetch_restore_stats);
 
   op_ret = RGWBucketAdminOp::info(driver, op_state, flusher, y, this);
 }
