@@ -466,11 +466,12 @@ int RocksDBStore::create_and_open(ostream &out,
 }
 
 std::shared_ptr<rocksdb::Cache> RocksDBStore::create_block_cache(
+    const std::string& name,
     const std::string& cache_type, size_t cache_size, double cache_prio_high) {
   std::shared_ptr<rocksdb::Cache> cache;
   auto shard_bits = cct->_conf->rocksdb_cache_shard_bits;
   if (cache_type == "binned_lru") {
-    cache = rocksdb_cache::NewBinnedLRUCache(cct, cache_size, shard_bits, false, cache_prio_high);
+    cache = rocksdb_cache::NewBinnedLRUCache(cct, name, cache_size, shard_bits, false, cache_prio_high);
   } else if (cache_type == "lru") {
     cache = rocksdb::NewLRUCache(cache_size, shard_bits);
   } else if (cache_type == "clock") {
@@ -556,7 +557,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   uint64_t row_cache_size = cache_size * cct->_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  bbt_opts.block_cache = create_block_cache(cct->_conf->rocksdb_cache_type, block_cache_size);
+  bbt_opts.block_cache = create_block_cache(rocksdb::kDefaultColumnFamilyName, cct->_conf->rocksdb_cache_type, block_cache_size);
   if (!bbt_opts.block_cache) {
     return -EINVAL;
   }
@@ -1015,7 +1016,7 @@ int RocksDBStore::apply_block_cache_options(const std::string& column_name,
     column_bbt_opts.no_block_cache = true;
   } else {
     if (require_new_block_cache) {
-      block_cache = create_block_cache(cache_type, cache_size, high_pri_pool_ratio);
+      block_cache = create_block_cache(column_name, cache_type, cache_size, high_pri_pool_ratio);
       if (!block_cache) {
 	dout(5) << __func__ << " failed to create block cache for params: " << block_cache_opt << dendl;
 	return -EINVAL;
