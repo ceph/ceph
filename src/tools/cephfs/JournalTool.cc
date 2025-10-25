@@ -492,6 +492,12 @@ int JournalTool::main_event(std::vector<const char*> &argv)
      * Iterate over log entries, attempting to scavenge from each one
      */
     std::set<inodeno_t> consumed_inos;
+    uint64_t event_count = js.events.size();
+    if (event_count > 100) { // Only track for larger operations
+      progress_tracker->set_operation_name("Processing events");
+      progress_tracker->start(event_count);
+    }
+
     for (JournalScanner::EventMap::iterator i = js.events.begin();
          i != js.events.end(); ++i) {
       auto& le = i->second.log_event;
@@ -510,6 +516,15 @@ int JournalTool::main_event(std::vector<const char*> &argv)
                 JournalScanner::EventError(scav_r, cpp_strerror(r))));
         }
       }
+
+      progress_tracker->increment();
+      if (event_count > 100) {
+        progress_tracker->display_progress();
+      }
+    }
+
+    if (event_count > 100) {
+      progress_tracker->display_final_summary();
     }
 
     /**
@@ -614,6 +629,9 @@ int JournalTool::journal_inspect()
 {
   int r;
 
+  progress_tracker->set_operation_name("Scanning journal");
+  progress_tracker->start(0); // Unknown total initially
+
   JournalFilter filter(type);
   JournalScanner js(input, rank, type, filter);
   r = js.scan();
@@ -622,6 +640,7 @@ int JournalTool::journal_inspect()
     return r;
   }
 
+  progress_tracker->display_final_summary();
   js.report(std::cout);
 
   return 0;
@@ -727,6 +746,12 @@ int JournalTool::recover_dentries(
   ceph_assert(consumed_inos != NULL);
 
   int r = 0;
+
+  // Initialize progress tracking for dentry recovery
+  if (metablob.lump_order.size() > 1) {
+    progress_tracker->set_operation_name("Recovering dentries");
+    progress_tracker->start(metablob.lump_order.size());
+  }
 
   // Replay fullbits (dentry+inode)
   for (const auto& frag : metablob.lump_order) {
@@ -1071,6 +1096,15 @@ int JournalTool::recover_dentries(
 	return r;
       }
     }
+
+    progress_tracker->increment();
+    if (metablob.lump_order.size() > 10) { // Only show for larger operations
+      progress_tracker->display_progress();
+    }
+  }
+
+  if (metablob.lump_order.size() > 1) {
+    progress_tracker->display_final_summary();
   }
 
   /* Now that we've looked at the dirlumps, we finally pay attention to
