@@ -823,7 +823,7 @@ Special Error Responses
 None.
 
 Get Account Info
-===========
+================
 .. versionadded:: Squid
 
 Get account info. Either an ``id`` or a ``name`` must be provided.

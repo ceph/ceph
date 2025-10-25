@@ -61,7 +61,7 @@ else
     $vdir/bin/pip install --quiet \
               -r $TOPDIR/admin/doc-requirements.txt \
               -r $TOPDIR/admin/doc-python-common-requirements.txt
-    BUILD_DOC=1 $vdir/bin/pip install --quiet \
+    BUILD_DOC=1 $vdir/bin/pip install --no-build-isolation --quiet \
          -r $TOPDIR/admin/doc-pybind.txt
     md5sum \
         $TOPDIR/admin/doc-requirements.txt \

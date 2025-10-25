@@ -385,7 +385,6 @@ Code Walkthroughs
 .. toctree::
    :maxdepth: 1
 
-   Crimson Developer guide <index>
    OSDState <osd>
    The ClientRequest Pipeline <pipeline>
    Error Handling <error-handling>
