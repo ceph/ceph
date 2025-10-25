@@ -60,7 +60,8 @@ class RGWSI_Bucket_Sync;
 class RGWSI_Bucket_Sync_SObj;
 class RGWSI_BucketIndex;
 class RGWSI_BucketIndex_RADOS;
-class RGWSI_BILog_RADOS;
+class RGWSI_BILog_RADOS_BackendDispatcher;
+
 class RGWSI_Cls;
 class RGWSI_ConfigKey;
 class RGWSI_ConfigKey_RADOS;
@@ -88,7 +89,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
   std::unique_ptr<RGWSI_Bucket_Sync_SObj> bucket_sync_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
-  std::unique_ptr<RGWSI_BILog_RADOS> bilog_rados;
+  std::unique_ptr<RGWSI_BILog_RADOS_BackendDispatcher> bilog_rados;
   std::unique_ptr<RGWSI_Cls> cls;
   std::unique_ptr<RGWSI_ConfigKey_RADOS> config_key_rados;
   std::unique_ptr<RGWSI_MDLog> mdlog;
@@ -129,7 +130,7 @@ struct RGWServices
   RGWSI_Bucket_Sync_SObj *bucket_sync_sobj{nullptr};
   RGWSI_BucketIndex *bi{nullptr};
   RGWSI_BucketIndex_RADOS *bi_rados{nullptr};
-  RGWSI_BILog_RADOS *bilog_rados{nullptr};
+  RGWSI_BILog_RADOS_BackendDispatcher *bilog_rados{nullptr};
   RGWSI_Cls *cls{nullptr};
   RGWSI_ConfigKey_RADOS *config_key_rados{nullptr};
   RGWSI_ConfigKey *config_key{nullptr};

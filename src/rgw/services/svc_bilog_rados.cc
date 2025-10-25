@@ -664,24 +664,95 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
   return log_get_max_marker(dpp, bucket_info, headers, shard_id, &max_marker, y);
 }
 
-/*
+
 RGWSI_BILog_RADOS_BackendDispatcher::RGWSI_BILog_RADOS_BackendDispatcher(
-  CephContext* cct)
+  CephContext* cct, neorados::RADOS rados)
   : RGWSI_BILog_RADOS(cct),
     backend_inindex(cct),
-    backend_fifo(cct) {
+    backend_fifo(cct, std::move(rados)) {
+}
+
+void RGWSI_BILog_RADOS_BackendDispatcher::init(RGWSI_BucketIndex_RADOS *bi_rados_svc) {
+  // initialize both backends
+  backend_inindex.init(bi_rados_svc);
+  backend_fifo.init(bi_rados_svc);
 }
 
 RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
   const RGWBucketInfo& bucket_info)
 {
- if (bucket_info.layout.logs.empty() // no layout means the old way || \
-     bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::InIndex) {
-    return backend_inindex;
-  } else if (bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::FIFO) {
+  // check if bucket has new FIFO-based log layout
+  if (!bucket_info.layout.logs.empty() && 
+      bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::FIFO) {
+    ldpp_dout(this, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using FIFO backend for bucket " 
+                        << bucket_info.bucket << dendl;
     return backend_fifo;
-  } else {
-    ceph_abort_msg("Unknown BILog layout. This shouldn't happen!");
-  }
+  } 
+  
+  // default to in-index backend for:
+  // - buckets with no layout (old buckets)
+  // - buckets with InIndex layout
+  // - any other cases
+  ldpp_dout(this, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using InIndex backend for bucket " 
+                      << bucket_info.bucket << dendl;
+  return backend_inindex;
 }
-*/
+
+// delegate operations to the appropriate backend
+int RGWSI_BILog_RADOS_BackendDispatcher::log_start(const DoutPrefixProvider *dpp, optional_yield y,
+                                                   const RGWBucketInfo& bucket_info,
+                                                   const rgw::bucket_log_layout_generation& log_layout,
+                                                   int shard_id) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_start(dpp, y, bucket_info, log_layout, shard_id);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::log_stop(const DoutPrefixProvider *dpp, optional_yield y,
+                                                  const RGWBucketInfo& bucket_info,
+                                                  const rgw::bucket_log_layout_generation& log_layout,
+                                                  int shard_id) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_stop(dpp, y, bucket_info, log_layout, shard_id);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::log_trim(const DoutPrefixProvider *dpp, optional_yield y,
+                                                  const RGWBucketInfo& bucket_info,
+                                                  const rgw::bucket_log_layout_generation& log_layout,
+                                                  int shard_id,
+                                                  std::string_view marker) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_trim(dpp, y, bucket_info, log_layout, shard_id, marker);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::log_list(const DoutPrefixProvider *dpp, optional_yield y,
+                                                  const RGWBucketInfo& bucket_info,
+                                                  const rgw::bucket_log_layout_generation& log_layout,
+                                                  int shard_id,
+                                                  std::string& marker,
+                                                  uint32_t max,
+                                                  std::list<rgw_bi_log_entry>& result,
+                                                  bool *truncated) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_list(dpp, y, bucket_info, log_layout, shard_id, marker, max, result, truncated);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                                           const RGWBucketInfo& bucket_info,
+                                                           const std::map<int, rgw_bucket_dir_header>& headers,
+                                                           const int shard_id,
+                                                           std::string *max_marker,
+                                                           optional_yield y) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_get_max_marker(dpp, bucket_info, headers, shard_id, max_marker, y);
+}
+
+int RGWSI_BILog_RADOS_BackendDispatcher::log_get_max_marker(const DoutPrefixProvider *dpp,
+                                                           const RGWBucketInfo& bucket_info,
+                                                           const std::map<int, rgw_bucket_dir_header>& headers,
+                                                           const int shard_id,
+                                                           std::map<int, std::string> *max_markers,
+                                                           optional_yield y) {
+  auto& backend = get_backend(bucket_info);
+  return backend.log_get_max_marker(dpp, bucket_info, headers, shard_id, max_markers, y);
+}
+

@@ -73,7 +73,7 @@ public:
 
   struct Svc {
     RGWSI_Zone *zone{nullptr};
-    RGWSI_BILog_RADOS *bilog{nullptr};
+    RGWSI_BILog_RADOS_InIndex *bilog{nullptr};
     RGWDataChangesLog *datalog_rados{nullptr};
   } svc;
 
@@ -81,7 +81,7 @@ public:
 
   void init(RGWSI_Zone *zone_svc,
             librados::Rados* rados_,
-            RGWSI_BILog_RADOS *bilog_svc,
+            RGWSI_BILog_RADOS_InIndex *bilog_svc,
             RGWDataChangesLog *datalog_rados_svc);
 
   static int shards_max() {

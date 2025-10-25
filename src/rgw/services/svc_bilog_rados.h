@@ -252,27 +252,16 @@ public:
   int log_start(const DoutPrefixProvider *dpp, optional_yield y,
                 const RGWBucketInfo& bucket_info,
                 const rgw::bucket_log_layout_generation& log_layout,
-                int shard_id) override {
-    return get_backend(bucket_info).log_start(dpp, y, bucket_info,
-                                              log_layout, shard_id);
-  }
+                int shard_id) override;
   int log_stop(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
-               int shard_id) override {
-    return get_backend(bucket_info).log_stop(dpp, y, bucket_info,
-                                             log_layout, shard_id);
-  }
-
+               int shard_id) override;
   int log_trim(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
                int shard_id,
-               std::string_view marker) override {
-    return get_backend(bucket_info).log_trim(dpp, y, bucket_info,
-                                             log_layout, shard_id,
-                                             marker);
-  }
+               std::string_view marker) override;
   int log_list(const DoutPrefixProvider *dpp, optional_yield y,
                const RGWBucketInfo& bucket_info,
                const rgw::bucket_log_layout_generation& log_layout,
@@ -280,34 +269,17 @@ public:
                std::string& marker,
                uint32_t max,
                std::list<rgw_bi_log_entry>& result,
-               bool *truncated) override {
-    return get_backend(bucket_info).log_list(dpp, y, bucket_info,
-                                             log_layout, shard_id,
-                                             marker, max, result,
-                                             truncated);
-  }
-
+               bool *truncated) override;
   int log_get_max_marker(const DoutPrefixProvider *dpp,
                          const RGWBucketInfo& bucket_info,
                          const std::map<int, rgw_bucket_dir_header>& headers,
                          const int shard_id,
-                         std::map<int, std::string>* max_markers,
-                         optional_yield y) override {
-    return get_backend(bucket_info).log_get_max_marker(dpp, bucket_info,
-                                                       headers,
-                                                       shard_id,
-                                                       max_markers, y);
-  }
-
+                         std::map<int, std::string> *max_markers,
+                         optional_yield y) override;
   int log_get_max_marker(const DoutPrefixProvider *dpp,
                        const RGWBucketInfo& bucket_info,
                        const std::map<int, rgw_bucket_dir_header>& headers,
                        const int shard_id,
                        std::string *max_marker,
-                       optional_yield y) override {
-    return get_backend(bucket_info).log_get_max_marker(dpp, bucket_info,
-                                                       headers,
-                                                       shard_id,
-                                                       max_marker, y);
-  }
+                       optional_yield y) override;
 };
