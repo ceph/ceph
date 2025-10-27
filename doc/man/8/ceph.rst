@@ -37,7 +37,7 @@ Synopsis
 
 | **ceph** **mon** [ *add* \| *dump* \| *enable_stretch_mode* \| *getmap* \| *remove* \| *stat* ] ...
 
-| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
+| **ceph** **osd** [ *blocklist* \| *blocked-by* \| *create* \| *new* \| *deep-scrub* \| *df* \| *down* \| *dump* \| *erasure-code-profile* \| *find* \| *getcrushmap* \| *getmap* \| *getmaxosd* \| *in* \| *ls* \| *lspools* \| *map* \| *metadata* \| *ok-to-stop* \| *ok-to-upgrade* \| *out* \| *pause* \| *perf* \| *pg-temp* \| *force-create-pg* \| *primary-affinity* \| *primary-temp* \| *repair* \| *reweight* \| *reweight-by-pg* \| *rm* \| *destroy* \| *purge* \| *safe-to-destroy* \| *scrub* \| *set* \| *setcrushmap* \| *setmaxosd*  \| *stat* \| *tree* \| *unpause* \| *unset* ] ...
 
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
@@ -1110,6 +1110,53 @@ in the CRUSH hierarchy.
 Usage::
 
   ceph osd ok-to-stop <id> [<ids>...] [--max <num>]
+
+Subcommand ``ok-to-upgrade`` determines a safe set of OSDs found within the
+specified CRUSH bucket to upgrade simultaneously without impacting cluster
+data availability and with all data remaining readable and writeable. Data
+redundancy may be reduced with some PGs in degraded (but active) state. The
+command checks the Ceph version running on the OSDs against the specified
+version and filters those still needing upgrade. The command returns a
+success code if it finds a safe set of OSD(s) to upgrade and shows the list
+of OSD(s) in the response, or an error code and informative message otherwise
+or if no conclusion can be drawn.
+
+The CRUSH bucket types passed to the command can be one of 'rack', 'chassis',
+'host' or 'osd'. This restriction is to avoid performance issues with larger
+failure domains where the number of OSDs to check could be very high and to
+help manage failures if any during upgrades.
+
+The expected format of the option ``<new_ceph_version_short>`` is the short form
+of the Ceph version string. The version string format is similar to the value of
+``ceph_version_short`` key seen in the output of the ``ceph osd metadata <id>``
+command where ``id`` is the OSD number.
+
+When ``--max <num>`` is provided, up to <num> OSD IDs found either within the
+provided CRUSH bucket or across the CRUSH hierarchy that can be stopped for
+upgrade simultaneously will be returned. This logic can for example be triggered
+by specifying a single starting OSD and a max number. The search then spans both
+within and across the CRUSH hierarchy and additional OSDs are drawn from those
+locations.
+
+The command automatically determines a safe set of OSDs to upgrade found in the
+provided CRUSH bucket. If not all OSDs in the CRUSH bucket can be upgraded
+simultaneously, the command uses the config option
+``mgr_osd_upgrade_check_convergence_factor`` to progressively reduce the set of
+OSDs to check until a safe set is found. Note that the default value is on the
+higher side to help determine an optimal set of OSDs to upgrade. A higher
+convergence factor will help maximize the number of OSDs to upgrade at the cost
+of more iterations and time to find the set. The converse is true if a lower
+convergence factor is used. A lower value should be used only if the command is
+sluggish to respond.
+
+It must be noted that this command leverages the underlying logic of the
+``ok-to-stop`` command. The key difference is that ``ok-to-upgrade`` command
+operates strictly on the OSDs found in the CRUSH bucket and considers adjacent
+CRUSH locations if necessary to satisfy the ``--max`` criteria.
+
+Usage::
+
+  ceph osd ok-to-upgrade <crush_bucket_name> <new_ceph_version_short> [--max <num>]
 
 Subcommand ``pause`` pauses osd.
 

@@ -1148,6 +1148,230 @@ void DaemonServer::_maximize_ok_to_stop_set(
   }
 }
 
+void DaemonServer::_update_upgraded_osds(
+  const std::set<int>& orig_osds,
+  const std::set<int>& to_upgrade,
+  const std::set<int>& upgraded,
+  const std::set<int>& version_unknown,
+  upgrade_osd_report *report)
+{
+  // reset output
+  *report = upgrade_osd_report();
+  report->osds = orig_osds;
+  report->ok_upgrade = to_upgrade;
+  report->ok_upgraded = upgraded;
+  report->bad_no_version = version_unknown;
+}
+
+void DaemonServer::_maximize_ok_to_upgrade_set(
+  const std::set<int>& orig_osds,
+  unsigned max,
+  const OSDMap& osdmap,
+  const PGMap& pgmap,
+  std::string_view ceph_version_new,
+  upgrade_osd_report *out_osd_report,
+  offline_pg_report *out_pg_report)
+{
+  std::set<int> to_upgrade;
+  std::set<int> upgraded;
+  std::set<int> version_unknown;
+
+  dout(20) << "orig_osds " << orig_osds
+           << " new ceph_version " << ceph_version_new << dendl;
+  // Filter osds not yet running the new ceph_version.
+  // Limit the check for safe upgrade to only the set
+  // of OSDs that are still running the older version.
+  for (const auto& osd : orig_osds) {
+    auto osd_id = "osd." + std::to_string(osd);
+    auto ver = get_osd_metadata("ceph_version_short", osd_id);
+    if (ver.has_value()) {
+      if (*ver != ceph_version_new) {
+        dout(20) << "found " << osd_id << " to upgrade" << dendl;
+        to_upgrade.insert(osd);
+      } else {
+        dout(20) << osd_id << " is already running the new version("
+                 << *ver << ")" << dendl;
+        upgraded.insert(osd);
+      }
+    } else {
+        derr << "couldn't determine 'ceph_version_short' for "
+             << osd_id << dendl;
+        version_unknown.insert(osd);
+    }
+  }
+
+  // Check if all OSDs are upgraded
+  _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
+    version_unknown, out_osd_report);
+  if (!out_osd_report->bad_no_version.empty()) {
+    dout(20) << "'ceph_version_short' on osds couldn't be determined" << dendl;
+    return;
+  }
+  if (out_osd_report->all_osds_upgraded()) {
+    dout(20) << "all osds are upgraded!" << dendl;
+    return;
+  }
+
+  // Re-try until we can find a safe subset of OSDs to upgrade.
+  // On each attempt reduce the original set of OSDs to check by a
+  // factor defined by 'mgr_osd_upgrade_check_convergence_factor'.
+  // If no safe number can be found after all attempts, a minimum of
+  // 1 OSD is attempted.
+  const double convergence_factor =
+    g_conf().get_val<double>("mgr_osd_upgrade_check_convergence_factor");
+  size_t osd_subset_count = orig_osds.size();
+  while (true) {
+    // Check impact to PGs with the filtered set. Use the existing
+    // ok-to-stop logic for this purpose.
+    _check_offlines_pgs(to_upgrade, osdmap, pgmap, out_pg_report);
+    if (!out_pg_report->ok_to_stop()) {
+      if (osd_subset_count == 1) {
+        // This means that there's no safe set of OSDs to upgrade.
+        // This probably indicates a problem with the cluster configuration.
+        to_upgrade.clear();
+        _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
+          version_unknown, out_osd_report);
+        return;
+      }
+      // Reduce the number of OSDs in the set by the convergence factor.
+      osd_subset_count = std::max<size_t>(
+        1, static_cast<size_t>(osd_subset_count * convergence_factor));
+      max = (int)osd_subset_count;
+      // Prune the 'to-upgrade' set to hold the new subset of OSDs
+      auto start_it = std::next(to_upgrade.begin(), osd_subset_count);
+      auto end_it = to_upgrade.end();
+      to_upgrade.erase(start_it, end_it);
+      // reset pg report
+      *out_pg_report = offline_pg_report();
+    } else {
+      _update_upgraded_osds(orig_osds, to_upgrade, upgraded,
+        version_unknown, out_osd_report);
+      if (out_osd_report->ok_to_upgrade()) {
+        // Found a safe subset! Break and generate the output.
+        dout(20) << "found " << osd_subset_count << " OSDs that are safe to "
+                 << "upgrade" << dendl;
+        break;
+      }
+    }
+  }
+  if (to_upgrade.size() >= max) {
+    // already at max
+    return;
+  }
+
+  // semi-arbitrarily start with the first osd in the set
+  offline_pg_report _pg_report;
+  upgrade_osd_report _osd_report;
+  std::set<int> osds = to_upgrade;
+  int parent = *osds.begin();
+  std::set<int> children;
+
+  while (true) {
+    // identify the next parent
+    int r = osdmap.crush->get_immediate_parent_id(parent, &parent);
+    if (r < 0) {
+      return;  // just go with what we have so far!
+    }
+
+    // get candidate additions that are beneath this point in the tree
+    children.clear();
+    r = osdmap.crush->get_all_children(parent, &children);
+    if (r < 0) {
+      return;  // just go with what we have so far!
+    }
+    dout(20) << "  parent " << parent << " children " << children << dendl;
+
+    // try adding in more osds
+    int failed = 0;  // how many children we failed to add to our set
+    for (auto o : children) {
+      if (o >= 0 && osdmap.is_up(o) && osds.count(o) == 0) {
+        osds.insert(o);
+        _check_offlines_pgs(osds, osdmap, pgmap, &_pg_report);
+        if (!_pg_report.ok_to_stop()) {
+          osds.erase(o);
+          ++failed;
+          continue;
+        }
+        _update_upgraded_osds(orig_osds, osds, upgraded,
+          version_unknown, &_osd_report);
+        *out_pg_report = _pg_report;
+        *out_osd_report = _osd_report;
+        if (osds.size() == max) {
+          dout(20) << " hit max" << dendl;
+          if (out_osd_report->ok_to_upgrade()) {
+            // Found additional children that can be upgraded
+            dout(20) << "found " << osds.size() - to_upgrade.size()
+                     << " additional OSD(s) to upgrade" << dendl;
+          }
+          return;  // yay, we hit the max
+        }
+      }
+    }
+
+    if (failed) {
+      // we hit some failures; go with what we have
+      dout(20) << " hit some peer failures" << dendl;
+      return;
+    }
+  }
+}
+
+std::optional<std::string> DaemonServer::get_osd_metadata(
+  const std::string& name,
+  const std::string& osd_id)
+{
+    if (g_conf().get_val<bool>("mgr_test_metadata_error")) {
+      return std::nullopt;
+    }
+
+    auto [key, valid] = DaemonKey::parse(osd_id);
+    if (!valid) {
+      derr << "invalid daemon name: use <type>.<id>" << dendl;
+      return std::nullopt;
+    }
+    DaemonStatePtr daemon = daemon_state.get(key);
+    if (!daemon) {
+      derr << "daemon " << osd_id << " not found!" << dendl;
+      return std::nullopt;
+    }
+
+    std::lock_guard l(daemon->lock);
+    auto p = daemon->metadata.find(name);
+    if (p != daemon->metadata.end() && !p->second.empty()) {
+      return p->second;
+    }
+    return std::nullopt;
+}
+
+void upgrade_osd_report::dump(Formatter *f) const {
+  f->dump_bool("ok_to_upgrade", ok_to_upgrade());
+  f->dump_bool("all_osds_upgraded", all_osds_upgraded());
+
+  f->open_array_section("osds_in_crush_bucket");
+  for (auto o : osds) {
+    f->dump_int("osd", o);
+  }
+  f->close_section();
+
+  f->open_array_section("osds_ok_to_upgrade");
+  for (auto o : ok_upgrade) {
+    f->dump_int("ok_upgrade", o);
+  }
+  f->close_section();
+
+  f->open_array_section("osds_upgraded");
+  for (auto o : ok_upgraded) {
+    f->dump_int("ok_upgraded", o);
+  }
+  f->close_section();
+
+  f->open_array_section("bad_no_version");
+  for (auto o : bad_no_version) {
+    f->dump_int("bad_no_version", o);
+  }
+  f->close_section();
+}
+
 bool DaemonServer::_handle_command(
   std::shared_ptr<CommandContext>& cmdctx)
 {
@@ -1895,6 +2119,109 @@ bool DaemonServer::_handle_command(
     if (!out_report.ok_to_stop()) {
       ss << "unsafe to stop osd(s) at this time (" << out_report.not_ok.size() << " PGs are or would become offline)";
       cmdctx->reply(-EBUSY, ss);
+    } else {
+      cmdctx->reply(0, ss);
+    }
+    return true;
+  } else if (prefix == "osd ok-to-upgrade") {
+    std::string crush_bucket_name;
+    cmd_getval(cmdctx->cmdmap, "crush_bucket", crush_bucket_name);
+    std::string ceph_version;
+    cmd_getval(cmdctx->cmdmap, "ceph_version", ceph_version);
+    int64_t max = 1;
+    cmd_getval(cmdctx->cmdmap, "max", max);
+    int r;
+    std::set<int> osds_in_crush_bucket;
+    // Validate the crush bucket name & type. For this command the
+    // bucket type is limited to 'rack', 'chassis', 'host' or 'osd'.
+    // This is to help limit the number of OSDs and avoid
+    // performance issues during the upgrade check.
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        r = osdmap.get_osds_by_bucket_name(crush_bucket_name,
+                                           &osds_in_crush_bucket);
+        // Validate crush bucket
+        if (r == -ENOENT) {
+          ss << "\"" << crush_bucket_name << "\" does not exist";
+          return;
+        } else if (r < 0) {
+          ss << "cannot parse bucket name:\"" << crush_bucket_name << "\". "
+             << "got error code: " << r;
+          return;
+        }
+        int id = osdmap.crush->get_item_id(crush_bucket_name);
+        int btype = osdmap.crush->get_bucket_type(id);
+        if (btype < 0) {
+          // For negative type an OSD may be assumed
+          btype = 0;
+        }
+        const char *bucket_type = osdmap.crush->get_type_name(btype);
+        std::string bucket_type_str = bucket_type;
+        if (!bucket_type_str.empty()) {
+          bool compat_type =
+            (bucket_type_str == "rack" || bucket_type_str == "chassis" ||
+             bucket_type_str == "host" || bucket_type_str == "osd");
+          if (!compat_type) {
+            r = -EINVAL;
+            ss << "crush bucket \"" << crush_bucket_name << "\" of type "
+               << "\"" << bucket_type_str << "\" is incompatible for "
+               << "upgradability check; valid types are: 'rack', 'chassis', "
+               << "'host' and 'osd'";
+            return;
+          }
+        }
+    });
+    if (r < 0) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    if ((int)osds_in_crush_bucket.size() == 0) {
+      ss << "no osds found in crush bucket: \"" << crush_bucket_name << "\"";
+      r = -ENOENT;
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    if (max < (int)osds_in_crush_bucket.size()) {
+      max = osds_in_crush_bucket.size();
+    }
+    upgrade_osd_report osd_upgrade_report;
+    offline_pg_report pg_offline_report;
+    cluster_state.with_osdmap_and_pgmap([&](
+      const OSDMap& osdmap, const PGMap& pg_map) {
+        _maximize_ok_to_upgrade_set(
+          osds_in_crush_bucket, max, osdmap, pg_map, ceph_version,
+          &osd_upgrade_report, &pg_offline_report);
+      });
+    if (!f) {
+      f.reset(Formatter::create("json"));
+    }
+    f->dump_object("ok_to_upgrade", osd_upgrade_report);
+    f->flush(cmdctx->odata);
+    cmdctx->odata.append("\n");
+    if (!osd_upgrade_report.ok_to_upgrade()) {
+      if (!pg_offline_report.unknown.empty()) {
+        ss << pg_offline_report.unknown.size() << " pgs have unknown state; "
+           << "cannot draw any conclusions at this time; re-try after pgs "
+           << "transition to known states";
+        cmdctx->reply(-EBUSY, ss);
+      }
+      if (!osd_upgrade_report.bad_no_version.empty()) {
+        ss << osd_upgrade_report.bad_no_version.size()
+           << " osds have unknown version; cannot draw any conclusions";
+        cmdctx->reply(-EAGAIN, ss);
+      }
+      if (!pg_offline_report.ok_to_stop()) {
+        ss << "unsafe to upgrade osd(s) at this time ("
+           << pg_offline_report.not_ok.size()
+           << " PGs are or would become offline)";
+        cmdctx->reply(-EBUSY, ss);
+      }
+      // ok_to_upgrade() would be false in case all osds are upgraded
+      if (osd_upgrade_report.all_osds_upgraded()) {
+        ss << "all " << osds_in_crush_bucket.size()
+           << " osd(s) are running the new Ceph version("
+           << ceph_version << ")";
+        cmdctx->reply(0, ss);
+      }
     } else {
       cmdctx->reply(0, ss);
     }
