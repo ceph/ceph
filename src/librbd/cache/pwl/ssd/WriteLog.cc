@@ -1,10 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "WriteLog.h"
 #include "include/buffer.h"
 #include "include/Context.h"
 #include "include/ceph_assert.h"
+#include "include/intarith.h" // for round_up_to()
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/deleter.h"
 #include "common/dout.h"

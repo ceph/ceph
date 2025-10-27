@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -40,6 +40,14 @@ struct onode_layout_t {
 
   char oi[MAX_OI_LENGTH] = {0};
   char ss[MAX_SS_LENGTH] = {0};
+  /**
+    * needs_cow
+    *
+    * If true, all lba mappings for onode must be cloned
+    * to a new range prior to mutation. See ObjectDataHandler::copy_on_write,
+    * do_clone, do_clonerange
+    */
+  bool need_cow = false;
 
   onode_layout_t() : omap_root(omap_type_t::OMAP), log_root(omap_type_t::LOG),
     xattr_root(omap_type_t::XATTR) {}
@@ -85,6 +93,18 @@ public:
   virtual const onode_layout_t &get_layout() const = 0;
   virtual ~Onode() = default;
 
+  const hobject_t &get_hobj() const {
+    return hobj;
+  }
+  bool is_head() const {
+    return hobj.is_head();
+  }
+  bool is_snap() const {
+    return hobj.is_snap();
+  }
+  bool need_cow() const {
+    return get_layout().need_cow;
+  }
   virtual void update_onode_size(Transaction&, uint32_t) = 0;
   virtual void update_omap_root(Transaction&, omap_root_t&) = 0;
   virtual void update_log_root(Transaction&, omap_root_t&) = 0;
@@ -94,6 +114,9 @@ public:
   virtual void update_snapset(Transaction&, ceph::bufferlist&) = 0;
   virtual void clear_object_info(Transaction&) = 0;
   virtual void clear_snapset(Transaction&) = 0;
+  virtual void set_need_cow(Transaction&) = 0;
+  virtual void unset_need_cow(Transaction&) = 0;
+  virtual void swap_layout(Transaction&, Onode&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
     assert(default_metadata_offset);

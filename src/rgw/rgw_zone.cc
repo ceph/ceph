@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <optional>
 
@@ -68,11 +68,12 @@ static void decode_placement_targets(map<string, RGWZoneGroupPlacementTarget>& t
   targets[t.name] = t;
 }
 
-void RGWZone::generate_test_instances(list<RGWZone*> &o)
+list<RGWZone> RGWZone::generate_test_instances()
 {
-  RGWZone *z = new RGWZone;
-  o.push_back(z);
-  o.push_back(new RGWZone);
+  list<RGWZone> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
 void RGWZone::dump(Formatter *f) const
@@ -507,15 +508,17 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
    * rather not clutter the output */
 }
 
-void RGWZonePlacementInfo::generate_test_instances(list<RGWZonePlacementInfo*>& o)
+list<RGWZonePlacementInfo> RGWZonePlacementInfo::generate_test_instances()
 {
-  o.push_back(new RGWZonePlacementInfo);
-  o.push_back(new RGWZonePlacementInfo);
-  o.back()->index_pool = rgw_pool("rgw.buckets.index");
+  list<RGWZonePlacementInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().index_pool = rgw_pool("rgw.buckets.index");
   
-  o.back()->data_extra_pool = rgw_pool("rgw.buckets.non-ec");
-  o.back()->index_type = rgw::BucketIndexType::Normal;
-  o.back()->inline_data = false;
+  o.back().data_extra_pool = rgw_pool("rgw.buckets.non-ec");
+  o.back().index_type = rgw::BucketIndexType::Normal;
+  o.back().inline_data = false;
+  return o;
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
@@ -579,9 +582,11 @@ void RGWZoneStorageClasses::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClasses::generate_test_instances(list<RGWZoneStorageClasses*>& o)
+list<RGWZoneStorageClasses> RGWZoneStorageClasses::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClasses);
+  list<RGWZoneStorageClasses> o;
+  o.emplace_back();
+  return o;
 }
 
 void RGWZoneStorageClasses::decode_json(JSONObj *obj)
@@ -601,7 +606,14 @@ void RGWZoneStorageClasses::decode_json(JSONObj *obj)
 void RGWZoneGroupTierS3Glacier::dump(Formatter *f) const
 {
   encode_json("glacier_restore_days", glacier_restore_days, f);
-  string s = (glacier_restore_tier_type == Standard ? "Standard" : "Expedited");
+  string s;
+  if (glacier_restore_tier_type == Expedited) {
+    s = "Expedited";
+  } else if (glacier_restore_tier_type == NoTier) {
+    s = "NoTier";
+  } else {
+    s = "Standard";
+  }
   encode_json("glacier_restore_tier_type", s, f);
 }
 
@@ -610,10 +622,12 @@ void RGWZoneGroupTierS3Glacier::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("glacier_restore_days", glacier_restore_days, obj);
   string s;
   JSONDecoder::decode_json("glacier_restore_tier_type", s, obj);
-  if (s != "Expedited") {
-    glacier_restore_tier_type = Standard;
-  } else {
+  if (s == "Expedited") {
     glacier_restore_tier_type = Expedited;
+  } else if (s == "NoTier") {
+    glacier_restore_tier_type = NoTier;
+  } else {
+    glacier_restore_tier_type = Standard;
   }
 }
 
@@ -664,12 +678,14 @@ void RGWZoneStorageClass::dump(Formatter *f) const
   }
 }
 
-void RGWZoneStorageClass::generate_test_instances(list<RGWZoneStorageClass*>& o)
+list<RGWZoneStorageClass> RGWZoneStorageClass::generate_test_instances()
 {
-  o.push_back(new RGWZoneStorageClass);
-  o.push_back(new RGWZoneStorageClass);
-  o.back()->data_pool = rgw_pool("pool1");
-  o.back()->compression_type = "zlib";
+  list<RGWZoneStorageClass> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().data_pool = rgw_pool("pool1");
+  o.back().compression_type = "zlib";
+  return o;
 }
 
 void RGWZoneStorageClass::decode_json(JSONObj *obj)
@@ -2059,10 +2075,12 @@ int RGWZoneGroupTierS3Glacier::update_params(const JSONFormattable& config)
   if (config.exists("glacier_restore_tier_type")) {
     string s;
     s = config["glacier_restore_tier_type"];
-    if (s != "Expedited") {
-      glacier_restore_tier_type = Standard;
-    } else {
+    if (s == "Expedited") {
       glacier_restore_tier_type = Expedited;
+    } else if (s == "NoTier") {
+      glacier_restore_tier_type = NoTier;
+    } else {
+      glacier_restore_tier_type = Standard;
     }
   }
   return 0;
@@ -2080,49 +2098,59 @@ int RGWZoneGroupTierS3Glacier::clear_params(const JSONFormattable& config)
   return 0;
 }
 
-void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+std::list<rgw_meta_sync_info> rgw_meta_sync_info::generate_test_instances()
 {
-  auto info = new rgw_meta_sync_info;
-  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
-  info->period = "periodid";
-  info->realm_epoch = 5;
-  o.push_back(info);
-  o.push_back(new rgw_meta_sync_info);
+  std::list<rgw_meta_sync_info> o;
+  rgw_meta_sync_info info;
+  info.state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info.period = "periodid";
+  info.realm_epoch = 5;
+  o.push_back(std::move(info));
+  o.emplace_back();
+  return o;
 }
 
-void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+std::list<rgw_meta_sync_marker> rgw_meta_sync_marker::generate_test_instances()
 {
-  auto marker = new rgw_meta_sync_marker;
-  marker->state = rgw_meta_sync_marker::IncrementalSync;
-  marker->marker = "01234";
-  marker->realm_epoch = 5;
-  o.push_back(marker);
-  o.push_back(new rgw_meta_sync_marker);
+  std::list<rgw_meta_sync_marker> o;
+  rgw_meta_sync_marker marker;
+  marker.state = rgw_meta_sync_marker::IncrementalSync;
+  marker.marker = "01234";
+  marker.realm_epoch = 5;
+  o.push_back(std::move(marker));
+  o.emplace_back();
+  return o;
 }
 
-void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+std::list<rgw_meta_sync_status> rgw_meta_sync_status::generate_test_instances()
 {
-  o.push_back(new rgw_meta_sync_status);
+  std::list<rgw_meta_sync_status> o;
+  o.emplace_back();
+  return o;
 }
 
-void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
+std::list<RGWZoneParams> RGWZoneParams::generate_test_instances()
 {
-  o.push_back(new RGWZoneParams);
-  o.push_back(new RGWZoneParams);
+  std::list<RGWZoneParams> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
-void RGWPeriodLatestEpochInfo::generate_test_instances(list<RGWPeriodLatestEpochInfo*> &o)
+std::list<RGWPeriodLatestEpochInfo> RGWPeriodLatestEpochInfo::generate_test_instances()
 {
-  RGWPeriodLatestEpochInfo *z = new RGWPeriodLatestEpochInfo;
-  o.push_back(z);
-  o.push_back(new RGWPeriodLatestEpochInfo);
+  std::list<RGWPeriodLatestEpochInfo> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
-void RGWZoneGroup::generate_test_instances(list<RGWZoneGroup*>& o)
+std::list<RGWZoneGroup> RGWZoneGroup::generate_test_instances()
 {
-  RGWZoneGroup *r = new RGWZoneGroup;
-  o.push_back(r);
-  o.push_back(new RGWZoneGroup);
+  std::list<RGWZoneGroup> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
 void RGWPeriodLatestEpochInfo::dump(Formatter *f) const {
@@ -2141,10 +2169,12 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
-void RGWNameToId::generate_test_instances(list<RGWNameToId*>& o) {
-  RGWNameToId *n = new RGWNameToId;
-  n->obj_id = "id";
-  o.push_back(n);
-  o.push_back(new RGWNameToId);
+std::list<RGWNameToId> RGWNameToId::generate_test_instances() {
+  std::list<RGWNameToId> o;
+  RGWNameToId n;
+  n.obj_id = "id";
+  o.push_back(std::move(n));
+  o.emplace_back();
+  return o;
 }
 

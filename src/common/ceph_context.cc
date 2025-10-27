@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -66,6 +67,10 @@
 
 // for CINIT_FLAGS
 #include "common/common_init.h"
+
+#ifdef WITH_CPUTRACE
+#include "common/cputrace.h"
+#endif
 
 #include <iostream>
 #include <pthread.h>
@@ -685,6 +690,24 @@ int CephContext::_do_command(
     else if (command == "log reopen") {
       _log->reopen_log_file();
     }
+#ifdef WITH_CPUTRACE
+    else if (command == "cputrace start") {
+      cputrace_start(f);
+    }
+    else if (command == "cputrace stop") {
+      cputrace_stop(f);
+    }
+    else if (command == "cputrace dump") {
+      std::string logger;
+      std::string counter;
+      cmd_getval(cmdmap, "logger", logger);
+      cmd_getval(cmdmap, "counter", counter);
+      cputrace_dump(f, logger, counter);
+    }
+    else if (command == "cputrace reset") {
+      cputrace_reset(f);
+    }
+#endif
     else {
       ceph_abort_msg("registered under wrong command?");    
     }
@@ -781,6 +804,12 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
 
+#ifdef WITH_CPUTRACE
+  _admin_socket->register_command("cputrace start", _admin_hook, "start cpu profiling");
+  _admin_socket->register_command("cputrace stop", _admin_hook, "stop cpu profiling");
+  _admin_socket->register_command("cputrace reset", _admin_hook, "reset cpu profiling");
+  _admin_socket->register_command("cputrace dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump cpu profiling results");
+#endif
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
   _crypto_random.reset(new CryptoRandom());
@@ -987,6 +1016,17 @@ void CephContext::_enable_perf_counter()
   }
   _mempool_perf = plb2.create_perf_counters();
   _perf_counters_collection->add(_mempool_perf);
+
+  service_unique_id = _conf.get_val<std::string>("service_unique_id");
+  if (!service_unique_id.empty()) {
+    PerfCountersBuilder plb(this, "service_unique_id", l_service_first,
+			    l_service_last);
+    plb.add_u64(l_service_unique_id, service_unique_id.c_str(),
+		"Unique ID for this service");
+    _service_perf = plb.create_perf_counters();
+    _perf_counters_collection->add(_service_perf);
+    _service_perf->set(l_service_unique_id, 0);
+  }
 }
 
 void CephContext::_disable_perf_counter()
@@ -1003,6 +1043,12 @@ void CephContext::_disable_perf_counter()
   _mempool_perf = nullptr;
   _mempool_perf_names.clear();
   _mempool_perf_descriptions.clear();
+
+  if (_service_perf) {
+    _perf_counters_collection->remove(_service_perf);
+    delete _service_perf;
+    _service_perf = nullptr;
+  }
 }
 
 void CephContext::_refresh_perf_values()

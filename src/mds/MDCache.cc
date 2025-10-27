@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -13,6 +14,7 @@
  */
 
 #include "MDCache.h"
+#include "Mutation.h"
 #include "RetryMessage.h"
 #include "RetryRequest.h"
 
@@ -6657,7 +6659,7 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
   LogSegmentRef ls;
   uint32_t block_size;
   C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegmentRef const& l, uint32_t bs) :
-    MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
+    MDCacheIOContext(c), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
@@ -6672,7 +6674,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
   LogSegmentRef ls;
   C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegmentRef const& l) :
-    MDCacheIOContext(c, false), in(i), ls(l) {
+    MDCacheIOContext(c), in(i), ls(l) {
   }
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
@@ -8763,17 +8765,17 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 	return -ENOENT;
       }
 
-      // do we have inode?
+      // do we have the inode?
       CInode *in = dnl->get_inode();
       if (!in) {
         ceph_assert(dnl->is_remote() || dnl->is_referent_remote());
-        // do i have it?
+        // do we have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
 	  dout(7) << "linking in remote in " << *in << dendl;
 	  dn->link_remote(dnl, in);
 	} else {
-          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which i don't have" << dendl;
+          dout(7) << "remote link to " << dnl->get_remote_ino() << ", which we don't have" << dendl;
 	  ceph_assert(mdr);  // we shouldn't hit non-primary dentries doing a non-mdr traversal!
           if (mds->damage_table.is_remote_damaged(dnl->get_remote_ino())) {
             dout(4) << "traverse: remote dentry points to damaged ino "

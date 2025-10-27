@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Types.h"
 #include "include/ceph_assert.h"
@@ -132,10 +132,12 @@ void NotifyMessage::dump(Formatter *f) const {
   std::visit(DumpPayloadVisitor(f), payload);
 }
 
-void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
-  o.push_back(new NotifyMessage(HeartbeatPayload()));
-  o.push_back(new NotifyMessage(LockAcquiredPayload()));
-  o.push_back(new NotifyMessage(LockReleasedPayload()));
+std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
+  std::list<NotifyMessage> o;
+  o.push_back(NotifyMessage(HeartbeatPayload()));
+  o.push_back(NotifyMessage(LockAcquiredPayload()));
+  o.push_back(NotifyMessage(LockReleasedPayload()));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {

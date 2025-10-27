@@ -7,39 +7,6 @@
         data-testid="rgw-storage-details"
       >
         <tbody>
-          @if( isTierMatch(
-            TIER_TYPE_DISPLAY.LOCAL
-          )){
-          <tr>
-            <td class="bold"
-                i18n>
-              Zone Group
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  {{ zoneGroupText }}
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.zonegroup_name }}</td>
-          </tr>
-        }
-        @if(isTierMatch(
-            TIER_TYPE_DISPLAY.LOCAL
-          )){
-          <tr>
-            <td class="bold"
-                i18n>
-              Placement Target
-              <cd-helper class="text-pre-wrap">
-                <span>
-                  Placement Target defines the destination and rules for moving objects between
-                  storage tiers.
-                </span>
-              </cd-helper>
-            </td>
-            <td>{{ selection?.placement_target }}</td>
-          </tr>
-        }
         @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
@@ -53,8 +20,6 @@
             </td>
             <td>{{ selection?.target_path }}</td>
           </tr>
-        }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -84,34 +49,6 @@
             </td>
           </tr>
         }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
-          <tr>
-            <td class="bold"
-                i18n>
-              Secret key
-              <cd-helper class="text-pre-wrap">
-                <span> {{ targetSecretKeyText }} </span>
-              </cd-helper>
-            </td>
-            <td>
-              <div cdsCol
-                   [columnNumbers]="{ md: 4 }"
-                   class="d-flex">
-                <input
-                  cdsPassword
-                  type="password"
-                  readonly
-                  id="secret"
-                  [value]="selection?.secret"
-                />
-                <button type="button"
-                        class="btn btn-light"
-                        cdPasswordButton="secret"></button>
-                <cd-copy-2-clipboard-button source="secret"> </cd-copy-2-clipboard-button>
-              </div>
-            </td>
-          </tr>
-        }
         @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
@@ -123,8 +60,6 @@
             </td>
             <td>{{ selection?.host_style }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -135,8 +70,6 @@
             </td>
             <td>{{ selection?.retain_head_object ? 'Enabled' : 'Disabled' }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -149,9 +82,9 @@
             </td>
             <td>{{ selection?.allow_read_through ? 'Enabled' : 'Disabled' }}</td>
           </tr>
-        }
-        @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)) {
-          <tr *ngIf="isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) && (selection?.allow_read_through)">
+          } @if(isTierMatch(TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER) &&
+          (selection?.allow_read_through)) {
+          <tr>
             <td class="bold"
                 i18n>
               Read through Restore Days
@@ -161,10 +94,12 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.read_through_restore_days }}</td>
+            <td>
+              {{ selection?.read_through_restore_days }}
+              {{ selection?.read_through_restore_days === 1 ? 'Day' : 'Days' }}
+            </td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -175,10 +110,9 @@
                 </span>
               </cd-helper>
             </td>
-            <td>{{ selection?.glacier_restore_days }}</td>
+            <td>  {{ selection?.glacier_restore_days }}
+              {{ selection?.glacier_restore_days === 1 ? 'Day' : 'Days' }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.GLACIER)) {
           <tr>
             <td class="bold"
                 i18n>
@@ -191,8 +125,7 @@
             </td>
             <td>{{ selection?.glacier_restore_tier_type }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
+          } @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -205,8 +138,6 @@
             </td>
             <td>{{ selection?.restore_storage_class }}</td>
           </tr>
-        }
-          @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
@@ -219,21 +150,94 @@
             </td>
             <td>{{ selection?.multipart_min_part_size | dimlessBinary }}</td>
           </tr>
-        }
-        @if(isTierMatch( TIER_TYPE_DISPLAY.CLOUD_TIER, TIER_TYPE_DISPLAY.GLACIER)){
           <tr>
             <td class="bold"
                 i18n>
               Multipart Sync Threshold
               <cd-helper class="text-pre-wrap">
                 <span>
-                  {{ multipartSyncThreholdText  }}
+                  {{ multipartSyncThreholdText }}
                 </span>
               </cd-helper>
             </td>
             <td>{{ selection?.multipart_sync_threshold | dimlessBinary }}</td>
           </tr>
-        }
+          } @if(selection?.acl_mappings?.length > 0) {
+          <tr>
+            <td class="bold w-25"
+                i18n>ACLs</td>
+            <td>
+              <ng-container *ngFor="let type of groupedACLs | keyvalue">
+                <div class="mb-2">
+                  <div class="cds--label">{{ type.key }}:</div>
+                  <div *ngFor="let item of type.value"
+                       [cdsStack]="'horizontal'"
+                       class="mt-1">
+                    <cds-tag size="sm"
+                             class="tags-background-gray">
+                      {{ item.source_id }} : {{ item.dest_id }}
+                    </cds-tag>
+                  </div>
+                </div>
+              </ng-container>
+            </td>
+          </tr>
+         }
+         @if (isTierMatch(TIER_TYPE.LOCAL)) {
+          <tr>
+            <td class="bold">
+              Zone
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  A zone defines a logical group that consists of one or more Ceph Object Gateway instances.
+                </span>
+              </cd-helper>
+            </td>
+            <td>
+@if (loading) {
+              <cds-skeleton-text
+                [lines]="1"
+                [minLineWidth]="100"
+                [maxLineWidth]="200">
+              </cds-skeleton-text>
+            } @else {
+              <span>{{ localStorageClassDetails?.zone_name }}</span>
+            }
+            </td>
+          </tr>
+          <tr>
+            <td class="bold">
+              Data Pool
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                    The data pool contains the objects associated with this storage class.
+                </span>
+              </cd-helper>
+            </td>
+            <td>
+              @if (loading) {
+              <cds-skeleton-text
+                [lines]="1"
+                [minLineWidth]="100"
+                [maxLineWidth]="200">
+              </cds-skeleton-text>
+            } @else {
+              <span>{{ localStorageClassDetails?.data_pool }}</span>
+            }
+            </td>
+          </tr>
+         }
+          <tr>
+            <td class="bold">
+              Placement Target
+              <cd-helper class="text-pre-wrap">
+                <span i18n>
+                  Placement targets control which Pools are associated with a particular bucket.
+                </span>
+              </cd-helper>
+            </td>
+            <td>{{ selection?.placement_target }}</td>
+          </tr>
         </tbody>
       </table>
     </cds-tab>

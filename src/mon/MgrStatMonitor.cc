@@ -1,9 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "MgrStatMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MgrMonitor.h"
+#include "mon/Monitor.h"
 #include "mon/PGMap.h"
 #include "messages/MGetPoolStats.h"
 #include "messages/MGetPoolStatsReply.h"
@@ -64,6 +65,7 @@ std::vector<std::string> MgrStatMonitor::get_tracked_keys() const noexcept
 {
   return {
     "enable_availability_tracking",
+    "pool_availability_update_interval",
   };
 }
 
@@ -93,6 +95,16 @@ void MgrStatMonitor::handle_conf_change(
     }
     enable_availability_tracking = newval;
   }
+
+  if (changed.count("pool_availability_update_interval")) {
+      std::scoped_lock l(lock);
+      dout(10) << __func__ << " pool_availability_update_interval config changed from " 
+             << pool_availability_update_interval << " to " 
+             << g_conf().get_val<double>("pool_availability_update_interval")
+             << dendl;
+      
+      pool_availability_update_interval = g_conf().get_val<double>("pool_availability_update_interval"); 
+  }
 }
 
 void MgrStatMonitor::create_initial()
@@ -117,6 +129,18 @@ void MgrStatMonitor::clear_pool_availability(int64_t poolid)
     return; 
   };
   dout(20) << __func__ << " cleared availability score for pool: " << poolid << dendl;
+}
+
+bool MgrStatMonitor::should_calc_pool_availability() 
+{
+  dout(20) << __func__ << dendl;
+  std::scoped_lock l(lock); 
+
+  utime_t now = ceph_clock_now();
+  if ((now  - pool_availability_last_updated) >= pool_availability_update_interval) {
+    return true; 
+  }
+  return false; 
 }
 
 void MgrStatMonitor::calc_pool_availability()
@@ -201,6 +225,7 @@ void MgrStatMonitor::calc_pool_availability()
 
   }
   pending_pool_availability = pool_availability;
+  pool_availability_last_updated = now; 
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
@@ -238,7 +263,8 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   mon.osdmon()->notify_new_pg_digest();
 
   // only calculate pool_availability within leader mon
-  if (mon.is_leader()) {
+  // and if configured interval has elapsed
+  if (mon.is_leader() && should_calc_pool_availability()) {
       calc_pool_availability();
   }
 }

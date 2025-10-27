@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -32,6 +33,7 @@
 #endif
 
 // ceph
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "include/types.h"
@@ -389,13 +391,14 @@ static void fuse_ll_getattr(fuse_req_t req, fuse_ino_t ino,
 
   (void) fi; // XXX
 
-  if (cfuse->client->ll_getattr(in, &stbuf, perms)
-      == 0) {
+  int r = cfuse->client->ll_getattr(in, &stbuf, perms);
+  if (r == 0) {
     stbuf.st_ino = cfuse->make_fake_ino(stbuf.st_ino, stbuf.st_dev);
     stbuf.st_rdev = new_encode_dev(stbuf.st_rdev);
     fuse_reply_attr(req, &stbuf, 0);
   } else
-    fuse_reply_err(req, ENOENT);
+    fuse_reply_err(req, get_sys_errno(-r));
+
 
   cfuse->iput(in); // iput required
 }

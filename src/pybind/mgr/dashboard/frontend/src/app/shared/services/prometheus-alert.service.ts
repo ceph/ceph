@@ -6,7 +6,9 @@ import { PrometheusService } from '../api/prometheus.service';
 import {
   AlertmanagerAlert,
   PrometheusCustomAlert,
-  PrometheusRule
+  PrometheusRule,
+  GroupAlertmanagerAlert,
+  AlertState
 } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { BehaviorSubject } from 'rxjs';
@@ -28,9 +30,9 @@ export class PrometheusAlertService {
     private prometheusService: PrometheusService
   ) {}
 
-  getAlerts(clusterFilteredAlerts?: boolean) {
+  getGroupedAlerts(clusterFilteredAlerts = false) {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts(clusterFilteredAlerts).subscribe(
+      this.prometheusService.getGroupedAlerts(clusterFilteredAlerts).subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
           if ([404, 504].includes(resp.status)) {
@@ -57,29 +59,48 @@ export class PrometheusAlertService {
     });
   }
 
-  refresh(clusterFilteredAlerts?: boolean) {
-    this.getAlerts(clusterFilteredAlerts);
+  refresh() {
+    this.getGroupedAlerts(true);
   }
 
-  private handleAlerts(alerts: AlertmanagerAlert[]) {
+  private handleAlerts(alertGroups: GroupAlertmanagerAlert[]) {
+    const alerts: AlertmanagerAlert[] = alertGroups
+      .map((group) => {
+        if (!group.alerts.length) return null;
+        if (group.alerts.length === 1) return { ...group.alerts[0], alert_count: 1 };
+        const hasActive = group.alerts.some(
+          (alert: AlertmanagerAlert) => alert.status.state === AlertState.ACTIVE
+        );
+        const parent = { ...group.alerts[0] };
+        if (hasActive) parent.status.state = AlertState.ACTIVE;
+        return { ...parent, alert_count: group.alerts.length, subalerts: group.alerts };
+      })
+      .filter(Boolean) as AlertmanagerAlert[];
+
     if (this.canAlertsBeNotified) {
-      this.notifyOnAlertChanges(alerts, this.alerts);
+      const allSubalerts = alertGroups.flatMap((g) => g.alerts);
+      const oldAlerts = this.alerts.flatMap((a) => (a.subalerts ? a.subalerts : a));
+      this.notifyOnAlertChanges(allSubalerts, oldAlerts);
     }
     this.activeAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,
-      (result, alert) => (alert.status.state === 'active' ? ++result : result),
+      (result, alert) => (alert.status.state === AlertState.ACTIVE ? ++result : result),
       0
     );
     this.activeCriticalAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,
       (result, alert) =>
-        alert.status.state === 'active' && alert.labels.severity === 'critical' ? ++result : result,
+        alert.status.state === AlertState.ACTIVE && alert.labels.severity === 'critical'
+          ? ++result
+          : result,
       0
     );
     this.activeWarningAlerts = _.reduce<AlertmanagerAlert, number>(
       alerts,
       (result, alert) =>
-        alert.status.state === 'active' && alert.labels.severity === 'warning' ? ++result : result,
+        alert.status.state === AlertState.ACTIVE && alert.labels.severity === 'warning'
+          ? ++result
+          : result,
       0
     );
     this.alerts = alerts
@@ -94,7 +115,7 @@ export class PrometheusAlertService {
       this.alertFormatter.convertToCustomAlerts(oldAlerts)
     );
     const suppressedFiltered = _.filter(changedAlerts, (alert) => {
-      return alert.status !== 'suppressed';
+      return alert.status !== AlertState.SUPPRESSED;
     });
     const notifications = suppressedFiltered.map((alert) =>
       this.alertFormatter.convertAlertToNotification(alert)
@@ -110,7 +131,7 @@ export class PrometheusAlertService {
   private getVanishedAlerts(alerts: PrometheusCustomAlert[], oldAlerts: PrometheusCustomAlert[]) {
     return _.differenceWith(oldAlerts, alerts, (a, b) => a.fingerprint === b.fingerprint).map(
       (alert) => {
-        alert.status = 'resolved';
+        alert.status = AlertState.RESOLVED;
         return alert;
       }
     );

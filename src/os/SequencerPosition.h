@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef __CEPH_OS_SEQUENCERPOSITION_H
 #define __CEPH_OS_SEQUENCERPOSITION_H
@@ -41,10 +41,12 @@ struct SequencerPosition {
     f->dump_unsigned("trans", trans);
     f->dump_unsigned("op", op);
   }
-  static void generate_test_instances(std::list<SequencerPosition*>& o) {
-    o.push_back(new SequencerPosition);
-    o.push_back(new SequencerPosition(1, 2, 3));
-    o.push_back(new SequencerPosition(4, 5, 6));
+  static std::list<SequencerPosition> generate_test_instances() {
+    std::list<SequencerPosition> o;
+    o.emplace_back();
+    o.push_back(SequencerPosition(1, 2, 3));
+    o.push_back(SequencerPosition(4, 5, 6));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(SequencerPosition)

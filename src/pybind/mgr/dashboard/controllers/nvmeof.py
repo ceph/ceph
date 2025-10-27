@@ -7,6 +7,7 @@ import cherrypy
 from orchestrator import OrchestratorError
 
 from .. import mgr
+from ..exceptions import DashboardException
 from ..model import nvmeof as model
 from ..security import Scope
 from ..services.nvmeof_cli import NvmeofCLICommand, convert_to_bytes
@@ -104,6 +105,36 @@ else:
             )
             return gw_log_level
 
+        @ReadPermission
+        @Endpoint('GET', '/stats')
+        @NvmeofCLICommand(
+            "nvmeof gateway get_stats", model.GatewayStatsInfo, alias="nvmeof gw get_stats")
+        @EndpointDoc("Get NVMeoF statistics for the gateway")
+        @convert_to_model(model.GatewayStatsInfo)
+        @handle_nvmeof_error
+        def get_gw_stats(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+            gw_stats = NVMeoFClient(gw_group=gw_group,
+                                    traddr=traddr).stub.get_gateway_stats(
+                NVMeoFClient.pb2.get_gateway_stats_req()
+            )
+            return gw_stats
+
+        @ReadPermission
+        @Endpoint('GET', '/listener_info')
+        @NvmeofCLICommand(
+            "nvmeof gateway listener_info", model.GatewayListenersInfo,
+            alias="nvmeof gw listener_info")
+        @EndpointDoc("Get NVMeoF gateway's listeners info")
+        @convert_to_model(model.GatewayListenersInfo)
+        @handle_nvmeof_error
+        def listener_info(self, nqn: str, gw_group: Optional[str] = None,
+                          traddr: Optional[str] = None):
+            gw_listener_info = NVMeoFClient(gw_group=gw_group,
+                                            traddr=traddr).stub.show_gateway_listeners_info(
+                NVMeoFClient.pb2.show_gateway_listeners_info_req(subsystem_nqn=nqn)
+            )
+            return gw_listener_info
+
     @APIRouter("/nvmeof/spdk", Scope.NVME_OF)
     @APIDoc("NVMe-oF SPDK Management API", "NVMe-oF SPDK")
     class NVMeoFSpdk(RESTController):
@@ -195,15 +226,20 @@ else:
             "Create a new NVMeoF subsystem",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
-                "max_namespaces": Param(int, "Maximum number of namespaces", True, 4096),
-                "enable_ha": Param(bool, "Enable high availability"),
+                "enable_ha": Param(bool, "Enable high availability", True, None),
+                "max_namespaces": Param(int, "Maximum number of namespaces", True, None),
+                "no_group_append": Param(int, "Do not append gateway group name to the NQN",
+                                         True, False),
+                "serial_number": Param(int, "Subsystem serial number", True, None),
+                "dhchap_key": Param(int, "Subsystem DH-HMAC-CHAP key", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "NVMeoF gateway address", True, None),
             },
         )
         @convert_to_model(model.SubsystemStatus)
         @handle_nvmeof_error
         def create(self, nqn: str, enable_ha: Optional[bool] = True,
-                   max_namespaces: Optional[int] = 4096, no_group_append: Optional[bool] = True,
+                   max_namespaces: Optional[int] = None, no_group_append: Optional[bool] = False,
                    serial_number: Optional[str] = None, dhchap_key: Optional[str] = None,
                    gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.create_subsystem(
@@ -373,15 +409,18 @@ else:
         @EndpointDoc(
             "List all NVMeoF namespaces in a subsystem",
             parameters={
-                "nqn": Param(str, "NVMeoF subsystem NQN"),
+                "nqn": Param(str, "NVMeoF subsystem NQN", True, None),
+                "nsid": Param(str, "NVMeoF Namespace ID to filter by", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
             },
         )
         @convert_to_model(model.NamespaceList)
         @handle_nvmeof_error
-        def list(self, nqn: str, gw_group: Optional[str] = None, traddr: Optional[str] = None):
+        def list(self, nqn: Optional[str] = None, nsid: Optional[str] = None,
+                 gw_group: Optional[str] = None, traddr: Optional[str] = None):
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.list_namespaces(
-                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn)
+                NVMeoFClient.pb2.list_namespaces_req(subsystem=nqn,
+                                                     nsid=int(nsid) if nsid else None)
             )
 
         @pick("namespaces", first=True)
@@ -426,22 +465,22 @@ else:
                     subsystem_nqn=nqn, nsid=int(nsid))
             )
 
-        @NvmeofCLICommand(
-            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
-        )
         @EndpointDoc(
-            "Create a new NVMeoF namespace",
+            "Create a new NVMeoF namespace.",
             parameters={
                 "nqn": Param(str, "NVMeoF subsystem NQN"),
                 "rbd_pool": Param(str, "RBD pool name"),
                 "rbd_image_name": Param(str, "RBD image name"),
                 "create_image": Param(bool, "Create RBD image"),
-                "size": Param(int, "RBD image size"),
+                "size": Param(int, "Deprecated. Use `rbd_image_size` instead"),
                 "rbd_image_size": Param(int, "RBD image size"),
                 "trash_image": Param(bool, "Trash the RBD image when namespace is removed"),
                 "block_size": Param(int, "NVMeoF namespace block size"),
                 "load_balancing_group": Param(int, "Load balancing group"),
+                "disable_auto_resize": Param(str, "Disable auto resize", True, None),
+                "read_only": Param(str, "Read only namespace", True, None),
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
+                "traddr": Param(str, "Target gateway address", True, None),
                 "force": Param(
                     bool,
                     "Force create namespace even it image is used by other namespace"
@@ -459,8 +498,9 @@ else:
             nqn: str,
             rbd_image_name: str,
             rbd_pool: str = "rbd",
+            nsid: Optional[str] = None,
             create_image: Optional[bool] = False,
-            size: Optional[int] = 1024,
+            size: Optional[int] = None,
             rbd_image_size: Optional[int] = None,
             trash_image: Optional[bool] = False,
             block_size: int = 512,
@@ -475,6 +515,7 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add(
                 NVMeoFClient.pb2.namespace_add_req(
                     subsystem_nqn=nqn,
+                    nsid=int(nsid) if nsid else None,
                     rbd_image_name=rbd_image_name,
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
@@ -489,7 +530,9 @@ else:
                 )
             )
 
-        @NvmeofCLICommand("nvmeof ns add", model.NamespaceCreation)
+        @NvmeofCLICommand(
+            "nvmeof namespace add", model.NamespaceCreation, alias="nvmeof ns add"
+        )
         @convert_to_model(model.NamespaceCreation)
         @handle_nvmeof_error
         def create_cli(
@@ -497,6 +540,7 @@ else:
             nqn: str,
             rbd_image_name: str,
             rbd_pool: str = "rbd",
+            nsid: Optional[str] = None,
             create_image: Optional[bool] = False,
             size: Optional[str] = None,
             rbd_image_size: Optional[str] = None,
@@ -510,6 +554,14 @@ else:
             gw_group: Optional[str] = None,
             traddr: Optional[str] = None,
         ):
+            if size and rbd_image_size:
+                raise DashboardException(
+                    msg="Can use size or rbd_image_size but not both",
+                    code="can_use_size_or_rbd_image_size_but_not_both",
+                    http_status_code=400,
+                    component="nvmeof",
+                )
+
             size_b = rbd_image_size_b = None
             if size:
                 size_b = convert_to_bytes(size, default_unit='MB')
@@ -518,6 +570,7 @@ else:
             return NVMeoFClient(gw_group=gw_group, traddr=traddr).stub.namespace_add(
                 NVMeoFClient.pb2.namespace_add_req(
                     subsystem_nqn=nqn,
+                    nsid=int(nsid) if nsid else None,
                     rbd_image_name=rbd_image_name,
                     rbd_pool_name=rbd_pool,
                     block_size=block_size,
@@ -619,9 +672,6 @@ else:
 
         @ReadPermission
         @Endpoint('PUT', '{nsid}/resize')
-        @NvmeofCLICommand(
-            "nvmeof namespace resize", model=model.RequestStatus, alias="nvmeof ns resize"
-        )
         @EndpointDoc(
             "resize the specified NVMeoF namespace",
             parameters={
@@ -651,7 +701,8 @@ else:
                 )
             )
 
-        @NvmeofCLICommand("nvmeof ns resize", model=model.RequestStatus)
+        @NvmeofCLICommand("nvmeof namespace resize", model=model.RequestStatus,
+                          alias="nvmeof ns resize")
         @convert_to_model(model.RequestStatus)
         @handle_nvmeof_error
         def resize_cli(
@@ -708,7 +759,7 @@ else:
                 NVMeoFClient.pb2.namespace_add_host_req(subsystem_nqn=nqn,
                                                         nsid=int(nsid),
                                                         host_nqn=host_nqn,
-                                                        force=str_to_bool(force))
+                                                        force=str_to_bool(force) if force else None)
             )
 
         @ReadPermission

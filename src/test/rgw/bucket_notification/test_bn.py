@@ -38,7 +38,9 @@ from .api import PSTopicS3, \
     delete_all_objects, \
     delete_all_topics, \
     put_object_tagging, \
-    admin
+    admin, \
+    set_rgw_config_option, \
+    bash
 
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal, assert_in, assert_not_in, assert_true
@@ -3076,13 +3078,13 @@ def wait_for_queue_to_drain(topic_name, tenant=None, account=None, http_port=Non
         entries = parsed_result['Topic Stats']['Entries']
         retries += 1
         time_diff = time.time() - start_time
-        log.info('queue %s has %d entries after %ds', topic_name, entries, time_diff)
-        if retries > 30:
-            log.warning('queue %s still has %d entries after %ds', topic_name, entries, time_diff)
+        log.info('shards for %s has %d entries after %ds', topic_name, entries, time_diff)
+        if retries > 100:
+            log.warning('shards for %s still has %d entries after %ds', topic_name, entries, time_diff)
             assert_equal(entries, 0)
         time.sleep(5)
     time_diff = time.time() - start_time
-    log.info('waited for %ds for queue %s to drain', time_diff, topic_name)
+    log.info('waited for %ds for shards of %s to drain', time_diff, topic_name)
 
 
 def persistent_topic_stats(conn, endpoint_type):
@@ -6014,3 +6016,122 @@ def test_topic_migration_to_an_account():
             get_config_cluster(),
         )
         admin(["account", "rm", "--account-id", account_id], get_config_cluster())
+
+def persistent_notification_shard_config_change(endpoint_type, conn, new_num_shards, old_num_shards=11): 
+    """ test persistent notification shard config change """
+    """ test to check if notifications work when config value for determining num_shards is changed..."""
+    
+    default_num_shards = 11
+    rgw_client = f'client.rgw.{get_config_port()}'
+    if (old_num_shards != default_num_shards):
+        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', old_num_shards)
+
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    #start receiver thread based on conn type
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification
+    notif_1 = bucket_name +  '_notif_1'
+    topic_conf_list = [{'Id': notif_1, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
+    }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    ## create objects in the bucket (async)
+    expected_keys = []
+    create_object_and_verify_events(bucket, 'foo', topic_name, receiver, expected_keys, deletions=True)
+
+    ## change config value for num_shards to new_num_shards
+    set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', new_num_shards)
+    
+    ## create objects in the bucket (async)
+    expected_keys = []
+    create_object_and_verify_events(bucket, 'bar', topic_name, receiver, expected_keys, deletions=True)
+
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+    ##revert config value for num_shards to default
+    if (new_num_shards != default_num_shards):
+        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', default_num_shards)
+
+
+def create_object_and_verify_events(bucket, key_name, topic_name, receiver, expected_keys, deletions=False):
+    key = bucket.new_key(key_name)
+    key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expected_keys.append(key_name)
+
+    print('wait for the messages...')
+    wait_for_queue_to_drain(topic_name)
+    events = receiver.get_and_reset_events()
+    assert_equal(len(events), len(expected_keys))
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+    if deletions:
+        # delete objects
+        for key in bucket.list():
+            key.delete()
+        print('wait for the messages...')
+        wait_for_queue_to_drain(topic_name)
+        # check endpoint receiver
+        events = receiver.get_and_reset_events()
+        assert_equal(len(events), len(expected_keys))
+        for event in events:
+            assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+@attr('http_test')
+def test_backward_compatibility_persistent_sharded_topic_http(): 
+    conn = connection()
+    persistent_notification_shard_config_change('http', conn, new_num_shards=11, old_num_shards=1)
+
+@attr('kafka_test')
+def test_backward_compatibility_persistent_sharded_topic_kafka(): 
+    conn = connection()
+    persistent_notification_shard_config_change('kafka', conn, new_num_shards=11, old_num_shards=1)
+
+@attr('http_test')
+def test_persistent_sharded_topic_config_change_http():
+    conn = connection()
+    new_num_shards = random.randint(2, 10)
+    default_num_shards = 11
+    persistent_notification_shard_config_change('http', conn, new_num_shards, default_num_shards)
+
+@attr('kafka_test')
+def test_persistent_sharded_topic_config_change_kafka():
+    conn = connection()
+    new_num_shards = random.randint(2, 10)
+    default_num_shards = 11
+    persistent_notification_shard_config_change('kafka', conn, new_num_shards, default_num_shards)

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "pg_backend.h"
 
@@ -833,7 +833,14 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
                      " because got ENOENT|whiteout on obc lookup",
                      os.oi.soid, snapid);
       return remove(os, txn, osd_op_params, delta_stats,
-                    should_whiteout(ss, snapc), os.oi.size);
+                    should_whiteout(ss, snapc), os.oi.size
+      ).handle_error_interruptible(
+	crimson::ct_error::enoent::handle([] {
+	  // We consider rolling back a non-existing head to
+	  // non-existing clone as a no-op.
+	  return rollback_iertr::now();
+	})
+      );
     }),
     rollback_ertr::pass_further{},
     crimson::ct_error::assert_all{"unexpected error in rollback"}

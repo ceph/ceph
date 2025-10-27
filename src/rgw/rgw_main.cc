@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/intrusive/list.hpp>
 #include "common/ceph_argparse.h"
@@ -162,7 +162,9 @@ int main(int argc, char *argv[])
   main.init_opslog();
   main.init_tracepoints();
   main.init_lua();
+#ifdef WITH_RADOSGW_RADOS
   main.init_dedup();
+#endif
   r = main.init_frontends2(nullptr /* RGWLib */);
   if (r != 0) {
     derr << "ERROR:  initialize frontend fail, r = " << r << dendl;

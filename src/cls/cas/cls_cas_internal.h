@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -93,8 +93,10 @@ struct chunk_refs_t {
   void dump(Formatter *f) const {
     r->dump(f);
   }
-  static void generate_test_instances(std::list<chunk_refs_t*>& ls) {
-    ls.push_back(new chunk_refs_t());
+  static std::list<chunk_refs_t> generate_test_instances() {
+    std::list<chunk_refs_t> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(chunk_refs_t)
@@ -145,11 +147,13 @@ struct chunk_refs_by_object_t : public chunk_refs_t::refs_t {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<chunk_refs_by_object_t*>& ls) {
-    ls.push_back(new chunk_refs_by_object_t());
-    ls.push_back(new chunk_refs_by_object_t());
-    ls.back()->by_object.insert(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
-    ls.back()->by_object.insert(hobject_t(sobject_t("bar", CEPH_NOSNAP)));
+  static std::list<chunk_refs_by_object_t> generate_test_instances() {
+    std::list<chunk_refs_by_object_t> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().by_object.insert(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+    ls.back().by_object.insert(hobject_t(sobject_t("bar", CEPH_NOSNAP)));
+    return ls;
   }
 };
 WRITE_CLASS_ENCODER(chunk_refs_by_object_t)
@@ -392,10 +396,12 @@ struct chunk_refs_count_t : public chunk_refs_t::refs_t {
     f->dump_string("type", "count");
     f->dump_unsigned("count", total);
   }
-  static void generate_test_instances(std::list<chunk_refs_count_t*>& o) {
-    o.push_back(new chunk_refs_count_t);
-    o.push_back(new chunk_refs_count_t);
-    o.back()->total = 123;
+  static std::list<chunk_refs_count_t> generate_test_instances() {
+    std::list<chunk_refs_count_t> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().total = 123;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(chunk_refs_count_t)

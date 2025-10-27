@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * In memory space allocator benchmarks.
  * Author: Igor Fedotov, ifedotov@suse.com
@@ -8,6 +9,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"

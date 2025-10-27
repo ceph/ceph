@@ -2224,6 +2224,13 @@ class RgwMultisite:
                         '--tier-type', tier_type, '--tier-config', tier_config_str
                     ]
 
+            tier_config_rm = placement_target.get('tier_config_rm', {})
+            if tier_config_rm:
+                tier_config_rm_str = ','.join(
+                    f"{key}={value}" for key, value in tier_config_rm.items()
+                )
+                cmd_add_placement_options += ['--tier-config-rm', tier_config_rm_str]
+
             if placement_target.get('tags') and storage_class_name != STANDARD_STORAGE_CLASS:
                 cmd_add_placement_options += ['--tags', placement_target['tags']]
 
@@ -2404,17 +2411,31 @@ class RgwMultisite:
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
 
-    def add_placement_targets_zone(self, zone_name: str, placement_target: str, data_pool: str,
-                                   index_pool: str, data_extra_pool: str):
+    def add_placement_targets_storage_class_zone(self, zone_name: str, placement_target: str,
+                                                 data_pool: str, index_pool: str,
+                                                 data_extra_pool: str, storage_class: str,
+                                                 data_pool_class: str, compression: str):
         rgw_zone_add_placement_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
-                                      '--placement-id', placement_target, '--data-pool', data_pool,
+                                      '--placement-id', placement_target,
+                                      '--data-pool', data_pool,
                                       '--index-pool', index_pool,
-                                      '--data-extra-pool', data_extra_pool]
+                                      '--data-extra-pool', data_extra_pool,
+                                      '--storage-class', storage_class,
+                                      '--data-pool', data_pool_class]
+
+        if compression:
+            rgw_zone_add_placement_cmd.extend(['--compression', compression])
+
         try:
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_placement_cmd)
             if exit_code > 0:
-                raise DashboardException(e=err, msg='Unable to add placement target {} to zone {}'.format(placement_target, zone_name),  # noqa E501 #pylint: disable=line-too-long
-                                         http_status_code=500, component='rgw')
+                raise DashboardException(
+                    e=err,
+                    msg='Unable to add placement target {} to \
+                        zone {}'.format(placement_target, zone_name),
+                    http_status_code=500,
+                    component='rgw'
+                )
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
@@ -2434,7 +2455,23 @@ class RgwMultisite:
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
+
+    def edit_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
+                                data_pool: str, compression: str):
+        edit_placement_target_cmd = ['zone', 'placement', 'modify', '--rgw-zone', zone_name,
+                                     '--placement-id', placement_target,
+                                     '--storage-class', storage_class,
+                                     '--data-pool', data_pool]
+        if compression:
+            edit_placement_target_cmd.extend(['--compression', compression])
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(edit_placement_target_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg=f'Unable to modify storage class \
+                                         {storage_class} to zone {zone_name}',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
 
     def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
                   master: str = '', endpoints: str = '', access_key: str = '', secret_key: str = '',
@@ -2447,17 +2484,21 @@ class RgwMultisite:
             try:
                 exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_rename_cmd, False)
                 if exit_code > 0:
-                    raise DashboardException(e=err, msg='Unable to rename zone to {}'.format(new_zone_name),  # noqa E501 #pylint: disable=line-too-long
-                                             http_status_code=500, component='rgw')
+                    raise DashboardException(
+                        e=err, msg='Unable to rename zone to {}'.format(new_zone_name),
+                        http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
             self.update_period()
         self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, access_key,
                          secret_key)
-        self.add_placement_targets_zone(new_zone_name, placement_target,
-                                        data_pool, index_pool, data_extra_pool)
-        self.add_storage_class_zone(new_zone_name, placement_target, storage_class,
-                                    data_pool_class, compression)
+
+        if placement_target:
+            self.add_placement_targets_storage_class_zone(
+                new_zone_name, placement_target,
+                data_pool, index_pool,
+                data_extra_pool, storage_class,
+                data_pool_class, compression)
 
     def list_zones(self):
         rgw_zone_list = {}

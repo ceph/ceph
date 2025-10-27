@@ -28,10 +28,10 @@ describe('RgwSyncPrimaryZoneComponent', () => {
     component.zone = 'Zone';
     fixture.detectChanges();
 
-    const realmBadge = fixture.debugElement.query(By.css('li:nth-child(2)'));
+    const realmBadge = fixture.debugElement.query(By.css('cds-tag.tag-info'));
     expect(realmBadge.nativeElement.textContent).toContain('Realm');
 
-    const zonegroupBadge = fixture.debugElement.query(By.css('p'));
+    const zonegroupBadge = fixture.debugElement.queryAll(By.css('cds-tag.tag-info'))[1];
     expect(zonegroupBadge.nativeElement.textContent).toContain('Zonegroup');
 
     const zoneBadge = fixture.debugElement.query(By.css('li:nth-child(8)'));

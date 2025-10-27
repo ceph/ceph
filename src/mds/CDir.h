@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -352,6 +353,7 @@ public:
   dentry_key_map::iterator begin() { return items.begin(); }
   dentry_key_map::iterator end() { return items.end(); }
   dentry_key_map::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
+  dentry_key_map::iterator upper_bound(dentry_key_t key) { return items.upper_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
@@ -785,7 +787,8 @@ private:
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
   void finish_old_fragment(std::vector<MDSContext*>& waiters, bool replay);
   void init_fragment_pins();
-  std::string get_path() const;
+  std::string get_trimmed_path() const;
+  std::string get_path(bool trim_path=false) const;
 
   // -- authority --
   /*

@@ -1558,6 +1558,38 @@ paths:
       summary: Display Rbd Mirroring Summary
       tags:
       - RbdMirroringSummary
+  /api/block/mirroring/{pool_name}/{image_name}/summary:
+    get:
+      parameters:
+      - in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: image_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RbdMirroringSummary
   /api/block/pool/{pool_name}/namespace:
     get:
       parameters:
@@ -3919,14 +3951,14 @@ paths:
       summary: Export Ceph Users
       tags:
       - Cluster
-  /api/cluster/user/{user_entity}:
+  /api/cluster/user/{user_entities}:
     delete:
-      description: "\n        Delete a ceph user and it's defined capabilities.\n\
-        \        "
+      description: "\n        Delete one or more ceph users and their defined capabilities.\n\
+        \        user_entities: comma-separated string of users to delete\n      \
+        \  "
       parameters:
-      - description: Entity to delete
-        in: path
-        name: user_entity
+      - in: path
+        name: user_entities
         required: true
         schema:
           type: string
@@ -3952,7 +3984,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Delete Ceph User
+      summary: Delete one or more Ceph Users
       tags:
       - Cluster
   /api/cluster_conf:
@@ -4631,9 +4663,6 @@ paths:
                   cephfs:
                     description: ''
                     type: boolean
-                  dashboard:
-                    description: ''
-                    type: boolean
                   iscsi:
                     description: ''
                     type: boolean
@@ -4656,7 +4685,6 @@ paths:
                 - cephfs
                 - rgw
                 - nfs
-                - dashboard
                 type: object
           description: OK
         '400':
@@ -4976,6 +5004,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get Cluster's detailed health report
       tags:
       - Health
   /api/health/get_cluster_capacity:
@@ -5427,7 +5456,204 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Get Cluster's minimal health report
+      summary: Get Cluster's health report with lesser details
+      tags:
+      - Health
+  /api/health/snapshot:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  fsid:
+                    description: Cluster filesystem ID
+                    type: string
+                  fsmap:
+                    description: Filesystem map details
+                    properties:
+                      num_active:
+                        description: Number of active mds
+                        type: integer
+                      num_standbys:
+                        description: Standby MDS count
+                        type: integer
+                    required:
+                    - num_active
+                    - num_standbys
+                    type: object
+                  health:
+                    description: Cluster health overview
+                    properties:
+                      checks:
+                        description: Health checks keyed by name
+                        properties:
+                          <check_name>:
+                            description: Individual health check object
+                            properties:
+                              muted:
+                                description: Whether the check is muted
+                                type: boolean
+                              severity:
+                                description: Health severity level
+                                type: string
+                              summary:
+                                description: Summary details
+                                properties:
+                                  count:
+                                    description: Occurrence count
+                                    type: integer
+                                  message:
+                                    description: Human-readable summary
+                                    type: string
+                                required:
+                                - message
+                                - count
+                                type: object
+                            required:
+                            - severity
+                            - summary
+                            - muted
+                            type: object
+                        required:
+                        - <check_name>
+                        type: object
+                      mutes:
+                        description: List of muted check names
+                        items:
+                          type: string
+                        type: array
+                      status:
+                        description: Overall health status
+                        type: string
+                    required:
+                    - status
+                    - checks
+                    - mutes
+                    type: object
+                  mgrmap:
+                    description: Manager map details
+                    properties:
+                      num_active:
+                        description: Number of active managers
+                        type: integer
+                      num_standbys:
+                        description: Standby manager count
+                        type: integer
+                    required:
+                    - num_active
+                    - num_standbys
+                    type: object
+                  monmap:
+                    description: Monitor map details
+                    properties:
+                      num_mons:
+                        description: Number of monitors
+                        type: integer
+                    required:
+                    - num_mons
+                    type: object
+                  num_hosts:
+                    description: Count of hosts
+                    type: integer
+                  num_iscsi_gateways:
+                    description: Iscsi gateways status
+                    properties:
+                      down:
+                        description: Count of iSCSI gateways not running
+                        type: integer
+                      up:
+                        description: Count of iSCSI gateways running
+                        type: integer
+                    required:
+                    - up
+                    - down
+                    type: object
+                  num_rgw_gateways:
+                    description: Count of RGW gateway daemons running
+                    type: integer
+                  osdmap:
+                    description: OSD map details
+                    properties:
+                      in:
+                        description: Number of OSDs in
+                        type: integer
+                      num_osds:
+                        description: Total OSD count
+                        type: integer
+                      up:
+                        description: Number of OSDs up
+                        type: integer
+                    required:
+                    - in
+                    - up
+                    - num_osds
+                    type: object
+                  pgmap:
+                    description: Placement group map details
+                    properties:
+                      bytes_total:
+                        description: Total capacity in bytes
+                        type: integer
+                      bytes_used:
+                        description: Used capacity in bytes
+                        type: integer
+                      num_pgs:
+                        description: Total PG count
+                        type: integer
+                      num_pools:
+                        description: Number of pools
+                        type: integer
+                      pgs_by_state:
+                        description: List of PG counts by state
+                        items:
+                          properties:
+                            count:
+                              description: Count of PGs in this state
+                              type: integer
+                            state_name:
+                              description: Placement group state
+                              type: string
+                          required:
+                          - state_name
+                          - count
+                          type: object
+                        type: array
+                    required:
+                    - pgs_by_state
+                    - num_pools
+                    - num_pgs
+                    - bytes_used
+                    - bytes_total
+                    type: object
+                required:
+                - fsid
+                - health
+                - monmap
+                - osdmap
+                - pgmap
+                - mgrmap
+                - fsmap
+                - num_rgw_gateways
+                - num_iscsi_gateways
+                - num_hosts
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get a quick overview of cluster health at a moment, analogous to the
+        ceph status command in CLI.
       tags:
       - Health
   /api/host:
@@ -5465,6 +5691,12 @@ paths:
         name: sort
         schema:
           type: string
+      - default: true
+        description: Include Service Instances
+        in: query
+        name: include_service_instances
+        schema:
+          type: boolean
       responses:
         '200':
           content:
@@ -8289,6 +8521,44 @@ paths:
       - jwt: []
       tags:
       - NVMe-oF Gateway
+  /api/nvmeof/gateway/listener_info/{nqn}:
+    get:
+      parameters:
+      - in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get NVMeoF gateway's listeners info
+      tags:
+      - NVMe-oF Gateway
   /api/nvmeof/gateway/log_level:
     get:
       parameters:
@@ -8361,6 +8631,39 @@ paths:
       security:
       - jwt: []
       summary: Set NVMeoF gateway log levels
+      tags:
+      - NVMe-oF Gateway
+  /api/nvmeof/gateway/stats:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: gw_group
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get NVMeoF statistics for the gateway
       tags:
       - NVMe-oF Gateway
   /api/nvmeof/gateway/version:
@@ -8558,7 +8861,8 @@ paths:
             schema:
               properties:
                 dhchap_key:
-                  type: string
+                  description: Subsystem DH-HMAC-CHAP key
+                  type: integer
                 enable_ha:
                   default: true
                   description: Enable high availability
@@ -8567,18 +8871,20 @@ paths:
                   description: NVMeoF gateway group
                   type: string
                 max_namespaces:
-                  default: 4096
                   description: Maximum number of namespaces
                   type: integer
                 no_group_append:
-                  default: true
-                  type: boolean
+                  default: false
+                  description: Do not append gateway group name to the NQN
+                  type: integer
                 nqn:
                   description: NVMeoF subsystem NQN
                   type: string
                 serial_number:
+                  description: Subsystem serial number
                   type: integer
                 traddr:
+                  description: NVMeoF gateway address
                   type: string
               required:
               - nqn
@@ -9059,10 +9365,16 @@ paths:
   /api/nvmeof/subsystem/{nqn}/namespace:
     get:
       parameters:
-      - description: NVMeoF subsystem NQN
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN
         in: path
         name: nqn
-        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF Namespace ID to filter by
+        in: query
+        name: nsid
         schema:
           type: string
       - allowEmptyValue: true
@@ -9119,7 +9431,8 @@ paths:
                   type: boolean
                 disable_auto_resize:
                   default: false
-                  type: integer
+                  description: Disable auto resize
+                  type: string
                 force:
                   default: false
                   description: Force create namespace even it image is used by other
@@ -9135,6 +9448,8 @@ paths:
                   default: false
                   description: Namespace will be visible only for the allowed hosts
                   type: boolean
+                nsid:
+                  type: string
                 rbd_image_name:
                   description: RBD image name
                   type: string
@@ -9147,12 +9462,13 @@ paths:
                   type: string
                 read_only:
                   default: false
-                  type: boolean
+                  description: Read only namespace
+                  type: string
                 size:
-                  default: 1024
-                  description: RBD image size
+                  description: Deprecated. Use `rbd_image_size` instead
                   type: integer
                 traddr:
+                  description: Target gateway address
                   type: string
                 trash_image:
                   default: false
@@ -9183,7 +9499,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Create a new NVMeoF namespace
+      summary: Create a new NVMeoF namespace.
       tags:
       - NVMe-oF Subsystem Namespace
   /api/nvmeof/subsystem/{nqn}/namespace/{nsid}:
@@ -11502,7 +11818,12 @@ paths:
       - Prometheus
   /api/prometheus/alertgroup:
     get:
-      parameters: []
+      parameters:
+      - default: false
+        in: query
+        name: cluster_filter
+        schema:
+          type: boolean
       responses:
         '200':
           content:
@@ -14884,6 +15205,103 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               type: object
           description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwZone
+  /api/rgw/zone/storage-class:
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                compression:
+                  default: ''
+                  type: string
+                data_pool:
+                  type: string
+                placement_target:
+                  type: string
+                storage_class:
+                  type: string
+                zone_name:
+                  type: string
+              required:
+              - zone_name
+              - placement_target
+              - storage_class
+              - data_pool
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwZone
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                compression:
+                  default: ''
+                  type: string
+                data_pool:
+                  type: string
+                placement_target:
+                  type: string
+                storage_class:
+                  type: string
+                zone_name:
+                  type: string
+              required:
+              - zone_name
+              - placement_target
+              - storage_class
+              - data_pool
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -132,6 +132,15 @@ public:
   int set_cloud_restore_status(const DoutPrefixProvider* dpp, rgw::sal::Object* pobj,
 		  	   optional_yield y,
 			   const rgw::sal::RGWRestoreStatus& restore_status);
+
+  /** Calculate expiration date based on expiry days */
+  void get_expiration_date(const DoutPrefixProvider* dpp,
+                           int expiry_days, ceph::real_time& exp_date);
+
+  /** Update expiry date for temp restored copies */
+  int update_cloud_restore_exp_date(rgw::sal::Bucket* pbucket,
+	       			       rgw::sal::Object* pobj, std::optional<uint64_t> days,
+				             const DoutPrefixProvider* dpp, optional_yield y);
 
   /** Given <bucket, obj>, restore the object from the cloud-tier. In case the
    * object cannot be restored immediately, save that restore state(/entry) 

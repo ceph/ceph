@@ -8,6 +8,8 @@ import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-fo
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { VERSION_PREFIX } from '~/app/shared/constants/app.constants';
+
 import { Router } from '@angular/router';
 
 import {
@@ -133,12 +135,12 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         prop: 'cluster_connection_status',
         name: $localize`Connection`,
         flexGrow: 2,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            1: { value: 'DISCONNECTED', class: 'badge-danger' },
-            0: { value: 'CONNECTED', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-info' }
+            1: { value: 'DISCONNECTED', class: 'tag-danger' },
+            0: { value: 'CONNECTED', class: 'tag-success' },
+            2: { value: 'CHECKING..', class: 'tag-info' }
           }
         }
       },
@@ -146,12 +148,12 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
         prop: 'status',
         name: $localize`Status`,
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            1: { value: 'WARN', class: 'badge-warning' },
-            0: { value: 'OK', class: 'badge-success' },
-            2: { value: 'ERROR', class: 'badge-danger' }
+            1: { value: 'WARN', class: 'tag-warning' },
+            0: { value: 'OK', class: 'tag-success' },
+            2: { value: 'ERROR', class: 'tag-danger' }
           }
         }
       },
@@ -491,8 +493,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   }
 
   getVersion(fullVersion: string) {
-    const version = fullVersion.replace('ceph version ', '').split(' ');
-    return version[0] + ' ' + version.slice(2, version.length).join(' ');
+    const version = fullVersion.replace(`${VERSION_PREFIX} `, '').split(' ');
+    return version[0] + ' ' + version.slice(2).join(' ');
   }
 
   generateQueryLabel(query: any, name = false, count = this.COUNT_OF_UTILIZATION_CHARTS) {

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,21 @@
 #include "common/Formatter.h"
 
 #include <ostream>
+
+/* Trim given path to final 10 components and return it by prefixing it with
+ * "..."  to indicate that the path has been trimmed. */
+std::string filepath::get_trimmed_path() const
+{
+  std::size_t n = 0;
+  for (int i = 1; i <= 10; ++i) {
+    n = path.rfind("/", n - 1);
+    if (n == std::string::npos) {
+      return std::string(path);
+    }
+  }
+
+  return std::string("..." + path.substr(n, -1));
+}
 
 void filepath::rebuild_path() {
   path.clear();
@@ -39,6 +55,14 @@ void filepath::parse_bits() const {
     }
     off = nextslash+1;
   }
+}
+
+void filepath::set_trimmed() {
+  if (trimmed)
+    return;
+  // indicates that the path has been shortened.
+  path += "...";
+  trimmed = true;
 }
 
 void filepath::set_path(std::string_view s) {
@@ -116,12 +140,14 @@ void filepath::dump(ceph::Formatter *f) const {
   f->dump_string("relative_path", path);
 }
 
-void filepath::generate_test_instances(std::list<filepath*>& o) {
-  o.push_back(new filepath);
-  o.push_back(new filepath("/usr/bin", 0));
-  o.push_back(new filepath("/usr/sbin", 1));
-  o.push_back(new filepath("var/log", 1));
-  o.push_back(new filepath("foo/bar", 101));
+std::list<filepath> filepath::generate_test_instances() {
+  std::list<filepath> o;
+  o.emplace_back();
+  o.push_back(filepath("/usr/bin", 0));
+  o.push_back(filepath("/usr/sbin", 1));
+  o.push_back(filepath("var/log", 1));
+  o.push_back(filepath("foo/bar", 101));
+  return o;
 }
 
 bool filepath::is_last_dot_or_dotdot() const {

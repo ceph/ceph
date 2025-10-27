@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,7 +16,8 @@
 #ifndef CEPH_MDSTABLE_H
 #define CEPH_MDSTABLE_H
 
-#include "include/buffer_fwd.h"
+#include "include/buffer.h"
+#include "include/object.h" // for object_t
 #include "include/types.h" // for version_t
 #include "include/cephfs/types.h" // for mds_rank_t
 

@@ -198,6 +198,17 @@ int ECEncoder<SInfo>::get_m()
 {
   return stripe_info->get_m();
 }
+
+/**
+ * Return chunksize for the stripe
+ *
+ * @returns int Chunksize for the stripe
+ */
+template <typename SInfo>
+int ECEncoder<SInfo>::get_chunk_size()
+{
+  return stripe_info->get_chunk_size();
+}
 }
 }
 

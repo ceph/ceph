@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -79,6 +79,15 @@ private:
   mutable std::optional<ceph::bufferptr> ptr = std::nullopt;
 };
 
+struct clone_range_t {
+  LBAMapping first_src_mapping;
+  laddr_t src_base = L_ADDR_NULL;
+  laddr_t dest_base = L_ADDR_NULL;
+  extent_len_t offset = 0;
+  extent_len_t len = 0;
+};
+std::ostream& operator<<(std::ostream &out, const clone_range_t &);
+
 struct overwrite_range_t {
   objaddr_t unaligned_len = 0;
   laddr_offset_t unaligned_begin;
@@ -86,6 +95,7 @@ struct overwrite_range_t {
   laddr_t aligned_begin = L_ADDR_NULL;
   laddr_t aligned_end = L_ADDR_NULL;
   objaddr_t aligned_len = 0;
+  std::optional<clone_range_t> clonerange_info;
   overwrite_range_t(
     objaddr_t unaligned_len,
     laddr_offset_t unaligned_begin,
@@ -99,6 +109,22 @@ struct overwrite_range_t {
       aligned_len(
 	aligned_end.template get_byte_distance<
 	  extent_len_t>(aligned_begin))
+  {}
+  overwrite_range_t(
+    objaddr_t unaligned_len,
+    laddr_offset_t unaligned_begin,
+    laddr_offset_t unaligned_end,
+    extent_len_t block_size,
+    clone_range_t &&clonerange_info)
+    : unaligned_len(unaligned_len),
+      unaligned_begin(unaligned_begin),
+      unaligned_end(unaligned_end),
+      aligned_begin(unaligned_begin.get_aligned_laddr(block_size)),
+      aligned_end(unaligned_end.get_roundup_laddr(block_size)),
+      aligned_len(
+	aligned_end.template get_byte_distance<
+	  extent_len_t>(aligned_begin)),
+      clonerange_info(std::move(clonerange_info))
   {}
 
   bool is_empty() const {
@@ -165,10 +191,38 @@ struct overwrite_range_t {
 };
 std::ostream& operator<<(std::ostream &, const overwrite_range_t &);
 
+// |<-headbl->|<-head_padding->|<--------bl------->|<-tail_padding->|<-tailbl->|
+// |----------4KB--------------|-------------------|----------4KB--------------|
+//            |------------------overwrite_range--------------------|
 struct data_t {
   std::optional<bufferlist> headbl;
+  std::optional<bufferlist> head_padding;
   std::optional<bufferlist> bl;
   std::optional<bufferlist> tailbl;
+  std::optional<bufferlist> tail_padding;
+  data_t() = default;
+  data_t(std::optional<bufferlist> &&_bl) : bl(std::move(_bl)) {}
+  void merge_head(extent_len_t block_size) {
+    assert(head_padding.has_value());
+    if (headbl) {
+      headbl->append(*head_padding);
+    } else {
+      headbl = bufferlist{};
+      headbl->append_zero(block_size - head_padding->length());
+      headbl->append(*head_padding);
+    }
+    head_padding.reset();
+  }
+  void merge_tail(extent_len_t block_size) {
+    assert(tail_padding.has_value());
+    if (tailbl) {
+      tail_padding->append(*tailbl);
+    } else {
+      tail_padding->append_zero(block_size - tail_padding->length());
+    }
+    tailbl = std::move(tail_padding);
+    tail_padding.reset();
+  }
 };
 std::ostream& operator<<(std::ostream &out, const data_t &data);
 
@@ -323,9 +377,26 @@ public:
   clear_ret clear(context_t ctx);
 
   /// Clone data of an Onode
+  /// Note that the clone always assume that ctx.onode
+  /// is a snap onode, so, for OP_CLONE, the caller of
+  /// this method should swap the layout of the onode
+  /// and the dest_onode first.
   using clone_iertr = base_iertr;
   using clone_ret = clone_iertr::future<>;
   clone_ret clone(context_t ctx);
+
+  /// Clone the object so that the later modification
+  /// won't be seen by other objects sharing the same
+  /// direct lba mappings.
+  clone_ret copy_on_write(context_t ctx);
+
+  /// Clone the specified range from the src object
+  /// to the dest object
+  clone_ret clone_range(
+    context_t ctx,
+    extent_len_t srcoff,
+    extent_len_t len,
+    extent_len_t destoff);
 
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
@@ -336,6 +407,21 @@ private:
     extent_len_t len,
     std::optional<bufferlist> &&bl,
     LBAMapping first_mapping);
+
+  /**
+   * do_clone
+   *
+   * Clone lba mappings from object_data to d_object_data.
+   * object_data must belong to ctx.onode, and d_object_data must belong to ctx.d_onode
+   * This implementation is asymmetric and optimizes for (but does not require) the case
+   * that source is not further mutated.
+   */
+  clone_ret do_clone(
+    context_t ctx,
+    object_data_t &object_data,
+    object_data_t &d_object_data,
+    LBAMapping first_mapping,
+    bool updateref);
 
   /// Ensures object_data reserved region is prepared
   write_iertr::future<std::optional<LBAMapping>>
@@ -359,7 +445,8 @@ private:
   enum op_type_t : uint8_t {
     OVERWRITE,
     ZERO,
-    TRIM
+    TRIM,
+    OP_CLONERANGE
   };
   enum edge_handle_policy_t : uint8_t {
     DELTA_BASED_PUNCH,
@@ -548,6 +635,13 @@ private:
     overwrite_range_t &overwrite_range,
     data_t &data,
     LBAMapping edge_mapping);
+
+  read_iertr::future<> read_edge_for_clone_range(
+    context_t ctx,
+    object_data_t &object_data,
+    extent_len_t offset,
+    extent_len_t len,
+    data_t &data);
 
 private:
   /**

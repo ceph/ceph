@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,14 +41,6 @@ namespace ceph::osd::scheduler {
 uint32_t mClockScheduler::calc_scaled_cost(int item_cost)
 {
   return mclock_conf.calc_scaled_cost(item_cost);
-}
-
-void mClockScheduler::update_configuration()
-{
-  // Apply configuration change. The expectation is that
-  // at least one of the tracked mclock config option keys
-  // is modified before calling this method.
-  cct->_conf.apply_changes(nullptr);
 }
 
 void mClockScheduler::dump(ceph::Formatter &f) const
@@ -195,40 +188,6 @@ std::string mClockScheduler::display_queues() const
   std::ostringstream out;
   scheduler.display_queues(out);
   return out.str();
-}
-
-
-std::vector<std::string> mClockScheduler::get_tracked_keys() const noexcept
-{
-  return {
-    "osd_mclock_scheduler_client_res"s,
-    "osd_mclock_scheduler_client_wgt"s,
-    "osd_mclock_scheduler_client_lim"s,
-    "osd_mclock_scheduler_background_recovery_res"s,
-    "osd_mclock_scheduler_background_recovery_wgt"s,
-    "osd_mclock_scheduler_background_recovery_lim"s,
-    "osd_mclock_scheduler_background_best_effort_res"s,
-    "osd_mclock_scheduler_background_best_effort_wgt"s,
-    "osd_mclock_scheduler_background_best_effort_lim"s,
-    "osd_mclock_max_capacity_iops_hdd"s,
-    "osd_mclock_max_capacity_iops_ssd"s,
-    "osd_mclock_max_sequential_bandwidth_hdd"s,
-    "osd_mclock_max_sequential_bandwidth_ssd"s,
-    "osd_mclock_profile"s
-  };
-}
-
-
-void mClockScheduler::handle_conf_change(
-  const ConfigProxy& conf,
-  const std::set<std::string> &changed)
-{
-  mclock_conf.mclock_handle_conf_change(conf, changed);
-}
-
-mClockScheduler::~mClockScheduler()
-{
-  cct->_conf.remove_observer(this);
 }
 
 }

@@ -13,6 +13,7 @@ import { NotificationService } from '../services/notification.service';
 import { ToastrModule } from 'ngx-toastr';
 import { NotificationType } from '../enum/notification-type.enum';
 import { SharedModule } from '../shared.module';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('SmbService', () => {
   let service: SmbService;
@@ -165,7 +166,7 @@ describe('SmbService', () => {
       resource_type: JOIN_AUTH_RESOURCE,
       auth_id: 'foo',
       auth: {
-        username: 'user',
+        username: USER,
         password: 'pass'
       },
       linked_to_cluster: ''
@@ -188,7 +189,7 @@ describe('SmbService', () => {
       values: {
         users: [
           {
-            name: 'user',
+            name: USER,
             password: 'pass'
           }
         ],

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,8 @@
 
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
+
+#include <dirent.h> // for IFTODT()
 
 #include <list>
 #include <map>
@@ -33,6 +36,7 @@
 #include "include/compact_set.h"
 
 #include "MDSCacheObject.h"
+#include "mdstypes.h" // for old_inode_t
 #include "flock.h"
 #include "inode_backtrace.h" // for inode_backtrace_t
 
@@ -221,7 +225,7 @@ public:
     InodeStoreBase::decode_bare(bl, snap_blob);
   }
 
-  static void generate_test_instances(std::list<InodeStore*>& ls);
+  static std::list<InodeStore> generate_test_instances();
 
   using InodeStoreBase::inode;
   using InodeStoreBase::xattrs;
@@ -242,7 +246,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &bl) {
     InodeStore::decode_bare(bl);
   }
-  static void generate_test_instances(std::list<InodeStoreBare*>& ls);
+  static std::list<InodeStoreBare> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 
@@ -739,8 +743,14 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_ancestor_of(const CInode *other, std::unordered_map<CInode const*,bool>* visited=nullptr) const;
   bool is_projected_ancestor_of(const CInode *other) const;
 
-  void make_path_string(std::string& s, bool projected=false, const CDentry *use_parent=NULL) const;
-  void make_path(filepath& s, bool projected=false) const;
+  void make_path_string(std::string& s, bool projected=false,
+		        const CDentry *use_parent=NULL,
+		        int path_comp_count=-1) const;
+  void make_trimmed_path_string(std::string& s, bool projected=false,
+				const CDentry *use_parent=NULL,
+				int path_comp_count=10) const;
+  void make_path(filepath& s, bool projected=false,
+		 int path_comp_count=-1) const;
   void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --
@@ -1148,7 +1158,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * @returns a pool ID >=0
    */
   int64_t get_backtrace_pool() const;
-
+  inodeno_t get_subvolume_id() const;
 protected:
   ceph_lock_state_t *get_fcntl_lock_state() {
     if (!fcntl_locks)

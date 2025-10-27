@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -69,6 +69,9 @@ enum RGWOpType {
   RGW_OP_GET_OBJ_RETENTION,
   RGW_OP_PUT_OBJ_LEGAL_HOLD,
   RGW_OP_GET_OBJ_LEGAL_HOLD,
+  RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS,
+  RGW_OP_GET_BUCKET_OWNERSHIP_CONTROLS,
+  RGW_OP_DELETE_BUCKET_OWNERSHIP_CONTROLS,
   // IAM
   RGW_OP_PUT_USER_POLICY,
   RGW_OP_GET_USER_POLICY,

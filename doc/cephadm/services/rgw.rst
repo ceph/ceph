@@ -140,43 +140,98 @@ See also :ref:`multisite`.
 Setting up HTTPS
 ----------------
 
-In order to enable HTTPS for RGW services, apply a spec file following this scheme:
+RGW services, like other cephadm-managed services, support three ways of configuring
+HTTPS certificates, all managed through the cephadm Certificate Manager (certmgr):
+
+- **cephadm-signed (default):**
+  If ``ssl`` is set to true but no certificate is specified, cephadm generates and
+  signs a certificate for the RGW service automatically.
+
+- **inline:**
+  Users can set the ``certificate_source`` to ``inline`` in the spec and
+  embed the certificate and private key directly in the spec using
+  the ``ssl_cert`` and ``ssl_key`` fields.
+
+- **reference:**
+  Users can register their own certificate and key with certmgr and
+  set the ``certificate_source`` to ``reference`` in the spec.
+
+**Option 1: Inline certificate and key**
 
 .. code-block:: yaml
 
   service_type: rgw
   service_id: myrgw
   spec:
-    rgw_frontend_ssl_certificate: | 
-      -----BEGIN PRIVATE KEY-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END PRIVATE KEY-----
-      -----BEGIN CERTIFICATE-----
-      V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFt
-      ZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15
-      IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWdu
-      YSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3Mg
-      ZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=
-      -----END CERTIFICATE-----
     ssl: true
+    certificate_source: inline
+    ssl_cert: |
+      -----BEGIN CERTIFICATE-----
+      (PEM cert contents here)
+      -----END CERTIFICATE-----
+    ssl_key: |
+      -----BEGIN PRIVATE KEY-----
+      (PEM key contents here)
+      -----END PRIVATE KEY-----
 
-Then apply this yaml document:
+Apply the spec:
 
 .. prompt:: bash #
 
   ceph orch apply -i myrgw.yaml
 
-Note the value of ``rgw_frontend_ssl_certificate`` is a literal string as
-indicated by a ``|`` character preserving newline characters.
+.. note::
+
+   The older ``rgw_frontend_ssl_certificate`` field is still supported
+   for backward compatibility, but it is deprecated.
+   New deployments should use ``ssl_cert`` / ``ssl_key`` instead.
+
+**Option 2: Reference to a registered certificate/key**
+
+First, register the certificate and key with certmgr:
+
+.. prompt:: bash #
+
+  ceph orch certmgr cert set --cert-name rgw_ssl_cert --service-name rgw.<service_id> -i $PWD/server_cert.pem
+  ceph orch certmgr key set --key-name rgw_ssl_key  --service-name rgw.<service_id> -i $PWD/server_key
+
+Then use ``reference`` source in the RGW spec:
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: reference
+
+Apply the spec:
+
+.. prompt:: bash #
+
+  ceph orch apply -i myrgw.yaml
+
+**Option 3: cephadm-signed (default)**
+
+If ``ssl: true`` is set but no certificate is provided, cephadm
+will automatically generate and sign a certificate for the RGW service.
+
+.. code-block:: yaml
+
+  service_type: rgw
+  service_id: myrgw
+  spec:
+    ssl: true
+    certificate_source: cephadm-signed
+
+This will deploy RGW with a cephadm-signed certificate.
 
 Setting up HTTPS with Wildcard SANs
 -----------------------------------
 
-To enable HTTPS for RGW services, apply a spec file following this scheme:
+When using cephadm-signed certificates, wildcard Subject Alternative
+Names (SANs) can be optionally included in the generated certificates.
+For RGW services, this can be enabled by applying a spec file such as:
 
 .. code-block:: yaml
 
@@ -187,7 +242,7 @@ To enable HTTPS for RGW services, apply a spec file following this scheme:
     count_per_host: 1
   spec:
     ssl: true
-    generate_cert: true  
+    certificate_source: cephadm-signed
     rgw_frontend_port: 8080
     wildcard_enabled: true  # Enables wildcard SANs in the certificate
     zonegroup_hostnames:
@@ -202,6 +257,22 @@ Then apply this yaml document:
 The ``wildcard_enabled`` flag ensures that a wildcard SAN entry is included in the self-signed certificate,
 allowing access to buckets in virtual host mode. By default, this flag is disabled.
 example: wildcard SAN - (``*.s3.cephlab.com``)
+
+Cephadm ``ceph orch`` specs for RGW services now support the following optional configuration:
+
+.. code-block:: yaml
+
+  spec:
+    qat:
+      compression: hw | sw
+
+compression:
+
+``hw``: Enables hardware QAT offload (if QAT hardware and VFs are present on the node)
+
+``sw``: Enables QAT software fallback mode
+
+No other keys are currently supported in the ``qat`` block.
 
 Disabling multisite sync traffic
 --------------------------------
@@ -338,13 +409,30 @@ Service specs are YAML blocks with the following properties:
       use_keepalived_multicast: <bool>          # optional: Default is False.
       vrrp_interface_network: <string>/<string> # optional: ex: 192.168.20.0/24
       health_check_interval: <string>           # optional: Default is 2s.
+      ssl: true
+      certificate_source: inline                # optional: Default is cephadm-signed
       ssl_cert: |                               # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
         -----END CERTIFICATE-----
+      ssl_key: |
         -----BEGIN PRIVATE KEY-----
         ...
         -----END PRIVATE KEY-----
+      enable_stats: true
+      monitor_ssl: <bool>
+      monitor_cert_source: inline                       # optional: default is reuse_service_cert
+      monitor_ssl_cert: |                               # optional: SSL certificate and key
+        -----BEGIN CERTIFICATE-----
+        ...
+        -----END CERTIFICATE-----
+      monitor_ssl_key: |
+        -----BEGIN PRIVATE KEY-----
+        ...
+        -----END PRIVATE KEY-----
+      monitor_networks: [..]
+      monitor_ip_addrs:
+        host: <ip>
 
 .. code-block:: yaml
 
@@ -396,9 +484,20 @@ where the properties of this service specification are:
     A list of networks to identify which ethernet interface to use for the virtual IP.
 * ``frontend_port``
     The port used to access the ingress service.
-* ``ssl_cert``:
-    SSL certificate, if SSL is to be enabled. This must contain the both the certificate and
-    private key blocks in .pem format.
+* ``ssl``
+    To enable SSL for ingress service.
+* ``certificate_source``
+    The certificate source can be one of the following: 'inline', 'reference', or 'cephadm-signed'.
+    - If set to 'inline', the YAML configuration must include ssl_cert and ssl_key.
+    - If set to 'reference', the certificate and key must already exist in the certificate store.
+    - If set to 'cephadm-signed', Cephadm will automatically generate the certificate and key.
+    By default, the source is set to 'cephadm-signed'.
+* ``ssl_cert``
+    SSL certificate, if SSL is enabled and ``certificate_source`` is not 'cephadm-signed'.
+    This should have the certificate .pem format.
+* ``ssl_key``
+    SSL key, if SSL is enabled and ``certificate_source`` is not 'cephadm-signed'.
+    This should have the key .pem format.
 * ``use_keepalived_multicast``
     Default is False. By default, cephadm will deploy keepalived config to use unicast IPs,
     using the IPs of the hosts. The IPs chosen will be the same IPs cephadm uses to connect
@@ -417,6 +516,29 @@ where the properties of this service specification are:
 * ``health_check_interval``
     Default is 2 seconds. This parameter can be used to set the interval between health checks
     for the haproxy with the backend servers.
+* ``enable_stats``
+    Default is False, must be set to enable haproxy stats.
+* ``monitor_ssl``
+    To enable ssl for monitoring. SSL for monitoring can be enabled only when service SSL is enabled.
+* ``monitor_cert_source``
+    The monitor certificate source can be one of the following: 'reuse_service_cert', 'inline', 'reference', or 'cephadm-signed'.
+    - If set to 'reuse_service_cert', then the service certs will be used.
+    - If set to 'inline', the YAML configuration must include ssl_cert and ssl_key.
+    - If set to 'reference', the certificate and key must already exist in the certificate store.
+    - If set to 'cephadm-signed', Cephadm will automatically generate the certificate and key.
+    By default, the source is set to 'reuse_service_cert'.
+* ``monitor_ssl_cert``
+    Monitor SSL certificate, if monitor SSL is enabled and ``monitor_cert_source``
+    is not 'cephadm-signed'. This should have the certificate .pem format.
+* ``monitor_ssl_key``
+    Monitor SSL key, if monitor SSL is enabled and ``monitor_cert_source`` is not
+    'cephadm-signed'. This should have the key .pem format.
+* ``monitor_ip_addrs``
+    If ``monitor_ip_addrs`` is provided and the specified IP address is assigned to the host,
+    that IP address will be used. If IP address is not present, then 'monitor_networks' will be checked.
+* ``monitor_networks``
+    If ``monitor_networks`` is specified, an IP address that matches one of the specified
+    networks will be used. If IP not present, then default host ip will be used.
 
 .. _ingress-virtual-ip:
 

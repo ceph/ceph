@@ -374,7 +374,7 @@ int SSDDriver::restore_blocks_objects(const DoutPrefixProvider* dpp, ObjectDataC
 uint64_t SSDDriver::get_free_space(const DoutPrefixProvider* dpp)
 {
     efs::space_info space = efs::space(partition_info.location);
-    return space.available;
+    return (space.available < partition_info.reserve_size) ? 0 : (space.available - partition_info.reserve_size);
 }
 
 void SSDDriver::set_free_space(const DoutPrefixProvider* dpp, uint64_t free_space)
@@ -516,6 +516,7 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, const Executor& ex, con
         auto ec = boost::system::error_code{-ret, boost::system::system_category()};
         ceph::async::post(std::move(p), ec, bufferlist{});
     } else {
+        // coverity[leaked_storage:SUPPRESS]
         (void)p.release();
     }
   }, token, dpp, ex, key, read_ofs, read_len);

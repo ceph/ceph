@@ -130,8 +130,7 @@
              [showNavLinks]="false"
              [showFilterTools]="false"
              [showDownloadCopyButton]="false"
-             defaultTab="cluster-logs"
-             [scrollable]="true"></cd-logs>
+             defaultTab="cluster-logs"></cd-logs>
 
 
     <ng-template #upgradeStatusTpl>
@@ -193,7 +192,7 @@
   <div class="w-50"
        *ngIf="!errorMessage; else upgradeInfoError">
     <span class="text-info justify-content-center align-items-center"
-          i18n>Fetching registry informations
+          i18n>Fetching registry information
       <i [ngClass]="[icons.spin, icons.spinner]"></i>
     </span>
   </div>
@@ -217,7 +216,7 @@
   <span class="text-danger justify-content-center align-items-center"
         i18n>
     <i [ngClass]="[icons.danger]"></i>
-    Failed to fetch registry informations
+    Failed to fetch registry information
   </span>
 </ng-template>
 

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,30 +17,44 @@
 #ifndef CEPH_COMMON_ASYNC_BLOCKED_COMPLETION_H
 #define CEPH_COMMON_ASYNC_BLOCKED_COMPLETION_H
 
+/// \file common/async/blocked_completion.h
+///
+/// \brief A blocking `completion token`
+///
+/// This completion token will actually hard-block your thread. Do not
+/// do so within an `io_context` thread.
+
 #include <condition_variable>
 #include <mutex>
 #include <optional>
 
 #include <boost/asio/async_result.hpp>
-#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/disposition.hpp>
 
 #include <boost/system/error_code.hpp>
 
-#include <common/async/concepts.h>
+#include "common/async/redirect_error.h"
 
 namespace ceph::async {
-
-namespace bs = boost::system;
-
+/// A \ref `completion token` type that blocks the current thread
+/// until the operation completes.
+///
+/// \warning Keep deadlocks in mind. Do not use in threads that expect
+/// to be asynchronous.
 class use_blocked_t {
 public:
   use_blocked_t() = default;
 
-  auto operator [](bs::error_code& ec) const {
-    return boost::asio::redirect_error(use_blocked_t{}, ec);
+  /// Redirect the \ref `disposition` of the operation to a
+  /// variable. (A `disposition` is a concept generalizing error codes
+  /// and exceptions.)
+  template<boost::asio::disposition Disposition>
+  auto operator [](Disposition& d) const {
+    return redirect_error(use_blocked_t{}, d);
   }
 };
 
+/// The archetypical instance of `use_blocked_t`
 inline constexpr use_blocked_t use_blocked;
 
 namespace detail {

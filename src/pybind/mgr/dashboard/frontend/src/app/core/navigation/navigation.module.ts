@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { NgModule } from '@angular/core';
+import { NgModule, CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
 import { NgbCollapseModule, NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
@@ -11,7 +11,12 @@ import {
   ThemeModule,
   DialogModule,
   GridModule,
-  BreadcrumbModule
+  BreadcrumbModule,
+  ModalModule,
+  ToggleModule,
+  ButtonModule,
+  PlaceholderModule,
+  TagModule
 } from 'carbon-components-angular';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -25,6 +30,9 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
+import { NotificationPanelComponent } from './notification-panel/notification-panel.component';
+import { NotificationHeaderComponent } from './notification-panel/header/notification-header.component';
+import { NotificationAreaComponent } from './notification-panel/notification-area/notification-area.component';
 
 // Icons
 import UserFilledIcon from '@carbon/icons/es/user--filled/20';
@@ -42,6 +50,7 @@ import ObservabilityIcon from '@carbon/icons/es/observed--hail/20';
 import AdminIcon from '@carbon/icons/es/network--admin-control/20';
 import LockedIcon from '@carbon/icons/es/locked/16';
 import LogoutIcon from '@carbon/icons/es/logout/16';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 
 @NgModule({
   imports: [
@@ -58,7 +67,12 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     ThemeModule,
     DialogModule,
     GridModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    ModalModule,
+    ToggleModule,
+    ButtonModule,
+    PlaceholderModule,
+    TagModule
   ],
   declarations: [
     AboutComponent,
@@ -66,11 +80,16 @@ import LogoutIcon from '@carbon/icons/es/logout/16';
     BreadcrumbsComponent,
     NavigationComponent,
     NotificationsComponent,
+    NotificationPanelComponent,
+    NotificationHeaderComponent,
+    NotificationAreaComponent,
     DashboardHelpComponent,
     AdministrationComponent,
     IdentityComponent
   ],
-  exports: [NavigationComponent, BreadcrumbsComponent]
+  providers: [ModalCdsService],
+  exports: [NavigationComponent, BreadcrumbsComponent],
+  schemas: [CUSTOM_ELEMENTS_SCHEMA]
 })
 export class NavigationModule {
   constructor(private iconService: IconService) {

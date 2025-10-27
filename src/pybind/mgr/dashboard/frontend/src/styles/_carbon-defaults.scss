@@ -38,6 +38,10 @@ Custom theme
 ******************************************/
 @forward './themes/content';
 
+//Importing carbon tags token
+
+@use '@carbon/styles/scss/components/tag/tokens' as tag-tokens;
+
 /******************************************
 Datatable
 ******************************************/
@@ -64,6 +68,54 @@ tr.cds--parent-row.cds--expandable-row + tr[data-child-row] td {
 
 th {
   padding-block: 0 !important;
+}
+
+/******************************************
+ Tags
+******************************************/
+.tag-success {
+  background-color: theme.$support-success;
+  color: colors.$white;
+}
+
+.tag-warning {
+  background: theme.$support-warning;
+  color: colors.$white;
+}
+
+.tag-danger {
+  background: theme.$support-error;
+  color: colors.$white;
+}
+
+.tag-primary {
+  background: vv.$primary;
+  color: colors.$white;
+}
+
+.tag-secondary {
+  background: tag-tokens.$tag-color-warm-gray;
+  color: colors.$white;
+}
+
+.tag-info {
+  background-color: vv.$primary;
+  color: colors.$white;
+}
+
+.tag-light {
+  background: colors.$white;
+  border: tag-tokens.$tag-color-gray;
+}
+
+.tag-dark {
+  background: tag-tokens.$tag-color-cool-gray;
+  color: colors.$white;
+}
+
+.tag-default {
+  background: tag-tokens.$tag-border-gray;
+  color: colors.$white;
 }
 
 /******************************************
@@ -176,6 +228,7 @@ Carbon Popover
 
 .cds--popover-content {
   background-color: theme.$background;
+  padding: layout.$spacing-05;
 }
 
 // inner container class for overflow

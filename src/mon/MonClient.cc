@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -535,11 +536,11 @@ void MonClient::shutdown()
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
-    asio::dispatch(
-      asio::append(std::move(version_requests.begin()->second),
-		   make_error_code(monc_errc::shutting_down), 0, 0));
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
 		   << version_requests.begin()->first << dendl;
+    asio::post(service.get_executor(),
+               asio::append(std::move(version_requests.begin()->second),
+                            make_error_code(monc_errc::shutting_down), 0, 0));
     version_requests.erase(version_requests.begin());
   }
   while (!mon_commands.empty()) {
@@ -769,9 +770,11 @@ void MonClient::_reopen_session(int rank)
 
   // throw out version check requests
   while (!version_requests.empty()) {
-    asio::dispatch(asio::append(std::move(version_requests.begin()->second),
-				make_error_code(monc_errc::session_reset),
-				0, 0));
+    ldout(cct, 20) << __func__ << " canceling and discarding version request "
+		   << version_requests.begin()->first << dendl;
+    asio::post(service.get_executor(),
+               asio::append(std::move(version_requests.begin()->second),
+                            make_error_code(monc_errc::session_reset), 0, 0));
     version_requests.erase(version_requests.begin());
   }
 
@@ -965,6 +968,11 @@ void MonClient::_finish_hunting(int auth_err)
 void MonClient::tick()
 {
   ldout(cct, 10) << __func__ << dendl;
+
+  if (stopping) {
+    ldout(cct, 1) << "skipping tick on shutdown" << dendl;
+    return;
+  }
 
   utime_t now = ceph_clock_now();
 

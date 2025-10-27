@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph distributed storage system
  *
@@ -247,7 +248,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   for (unsigned int i = 0; i < k - padded_chunks; i++) {
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, i * blocksize, blocksize);
-    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
+    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN, 1);
     ceph_assert(chunk.is_contiguous());
   }
   if (padded_chunks) {
@@ -285,7 +286,7 @@ int ErasureCode::encode_prepare(const bufferlist &raw,
   for (raw_shard_id_t i; i < k - padded_chunks; ++i) {
     bufferlist &chunk = encoded[chunk_index(i)];
     chunk.substr_of(prepared, (int)i * blocksize, blocksize);
-    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN);
+    chunk.rebuild_aligned_size_and_memory(blocksize, SIMD_ALIGN, 1);
     ceph_assert(chunk.is_contiguous());
   }
   if (padded_chunks) {

@@ -79,8 +79,10 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/DecayCounter.cc
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/JSONFormatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/TableFormatter.cc
+  ${PROJECT_SOURCE_DIR}/src/common/XMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
-  ${PROJECT_SOURCE_DIR}/src/common/Journald.cc
   ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/TextTable.cc
@@ -125,6 +127,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/common/scrub_types.cc
   ${PROJECT_SOURCE_DIR}/src/xxHash/xxhash.c
+  $<$<BOOL:${WITH_SYSTEMD}>:${PROJECT_SOURCE_DIR}/src/common/Journald.cc>
   ${crimson_common_srcs}
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:common-options-objs>)

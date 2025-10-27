@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -20,7 +21,7 @@
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's
-#include "common/admin_finisher.h"
+#include "common/admin_finisher.h" // for asok_finisher
 #include "include/ceph_assert.h" 
 #include "include/common_fwd.h"
 
@@ -49,6 +50,7 @@
 #include <memory>
 #include <string>
 #include <tuple>
+#include <vector>
 
 //#define DEBUG_RECOVERY_OIDS   // track std::set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
@@ -78,6 +80,7 @@ namespace Scrub {
   void put_with_id(PG *pg, uint64_t id);
   typedef TrackedIntPtr<PG> PGRef;
 #else
+#include <boost/intrusive_ptr.hpp>
   typedef boost::intrusive_ptr<PG> PGRef;
 #endif
 

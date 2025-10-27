@@ -39,8 +39,12 @@ class Module(MgrModule):
         if remote_mon_host and cephx_key:
             conf['mon_host'] = remote_mon_host
             conf['key'] = cephx_key
-        return self.fs_snapshot_mirror.peer_add(fs_name, remote_cluster_spec,
-                                                remote_fs_name, remote_conf=conf)
+        r, out, err = self.fs_snapshot_mirror.peer_add(fs_name, remote_cluster_spec,
+                                                       remote_fs_name, remote_conf=conf)
+        out = (f"{out}\n"
+               "Warning: The 'peer_add' command is deprecated and will be removed in a "
+               "future release. Use 'peer_bootstrap' instead.\n")
+        return r, out, err
 
     @CLIReadCommand('fs snapshot mirror peer_list')
     def snapshot_mirror_peer_list(self,
@@ -84,7 +88,7 @@ class Module(MgrModule):
         """Remove a snapshot mirrored directory"""
         return self.fs_snapshot_mirror.remove_dir(fs_name, path)
 
-    @CLIWriteCommand('fs snapshot mirror ls')
+    @CLIReadCommand('fs snapshot mirror ls')
     def snapshot_mirror_ls(self,
                            fs_name: str):
         """List the snapshot mirrored directories"""

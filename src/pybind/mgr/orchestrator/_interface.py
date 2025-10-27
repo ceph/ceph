@@ -1,4 +1,3 @@
-
 """
 ceph-mgr orchestrator interface
 
@@ -587,10 +586,13 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def cert_store_cert_ls(self, show_details: bool = False) -> OrchResult[Dict[str, Any]]:
+    def cert_store_cert_ls(self,
+                           filter_by: str = '',
+                           show_details: bool = False,
+                           include_cephadm_signed: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
-    def cert_store_entity_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
+    def cert_store_bindings_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
         raise NotImplementedError()
 
     def cert_store_reload(self) -> OrchResult[str]:
@@ -599,7 +601,7 @@ class Orchestrator(object):
     def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
-    def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
     def cert_store_get_cert(
@@ -624,7 +626,7 @@ class Orchestrator(object):
         self,
         cert: str,
         key: str,
-        entity: str,
+        consumer: str,
         cert_name: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
@@ -638,6 +640,7 @@ class Orchestrator(object):
         cert: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -692,6 +695,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
             'promtail': self.apply_promtail,
+            'alloy': self.apply_alloy,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -943,6 +947,10 @@ class Orchestrator(object):
         """Update existing a Promtail daemon(s)"""
         raise NotImplementedError()
 
+    def apply_alloy(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a alloy daemon(s)"""
+        raise NotImplementedError()
+
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
@@ -1073,6 +1081,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'ceph-exporter': 'ceph-exporter',
         'loki': 'loki',
         'promtail': 'promtail',
+        'alloy': 'alloy',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
@@ -1108,6 +1117,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'prometheus': ['prometheus'],
         'loki': ['loki'],
         'promtail': ['promtail'],
+        'alloy': ['alloy'],
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],
         'crash': ['crash'],

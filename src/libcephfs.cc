@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -2216,6 +2217,15 @@ private:
     io_info->callback(io_info);
   }
 };
+
+extern "C" int64_t ceph_ll_nonblocking_fsync(class ceph_mount_info *cmount,
+					     Inode *in, struct ceph_ll_io_info *io_info)
+{
+  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+
+  return (cmount->get_client()->nonblocking_fsync(
+	                in, io_info->syncdataonly, onfinish));
+}
 
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)

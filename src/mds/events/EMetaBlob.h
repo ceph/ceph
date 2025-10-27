@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -104,7 +105,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<EMetaBlob::fullbit*>& ls);
+    static std::list<EMetaBlob::fullbit> generate_test_instances();
 
     void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
@@ -174,7 +175,7 @@ public:
       out << std::endl;
     }
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<remotebit*>& ls);
+    static std::list<remotebit> generate_test_instances();
   };
   WRITE_CLASS_ENCODER_FEATURES(remotebit)
 
@@ -195,7 +196,7 @@ public:
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<nullbit*>& ls);
+    static std::list<nullbit> generate_test_instances();
     void print(std::ostream& out) const {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
@@ -313,7 +314,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<dirlump*>& ls);
+    static std::list<dirlump> generate_test_instances();
   };
   WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
@@ -363,7 +364,7 @@ private:
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<EMetaBlob*>& ls);
+  static std::list<EMetaBlob> generate_test_instances();
 
   // for replay, in certain cases
   //LogSegment *_segment;

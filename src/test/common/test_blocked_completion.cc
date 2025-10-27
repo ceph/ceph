@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,9 +13,14 @@
  *
  */
 
+#include "common/async/blocked_completion.h"
+
+#include <exception>
 
 #include <boost/asio/append.hpp>
+#include <boost/asio/awaitable.hpp>
 #include <boost/asio/async_result.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
@@ -23,7 +29,7 @@
 
 #include <gtest/gtest.h>
 
-#include "common/async/blocked_completion.h"
+
 using namespace std::literals;
 
 namespace asio = boost::asio;
@@ -150,6 +156,44 @@ TEST(BlockedCompletion, AnError)
   EXPECT_NO_THROW(id(t.get_executor(), async::use_blocked[ec],
 		     sys::error_code{EDOM, sys::system_category()}, 5, 3));
   EXPECT_EQ(sys::error_code(EDOM, sys::system_category()), ec);
+}
+
+TEST(BlockedCompletion, AnException)
+{
+  context_thread t;
+  std::exception_ptr e = nullptr;
+
+  ASSERT_FALSE(e);
+  ASSERT_THROW(asio::co_spawn(t.get_executor(),
+			      []() -> asio::awaitable<void> {
+				throw std::exception{};
+				co_return;
+			      }, async::use_blocked),
+	       std::exception);
+  // Have yet to divert an exception
+  ASSERT_FALSE(e);
+
+  ASSERT_NO_THROW(asio::co_spawn(t.get_executor(),
+				 []() -> asio::awaitable<void> {
+				   throw std::exception{};
+				   co_return;
+				 }, async::use_blocked[e]));
+  // Exception diverted
+  ASSERT_TRUE(e);
+
+  ASSERT_NO_THROW(asio::co_spawn(t.get_executor(),
+				 []() -> asio::awaitable<void> {
+				   co_return;
+				 }, async::use_blocked));
+  // Previously diverted exception not overwritten
+  ASSERT_TRUE(e);
+
+  ASSERT_NO_THROW(asio::co_spawn(t.get_executor(),
+				 []() -> asio::awaitable<void> {
+				   co_return;
+				 }, async::use_blocked[e]));
+  // Success diverted to overwrite previous exception
+  ASSERT_FALSE(e);
 }
 
 TEST(BlockedCompletion, MoveOnly)

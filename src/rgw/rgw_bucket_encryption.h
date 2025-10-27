@@ -1,10 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 #include <include/types.h>
+#include "include/encoding.h"
 
 class XMLObj;
+namespace ceph { class Formatter; }
 
 class ApplyServerSideEncryptionByDefault
 {
@@ -137,6 +139,6 @@ public:
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWBucketEncryptionConfig*>& o);
+  static std::list<RGWBucketEncryptionConfig> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWBucketEncryptionConfig)

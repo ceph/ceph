@@ -1537,7 +1537,7 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     Read_CB cb(&bl);
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+    EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs-1), &cb, optional_yield{yield}), 0);
     
     boost::system::error_code ec;
     request req;
@@ -1702,8 +1702,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     EXPECT_EQ(testData, "test data");
 
     // Ensure attr is not modified
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "test_value");  
@@ -1824,8 +1823,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     EXPECT_EQ(testData, "test data");
 
     // Ensure attr is merged 
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "copy_value");  
@@ -1946,8 +1944,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     EXPECT_EQ(testData, "test data");
     
     // Ensure attr is replaced
-    rgw_obj copyObj = destObj->get_obj();
-    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+    ASSERT_EQ(destObj->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
     rgw::sal::Attrs copyAttrs = destObj->get_attrs();
     buffer::list val = copyAttrs["user.rgw.test_attr"];
     EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2216,7 +2213,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       Read_CB cb(&bl);
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op_enabled(objEnabled->get_read_op());
       EXPECT_EQ(read_op_enabled->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op_enabled->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
       boost::system::error_code ec;
       request req;
@@ -2285,7 +2282,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       Read_CB cb(&bl);
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op_suspended(objSuspended->get_read_op());
       EXPECT_EQ(read_op_suspended->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op_suspended->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
 
       boost::system::error_code ec;
       request req;
@@ -2454,8 +2451,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is not modified
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "test_value");  
@@ -2549,8 +2545,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is not modified
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "test_value");  
@@ -2675,8 +2670,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is merged
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2770,8 +2764,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is merged  
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2896,8 +2889,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
       // Ensure attr is replaced
-      rgw_obj copyObj = destObjEnabled->get_obj();
-      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjEnabled->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjEnabled->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -2991,8 +2983,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
       // Ensure attr is replaced
-      rgw_obj copyObj = destObjSuspended->get_obj();
-      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp, &copyObj), 0);
+      ASSERT_EQ(destObjSuspended->get_obj_attrs(optional_yield{yield}, env->dpp), 0);
       rgw::sal::Attrs copyAttrs = destObjSuspended->get_attrs();
       buffer::list val = copyAttrs["user.rgw.test_attr"];
       EXPECT_EQ(val.to_str(), "copy_value");  
@@ -3189,7 +3180,6 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), -2); // Simple read; should return -ENOENT
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), -2);
 
     /* TODO: 
     std::string attr_val;
@@ -3266,7 +3256,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-    EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, nullptr, optional_yield{yield}), 0);
+    EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), nullptr, optional_yield{yield}), 0);
     EXPECT_EQ(objEnabled->get_instance(), instances[0]); // Next latest version
 
     objEnabled->set_instance(instances[0]);
@@ -3304,7 +3294,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
       next->set_instance("");
       std::unique_ptr<rgw::sal::Object::ReadOp> read_op(next->get_read_op());
       EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
-      EXPECT_EQ(read_op->iterate(env->dpp, 0, ofs, &cb, optional_yield{yield}), 0);
+      EXPECT_EQ(read_op->iterate(env->dpp, 0, (ofs - 1), &cb, optional_yield{yield}), 0);
       EXPECT_EQ(next->get_instance(), instances[0]); // Next latest version
     }
 

@@ -105,6 +105,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
+RBD_IMAGE_METADATA = ('pool_id', 'image_name')
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
@@ -112,6 +114,8 @@ NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
 SMB_METADATA = ('smb_version', 'volume',
                 'subvolume_group', 'subvolume', 'netbiosname', 'share')
+
+CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
 
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
@@ -760,6 +764,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             RBD_MIRROR_METADATA
         )
 
+        metrics['rbd_image_metadata'] = Metric(
+            'untyped',
+            'rbd_image_metadata',
+            'RBD Image Metadata',
+            RBD_IMAGE_METADATA
+        )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -793,6 +804,12 @@ class Module(MgrModule, OrchestratorClientMixin):
             'smb_metadata',
             'SMB Metadata',
             SMB_METADATA
+        )
+        metrics['cephadm_daemon_status'] = Metric(
+            'gauge',
+            'cephadm_daemon_status',
+            'Status of cephadm daemons (0=stopped, 1=running, 2=errored)',
+            CEPHADM_DAEMON_STATUS
         )
 
         for flag in OSD_FLAGS:
@@ -983,6 +1000,30 @@ class Module(MgrModule, OrchestratorClientMixin):
                     pool['recovery_rate'].get(stat, 0),
                     (pool['pool_id'],)
                 )
+
+    @profile_method()
+    def set_cephadm_daemon_status_metrics(self) -> None:
+        try:
+            daemons = raise_if_exception(self.list_daemons())
+            for daemon in daemons:
+                service_type = getattr(daemon, 'daemon_type', '')
+                daemon_name = getattr(daemon, 'daemon_name', '')
+                hostname = str(getattr(daemon, 'hostname', ''))
+                status = getattr(daemon, 'status', '')
+                service_name_attr = getattr(daemon, 'service_name', '')
+                service_name = service_name_attr() if callable(service_name_attr) else str(service_name_attr)
+
+                self.metrics['cephadm_daemon_status'].set(
+                    int(status),
+                    (
+                        service_type,
+                        daemon_name,
+                        hostname,
+                        service_name,
+                    )
+                )
+        except Exception as e:
+            self.log.error(f"Failed to collect cephadm daemon status: {e}")
 
     @profile_method()
     def get_df(self) -> None:
@@ -1360,6 +1401,20 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rbd_mirror_metadata'].set(
                     1, rbd_mirror_metadata
                 )
+        try:
+            rbd = RBD()
+            for pool in osd_map['pools']:
+                pool_id = pool['pool']
+                pool_name = pool['pool_name']
+                if 'rbd' in pool.get('application_metadata', {}):
+                    with self.rados.open_ioctx(pool_name) as ioctx:
+                        for image_meta in rbd.list2(ioctx):
+                            image_name = image_meta['name']
+                            self.metrics['rbd_image_metadata'].set(
+                                1, (str(pool_id), image_name)
+                            )
+        except Exception as e:
+            self.log.error(f"Failed to collect RBD image metadata: {e}")
 
     @profile_method()
     def get_num_objects(self) -> None:
@@ -1739,9 +1794,9 @@ class Module(MgrModule, OrchestratorClientMixin):
     def get_smb_metadata(self) -> None:
         try:
             mgr_map = self.get('mgr_map')
-            available_modules = [m['name'] for m in mgr_map['available_modules']]
-            if 'smb' not in available_modules:
-                self.log.debug("SMB module is not available, skipping SMB metadata collection")
+            enabled_modules = mgr_map['modules']
+            if 'smb' not in enabled_modules:
+                self.log.debug("SMB module is not enabled, skipping SMB metadata collection")
                 return
 
             if not self.available()[0]:
@@ -1817,6 +1872,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
         self.get_smb_metadata()
+        self.set_cephadm_daemon_status_metrics()
 
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
@@ -1861,6 +1917,7 @@ class Module(MgrModule, OrchestratorClientMixin):
     def configure(self, server_addr: str, server_port: int) -> None:
         cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
+
         if ret == 0 and out is not None:
             try:
                 security_config = json.loads(out)
@@ -1868,8 +1925,11 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.setup_tls_config(server_addr, server_port)
                     return
             except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                   'Falling back to default configuration')
+                self.log.exception(
+                    'Failed to setup cephadm based secure monitoring stack: %s\n'
+                    'Falling back to default configuration',
+                    e
+                )
 
         # In any error fallback to plain http mode
         self.setup_default_config(server_addr, server_port)

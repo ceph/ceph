@@ -20,7 +20,7 @@ export enum CellTemplate {
   // supports an optional custom configuration:
   // {
   //   ...
-  //   cellTransformation: CellTemplate.badge,
+  //   cellTransformation: CellTemplate.tag,
   //   customTemplateConfig: {
   //     class?: string; // Additional class name.
   //     prefix?: any;   // Prefix of the value to be displayed.
@@ -30,7 +30,7 @@ export enum CellTemplate {
   //     }
   //   }
   // }
-  badge = 'badge',
+  tag = 'tag',
   // Maps the value using the given dictionary.
   // {
   //   ...
@@ -79,5 +79,25 @@ export enum CellTemplate {
   //   ...
   //   cellTransformation: CellTemplate.copy,
   */
-  copy = 'copy'
+  copy = 'copy',
+  /*
+  This template will let you edit the cell value inline. You can pass the validators in the
+  customTemplateConfig.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.editing,
+  //    customTemplateConfig: {
+  //          validators: [Validators.required, Validators.pattern(/^[A-Za-z ]+$/)],
+  //          asyncValidators: [AsyncValidator]
+  //          errorMessages: {
+  //            required:  $localize`This field is required.`,
+  //            pattern: $localize`The field format is invalid.`
+  //          }
+  //    }
+  //    ...
+  // }
+  Also need to pass forceIdentifer=true and also a unique identifier prop like
+  identifier="uid" to the table in some cases to avoid issues.
+  */
+  editing = 'editing'
 }

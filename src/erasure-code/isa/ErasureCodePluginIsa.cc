@@ -38,14 +38,17 @@ int ErasureCodePluginIsa::factory(const std::string &directory,
   ErasureCodeIsa *interface;
     std::string technique;
     technique = profile.find("technique")->second;
+    std::string _m = profile.find("m")->second;
     if ((technique == "reed_sol_van")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             technique,
-                                            ErasureCodeIsaDefault::kVandermonde);
+                                            ErasureCodeIsaDefault::kVandermonde,
+                                            _m);
     } else if ((technique == "cauchy")) {
       interface = new ErasureCodeIsaDefault(tcache,
                                             technique,
-                                            ErasureCodeIsaDefault::kCauchy);
+                                            ErasureCodeIsaDefault::kCauchy,
+                                            _m);
     } else {
       *ss << "technique=" << technique << " is not a valid coding technique. "
         << " Choose one of the following: "

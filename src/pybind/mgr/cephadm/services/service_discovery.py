@@ -12,12 +12,12 @@ import orchestrator  # noqa
 from mgr_util import build_url
 from typing import Dict, List, TYPE_CHECKING, cast, Collection, Callable, NamedTuple, Optional, IO
 from cephadm.services.nfs import NFSService
+from cephadm.services.ingress import IngressService
 from cephadm.services.monitoring import AlertmanagerService, NodeExporterService, PrometheusService
 import secrets
 from mgr_util import verify_tls_files
 import tempfile
 
-from cephadm.services.ingress import IngressSpec
 from cephadm.services.cephadmservice import CephExporterService
 from cephadm.services.nvmeof import NvmeofService
 from cephadm.services.service_registry import service_registry
@@ -39,6 +39,9 @@ def cherrypy_filter(record: logging.LogRecord) -> bool:
 logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 cherrypy.log.access_log.propagate = False
 logger = logging.getLogger(__name__)
+
+
+CEPHADM_SVC_DISCOVERY_CERT_DURATION = (365 * 5)
 
 
 class Route(NamedTuple):
@@ -93,13 +96,13 @@ class ServiceDiscovery:
     def configure_tls(self, server: Server) -> None:
         addr = self.mgr.get_mgr_ip()
         host = self.mgr.get_hostname()
-        cert, key = self.mgr.cert_mgr.generate_cert(host, addr)
+        tls_pair = self.mgr.cert_mgr.generate_cert(host, addr, duration_in_days=CEPHADM_SVC_DISCOVERY_CERT_DURATION)
         self.cert_file = tempfile.NamedTemporaryFile()
-        self.cert_file.write(cert.encode('utf-8'))
+        self.cert_file.write(tls_pair.cert.encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
 
         self.key_file = tempfile.NamedTemporaryFile()
-        self.key_file.write(key.encode('utf-8'))
+        self.key_file.write(tls_pair.key.encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
         verify_tls_files(self.cert_file.name, self.key_file.name)
@@ -220,12 +223,13 @@ class Root(Server):
         srv_entries = []
         for dd in self.mgr.cache.get_daemons_by_type('ingress'):
             if dd.service_name() in self.mgr.spec_store:
-                spec = cast(IngressSpec, self.mgr.spec_store[dd.service_name()].spec)
                 assert dd.hostname is not None
                 if dd.daemon_type == 'haproxy':
-                    addr = self.mgr.inventory.get_addr(dd.hostname)
+                    ingress = cast(IngressService, service_registry.get_service('ingress'))
+                    monitor_ip, monitor_port = ingress.get_monitoring_details(dd.service_name(), dd.hostname)
+                    addr = monitor_ip or dd.ip or self.mgr.inventory.get_addr(dd.hostname)
                     srv_entries.append({
-                        'targets': [f"{build_url(host=addr, port=spec.monitor_port).lstrip('/')}"],
+                        'targets': [f"{build_url(host=addr, port=monitor_port).lstrip('/')}"],
                         'labels': {'ingress': dd.service_name(), 'instance': dd.hostname}
                     })
         return srv_entries

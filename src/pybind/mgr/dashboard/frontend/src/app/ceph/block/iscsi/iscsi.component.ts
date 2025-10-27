@@ -39,11 +39,11 @@ export class IscsiComponent implements OnInit {
         name: $localize`State`,
         prop: 'state',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            up: { class: 'badge-success' },
-            down: { class: 'badge-danger' }
+            up: { class: 'tag-success' },
+            down: { class: 'tag-danger' }
           }
         }
       },

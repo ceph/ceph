@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,6 +22,7 @@
 #include "kv/RocksDBStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/errno.h"

@@ -1,26 +1,22 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
+#include "common/Finisher.h"
 #include "rgw_service.h"
 
 #include "rgw_tools.h"
 
 
-class Context;
-
 class RGWSI_Zone;
-class RGWSI_Finisher;
 
 class RGWWatcher;
-class RGWSI_Notify_ShutdownCB;
 struct RGWCacheNotifyInfo;
 
 class RGWSI_Notify : public RGWServiceInstance
 {
   friend class RGWWatcher;
-  friend class RGWSI_Notify_ShutdownCB;
   friend struct RGWServices_Def;
 
 public:
@@ -29,7 +25,7 @@ public:
 private:
   RGWSI_Zone *zone_svc{nullptr};
   librados::Rados *rados{nullptr};
-  RGWSI_Finisher *finisher_svc{nullptr};
+  Finisher finisher;
 
   ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
   rgw_pool control_pool;
@@ -48,9 +44,6 @@ private:
 
   CB *cb{nullptr};
 
-  std::optional<int> finisher_handle;
-  RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
-
   bool finalized{false};
 
   int init_watch(const DoutPrefixProvider *dpp,
@@ -58,11 +51,9 @@ private:
   void finalize_watch(boost::asio::yield_context yield);
 
   void init(RGWSI_Zone *_zone_svc,
-            librados::Rados* rados_,
-            RGWSI_Finisher *_finisher_svc) {
+            librados::Rados* rados_) {
     zone_svc = _zone_svc;
     rados = rados_;
-    finisher_svc = _finisher_svc;
   }
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;

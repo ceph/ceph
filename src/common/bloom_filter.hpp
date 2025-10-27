@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 /*
  *******************************************************************
@@ -468,7 +468,7 @@ public:
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bloom_filter*>& ls);
+  static std::list<bloom_filter> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bloom_filter)
 
@@ -565,7 +565,7 @@ public:
   void encode(ceph::bufferlist& bl) const;
   void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
+  static std::list<compressible_bloom_filter> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(compressible_bloom_filter)
 

@@ -45,10 +45,10 @@
   </cd-table>
 </ng-container>
 
-<ng-template #badgeDictTpl
+<ng-template #tagDictTpl
              let-value="data.value">
   <span *ngFor="let instance of value | keyvalue; last as isLast">
-    <span class="badge badge-background-primary" >{{ instance.key }}: {{ instance.value }}</span>
+    <cds-tag class="tag-background-primary" >{{ instance.key }}: {{ instance.value }}</cds-tag>
     <ng-container *ngIf="!isLast">&nbsp;</ng-container>
   </span>
 </ng-template>

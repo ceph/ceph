@@ -92,7 +92,7 @@ describe('NavigationComponent', () => {
     spyOn(TestBed.inject(SummaryService), 'subscribe').and.callFake(() =>
       of({ health: { status: 'HEALTH_OK' } })
     );
-    spyOn(TestBed.inject(PrometheusAlertService), 'getAlerts').and.callFake(() => of([]));
+    spyOn(TestBed.inject(PrometheusAlertService), 'getGroupedAlerts').and.callFake(() => of([]));
     fixture = TestBed.createComponent(NavigationComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -139,7 +139,7 @@ describe('NavigationComponent', () => {
           '.tc_submenuitem_rgw_daemons',
           '.tc_submenuitem_rgw_users',
           '.tc_submenuitem_rgw_buckets',
-          '.tc_submenuitem_rgw_topics'
+          '.tc_submenuitem_rgw_notification'
         ]
       ]
     ];
@@ -188,7 +188,7 @@ describe('NavigationComponent', () => {
           '.tc_submenuitem_rgw_daemons',
           '.tc_submenuitem_rgw_users',
           '.tc_submenuitem_rgw_buckets',
-          '.tc_submenuitem_rgw_topics'
+          '.tc_submenuitem_rgw_notification'
         ]
       ]
     ];
@@ -229,17 +229,17 @@ describe('NavigationComponent', () => {
       const expectedTexts = {
         '.tc_menuitem_dashboard': 'Dashboard',
         '.tc_submenuitem_multiCluster_overview': 'Overview',
-        '.tc_submenuitem_multiCluster_manage_clusters': 'Manage Clusters',
+        '.tc_submenuitem_multiCluster_manage_clusters': 'Manage clusters',
         '.tc_submenuitem_cluster_pool': 'Pools',
         '.tc_submenuitem_cluster_hosts': 'Hosts',
-        '.tc_submenuitem_cluster_inventory': 'Physical Disks',
+        '.tc_submenuitem_cluster_inventory': 'Physical disks',
         '.tc_submenuitem_admin_services': 'Services',
         '.tc_submenuitem_cluster_monitor': 'Monitors',
         '.tc_submenuitem_cluster_osds': 'OSDs',
-        '.tc_submenuitem_cluster_crush': 'CRUSH Map',
+        '.tc_submenuitem_cluster_crush': 'CRUSH map',
         '.tc_submenuitem_admin_configuration': 'Configuration',
-        '.tc_submenuitem_admin_modules': 'Manager Modules',
-        '.tc_submenuitem_admin_users': 'Ceph Users',
+        '.tc_submenuitem_admin_modules': 'Manager modules',
+        '.tc_submenuitem_admin_users': 'Ceph users',
         '.tc_submenuitem_admin_upgrade': 'Upgrade',
         '.tc_submenuitem_observe_log': 'Logs',
         '.tc_submenuitem_observe_monitoring': 'Alerts',
@@ -248,14 +248,14 @@ describe('NavigationComponent', () => {
         '.tc_submenuitem_block_iscsi': 'iSCSI',
         '.tc_submenuitem_block_nvme': 'NVMe/TCP',
         '.tc_submenuitem_rgw_overview': 'Overview',
-        '.tc_submenuitem_rgw_users': 'Users',
+        '.tc_submenuitem_rgw_users': 'User management',
         '.tc_submenuitem_rgw_buckets': 'Buckets',
-        '.tc_submenuitem_rgw_topics': 'Topics',
+        '.tc_submenuitem_rgw_notification': 'Notification destination',
         '.tc_submenuitem_rgw_multi-site': 'Multi-site',
         '.tc_submenuitem_rgw_daemons': 'Gateways',
         '.tc_submenuitem_rgw_nfs': 'NFS',
         '.tc_submenuitem_rgw_configuration': 'Configuration',
-        '.tc_submenuitem_file_cephfs': 'File Systems',
+        '.tc_submenuitem_file_cephfs': 'File systems',
         '.tc_submenuitem_file_nfs': 'NFS'
       };
 

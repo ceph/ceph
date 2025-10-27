@@ -465,3 +465,6 @@ endfunction()
 
 add_catch2_test_rgw(rgw_hex)
 
+add_executable(unittest_rgw_async_utils test_rgw_async_utils.cc)
+add_ceph_unittest(unittest_rgw_async_utils)
+target_link_libraries(unittest_rgw_async_utils ${rgw_libs} ${UNITTEST_LIBS})

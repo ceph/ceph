@@ -56,6 +56,7 @@ Client Config Reference
 .. confval:: client_readahead_max_periods
 .. confval:: client_readahead_min
 .. confval:: client_reconnect_stale
+.. confval:: client_respect_subvolume_snapshot_visibility
 .. confval:: client_snapdir
 .. confval:: client_tick_interval
 .. confval:: client_use_random_mds

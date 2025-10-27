@@ -1,13 +1,12 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
-
-import { NgbActiveModal, NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
 
 import { FeedbackService } from '~/app/shared/api/feedback.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
@@ -16,9 +15,9 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   templateUrl: './feedback.component.html',
   styleUrls: ['./feedback.component.scss']
 })
-export class FeedbackComponent implements OnInit, OnDestroy {
+export class FeedbackComponent extends CdForm implements OnInit, OnDestroy {
   title = 'Feedback';
-  project: any = [
+  projects: any = [
     'dashboard',
     'block',
     'objects',
@@ -31,19 +30,20 @@ export class FeedbackComponent implements OnInit, OnDestroy {
   tracker: string[] = ['bug', 'feature'];
   api_key: string;
   keySub: Subscription;
-
+  submit: string;
   feedbackForm: CdFormGroup;
   isAPIKeySet = false;
   isFeedbackEnabled = true;
 
   constructor(
     private feedbackService: FeedbackService,
-    public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
-    public secondaryModal: NgbModal,
-    private notificationService: NotificationService,
-    private router: Router
-  ) {}
+    public mgrModuleService: MgrModuleService,
+    private notificationService: NotificationService
+  ) {
+    super();
+    this.submit = $localize`Submit`;
+  }
 
   ngOnInit() {
     this.createForm();
@@ -64,7 +64,7 @@ export class FeedbackComponent implements OnInit, OnDestroy {
   private createForm() {
     this.feedbackForm = new CdFormGroup({
       project: new UntypedFormControl('', Validators.required),
-      tracker: new UntypedFormControl('', Validators.required),
+      tracker: new UntypedFormControl(this.tracker[0], Validators.required),
       subject: new UntypedFormControl('', Validators.required),
       description: new UntypedFormControl('', Validators.required),
       api_key: new UntypedFormControl('', Validators.required)
@@ -97,13 +97,19 @@ export class FeedbackComponent implements OnInit, OnDestroy {
           this.feedbackForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
         }
       });
   }
 
-  redirect() {
-    this.activeModal.close();
-    this.router.navigate(['/mgr-modules']);
+  enableFeedbackModule() {
+    this.mgrModuleService.updateModuleState(
+      'feedback',
+      false,
+      null,
+      null,
+      'Enabled Feedback Module',
+      true
+    );
   }
 }

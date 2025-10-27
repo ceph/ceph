@@ -645,3 +645,62 @@ class SubvolumeBase(object):
                       f"subvolume={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
             raise VolumeException(-me.args[0], me.args[1])
+
+    def snapshot_visibility_set(self, value):
+        if value not in ("true", "false"):
+            raise VolumeException(-errno.EINVAL, "snapshot visibility value invalid")
+
+        subvol_root_path = os.path.dirname(self.path)
+        subvol_v2_path = self.path
+        snaps_visibility_vxattr = "ceph.dir.subvolume.snaps.visible"
+        subvolume_size = 0
+        try:
+            self.fs.setxattr(subvol_root_path, snaps_visibility_vxattr,
+                             str(value).encode('utf-8'), 0)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        # in case of a sized subvolume, a new srnode will be assigned to the
+        # volumes/<group-name>/<subvolume-name>/<uuid>/ path when applying
+        # ceph.quota.max_bytes which would assign it with the default value
+        # of is_snapdir_visible flag and right now the child snaprealm
+        # changes are not being compiled and sent to the client by MDS, so until
+        # that gets addressed, as a quick fix apply the vxattr on subvol root
+        # and the uuid path. Once the child snaprealm fix is in place, apply
+        # the vxattr only to subvolume root.
+        try:
+            subvolume_size = self.fs.getxattr(
+                subvol_v2_path, "ceph.quota.max_bytes").decode('utf-8')
+        except cephfs.NoData:
+            # should be non-sized subvol v2 path
+            pass
+        if int(subvolume_size) > 0:
+            try:
+                self.fs.setxattr(subvol_v2_path, snaps_visibility_vxattr,
+                                 str(value).encode('utf-8'), 0)
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
+            try:
+                 subvol_v2_path_snapshot_visibility = self.fs.getxattr(subvol_v2_path,
+                                        snaps_visibility_vxattr).decode('utf-8')
+                 if bool(subvol_v2_path_snapshot_visibility) != bool(value):
+                     raise VolumeException(-errno.EINVAL, "could not set "
+                                           f"{snaps_visibility_vxattr} to {value} "
+                                           f"on subvolume v2 path {subvol_v2_path}")
+            except cephfs.Error as e:
+                raise VolumeException(-e.args[0], e.args[1])
+
+        try:
+            return self.fs.getxattr(subvol_root_path,
+                                    snaps_visibility_vxattr).decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+    def snapshot_visibility_get(self):
+        subvol_parent_path = os.path.dirname(self.path)
+        try:
+            return self.fs.getxattr(subvol_parent_path,
+                                    "ceph.dir.subvolume.snaps.visible").decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])

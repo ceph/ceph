@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -105,6 +105,8 @@ public:
     LBAMapping pos,
     LBAMapping mapping,
     laddr_t laddr,
+    extent_len_t offset,
+    extent_len_t len,
     bool updateref) final;
 
 #ifdef UNIT_TESTS_BUILT
@@ -203,25 +205,89 @@ public:
   ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) final {
-    return update_refcount(t, addr, -1, true);
+    return update_refcount(t, addr, -1
+    ).si_then([this, &t](auto res) {
+      ceph_assert(res.refcount == 0);
+      if (res.addr.is_paddr()) {
+	return ref_iertr::make_ready_future<
+	  ref_update_result_t>(ref_update_result_t{
+	    std::move(res), std::nullopt});
+      }
+      return update_refcount(t, res.key, -1
+      ).si_then([indirect_result=std::move(res)](auto direct_result) mutable {
+	return indirect_result.mapping.refresh(
+	).si_then([direct_result=std::move(direct_result),
+		   indirect_result=std::move(indirect_result)](auto) {
+	  return ref_iertr::make_ready_future<
+	    ref_update_result_t>(ref_update_result_t{
+	      std::move(indirect_result),
+	      std::move(direct_result)});
+	});
+      });
+    });
+  }
+
+  ref_ret remove_indirect_mapping_only(
+    Transaction &t,
+    LBAMapping mapping) final {
+    assert(mapping.is_viewable());
+    assert(mapping.is_indirect());
+    return seastar::do_with(
+      std::move(mapping),
+      [&t, this](auto &mapping) {
+      return update_refcount(t, mapping.indirect_cursor.get(), -1
+      ).si_then([](auto res) {
+	return ref_iertr::make_ready_future<
+	  ref_update_result_t>(ref_update_result_t{
+	    std::move(res), std::nullopt});
+      });
+    });
   }
 
   ref_ret remove_mapping(
     Transaction &t,
     LBAMapping mapping) final {
     assert(mapping.is_viewable());
+    assert(mapping.is_complete());
     return seastar::do_with(
       std::move(mapping),
       [&t, this](auto &mapping) {
       auto &cursor = mapping.get_effective_cursor();
-      return update_refcount(t, &cursor, -1, true);
+      return update_refcount(t, &cursor, -1
+      ).si_then([this, &t, &mapping](auto res) {
+	ceph_assert(res.refcount == 0);
+	if (res.addr.is_paddr()) {
+	  assert(!mapping.is_indirect());
+	  return ref_iertr::make_ready_future<
+	    ref_update_result_t>(ref_update_result_t{
+	      std::move(res), std::nullopt});
+	}
+	assert(mapping.is_indirect());
+	auto &cursor = *mapping.direct_cursor;
+	return cursor.refresh().si_then([this, &t, &cursor] {
+	  return update_refcount(t, &cursor, -1);
+	}).si_then([indirect_result=std::move(res)]
+		   (auto direct_result) mutable {
+	  return indirect_result.mapping.refresh(
+	  ).si_then([direct_result=std::move(direct_result),
+		     indirect_result=std::move(indirect_result)](auto) {
+	    return ref_iertr::make_ready_future<
+	      ref_update_result_t>(ref_update_result_t{
+		std::move(indirect_result),
+		std::move(direct_result)});
+	  });
+	});
+      });
     });
   }
 
   ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) final {
-    return update_refcount(t, addr, 1, false);
+    return update_refcount(t, addr, 1
+    ).si_then([](auto res) {
+      return ref_update_result_t(std::move(res), std::nullopt);
+    });
   }
 
   ref_ret incref_extent(
@@ -232,7 +298,10 @@ public:
       std::move(mapping),
       [&t, this](auto &mapping) {
       auto &cursor = mapping.get_effective_cursor();
-      return update_refcount(t, &cursor, 1, false);
+      return update_refcount(t, &cursor, 1
+      ).si_then([](auto res) {
+	return ref_update_result_t(std::move(res), std::nullopt);
+      });
     });
   }
 
@@ -445,12 +514,11 @@ private:
 
   using update_refcount_iertr = ref_iertr;
   using update_refcount_ret = update_refcount_iertr::future<
-    ref_update_result_t>;
+    mapping_update_result_t>;
   update_refcount_ret update_refcount(
     Transaction &t,
     std::variant<laddr_t, LBACursor*> addr_or_cursor,
-    int delta,
-    bool cascade_remove);
+    int delta);
 
   /**
    * _update_mapping
@@ -546,7 +614,10 @@ private:
     laddr_t addr,
     int delta) {
     ceph_assert(delta > 0);
-    return update_refcount(t, addr, delta, false);
+    return update_refcount(t, addr, delta
+    ).si_then([](auto res) {
+      return ref_update_result_t(std::move(res), std::nullopt);
+    });
   }
 
   using _get_cursor_ret = get_mapping_iertr::future<LBACursorRef>;
@@ -584,13 +655,6 @@ private:
       return resolve_indirect_cursor(c, btree, indirect_cursor);
     });
   }
-
-  using _decref_intermediate_ret = ref_iertr::future<
-    update_mapping_ret_bare_t>;
-  _decref_intermediate_ret _decref_intermediate(
-    Transaction &t,
-    laddr_t addr,
-    extent_len_t len);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

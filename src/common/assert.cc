@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,7 @@
 
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "include/types.h" // for operator<<(std::list)
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"

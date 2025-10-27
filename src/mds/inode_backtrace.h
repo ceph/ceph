@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
@@ -35,7 +36,7 @@ struct inode_backpointer_t {
   void decode(ceph::buffer::list::const_iterator &bl);
   void decode_old(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inode_backpointer_t*>& ls);
+  static std::list<inode_backpointer_t> generate_test_instances();
 
   inodeno_t dirino;    // containing directory ino
   std::string dname;        // linking dentry name
@@ -60,7 +61,7 @@ struct inode_backtrace_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inode_backtrace_t*>& ls);
+  static std::list<inode_backtrace_t> generate_test_instances();
 
   /**
    * Compare two backtraces *for the same inode*.

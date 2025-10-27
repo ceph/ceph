@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/extent_pinboard.h"
 #include "crimson/os/seastore/transaction.h"
@@ -630,9 +630,15 @@ private:
     for (auto extent : extents) {
       ceph_assert(is_logical_type(extent->get_type()));
       extent->set_2q_state(extent_2q_state_t::Fresh);
+      auto len = extent->get_loaded_length();
+      if (len == 0) {
+        // The extent is possibly empty after being initially split/remapped
+        // by the ObjectDataHandler, we should only record non-empty extents
+        // to the warm out queue.
+        continue;
+      }
       auto lext = extent->cast<LogicalCachedExtent>();
       auto laddr = lext->get_laddr();
-      auto len = extent->get_loaded_length();
       auto end = extent->get_last_touch_end();
       // the extents evicted from warm_in queue will be recorded
       // in warm_out FIFO queue as recently accessed extents.

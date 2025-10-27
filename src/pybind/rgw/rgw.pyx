@@ -166,12 +166,12 @@ cdef make_ex(ret, msg):
         return Error(msg + (": error code %d" % ret))
 
 
-cdef bint readdir_cb(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) \
+cdef int readdir_cb(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) \
 except? -9000 with gil:
     if exc.PyErr_Occurred():
-        return False
+        return 0
     (<object>arg)(name, offset, flags)
-    return True
+    return 1
 
 
 class LibCephFSStateError(Error):

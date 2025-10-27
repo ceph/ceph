@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -57,6 +58,7 @@
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
 
+#include "common/JSONFormatter.h"
 #include "common/TextTable.h"
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
@@ -7834,6 +7836,17 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
 	break;
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
       uint32_t stripe_unit = g_conf().get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
+
+      if (stripe_unit == 0) {
+        if (((erasure_code->get_supported_optimizations() & 
+              ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) != 0) &&
+            (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations"))) {
+            stripe_unit = 16 * 1024;
+        } else {
+          stripe_unit = 4 * 1024;
+        }
+      } 
+    
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
@@ -11655,6 +11668,43 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply_no_propose;
     }
+
+    bool force_no_fake = false;
+	  cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
+
+
+    //This is the start of the validation for the w value in a blaum_roth profile
+    //this will search the Profile map, which contains the values for the parameters given in the command, for the technique parameter
+    if (auto found = profile_map.find("technique"); found != profile_map.end()) {
+
+      //if the technique parameter is found then save the value of it
+      string technique = found->second;
+
+      
+      //then search the profile map again for the w value, which doesnt have to be specified, and if it is found and the technique used is blaum-roth then check that the w value is correct.
+      if (found = profile_map.find("w"); technique == "blaum_roth" && found != profile_map.end()) {
+        int w = std::stoi(found->second);
+        
+        //checks if w+1 is not prime
+        if (w <= 2 || !mon.is_prime(w + 1)) {
+
+          if (force ^ force_no_fake) {
+            err = -EPERM;
+            ss << "Creating a blaum-roth erasure code profile with a w+1 value that is not prime is dangerious,"
+              << " as it can cause data corruption."
+              << " You need to use both --yes-i-really-mean-it and --force flags." << std::endl;
+            goto reply_no_propose;
+          } else if (!force && !force_no_fake) {
+            ss << "erasure-code-profile: " << profile_map 
+              << " must use a w value such that w+1 is prime and w is greater than 2." << std::endl;
+            err = -EINVAL;
+            goto reply_no_propose;
+          }
+        }
+      }
+    }
+
     string plugin = profile_map["plugin"];
 
     if (pending_inc.has_erasure_code_profile(name)) {
@@ -11676,8 +11726,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  err = 0;
 	  goto reply_no_propose;
 	}
-	bool force_no_fake = false;
-	cmd_getval(cmdmap, "yes_i_really_mean_it", force_no_fake);
+
 	if (!force) {
 	  err = -EPERM;
 	  ss << "will not override erasure code profile " << name
@@ -14443,33 +14492,59 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "availability tracking is disabled; you can enable it by setting the config option enable_availability_tracking";
       err = -EOPNOTSUPP;
       goto reply_no_propose;
-    }
-    TextTable tbl;
-    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
-    tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+    }  
+    
     std::map<uint64_t, PoolAvailability> pool_availability = mon.mgrstatmon()->get_pool_availability();
-    for (const auto& i : pool_availability) {
-      const auto& p = i.second;
-      double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
-      double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
-      double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
-      tbl << p.pool_name;
-      tbl << timespan_str(make_timespan(p.uptime));
-      tbl << timespan_str(make_timespan(p.downtime));
-      tbl << p.num_failures;
-      tbl << timespan_str(make_timespan(mtbf));
-      tbl << timespan_str(make_timespan(mttr));
-      tbl << score;
-      tbl << p.is_avail;
-      tbl << TextTable::endrow;
+
+    if (f) {
+      f->open_array_section("pools");
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+
+        f->open_object_section("pool");
+        f->dump_string("pool", p.pool_name);
+        f->dump_unsigned("uptime",    p.uptime);
+        f->dump_unsigned("downtime",  p.downtime);
+        f->dump_float("mtbf",      mtbf);
+        f->dump_float("mttr",      mttr);
+        f->dump_unsigned("num_failures", p.num_failures);
+        f->dump_float("score", score);
+        f->dump_bool("available", p.is_avail);
+        f->close_section(); 
+      }
+      f->close_section(); 
+      f->flush(rdata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("UPTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("DOWNTIME", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("NUMFAILURES", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTBF", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("MTTR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("SCORE", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("AVAILABLE", TextTable::LEFT, TextTable::RIGHT);
+
+      for (const auto& i : pool_availability) {
+        const auto& p = i.second;
+        double mtbf = p.num_failures > 0 ? (p.uptime / p.num_failures) : 0;
+        double mttr = p.num_failures > 0 ? (p.downtime / p.num_failures) : 0;
+        double score = mtbf > 0 ? mtbf / (mtbf +  mttr): 1.0;
+        tbl << p.pool_name;
+        tbl << timespan_str(make_timespan(p.uptime));
+        tbl << timespan_str(make_timespan(p.downtime));
+        tbl << p.num_failures;
+        tbl << timespan_str(make_timespan(mtbf));
+        tbl << timespan_str(make_timespan(mttr));
+        tbl << score;
+        tbl << p.is_avail;
+        tbl << TextTable::endrow;
+      }
+      rdata.append(stringify(tbl));
     }
-    rdata.append(stringify(tbl));
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;

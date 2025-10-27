@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,6 +27,7 @@
 #include "mds/CInode.h"
 #include "mds/CDentry.h"
 #include "mds/InoTable.h"
+#include "mds/snap.h" // for struct sr_t
 #include "mds/SnapServer.h"
 #include "cls/cephfs/cls_cephfs_client.h"
 

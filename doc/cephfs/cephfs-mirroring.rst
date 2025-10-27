@@ -4,7 +4,7 @@
 CephFS Snapshot Mirroring
 =========================
 
-CephFS supports asynchronous replication of snapshots to a remote CephFS file system via
+CephFS supports asynchronous push-based replication of snapshots to a remote CephFS file system via
 the ``cephfs-mirror`` tool. Snapshots are synchronized by mirroring snapshot data followed by
 creating a remote snapshot with the same name (for a given directory on the remote file system) as
 the source snapshot.
@@ -173,6 +173,8 @@ and the user key. However, bootstrapping a peer is the recommended way to add a
 peer.
 
 .. note:: Only a single peer is currently supported.
+          The ``peer_add`` command is deprecated and will be removed in a future release.
+          Use the ``peer_bootstrap`` command instead.
 
 To remove a peer, run a command of the following form:
 

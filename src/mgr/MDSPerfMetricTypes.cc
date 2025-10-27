@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <ostream>
 #include "mgr/MDSPerfMetricTypes.h"
@@ -41,6 +41,12 @@ void MDSPerformanceCounterDescriptor::pack_counter(
   case MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC:
   case MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC:
+  case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
+  case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
+  case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+  case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -69,6 +75,12 @@ void MDSPerformanceCounterDescriptor::unpack_counter(
   case MDSPerformanceCounterType::STDEV_WRITE_LATENCY_METRIC:
   case MDSPerformanceCounterType::AVG_METADATA_LATENCY_METRIC:
   case MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC:
+  case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
+  case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
+  case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+  case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
+  case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
     break;
   default:
     ceph_abort_msg("unknown counter type");
@@ -125,6 +137,24 @@ std::ostream& operator<<(std::ostream &os, const MDSPerformanceCounterDescriptor
    case MDSPerformanceCounterType::STDEV_METADATA_LATENCY_METRIC:
      os << "stdev_metadata_latency";
      break;
+     case MDSPerformanceCounterType::SUBV_READ_IOPS_METRIC:
+       os << "subv_read_iops";
+       break;
+     case MDSPerformanceCounterType::SUBV_WRITE_IOPS_METRIC:
+       os << "subv_write_iops";
+       break;
+     case MDSPerformanceCounterType::SUBV_READ_THROUGHPUT_METRIC:
+       os << "subv_last_read_tp_Bps";
+       break;
+     case MDSPerformanceCounterType::SUBV_WRITE_THROUGHPUT_METRIC:
+       os << "subv_last_write_tp_Bps";
+       break;
+     case MDSPerformanceCounterType::SUBV_AVG_READ_LATENCY_METRIC:
+       os << "subv_avg_read_latency";
+       break;
+     case MDSPerformanceCounterType::SUBV_AVG_WRITE_LATENCY_METRIC:
+       os << "subv_avg_write_latency";
+       break;
    }
 
    return os;

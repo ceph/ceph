@@ -59,10 +59,16 @@ class AuthMode(_StrEnum):
     ACTIVE_DIRECTORY = 'active-directory'
 
 
+class SourceReferenceType(_StrEnum):
+    RESOURCE = 'resource'
+
+
+# NOTE: Use SourceReferenceType for new source objects
 class JoinSourceType(_StrEnum):
     RESOURCE = 'resource'
 
 
+# NOTE: Use SourceReferenceType for new source objects
 class UserGroupSourceType(_StrEnum):
     RESOURCE = 'resource'
     EMPTY = 'empty'
@@ -73,6 +79,7 @@ class ConfigNS(_StrEnum):
     SHARES = 'shares'
     USERS_AND_GROUPS = 'users_and_groups'
     JOIN_AUTHS = 'join_auths'
+    TLS_CREDENTIALS = 'tls_creds'
 
 
 class LoginCategory(_StrEnum):
@@ -129,3 +136,11 @@ class InputPasswordFilter(_StrEnum):
         # but we want a InputPasswordFilter to be a strict subset of the
         # password filter enum.
         return PasswordFilter(self.value)
+
+
+class TLSCredentialType(_StrEnum):
+    """Specify the type of a TLS credential."""
+
+    CERT = 'cert'
+    KEY = 'key'
+    CA_CERT = 'ca-cert'

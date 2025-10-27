@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,7 @@
 #include "ECUtil.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
+#include "OSDMap.h"
 #include "PGTransaction.h"
 
 namespace ECTransaction {
@@ -105,7 +107,7 @@ class Generate {
   void truncate();
   void overlay_writes();
   void appends_and_clone_ranges();
-  void written_and_present_shards();
+  void written_shards();
   void attr_updates();
 
  public:

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -36,7 +36,6 @@ struct D3nChunkDataInfo : public LRUObject {
 	}
 
 	void dump(Formatter *f) const;
-	static void generate_test_instances(std::list<D3nChunkDataInfo*>& o);
 };
 
 struct D3nCacheAioWriteRequest {

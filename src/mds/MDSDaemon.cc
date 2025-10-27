@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -164,12 +165,16 @@ void MDSDaemon::asok_command(
     dump_status(f);
     r = 0;
   } else if (command == "lockup") {
-    int64_t millisecs;
-    cmd_getval(cmdmap, "millisecs", millisecs);
-    derr << "(lockup) sleeping with mds_lock for " << millisecs << dendl;
-    std::lock_guard l(mds_lock);
-    std::this_thread::sleep_for(std::chrono::milliseconds(millisecs));
-    r = 0;
+    int64_t millisecs{};
+    if (cmd_getval(cmdmap, "millisecs", millisecs)) {
+      derr << "(lockup) sleeping with mds_lock for " << millisecs << dendl;
+      std::lock_guard l(mds_lock);
+      std::this_thread::sleep_for(std::chrono::milliseconds(millisecs));
+      r = 0;
+    } else {
+      ss << "millisecs setting not found";
+      r = -EINVAL;
+    }
   } else if (command == "exit") {
     outbl.append("Exiting...\n");
     r = 0;

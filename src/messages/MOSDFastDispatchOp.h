@@ -1,11 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_MOSDFASTDISPATCHOP_H
 #define CEPH_MOSDFASTDISPATCHOP_H
 
+#include "include/types.h" // for epoch_t
 #include "msg/Message.h"
-#include "osd/osd_types.h"
+#include "osd/osd_types.h" // for spg_t
 
 class MOSDFastDispatchOp : public Message {
 public:

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -2491,6 +2492,13 @@ Capability* Locker::issue_new_caps(CInode *in,
   return cap;
 }
 
+void Locker::maybe_set_subvolume_id(const CInode* inode, ref_t<MClientCaps>& ack) {
+ if (ack && inode) {
+   ack->subvolume_id = inode->get_subvolume_id();
+   dout(10) << "setting subvolume id " << ack->subvolume_id << " for inode " << inode->ino().val << dendl;
+ }
+}
+
 void Locker::issue_caps_set(set<CInode*>& inset)
 {
   for (set<CInode*>::iterator p = inset.begin(); p != inset.end(); ++p)
@@ -3398,6 +3406,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       if (mds->logger) mds->logger->inc(l_mdss_handle_client_caps_dirty);
   }
 
+  CInode *head_in = mdcache->get_inode(m->get_ino());
   if (m->get_client_tid() > 0 && session &&
       session->have_completed_flush(m->get_client_tid())) {
     dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
@@ -3406,9 +3415,11 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     if (op == CEPH_CAP_OP_FLUSHSNAP) {
       if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flushsnap_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSHSNAP_ACK, m->get_ino(), 0, 0, 0, 0, 0, dirty, 0, 0, mds->get_osd_epoch_barrier());
+      maybe_set_subvolume_id(head_in, ack);
     } else {
       if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flush_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSH_ACK, m->get_ino(), 0, m->get_cap_id(), m->get_seq(), m->get_caps(), 0, dirty, 0, 0, mds->get_osd_epoch_barrier());
+      maybe_set_subvolume_id(head_in, ack);
     }
     ack->set_snap_follows(follows);
     ack->set_client_tid(m->get_client_tid());
@@ -3445,7 +3456,6 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     }
   }
 
-  CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
     if (mds->is_clientreplay()) {
       dout(7) << "handle_client_caps on unknown ino " << m->get_ino()
@@ -3534,6 +3544,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       ack->set_snap_follows(follows);
       ack->set_client_tid(m->get_client_tid());
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
+      maybe_set_subvolume_id(head_in, ack);
     }
 
     if (in == head_in ||
@@ -3622,6 +3633,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
           m->get_caps(), 0, dirty, 0, cap->get_last_issue(), mds->get_osd_epoch_barrier());
       ack->set_client_tid(m->get_client_tid());
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
+      maybe_set_subvolume_id(head_in, ack);
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)

@@ -37,11 +37,12 @@ else:
             logger.info("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info()
+                    res = NvmeofGatewaysConfig.get_service_info()
                 else:
-                    service_name, self.gateway_addr = NvmeofGatewaysConfig.get_service_info(
-                        gw_group
-                    )
+                    res = NvmeofGatewaysConfig.get_service_info(gw_group)
+                if res is None:
+                    raise DashboardException("Gateway group does not exists")
+                service_name, self.gateway_addr = res
             except TypeError as e:
                 raise DashboardException(
                     f'Unable to retrieve the gateway info: {e}'
@@ -188,7 +189,7 @@ else:
         yield namedtuple_instance
 
     def obj_to_namedtuple(data: Any, target_type: Type[NamedTuple],
-                          max_depth: int = 4) -> NamedTuple:
+                          max_depth: int = 7) -> NamedTuple:
         """
         Convert an object or dict to a NamedTuple, handling nesting and lists lazily.
         This will raise an error if nesting depth exceeds the max depth (default 4)

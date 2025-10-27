@@ -29,12 +29,12 @@
           </dd>
           <ng-container>
             <dt>Telemetry Dashboard
-              <span
-                class="badge"
-                [ngClass]="telemetryEnabled ? 'badge-success' : 'badge-secondary'"
-                [ngbTooltip]="getTelemetryText()" >
+              <cds-tag *ngIf="telemetryEnabled !== null"
+                       [class]="telemetryEnabled ? 'tag-success' : 'tag-secondary'"
+                       [size]="'md'"
+                       [ngbTooltip]="getTelemetryText()">
                 {{ telemetryEnabled ? 'Active' : 'Inactive' }}
-              </span>
+              </cds-tag>
             </dt>
             <dd>
               <a target="_blank"
@@ -73,22 +73,22 @@
                        [dropdownData]="(isHardwareEnabled$ | async) && (hardwareSummary$ | async)">
           </cd-card-row>
           <!-- Monitors -->
-          <cd-card-row [data]="monMap?.monmap.mons.length"
+          <cd-card-row [data]="monCount"
                        link="/monitor"
                        title="Monitor"
                        summaryType="simplified"></cd-card-row>
           <!-- Managers -->
-          <cd-card-row [data]="mgrMap | mgrSummary"
+          <cd-card-row [data]="mgrStatus"
                        title="Manager"></cd-card-row>
 
           <!-- OSDs -->
-          <cd-card-row [data]="osdMap | osdSummary"
+          <cd-card-row [data]="osdCount"
                        link="/osd"
                        title="OSD"
                        summaryType="osd"></cd-card-row>
 
           <!-- Pools -->
-          <cd-card-row [data]="poolStatus?.length"
+          <cd-card-row [data]="poolCount"
                        link="/pool"
                        title="Pool"
                        summaryType="simplified"></cd-card-row>
@@ -106,7 +106,7 @@
                        *ngIf="enabledFeature.rgw"></cd-card-row>
 
           <!-- Metadata Servers -->
-          <cd-card-row [data]="mdsMap | mdsSummary"
+          <cd-card-row [data]="mdsStatus"
                        title="Metadata Server"
                        id="mds-item"
                        *ngIf="enabledFeature.cephfs"></cd-card-row>
@@ -142,28 +142,28 @@
             </div>
             <div class="d-flex flex-column ms-4 me-4 mt-4 mb-4">
               <div class="d-flex flex-row col-md-3 ms-4">
-                <i  *ngIf="healthData?.status else loadingTpl"
-                    [ngClass]="[healthData.status | healthIcon, icons.large2x]"
-                    [ngStyle]="healthData.status | healthColor"
-                    [title]="healthData.status">
+                <i  *ngIf="healthCardData?.status else loadingTpl"
+                    [ngClass]="[healthCardData.status | healthIcon, icons.large2x]"
+                    [ngStyle]="healthCardData.status | healthColor"
+                    [title]="healthCardData.status">
                 </i>
               <span class="ms-2 mt-n1 lead"
-                    *ngIf="!healthData?.checks?.length"
+                    *ngIf="!hasHealthChecks"
                     i18n>Cluster</span>
               <cds-toggletip  [dropShadow]="true"
                               [autoAlign]="true">
               <div cdsToggletipButton>
                 <a class="ms-2 mt-n1 lead text-primary"
                    popoverClass="info-card-popover-cluster-status"
-                   *ngIf="healthData?.checks?.length"
+                   *ngIf="hasHealthChecks"
                    i18n>Cluster
                 </a>
               </div>
               <div cdsToggletipContent
                    #healthCheck>
                 <div class="cds--popover-scroll-container">
-                  <cd-health-checks *ngIf="healthData?.checks"
-                                    [healthData]="healthData.checks">
+                  <cd-health-checks *ngIf="hasHealthChecks"
+                                    [healthData]="healthCardData.checks">
                   </cd-health-checks>
                 </div>
               </div>
@@ -227,10 +227,10 @@
                    [fullHeight]="true"
                    aria-label="Capacity card">
             <ng-container class="ms-4 me-4"
-                          *ngIf="capacity">
-              <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
-                                [lowThreshold]="osdSettings.nearfull_ratio"
-                                [highThreshold]="osdSettings.full_ratio">
+                          *ngIf="totalCapacity && usedCapacity">
+              <cd-dashboard-pie [data]="{max: totalCapacity, current: usedCapacity}"
+                                [lowThreshold]="capacityCardData.osdNearfull"
+                                [highThreshold]="capacityCardData.osdFull">
               </cd-dashboard-pie>
             </ng-container>
           </cd-card>
@@ -244,9 +244,9 @@
           <div class="ms-4 me-4 mt-0">
             <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
             </cd-dashboard-time-selector>
-            <ng-container *ngIf="capacity">
+            <ng-container *ngIf="totalCapacity">
               <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
-                                       [maxValue]="capacity.total_bytes"
+                                       [maxValue]="totalCapacity"
                                        dataUnits="B"
                                        [labelsArray]="['Used Capacity']"
                                        [dataArray]="[queriesResults.USEDCAPACITY]">
@@ -288,8 +288,8 @@
   <ng-container *ngFor="let alert of prometheusAlertService.alerts; let i = index;  trackBy: trackByFn">
     <div [ngClass]="['border-'+alertClass[alert.labels.severity]]"
          *ngIf="alert.status.state === 'active' &&
-         alert.labels.severity === alertType ||
-         !alertType">
+         (alert.labels.severity === alertType ||
+         !alertType)">
       <div class="card tc_alerts border-0 pt-3">
         <div class="row no-gutters ps-2">
           <div class="col-sm-1 text-center">
@@ -302,12 +302,16 @@
             <div class="card-body ps-0 pe-1 pb-1 pt-0">
               <h6 class="card-title bold">{{ alert.labels.alertname }}</h6>
               <p class="card-text me-3 mb-0 text-truncate"
-                 [innerHtml]="alert.annotations.description"
-                 [ngbTooltip]="alert.annotations.description"></p>
+                 [innerHtml]="alert.annotations.summary"
+                 [ngbTooltip]="alert.annotations.summary"></p>
               <p class="card-text text-muted me-3">
                 <small class="date"
                        [title]="alert.startsAt | cdDate"
                        i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
+                <small class="alert_count"
+                       *ngIf="alert.alert_count > 1"
+                       [title]="alert.alert_count"
+                       i18n>Total occurrences: {{ alert.alert_count }}</small>
               </p>
             </div>
           </div>
@@ -315,13 +319,6 @@
       </div>
       <hr class="mt-0 mb-0">
     </div>
-  </ng-container>
-</ng-template>
-
-<ng-template #logsLink>
-  <ng-container *ngIf="permissions.log.read">
-    <p class="logs-link"
-       i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
   </ng-container>
 </ng-template>
 

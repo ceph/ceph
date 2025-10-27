@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -169,7 +170,7 @@ struct MirrorInfo {
   Peers peers;
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<MirrorInfo*>& ls);
+  static std::list<MirrorInfo> generate_test_instances();
   void print(std::ostream& out) const;
 
   void encode(ceph::buffer::list &bl) const;
@@ -676,7 +677,7 @@ public:
   void print_fs_summary(std::ostream& out) const;
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<FSMap*>& ls);
+  static std::list<FSMap> generate_test_instances();
 
 protected:
   iterator begin() {

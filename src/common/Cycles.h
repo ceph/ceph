@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -83,6 +84,10 @@ class Cycles {
 #elif defined(__s390__)
     uint64_t tsc;
     asm volatile("stck %0" : "=Q" (tsc) : : "cc");
+    return tsc;
+#elif defined(__riscv) && __riscv_xlen == 64
+    uint64_t tsc;
+    asm volatile ("rdtime %0" : "=r" (tsc));
     return tsc;
 #else
 #warning No high-precision counter available for your OS/arch

@@ -350,7 +350,8 @@
                 Ceph cluster. RGW bucket indexes are stored as omaps.
                 Erasure-coded pools cannot store RADOS omap data structures.
                
-                Run the command ``ceph osd df`` to see your omap.
+                Run the command ``ceph osd df`` to see the storage space used by
+                omaps on each OSD.
 
                 See Eleanor Cawthon's 2012 paper `A Distributed Key-Value Store
                 using Ceph

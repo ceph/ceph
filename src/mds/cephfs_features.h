@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -94,7 +95,8 @@ namespace ceph {
     CLIENT_METRIC_TYPE_AVG_WRITE_LATENCY,	\
     CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,	\
     CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,	\
-    CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,	\
+    CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY, \
+    CLIENT_METRIC_TYPE_SUBVOLUME_METRICS, \
 }
 
 #define CEPHFS_FEATURES_MDS_SUPPORTED CEPHFS_FEATURES_ALL

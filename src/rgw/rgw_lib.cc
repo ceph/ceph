@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -545,7 +545,9 @@ namespace rgw {
     }
 
     main.init_lua();
+#ifdef WITH_RADOSGW_RADOS
     main.init_dedup();
+#endif
 
     return 0;
   } /* RGWLib::init() */

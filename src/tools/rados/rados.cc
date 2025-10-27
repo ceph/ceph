@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -24,13 +25,14 @@
  using namespace libradosstriper;
 #endif
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/obj_bencher.h"
 #include "common/strtol.h" // for strict_strtoll()
 #include "common/TextTable.h"
@@ -2533,7 +2535,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 #endif // WITH_LIBRADOSSTRIPER
           if (pgid) {
             uint32_t ps;
-            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps) {
+            if (const auto& key = i->get_locator().size() ? i->get_locator() : i->get_oid();
+		io_ctx.get_object_pg_hash_position2(key, &ps) || pgid->ps() != ps) {
               break;
 	    }
           }

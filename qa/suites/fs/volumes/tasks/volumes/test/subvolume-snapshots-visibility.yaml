@@ -1,0 +1,7 @@
+tasks:
+  - cephfs_test_runner:
+      fail_on_skip: false
+      modules:
+        - tasks.cephfs.test_volumes.TestSubvolumeSnapshotVisibilityBasic
+        - tasks.cephfs.test_volumes.TestSubvolumeSnapshotVisibility
+        - tasks.cephfs.test_volumes.TestSubvolumeSnapshotVisibilityMgr

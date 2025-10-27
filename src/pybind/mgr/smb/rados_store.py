@@ -210,7 +210,7 @@ class RADOSConfigStore:
 
     def _lazy_init(self) -> None:
         if self._init_cb:
-            self._init_cb
+            self._init_cb()
             self._init_cb = None
 
     def __getitem__(self, key: EntryKey) -> RADOSConfigEntry:

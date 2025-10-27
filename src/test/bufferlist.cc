@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1866,6 +1867,9 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
   EXPECT_TRUE(bl.is_aligned(SIMD_ALIGN));
   EXPECT_TRUE(bl.is_n_align_sized(BUFFER_SIZE));
   EXPECT_EQ(3U, bl.get_num_buffers());
+
+  bl.rebuild_aligned_size_and_memory(BUFFER_SIZE, SIMD_ALIGN, 1);
+  EXPECT_EQ(1U, bl.get_num_buffers());
 
   {
     /* bug replicator, to test rebuild_aligned_size_and_memory() in the

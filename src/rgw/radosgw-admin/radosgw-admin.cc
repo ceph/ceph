@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Copyright (C) 2025 IBM
@@ -29,7 +29,8 @@ extern "C" {
 #include "common/ceph_json.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
+#include "common/XMLFormatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/fault_injector.h"
@@ -156,10 +157,11 @@ void usage()
   cout << "  caps rm                          remove user capabilities\n";
   cout << "  dedup stats                      Display dedup statistics from the last run\n";
   cout << "  dedup estimate                   Runs dedup in estimate mode (no changes will be made)\n";
-  cout << "  dedup restart                    Restart dedup\n";
+  cout << "  dedup exec                       Execute dedup (duplicated tail objects will be deleted); must include --yes-i-really-mean-it to activate\n";
   cout << "  dedup abort                      Abort dedup\n";
   cout << "  dedup pause                      Pause dedup\n";
   cout << "  dedup resume                     Resume paused dedup\n";
+  cout << "  dedup throttle                   Throttle dedup execution\n";
   cout << "  subuser create                   create a new subuser\n" ;
   cout << "  subuser modify                   modify subuser\n";
   cout << "  subuser rm                       remove subuser\n";
@@ -400,6 +402,7 @@ void usage()
   cout << "   --shard-id=<shard-id>             optional for:\n";
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
+  cout << "                                       sync error trim\n";
   cout << "                                     required for:\n";
   cout << "                                       mdlog trim\n";
   cout << "   --gen=<gen-id>                    optional for:\n";
@@ -488,15 +491,21 @@ void usage()
   cout << "   --disable-feature                 disable a zone/zonegroup feature\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
+  cout << "\nDedup throttle options:\n";
+  cout << "   --max-bucket-index-ops        specify max bucket-index requests per second allowed for an RGW during dedup, 0 means unlimited\n";
+  cout << "   --max-metadata-ops            specify max metadata requests per second allowed for an RGW during dedup, 0 means unlimited\n";
+  cout << "   --stat                        display dedup throttle setting\n";
   cout << "\nQuota options:\n";
   cout << "   --max-objects                 specify max objects (negative value to disable)\n";
   cout << "   --max-size                    specify max size (in B/K/M/G/T, negative value to disable)\n";
   cout << "   --quota-scope                 scope of quota (bucket, user, account)\n";
   cout << "\nRate limiting options:\n";
-  cout << "   --max-read-ops                specify max requests per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-read-bytes              specify max bytes per minute for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-write-ops               specify max requests per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
-  cout << "   --max-write-bytes             specify max bytes per minute for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-read-ops                specify max requests per accumulation interval for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-read-bytes              specify max bytes per accumulation interval for READ ops per RGW (GET and HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-ops               specify max requests per accumulation interval for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-write-bytes             specify max bytes per accumulation interval for WRITE ops per RGW (Not GET or HEAD request methods), 0 means unlimited\n";
+  cout << "   --max-list-ops                specify max requests per accumulation interval for bucket listing requests per RGW, 0 means unlimited\n";
+  cout << "   --max-delete-ops              specify max requests per accumulation interval for DELETE ops per RGW (DELETE request methods), 0 means unlimited\n";
   cout << "   --ratelimit-scope             scope of rate limiting: bucket, user, anonymous\n";
   cout << "                                 anonymous can be configured only with global rate limit\n";
   cout << "\nOrphans search options:\n";
@@ -754,9 +763,10 @@ enum class OPT {
   DEDUP_STATS,
   DEDUP_ESTIMATE,
   DEDUP_ABORT,
-  DEDUP_RESTART,
+  DEDUP_EXEC,
   DEDUP_PAUSE,
   DEDUP_RESUME,
+  DEDUP_THROTTLE,
   GC_LIST,
   GC_PROCESS,
   LC_LIST,
@@ -1007,9 +1017,11 @@ static SimpleCmd::Commands all_cmds = {
   { "dedup stats", OPT::DEDUP_STATS },
   { "dedup estimate", OPT::DEDUP_ESTIMATE },
   { "dedup abort", OPT::DEDUP_ABORT },
-  { "dedup restart", OPT::DEDUP_RESTART },
+  { "dedup restart", OPT::DEDUP_EXEC },
+  { "dedup exec", OPT::DEDUP_EXEC },
   { "dedup pause", OPT::DEDUP_PAUSE },
   { "dedup resume", OPT::DEDUP_RESUME },
+  { "dedup throttle", OPT::DEDUP_THROTTLE },
   { "gc list", OPT::GC_LIST },
   { "gc process", OPT::GC_PROCESS },
   { "lc list", OPT::LC_LIST },
@@ -1411,9 +1423,9 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 }
 
 bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_read_ops, int64_t max_write_ops,
-                    int64_t max_read_bytes, int64_t max_write_bytes,
-                    bool have_max_read_ops, bool have_max_write_ops,
-                    bool have_max_read_bytes, bool have_max_write_bytes)
+                    int64_t max_list_ops, int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                    bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
+                    bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
 {
   bool ratelimit_configured = true;
   switch (opt_cmd) {
@@ -1434,6 +1446,18 @@ bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_re
       if (have_max_write_ops) {
         if (max_write_ops >= 0) {
           ratelimit.max_write_ops = max_write_ops;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_list_ops) {
+        if (max_list_ops >= 0) {
+          ratelimit.max_list_ops = max_list_ops;
+          ratelimit_configured = true;
+        }
+      }
+      if (have_max_delete_ops) {
+        if (max_delete_ops >= 0) {
+          ratelimit.max_delete_ops = max_delete_ops;
           ratelimit_configured = true;
         }
       }
@@ -1521,10 +1545,10 @@ int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
 
 int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
                      const string& tenant_name, const string& bucket_name,
-                     int64_t max_read_ops, int64_t max_write_ops,
-                     int64_t max_read_bytes, int64_t max_write_bytes,
-                     bool have_max_read_ops, bool have_max_write_ops,
-                     bool have_max_read_bytes, bool have_max_write_bytes)
+                     int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
+                     int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
+                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
@@ -1545,10 +1569,10 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
       return -EIO;
     }
   }
-  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
+                         max_delete_ops, max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
   if (!ratelimit_configured) {
     ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
     return -EINVAL;
@@ -1566,10 +1590,10 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
 }
 
 int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
-                     int64_t max_read_ops, int64_t max_write_ops,
-                     int64_t max_read_bytes, int64_t max_write_bytes,
-                     bool have_max_read_ops, bool have_max_write_ops,
-                     bool have_max_read_bytes, bool have_max_write_bytes)
+                     int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
+                     int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
+                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
+                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
 {
   RGWRateLimitInfo ratelimit_info;
   user->load_user(dpp(), null_yield);
@@ -1584,10 +1608,10 @@ int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
       return -EIO;
     }
   }
-  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
+                         max_delete_ops, max_read_bytes, max_write_bytes,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
   if (!ratelimit_configured) {
     ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
     return -EINVAL;
@@ -1618,7 +1642,10 @@ int show_user_ratelimit(std::unique_ptr<rgw::sal::User>& user, Formatter *format
       ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
       return -EIO;
     }
+  } else {
+    return -ENOENT;
   }
+
   formatter->open_object_section("user_ratelimit");
   encode_json("user_ratelimit", ratelimit_info, formatter);
   formatter->close_section();
@@ -3635,6 +3662,7 @@ int main(int argc, const char **argv)
   int skip_zero_entries = false;  // log show
   int purge_keys = false;
   int yes_i_really_mean_it = false;
+  int throttle_stat = false;
   int delete_child_objects = false;
   int fix = false;
   int remove_bad = false;
@@ -3685,14 +3713,22 @@ int main(int argc, const char **argv)
   int64_t max_size = -1;
   int64_t max_read_ops = 0;
   int64_t max_write_ops = 0;
+  int64_t max_list_ops = 0;
+  int64_t max_delete_ops = 0;
   int64_t max_read_bytes = 0;
   int64_t max_write_bytes = 0;
+  uint32_t max_bucket_index_ops = 0;
+  uint32_t max_metadata_ops = 0;
   bool have_max_objects = false;
   bool have_max_size = false;
   bool have_max_write_ops = false;
   bool have_max_read_ops = false;
+  bool have_max_list_ops = false;
+  bool have_max_delete_ops = false;
   bool have_max_write_bytes = false;
   bool have_max_read_bytes = false;
+  bool have_max_bucket_index_ops = false;
+  bool have_max_metadata_ops = false;
   int include_all = false;
   int allow_unordered = false;
 
@@ -3980,6 +4016,20 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       have_max_read_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-list-ops", (char*)NULL)) {
+      max_list_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max list requests: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_list_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-delete-ops", (char*)NULL)) {
+      max_delete_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max delete requests: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_delete_ops = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-write-ops", (char*)NULL)) {
       max_write_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -4001,6 +4051,20 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       have_max_write_bytes = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-bucket-index-ops", (char*)NULL)) {
+      max_bucket_index_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+	cerr << "ERROR: failed to parse max bucket index ops: " << err << std::endl;
+	return EINVAL;
+      }
+      have_max_bucket_index_ops = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-metadata-ops", (char*)NULL)) {
+      max_metadata_ops = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+	cerr << "ERROR: failed to parse max metadata ops: " << err << std::endl;
+	return EINVAL;
+      }
+      have_max_metadata_ops = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
       date = val;
       if (end_date.empty())
@@ -4094,6 +4158,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &throttle_stat, NULL, "--stat", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
       // do nothing
@@ -4512,9 +4578,10 @@ int main(int argc, const char **argv)
 			 OPT::DEDUP_STATS,
 			 OPT::DEDUP_ESTIMATE,
 			 OPT::DEDUP_ABORT,     // TBD - not READ-ONLY
-			 OPT::DEDUP_RESTART,   // TBD - not READ-ONLY
+			 OPT::DEDUP_EXEC,   // TBD - not READ-ONLY
 			 OPT::DEDUP_PAUSE,
 			 OPT::DEDUP_RESUME,
+			 OPT::DEDUP_THROTTLE,
 			 OPT::GC_LIST,
 			 OPT::LC_LIST,
 			 OPT::ORPHANS_LIST_JOBS,
@@ -4882,41 +4949,22 @@ int main(int argc, const char **argv)
       break;
     case OPT::PERIOD_PULL:
       {
-        boost::optional<RGWRESTConn> conn;
-        RGWRESTConn *remote_conn = nullptr;
         if (url.empty()) {
-          // load current period for endpoints
-          RGWRealm realm;
-          int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                    realm_id, realm_name, realm);
-          if (ret < 0 ) {
-            cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          period_id = realm.current_period;
-
-          RGWPeriod current_period;
-          ret = cfgstore->read_period(dpp(), null_yield, period_id,
-                                      std::nullopt, current_period);
-          if (ret < 0) {
-            cerr << "failed to load current period: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          if (remote.empty()) {
-            // use realm master zone as remote
-            remote = current_period.get_master_zone().id;
-          }
-          conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), current_period.get_map(), remote);
-          if (!conn) {
-            cerr << "failed to find a zone or zonegroup for remote "
-                << remote << std::endl;
-            return -ENOENT;
-          }
-          remote_conn = &*conn;
+          cerr << "A --url must be provided." << std::endl;
+          return EINVAL;
         }
+        // load realm for current period
+        RGWRealm realm;
+        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
+                                  realm_id, realm_name, realm);
+        if (ret < 0 ) {
+          cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
+        period_id = realm.current_period;
 
         RGWPeriod period;
-        int ret = do_period_pull(cfgstore.get(), remote_conn, url,
+        ret = do_period_pull(cfgstore.get(), nullptr, url,
                                  opt_region, access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
@@ -4968,24 +5016,24 @@ int main(int argc, const char **argv)
         formatter->open_object_section("period_config");
         if (ratelimit_scope == "bucket") {
           ratelimit_configured = set_ratelimit_info(period_config.bucket_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops,
+                         max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
                          max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
           encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
         } else if (ratelimit_scope == "user") {
           ratelimit_configured = set_ratelimit_info(period_config.user_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops,
+                         max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
                          max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
           encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
         } else if (ratelimit_scope == "anonymous") {
           ratelimit_configured = set_ratelimit_info(period_config.anon_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops,
+                         max_read_ops, max_write_ops, max_list_ops,max_delete_ops,
                          max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
-                         have_max_read_bytes, have_max_write_bytes);
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
+                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
           encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
         } else if (ratelimit_scope.empty() && opt_cmd == OPT::GLOBAL_RATELIMIT_GET) {
           // if no scope is given for GET, print both
@@ -5901,6 +5949,7 @@ int main(int argc, const char **argv)
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
+        zonegroup.api_name = zonegroup_new_name;
         ret = writer->rename(dpp(), null_yield, zonegroup, zonegroup_new_name);
 	if (ret < 0) {
 	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -6722,7 +6771,8 @@ int main(int argc, const char **argv)
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
                                         OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
                                         OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
-                                        OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH};
+                                        OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
+                                        OPT::RATELIMIT_SET, OPT::RATELIMIT_ENABLE, OPT::RATELIMIT_DISABLE};
 
   bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
                                 non_master_cmd);
@@ -7522,6 +7572,10 @@ int main(int argc, const char **argv)
         }
       }
       bucket_op.marker = marker;
+      if (max_entries_specified)
+        bucket_op.max_entries = max_entries;
+      else
+        bucket_op.max_entries = 0; /* for backward compatibility */
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
@@ -7639,6 +7693,10 @@ int main(int argc, const char **argv)
       bucket_op.set_bucket_name(bucket.name);
     }
     bucket_op.set_fetch_stats(true);
+    if (max_entries_specified)
+      bucket_op.max_entries = max_entries;
+    else
+      bucket_op.max_entries = 0; /* for backward compatibility */
 
     int r = RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     if (r < 0) {
@@ -7812,22 +7870,17 @@ int main(int argc, const char **argv)
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, null_yield, dpp(), &objv_tracker);
-    if (ret < 0) {
-      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket << "'" << std::endl;
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: failed to get pending logging object name from target bucket '" << configuration.target_bucket <<
+        "'. error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     std::string old_obj;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
     ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, &old_obj);
     if (ret < 0) {
-      if (ret == -ENOENT) {
-        cerr << "WARNING: no pending logging object '" << obj_name << "'. nothing to flush";
-        ret = 0;
-      } else {
-        cerr << "ERROR: failed flush pending logging object '" << obj_name << "'";
-      }
-      cerr << " to target bucket '" << configuration.target_bucket << "'. "
-        << " last committed object is '" << old_obj << "'" << std::endl;
+      cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
+        << "'. error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     cout << "flushed pending logging object '" << old_obj
@@ -9179,7 +9232,8 @@ next:
       opt_cmd == OPT::DEDUP_ABORT    ||
       opt_cmd == OPT::DEDUP_PAUSE    ||
       opt_cmd == OPT::DEDUP_RESUME   ||
-      opt_cmd == OPT::DEDUP_RESTART) {
+      opt_cmd == OPT::DEDUP_THROTTLE ||
+      opt_cmd == OPT::DEDUP_EXEC) {
 
     using namespace rgw::dedup;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -9200,7 +9254,41 @@ next:
       return ret;
     }
 
-    if (opt_cmd == OPT::DEDUP_ABORT || opt_cmd == OPT::DEDUP_PAUSE || opt_cmd == OPT::DEDUP_RESUME) {
+    if (opt_cmd == OPT::DEDUP_THROTTLE) {
+      bufferlist urgent_msg_bl;
+      urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
+      ceph::encode(urgent_msg, urgent_msg_bl);
+      throttle_msg_t throttle_msg;
+
+      if (throttle_stat) {
+	encode(throttle_msg, urgent_msg_bl);
+	return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+      }
+
+      if (unlikely(!have_max_bucket_index_ops && !have_max_metadata_ops)) {
+	std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
+	return EINVAL;
+      }
+
+      if (have_max_bucket_index_ops) {
+	throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
+				     .limit = max_bucket_index_ops};
+	throttle_msg.vec.push_back(action);
+      }
+
+      if (have_max_metadata_ops) {
+	throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
+				     .limit = max_metadata_ops};
+	throttle_msg.vec.push_back(action);
+      }
+
+      encode(throttle_msg, urgent_msg_bl);
+      return cluster::dedup_control_bl(store, dpp(), urgent_msg, urgent_msg_bl);
+    }
+
+    if (opt_cmd == OPT::DEDUP_ABORT  ||
+	opt_cmd == OPT::DEDUP_PAUSE  ||
+	opt_cmd == OPT::DEDUP_RESUME) {
       urgent_msg_t urgent_msg;
       if (opt_cmd == OPT::DEDUP_ABORT) {
 	urgent_msg = URGENT_MSG_ABORT;
@@ -9214,13 +9302,19 @@ next:
       return cluster::dedup_control(store, dpp(), urgent_msg);
     }
 
-    if (opt_cmd == OPT::DEDUP_RESTART || opt_cmd == OPT::DEDUP_ESTIMATE) {
+    if (opt_cmd == OPT::DEDUP_EXEC || opt_cmd == OPT::DEDUP_ESTIMATE) {
       dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
       if (opt_cmd == OPT::DEDUP_ESTIMATE) {
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
       }
       else {
-	dedup_type = dedup_req_type_t::DEDUP_TYPE_FULL;
+	if (!yes_i_really_mean_it) {
+	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
+	       << "do you really mean it? (requires --yes-i-really-mean-it)"
+	       << std::endl;
+	  return EINVAL;
+	}
+	dedup_type = dedup_req_type_t::DEDUP_TYPE_EXEC;
 #ifndef FULL_DEDUP_SUPPORT
 	std::cerr << "Only dedup estimate is supported!" << std::endl;
 	return EPERM;
@@ -9493,7 +9587,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+    check_bad_owner_bucket_mapping(driver, user->get_id(),
+                                   user->get_display_name(), user->get_tenant(),
                                    fix, null_yield, dpp());
   }
 
@@ -9742,8 +9837,8 @@ next:
         std::string err_msg;
         int ret = rgw::account::list_users(
             dpp(), driver, op_state, path_prefix, marker,
-            max_entries_specified, max_entries, err_msg,
-            stream_flusher, null_yield);
+            max_entries_specified, max_entries, account_root,
+            err_msg, stream_flusher, null_yield);
         if (ret < 0)  {
           cerr << "ERROR: " << err_msg << std::endl;
           return -ret;
@@ -11277,15 +11372,15 @@ next:
         return EINVAL;
       }
       return set_bucket_ratelimit(driver, opt_cmd, tenant, bucket_name,
-                           max_read_ops, max_write_ops,
+                           max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
                            max_read_bytes, max_write_bytes,
-                           have_max_read_ops, have_max_write_ops,
+                           have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
                            have_max_read_bytes, have_max_write_bytes);
     } else if (!rgw::sal::User::empty(user)) {
       if (ratelimit_scope == "user") {
-        return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops,
+        return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
                          max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops,
+                         have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
                          have_max_read_bytes, have_max_write_bytes);
       } else {
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
@@ -11308,7 +11403,11 @@ next:
       return show_bucket_ratelimit(driver, tenant, bucket_name, formatter.get());
     } else if (!rgw::sal::User::empty(user)) {
       if (ratelimit_scope == "user") {
-        return show_user_ratelimit(user, formatter.get());
+        int ret = show_user_ratelimit(user, formatter.get());
+        if (ret < 0) {
+          std::cerr << "ERROR: failed to get a ratelimit for user id: '" << user->get_id() << "', errno: " << cpp_strerror(-ret) << std::endl;
+        }
+        return ret;
       } else {
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
@@ -11918,9 +12017,9 @@ next:
     rgw::notify::rgw_topic_stats stats;
     ret = rgw::notify::get_persistent_queue_stats(
         dpp(), ioctx,
-        topic.dest.persistent_queue, stats, null_yield);
+        topic.dest.get_shard_names(), stats, null_yield);
     if (ret < 0) {
-      cerr << "ERROR: could not get persistent queue: " << cpp_strerror(-ret) << std::endl;
+      cerr << "ERROR: could not get persistent queues: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
     encode_json("", stats, formatter.get());
@@ -11952,37 +12051,41 @@ next:
     std::string end_marker;
     librados::ObjectReadOperation rop;
     std::vector<cls_queue_entry> queue_entries;
-    bool truncated = true;
+    bool truncated;
     formatter->open_array_section("eventEntries");
-    while (truncated) {
-      bufferlist bl;
-      int rc;
-      cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
-      ioctx.operate(topic.dest.persistent_queue, &rop, nullptr);
-      if (rc < 0 ) {
-        cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
-      rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
-      if (rc < 0) {
-        cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
-        return -rc;
-      }
 
-      std::for_each(queue_entries.cbegin(), 
-        queue_entries.cend(), 
-        [&formatter](const auto& queue_entry) {
-          rgw::notify::event_entry_t event_entry;
-          bufferlist::const_iterator iter{&queue_entry.data};
-          try {
-            event_entry.decode(iter);
-            encode_json("", event_entry, formatter.get());
-          } catch (const buffer::error& e) {
-            cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
-          }
-        });
-      formatter->flush(cout);
-      marker = end_marker;
+    for (const auto& shard_name: topic.dest.get_shard_names()){
+      truncated = true; 
+      marker.clear();
+      while (truncated) {
+        bufferlist bl;
+        int rc;
+        cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
+        ioctx.operate(shard_name, &rop, nullptr);
+        if (rc < 0 ) {
+          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
+        if (rc < 0) {
+          cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
+          return -rc;
+        }
+        std::for_each(queue_entries.cbegin(), 
+          queue_entries.cend(), 
+          [&formatter](const auto& queue_entry) {
+            rgw::notify::event_entry_t event_entry;
+            bufferlist::const_iterator iter{&queue_entry.data};
+            try {
+              event_entry.decode(iter);
+              encode_json("", event_entry, formatter.get());
+            } catch (const buffer::error& e) {
+              cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
+            }
+          });
+        formatter->flush(cout);
+        marker = end_marker;
+      }
     }
     formatter->close_section();
     formatter->flush(cout);

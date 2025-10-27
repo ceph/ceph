@@ -26,7 +26,7 @@ where "name" is the RADOS client name (referred to hereafter as "RADOS user",
 and meaning any individual or system actor such as an application). 
 
 Mount helper can fill in the cluster FSID by reading the ceph configuration file.
-Its recommended to call the mount helper via mount(8) as per::
+It is recommended to call the mount helper via mount(8) as per::
 
   mount -t ceph name@.fs_name=/ /mnt/mycephfs -o mon_addr=1.2.3.4
 
@@ -37,7 +37,7 @@ RADOS user for authentication, the file system name and a path within CephFS
 that will be mounted at the mount point.
 
 Monitor addresses can be passed using ``mon_addr`` mount option. Multiple monitor
-addresses can be passed by separating addresses with a slash (`/`). Only one
+addresses can be passed by separating addresses with a slash ("/"). Only one
 monitor is needed to mount successfully; the client will learn about all monitors
 from any responsive monitor. However, it is a good idea to specify more than one
 in case the one happens to be down at the time of mount. Monitor addresses takes
@@ -78,49 +78,49 @@ Basic
     Set the connection mode that the client uses for transport. The available
     modes are:
 
-    - ``legacy``: use messenger v1 protocol to talk to the cluster
+    - ``legacy``: Use messenger v1 protocol to talk to the cluster.
 
-    - ``crc``: use messenger v2, without on-the-wire encryption
+    - ``crc``: Use messenger v2, without on-the-wire encryption.
 
-    - ``secure``: use messenger v2, with on-the-wire encryption
+    - ``secure``: Use messenger v2, with on-the-wire encryption.
 
-    - ``prefer-crc``: crc mode, if denied agree to secure mode
+    - ``prefer-crc``: ``crc`` mode, if denied agree to ``secure`` mode.
 
-    - ``prefer-secure``: secure mode, if denied agree to crc mode
+    - ``prefer-secure``: ``secure`` mode, if denied agree to ``crc`` mode.
 
 :command:`mon_addr`
-    Monitor address of the cluster in the form of ip_address[:port]
+    Monitor address of the cluster in the form of ip_address[:port].
 
 :command:`fsid`
     Cluster FSID. This can be found using `ceph fsid` command.
 
 :command:`secret`
-    secret key for use with CephX. This option is insecure because it exposes
-    the secret on the command line. To avoid this, use the secretfile option.
+    Secret key for use with CephX. This option is insecure because it exposes
+    the secret on the command line. To avoid this, use the ``secretfile`` option.
 
 :command:`secretfile`
-    path to file containing the secret key to use with CephX
+    Path to file containing the secret key to use with CephX.
 
 :command:`recover_session=<no|clean>`
     Set auto reconnect mode in the case where the client is blocklisted. The
     available modes are ``no`` and ``clean``. The default is ``no``.
 
-    - ``no``: never attempt to reconnect when client detects that it has been
+    - ``no``: Never attempt to reconnect when client detects that it has been
       blocklisted. Blocklisted clients will not attempt to reconnect and
       their operations will fail too.
 
-    - ``clean``: client reconnects to the Ceph cluster automatically when it
+    - ``clean``: Client reconnects to the Ceph cluster automatically when it
       detects that it has been blocklisted. During reconnect, client drops
       dirty data/metadata, invalidates page caches and writable file handles.
       After reconnect, file locks become stale because the MDS loses track of
       them. If an inode contains any stale file locks, read/write on the inode
       is not allowed until applications release all stale file locks.
 
-:command: `fs=<fs-name>`
+:command:`fs=<fs-name>`
     Specify the non-default file system to be mounted, when using the old syntax.
 
-:command: `mds_namespace=<fs-name>`
-    A synonym of "fs=" (Deprecated).
+:command:`mds_namespace=<fs-name>`
+    A synonym of "fs=" (deprecated).
 
 Advanced
 --------
@@ -134,10 +134,12 @@ Advanced
     int, cap release delay, Default: 5
 
 :command:`dirstat`
-    funky `cat dirname` for stats, Default: off
+    enable reporting of file stats for a directory by running `cat dirname`. Note that these
+    stats are updated lazily and thus may be outdated for a time after changes to the
+    directory. Default: off
 
 :command:`nodirstat`
-    no funky `cat dirname` for stats
+    disable reporting of file stats for a directory by running  `cat dirname`.
 
 :command:`ip`
     my ip
@@ -149,8 +151,8 @@ Advanced
     no data crc on writes
 
 :command:`noshare`
-    create a new client instance, instead of sharing an existing instance of
-    a client mounting the same cluster
+    Create a new client instance, instead of sharing an existing instance of
+    a client mounting the same cluster.
 
 :command:`osdkeepalive`
     int, Default: 5
@@ -182,7 +184,7 @@ Advanced
     string, set the name of the hidden snapdir. Default: .snap
 
 :command:`write_congestion_kb`
-    int (kb), max writeback in flight. scale with available
+    int (kb), max writeback in flight. Scales with available
     memory. Default: calculated from available memory
 
 :command:`wsize`
@@ -202,8 +204,8 @@ Advanced
 
 :command:`crush_location=x`
     Specify the location of the client in terms of CRUSH hierarchy (since 5.8).
-    This is a set of key-value pairs separated from each other by '|', with
-    keys separated from values by ':'.  Note that '|' may need to be quoted
+    This is a set of key-value pairs separated from each other by "|", with
+    keys separated from values by ":".  Note that "|" may need to be quoted
     or escaped to avoid it being interpreted as a pipe by the shell. The key
     is the bucket type name (e.g. rack, datacenter or region with default
     bucket types) and the value is the bucket name. For example, to indicate
@@ -227,19 +229,19 @@ Advanced
     - ``balance``: When a replicated pool receives a read request, pick a random
       OSD from the PG's acting set to serve it (since 5.8).
 
-      This mode is safe for general use only since Octopus (i.e. after "ceph osd
-      require-osd-release octopus"). Otherwise it should be limited to read-only
+      This mode is safe for general use only since Octopus (i.e. after `ceph osd
+      require-osd-release octopus`). Otherwise it should be limited to read-only
       workloads such as snapshots.
 
     - ``localize``: When a replicated pool receives a read request, pick the most
       local OSD to serve it (since 5.8). The locality metric is calculated against
-      the location of the client given with crush_location; a match with the
+      the location of the client given with ``crush_location``; a match with the
       lowest-valued bucket type wins.  For example, an OSD in a matching rack
       is closer than an OSD in a matching data center, which in turn is closer
       than an OSD in a matching region.
 
-      This mode is safe for general use only since Octopus (i.e. after "ceph osd
-      require-osd-release octopus").  Otherwise it should be limited to read-only
+      This mode is safe for general use only since Octopus (i.e. after `ceph osd
+      require-osd-release octopus`).  Otherwise it should be limited to read-only
       workloads such as snapshots.
 
 
@@ -259,11 +261,11 @@ Pass the monitor host's IP address, optionally::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1
 
-Pass the port along with IP address if it's running on a non-standard port::
+Pass the port along with IP address if it is running on a non-standard port::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1:7000
 
-If there are multiple monitors, pass each address separated by a `/`::
+If there are multiple monitors, pass each address separated by a "/"::
 
    mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs -o mon_addr=192.168.0.1/192.168.0.2/192.168.0.3
 

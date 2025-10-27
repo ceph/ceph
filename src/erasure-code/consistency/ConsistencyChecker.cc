@@ -5,6 +5,7 @@
 #include "ECReader.h"
 #include "ECEncoder.h"
 #include "ECEncoderSwitch.h"
+#include "osd/ECUtil.h"
 
 using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
@@ -113,6 +114,30 @@ bool ConsistencyChecker::check_object_consistency(const std::string& oid,
 
   if (!outbl.has_value()) {
     return false;
+  }
+
+  // Encode always returns 4k aligned data
+  // A client read will always return parity with the same size as shard 0
+  // We confirm the encoded data is the same or larger than the client read
+  ceph_assert(outbl->length() >= data_and_parity.second.length());
+  // We check the difference is not larger than the page size multipled by the
+  //    number of parities
+  ceph_assert(std::cmp_less_equal(outbl->length() - data_and_parity.second.length(),
+                (encoder.get_m() * encoder.get_chunk_size()) - encoder.get_m()));
+  // We truncate the encoded parity to the size of the client read for comparison
+  if (outbl->length() != data_and_parity.second.length())
+  {
+    const int aligned_shard_length = outbl->length() / encoder.get_m();
+    const int shard_data_length = data_and_parity.second.length()
+                                  / encoder.get_m();
+    ceph::bufferlist newdata;
+    for (int i = 0; i < encoder.get_m(); i++)
+    {
+      ceph::bufferlist bl;
+      bl.substr_of(*outbl, i * aligned_shard_length, shard_data_length);
+      newdata.append(bl);
+    }
+    outbl = std::move(newdata);
   }
 
   return buffers_match(outbl.value(), data_and_parity.second);

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -38,7 +38,6 @@ class TransactionManager;
 enum class op_type_t : uint8_t {
     DO_TRANSACTION = 0,
     READ,
-    WRITE,
     GET_ATTR,
     GET_ATTRS,
     STAT,
@@ -186,7 +185,7 @@ public:
 
   // only exposed to SeaStore
   public:
-    seastar::future<> umount();
+    base_ertr::future<> umount();
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
@@ -245,60 +244,6 @@ public:
     get_coll_bits(CollectionRef ch, Transaction &t) const;
 
     static void on_error(ceph::os::Transaction &t);
-
-    template <typename F>
-    auto repeat_with_internal_context(
-      CollectionRef ch,
-      ceph::os::Transaction &&t,
-      Transaction::src_t src,
-      const char* tname,
-      op_type_t op_type,
-      F &&f) {
-      // The below repeat_io_num requires MUTATE
-      assert(src == Transaction::src_t::MUTATE);
-      return seastar::do_with(
-        internal_context_t(
-          ch, std::move(t),
-          transaction_manager->create_transaction(
-	    src, tname, t.get_fadvise_flags())),
-        std::forward<F>(f),
-        [this, op_type](auto &ctx, auto &f) {
-        assert(shard_stats.starting_io_num);
-        --(shard_stats.starting_io_num);
-        ++(shard_stats.waiting_collock_io_num);
-
-	return ctx.transaction->get_handle().take_collection_lock(
-	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	).then([this] {
-	  assert(shard_stats.waiting_collock_io_num);
-	  --(shard_stats.waiting_collock_io_num);
-	  ++(shard_stats.waiting_throttler_io_num);
-
-	  return throttler.get(1);
-	}).then([&, this] {
-	  assert(shard_stats.waiting_throttler_io_num);
-	  --(shard_stats.waiting_throttler_io_num);
-	  ++(shard_stats.processing_inlock_io_num);
-
-	  return repeat_eagain([&, this] {
-	    ++(shard_stats.repeat_io_num);
-
-	    ctx.reset_preserve_handle(*transaction_manager);
-	    return std::invoke(f, ctx);
-	  }).handle_error(
-	    crimson::ct_error::all_same_way([&ctx](auto e) {
-	      on_error(ctx.ext_transaction);
-	      return seastar::now();
-	    })
-	  );
-	}).then([this, op_type, &ctx] {
-	  add_latency_sample(op_type,
-	      std::chrono::steady_clock::now() - ctx.begin_timestamp);
-	}).finally([this] {
-	  throttler.put();
-	});
-      });
-    }
 
     template <typename Ret, typename F>
     auto repeat_with_onode(
@@ -407,6 +352,13 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _clone_range(
+      internal_context_t &ctx,
+      OnodeRef &src_onode,
+      OnodeRef &dst_onode,
+      extent_len_t srcoff,
+      extent_len_t length,
+      extent_len_t dstoff);
     tm_ret _zero(
       internal_context_t &ctx,
       Onode &onode,
@@ -433,6 +385,9 @@ public:
       internal_context_t &ctx,
       Onode &onode);
     tm_ret _create_collection(
+      internal_context_t &ctx,
+      const coll_t& cid, int bits);
+    tm_ret _split_collection(
       internal_context_t &ctx,
       const coll_t& cid, int bits);
     tm_ret _remove_collection(
@@ -586,10 +541,27 @@ public:
   seastar::future<> start() final;
   seastar::future<> stop() final;
 
-  mount_ertr::future<> mount() final;
+  Device::access_ertr::future<> _mount();
+
+  // FuturizedStore::mount_ertr/mkfs_ertr only supports a stateful_ec
+  // to keep the interface intact, convert to stateful_ec.
+  crimson::os::FuturizedStore::mount_ertr::future<> mount() final {
+    return _mount().handle_error(
+      Device::access_ertr::all_same_way([](auto& code) {
+        return crimson::stateful_ec{code};
+    }));
+  }
   seastar::future<> umount() final;
 
-  mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
+  Device::access_ertr::future<> _mkfs(uuid_d new_osd_fsid);
+
+  crimson::os::FuturizedStore::mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final {
+    return _mkfs(new_osd_fsid).handle_error(
+      Device::access_ertr::all_same_way([](auto& code) {
+        return crimson::stateful_ec{code};
+    }));
+  }
+
   seastar::future<store_statfs_t> stat() const final;
   seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
 

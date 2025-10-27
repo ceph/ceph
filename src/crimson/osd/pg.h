@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -602,6 +602,10 @@ public:
   void handle_activate_map(PeeringCtx &rctx);
   void handle_initialize(PeeringCtx &rctx);
 
+  void update_snap_mapper_bits(uint32_t bits) {
+    snap_mapper.update_bits(bits);
+  }
+
   void start_split_stats(const std::set<spg_t>& childpgs, std::vector<object_stat_sum_t> *out) {
     peering_state.start_split_stats(childpgs, out);
   }
@@ -631,6 +635,7 @@ public:
 
   void split_into(pg_t child_pgid, Ref<PG> child, unsigned split_bits) {
     peering_state.split_into(child_pgid, &child->peering_state, split_bits);
+    child->update_snap_mapper_bits(split_bits);
     child->snap_trimq = snap_trimq;
   }
 

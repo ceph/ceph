@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 /**
  * Server-side encryption integrations with Key Management Systems (SSE-KMS)
@@ -18,6 +18,7 @@
 #include <rapidjson/writer.h>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include <regex>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -117,6 +118,14 @@ static void concat_url(std::string &url, std::string path) {
     }
     url.append(path);
   }
+}
+
+static bool validate_barbican_key_id(std::string_view key_id) {
+  // Barbican expects UUID4 secret ids.
+  // See barbican: common/utils.py, api/controllers/secrets.py
+  static const std::regex uuid_4_re{
+      R"(^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$)"};
+  return std::regex_match(key_id.data(), uuid_4_re);
 }
 
 /**
@@ -281,10 +290,8 @@ protected:
       secret_req.set_send_length(postdata.length());
     }
 
-    secret_req.append_header("X-Vault-Token", vault_token);
-    if (!vault_token.empty()){
+    if (!vault_token.empty()) {
       secret_req.append_header("X-Vault-Token", vault_token);
-      vault_token.replace(0, vault_token.length(), vault_token.length(), '\000');
     }
 
     string vault_namespace = kctx.k_namespace();
@@ -494,6 +501,8 @@ public:
     int res = send_request(dpp, "POST", "/datakey/plaintext/", key_id,
                            post_data, y, secret_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Failed to send request to Vault, res: "
+                        << res << " response: " << string_view(secret_bl.c_str(), secret_bl.length()) << dendl;
       return res;
     }
 
@@ -579,6 +588,8 @@ public:
     int res = send_request(dpp, "POST", "/decrypt/", key_id,
                            post_data, y, secret_bl);
     if (res < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Failed to send request to Vault for decrypt, res: "
+                        << res << " response: " << string_view(secret_bl.c_str(), secret_bl.length()) << dendl;
       return res;
     }
 
@@ -647,12 +658,11 @@ public:
     int res = send_request(dpp, "POST", "/keys/", key_name,
                            post_data, y, dummy_bl);
     if (res < 0) {
-      return res;
-    }
-    if (dummy_bl.length() != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: unexpected response from Vault making a key: "
+      ldpp_dout(dpp, 0) << "ERROR: key creation failed by Vault, ret: "
+        << res << " response: "
         << std::string_view(dummy_bl.c_str(), dummy_bl.length())
         << dendl;
+      return res;
     }
     return 0;
   }
@@ -919,6 +929,10 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
                                      const std::string& barbican_token,
                                      optional_yield y,
                                      std::string& actual_key) {
+  if (!validate_barbican_key_id(key_id)) {
+    return -EINVAL;
+  }
+
   int res;
 
   CephContext* cct = dpp->get_cct();
@@ -929,6 +943,7 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
   }
   concat_url(secret_url, "/v1/secrets/");
   concat_url(secret_url, std::string(key_id));
+  concat_url(secret_url, "/payload");
 
   bufferlist secret_bl;
   RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);

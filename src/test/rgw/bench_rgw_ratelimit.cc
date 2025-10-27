@@ -91,7 +91,7 @@ bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared
     int rw = 0; // will always use PUT method as there is no different
     std::string methodop = method[rw];
     auto dout = DoutPrefix(g_ceph_context, ceph_subsys_rgw, "rate limiter: ");
-    bool to_fail = ratelimit->should_rate_limit(methodop.c_str(), it.tenant, time, &info);
+    bool to_fail = ratelimit->should_rate_limit(methodop.c_str(), it.tenant, time, &info, "");
     if(to_fail)
     {
         it.rejected++;

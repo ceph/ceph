@@ -17,12 +17,14 @@ from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CertificateSource
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from mgr_util import verify_tls_files
 import tempfile
 from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmAgent
+from cephadm.tlsobject_types import TLSCredentials
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO
@@ -43,6 +45,9 @@ logging.getLogger('cherrypy.error').addFilter(cherrypy_filter)
 cherrypy.log.access_log.propagate = False
 
 
+CEPHADM_AGENT_CERT_DURATION = (365 * 5)
+
+
 class AgentEndpoint:
 
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
@@ -59,19 +64,26 @@ class AgentEndpoint:
         cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
-        addr = self.mgr.get_mgr_ip()
-        host = self.mgr.get_hostname()
-        cert, key = self.mgr.cert_mgr.generate_cert(host, addr)
+        self.mgr.cert_mgr.register_self_signed_cert_key_pair(CephadmAgent.TYPE)
+        tls_pair = self._get_agent_certificates()
         self.cert_file = tempfile.NamedTemporaryFile()
-        self.cert_file.write(cert.encode('utf-8'))
+        self.cert_file.write(tls_pair.cert.encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
 
         self.key_file = tempfile.NamedTemporaryFile()
-        self.key_file.write(key.encode('utf-8'))
+        self.key_file.write(tls_pair.key.encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
         verify_tls_files(self.cert_file.name, self.key_file.name)
         server.ssl_certificate, server.ssl_private_key = self.cert_file.name, self.key_file.name
+
+    def _get_agent_certificates(self) -> TLSCredentials:
+        host = self.mgr.get_hostname()
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(CephadmAgent.TYPE, host)
+        if not tls_creds:
+            tls_creds = self.mgr.cert_mgr.generate_cert(host, self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
+            self.mgr.cert_mgr.save_self_signed_cert_key_pair(CephadmAgent.TYPE, tls_creds, host=host)
+        return tls_creds
 
     def find_free_port(self) -> None:
         max_port = self.server_port + 150
@@ -782,15 +794,15 @@ class AgentMessageThread(threading.Thread):
             root_cert_tmp.flush()
             root_cert_fname = root_cert_tmp.name
 
-            cert, key = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip())
+            tls_pair = self.mgr.cert_mgr.generate_cert(self.mgr.get_hostname(), self.mgr.get_mgr_ip(), duration_in_days=CEPHADM_AGENT_CERT_DURATION)
 
             cert_tmp = tempfile.NamedTemporaryFile()
-            cert_tmp.write(cert.encode('utf-8'))
+            cert_tmp.write(tls_pair.cert.encode('utf-8'))
             cert_tmp.flush()
             cert_fname = cert_tmp.name
 
             key_tmp = tempfile.NamedTemporaryFile()
-            key_tmp.write(key.encode('utf-8'))
+            key_tmp.write(tls_pair.key.encode('utf-8'))
             key_tmp.flush()
             key_fname = key_tmp.name
 
@@ -877,7 +889,7 @@ class CephadmAgentHelpers:
         if self.mgr.cache.is_host_draining(host):
             return False
         # if we haven't deployed an agent on the host yet, don't say an agent is down
-        if not self.mgr.cache.get_daemons_by_type('agent', host=host):
+        if not self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE, host=host):
             return False
         # if we don't have a timestamp, it's likely because of a mgr fail over.
         # just set the timestamp to now. However, if host was offline before, we
@@ -902,7 +914,7 @@ class CephadmAgentHelpers:
                 detail.append((f'Cephadm agent on host {agent} has not reported in '
                               f'{down_mult * self.mgr.agent_refresh_rate} seconds. Agent is assumed '
                                'down and host may be offline.'))
-            for dd in [d for d in self.mgr.cache.get_daemons_by_type('agent') if d.hostname in down_agent_hosts]:
+            for dd in [d for d in self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE) if d.hostname in down_agent_hosts]:
                 dd.status = DaemonDescriptionStatus.error
             self.mgr.set_health_warning(
                 'CEPHADM_AGENT_DOWN',
@@ -918,8 +930,10 @@ class CephadmAgentHelpers:
     # daemons, OR we can put this in its own function then mock the function
     def _apply_agent(self) -> None:
         spec = ServiceSpec(
-            service_type='agent',
-            placement=PlacementSpec(host_pattern='*')
+            service_type=CephadmAgent.TYPE,
+            placement=PlacementSpec(host_pattern='*'),
+            ssl=True,
+            certificate_source=CertificateSource.CEPHADM_SIGNED.value,
         )
         self.mgr.spec_store.save(spec)
 
@@ -930,17 +944,17 @@ class CephadmAgentHelpers:
             # when we turned the config option off, we need to redeploy them
             # we can tell they're in that state if we don't have a keyring for
             # them in the host cache
-            for agent in self.mgr.cache.get_daemons_by_service('agent'):
+            for agent in self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
                 if agent.hostname not in self.mgr.agent_cache.agent_keys:
                     self.mgr._schedule_daemon_action(agent.name(), 'redeploy')
-            if 'agent' not in self.mgr.spec_store:
+            if CephadmAgent.TYPE not in self.mgr.spec_store:
                 self.mgr.agent_helpers._apply_agent()
                 need_apply = True
         else:
-            if 'agent' in self.mgr.spec_store:
-                self.mgr.spec_store.rm('agent')
+            if CephadmAgent.TYPE in self.mgr.spec_store:
+                self.mgr.spec_store.rm(CephadmAgent.TYPE)
                 need_apply = True
-            if not self.mgr.cache.get_daemons_by_service('agent'):
+            if not self.mgr.cache.get_daemons_by_service(CephadmAgent.TYPE):
                 self.mgr.agent_cache.agent_counter = {}
                 self.mgr.agent_cache.agent_timestamp = {}
                 self.mgr.agent_cache.agent_keys = {}
@@ -959,7 +973,7 @@ class CephadmAgentHelpers:
         if self.mgr.agent_helpers._agent_down(host):
             down = True
         try:
-            agent = self.mgr.cache.get_daemons_by_type('agent', host=host)[0]
+            agent = self.mgr.cache.get_daemons_by_type(CephadmAgent.TYPE, host=host)[0]
             assert agent.daemon_id is not None
             assert agent.hostname is not None
         except Exception as e:
@@ -967,8 +981,8 @@ class CephadmAgentHelpers:
                 f'Could not retrieve agent on host {host} from daemon cache: {e}')
             return down
         try:
-            spec = self.mgr.spec_store.active_specs.get('agent', None)
-            deps = self.mgr._calc_daemon_deps(spec, 'agent', agent.daemon_id)
+            spec = self.mgr.spec_store.active_specs.get(CephadmAgent.TYPE, None)
+            deps = self.mgr._calc_daemon_deps(spec, CephadmAgent.TYPE, agent.daemon_id)
             last_deps, last_config = self.mgr.agent_cache.get_agent_last_config_deps(host)
             if not last_config or last_deps != deps:
                 # if root cert is the dep that changed, we must use ssh to reconfig

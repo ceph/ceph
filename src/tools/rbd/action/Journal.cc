@@ -1,14 +1,15 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "common/Cond.h"
-#include "common/Formatter.h"
+#include "common/JSONFormatter.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "include/rbd_types.h" // for RBD_DIRECTORY
 #include "include/stringify.h"
 #include <fstream>
 #include <sstream>

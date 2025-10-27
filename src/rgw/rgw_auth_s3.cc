@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
 #include <boost/algorithm/string/predicate.hpp>
@@ -1024,12 +1024,13 @@ get_v2_signature(CephContext* const cct,
 
   const auto digest = calc_hmac_sha1(secret_key, string_to_sign);
 
-  /* 64 is really enough */;
-  char buf[64];
-  const int ret = ceph_armor(std::begin(buf),
-                             std::begin(buf) + 64,
-                             reinterpret_cast<const char *>(digest.v),
-                             reinterpret_cast<const char *>(digest.v + digest.SIZE));
+  /* Sized for signature */;
+  char buf[AWSEngine::VersionAbstractor::SIGNATURE_MAX_SIZE];
+  const int ret = ceph_armor(
+      std::begin(buf),
+      std::begin(buf) + AWSEngine::VersionAbstractor::SIGNATURE_MAX_SIZE,
+      reinterpret_cast<const char*>(digest.v),
+      reinterpret_cast<const char*>(digest.v + digest.SIZE));
   if (ret < 0) {
     ldout(cct, 10) << "ceph_armor failed" << dendl;
     throw ret;

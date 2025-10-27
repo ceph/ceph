@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -55,13 +56,16 @@ void DecayCounter::dump(ceph::Formatter *f) const
   f->dump_float("halflife", rate.get_halflife());
 }
 
-void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
+std::list<DecayCounter> DecayCounter::generate_test_instances()
 {
-  DecayCounter *counter = new DecayCounter();
-  counter->val = 3.0;
-  ls.push_back(counter);
-  counter = new DecayCounter();
-  ls.push_back(counter);
+  std::list<DecayCounter>ls;
+
+  DecayCounter counter;
+  counter.val = 3.0;
+  ls.push_back(std::move(counter));
+  counter = DecayCounter();
+  ls.push_back(std::move(counter));
+  return ls;
 }
 
 void DecayCounter::decay(double delta) const

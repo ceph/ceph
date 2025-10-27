@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -117,15 +117,19 @@ public:
   using clone_mapping_iertr = alloc_extent_iertr;
   using clone_mapping_ret = clone_mapping_iertr::future<clone_mapping_ret_t>;
   /*
-   * Clones "mapping" at the position "pos" with new laddr "laddr", if updateref
-   * is true, update the refcount of the mapping "mapping"
+   * Clones (part of) "mapping" at the position "pos" with the new lba key "laddr".
    */
   virtual clone_mapping_ret clone_mapping(
     Transaction &t,
-    LBAMapping pos,
-    LBAMapping mapping,
-    laddr_t laddr,
-    bool updateref) = 0;
+    LBAMapping pos,		// the destined position
+    LBAMapping mapping,		// the mapping to be cloned
+    laddr_t laddr,		// the new lba key of the cloned mapping
+    extent_len_t offset,	// the offset of the part to be cloned,
+				// relative to the start of the mapping.
+    extent_len_t len,		// the length of the part to be cloned
+    bool updateref		// whether to update the refcount of the
+				// direct mapping
+  ) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
@@ -181,6 +185,19 @@ public:
    * if the mapping of laddr is indirect.
    */
   virtual ref_ret remove_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
+  /*
+   * remove_indirect_mapping_only
+   *
+   * Remove the indirect mapping without touch the corresponding
+   * direct one.
+   *
+   * @return returns the information about the removed
+   * indirect mapping.
+   */
+  virtual ref_ret remove_indirect_mapping_only(
     Transaction &t,
     LBAMapping mapping) = 0;
 

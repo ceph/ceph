@@ -79,6 +79,85 @@ address is not present and ``monitoring_networks`` is specified, an IP address
 that matches one of the specified networks will be used. If neither condition
 is met, the default binding will happen on all available network interfaces.
 
+TLS/SSL Example
+---------------
+
+Here's an example NFS service specification with TLS/SSL configuration:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      hosts:
+      - ceph-node-0
+    spec:
+      port: 12345
+      ssl: true
+      certificate_source: inline|reference|cephadm-signed
+      ssl_cert: |
+        -----BEGIN CERTIFICATE-----
+        (PEM cert contents here)
+        -----END CERTIFICATE-----
+      ssl_key: |
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      ssl_ca_cert:
+        -----BEGIN PRIVATE KEY-----
+        (PEM key contents here)
+        -----END PRIVATE KEY-----
+      tls_ktls: true
+      tls_debug: true
+      tls_min_version: TLSv1.3
+      tls_ciphers: AES-256
+
+This example configures an NFS service with TLS encryption enabled using
+inline certificates.
+
+TLS/SSL Parameters
+~~~~~~~~~~~~~~~~~~
+
+The following parameters can be used to configure TLS/SSL encryption for the NFS service:
+
+* ``ssl`` (boolean): Enable or disable SSL/TLS encryption. Default is ``false``.
+
+* ``certificate_source`` (string): Specifies the source of the TLS certificates.
+  Options include:
+
+  - ``cephadm-signed``: Use certificates signed by cephadm's internal CA
+  - ``inline``: Provide certificates directly in the specification using ``ssl_cert``, ``ssl_key``, and ``ssl_ca_cert`` fields
+  - ``reference``: Users can register their own certificate and key with certmgr and
+    set the ``certificate_source`` to ``reference`` in the spec.
+
+* ``ssl_cert`` (string): The SSL certificate in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_key`` (string): The SSL private key in PEM format. Required when using
+  ``inline`` certificate source.
+
+* ``ssl_ca_cert`` (string): The SSL CA certificate in PEM format. Required when
+  using ``inline`` certificate source.
+
+* ``custom_sans`` (list): List of custom Subject Alternative Names (SANs) to
+  include in the certificate.
+
+* ``tls_ktls`` (boolean): Enable kernel TLS (kTLS) for improved performance when
+  available. Default is ``false``.
+
+* ``tls_debug`` (boolean): Enable TLS debugging output. Useful for troubleshooting
+  TLS issues. Default is ``false``.
+
+* ``tls_min_version`` (string): Specify the minimum TLS version to accept.
+  Examples: TLSv1.3, TLSv1.2
+
+* ``tls_ciphers`` (string): Specify allowed cipher suites for TLS connections.
+  Example: :-CIPHER-ALL:+AES-256-GCM
+
+.. note:: When ``ssl`` is enabled, a ``certificate_source`` must be specified.
+   If using ``inline`` certificates, all three certificate fields (``ssl_cert``,
+   ``ssl_key``, ``ssl_ca_cert``) must be provided.
+
 The specification can then be applied by running the following command:
 
 .. prompt:: bash #

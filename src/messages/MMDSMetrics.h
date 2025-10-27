@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_MDS_METRICS_H
 #define CEPH_MDS_METRICS_H
@@ -31,7 +31,8 @@ public:
 
   void print(std::ostream &out) const override {
     out << "mds_metrics from rank=" << metrics_message.rank << " carrying "
-        << metrics_message.client_metrics_map.size() << " metric updates";
+        << metrics_message.client_metrics_map.size() << "+"
+	<< metrics_message.subvolume_metrics.size() << " metric updates";
   }
 
   void encode_payload(uint64_t features) override {

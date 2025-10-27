@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -281,6 +282,8 @@ public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
+
+  bool is_prime(int value); // A utility funtion that returns true if value is prime 
 
   /**
    * This set of functions maintains the in-memory stretch state

@@ -4,6 +4,7 @@
   </cd-help-text>
 </legend>
 <cd-table
+  #table
   [data]="storageClassList"
   columnMode="flex"
   [columns]="columns"
@@ -14,7 +15,7 @@
   [hasDetails]="true"
   (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
->
+  [autoReload]="false">
   <div class="table-actions">
     <cd-table-actions class="btn-group"
                       [permission]="permission"

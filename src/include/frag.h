@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -149,7 +150,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<frag_t*>& ls);
+  static std::list<frag_t> generate_test_instances() ;
 
   bool operator<(const frag_t& b) const
   {
@@ -399,7 +400,7 @@ public:
 
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<fragtree_t*>& ls);
+  static std::list<fragtree_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(fragtree_t)
 

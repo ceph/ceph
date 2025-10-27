@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 #ifndef _CEPH_UUID_H
 #define _CEPH_UUID_H
 
@@ -64,7 +64,7 @@ struct uuid_d {
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<uuid_d*>& o);
+  static std::list<uuid_d> generate_test_instances();
 };
 WRITE_CLASS_DENC_BOUNDED(uuid_d)
 

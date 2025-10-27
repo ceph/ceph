@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "mdstypes.h"
 #include "include/cephfs/types.h"
@@ -84,14 +84,16 @@ void frag_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("change_attr", change_attr, obj, true);
 }
 
-void frag_info_t::generate_test_instances(std::list<frag_info_t*>& ls)
+std::list<frag_info_t> frag_info_t::generate_test_instances()
 {
-  ls.push_back(new frag_info_t);
-  ls.push_back(new frag_info_t);
-  ls.back()->version = 1;
-  ls.back()->mtime = utime_t(2, 3);
-  ls.back()->nfiles = 4;
-  ls.back()->nsubdirs = 5;
+  std::list<frag_info_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().version = 1;
+  ls.back().mtime = utime_t(2, 3);
+  ls.back().nfiles = 4;
+  ls.back().nsubdirs = 5;
+  return ls;
 }
 
 ostream& operator<<(ostream &out, const frag_info_t &f)
@@ -165,16 +167,18 @@ void nest_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("rctime", rctime, obj, true);
 }
 
-void nest_info_t::generate_test_instances(std::list<nest_info_t*>& ls)
+std::list<nest_info_t> nest_info_t::generate_test_instances()
 {
-  ls.push_back(new nest_info_t);
-  ls.push_back(new nest_info_t);
-  ls.back()->version = 1;
-  ls.back()->rbytes = 2;
-  ls.back()->rfiles = 3;
-  ls.back()->rsubdirs = 4;
-  ls.back()->rsnaps = 6;
-  ls.back()->rctime = utime_t(7, 8);
+  std::list<nest_info_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().version = 1;
+  ls.back().rbytes = 2;
+  ls.back().rfiles = 3;
+  ls.back().rsubdirs = 4;
+  ls.back().rsnaps = 6;
+  ls.back().rctime = utime_t(7, 8);
+  return ls;
 }
 
 ostream& operator<<(ostream &out, const nest_info_t &n)
@@ -209,12 +213,14 @@ void  quota_info_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("max_files", max_files, obj, true);
 }
 
-void quota_info_t::generate_test_instances(std::list<quota_info_t *>& ls)
+std::list<quota_info_t> quota_info_t::generate_test_instances()
 {
-  ls.push_back(new quota_info_t);
-  ls.push_back(new quota_info_t);
-  ls.back()->max_bytes = 16;
-  ls.back()->max_files = 16;
+  std::list<quota_info_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().max_bytes = 16;
+  ls.back().max_files = 16;
+  return ls;
 }
 
 ostream& operator<<(ostream &out, const quota_info_t &n)
@@ -263,13 +269,15 @@ void client_writeable_range_t::byte_range_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("last", last, obj, true);
 }
 
-void client_writeable_range_t::generate_test_instances(std::list<client_writeable_range_t*>& ls)
+std::list<client_writeable_range_t> client_writeable_range_t::generate_test_instances()
 {
-  ls.push_back(new client_writeable_range_t);
-  ls.push_back(new client_writeable_range_t);
-  ls.back()->range.first = 123;
-  ls.back()->range.last = 456;
-  ls.back()->follows = 12;
+  std::list<client_writeable_range_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().range.first = 123;
+  ls.back().range.last = 456;
+  ls.back().follows = 12;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const client_writeable_range_t& r)
@@ -309,13 +317,15 @@ void inline_data_t::dump(Formatter *f) const
   f->dump_unsigned("length", length());
 }
 
-void inline_data_t::generate_test_instances(std::list<inline_data_t*>& ls)
+std::list<inline_data_t> inline_data_t::generate_test_instances()
 {
-  ls.push_back(new inline_data_t);
-  ls.push_back(new inline_data_t);
+  std::list<inline_data_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
   bufferlist bl;
   bl.append("inline data");
-  ls.back()->set_data(bl);
+  ls.back().set_data(bl);
+  return ls;
 }
 
 
@@ -391,20 +401,20 @@ void fnode_t::decode_json(JSONObj *obj){
   JSONDecoder::decode_json("rstat", rstat, obj, true);
   JSONDecoder::decode_json("accounted_rstat", accounted_rstat, obj, true);
 }
-void fnode_t::generate_test_instances(std::list<fnode_t*>& ls)
+std::list<fnode_t> fnode_t::generate_test_instances()
 {
-  ls.push_back(new fnode_t);
-  ls.push_back(new fnode_t);
-  ls.back()->version = 1;
-  ls.back()->snap_purged_thru = 2;
-  list<frag_info_t*> fls;
-  frag_info_t::generate_test_instances(fls);
-  ls.back()->fragstat = *fls.back();
-  ls.back()->accounted_fragstat = *fls.front();
-  list<nest_info_t*> nls;
-  nest_info_t::generate_test_instances(nls);
-  ls.back()->rstat = *nls.front();
-  ls.back()->accounted_rstat = *nls.back();
+  std::list<fnode_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().version = 1;
+  ls.back().snap_purged_thru = 2;
+  list<frag_info_t> fls = frag_info_t::generate_test_instances();
+  ls.back().fragstat = fls.back();
+  ls.back().accounted_fragstat = fls.front();
+  list<nest_info_t> nls = nest_info_t::generate_test_instances();
+  ls.back().rstat = nls.front();
+  ls.back().accounted_rstat = nls.back();
+  return ls;
 }
 
 
@@ -440,15 +450,16 @@ void old_rstat_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void old_rstat_t::generate_test_instances(std::list<old_rstat_t*>& ls)
+std::list<old_rstat_t> old_rstat_t::generate_test_instances()
 {
-  ls.push_back(new old_rstat_t());
-  ls.push_back(new old_rstat_t());
-  ls.back()->first = 12;
-  list<nest_info_t*> nls;
-  nest_info_t::generate_test_instances(nls);
-  ls.back()->rstat = *nls.back();
-  ls.back()->accounted_rstat = *nls.front();
+  std::list<old_rstat_t> ls;
+  ls.push_back(old_rstat_t());
+  ls.push_back(old_rstat_t());
+  ls.back().first = 12;
+  list<nest_info_t> nls = nest_info_t::generate_test_instances();
+  ls.back().rstat = nls.back();
+  ls.back().accounted_rstat = nls.front();
+  return ls;
 }
 
 void old_rstat_t::print(std::ostream& out) const {
@@ -547,13 +558,15 @@ void feature_bitset_t::dump(Formatter *f) const {
   f->dump_string("feature_bits", css->strv());
 }
 
-void feature_bitset_t::generate_test_instances(std::list<feature_bitset_t*>& ls)
+std::list<feature_bitset_t> feature_bitset_t::generate_test_instances()
 {
-  ls.push_back(new feature_bitset_t());
-  ls.push_back(new feature_bitset_t());
-  ls.back()->_vec.push_back(1);
-  ls.back()->_vec.push_back(2);
-  ls.back()->_vec.push_back(3);
+  std::list<feature_bitset_t> ls;
+  ls.push_back(feature_bitset_t());
+  ls.push_back(feature_bitset_t());
+  ls.back()._vec.push_back(1);
+  ls.back()._vec.push_back(2);
+  ls.back()._vec.push_back(3);
+  return ls;
 }
 
 void feature_bitset_t::print(ostream& out) const
@@ -592,11 +605,13 @@ void metric_spec_t::dump(Formatter *f) const {
   f->dump_object("metric_flags", metric_flags);
 }
 
-void metric_spec_t::generate_test_instances(std::list<metric_spec_t*>& ls)
+std::list<metric_spec_t> metric_spec_t::generate_test_instances()
 {
-  ls.push_back(new metric_spec_t());
-  ls.push_back(new metric_spec_t());
-  ls.back()->metric_flags = 1;
+  std::list<metric_spec_t> ls;
+  ls.push_back(metric_spec_t());
+  ls.push_back(metric_spec_t());
+  ls.back().metric_flags = 1;
+  return ls;
 }
 
 void metric_spec_t::print(ostream& out) const
@@ -636,14 +651,16 @@ void client_metadata_t::dump(Formatter *f) const
     f->dump_string(name.c_str(), val);
 }
 
-void client_metadata_t::generate_test_instances(std::list<client_metadata_t*>& ls)
+std::list<client_metadata_t> client_metadata_t::generate_test_instances()
 {
-  ls.push_back(new client_metadata_t());
-  ls.push_back(new client_metadata_t());
-  ls.back()->kv_map["key1"] = "val1";
-  ls.back()->kv_map["key2"] = "val2";
-  ls.back()->features = 0x12345678;
-  ls.back()->metric_spec.metric_flags = 0x12345678;
+  std::list<client_metadata_t> ls;
+  ls.push_back(client_metadata_t());
+  ls.push_back(client_metadata_t());
+  ls.back().kv_map["key1"] = "val1";
+  ls.back().kv_map["key2"] = "val2";
+  ls.back().features = 0x12345678;
+  ls.back().metric_spec.metric_flags = 0x12345678;
+  return ls;
 }
 
 /*
@@ -722,16 +739,18 @@ void session_info_t::dump(Formatter *f) const
   f->dump_object("client_metadata", client_metadata);
 }
 
-void session_info_t::generate_test_instances(std::list<session_info_t*>& ls)
+std::list<session_info_t> session_info_t::generate_test_instances()
 {
-  ls.push_back(new session_info_t);
-  ls.push_back(new session_info_t);
-  ls.back()->inst = entity_inst_t(entity_name_t::MDS(12), entity_addr_t());
-  ls.back()->completed_requests.insert(make_pair(234, inodeno_t(111222)));
-  ls.back()->completed_requests.insert(make_pair(237, inodeno_t(222333)));
-  ls.back()->prealloc_inos.insert(333, 12);
-  ls.back()->prealloc_inos.insert(377, 112);
+  std::list<session_info_t>ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().inst = entity_inst_t(entity_name_t::MDS(12), entity_addr_t());
+  ls.back().completed_requests.insert(make_pair(234, inodeno_t(111222)));
+  ls.back().completed_requests.insert(make_pair(237, inodeno_t(222333)));
+  ls.back().prealloc_inos.insert(333, 12);
+  ls.back().prealloc_inos.insert(377, 112);
   // we can't add used inos; they're cleared on decode
+  return ls;
 }
 
 /*
@@ -783,15 +802,17 @@ void string_snap_t::dump(Formatter *f) const
   f->dump_unsigned("snapid", snapid);
 }
 
-void string_snap_t::generate_test_instances(std::list<string_snap_t*>& ls)
+std::list<string_snap_t> string_snap_t::generate_test_instances()
 {
-  ls.push_back(new string_snap_t);
-  ls.push_back(new string_snap_t);
-  ls.back()->name = "foo";
-  ls.back()->snapid = 123;
-  ls.push_back(new string_snap_t);
-  ls.back()->name = "bar";
-  ls.back()->snapid = 456;
+  std::list<string_snap_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().name = "foo";
+  ls.back().snapid = 123;
+  ls.emplace_back();
+  ls.back().name = "bar";
+  ls.back().snapid = 456;
+  return ls;
 }
 
 
@@ -837,19 +858,21 @@ void MDSCacheObjectInfo::print(std::ostream& out) const {
   }
 }
 
-void MDSCacheObjectInfo::generate_test_instances(std::list<MDSCacheObjectInfo*>& ls)
+std::list<MDSCacheObjectInfo> MDSCacheObjectInfo::generate_test_instances()
 {
-  ls.push_back(new MDSCacheObjectInfo);
-  ls.push_back(new MDSCacheObjectInfo);
-  ls.back()->ino = 1;
-  ls.back()->dirfrag = dirfrag_t(2, 3);
-  ls.back()->dname = "fooname";
-  ls.back()->snapid = CEPH_NOSNAP;
-  ls.push_back(new MDSCacheObjectInfo);
-  ls.back()->ino = 121;
-  ls.back()->dirfrag = dirfrag_t(222, 0);
-  ls.back()->dname = "bar foo";
-  ls.back()->snapid = 21322;
+  std::list<MDSCacheObjectInfo> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().ino = 1;
+  ls.back().dirfrag = dirfrag_t(2, 3);
+  ls.back().dname = "fooname";
+  ls.back().snapid = CEPH_NOSNAP;
+  ls.emplace_back();
+  ls.back().ino = 121;
+  ls.back().dirfrag = dirfrag_t(222, 0);
+  ls.back().dname = "bar foo";
+  ls.back().snapid = 21322;
+  return ls;
 }
 
 /*
@@ -880,13 +903,15 @@ void mds_table_pending_t::dump(Formatter *f) const
   f->dump_unsigned("tid", tid);
 }
 
-void mds_table_pending_t::generate_test_instances(std::list<mds_table_pending_t*>& ls)
+std::list<mds_table_pending_t> mds_table_pending_t::generate_test_instances()
 {
-  ls.push_back(new mds_table_pending_t);
-  ls.push_back(new mds_table_pending_t);
-  ls.back()->reqid = 234;
-  ls.back()->mds = 2;
-  ls.back()->tid = 35434;
+  std::list<mds_table_pending_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().reqid = 234;
+  ls.back().mds = 2;
+  ls.back().tid = 35434;
+  return ls;
 }
 
 void metareqid_t::dump(ceph::Formatter* f) const {
@@ -898,9 +923,11 @@ void metareqid_t::print(std::ostream& out) const {
   out << name << ":" << tid;
 }
 
-void metareqid_t::generate_test_instances(std::list<metareqid_t*>& ls) {
-  ls.push_back(new metareqid_t);
-  ls.push_back(new metareqid_t(entity_name_t::CLIENT(123), 456));
+std::list<metareqid_t> metareqid_t::generate_test_instances() {
+  std::list<metareqid_t> ls;
+  ls.emplace_back();
+  ls.push_back(metareqid_t(entity_name_t::CLIENT(123), 456));
+  return ls;
 }
 
 /*
@@ -918,10 +945,12 @@ void dirfrag_t::dump(ceph::Formatter *f) const {
   f->dump_unsigned("frag", frag);
 }
 
-void dirfrag_t::generate_test_instances(std::list<dirfrag_t*>& ls) {
-  ls.push_back(new dirfrag_t);
-  ls.push_back(new dirfrag_t(1, frag_t()));
-  ls.push_back(new dirfrag_t(2, frag_t(3)));
+std::list<dirfrag_t> dirfrag_t::generate_test_instances() {
+  std::list<dirfrag_t> ls;
+  ls.emplace_back();
+  ls.push_back(dirfrag_t(1, frag_t()));
+  ls.push_back(dirfrag_t(2, frag_t(3)));
+  return ls;
 }
 
 /*
@@ -956,9 +985,11 @@ void inode_load_vec_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void inode_load_vec_t::generate_test_instances(std::list<inode_load_vec_t*>& ls)
+std::list<inode_load_vec_t> inode_load_vec_t::generate_test_instances()
 {
-  ls.push_back(new inode_load_vec_t(DecayRate()));
+  std::list<inode_load_vec_t> ls;
+  ls.push_back(inode_load_vec_t(DecayRate()));
+  return ls;
 }
 
 
@@ -999,9 +1030,11 @@ void dirfrag_load_vec_t::print(std::ostream& out) const {
   out << css->strv();
 }
 
-void dirfrag_load_vec_t::generate_test_instances(std::list<dirfrag_load_vec_t*>& ls)
+std::list<dirfrag_load_vec_t> dirfrag_load_vec_t::generate_test_instances()
 {
-  ls.push_back(new dirfrag_load_vec_t(DecayRate()));
+  std::list<dirfrag_load_vec_t> ls;
+  ls.push_back(dirfrag_load_vec_t(DecayRate()));
+  return ls;
 }
 
 /*
@@ -1052,9 +1085,11 @@ void mds_load_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void mds_load_t::generate_test_instances(std::list<mds_load_t*>& ls)
+std::list<mds_load_t> mds_load_t::generate_test_instances()
 {
-  ls.push_back(new mds_load_t(DecayRate()));
+  std::list<mds_load_t> ls;
+  ls.push_back(mds_load_t(DecayRate()));
+  return ls;
 }
 
 /*
@@ -1101,11 +1136,13 @@ void cap_reconnect_t::dump(Formatter *f) const
   f->dump_string("has file locks", capinfo.flock_len ? "true" : "false");
 }
 
-void cap_reconnect_t::generate_test_instances(std::list<cap_reconnect_t*>& ls)
+std::list<cap_reconnect_t> cap_reconnect_t::generate_test_instances()
 {
-  ls.push_back(new cap_reconnect_t);
-  ls.back()->path = "/test/path";
-  ls.back()->capinfo.cap_id = 1;
+  std::list<cap_reconnect_t> ls;
+  ls.emplace_back();
+  ls.back().path = "/test/path";
+  ls.back().capinfo.cap_id = 1;
+  return ls;
 }
 
 /*
@@ -1140,12 +1177,14 @@ void snaprealm_reconnect_t::dump(Formatter *f) const
   f->dump_int("parent", realm.parent);
 }
 
-void snaprealm_reconnect_t::generate_test_instances(std::list<snaprealm_reconnect_t*>& ls)
+std::list<snaprealm_reconnect_t> snaprealm_reconnect_t::generate_test_instances()
 {
-  ls.push_back(new snaprealm_reconnect_t);
-  ls.back()->realm.ino = 0x10000000001ULL;
-  ls.back()->realm.seq = 2;
-  ls.back()->realm.parent = 1;
+  std::list<snaprealm_reconnect_t> ls;
+  ls.emplace_back();
+  ls.back().realm.ino = 0x10000000001ULL;
+  ls.back().realm.seq = 2;
+  ls.back().realm.parent = 1;
+  return ls;
 }
 
 void EstimatedReplayTime::print(std::ostream& out) {
@@ -1180,16 +1219,41 @@ void BlockDiff::dump(Formatter *f) const {
   f->dump_stream("blocks") << blocks;
 }
 
-void BlockDiff::generate_test_instances(std::list<BlockDiff*>& ls)
+std::list<BlockDiff> BlockDiff::generate_test_instances()
 {
-  ls.push_back(new BlockDiff());
-  ls.push_back(new BlockDiff());
-  ls.back()->rval = 0;
-  ls.back()->scan_idx = 1;
-  ls.back()->blocks.union_insert(0, 200);
+  std::list<BlockDiff> ls;
+  ls.push_back(BlockDiff());
+  ls.push_back(BlockDiff());
+  ls.back().rval = 0;
+  ls.back().scan_idx = 1;
+  ls.back().blocks.union_insert(0, 200);
+  return ls;
 }
 
 void BlockDiff::print(ostream& out) const
 {
   out << "{rval: " << rval << ", scan_idx=" << scan_idx << ", blocks=" << blocks << "}";
+}
+
+void SubvolumeMetric::dump(Formatter *f) const {
+  f->dump_string("subvolume_path", subvolume_path);
+  f->dump_unsigned("read_ops", read_ops);
+  f->dump_unsigned("write_ops", write_ops);
+  f->dump_unsigned("read_size", read_size);
+  f->dump_unsigned("write_size", write_size);
+  f->dump_unsigned("avg_read_latency", avg_read_latency);
+  f->dump_unsigned("avg_write_latency", avg_write_latency);
+  f->dump_unsigned("time_window_sec", time_stamp);
+}
+
+std::ostream& operator<<(std::ostream& os, const SubvolumeMetric &m) {
+  os << "{subv_path=" << m.subvolume_path
+     << ", read_ops=" << m.read_ops
+     << ", write_ops=" << m.write_ops
+     << ", read_size=" << m.read_size
+     << ", write_size=" << m.write_size
+     << ", avg_read_lat=" << m.avg_read_latency
+     << ", avg_write_lat=" << m.avg_write_latency
+     << ", time_window_sec=" << m.time_stamp << "}";
+  return os;
 }

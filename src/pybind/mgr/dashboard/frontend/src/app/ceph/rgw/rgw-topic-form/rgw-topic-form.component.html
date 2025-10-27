@@ -9,14 +9,14 @@
       {{ action | titlecase }} {{ resource | upperFirst }}
       <cd-help-text>
         <span i18n>
-            Configure the push endpoint parameters to send notifications. On successful creation, you'll receive the topic's unique Amazon Resource Name
+            Configure the push endpoint parameters to send notifications. On successful creation, you'll receive the destination's unique Amazon Resource Name
         </span>
       </cd-help-text>
     </div>
 
     <div class="form-item form-item-append"
          cdsRow>
-      <!-- Topic Type-->
+      <!-- Destination Type-->
       <div cdsCol>
         <cds-select formControlName="endpointType"
                     label="Type"
@@ -25,15 +25,13 @@
                     id="endpointType"
                     (change)="onEndpointTypeChange();"
                     [invalid]="topicForm.controls.endpointType.invalid && topicForm.controls.endpointType.dirty"
-                    [invalidText]="topicTypeError"
-                    helperText="This user will manage and configure the topic’s settings."
-                    i18n-helperText>
+                    [invalidText]="topicTypeError">
           <option i18n
                   *ngIf="endpointType === null"
                   value="null">Loading... </option>
           <option i18n
                   *ngIf="endpointType !== null"
-                  value="">-- Select a Topic type --</option>
+                  value="">-- Select a destination type --</option>
           <option *ngFor="let data of endpointType"
                   i18n>{{ data | upperFirst }} </option>
         </cds-select>
@@ -53,9 +51,7 @@
           cdRequiredField="Owner"
           [invalid]="topicForm.controls.owner.invalid && topicForm.controls.owner.dirty"
           id="owner"
-          helperText="This owner will define and control the topic’s settings"
-          [invalidText]="ownerError"
-          i18n-helperText>
+          [invalidText]="ownerError">
           <option i18n
                   *ngIf="owners === null"
                   value="null">Loading... </option>
@@ -78,7 +74,7 @@
       <div class="form-item form-item-append"
            cdsRow>
 
-        <!-- Topic Name -->
+        <!-- Destination Name -->
         <div cdsCol>
           <cds-text-label
             labelInputID="name"
@@ -86,8 +82,7 @@
             i18n-helperText
             cdRequiredField="Name"
             [invalid]="topicForm.controls.name.invalid && topicForm.controls.name.dirty"
-            [invalidText]="nameError"
-            helperText="Enter a Topic name">Name
+            [invalidText]="nameError">Name
 
           <input cdsText
                  type="text"
@@ -162,13 +157,13 @@
         <div cdsCol>
           <cds-text-label
             labelInputID="fqdn"
-            cdRequiredField="RGW Gateway Hostname"
+            cdRequiredField="Destination address"
             [invalid]="topicForm.controls.fqdn.invalid && topicForm.controls.fqdn.dirty"
             [invalidText]="fqdnError"
-            helperText="Enter the FQDN to configure the topic's settings and behavior"
+            helperText="Enter the FQDN/hostname/IP address for the push endpoint"
             i18n-helperText
             i18n>
-           RGW Gateway hostname
+           Destination address
           <input cdsText
                  type="text"
                  id="fqdn"
@@ -188,7 +183,7 @@
           <cds-number
             id="Port"
             formControlName="port"
-            cdRequiredField="Port"
+            cdRequiredField="Destination port"
             label="Port"
             i18n-label
             [min]="1"
@@ -424,7 +419,7 @@
                   cdsCol
                   class="cd-header">
             Additional common attributes
-            <cd-help-text>Configure additional attributes to customize the topic's behavior and settings</cd-help-text>
+            <cd-help-text>Configure additional attributes to customize the destination behavior and settings</cd-help-text>
           </legend>
 
           <!-- Persistent-->
@@ -445,7 +440,7 @@
             <cds-text-label labelInputID="opaque_data"
                             i18n
                             i18n-helperText
-                            helperText="A user-defined metadata added to all notifications that are triggered by the topic.">
+                            helperText="A user-defined metadata added to all notifications that are triggered by the destination.">
               Opaque data
               <input cdsText
                      type="text"

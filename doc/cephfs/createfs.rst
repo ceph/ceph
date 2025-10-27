@@ -22,12 +22,28 @@ There are important considerations when planning these pools:
 - The data pool used to create the file system is the "default" data pool and
   the location for storing all inode backtrace information, which is used for hard link
   management and disaster recovery. For this reason, all CephFS inodes
-  have at least one object in the default data pool. If erasure-coded
+  have at least one RADOS object in the default data pool. If erasure-coded
   pools are planned for file system data, it is best to configure the default as
   a replicated pool to improve small-object write and
   read performance when updating backtraces. Separately, another erasure-coded
   data pool can be added (see also :ref:`ecpool`) that can be used on an entire
   hierarchy of directories and files (see also :ref:`file-layouts`).
+- For the same reason, even if you are not using erasure coding
+  and plan to store all or most of your files on HDDs,
+  it is recommended to set the default data pool to an SSD pool
+  and set a file layout for top-level directories to an HDD pool.
+  This gives you the option to move small files and inode objects completely off HDDs
+  in the future using file layouts, without having to re-create the pool from scratch.
+  That reduces scrub and recovery times when you have many small files,
+  as those operations cause at least one HDD seek per RADOS object.
+  This optimization cannot be retrofitted in place when deploying a CephFS
+  file system with an HDD default data pool,
+  and the default data pool cannot be subsequently removed without creating
+  an entirely new CephFS filesystem and migrating all files.
+  This strategy requires only modest capacity in the SSD default data pool
+  when subdirectories are aligned with an HDD data pool,
+  but accelerates various operations and sets your file system up for
+  future flexibility.
 
 Refer to :doc:`/rados/operations/pools` to learn more about managing pools.  For
 example, to create two pools with default settings for use with a file system, you
@@ -108,19 +124,15 @@ Once the file system is created and the MDS is active, you are ready to mount
 the file system.  If you have created more than one file system, you will
 choose which to use when mounting.
 
-  - `Mount CephFS`_
-  - `Mount CephFS as FUSE`_
-  - `Mount CephFS on Windows`_
-
-.. _Mount CephFS: ../../cephfs/mount-using-kernel-driver
-.. _Mount CephFS as FUSE: ../../cephfs/mount-using-fuse
-.. _Mount CephFS on Windows: ../../cephfs/ceph-dokan
+  - :ref:`cephfs_mount_using_kernel_driver`
+  - :ref:`cephfs_mount_using_fuse`
+  - :ref:`ceph-dokan`
 
 If you have created more than one file system, and a client does not
 specify a file system when mounting, you can control which file system
 they will see by using the ``ceph fs set-default`` command.
 
-Adding a Data Pool to the File System 
+Adding a Data Pool to the File System
 -------------------------------------
 
 See :ref:`adding-data-pool-to-file-system`.
@@ -134,7 +146,7 @@ You may use Erasure Coded pools as CephFS data pools as long as they have overwr
 .. code:: bash
 
     ceph osd pool set my_ec_pool allow_ec_overwrites true
-    
+
 Note that EC overwrites are only supported when using OSDs with the BlueStore backend.
 
 If you are storing lots of small files or are frequently modifying files you can improve performance by enabling EC optimizations, which is done as follows:

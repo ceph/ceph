@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: '*/30 * * * *'
+    - cron: '0 */12 * * *'
   pull_request_target:
     types: [closed]
     branches:
@@ -31,17 +31,10 @@ on:
   push:
     branches:
       - 'feature/redmine-upkeep'
-concurrency:
-  group: redmine-upkeep-workflow-concurrency-group
-  cancel-in-progress: false
 jobs:
   redmine-upkeep:
     runs-on: ubuntu-latest
-    # This condition ensures the job only runs in the main ceph/ceph repository and only on the specified branches.
-    if: github.repository == 'ceph/ceph' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feature/redmine-upkeep')
-    permissions:
-      # To allow writing comments on PRs:
-      issues: write
+    if: github.repository == 'ceph/ceph'
     steps:
       - name: Checkout main branch for pull_request_target
         if: github.event_name == 'pull_request_target'
@@ -85,8 +78,10 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
+             --limit=5000
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run redmine-upkeep via test push
         if: github.event_name == 'push' && github.ref == 'refs/heads/feature/redmine-upkeep'
@@ -94,8 +89,10 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
+             --limit=50
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run redmine-upkeep via merge on pull_request_target
         if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
@@ -107,3 +104,4 @@ jobs:
              --merge-commit=${{ github.event.pull_request.merge_commit_sha }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,8 +1,9 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "mds/flock.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "mdstypes.h"
 
 #include <iostream>
@@ -84,13 +85,15 @@ void ceph_lock_state_t::dump(ceph::Formatter *f) const {
 }
 
 
-void ceph_lock_state_t::generate_test_instances(std::list<ceph_lock_state_t*>& ls) {
-  ls.push_back(new ceph_lock_state_t(NULL, 0));
-  ls.push_back(new ceph_lock_state_t(NULL, 1));
-  ls.back()->held_locks.insert(std::make_pair(1, ceph_filelock()));
-  ls.back()->waiting_locks.insert(std::make_pair(1, ceph_filelock()));
-  ls.back()->client_held_lock_counts.insert(std::make_pair(1, 1));
-  ls.back()->client_waiting_lock_counts.insert(std::make_pair(1, 1));
+std::list<ceph_lock_state_t> ceph_lock_state_t::generate_test_instances() {
+  std::list<ceph_lock_state_t> ls;
+  ls.push_back(ceph_lock_state_t(NULL, 0));
+  ls.push_back(ceph_lock_state_t(NULL, 1));
+  ls.back().held_locks.insert(std::make_pair(1, ceph_filelock()));
+  ls.back().waiting_locks.insert(std::make_pair(1, ceph_filelock()));
+  ls.back().client_held_lock_counts.insert(std::make_pair(1, 1));
+  ls.back().client_waiting_lock_counts.insert(std::make_pair(1, 1));
+  return ls;
 }
 
 bool ceph_lock_state_t::is_waiting(const ceph_filelock &fl) const

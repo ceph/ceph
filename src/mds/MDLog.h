@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -41,6 +42,7 @@ enum {
   l_mdl_last,
 };
 
+#include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
 #include "include/Context.h"
 
@@ -53,8 +55,12 @@ enum {
 #include "mdstypes.h"
 #include "LogSegmentRef.h"
 
+#include <atomic>
 #include <list>
 #include <map>
+#include <set>
+#include <string>
+#include <vector>
 
 class Journaler;
 class JournalPointer;

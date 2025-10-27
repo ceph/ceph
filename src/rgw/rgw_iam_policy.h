@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -303,6 +303,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetReplicationConfiguration:
   case s3GetBucketObjectLockConfiguration:
   case s3GetBucketPublicAccessBlock:
+  case s3GetBucketOwnershipControls:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -326,6 +327,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutReplicationConfiguration:
   case s3PutBucketObjectLockConfiguration:
   case s3PutBucketPublicAccessBlock:
+  case s3PutBucketOwnershipControls:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
@@ -484,8 +486,8 @@ struct Condition {
   using unordered_multimap_it_pair = std::pair <std::unordered_multimap<std::string,std::string>::const_iterator, std::unordered_multimap<std::string,std::string>::const_iterator>;
 
   template<typename F>
-  static bool andible(F&& f, const unordered_multimap_it_pair& it,
-		      const std::vector<std::string>& v) {
+  static bool multimap_all(F&& f, const unordered_multimap_it_pair& it,
+                           const std::vector<std::string>& v) {
     for (auto itr = it.first; itr != it.second; itr++) {
       bool matched = false;
       for (const auto& d : v) {
@@ -500,8 +502,8 @@ struct Condition {
   }
 
   template<typename F>
-  static bool orrible(F&& f, const unordered_multimap_it_pair& it,
-		      const std::vector<std::string>& v) {
+  static bool multimap_any(F&& f, const unordered_multimap_it_pair& it,
+                           const std::vector<std::string>& v) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
         if (f(itr->second, d)) {
@@ -512,9 +514,22 @@ struct Condition {
     return false;
   }
 
+  template<typename F>
+  static bool multimap_none(F&& f, const unordered_multimap_it_pair& it,
+                            const std::vector<std::string>& v) {
+    for (auto itr = it.first; itr != it.second; itr++) {
+      for (const auto& d : v) {
+        if (f(itr->second, d)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   template<typename F, typename X>
-  static bool shortible(F&& f, X& x, const std::string& c,
-			const std::vector<std::string>& v) {
+  static bool typed_any(F&& f, X& x, const std::string& c,
+                        const std::vector<std::string>& v) {
     auto xc = std::forward<X>(x)(c);
     if (!xc) {
       return false;
@@ -531,6 +546,27 @@ struct Condition {
       }
     }
     return false;
+  }
+
+  template<typename F, typename X>
+  static bool typed_none(F&& f, X& x, const std::string& c,
+                         const std::vector<std::string>& v) {
+    auto xc = std::forward<X>(x)(c);
+    if (!xc) {
+      return false;
+    }
+
+    for (const auto& d : v) {
+      auto xd = x(d);
+      if (!xd) {
+        continue;
+      }
+
+      if (f(*xc, *xd)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   template <typename F>

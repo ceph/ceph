@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <seastar/core/future.hh>
 
@@ -160,6 +160,9 @@ seastar::future<> PGAdvanceMap::split_pg(
   auto pg_epoch = next_map->get_epoch();
   DEBUG("{}: epoch: {}", *this, pg_epoch);
 
+  unsigned new_pg_num = next_map->get_pg_num(pg->get_pgid().pool());
+  pg->update_snap_mapper_bits(pg->get_pgid().get_split_bits(new_pg_num));
+
   co_await seastar::coroutine::parallel_for_each(split_children, [this, &next_map,
   pg_epoch, FNAME] (auto child_pgid) -> seastar::future<> {
     children_pgids.insert(child_pgid);
@@ -185,6 +188,9 @@ seastar::future<> PGAdvanceMap::split_pg(
     DEBUG(" {} split collection done", child_pg->get_pgid());
     // Update the child PG's info from the parent PG
     pg->split_into(child_pg->get_pgid().pgid, child_pg, split_bits);
+    // Make SnapMapper OID for the child PG
+    auto child_coll_ref = child_pg->get_collection_ref();
+    rctx.transaction.touch(child_coll_ref->get_cid(), child_pg->get_pgid().make_snapmapper_oid());
 
     co_await handle_split_pg_creation(child_pg, next_map);
     split_pgs.insert(child_pg);

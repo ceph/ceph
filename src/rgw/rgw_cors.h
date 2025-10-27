@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -80,7 +80,7 @@ public:
     decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
-  static void generate_test_instances(std::list<RGWCORSRule*>& o);
+  static std::list<RGWCORSRule> generate_test_instances();
   bool has_wildcard_origin();
   bool is_origin_present(const char *o);
   void format_exp_headers(std::string& s);

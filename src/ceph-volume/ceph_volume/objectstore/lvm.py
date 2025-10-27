@@ -14,7 +14,6 @@ from typing import Dict, Any, Optional, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     import argparse
-    from ceph_volume.api.lvm import Volume
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +68,7 @@ class Lvm(BaseObjectStore):
 
     def prepare_data_device(self,
                             device_type: str,
-                            osd_uuid: str) -> Optional["Volume"]:
+                            osd_uuid: str) -> Optional[api.Volume]:
         """
         Check if ``arg`` is a device or partition to create an LV out of it
         with a distinct volume group name, assigning LV tags on it and
@@ -181,7 +180,8 @@ class Lvm(BaseObjectStore):
         # format data device
         encryption_utils.luks_format(
             self.dmcrypt_key,
-            device
+            device,
+            self.args.dmcrypt_format_opts,
         )
 
         if self.with_tpm:
@@ -191,89 +191,98 @@ class Lvm(BaseObjectStore):
             self.dmcrypt_key,
             device,
             uuid,
-            self.with_tpm)
+            self.with_tpm,
+            self.args.dmcrypt_open_opts)
 
         return '/dev/mapper/%s' % uuid
 
     def setup_metadata_devices(self) -> None:
-        """
-        Check if ``device`` is an lv, if so, set the tags, making sure to
-        update the tags with the lv_uuid and lv_path which the incoming tags
-        will not have.
-
-        If the device is not a logical volume, then retrieve the partition UUID
-        by querying ``blkid``
-        """
-        s: Dict[str, Any] = {
-            'db': {
-                'attr_map': 'db_device_path',
-                'device_name': self.args.block_db,
-                'device_size': self.args.block_db_size,
-                'device_slots': self.args.block_db_slots,
-                },
-            'wal': {
-                'attr_map': 'wal_device_path',
-                'device_name': self.args.block_wal,
-                'device_size': self.args.block_wal_size,
-                'device_slots': self.args.block_wal_slots,
-                }
-            }
-        for device_type, device_args in s.items():
-            device_name: str = device_args.get('device_name', None)
-            size: int = device_args.get('device_size')
-            slots: int = device_args.get('device_slots')
-            if device_name is None:
+        for device_type in ("db", "wal"):
+            device_name: Optional[str] = getattr(self.args, f"block_{device_type}")
+            if not device_name:
                 continue
-            _tags: Dict[str, Any] = self.tags.copy()
-            _tags['ceph.type'] = device_type
-            _tags['ceph.vdo'] = api.is_vdo(device_name)
 
-            try:
-                vg_name, lv_name = device_name.split('/')
-                lv = api.get_single_lv(filters={'lv_name': lv_name,
-                                                'vg_name': vg_name})
-            except ValueError:
-                lv = None
+            size: int = getattr(self.args, f"block_{device_type}_size")
+            slots: int = getattr(self.args, f"block_{device_type}_slots")
+
+            tags: Dict[str, Any] = self._prepare_tags(device_type, device_name)
+            lv = self._get_existing_lv(device_name)
 
             if lv:
-                _tags['ceph.%s_uuid' % device_type] = lv.lv_uuid
-                _tags['ceph.%s_device' % device_type] = lv.lv_path
-                lv.set_tags(_tags)
-            elif disk.is_partition(device_name) or disk.is_device(device_name):
-                # We got a disk or a partition, create an lv
-                path = device_name
-                lv_type = "osd-{}".format(device_type)
-                name_uuid = system.generate_uuid()
-                kwargs = {
-                    'name_prefix': lv_type,
-                    'uuid': name_uuid,
-                    'vg': None,
-                    'device': device_name,
-                    'slots': slots,
-                    'extents': None,
-                    'size': None,
-                    'tags': _tags,
+                self._apply_tags_to_existing_lv(lv, device_type, tags)
+                path = lv.lv_path
+            else:
+                path = self._handle_physical_device(
+                    device_name, device_type, size, slots, tags
+                )
+                if path is None:
+                    raise RuntimeError(f"Invalid device: {device_name}")
+
+            setattr(self, f"{device_type}_device_path", path)
+
+    def _prepare_tags(self, device_type: str, device_name: str) -> Dict[str, Any]:
+        tags: Dict[str, Any] = self.tags.copy()
+        tags["ceph.type"] = device_type
+        tags["ceph.vdo"] = api.is_vdo(device_name)
+        return tags
+
+    def _get_existing_lv(self, device_name: str) -> Optional[api.Volume]:
+        try:
+            vg_name, lv_name = device_name.split("/")
+            return api.get_single_lv(filters={"lv_name": lv_name, "vg_name": vg_name})
+        except ValueError:
+            return None
+
+    def _apply_tags_to_existing_lv(
+        self, lv: api.Volume, device_type: str, tags: Dict[str, Any]
+    ) -> None:
+        tags[f"ceph.{device_type}_uuid"] = lv.lv_uuid
+        tags[f"ceph.{device_type}_device"] = lv.lv_path
+        lv.set_tags(tags)
+        self.tags.update(tags)
+
+    def _handle_physical_device(
+        self,
+        device_name: str,
+        device_type: str,
+        size: int,
+        slots: int,
+        tags: Dict[str, Any],
+    ) -> Optional[str]:
+        if not (disk.is_partition(device_name) or disk.is_device(device_name)):
+            return None
+
+        lv_type = f"osd-{device_type}"
+        name_uuid = system.generate_uuid()
+
+        kwargs: Dict[str, Any] = {
+            "name_prefix": lv_type,
+            "uuid": name_uuid,
+            "vg": None,
+            "device": device_name,
+            "slots": slots,
+            "extents": None,
+            "size": size if size != 0 else None,
+            "tags": tags,
+        }
+
+        lv = None if disk.is_partition(device_name) else api.create_lv(**kwargs)
+
+        if lv is not None:
+            tags.update(
+                {
+                    f"ceph.{device_type}_uuid": lv.lv_uuid,
+                    f"ceph.{device_type}_device": lv.lv_path,
                 }
-                # TODO use get_block_db_size and co here to get configured size in
-                # conf file
-                if size != 0:
-                    kwargs['size'] = size
-                # We do not create LV if this is a partition
-                if not disk.is_partition(device_name):
-                    lv = api.create_lv(**kwargs)
-                if lv is not None:
-                    path, lv_uuid = lv.lv_path, lv.lv_uuid
-                    for key, value in {
-                        f"ceph.{device_type}_uuid": lv_uuid,
-                        f"ceph.{device_type}_device": path,
-                    }.items():
-                        _tags[key] = value
-                        self.tags[key] = value
-                    lv.set_tags(_tags)
-                setattr(self, f'{device_type}_device_path', path)
+            )
+            self.tags.update(tags)
+            lv.set_tags(tags)
+            return lv.lv_path
+
+        return device_name
 
     def get_osd_device_path(self,
-                            osd_lvs: List["Volume"],
+                            osd_lvs: List[api.Volume],
                             device_type: str,
                             dmcrypt_secret: str = '') -> Optional[str]:
         """
@@ -299,7 +308,7 @@ class Lvm(BaseObjectStore):
             if not device_uuid:
                 return None
 
-        device_lv: Optional["Volume"] = None
+        device_lv: Optional[api.Volume] = None
         for lv in osd_lvs:
             if lv.tags.get('ceph.type') == device_type:
                 device_lv = lv
@@ -326,7 +335,7 @@ class Lvm(BaseObjectStore):
                                                                device_uuid))
 
     def _activate(self,
-                  osd_lvs: List["Volume"],
+                  osd_lvs: List[api.Volume],
                   no_systemd: bool = False,
                   no_tmpfs: bool = False) -> None:
         for lv in osd_lvs:

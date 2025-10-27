@@ -35,6 +35,9 @@ import { TableDetailDirective } from '../directives/table-detail.directive';
 import { filter, map } from 'rxjs/operators';
 import { CdSortDirection } from '../../enum/cd-sort-direction';
 import { CdSortPropDir } from '../../models/cd-sort-prop-dir';
+import { EditState } from '../../models/cd-table-editing';
+import { CdFormGroup } from '../../forms/cd-form-group';
+import { FormControl } from '@angular/forms';
 
 const TABLE_LIST_LIMIT = 10;
 type TPaginationInput = { page: number; size: number; filteredData: any[] };
@@ -61,8 +64,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   executingTpl: TemplateRef<any>;
   @ViewChild('classAddingTpl', { static: true })
   classAddingTpl: TemplateRef<any>;
-  @ViewChild('badgeTpl', { static: true })
-  badgeTpl: TemplateRef<any>;
+  @ViewChild('tagTpl', { static: true })
+  tagTpl: TemplateRef<any>;
   @ViewChild('mapTpl', { static: true })
   mapTpl: TemplateRef<any>;
   @ViewChild('truncateTpl', { static: true })
@@ -85,12 +88,21 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   rowDetailTpl: TemplateRef<any>;
   @ViewChild('tableActionTpl', { static: true })
   tableActionTpl: TemplateRef<any>;
+  @ViewChild('editingTpl', { static: true })
+  editingTpl: TemplateRef<any>;
 
   @ContentChild(TableDetailDirective) rowDetail!: TableDetailDirective;
   @ContentChild(TableActionsComponent) tableActions!: TableActionsComponent;
 
+  private _headerTitle: string | TemplateRef<any>;
+  isHeaderTitleString = false;
+
   @Input()
-  headerTitle: string;
+  set headerTitle(value: string | TemplateRef<any>) {
+    this._headerTitle = value;
+    this.isHeaderTitleString = typeof value === 'string';
+  }
+
   @Input()
   headerDescription: string;
   // This is the array with the items to be shown.
@@ -206,6 +218,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   theme: string;
 
   /**
+   * Use to make the expandable row scrollable with max-height
+   */
+  @Input()
+  scrollable: boolean = true;
+
+  /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
    * Sometimes it's useful to only define fetchData once.
@@ -240,6 +258,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    * @memberof TableComponent
    */
   @Output() columnFiltersChanged = new EventEmitter<CdTableColumnFiltersChange>();
+
+  @Output()
+  editSubmitAction = new EventEmitter<{
+    state: { [field: string]: string };
+    row: any;
+  }>();
 
   /**
    * Use this variable to access the selected row(s).
@@ -276,6 +300,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     return this.selectionType === 'single';
   }
 
+  get headerTitle(): string | TemplateRef<any> {
+    return this._headerTitle;
+  }
   /**
    * Controls if all checkboxes are viewed as selected.
    */
@@ -377,6 +404,11 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     });
   }
   private previousRows = new Map<string | number, TableItem[]>();
+  private debouncedSearch = this.reloadData.bind(this);
+
+  editingCells = new Set<string>();
+  editStates: EditState = {};
+  formGroup: CdFormGroup = new CdFormGroup({});
 
   constructor(
     // private ngZone: NgZone,
@@ -533,7 +565,13 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     // debounce reloadData method so that search doesn't run api requests
     // for every keystroke
     if (this.serverSide) {
-      this.reloadData = _.debounce(this.reloadData, 1000);
+      this.reloadData = _.throttle(this.reloadData.bind(this), 1000, {
+        leading: true,
+        trailing: false
+      });
+      this.debouncedSearch = _.debounce(this.reloadData.bind(this), 1000);
+    } else {
+      this.debouncedSearch = this.reloadData.bind(this);
     }
 
     // ngx-datatable triggers calculations each time mouse enters a row,
@@ -816,13 +854,14 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.cellTemplates.perSecond = this.perSecondTpl;
     this.cellTemplates.executing = this.executingTpl;
     this.cellTemplates.classAdding = this.classAddingTpl;
-    this.cellTemplates.badge = this.badgeTpl;
+    this.cellTemplates.tag = this.tagTpl;
     this.cellTemplates.map = this.mapTpl;
     this.cellTemplates.truncate = this.truncateTpl;
     this.cellTemplates.timeAgo = this.timeAgoTpl;
     this.cellTemplates.path = this.pathTpl;
     this.cellTemplates.tooltip = this.tooltipTpl;
     this.cellTemplates.copy = this.copyTpl;
+    this.cellTemplates.editing = this.editingTpl;
   }
 
   useCustomClass(value: any): string {
@@ -877,7 +916,8 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       });
       context.pageInfo.offset = this.userConfig.offset;
       context.pageInfo.limit = this.userConfig.limit;
-      context.search = this.userConfig.search;
+      if (this.serverSide) context.search = this.search;
+      else context.search = this.userConfig.search;
       if (this.userConfig.sorts?.length) {
         const sort = this.userConfig.sorts[0];
         context.sort = `${sort.dir === 'desc' ? '-' : '+'}${sort.prop}`;
@@ -899,6 +939,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     this.userConfig.limit = this.model.pageLength;
 
     if (this.serverSide) {
+      this.loadingIndicator = true;
       this.reloadData();
       return;
     }
@@ -995,15 +1036,23 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         }
       }
     });
-    if (newSelected.size === 0) return;
+
     const newSelectedArray = Array.from(newSelected.values());
 
-    newSelectedArray?.forEach?.((selection: any) => {
+    if (newSelectedArray.length === 0) {
+      this.selection.selected = [];
+      this.updateSelection.emit(_.clone(this.selection));
+      return;
+    }
+
+    newSelectedArray.forEach((selection: any) => {
       const rowIndex = this.model.data.findIndex(
         (row: TableItem[]) =>
           _.get(row, [0, 'selected', this.identifier]) === selection[this.identifier]
       );
-      rowIndex > -1 && this.model.selectRow(rowIndex, true);
+      if (rowIndex > -1) {
+        this.model.selectRow(rowIndex, true);
+      }
     });
 
     if (
@@ -1015,11 +1064,9 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
 
     this.selection.selected = newSelectedArray;
 
-    if (this.updateSelectionOnRefresh === 'never') {
-      return;
+    if (this.updateSelectionOnRefresh !== 'never') {
+      this.updateSelection.emit(_.clone(this.selection));
     }
-
-    this.updateSelection.emit(_.clone(this.selection));
   }
 
   updateExpanded() {
@@ -1040,7 +1087,12 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   _toggleSelection(rowIndex: number, isSelected: boolean) {
     const selectedData = _.get(this.model.data?.[rowIndex], [0, 'selected']);
     if (isSelected) {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const alreadySelected = this.selection.selected.some(
+        (s) => s[this.identifier] === selectedData[this.identifier]
+      );
+      if (!alreadySelected) {
+        this.selection.selected = [...this.selection.selected, selectedData];
+      }
     } else {
       this.selection.selected = this.selection.selected.filter(
         (s) => s[this.identifier] !== selectedData[this.identifier]
@@ -1049,14 +1101,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   }
 
   onSelect(selectedRowIndex: number) {
-    const selectedData = _.get(this.model.data?.[selectedRowIndex], [0, 'selected']);
     if (this.selectionType === 'single') {
       this.model.selectAll(false);
-      this.selection.selected = [selectedData];
+      this.selection.selected = [_.get(this.model.data?.[selectedRowIndex], [0, 'selected'])];
+      this.model.selectRow(selectedRowIndex, true);
     } else {
-      this.selection.selected = [...this.selection.selected, selectedData];
+      const isSelected = this.model.rowsSelected[selectedRowIndex] ?? false;
+      this._toggleSelection(selectedRowIndex, !isSelected);
+      this.model.selectRow(selectedRowIndex, !isSelected);
     }
-    this.model.selectRow(selectedRowIndex, true);
     this.updateSelection.emit(this.selection);
   }
 
@@ -1220,7 +1273,7 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
         this.userConfig.limit = this.limit;
         this.userConfig.search = this.search;
         this.updating = false;
-        this.reloadData();
+        this.debouncedSearch();
       }
       this.rows = this.data;
     } else {
@@ -1352,5 +1405,47 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
       this.selectAllCheckbox = true;
       this.selectAllCheckboxSomeSelected = false;
     }
+  }
+
+  editCellItem(rowId: string, column: CdTableColumn, value: string) {
+    const key = `${rowId}-${column.prop}`;
+    this.formGroup.addControl(
+      key,
+      new FormControl('', {
+        validators: column.customTemplateConfig?.validators || [],
+        asyncValidators: column.customTemplateConfig?.asyncValidators || []
+      })
+    );
+    this.editingCells.add(key);
+    if (!this.editStates[rowId]) {
+      this.editStates[rowId] = {};
+    }
+    this.formGroup?.get(key).setValue(value);
+    this.editStates[rowId][column.prop] = value;
+  }
+
+  saveCellItem(row: any, colProp: string) {
+    const key = `${row[this.identifier]}-${colProp}`;
+    const control = this.formGroup.get(key);
+
+    if (control?.invalid) {
+      control.setErrors({ cdSubmitButton: true, ...control.errors });
+      return;
+    }
+
+    this.editSubmitAction.emit({
+      state: this.editStates[row[this.identifier]],
+      row: row
+    });
+    this.editingCells.delete(key);
+    delete this.editStates[row[this.identifier]][colProp];
+  }
+
+  isCellEditing(rowId: string, colProp: string): boolean {
+    return this.editingCells.has(`${rowId}-${colProp}`);
+  }
+
+  valueChange(rowId: string, colProp: string, value: string) {
+    this.editStates[rowId][colProp] = value;
   }
 }

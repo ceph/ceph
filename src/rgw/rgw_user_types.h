@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -132,7 +132,7 @@ struct rgw_user {
   friend auto operator<=>(const rgw_user&, const rgw_user&) = default;
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<rgw_user*>& o);
+  static std::list<rgw_user> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_user)
 

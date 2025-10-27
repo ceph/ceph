@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "msg_types.h"
 
@@ -63,39 +63,45 @@ void entity_inst_t::dump(ceph::Formatter *f) const
   f->dump_object("addr", addr);
 }
 
-void entity_name_t::generate_test_instances(std::list<entity_name_t*>& o)
+std::list<entity_name_t> entity_name_t::generate_test_instances()
 {
-  o.push_back(new entity_name_t(entity_name_t::MON()));
-  o.push_back(new entity_name_t(entity_name_t::MON(1)));
-  o.push_back(new entity_name_t(entity_name_t::OSD(1)));
-  o.push_back(new entity_name_t(entity_name_t::CLIENT(1)));
+  std::list<entity_name_t> o;
+  o.push_back(entity_name_t(entity_name_t::MON()));
+  o.push_back(entity_name_t(entity_name_t::MON(1)));
+  o.push_back(entity_name_t(entity_name_t::OSD(1)));
+  o.push_back(entity_name_t(entity_name_t::CLIENT(1)));
+  return o;
 }
 
-void entity_addr_t::generate_test_instances(std::list<entity_addr_t*>& o)
+std::list<entity_addr_t> entity_addr_t::generate_test_instances()
 {
-  o.push_back(new entity_addr_t());
-  entity_addr_t *a = new entity_addr_t();
-  a->set_nonce(1);
+  std::list<entity_addr_t> o;
+  o.push_back(entity_addr_t());
+  entity_addr_t a;
+  a.set_nonce(1);
   o.push_back(a);
-  entity_addr_t *b = new entity_addr_t();
-  b->set_type(entity_addr_t::TYPE_LEGACY);
-  b->set_nonce(5);
-  b->set_family(AF_INET);
-  b->set_in4_quad(0, 127);
-  b->set_in4_quad(1, 0);
-  b->set_in4_quad(2, 1);
-  b->set_in4_quad(3, 2);
-  b->set_port(2);
+  entity_addr_t b;
+  b.set_type(entity_addr_t::TYPE_LEGACY);
+  b.set_nonce(5);
+  b.set_family(AF_INET);
+  b.set_in4_quad(0, 127);
+  b.set_in4_quad(1, 0);
+  b.set_in4_quad(2, 1);
+  b.set_in4_quad(3, 2);
+  b.set_port(2);
   o.push_back(b);
+  return o;
 }
 
-void entity_inst_t::generate_test_instances(std::list<entity_inst_t*>& o)
+std::list<entity_inst_t> entity_inst_t::generate_test_instances()
 {
-  o.push_back(new entity_inst_t());
+  std::list<entity_inst_t> o;
+  o.push_back(entity_inst_t());
   entity_name_t name;
   entity_addr_t addr;
-  entity_inst_t *a = new entity_inst_t(name, addr);
-  o.push_back(a);
+  entity_inst_t a(name, addr);
+  o.push_back(std::move(a));
+  return o;
 }
 
 bool entity_addr_t::parse(const std::string_view s, int default_type)
@@ -399,14 +405,16 @@ void entity_addrvec_t::dump(ceph::Formatter *f) const
   f->close_section();
 }
 
-void entity_addrvec_t::generate_test_instances(std::list<entity_addrvec_t*>& ls)
+std::list<entity_addrvec_t> entity_addrvec_t::generate_test_instances()
 {
-  ls.push_back(new entity_addrvec_t());
-  ls.push_back(new entity_addrvec_t());
-  ls.back()->v.push_back(entity_addr_t());
-  ls.push_back(new entity_addrvec_t());
-  ls.back()->v.push_back(entity_addr_t());
-  ls.back()->v.push_back(entity_addr_t());
+  std::list<entity_addrvec_t> ls;
+  ls.push_back(entity_addrvec_t());
+  ls.push_back(entity_addrvec_t());
+  ls.back().v.push_back(entity_addr_t());
+  ls.push_back(entity_addrvec_t());
+  ls.back().v.push_back(entity_addr_t());
+  ls.back().v.push_back(entity_addr_t());
+  return ls;
 }
 
 std::string entity_addr_t::ip_only_to_str() const 

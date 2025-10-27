@@ -1185,6 +1185,237 @@
                "show": true
             }
          ]
+      },
+      {
+         "collapse": false,
+         "collapsed": false,
+         "gridPos": {
+            "h": 1,
+            "w": 24,
+            "x": 0,
+            "y": 27
+         },
+         "id": 14,
+         "panels": [ ],
+         "repeat": null,
+         "repeatIteration": null,
+         "repeatRowId": null,
+         "showTitle": true,
+         "title": "RGW Overview - Bucket Notification",
+         "titleSize": "h6",
+         "type": "row"
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "Shows the number of pending notifications in each Object topic queue, indicating how many messages are waiting to be delivered",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": ""
+            }
+         },
+         "fill": 1,
+         "fillGradient": 0,
+         "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 28
+         },
+         "id": 15,
+         "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null as zero",
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "list",
+               "placement": "right",
+               "showLegend": true,
+               "sortDesc": true
+            }
+         },
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [ ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "(\n ceph_rgw_topic_persistent_topic_len\n)\n",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{topic}}",
+               "refId": "A"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Pending Notifications by Topic",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "timeseries",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
+      },
+      {
+         "aliasColors": { },
+         "bars": false,
+         "dashLength": 10,
+         "dashes": false,
+         "datasource": "$datasource",
+         "description": "Shows the total size of pending notifications stored per Object topic, reflecting how much data is waiting to be delivered.",
+         "fieldConfig": {
+            "defaults": {
+               "custom": {
+                  "fillOpacity": 8,
+                  "showPoints": "never"
+               },
+               "unit": "bytes"
+            }
+         },
+         "fill": 1,
+         "fillGradient": 0,
+         "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 28
+         },
+         "id": 16,
+         "legend": {
+            "alignAsTable": false,
+            "avg": false,
+            "current": false,
+            "max": false,
+            "min": false,
+            "rightSide": false,
+            "show": true,
+            "sideWidth": null,
+            "total": false,
+            "values": false
+         },
+         "lines": true,
+         "linewidth": 1,
+         "links": [ ],
+         "nullPointMode": "null as zero",
+         "options": {
+            "legend": {
+               "calcs": [
+                  "lastNotNull"
+               ],
+               "displayMode": "list",
+               "placement": "right",
+               "showLegend": true,
+               "sortDesc": true
+            }
+         },
+         "percentage": false,
+         "pointradius": 5,
+         "points": false,
+         "renderer": "flot",
+         "repeat": null,
+         "seriesOverrides": [ ],
+         "spaceLength": 10,
+         "stack": false,
+         "steppedLine": false,
+         "targets": [
+            {
+               "expr": "(\n ceph_rgw_topic_persistent_topic_size\n)\n",
+               "format": "time_series",
+               "intervalFactor": 1,
+               "legendFormat": "{{topic}}",
+               "refId": "A"
+            }
+         ],
+         "thresholds": [ ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Pending Notifications Size by Topic",
+         "tooltip": {
+            "shared": true,
+            "sort": 0,
+            "value_type": "individual"
+         },
+         "type": "timeseries",
+         "xaxis": {
+            "buckets": null,
+            "mode": "time",
+            "name": null,
+            "show": true,
+            "values": [ ]
+         },
+         "yaxes": [
+            {
+               "format": "bytes",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            },
+            {
+               "format": "short",
+               "label": null,
+               "logBase": 1,
+               "max": null,
+               "min": 0,
+               "show": true
+            }
+         ]
       }
    ],
    "refresh": "30s",

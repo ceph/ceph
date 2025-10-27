@@ -81,12 +81,12 @@ export class NvmeofGatewayComponent implements OnInit {
   getStatusClass(row: Gateway): string {
     return _.get(
       {
-        '-1': 'badge-danger',
-        '0': 'badge-warning',
-        '1': 'badge-success'
+        '-1': 'tag-danger',
+        '0': 'tag-warning',
+        '1': 'tag-success'
       },
       row.status,
-      'badge-dark'
+      'tag-dark'
     );
   }
 

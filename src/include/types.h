@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,7 @@
 // this is needed for ceph_fs to compile in userland
 #include "int_types.h"
 #include "byteorder.h"
+#include "platform_errno.h"
 
 #include "uuid.h"
 
@@ -35,6 +37,7 @@ extern "C" {
 #include "statlite.h"
 }
 
+#include <deque>
 #include <string>
 #include <list>
 #include <set>
@@ -47,8 +50,10 @@ extern "C" {
 #include <optional>
 #include <ostream>
 #include <iomanip>
+#include <unordered_map>
 #include <unordered_set>
 
+#include "common/convenience.h" // for ceph::for_each()
 #include "common/Formatter.h"
 
 #include "object.h"
@@ -412,7 +417,7 @@ struct client_t {
     decode(v, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<client_t*>& ls);
+  static std::list<client_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(client_t)
 
@@ -490,7 +495,7 @@ struct shard_id_t {
     decode(id, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<shard_id_t*>& ls);
+  static std::list<shard_id_t> generate_test_instances();
   shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const shard_id_t &lhs,
                                                     const shard_id_t &rhs) {
@@ -514,17 +519,6 @@ struct shard_id_t {
 };
 WRITE_CLASS_ENCODER(shard_id_t)
 std::ostream &operator<<(std::ostream &lhs, const shard_id_t &rhs);
-
-#if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
-    defined(__FreeBSD__) || defined(_WIN32)
-extern "C" {
-__s32  ceph_to_hostos_errno(__s32 e);
-__s32  hostos_to_ceph_errno(__s32 e);
-}
-#else
-#define  ceph_to_hostos_errno(e) (e)
-#define  hostos_to_ceph_errno(e) (e)
-#endif
 
 struct errorcode32_t {
   using code_t = __s32;
@@ -563,7 +557,7 @@ struct errorcode32_t {
     set_wire_to_host(newcode);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<errorcode32_t*>& ls);
+  static std::list<errorcode32_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(errorcode32_t)
 
@@ -608,12 +602,14 @@ struct sha_digest_t {
   void dump(ceph::Formatter *f) const {
     f->dump_string("sha1", to_str());
   }
-  static void generate_test_instances(std::list<sha_digest_t*>& ls) {
-    ls.push_back(new sha_digest_t);
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 1;
-    ls.push_back(new sha_digest_t);
-    ls.back()->v[0] = 2;
+  static std::list<sha_digest_t> generate_test_instances() {
+    std::list<sha_digest_t> ls;
+    ls.emplace_back();
+    ls.emplace_back();
+    ls.back().v[0] = 1;
+    ls.emplace_back();
+    ls.back().v[0] = 2;
+    return ls;
   }
 };
 

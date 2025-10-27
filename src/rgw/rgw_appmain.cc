@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -66,7 +66,9 @@
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_dedup.h"
+#endif
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
 #endif
@@ -256,7 +258,8 @@ int rgw::AppMain::init_storage()
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
-	        true, true, null_yield, env.cfgstore, // run notification thread
+	  true, // run notification thread
+	  true, null_yield, env.cfgstore,
           g_conf()->rgw_cache_enabled);
   if (!env.driver) {
     return -EIO;
@@ -664,6 +667,7 @@ void rgw::AppMain::init_lua()
 #endif
 } /* init_lua */
 
+#ifdef WITH_RADOSGW_RADOS
 void rgw::AppMain::init_dedup()
 {
   rgw::sal::Driver* driver = env.driver;
@@ -678,6 +682,7 @@ void rgw::AppMain::init_dedup()
     }
   }
 }
+#endif
 
 void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
@@ -706,9 +711,11 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
   ldh.reset(nullptr); // deletes ldap helper if it was created
   rgw_log_usage_finalize();
 
+#ifdef WITH_RADOSGW_RADOS
   if (dedup_background) {
     dedup_background->shutdown();
   }
+#endif
 
   if (lua_background) {
     lua_background->shutdown();

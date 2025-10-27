@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -58,7 +59,7 @@ struct object_t {
 
   void dump(ceph::Formatter *f) const;
 
-  static void generate_test_instances(std::list<object_t*>& o);
+  static std::list<object_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(object_t)
 
@@ -178,7 +179,7 @@ struct sobject_t {
     decode(snap, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<sobject_t*>& o);
+  static std::list<sobject_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(sobject_t)
 

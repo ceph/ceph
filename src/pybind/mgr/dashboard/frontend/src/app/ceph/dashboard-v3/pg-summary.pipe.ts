@@ -1,6 +1,6 @@
 import { Pipe, PipeTransform } from '@angular/core';
-import _ from 'lodash';
 import { PgCategoryService } from '~/app/ceph/shared/pg-category.service';
+import { PgStateCount } from '~/app/shared/models/health.interface';
 
 @Pipe({
   name: 'pgSummary'
@@ -11,18 +11,16 @@ export class PgSummaryPipe implements PipeTransform {
   transform(value: any): any {
     if (!value) return null;
     const categoryPgAmount: Record<string, number> = {};
-    let total = 0;
-    _.forEach(value.statuses, (pgAmount, pgStatesText) => {
-      const categoryType = this.pgCategoryService.getTypeByStates(pgStatesText);
-      if (_.isUndefined(categoryPgAmount[categoryType])) {
+    value.statuses.forEach((status: PgStateCount) => {
+      const categoryType = this.pgCategoryService.getTypeByStates(status?.state_name);
+      if (!categoryPgAmount?.[categoryType]) {
         categoryPgAmount[categoryType] = 0;
       }
-      categoryPgAmount[categoryType] += pgAmount;
-      total += pgAmount;
+      categoryPgAmount[categoryType] += status?.count;
     });
     return {
       categoryPgAmount,
-      total
+      total: value.total
     };
   }
 }

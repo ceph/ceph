@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -247,6 +248,8 @@ int Client::CommandHook::call(
       m_client->_kick_stale_sessions();
     else if (command == "status")
       m_client->dump_status(f);
+    else if (command == "dump_subvolume_metrics")
+      m_client->dump_subvolume_metrics(f);
     else
       ceph_abort_msg("bad command registered");
   }
@@ -400,7 +403,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     async_ino_releasor(m->cct),
     objecter_finisher(m->cct),
     m_command_hook(this),
-    fscid(0)
+    fscid(0),
+    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
 {
   /* We only use the locale for normalization/case folding. That is unaffected
    * by the locale but required by the API.
@@ -424,6 +428,12 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
 
   caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
     "client_caps_release_delay");
+
+  injected_write_delay_secs = std::chrono::duration<int>(
+    cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
+
+  respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
+    "client_respect_subvolume_snapshot_visibility");
 
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
@@ -626,6 +636,10 @@ void Client::dump_status(Formatter *f)
   }
 }
 
+void Client::dump_subvolume_metrics(Formatter* f) {
+  subvolume_tracker->dump(f);
+}
+
 void Client::_pre_init()
 {
   timer.init();
@@ -715,6 +729,13 @@ void Client::_finish_init()
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
   }
+  ret = admin_socket->register_command("dump_subvolume_metrics_aggr",
+    				       &m_command_hook,
+    				       "dump aggregated subvolume metrics");
+    if (ret < 0) {
+      lderr(cct) << "error registering admin socket command: "
+  	       << cpp_strerror(-ret) << dendl;
+    }
 }
 
 void Client::shutdown() 
@@ -854,7 +875,6 @@ void Client::update_io_stat_write(utime_t latency) {
   logger->set(l_c_wr_sqsum, n_sqsum);
   logger->set(l_c_wr_ops, nr_write_request);
 }
-
 // ===================
 // metadata cache stuff
 
@@ -1740,6 +1760,10 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     in = add_update_inode(&ist, request->sent_stamp, session,
 			  request->perms);
+    if (ist.subvolume_id) {
+      ldout(cct, 20) << __func__ << " subv_metric adding " << in->ino << "-" << ist.subvolume_id << dendl;
+      subvolume_tracker->add_inode(in->ino, ist.subvolume_id);
+    }
   }
 
   Inode *diri = NULL;
@@ -2252,7 +2276,7 @@ int Client::make_request(MetaRequest *request,
     *pdirbl = reply->get_extra_bl();
 
   // -- log times --
-  utime_t lat = ceph_clock_now();
+  utime_t lat = mono_clock_now();
   lat -= request->sent_stamp;
   ldout(cct, 20) << "lat " << lat << dendl;
 
@@ -2285,6 +2309,7 @@ void Client::unregister_request(MetaRequest *req)
 
 void Client::put_request(MetaRequest *request)
 {
+  ceph_assert(request->ref >= 1);
   if (request->_put()) {
     int op = -1;
     if (request->success)
@@ -5293,13 +5318,16 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 }
 
 struct SnapRealmInfoMeta {
-  SnapRealmInfoMeta(utime_t last_modified, uint64_t change_attr)
+  SnapRealmInfoMeta(utime_t last_modified,
+                    uint64_t change_attr,
+                    bool is_snapdir_visible)
     : last_modified(last_modified),
-      change_attr(change_attr) {
-  }
+      change_attr(change_attr),
+      is_snapdir_visible(is_snapdir_visible) {}
 
   utime_t last_modified;
   uint64_t change_attr;
+  bool is_snapdir_visible;
 };
 
 static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm_info(
@@ -5307,7 +5335,8 @@ static std::pair<SnapRealmInfo, std::optional<SnapRealmInfoMeta>> get_snap_realm
   if (session->mds_features.test(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
     SnapRealmInfoNew ninfo;
     decode(ninfo, p);
-    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified, ninfo.change_attr));
+    return std::make_pair(ninfo.info, SnapRealmInfoMeta(ninfo.last_modified,
+                          ninfo.change_attr, ninfo.flags & SnapRealmInfoNew::SNAPDIR_VISIBILITY));
   } else {
     SnapRealmInfo info;
     decode(info, p);
@@ -5365,6 +5394,7 @@ void Client::update_snap_trace(MetaSession *session, const bufferlist& bl, SnapR
       if (realm_info_meta) {
         realm->last_modified = (*realm_info_meta).last_modified;
         realm->change_attr = (*realm_info_meta).change_attr;
+        realm->is_snapdir_visible = (*realm_info_meta).is_snapdir_visible;
       }
       realm->my_snaps = info.my_snaps;
       invalidate = true;
@@ -5527,6 +5557,12 @@ void Client::handle_caps(const MConstRef<MClientCaps>& m)
   }
 
   got_mds_push(session.get());
+
+  // check whether the current inode is under subvolume for metrics collection
+  if (m->subvolume_id > 0) {
+    ldout(cct, 10) << __func__ << " adding " << m->get_ino() << " to subvolume tracker " << m->subvolume_id << dendl;
+    subvolume_tracker->add_inode(m->get_ino(), m->subvolume_id);
+  }
 
   bool do_cap_release = false;
   Inode *in;
@@ -6089,11 +6125,12 @@ int Client::mds_check_access(std::string& path, const UserPerm& perms, int mask)
     path = path.substr(1);
   }
 
+  std::string_view fs_name = mdsmap->get_fs_name();
   for (auto& s: cap_auths) {
-    ldout(cct, 20) << __func__ << " auth match path " << s.match.path << " r: " << s.readable
-                   << " w: " << s.writeable << dendl;
+    ldout(cct, 20) << __func__ << " auth match fsname " << s.match.fs_name << " auth match path "
+                   << s.match.path << " r: " << s.readable << " w: " << s.writeable << dendl;
     ldout(cct, 20) << " match.uid " << s.match.uid << dendl;
-    if (s.match.match(path, perms.uid(), perms.gid(), &gid_list)) {
+    if (s.match.match(fs_name, path, perms.uid(), perms.gid(), &gid_list)) {
       ldout(cct, 20) << " is matched" << dendl;
       // always follow the last auth caps' permision
       root_squash_perms = true;
@@ -7200,8 +7237,13 @@ void Client::flush_cap_releases()
   for (auto &p : mds_sessions) {
     auto session = p.second;
     if (session->release && mdsmap->is_clientreplay_or_active_or_stopping(
-          p.first)) {
+            p.first)) {
       nr_caps += session->release->caps.size();
+      for (const auto &cap: session->release->caps) {
+        ldout(cct, 10) << __func__ << " removing " << static_cast<inodeno_t>(cap.ino) <<
+        " from subvolume tracker" << dendl;
+        subvolume_tracker->remove_inode(static_cast<inodeno_t>(cap.ino));
+      }
       if (cct->_conf->client_inject_release_failure) {
         ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
       } else {
@@ -7437,6 +7479,18 @@ void Client::collect_and_send_global_metrics() {
     message.push_back(metric);
   }
 
+  // subvolume metrics
+  if (_collect_and_send_global_metrics ||
+        session->mds_metric_flags.test(CLIENT_METRIC_TYPE_SUBVOLUME_METRICS)) {
+    auto metrics = subvolume_tracker->aggregate(true);
+    if (!metrics.empty()) {
+      for (auto m: metrics)
+        ldout(cct, 20) << " sending subv_metric " << m << dendl;
+      metric = ClientMetricMessage(SubvolumeMetricsPayload(metrics));
+      message.push_back(metric);
+    }
+  }
+
   session->con->send_message2(make_message<MClientMetrics>(std::move(message)));
 }
 
@@ -7557,6 +7611,11 @@ int Client::_lookup(const InodeRef& dir, const std::string& name, std::string& a
 
   if (dname == cct->_conf->client_snapdir &&
       dir->snapid == CEPH_NOSNAP) {
+    if (respect_subvolume_snapshot_visibility &&
+        !dir->snaprealm->is_snapdir_visible) {
+      r = -EPERM;
+      goto done;
+    }
     *target = open_snapdir(dir);
     goto done;
   }
@@ -7684,7 +7743,10 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, InodeRef *end
   return rc;
 }
 
-int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options)
+int Client::path_walk(InodeRef dirinode, const filepath& origpath,
+		      walk_dentry_result* result, const UserPerm& perms,
+		      const PathWalk_ExtraOptions& extra_options,
+		      std::string trimmed_path)
 {
   int rc = 0;
   filepath path = origpath;
@@ -7708,7 +7770,11 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
   int symlinks = 0;
   unsigned i = 0;
 
-  ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << path << dendl;
+  if (trimmed_path == "") {
+    std::string trimmed_path = path.get_trimmed_path();
+  }
+
+  ldout(cct, 10) << __func__ << ": cur=" << *diri << " path=" << trimmed_path << dendl;
 
   if (path.depth() == 0) {
     /* diri/dname can also be used as a filepath; or target */
@@ -7722,7 +7788,7 @@ int Client::path_walk(InodeRef dirinode, const filepath& origpath, walk_dentry_r
     int caps = 0;
     dname = path[i];
     ldout(cct, 10) << " " << i << " " << *diri << " " << dname << dendl;
-    ldout(cct, 20) << "  (path is " << path << ")" << dendl;
+    ldout(cct, 20) << "  (path is " << trimmed_path << ")" << dendl;
     InodeRef next;
     if (!diri.get()->is_dir()) {
       ldout(cct, 20) << diri.get() << " is not a dir inode, name " << dname.c_str() << dendl;
@@ -9494,7 +9560,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
   Dir *dir = diri->dir;
 
   if (!dir) {
-    ldout(cct, 10) << " dir is empty" << dendl;
+    ldout(cct, 10) << __func__ << " dir is empty" << dendl;
     dirp->set_end();
     return 0;
   }
@@ -9504,25 +9570,22 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 						  dirp->offset, dentry_off_lt());
 
   string dn_name;
-  while (true) {
+  for (unsigned idx = pd - dir->readdir_cache.begin();
+       idx < dir->readdir_cache.size();
+       ++idx) {
     int mask = caps;
     if (!dirp->inode->is_complete_and_ordered())
       return -EAGAIN;
-    if (pd == dir->readdir_cache.end())
-      break;
-    Dentry *dn = *pd;
+    Dentry *dn = dir->readdir_cache[idx];
     if (dn->inode == NULL) {
       ldout(cct, 15) << " skipping null '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
     if (dn->cap_shared_gen != dir->parent_inode->shared_gen) {
       ldout(cct, 15) << " skipping mismatch shared gen '" << dn->name << "'" << dendl;
-      ++pd;
       continue;
     }
 
-    int idx = pd - dir->readdir_cache.begin();
     if (dn->inode->is_dir() && cct->_conf->client_dirsize_rbytes) {
       mask |= CEPH_STAT_RSTAT;
     }
@@ -9536,9 +9599,8 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       return -EAGAIN;
     }
     
-    // the content of readdir_cache may change after _getattr(), so pd may be invalid iterator    
-    pd = dir->readdir_cache.begin() + idx;
-    if (pd >= dir->readdir_cache.end() || *pd != dn)
+    // the content of readdir_cache may change after _getattr()
+    if (idx >= dir->readdir_cache.size() || dir->readdir_cache[idx] != dn)
       return -EAGAIN;
 
     struct ceph_statx stx;
@@ -9548,8 +9610,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     uint64_t next_off = dn->offset + 1;
     auto dname = _unwrap_name(*diri, dn->name, dn->alternate_name);
     fill_dirent(&de, dname.c_str(), stx.stx_mode, stx.stx_ino, next_off);
-    ++pd;
-    if (pd == dir->readdir_cache.end())
+    if (idx + 1 == dir->readdir_cache.size())
       next_off = dir_result_t::END;
 
     Inode *in = NULL;
@@ -9560,6 +9621,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
     dn_name = dn->name; // fill in name while we have lock
 
+    // the content of readdir_cache may change after unlocking
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
@@ -9736,9 +9798,9 @@ int Client::_readdir_r_cb(int op,
       dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
-    int err = _readdir_cache_cb(dirp, cb, p, caps, getref);
-    if (err != -EAGAIN)
-      return err;
+    int retval = _readdir_cache_cb(dirp, cb, p, caps, getref);
+    if (retval != -EAGAIN)
+      return retval;
   }
 
   while (1) {
@@ -10970,8 +11032,9 @@ void Client::C_Read_Finisher::finish_io(int r)
       f->pos = offset + r;
     }
     
-    lat = ceph_clock_now();
+    lat = mono_clock_now();
     lat -= start;
+    clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, static_cast<uint32_t>(r)});
     ++clnt->nr_read_request;
     clnt->update_io_stat_read(lat);
   }
@@ -11058,7 +11121,7 @@ void Client::C_Read_Sync_NonBlocking::finish(int r)
 success:
 
   r = read;
-
+  clnt->subvolume_tracker->add_metric(in->ino, SimpleIOMetric(false, mono_clock_now() - start_time, r));
 error:
 
   onfinish->complete(r);
@@ -11080,7 +11143,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
   utime_t lat;
-  utime_t start = ceph_clock_now(); 
+  utime_t start = mono_clock_now();
   CRF_iofinish *crf_iofinish = nullptr;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
@@ -11151,7 +11214,7 @@ retry:
                          conf->client_oc &&
                          (have & (CEPH_CAP_FILE_CACHE |
                                   CEPH_CAP_FILE_LAZYIO)),
-                       have, movepos, start, f, in, f->pos, offset, size));
+                       have, movepos, f, in, f->pos, offset, size));
 
     crf_iofinish->CRF = crf.get();
   }
@@ -11265,9 +11328,9 @@ success:
     f->pos = start_pos + rc;
   }
   
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
-
+  subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, lat, bl->length()});
   ++nr_read_request;
   update_io_stat_read(lat);
 
@@ -11283,7 +11346,7 @@ done:
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
-    client(c), f(f) {
+    client(c), f(f), start_time(mono_clock_now()) {
   f->get();
   f->readahead.inc_pending();
 }
@@ -11298,6 +11361,7 @@ void Client::C_Readahead::finish(int r) {
   client->put_cap_ref(f->inode.get(), CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
   if (r > 0) {
     client->update_read_io_size(r);
+    client->subvolume_tracker->add_metric(f->inode->ino, SimpleIOMetric(false, mono_clock_now()-start_time, r));
   }
 }
 
@@ -11390,6 +11454,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     io_finish.reset(io_finish_cond);
   }
 
+  auto start_time = mono_clock_now();
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
 			      off, len, bl, 0, io_finish.get());
 
@@ -11415,6 +11480,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     update_read_io_size(bl->length());
+    subvolume_tracker->add_metric(in->ino, SimpleIOMetric{false, mono_clock_now() - start_time, bl->length()});
   } else {
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
@@ -11624,9 +11690,10 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
 
   update_write_io_size(size);
   // time
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
 
+  subvolume_tracker->add_metric(in->ino, SimpleIOMetric{true, lat, static_cast<uint32_t>(size)});
   ++nr_write_request;
   update_io_stat_write(lat);
 
@@ -11780,7 +11847,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
        (uint64_t)(offset+size) > in->size ) { //exceeds filesize 
       return -EFBIG;              
 	}
-  //ldout(cct, 7) << "write fh " << fh << " size " << size << " offset " << offset << dendl;
+  ldout(cct, 7) << "_write fh " << f << " size " << size << " offset " << offset << dendl;
 
   if (objecter->osdmap_pool_full(in->layout.pool_id)) {
     return -ENOSPC;
@@ -11823,7 +11890,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   ldout(cct, 10) << "cur file size is " << in->size << dendl;
 
   // time it.
-  utime_t start = ceph_clock_now();
+  utime_t start = mono_clock_now();
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
@@ -11896,7 +11963,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
-                        start, f, in, fpos, offset, size,
+                        f, in, fpos, offset, size,
                         do_fsync, syncdataonly));
 
     cwf_iofinish->CWF = cwf.get();
@@ -11911,6 +11978,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     // async, caching, non-blocking.
+    ldout(cct, 10) << " _write_oc " << dendl;
     r = objectcacher->file_write(&in->oset, &in->layout,
 				 in->snaprealm->get_snap_context(),
 				 offset, size, bl, ceph::real_clock::now(),
@@ -11947,6 +12015,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
       }
 
       // allow caller to wait on onfinish...
+      ldout(cct, 10) << " _write_oc_1" << dendl;
       return 0;
     }
 
@@ -11981,6 +12050,15 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
+    auto delay = get_injected_write_delay_secs();
+    if (unlikely(delay > 0)) {
+      ldout(cct, 20) << __func__ << ": delaying write for " << delay << " seconds" << dendl;
+      client_lock.unlock();
+      sleep(delay);
+      client_lock.lock();
+    }
+
+    ldout(cct, 10) << " _write_filer" << dendl;
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
@@ -11995,6 +12073,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
       cwf.release();
 
       // allow caller to wait on onfinish...
+      ldout(cct, 10) << " _write_filer_2" << dendl;
       return 0;
     }
 
@@ -12010,6 +12089,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
+  ldout(cct, 10) << " _write_filer_succeess" << dendl;
   r = _write_success(f, start, fpos, offset, size, in);
 
   if (r >= 0 && do_fsync) {
@@ -12163,6 +12243,8 @@ void Client::C_nonblocking_fsync_state::advance()
       ldout(clnt->cct, 10) << "no metadata needs to commit" << dendl;
     }
 
+    ldout(clnt->cct, 10) << __func__ <<": in->unsafe_ops=" << in->unsafe_ops.size() << dendl;
+
     if (!syncdataonly && !in->unsafe_ops.empty()) {
       waitfor_safe = true;
       clnt->flush_mdlog_sync(in);
@@ -12280,7 +12362,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
   utime_t lat;
 
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
   clnt->logger->tinc(l_c_fsync, lat);
 
@@ -12317,12 +12399,16 @@ void Client::C_nonblocking_fsync_state_advancer::finish(int r)
   state->advance();
 }
 
-void Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
+int64_t Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
 {
   C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(this, in, syncdataonly, onfinish);
 
+  ldout(cct, 10) << __func__ << dendl;
+
+  std::unique_lock cl(client_lock);
   // Kick fsync off...
   state->advance();
+  return 0;
 }
 
 int Client::_fsync(Inode *in, bool syncdataonly)
@@ -12334,7 +12420,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
   utime_t lat;
-  utime_t start = ceph_clock_now(); 
+  utime_t start = mono_clock_now();
 
   ldout(cct, 8) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
@@ -12370,9 +12456,13 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
     // FIXME: this can starve
-    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+    int nr_refs = 0;
+    if (in->is_write_delegated()) {
+      ++nr_refs;
+    }
+    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > nr_refs) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
-		     << " uncommitted, waiting" << dendl;
+		     << " uncommitted (nrefs: " << nr_refs << "), waiting" << dendl;
       wait_on_context_list(in->waitfor_commit);
     }
   }
@@ -12387,7 +12477,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
 		  << cpp_strerror(-r) << dendl;
   }
    
-  lat = ceph_clock_now();
+  lat = mono_clock_now();
   lat -= start;
   logger->tinc(l_c_fsync, lat);
 
@@ -12569,20 +12659,18 @@ int Client::getcwd(string& dir, const UserPerm& perms)
   return _getcwd(dir, perms);
 }
 
-int Client::statfs(const char *path, struct statvfs *stbuf,
+int Client::_statfs(Inode *in, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
-  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-  if (!mref_reader.is_state_satisfied())
-    return -ENOTCONN;
+  ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  ldout(cct, 10) << __func__ << dendl;
   tout(cct) << __func__ << std::endl;
   unsigned long int total_files_on_fs;
 
   ceph_statfs stats;
   C_SaferCond cond;
 
-  std::unique_lock lock(client_lock);
   const vector<int64_t> &data_pools = mdsmap->get_data_pools();
   if (data_pools.size() == 1) {
     objecter->get_fs_stats(stats, data_pools[0], &cond);
@@ -12590,12 +12678,17 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     objecter->get_fs_stats(stats, std::optional<int64_t>(), &cond);
   }
 
-  lock.unlock();
+  client_lock.unlock();
   int rval = cond.wait();
-  lock.lock();
+  client_lock.lock();
 
-  ceph_assert(root);
-  total_files_on_fs = root->rstat.rfiles + root->rstat.rsubdirs;
+  ceph_assert(in);
+  // Usually quota_root will == root_ancestor, but if the mount root has no
+  // quota but we can see a parent of it that does have a quota, we'll
+  // respect that one instead.
+  InodeRef quota_root = in->quota.is_enabled() ? in : get_quota_root(in, perms);
+
+  total_files_on_fs = quota_root->rstat.rfiles + quota_root->rstat.rsubdirs;
 
   if (rval < 0) {
     ldout(cct, 1) << "underlying call to statfs returned error: "
@@ -12622,12 +12715,6 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   stbuf->f_fsid = -1;       // ??
   stbuf->f_flag = 0;        // ??
   stbuf->f_namemax = NAME_MAX;
-
-  // Usually quota_root will == root_ancestor, but if the mount root has no
-  // quota but we can see a parent of it that does have a quota, we'll
-  // respect that one instead.
-  ceph_assert(root != nullptr);
-  InodeRef quota_root = root->quota.is_enabled(QUOTA_MAX_BYTES) ? root : get_quota_root(root.get(), perms, QUOTA_MAX_BYTES);
 
   // get_quota_root should always give us something if client quotas are
   // enabled
@@ -13013,10 +13100,29 @@ int Client::get_snap_info(const char *path, const UserPerm &perms, SnapInfo *sna
 
 int Client::ll_statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms)
 {
-  /* Since the only thing this does is wrap a call to statfs, and
-     statfs takes a lock, it doesn't seem we have a need to split it
-     out. */
-  return statfs(0, stbuf, perms);
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::unique_lock cl(client_lock);
+  return _statfs(in, stbuf, perms);
+}
+
+int Client::statfs(const char *path, struct statvfs *stbuf, const UserPerm& perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::unique_lock cl(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  auto in = wdr.target.get();
+  return _statfs(in, stbuf, perms);
 }
 
 void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
@@ -13255,6 +13361,10 @@ int Client::mksnap(const char *relpath, const char *name, const UserPerm& perm,
   if (int rc = path_walk(cwd, filepath(relpath), &wdr, perm, {}); rc < 0) {
     return rc;
   }
+  if (respect_subvolume_snapshot_visibility &&
+      !wdr.target->snaprealm->is_snapdir_visible) {
+      return -EPERM;
+  }
   auto snapdir = open_snapdir(wdr.target);
   if (int rc = path_walk(std::move(snapdir), filepath(name), &wdr, perm, {.require_target = false}); rc < 0) {
     return rc;
@@ -13272,6 +13382,10 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   InodeRef in;
   if (int rc = path_walk(cwd, filepath(relpath), &in, perms, {}); rc < 0) {
     return rc;
+  }
+  if (respect_subvolume_snapshot_visibility &&
+      !in->snaprealm->is_snapdir_visible) {
+      return -EPERM;
   }
   auto snapdir = open_snapdir(in.get());
   return _rmdir(snapdir.get(), name, perms, check_perms);
@@ -15390,11 +15504,12 @@ int Client::ll_unlink(Inode *in, const char *name, const UserPerm& perm)
 
 int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms)
 {
-  ldout(cct, 8) << "_rmdir(" << dir->ino << " " << name << " uid "
+  std::string trimmed_path = filepath(name).get_trimmed_path();
+  ldout(cct, 8) << "_rmdir(" << dir->ino << " " << trimmed_path << " uid "
 		<< perms.uid() << " gid " << perms.gid() << ")" << dendl;
 
   walk_dentry_result wdr;
-  if (int rc = path_walk(dir, filepath(name), &wdr, perms, {.followsym = false}); rc < 0) {
+  if (int rc = path_walk(dir, filepath(name), &wdr, perms, {.followsym = false}, trimmed_path); rc < 0) {
     return rc;
   }
 
@@ -15431,7 +15546,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms, bool che
   int res = make_request(req, perms);
 
   trim_cache();
-  ldout(cct, 8) << "rmdir(" << wdr.getpath() << ") = " << res << dendl;
+  ldout(cct, 8) << "_rmdir(" << wdr.getpath() << ") = " << res << dendl;
   return res;
 }
 
@@ -17570,6 +17685,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_caps_release_delay",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
+    "client_inject_write_delay_secs",
     "client_mount_timeout",
     "client_oc_max_dirty",
     "client_oc_max_dirty_age",
@@ -17577,6 +17693,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_oc_size",
     "client_oc_target_dirty",
     "client_permissions",
+    "client_respect_subvolume_snapshot_visibility",
     "fuse_default_permissions"
   });
   static_assert(std::is_sorted(begin(as_sv), end(as_sv)));
@@ -17631,6 +17748,14 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     mount_timeout = cct->_conf.get_val<std::chrono::seconds>(
       "client_mount_timeout");
   }
+  if (changed.count("client_inject_write_delay_secs")) {
+    injected_write_delay_secs = std::chrono::duration<int>(
+      cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
+  }
+  if (changed.count("client_respect_subvolume_snapshot_visibility")) {
+    respect_subvolume_snapshot_visibility = cct->_conf.get_val<bool>(
+      "client_respect_subvolume_snapshot_visibility");
+  }
 }
 
 void intrusive_ptr_add_ref(Inode *in)
@@ -17658,6 +17783,112 @@ mds_rank_t Client::_get_random_up_mds() const
   return *p;
 }
 
+// --- subvolume metrics tracking --- //
+SubvolumeMetricTracker::SubvolumeMetricTracker(CephContext *ct, client_t id) : cct(ct), whoami(id) {}
+
+void SubvolumeMetricTracker::dump(Formatter *f) {
+  auto current_metrics = aggregate(false);
+  f->open_array_section("current_metrics");
+  for (auto &met : current_metrics) {
+    f->dump_object("", met);
+  }
+  f->close_section();
+
+  std::vector<AggregatedIOMetrics> temp;
+  {
+    std::shared_lock l(metrics_lock);
+    temp = last_subvolume_metrics;
+  }
+  f->open_array_section("last_metrics");
+  for (auto &val : temp) {
+    f->dump_object("", val);
+  }
+  f->close_section();
+}
+
+void SubvolumeMetricTracker::add_inode(inodeno_t inode, inodeno_t subvol) {
+  ldout(cct, 20) << __func__ << " subv_metric " << inode << "-" << subvol << dendl;
+  std::unique_lock l(metrics_lock);
+  if (likely(inode_subvolume.contains(inode))) {
+    ldout(cct, 10) << __func__ << " " << inode << "-" << subvol << " subv_metric inode exists" << dendl;
+    return;
+  }
+
+  auto [it, inserted] = subvolume_metrics.try_emplace(subvol);
+  if (inserted) {
+    ldout(cct, 10) << __func__ << " inserted " << inode << "-" << subvol << dendl;
+  }
+  inode_subvolume[inode] = subvol;
+  ldout(cct, 10) << __func__ << " add " << inode << "-" << subvol << dendl;
+}
+
+void SubvolumeMetricTracker::remove_inode(inodeno_t inode) {
+  ldout(cct, 20) << __func__ << " subv_metric " << inode << "-" << dendl;
+  std::unique_lock l(metrics_lock);
+  auto it = inode_subvolume.find(inode);
+  if (it == inode_subvolume.end()) {
+    return;
+  }
+
+  inodeno_t subvol = it->second;
+  inode_subvolume.erase(it);
+
+  auto se = subvolume_metrics.find(subvol);
+  if (se == subvolume_metrics.end()) {
+    ldout(cct, 20) << __func__ << " subv_metric not found " << inode << "-" << subvol << dendl;
+    return;
+  }
+  ldout(cct, 20) << __func__ << " subv_metric end " << inode << dendl;
+}
+
+void SubvolumeMetricTracker::add_metric(inodeno_t inode, SimpleIOMetric&& metric) {
+  ldout(cct, 10) << __func__ << " " << inode << dendl;
+  std::unique_lock l(metrics_lock);
+
+  auto it = inode_subvolume.find(inode);
+  if (it == inode_subvolume.end())
+    return;
+
+  auto& entry = subvolume_metrics[it->second];
+  entry.metrics.add(std::move(metric));
+}
+
+std::vector<AggregatedIOMetrics>
+SubvolumeMetricTracker::aggregate(bool clean) {
+  ldout(cct, 20) << __func__ << dendl;
+  std::vector<AggregatedIOMetrics> res;
+
+  if (clean) {
+    std::unordered_map<inodeno_t, SubvolumeEntry> tmp;
+    // move subvolume map to the local one, to release wlock asap
+    {
+      std::unique_lock l(metrics_lock);
+      subvolume_metrics.swap(tmp);
+    }
+    res.reserve(tmp.size());
+    for (auto &[subv_id, entry]: tmp) {
+      res.emplace_back(std::move(entry.metrics));
+      res.back().subvolume_id = subv_id;
+    }
+  } else {
+    // on rlock is needed, no need to copy the map to the local instance on the metrics map
+    std::shared_lock l(metrics_lock);
+    res.reserve(subvolume_metrics.size());
+    for (const auto &[subv_id, entry]: subvolume_metrics) {
+      res.emplace_back(entry.metrics);
+      res.back().subvolume_id = subv_id;
+    }
+  }
+
+  {
+    std::unique_lock l(metrics_lock);
+    last_subvolume_metrics = res; // since res holds only 1 aggregated metrics per subvolume, copying is not so bad
+  }
+
+  ldout(cct, 20) << __func__ << " res size " << res.size() << dendl;
+  return res; // return value optimization
+}
+// --- subvolume metrics tracking --- //
 
 StandaloneClient::StandaloneClient(Messenger *m, MonClient *mc,
 				   boost::asio::io_context& ictx)

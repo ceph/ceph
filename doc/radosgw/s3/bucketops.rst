@@ -45,6 +45,9 @@ Parameters
 +--------------------------------------+-------------------------------+-----------------------------------------------+------------+
 | ``x-amz-bucket-object-lock-enabled`` | Enable object lock on bucket. | ``true``, ``false``                           | No         |
 +--------------------------------------+-------------------------------+-----------------------------------------------+------------+
+| ``x-amz-object-ownership``           | Set ownership controls.       | ``BucketOwnerEnforced``,                      | No         |
+|                                      |                               | ``BucketOwnerPreferred``, ``ObjectWriter``    |            |
++--------------------------------------+-------------------------------+-----------------------------------------------+------------+
 
 Request Entities
 ~~~~~~~~~~~~~~~~
@@ -651,7 +654,7 @@ Parameters
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response is XML encoded in the body of the request, in the following format:
+The response is XML encoded in the body of the request, in the following format:
 
 ::
 
@@ -790,7 +793,7 @@ Parameters are XML encoded in the body of the request, in the following format:
 |                               |           | between different source buckets writing log records to the same log bucket.         |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``LoggingType``               | String    | The type of logging. Valid values are:                                               | No       |
-|                               |           | ``Standard`` (default) all bucket operations are logged after being perfomed.        |          |
+|                               |           | ``Standard`` (default) all bucket operations are logged after being performed.       |          |
 |                               |           | The log record will contain all fields.                                              |          |
 |                               |           | ``Journal`` only operations that modify and object are logged.                       |          |
 |                               |           | Will record the minimum subset of fields in the log record that is needed            |          |
@@ -799,6 +802,18 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``ObjectRollTime``            | Integer   | The time in seconds after which a new log object is created, and the previous log    | No       |
 |                               |           | object added to the log bucket. Default is 3600 seconds (1 hour).                    |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+The response is XML encoded in the body of the request, only if a configuration change triggers flushing of the current logging object.
+In this case it will return the name of the flushed logging object in following format:
+
+::
+
+  <PostBucketLoggingOutput xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <FlushedLoggingObject>string</FlushedLoggingObject>
+  </PostBucketLoggingOutput>
 
 
 HTTP Response
@@ -864,7 +879,7 @@ Syntax
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response header contains ``Last-Modified`` date/time of the logging configuration.
+The response header contains ``Last-Modified`` date/time of the logging configuration.
 Logging configuration is XML encoded in the body of the response, in the following format:
 
 ::
@@ -919,7 +934,7 @@ Flush Bucket Logging
 --------------------
 
 Flushes logging object for a given source bucket (if not flushed, the logging objects are written lazily to the log bucket).
-Returns the name of the object that was flushed. An empty name will be returned if no object needs to be flushed.
+Returns the name of the object that was flushed. Flushing will happen even if the logging object is empty.
 
 Syntax
 ~~~~~~
@@ -931,7 +946,7 @@ Syntax
 Response Entities
 ~~~~~~~~~~~~~~~~~
 
-Response is XML encoded in the body of the request, in the following format:
+The response is XML encoded in the body of the request, in the following format:
 
 ::
 

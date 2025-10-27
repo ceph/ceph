@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/fs_types.h"
 #include "common/Formatter.h"
@@ -143,15 +143,17 @@ void file_layout_t::decode_json(JSONObj *obj){
     JSONDecoder::decode_json("pool_ns", pool_ns, obj, true);
 }
 
-void file_layout_t::generate_test_instances(std::list<file_layout_t*>& o)
+std::list<file_layout_t> file_layout_t::generate_test_instances()
 {
-  o.push_back(new file_layout_t);
-  o.push_back(new file_layout_t);
-  o.back()->stripe_unit = 4096;
-  o.back()->stripe_count = 16;
-  o.back()->object_size = 1048576;
-  o.back()->pool_id = 3;
-  o.back()->pool_ns = "myns";
+  std::list<file_layout_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().stripe_unit = 4096;
+  o.back().stripe_count = 16;
+  o.back().object_size = 1048576;
+  o.back().pool_id = 3;
+  o.back().pool_ns = "myns";
+  return o;
 }
 
 std::ostream& operator<<(std::ostream& out, const file_layout_t &layout)

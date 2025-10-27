@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -235,10 +235,10 @@ private:
   // create and append the read-hole to
   // load_ranges_t and bl
   static void create_hole_append_bl(
-      load_ranges_t& ret,
-      ceph::bufferlist& bl,
-      extent_len_t hole_offset,
-      extent_len_t hole_length) {
+    load_ranges_t& ret,
+    ceph::bufferlist& bl,
+    extent_len_t hole_offset,
+    extent_len_t hole_length) {
     ceph::bufferptr hole_ptr = create_extent_ptr_rand(hole_length);
     bl.append(hole_ptr);
     ret.push_back(hole_offset, std::move(hole_ptr));
@@ -248,10 +248,10 @@ private:
   // and append to load_ranges_t
   // returns the iterator containing the inserted read-hole
   auto create_hole_insert_map(
-      load_ranges_t& ret,
-      extent_len_t hole_offset,
-      extent_len_t hole_length,
-      const map_t::const_iterator& next_it) {
+    load_ranges_t& ret,
+    extent_len_t hole_offset,
+    extent_len_t hole_length,
+    const map_t::const_iterator& next_it) {
     assert(!buffer_map.contains(hole_offset));
     ceph::bufferlist bl;
     create_hole_append_bl(ret, bl, hole_offset, hole_length);
@@ -529,6 +529,8 @@ public:
     paddr_t base, const ceph::bufferlist &bl) = 0;
 
   /**
+   * complete_load
+   *
    * Called on dirty CachedExtent implementation after replay.
    * Implementation should perform any reads/in-memory-setup
    * necessary. (for instance, the lba implementation will use this
@@ -940,8 +942,7 @@ private:
     }
   }
 
-  CachedExtent* get_transactional_view(Transaction &t);
-  CachedExtent* get_transactional_view(transaction_id_t tid);
+  CachedExtent* maybe_get_transactional_view(Transaction &t);
 
   read_trans_set_t<Transaction> read_transactions;
 
@@ -1365,54 +1366,6 @@ public:
 
 private:
   uint64_t bytes = 0;
-};
-
-/**
- * RetiredExtentPlaceholder
- *
- * Cache::retire_extent_addr(Transaction&, paddr_t, extent_len_t) can retire an
- * extent not currently in cache. In that case, in order to detect transaction
- * invalidation, we need to add a placeholder to the cache to create the
- * mapping back to the transaction. And whenever there is a transaction tries
- * to read the placeholder extent out, Cache is responsible to replace the
- * placeholder by the real one. Anyway, No placeholder extents should escape
- * the Cache interface boundary.
- */
-class RetiredExtentPlaceholder : public CachedExtent {
-
-public:
-  RetiredExtentPlaceholder(extent_len_t length)
-    : CachedExtent(CachedExtent::retired_placeholder_construct_t{}, length) {}
-
-  CachedExtentRef duplicate_for_write(Transaction&) final {
-    ceph_abort_msg("Should never happen for a placeholder");
-    return CachedExtentRef();
-  }
-
-  ceph::bufferlist get_delta() final {
-    ceph_abort_msg("Should never happen for a placeholder");
-    return ceph::bufferlist();
-  }
-
-  static constexpr extent_types_t TYPE = extent_types_t::RETIRED_PLACEHOLDER;
-  extent_types_t get_type() const final {
-    return TYPE;
-  }
-
-  void apply_delta_and_adjust_crc(
-    paddr_t base, const ceph::bufferlist &bl) final {
-    ceph_abort_msg("Should never happen for a placeholder");
-  }
-
-  void on_rewrite(Transaction &, CachedExtent&, extent_len_t) final {}
-
-  std::ostream &print_detail(std::ostream &out) const final {
-    return out << ", RetiredExtentPlaceholder";
-  }
-
-  void on_delta_write(paddr_t record_block_offset) final {
-    ceph_abort_msg("Should never happen for a placeholder");
-  }
 };
 
 class LBAMapping;

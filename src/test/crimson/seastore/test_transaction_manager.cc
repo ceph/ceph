@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <random>
 
@@ -708,11 +708,14 @@ struct transaction_manager_test_t :
     laddr_t offset) {
     auto key = mapping.get_key();
     auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
+      auto len = mapping.get_length();
       return tm->clone_pin(
 	trans,
 	std::move(pos),
 	std::move(mapping),
 	offset,
+	0,
+	len,
 	true);
     }).unsafe_get().cloned_mapping;
     EXPECT_EQ(offset, pin.get_key());

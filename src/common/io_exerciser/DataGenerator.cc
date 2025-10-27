@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include "DataGenerator.h"
 
 #include <chrono>
@@ -226,7 +227,7 @@ bool HeaderedSeededRandomGenerator::validate(bufferlist& bufferlist,
   }
 
   if (!invalid_block_offsets.empty()) {
-    dout(0) << "Miscompare for read of " << m_model.get_oid() <<
+    dout(0) << "Miscompare for read of " << m_model.get_primary_oid() <<
       " offset=" << offset << " length=" << length << dendl;
     printDebugInformationForOffsets(offset, invalid_block_offsets, bufferlist);
   }

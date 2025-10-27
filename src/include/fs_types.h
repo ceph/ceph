@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_INCLUDE_FS_TYPES_H
 #define CEPH_INCLUDE_FS_TYPES_H
 
@@ -46,9 +47,11 @@ struct inodeno_t {
     decode(val, p);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inodeno_t*>& ls) {
-    ls.push_back(new inodeno_t(1));
-    ls.push_back(new inodeno_t(123456789));
+  static std::list<inodeno_t> generate_test_instances() {
+    std::list<inodeno_t> ls;
+    ls.push_back(inodeno_t(1));
+    ls.push_back(inodeno_t(123456789));
+    return ls;
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
@@ -136,7 +139,7 @@ struct file_layout_t {
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<file_layout_t*>& o);
+  static std::list<file_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(file_layout_t)
 

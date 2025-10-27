@@ -33,6 +33,38 @@ If high logging levels have been set on the MDS, ``dump.txt`` can be expected
 to hold the information needed to diagnose and solve the issue causing the
 CephFS operations to hang.
 
+.. _slow_requests:
+
+Slow requests (MDS)
+-------------------
+List current operations via the admin socket by running the following command
+from the MDS host:
+
+.. prompt:: bash #
+
+   ceph daemon mds.<name> dump_ops_in_flight
+
+Identify the stuck commands and examine why they are stuck.
+Usually the last "event" will have been an attempt to gather locks, or sending
+the operation off to the MDS log. If it is waiting on the OSDs, fix them. 
+
+If operations are stuck on a specific inode, then a client is likely holding
+capabilities, preventing its use by other clients. This situation can be caused
+by a client trying to flush dirty data, but it might be caused because you have
+encountered a bug in the distributed file lock code (the file "capabilities"
+["caps"] system) of CephFS.
+
+If you have determined that the commands are stuck because of a bug in the
+capabilities code, restart the MDS. Restarting the MDS is likely to resolve the
+problem.
+
+If there are no slow requests reported on the MDS, and there is no indication
+that clients are misbehaving, then either there is a problem with the client
+or the client's requests are not reaching the MDS.
+
+
+.. _cephfs_dr_stuck_during_recovery:
+
 Stuck during recovery
 =====================
 
@@ -85,7 +117,13 @@ replay. Examine the journal replay status:
 Replay completes when the ``journal_read_pos`` reaches the
 ``journal_write_pos``. The write position does not change during replay. Track
 the progression of the read position to compute the expected time to complete.
+The MDS emits an `MDS_ESTIMATED_REPLAY_TIME` warning when the act of replaying
+the journal takes more than 30 seconds. The warning message includes an
+estimated time to the completion of journal replay::
 
+  mds.a(mds.0): replay: 50.0446% complete - elapsed time: 582s, estimated time remaining: 581s
+
+.. _cephfs_troubleshooting_avoiding_recovery_roadblocks:
 
 Avoiding recovery roadblocks
 ----------------------------
@@ -197,17 +235,23 @@ Do the following when restoring your file system:
 Expediting MDS journal trim
 ===========================
 
-If your MDS journal grew too large (maybe your MDS was stuck in up:replay for a
-long time!), you will want to have the MDS trim its journal more frequently.
-You will know the journal is too large because of ``MDS_HEALTH_TRIM`` warnings.
+``MDS_HEALTH_TRIM`` warnings indicate that the MDS journal has grown too large.
+When the MDS journal has grown too large, use the ``mds_tick_interval`` tunable
+to modify the "MDS tick interval". The "tick" interval drives various upkeep
+activities in the MDS, and modifying the interval will decrease the size of the
+MDS journal by ensuring that it is trimmed more frequently.
 
-The main tunable available to do this is to modify the MDS tick interval. The
-"tick" interval drives several upkeep activities in the MDS. It is strongly
-recommended no significant file system load be present when modifying this tick
-interval. This setting only affects an MDS in ``up:active``. The MDS does not
+Make sure that there is no significant file-system load present when modifying
+``mds_tick_interval``. See
+:ref:`cephfs_troubleshooting_avoiding_recovery_roadblocks` for ways to reduce
+load on the CephFS.
+
+This setting affects only MDSes in the ``up:active`` state. The MDS does not
 trim its journal during recovery.
 
-.. code:: bash
+Run the following command to modify the ``mds_tick_interval`` tunable:
+
+.. prompt:: bash #
 
    ceph config set mds mds_tick_interval 2
 
@@ -216,135 +260,143 @@ RADOS Health
 ============
 
 If part of the CephFS metadata or data pools is unavailable and CephFS is not
-responding, it is probably because RADOS itself is unhealthy. Resolve those
-problems first (:doc:`../../rados/troubleshooting/index`).
+responding, it could indicate that RADOS itself is unhealthy. 
+
+Resolve problems with RADOS before attempting to locate any problems in CephFS.
+See the :ref:`RADOS troubleshooting documentation<rados_troubleshooting>`.
 
 The MDS
 =======
 
-If an operation is hung inside the MDS, it will eventually show up in ``ceph health``,
-identifying "slow requests are blocked". It may also identify clients as
-"failing to respond" or misbehaving in other ways. If the MDS identifies
-specific clients as misbehaving, you should investigate why they are doing so.
+Run the ``ceph health`` command. Any operation that is hung in the MDS is
+indicated by the ``slow requests are blocked`` message. 
 
-Generally it will be the result of
+Messages that read ``failing to respond`` indicate that a client is failing to
+respond. 
 
-#. Overloading the system (if you have extra RAM, increase the
-   "mds cache memory limit" config from its default 1GiB; having a larger active
-   file set than your MDS cache is the #1 cause of this!).
+The following list details potential causes of hung operations:
 
-#. Running an older (misbehaving) client.
+#. The system is overloaded. The most likely cause of system overload is an
+   active file set that is larger than the MDS cache. 
+   
+   If you have extra RAM, increase the ``mds_cache_memory_limit``. The specific
+   tunable ``mds_cache_memory_limit`` is discussed in the :ref:`MDS Cache
+   Size<cephfs_cache_configuration_mds_cache_memory_limit>`. Read the :ref:`MDS
+   Cache Configuration<cephfs_mds_cache_configuration>` section in full before
+   making any alterations to the ``mds_cache_memory_limit`` tunable.
 
-#. Underlying RADOS issues.
+#. There is an older (misbehaving) client.
+
+#. There are underlying RADOS issues. See :ref:`The RADOS troubleshooting
+   documentation<rados_troubleshooting>`.
 
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
-
-.. _slow_requests:
-
-Slow requests (MDS)
--------------------
-You can list current operations via the admin socket by running::
-
-  ceph daemon mds.<name> dump_ops_in_flight
-
-from the MDS host. Identify the stuck commands and examine why they are stuck.
-Usually the last "event" will have been an attempt to gather locks, or sending
-the operation off to the MDS log. If it is waiting on the OSDs, fix them. If
-operations are stuck on a specific inode, you probably have a client holding
-caps which prevent others from using it, either because the client is trying
-to flush out dirty data or because you have encountered a bug in CephFS'
-distributed file lock code (the file "capabilities" ["caps"] system).
-
-If it's a result of a bug in the capabilities code, restarting the MDS
-is likely to resolve the problem.
-
-If there are no slow requests reported on the MDS, and it is not reporting
-that clients are misbehaving, either the client has a problem or its
-requests are not reaching the MDS.
 
 .. _ceph_fuse_debugging:
 
 ceph-fuse debugging
 ===================
 
-ceph-fuse also supports ``dump_ops_in_flight``. See if it has any and where they are
-stuck.
+ceph-fuse is an alternative to the CephFS kernel driver that mounts CephFS file
+systems in user space. ceph-fuse supports ``dump_ops_in_flight``. Use the following command to dump in-flight ceph-fuse operations for examination:  
+
+..
+  .. prompt:: bash #
+
+  the command goes here - 10 Aug 2025
+
+See the :ref:`Mount CephFS using FUSE<cephfs_mount_using_fuse>` documentation.
 
 Debug output
 ------------
 
-To get more debugging information from ceph-fuse, try running in the foreground
-with logging to the console (``-d``) and enabling client debug
-(``--debug-client=20``), enabling prints for each message sent
+To get more debugging information from ceph-fuse, list current operations in
+the foreground while logging to the console (``-d``), enabling client debug
+(``--debug-client=20``), and enabling prints for each message sent
 (``--debug-ms=1``).
 
+.. prompt:: bash #
+
+   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1
+
 If you suspect a potential monitor issue, enable monitor debugging as well
-(``--debug-monc=20``).
+(``--debug-monc=20``) by running a command of the following form:
+
+.. prompt:: bash #
+
+   ceph daemon -d mds.<name> dump_ops_in_flight --debug-client=20 --debug-ms=1 --debug-monc=20
 
 .. _kernel_mount_debugging:
 
 Kernel mount debugging
 ======================
 
-If there is an issue with the kernel client, the most important thing is
-figuring out whether the problem is with the kernel client or the MDS. Generally,
-this is easy to work out. If the kernel client broke directly, there will be
-output in ``dmesg``. Collect it and any inappropriate kernel state.
+The first step in diagnosing and repairing an issue with the kernel client is
+determining whether the problem is in the kernel client or in the MDS. If the
+kernel client itself is broken, evidence of its breakage will be in the kernel
+ring buffer, which can be examined by running the following command:
+
+.. prompt:: bash #
+
+   dmesg
+
+Find the relevant kernel state.
+
 
 Slow requests
 -------------
 
-Unfortunately the kernel client does not support the admin socket, but it has
-similar (if limited) interfaces if your kernel has debugfs enabled. There
-will be a folder in ``sys/kernel/debug/ceph/``, and that folder (whose name will
-look something like ``28f7427e-5558-4ffd-ae1a-51ec3042759a.client25386880``)
-will contain a variety of files that output interesting output when you ``cat``
-them. These files are described below; the most interesting when debugging
-slow requests are probably the ``mdsc`` and ``osdc`` files.
+Unfortunately, the kernel client does not provide an admin socket. However,
+the the kernel on the client has `debugfs
+<https://docs.kernel.org/filesystems/debugfs.html>`_ enabled, interfaces
+similar to the admin socket are available. 
 
-* bdi: BDI info about the Ceph system (blocks dirtied, written, etc)
-* caps: counts of file "caps" structures in-memory and used
-* client_options: dumps the options provided to the CephFS mount
-* dentry_lru: Dumps the CephFS dentries currently in-memory
-* mdsc: Dumps current requests to the MDS
-* mdsmap: Dumps the current MDSMap epoch and MDSes
-* mds_sessions: Dumps the current sessions to MDSes
-* monc: Dumps the current maps from the monitor, and any "subscriptions" held
-* monmap: Dumps the current monitor map epoch and monitors
-* osdc: Dumps the current ops in-flight to OSDs (ie, file data IO)
-* osdmap: Dumps the current OSDMap epoch, pools, and OSDs
+Find a folder in ``/sys/kernel/debug/ceph/`` with a name like 
+``28f7427e-5558-4ffd-ae1a-51ec3042759a.client25386880``.
+That folder contains files that can be used to diagnose the causes of slow requests. Use ``cat`` to see their contents.  
 
-If the data pool is in a NEARFULL condition, then the kernel cephfs client
-will switch to doing writes synchronously, which is quite slow.
+These files are described below. The files most useful for diagnosis of slow
+requests are the ``mdsc`` (current requests to the MDS) and the ``osdc``
+(current operations in-flight to OSDs) files.
+
+* ``bdi``: BDI info about the Ceph system (blocks dirtied, written, etc)
+* ``caps``: counts of file "caps" structures in-memory and used
+* ``client_options``: dumps the options provided to the CephFS mount
+* ``dentry_lru``: Dumps the CephFS dentries currently in-memory
+* ``mdsc``: Dumps current requests to the MDS
+* ``mdsmap``: Dumps the current MDSMap epoch and MDSes
+* ``mds_sessions``: Dumps the current sessions to MDSes
+* ``monc``: Dumps the current maps from the monitor, and any "subscriptions" held
+* ``monmap``: Dumps the current monitor map epoch and monitors
+* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data IO)
+* ``osdmap``: Dumps the current OSDMap epoch, pools, and OSDs
+
+If the data pool is in a ``NEARFULL`` condition, then the kernel CephFS client
+will switch to doing writes synchronously. Synchronous writes are quite slow.
 
 Disconnected+Remounted FS
 =========================
-Because CephFS has a "consistent cache", if your network connection is
-disrupted for a long enough time, the client will be forcibly
-disconnected from the system. At this point, the kernel client is in
-a bind: it cannot safely write back dirty data, and many applications
-do not handle IO errors correctly on close().
-At the moment, the kernel client will remount the FS, but outstanding file system
-IO may or may not be satisfied. In these cases, you may need to reboot your
-client system.
 
-You can identify you are in this situation if dmesg/kern.log report something like::
+Because CephFS has a "consistent cache", the MDS will forcibly evict (and
+blocklist) clients from the cluster when the network connection has been
+disrupted for a long time. When this happens, the kernel client cannot safely
+write back dirty (buffered) data and this results in data loss. However: note
+that this behavior is appropriate and also follows POSIX semantics. The client
+has to be remounted to be able to access the file system again. This is the
+default behavior but it can be overridden by the ``recover_session`` mount
+option. See `the "options" section of the "mount.ceph" man page
+<https://docs.ceph.com/en/latest/man/8/mount.ceph/#options>`_
 
-   Jul 20 08:14:38 teuthology kernel: [3677601.123718] ceph: mds0 closed our session
-   Jul 20 08:14:38 teuthology kernel: [3677601.128019] ceph: mds0 reconnect start
-   Jul 20 08:14:39 teuthology kernel: [3677602.093378] ceph: mds0 reconnect denied
-   Jul 20 08:14:39 teuthology kernel: [3677602.098525] ceph:  dropping dirty+flushing Fw state for ffff8802dc150518 1099935956631
-   Jul 20 08:14:39 teuthology kernel: [3677602.107145] ceph:  dropping dirty+flushing Fw state for ffff8801008e8518 1099935946707
-   Jul 20 08:14:39 teuthology kernel: [3677602.196747] libceph: mds0 172.21.5.114:6812 socket closed (con state OPEN)
-   Jul 20 08:14:40 teuthology kernel: [3677603.126214] libceph: mds0 172.21.5.114:6812 connection reset
-   Jul 20 08:14:40 teuthology kernel: [3677603.132176] libceph: reset on mds0
+You are in this situation if the output of ``dmesg`` contains something like
+the following::
 
-This is an area of ongoing work to improve the behavior. Kernels will soon
-be reliably issuing error codes to in-progress IO, although your application(s)
-may not deal with them well. In the longer-term, we hope to allow reconnect
-and reclaim of data in cases where it won't violate POSIX semantics (generally,
-data which hasn't been accessed or modified by other clients).
+[Fri Aug 15 02:38:10 2025] ceph: mds0 caps stale
+[Fri Aug 15 02:38:28 2025] libceph: mds0 (2)XXX.XX.XX.XX :6800 socket closed (con state OPEN)
+[Fri Aug 15 02:38:28 2025] libceph: mds0 (2)XXX.XX.XX.XX:6800 session reset
+[Fri Aug 15 02:38:28 2025] ceph: mds0 closed our session
+[Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect start
+[Fri Aug 15 02:38:28 2025] ceph: mds0 reconnect denied
 
 Mounting
 ========
@@ -352,25 +404,32 @@ Mounting
 Mount 5 Error
 -------------
 
-A mount 5 error typically occurs if a MDS server is laggy or if it crashed.
-Ensure at least one MDS is up and running, and the cluster is ``active +
+A ``mount 5`` error indicates a lagging MDS server or a crashed MDS server.
+
+Ensure that at least one MDS is up and running, and the cluster is ``active +
 healthy``. 
 
 Mount 12 Error
 --------------
 
-A mount 12 error with ``cannot allocate memory`` usually occurs if you  have a
+A mount 12 error with a message reading ``cannot allocate memory`` indicates a
 version mismatch between the :term:`Ceph Client` version and the :term:`Ceph
-Storage Cluster` version. Check the versions using::
+Storage Cluster` version. Check the versions using the following command:
 
-	ceph -v
+.. prompt:: bash #
+
+   ceph -v
 	
-If the Ceph Client is behind the Ceph cluster, try to upgrade it::
+If the Ceph Client is of an older version than the Ceph cluster, upgrade
+the Client:
 
-	sudo apt-get update && sudo apt-get install ceph-common 
+.. prompt:: bash #
 
-You may need to uninstall, autoclean and autoremove ``ceph-common`` 
-and then reinstall it so that you have the latest version.
+   sudo apt-get update && sudo apt-get install ceph-common 
+
+If this fails to resolve the problem, uninstall, autoclean, and autoremove the
+``ceph-common`` package and then reinstall it to ensure that you have the
+latest version of it.
 
 Dynamic Debugging
 =================
@@ -402,36 +461,55 @@ To disable debug logging, run a command of the following form:
 In-memory Log Dump
 ==================
 
-In-memory logs can be dumped by setting ``mds_extraordinary_events_dump_interval``
-during a lower level debugging (log level < 10). ``mds_extraordinary_events_dump_interval``
-is the interval in seconds for dumping the recent in-memory logs when there is an Extra-Ordinary event.
+In-memory logs can be dumped by setting
+``mds_extraordinary_events_dump_interval`` when
+the log level is set to less than ``10``.
+``mds_extraordinary_events_dump_interval`` is the interval in seconds for
+dumping the recent in-memory logs when there is an extraordinary event.
 
-The Extra-Ordinary events are classified as:
+Extraordinary events include the following:
 
 * Client Eviction
 * Missed Beacon ACK from the monitors
 * Missed Internal Heartbeats
 
-In-memory Log Dump is disabled by default to prevent log file bloat in a production environment.
-The below commands consecutively enables it::
+In-memory log dump is disabled by default. This prevents production
+environments from experiencing log file bloat by default.
 
-  $ ceph config set mds debug_mds <log_level>/<gather_level>
-  $ ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+Run the following two commands in order to enable in-memory log dumping: 
 
-The ``log_level`` should be < 10 and ``gather_level`` should be >= 10 to enable in-memory log dump.
-When it is enabled, the MDS checks for the extra-ordinary events every
-``mds_extraordinary_events_dump_interval`` seconds and if any of them occurs, MDS dumps the
-in-memory logs containing the relevant event details in ceph-mds log.
+#. 
+   .. prompt:: bash #
 
-.. note:: For higher log levels (log_level >= 10) there is no reason to dump the In-memory Logs and a
-          lower gather level (gather_level < 10) is insufficient to gather In-memory Logs. Thus a
-          log level >=10 or a gather level < 10 in debug_mds would prevent enabling the In-memory Log Dump.
-          In such cases, when there is a failure it's required to reset the value of
-          mds_extraordinary_events_dump_interval to 0 before enabling using the above commands.
+      ceph config set mds debug_mds <log_level>/<gather_level>
 
-The In-memory Log Dump can be disabled using::
+   Set ``log_level`` to a value of less than ``10``. Set ``gather_level`` to a
+   value greater than ``10``. When those two values have been set,  in-memory
+   log dump is enabled.
+#. 
+   .. prompt:: bash #
 
-  $ ceph config set mds mds_extraordinary_events_dump_interval 0
+      ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+
+   When in-memory log dumping is enabled, the MDS checks for
+   extraordinary events every ``mds_extraordinary_events_dump_interval``
+   seconds. If any extraordinary event occurs, the MDS dumps the in-memory logs
+   that contain relevant event details to the Ceph MDS log.
+
+.. note:: When higher log levels are set (``log_level`` greater than or equal
+   to ``10``) there is no reason to dump the in-memory logs. A lower gather
+   level (``gather_level`` less than ``10``) is insufficient to gather in-
+   memory logs. This means that a log level of greater than or equal to ``10``
+   or a gather level of less than ``10`` in ``debug_mds`` prevents enabling
+   in-memory-log dumping. In such cases, if there is a failure, you must reset
+   the value of ``mds_extraordinary_events_dump_interval`` to ``0`` before
+   enabling the use of the above commands.
+
+Disable in-memory log dumping by running the following command:
+
+.. prompt:: bash #
+
+   ceph config set mds mds_extraordinary_events_dump_interval 0
 
 Filesystems Become Inaccessible After an Upgrade
 ================================================

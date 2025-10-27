@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -64,15 +65,17 @@ void SnapInfo::dump(Formatter *f) const
   f->close_section();
 }
 
-void SnapInfo::generate_test_instances(std::list<SnapInfo*>& ls)
+std::list<SnapInfo> SnapInfo::generate_test_instances()
 {
-  ls.push_back(new SnapInfo);
-  ls.push_back(new SnapInfo);
-  ls.back()->snapid = 1;
-  ls.back()->ino = 2;
-  ls.back()->stamp = utime_t(3, 4);
-  ls.back()->name = "foo";
-  ls.back()->metadata = {{"foo", "bar"}};
+  std::list<SnapInfo> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().snapid = 1;
+  ls.back().ino = 2;
+  ls.back().stamp = utime_t(3, 4);
+  ls.back().name = "foo";
+  ls.back().metadata = {{"foo", "bar"}};
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const SnapInfo &sn)
@@ -121,12 +124,14 @@ void snaplink_t::dump(Formatter *f) const
   f->dump_unsigned("first", first);
 }
 
-void snaplink_t::generate_test_instances(std::list<snaplink_t*>& ls)
+std::list<snaplink_t> snaplink_t::generate_test_instances()
 {
-  ls.push_back(new snaplink_t);
-  ls.push_back(new snaplink_t);
-  ls.back()->ino = 2;
-  ls.back()->first = 123;
+  std::list<snaplink_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().ino = 2;
+  ls.back().first = 123;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const snaplink_t &l)
@@ -190,6 +195,7 @@ void sr_t::dump(Formatter *f) const
   f->dump_unsigned("last_destroyed", last_destroyed);
   f->dump_stream("last_modified") << last_modified;
   f->dump_unsigned("change_attr", change_attr);
+  f->dump_unsigned("is_snapdir_visible", is_snapdir_visible());
   f->dump_unsigned("current_parent_since", current_parent_since);
 
   f->open_array_section("snaps");
@@ -219,25 +225,35 @@ void sr_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void sr_t::generate_test_instances(std::list<sr_t*>& ls)
+std::list<sr_t> sr_t::generate_test_instances()
 {
-  ls.push_back(new sr_t);
-  ls.push_back(new sr_t);
-  ls.back()->seq = 1;
-  ls.back()->created = 2;
-  ls.back()->last_created = 3;
-  ls.back()->last_destroyed = 4;
-  ls.back()->current_parent_since = 5;
-  ls.back()->snaps[123].snapid = 7;
-  ls.back()->snaps[123].ino = 8;
-  ls.back()->snaps[123].stamp = utime_t(9, 10);
-  ls.back()->snaps[123].name = "name1";
-  ls.back()->past_parents[12].ino = 12;
-  ls.back()->past_parents[12].first = 3;
+  std::list<sr_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().seq = 1;
+  ls.back().created = 2;
+  ls.back().last_created = 3;
+  ls.back().last_destroyed = 4;
+  ls.back().current_parent_since = 5;
+  ls.back().snaps[123].snapid = 7;
+  ls.back().snaps[123].ino = 8;
+  ls.back().snaps[123].stamp = utime_t(9, 10);
+  ls.back().snaps[123].name = "name1";
+  ls.back().past_parents[12].ino = 12;
+  ls.back().past_parents[12].first = 3;
 
-  ls.back()->past_parent_snaps.insert(5);
-  ls.back()->past_parent_snaps.insert(6);
-  ls.back()->last_modified = utime_t(9, 10);
-  ls.back()->change_attr++;
+  ls.back().past_parent_snaps.insert(5);
+  ls.back().past_parent_snaps.insert(6);
+  ls.back().last_modified = utime_t(9, 10);
+  ls.back().change_attr++;
+  return ls;
+}
+
+void sr_t::print(std::ostream& out) const {
+  out << "sr_t(seq=" << seq
+      << " created=" << created
+      << " last_created=" << last_created
+      << " last_destroyed=" << last_destroyed
+      << " flags=" << flags << ")";
 }
 

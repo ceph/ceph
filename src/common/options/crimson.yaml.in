@@ -2,44 +2,34 @@
 ---
 
 options:
-- name: crimson_osd_obc_lru_size
-  type: uint
-  level: advanced
-  desc: Number of obcs to cache
-  default: 512
-- name: crimson_osd_scheduler_concurrency
-  type: uint
-  level: advanced
-  desc: The maximum number concurrent IO operations, 0 for unlimited
-  default: 0
-- name: crimson_alien_op_num_threads
-  type: uint
-  level: advanced
-  desc: The number of threads for serving alienized ObjectStore
-  default: 6
-  flags:
-  - startup
-- name: crimson_seastar_cpu_cores
+
+# Crimson CPU options:
+
+- name: crimson_cpu_set
   type: str
   level: advanced
-  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
+  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+  long_desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+             overrides crimson_cpu_num.
+             smp::count is deduced from this option
   flags:
   - startup
-- name: crimson_alien_thread_cpu_cores
-  type: str
-  level: advanced
-  desc: CPU cores on which alienstore threads will run in cpuset(7) format
-  flags:
-  - startup
-- name: crimson_seastar_num_threads
+
+- name: crimson_cpu_num
   type: uint
   level: advanced
   default: 0
-  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
+  desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
+  long_desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
+             overridden if crimson_cpu_set is set.
+             smp::count is deduced from this option.
   flags:
   - startup
   min: 0
   max: 32
+
+# Reactor options:
+
 - name: crimson_reactor_task_quota_ms
   type: float
   level: advanced
@@ -49,6 +39,7 @@ options:
              Shorter time between pools will result in larger CPU utilization.
   flags:
   - startup
+
 - name: crimson_reactor_idle_poll_time_us
   type: uint
   level: advanced
@@ -58,6 +49,7 @@ options:
              Longer reactor poll time will result in larger CPU utilization.
   flags:
   - startup
+
 - name: crimson_reactor_io_latency_goal_ms
   type: float
   level: advanced
@@ -69,6 +61,20 @@ options:
              Increasing this value will allow more IO requests to be dispatched concurrently.
   flags:
   - startup
+
+# Crimson OSD options:
+
+- name: crimson_osd_obc_lru_size
+  type: uint
+  level: advanced
+  desc: Number of obcs to cache
+  default: 512
+- name: crimson_osd_scheduler_concurrency
+  type: uint
+  level: advanced
+  desc: The maximum number concurrent IO operations, 0 for unlimited
+  default: 0
+
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
@@ -80,6 +86,23 @@ options:
   level: advanced
   default: false
   desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  flags:
+  - startup
+
+# Bluestore options:
+
+- name: crimson_bluestore_num_threads
+  type: uint
+  level: advanced
+  desc: The number of POSIX threads alienized to seastar for serving Bluestore
+  default: 6
+  flags:
+  - startup
+
+- name: crimson_bluestore_cpu_set
+  type: str
+  level: advanced
+  desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
 
@@ -208,6 +231,7 @@ options:
   level: advanced
   desc: The number of generations in the hot tier or the whole SeaStore instance if there's only one tier.
   default: 5
+  min: 5
 - name: seastore_cold_tier_generations
   type: uint
   level: advanced

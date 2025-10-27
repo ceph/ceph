@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,6 +39,9 @@ namespace ceph { class Formatter; }
 class filepath {
   inodeno_t ino = 0;   // base inode.  ino=0 implies pure relative path.
   std::string path;     // relative path.
+  // tells get_path() whether it should prefix path with "..." to indicate that
+  // it was shortened.
+  bool trimmed = false;
 
   /** bits - path segments
    * this is ['a', 'b', 'c'] for both the aboslute and relative case.
@@ -82,6 +86,8 @@ class filepath {
   // accessors
   inodeno_t get_ino() const { return ino; }
   const std::string& get_path() const { return path; }
+  void set_trimmed();
+  std::string get_trimmed_path() const;
   const char *c_str() const { return path.c_str(); }
 
   int length() const { return path.length(); }
@@ -151,7 +157,7 @@ class filepath {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& blp);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<filepath*>& o);
+  static std::list<filepath> generate_test_instances();
 
   bool is_last_dot_or_dotdot() const;
 

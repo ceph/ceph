@@ -1,9 +1,10 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_MGR_METRIC_TYPES_H
 #define CEPH_MGR_METRIC_TYPES_H
 
+#include <boost/variant/static_visitor.hpp>
 #include <variant>
 #include "include/denc.h"
 #include "include/ceph_features.h"
@@ -43,8 +44,10 @@ struct OSDMetricPayload {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<OSDMetricPayload*>& ls) {
-    ls.push_back(new OSDMetricPayload());
+  static std::list<OSDMetricPayload> generate_test_instances() {
+    std::list<OSDMetricPayload> ls;
+    ls.push_back(OSDMetricPayload());
+    return ls;
   }
 };
 
@@ -66,8 +69,10 @@ struct MDSMetricPayload {
   void dump(ceph::Formatter *f) const {
     metric_report.dump(f);
   }
-  static void generate_test_instances(std::list<MDSMetricPayload*>& ls) {
-    ls.push_back(new MDSMetricPayload());
+  static std::list<MDSMetricPayload> generate_test_instances() {
+    std::list<MDSMetricPayload> ls;
+    ls.push_back(MDSMetricPayload());
+    return ls;
   }
 };
 
@@ -176,9 +181,11 @@ struct MetricReportMessage {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<MetricReportMessage*>& ls) {
-    ls.push_back(new MetricReportMessage(OSDMetricPayload()));
-    ls.push_back(new MetricReportMessage(MDSMetricPayload()));
+  static std::list<MetricReportMessage> generate_test_instances() {
+    std::list<MetricReportMessage> ls;
+    ls.push_back(MetricReportMessage(OSDMetricPayload()));
+    ls.push_back(MetricReportMessage(MDSMetricPayload()));
+    return ls;
   }
 };
 
@@ -236,8 +243,10 @@ struct MDSConfigPayload {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<MDSConfigPayload*>& ls) {
-    ls.push_back(new MDSConfigPayload);
+  static std::list<MDSConfigPayload> generate_test_instances() {
+    std::list<MDSConfigPayload> ls;
+    ls.emplace_back();
+    return ls;
   }
 };
 

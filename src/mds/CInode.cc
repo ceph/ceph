@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -177,7 +178,7 @@ int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
 ostream& operator<<(ostream& out, const CInode& in)
 {
   string path;
-  in.make_path_string(path, true);
+  in.make_trimmed_path_string(path);
 
   out << "[inode " << in.ino();
   out << " [" 
@@ -1095,15 +1096,29 @@ bool CInode::is_projected_ancestor_of(const CInode *other) const
  * use_parent is NULL and projected is true, the primary parent's projected
  * inode is used all the way up the path chain. Otherwise the primary parent
  * stable inode is used.
+ *
+ * path_comp_count = path components count. default value is -1, which implies
+ * generate full path.
  */
-void CInode::make_path_string(string& s, bool projected, const CDentry *use_parent) const
+void CInode::make_path_string(string& s, bool projected,
+			      const CDentry *use_parent,
+			      int path_comp_count) const
 {
   if (!use_parent) {
     use_parent = projected ? get_projected_parent_dn() : parent;
   }
 
   if (use_parent) {
-    use_parent->make_path_string(s, projected);
+    if (path_comp_count == -1) {
+      use_parent->make_path_string(s, projected, path_comp_count);
+    } else if (path_comp_count >= 1) {
+      --path_comp_count;
+      use_parent->make_path_string(s, projected, path_comp_count);
+    } else if (path_comp_count == 0) {
+      // this indicates that path has been shortened.
+      s = "...";
+      return;
+    }
   } else if (is_root()) {
     s = "";
   } else if (is_mdsdir()) {
@@ -1120,12 +1135,31 @@ void CInode::make_path_string(string& s, bool projected, const CDentry *use_pare
   }
 }
 
-void CInode::make_path(filepath& fp, bool projected) const
+/* XXX Generating more than 10 components of a path for printing in logs will
+ * consume too much time when the path is too long (imagine a path with 2000
+ * components) since the path would've to be generated indidividually for each
+ * log entry.
+ *
+ * Besides consuming too much time, such long paths in logs are not only not
+ * useful but also it makes reading logs harder. Therefore, shorten the path
+ * when used for logging.
+ *
+ * path_comp_count = path components count. default value is 10, which implies
+ * generate full path.
+ */
+void CInode::make_trimmed_path_string(string& s, bool projected,
+				      const CDentry* use_parent,
+				      int path_comp_count) const
+{
+  make_path_string(s, projected, use_parent, path_comp_count);
+}
+
+void CInode::make_path(filepath& fp, bool projected, int path_comp_count) const
 {
   const CDentry *use_parent = projected ? get_projected_parent_dn() : parent;
   if (use_parent) {
     ceph_assert(!is_base());
-    use_parent->make_path(fp, projected);
+    use_parent->make_path(fp, projected, path_comp_count);
   } else {
     fp = filepath(ino());
   }
@@ -2695,7 +2729,7 @@ void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
 
       if (pi->dirstat.nfiles < 0 || pi->dirstat.nsubdirs < 0) {
         std::string path;
-        make_path_string(path);
+	make_trimmed_path_string(path);
 	clog->error() << "Inconsistent statistics detected: fragstat on inode "
                       << ino() << " (" << path << "), inode has " << pi->dirstat;
 	ceph_assert(!"bad/negative fragstat" == g_conf()->mds_verify_scatter);
@@ -4228,7 +4262,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(8, 1, bl);
+    ENCODE_START(9, 1, bl);
     encode(std::tuple{
       oi->ino,
       snapid,
@@ -4281,6 +4315,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(file_i->fscrypt_auth, bl);
     encode(file_i->fscrypt_file, bl);
     encode_nohead(optmdbl, bl);
+    encode(get_subvolume_id(), bl);
     // encode inodestat
     ENCODE_FINISH(bl);
   }
@@ -4795,22 +4830,26 @@ void InodeStoreBase::old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSO
   c[s] = i;
 }
 
-void InodeStore::generate_test_instances(std::list<InodeStore*> &ls)
+std::list<InodeStore> InodeStore::generate_test_instances()
 {
-  InodeStore *populated = new InodeStore;
-  populated->get_inode()->ino = 0xdeadbeef;
-  populated->get_inode()->mode = S_IFLNK | 0777;
-  populated->symlink = "rhubarb";
-  ls.push_back(populated);
+  std::list<InodeStore> ls;
+  InodeStore populated;
+  populated.get_inode()->ino = 0xdeadbeef;
+  populated.get_inode()->mode = S_IFLNK | 0777;
+  populated.symlink = "rhubarb";
+  ls.push_back(std::move(populated));
+  return ls;
 }
 
-void InodeStoreBare::generate_test_instances(std::list<InodeStoreBare*> &ls)
+std::list<InodeStoreBare> InodeStoreBare::generate_test_instances()
 {
-  InodeStoreBare *populated = new InodeStoreBare;
-  populated->get_inode()->ino = 0xdeadbeef;
-  populated->get_inode()->mode = S_IFLNK | 0777;
-  populated->symlink = "rhubarb";
-  ls.push_back(populated);
+  std::list<InodeStoreBare> ls;
+  InodeStoreBare populated;
+  populated.get_inode()->ino = 0xdeadbeef;
+  populated.get_inode()->mode = S_IFLNK | 0777;
+  populated.symlink = "rhubarb";
+  ls.push_back(std::move(populated));
+  return ls;
 }
 
 void CInode::validate_disk_state(CInode::validated_data *results,
@@ -4996,7 +5035,7 @@ next:
 
       if (!results->backtrace.passed && in->scrub_infop->header->get_repair()) {
         std::string path;
-        in->make_path_string(path);
+	in->make_trimmed_path_string(path);
         in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
                                        << "(" << path << "), rewriting it";
         in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
@@ -5502,6 +5541,11 @@ int64_t CInode::get_backtrace_pool() const
     ceph_assert(get_inode()->layout.pool_id != -1);
     return get_inode()->layout.pool_id;
   }
+}
+
+inodeno_t CInode::get_subvolume_id() const {
+  auto snapr = find_snaprealm();
+  return snapr ? snapr->get_subvolume_ino() : inodeno_t(0);
 }
 
 void CInode::queue_export_pin(mds_rank_t export_pin)

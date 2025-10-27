@@ -2,6 +2,7 @@
 import errno
 import json
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Annotated, Any, Dict, List, NamedTuple, Optional, Type, \
     Union, get_args, get_origin, get_type_hints
 
@@ -10,8 +11,7 @@ from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
 from prettytable import PrettyTable
 
-from ..exceptions import DashboardException
-from ..model.nvmeof import CliFlags, CliHeader
+from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
@@ -166,7 +166,14 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
     def is_namedtuple_type(self, obj):
         return isinstance(obj, type) and issubclass(obj, tuple) and hasattr(obj, '_fields')
 
-    # pylint: disable=too-many-branches
+    def get_enum_class(self, maybe_enum: Any) -> Optional[Type[Enum]]:
+        if isinstance(maybe_enum, type) and issubclass(maybe_enum, Enum):
+            return maybe_enum
+        if issubclass(type(maybe_enum), Enum):
+            return type(maybe_enum)
+        return None
+
+    # pylint: disable=too-many-branches, too-many-nested-blocks
     def process_dict(self, input_dict: dict,
                      nt_class: Type[NamedTuple],
                      is_top_level: bool) -> Union[Dict, str, List]:
@@ -195,16 +202,24 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                         break
                     if isinstance(annotation, CliHeader):
                         output_name = annotation.label
-                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
+                    if isinstance(annotation, CliFieldTransformer):
+                        value = annotation.transform(value)
+                    if is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
                         assert get_origin(actual_type) == list
                         assert len(get_args(actual_type)) == 1
                         return [self.process_dict(item, get_args(actual_type)[0],
                                                   False) for item in value]
-                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
+                    if is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
                         return f"Failure: {input_dict.get('error_message')}" if bool(
                             input_dict[field]) else "Success"
-                    elif annotation == CliFlags.SIZE:
+                    if annotation == CliFlags.SIZE:
                         value = convert_from_bytes(int(input_dict[field]))
+                    elif annotation == CliFlags.PROMOTE_INTERNAL_FIELDS:
+                        object_to_promote = self.process_dict(value, actual_type, False)
+                        if isinstance(object_to_promote, dict):
+                            for field_name, value in object_to_promote.items():
+                                result[field_name] = value
+                            skip = True
 
             if skip:
                 continue
@@ -212,6 +227,9 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             # If it's a nested namedtuple and value is a dict, recurse
             if self.is_namedtuple_type(actual_type) and isinstance(value, dict):
                 result[output_name] = self.process_dict(value, actual_type, False)
+            # If it's an enum type or enum instance, take its name
+            elif (enum_cls := self.get_enum_class(actual_type)):
+                result[output_name] = enum_cls(value).name
             else:
                 result[output_name] = value
 
@@ -235,6 +253,7 @@ class NvmeofCLICommand(CLICommand):
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
         self._alias = alias
+        self._alias_cmd: Optional[NvmeofCLICommand] = None
 
     def _use_api_endpoint_desc_if_available(self, func):
         if not self.desc and hasattr(func, 'doc_info'):
@@ -242,7 +261,9 @@ class NvmeofCLICommand(CLICommand):
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
         if self._alias:
-            NvmeofCLICommand(self._alias, model=self._model)._register_handler(func)
+            self._alias_cmd = NvmeofCLICommand(self._alias, model=self._model)
+            assert self._alias_cmd is not None
+            self._alias_cmd(func)
 
         resp = super().__call__(func)
         self._use_api_endpoint_desc_if_available(func)
@@ -267,5 +288,5 @@ class NvmeofCLICommand(CLICommand):
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
             return HandleCommandResult(0, out, '')
-        except DashboardException as e:
+        except Exception as e:  # pylint: disable=broad-except
             return HandleCommandResult(-errno.EINVAL, '', str(e))

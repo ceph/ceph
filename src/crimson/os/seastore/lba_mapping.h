@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -45,6 +45,17 @@ public:
   LBAMapping &operator=(const LBAMapping &) = default;
   LBAMapping &operator=(LBAMapping &&) = default;
   ~LBAMapping() = default;
+
+  // whether the removal of this mapping would cause
+  // other mappings to be removed.
+  //
+  // Note that this should only be called on complete
+  // indirect mappings
+  bool would_cascade_remove() const {
+    assert(is_indirect());
+    assert(is_complete_indirect());
+    return direct_cursor->get_refcount() == 1;
+  }
 
   // whether the mapping corresponds to a pending extent
   bool is_pending() const {
@@ -100,6 +111,10 @@ public:
   bool is_zero_reserved() const {
     return !is_indirect() && get_val().is_zero();
   }
+  // true if the mapping corresponds to real data
+  bool is_real() const {
+    return !is_indirect() && !get_val().is_zero();
+  }
 
   extent_len_t get_length() const {
     assert(!is_null());
@@ -131,6 +146,10 @@ public:
     }
     assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
+  }
+
+  laddr_t get_end() const {
+    return (get_key() + get_length()).checked_to_laddr();
   }
 
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h

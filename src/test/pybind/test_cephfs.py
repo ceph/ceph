@@ -1,4 +1,4 @@
-# vim: expandtab smarttab shiftwidth=4 softtabstop=4
+# vim: expandtab shiftwidth=4 softtabstop=4
 import collections
 collections.Callable = collections.abc.Callable
 from assertions import assert_raises, assert_equal, assert_not_equal, assert_greater
@@ -12,13 +12,26 @@ import stat
 import uuid
 import json
 from datetime import datetime
+from subprocess import getoutput as get_cmd_output
+
 
 cephfs = None
+
 
 def setup_module():
     global cephfs
     cephfs = libcephfs.LibCephFS(conffile='')
+
+    username = get_cmd_output('id -un')
+    uid = get_cmd_output(f'id -u {username}')
+    gid = get_cmd_output(f'id -g {username}')
+    cephfs.conf_set('client_mount_uid', uid)
+    cephfs.conf_set('client_mount_gid', gid)
     cephfs.mount()
+
+    cephfs.conf_set('client_permissions' , 'false')
+    cephfs.chown('/', int(uid), int(gid))
+    cephfs.conf_set('client_permissions' , 'true')
 
 def teardown_module():
     global cephfs
@@ -569,23 +582,6 @@ def test_fchmod(testdir):
     cephfs.close(fd)
     cephfs.unlink(b'/file-fchmod')
 
-def test_fchown(testdir):
-    fd = cephfs.open(b'/file-fchown', 'w', 0o655)
-    uid = os.getuid()
-    gid = os.getgid()
-    assert_raises(TypeError, cephfs.fchown, b'/file-fchown', uid, gid)
-    assert_raises(TypeError, cephfs.fchown, fd, "uid", "gid")
-    cephfs.fchown(fd, uid, gid)
-    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
-    assert_equal(st["uid"], uid)
-    assert_equal(st["gid"], gid)
-    cephfs.fchown(fd, 9999, 9999)
-    st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
-    assert_equal(st["uid"], 9999)
-    assert_equal(st["gid"], 9999)
-    cephfs.close(fd)
-    cephfs.unlink(b'/file-fchown')
-
 def test_truncate(testdir):
     fd = cephfs.open(b'/file-truncate', 'w', 0o755)
     cephfs.write(fd, b"1111", 0)
@@ -720,80 +716,6 @@ def test_preadv_pwritev():
     assert_equal([b"asdf", b"zxcvb"], list(buf))
     cephfs.close(fd)
     cephfs.unlink(b'file-1')
-
-def test_setattrx(testdir):
-    fd = cephfs.open(b'file-setattrx', 'w', 0o655)
-    cephfs.write(fd, b"1111", 0)
-    cephfs.close(fd)
-    st = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE, 0)
-    mode = st["mode"] | stat.S_IXUSR
-    assert_raises(TypeError, cephfs.setattrx, b'file-setattrx', "dict", 0, 0)
-
-    time.sleep(1)
-    statx_dict = dict()
-    statx_dict["mode"] = mode
-    statx_dict["uid"] = 9999
-    statx_dict["gid"] = 9999
-    dt = datetime.now()
-    statx_dict["mtime"] = dt
-    statx_dict["atime"] = dt
-    statx_dict["ctime"] = dt
-    statx_dict["size"] = 10
-    statx_dict["btime"] = dt
-    cephfs.setattrx(b'file-setattrx', statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
-                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
-                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
-                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME, 0)
-    st1 = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
-                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
-                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
-                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
-    assert_equal(mode, st1["mode"])
-    assert_equal(9999, st1["uid"])
-    assert_equal(9999, st1["gid"])
-    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
-    assert_equal(10, st1["size"])
-    cephfs.unlink(b'file-setattrx')
-
-def test_fsetattrx(testdir):
-    fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
-    cephfs.write(fd, b"1111", 0)
-    st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
-    mode = st["mode"] | stat.S_IXUSR
-    assert_raises(TypeError, cephfs.fsetattrx, fd, "dict", 0, 0)
-
-    time.sleep(1)
-    statx_dict = dict()
-    statx_dict["mode"] = mode
-    statx_dict["uid"] = 9999
-    statx_dict["gid"] = 9999
-    dt = datetime.now()
-    statx_dict["mtime"] = dt
-    statx_dict["atime"] = dt
-    statx_dict["ctime"] = dt
-    statx_dict["size"] = 10
-    statx_dict["btime"] = dt
-    cephfs.fsetattrx(fd, statx_dict, libcephfs.CEPH_SETATTR_MODE | libcephfs.CEPH_SETATTR_UID |
-                                                  libcephfs.CEPH_SETATTR_GID | libcephfs.CEPH_SETATTR_MTIME |
-                                                  libcephfs.CEPH_SETATTR_ATIME | libcephfs.CEPH_SETATTR_CTIME |
-                                                  libcephfs.CEPH_SETATTR_SIZE | libcephfs.CEPH_SETATTR_BTIME)
-    st1 = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE | libcephfs.CEPH_STATX_UID |
-                                         libcephfs.CEPH_STATX_GID | libcephfs.CEPH_STATX_MTIME |
-                                         libcephfs.CEPH_STATX_ATIME | libcephfs.CEPH_STATX_CTIME |
-                                         libcephfs.CEPH_STATX_SIZE | libcephfs.CEPH_STATX_BTIME, 0)
-    assert_equal(mode, st1["mode"])
-    assert_equal(9999, st1["uid"])
-    assert_equal(9999, st1["gid"])
-    assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
-    assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
-    assert_equal(10, st1["size"])
-    cephfs.close(fd)
-    cephfs.unlink(b'file-fsetattrx')
 
 def test_get_layout(testdir):
     fd = cephfs.open(b'file-get-layout', 'w', 0o755)
@@ -940,3 +862,765 @@ def test_multi_target_command():
     if isinstance(mds_status, list): # if multi target command result
         for mds_sessions in session_map:
             assert(list(mds_sessions.keys())[0].startswith('mds.'))
+
+
+class TestWithRootUser:
+
+    def setup_method(self):
+        cephfs.unmount()
+        cephfs.conf_set('client_mount_uid', '0')
+        cephfs.conf_set('client_mount_gid', '0')
+        cephfs.mount()
+
+        cephfs.conf_set('client_permissions' , 'false')
+        cephfs.chown('/', 0, 0)
+        cephfs.conf_set('client_permissions' , 'true')
+
+    def teardown_method(self):
+        cephfs.unmount()
+
+        username = get_cmd_output('id -un')
+        uid = get_cmd_output(f'id -u {username}')
+        gid = get_cmd_output(f'id -g {username}')
+
+        cephfs.conf_set('client_mount_uid', uid)
+        cephfs.conf_set('client_mount_gid', gid)
+        cephfs.mount()
+
+        cephfs.conf_set('client_permissions' , 'false')
+        cephfs.chown('/', int(uid), int(gid))
+        cephfs.conf_set('client_permissions' , 'true')
+
+    def test_chown(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        uid = 1012
+        gid = 1012
+        cephfs.chown('file1', uid, gid)
+        st = cephfs.stat(b'/file1')
+        assert_equal(st.st_uid, uid)
+        assert_equal(st.st_gid, gid)
+
+    def test_chown_change_uid_but_not_gid(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        st1 = cephfs.stat(b'/file1')
+
+        uid = 1012
+        cephfs.chown('file1', uid, -1)
+        st2 = cephfs.stat(b'/file1')
+        assert_equal(st2.st_uid, uid)
+
+        # ensure that gid is unchaged.
+        assert_equal(st1.st_gid, st2.st_gid)
+
+    def test_chown_change_gid_but_not_uid(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        st1 = cephfs.stat(b'/file1')
+
+        gid = 1012
+        cephfs.chown('file1', -1, gid)
+        st2 = cephfs.stat(b'/file1')
+        assert_equal(st2.st_gid, gid)
+
+        # ensure that uid is unchaged.
+        assert_equal(st1.st_uid, st2.st_uid)
+
+    def test_lchown(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file1', 'slink1')
+
+        uid = 1012
+        gid = 1012
+        cephfs.lchown('slink1', uid, gid)
+        st = cephfs.lstat(b'/slink1')
+        assert_equal(st.st_uid, uid)
+        assert_equal(st.st_gid, gid)
+
+    def test_lchown_change_uid_but_not_gid(testdir):
+        fd = cephfs.open('file2', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file2', 'slink2')
+
+        st1 = cephfs.lstat(b'slink2')
+
+        uid = 1012
+        cephfs.lchown('slink2', uid, -1)
+        st2 = cephfs.lstat(b'/slink2')
+        assert_equal(st2.st_uid, uid)
+
+        # ensure that gid is unchaged.
+        assert_equal(st1.st_gid, st2.st_gid)
+
+    def test_lchown_change_gid_but_not_uid(testdir):
+        fd = cephfs.open('file3', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file3', 'slink3')
+
+        st1 = cephfs.lstat(b'slink3')
+
+        gid = 1012
+        cephfs.lchown('slink3', -1, gid)
+        st2 = cephfs.lstat(b'/slink3')
+        assert_equal(st2.st_gid, gid)
+
+        # ensure that uid is unchaged.
+        assert_equal(st1.st_uid, st2.st_uid)
+
+    def test_fchown(testdir):
+        fd = cephfs.open(b'/file-fchown', 'w', 0o655)
+        uid = os.getuid()
+        gid = os.getgid()
+        assert_raises(TypeError, cephfs.fchown, b'/file-fchown', uid, gid)
+        assert_raises(TypeError, cephfs.fchown, fd, "uid", "gid")
+        cephfs.fchown(fd, uid, gid)
+        st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+        assert_equal(st["uid"], uid)
+        assert_equal(st["gid"], gid)
+        cephfs.fchown(fd, 9999, 9999)
+        st = cephfs.statx(b'/file-fchown', libcephfs.CEPH_STATX_UID | libcephfs.CEPH_STATX_GID, 0)
+        assert_equal(st["uid"], 9999)
+        assert_equal(st["gid"], 9999)
+        cephfs.close(fd)
+        cephfs.unlink(b'/file-fchown')
+
+    def test_fchown_change_uid_but_not_gid(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+
+        st1 = cephfs.stat(b'/file1')
+
+        uid = 1012
+        cephfs.fchown(fd, uid, -1)
+        st2 = cephfs.stat(b'/file1')
+        assert_equal(st2.st_uid, uid)
+
+        # ensure that uid is unchanged.
+        assert_equal(st1.st_gid, st2.st_gid)
+
+        cephfs.close(fd)
+
+    def test_fchown_change_gid_but_not_uid(testdir):
+        fd = cephfs.open('file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+
+        st1 = cephfs.stat(b'/file1')
+
+        gid = 1012
+        cephfs.chown('file1', -1, gid)
+        st2 = cephfs.stat(b'/file1')
+        assert_equal(st2.st_gid, gid)
+
+        # ensure that gid is unchanged.
+        assert_equal(st1.st_uid, st2.st_uid)
+
+        cephfs.close(fd)
+
+    def test_setattrx(testdir):
+        fd = cephfs.open(b'file-setattrx', 'w', 0o655)
+        cephfs.write(fd, b"1111", 0)
+        cephfs.close(fd)
+        st = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE, 0)
+        mode = st["mode"] | stat.S_IXUSR
+        assert_raises(TypeError, cephfs.setattrx, b'file-setattrx', "dict", 0, 0)
+
+        time.sleep(1)
+        statx_dict = dict()
+        statx_dict["mode"] = mode
+        statx_dict["uid"] = 9999
+        statx_dict["gid"] = 9999
+        dt = datetime.now()
+        statx_dict["mtime"] = dt
+        statx_dict["atime"] = dt
+        statx_dict["ctime"] = dt
+        statx_dict["size"] = 10
+        statx_dict["btime"] = dt
+        cephfs.setattrx(b'file-setattrx', statx_dict, libcephfs.CEPH_SETATTR_MODE |
+                                                      libcephfs.CEPH_SETATTR_UID |
+                                                      libcephfs.CEPH_SETATTR_GID |
+                                                      libcephfs.CEPH_SETATTR_MTIME |
+                                                      libcephfs.CEPH_SETATTR_ATIME |
+                                                      libcephfs.CEPH_SETATTR_CTIME |
+                                                      libcephfs.CEPH_SETATTR_SIZE |
+                                                      libcephfs.CEPH_SETATTR_BTIME, 0)
+        st1 = cephfs.statx(b'file-setattrx', libcephfs.CEPH_STATX_MODE |
+                                             libcephfs.CEPH_STATX_UID |
+                                             libcephfs.CEPH_STATX_GID |
+                                             libcephfs.CEPH_STATX_MTIME |
+                                             libcephfs.CEPH_STATX_ATIME |
+                                             libcephfs.CEPH_STATX_CTIME |
+                                             libcephfs.CEPH_STATX_SIZE |
+                                             libcephfs.CEPH_STATX_BTIME, 0)
+        assert_equal(mode, st1["mode"])
+        assert_equal(9999, st1["uid"])
+        assert_equal(9999, st1["gid"])
+        assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+        assert_equal(10, st1["size"])
+        cephfs.unlink(b'file-setattrx')
+
+    def test_fsetattrx(testdir):
+        fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
+        cephfs.write(fd, b"1111", 0)
+        st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
+        mode = st["mode"] | stat.S_IXUSR
+        assert_raises(TypeError, cephfs.fsetattrx, fd, "dict", 0, 0)
+
+        time.sleep(1)
+        statx_dict = dict()
+        statx_dict["mode"] = mode
+        statx_dict["uid"] = 9999
+        statx_dict["gid"] = 9999
+        dt = datetime.now()
+        statx_dict["mtime"] = dt
+        statx_dict["atime"] = dt
+        statx_dict["ctime"] = dt
+        statx_dict["size"] = 10
+        statx_dict["btime"] = dt
+        cephfs.fsetattrx(fd, statx_dict, libcephfs.CEPH_SETATTR_MODE |
+                                         libcephfs.CEPH_SETATTR_UID |
+                                         libcephfs.CEPH_SETATTR_GID |
+                                         libcephfs.CEPH_SETATTR_MTIME |
+                                         libcephfs.CEPH_SETATTR_ATIME |
+                                         libcephfs.CEPH_SETATTR_CTIME |
+                                         libcephfs.CEPH_SETATTR_SIZE |
+                                         libcephfs.CEPH_SETATTR_BTIME)
+        st1 = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE |
+                                              libcephfs.CEPH_STATX_UID |
+                                              libcephfs.CEPH_STATX_GID |
+                                              libcephfs.CEPH_STATX_MTIME |
+                                              libcephfs.CEPH_STATX_ATIME |
+                                              libcephfs.CEPH_STATX_CTIME |
+                                              libcephfs.CEPH_STATX_SIZE |
+                                              libcephfs.CEPH_STATX_BTIME, 0)
+        assert_equal(mode, st1["mode"])
+        assert_equal(9999, st1["uid"])
+        assert_equal(9999, st1["gid"])
+        assert_equal(int(dt.timestamp()), int(st1["mtime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["atime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["ctime"].timestamp()))
+        assert_equal(int(dt.timestamp()), int(st1["btime"].timestamp()))
+        assert_equal(10, st1["size"])
+        cephfs.close(fd)
+        cephfs.unlink(b'file-fsetattrx')
+
+
+class TestRmtree:
+    '''
+    Test rmtree() method of CephFS python bindings.
+    '''
+
+    def test_rmtree_on_regfile(self, testdir):
+        should_cancel = lambda: False
+
+        fd = cephfs.open(f'/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('/file1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'file1')
+
+    def test_rmtree_on_regfile_no_perms(self, testdir):
+        should_cancel = lambda: False
+
+        fd = cephfs.open(f'/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.chmod('/file1', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('/file1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'file1')
+
+    def test_rmtree_on_symlink(self, testdir):
+        should_cancel = lambda: False
+
+        fd = cephfs.open(f'/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file1', '/slink1')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('/slink1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'slink1')
+        cephfs.stat('file1')
+
+    def test_rmtree_on_symlink_no_perms(self, testdir):
+        should_cancel = lambda: False
+
+        fd = cephfs.open(f'/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file1', '/slink1')
+
+        cephfs.chmod('/file1', 0o000)
+        cephfs.chmod('/slink1', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('/slink1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'slink1')
+        cephfs.stat('file1')
+
+    def test_rmtree_when_tree_contains_only_regfiles(self, testdir):
+        '''
+        Test rmtree() successfully deletes the entire file hierarchy that contains
+        only regular files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_when_tree_contains_dirs_and_regfiles(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy that
+        contains only directories and regular files.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir2', 0o755)
+        for i in range(1, 6):
+            cephfs.mkdir(f'/dir2/dir2{i}', 0o755)
+            for j in range(1, 6):
+                fd = cephfs.open(f'/dir2/dir2{i}/file{j}', 'w', 0o755)
+                cephfs.write(fd, b'abcd', 0)
+                cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir2', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir2')
+
+    def test_rmtree_when_tree_contains_dirs_regfiles_and_symlinks(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy that
+        contains directories, regular files as well as symbolic links.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir3', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir3/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+            file_name = f'/dir3/file{i}'.encode('utf-8')
+            slink_name = f'slink{i}'.encode('utf-8')
+            cephfs.symlink(file_name, slink_name)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir3', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir3')
+
+    def test_rmtree_when_symlink_points_to_parent_dir(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy that
+        contains directories, regular files as well as symbolic links.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir3', 0o755)
+        cephfs.mkdir('dir3/dir4', 0o755)
+        cephfs.symlink('../dir4', 'dir3/dir4/slink1')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir3', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir3')
+
+    def test_rmtree_when_tree_contains_only_empty_dirs(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy that contains
+        only empty directories.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir4', 0o755)
+        for i in range(1, 6):
+            cephfs.mkdir(f'/dir4/dir4{i}', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir4', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir4')
+
+    def test_rmtree_when_root_is_empty_dir(self, testdir):
+        '''
+        Test that rmtree() successfully deletes entire file hierarchy when it is
+        only an empty directory.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir5', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir5', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir5')
+
+    def test_rmtree_no_perm_on_nonroot_dir_suppress_errors(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except the
+        branch where permission for one of the (non-root) directories is not
+        granted.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+
+        cephfs.mkdir('dir1/dir2', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir2/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir3', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir3/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir4', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # actual test
+        cephfs.chmod('/dir1/dir3', 0o000)
+        # Errors are expected from call to this method. Set suppress_errors to
+        # True to confirm that this argument works.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=True)
+        # ensure /dir1/dir3 wasn't deleted
+        cephfs.stat('dir1/dir3')
+        cephfs.chmod('/dir1/dir3', 0o755)
+        for i in range(1, 6):
+            cephfs.stat(f'dir1/dir3/file{i}')
+
+        # cleanup
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_no_perm_on_nonroot_dir_dont_suppress_errors(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except the
+        branch where permission for one of the (non-root) directories is not
+        granted.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+
+        cephfs.mkdir('dir1/dir2', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir2/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir3', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir3/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir4', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # actual test
+        cephfs.chmod('/dir1/dir3', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        assert_raises(libcephfs.PermissionDenied, cephfs.rmtree, 'dir1',
+                      should_cancel, suppress_errors=False)
+        # ensure /dir1/dir3 wasn't deleted
+        cephfs.stat('dir1/dir3')
+
+        # cleanup
+        cephfs.chmod('/dir1/dir3', 0o755)
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_no_perm_on_root_suppress_errors(self, testdir):
+        '''
+        Test rmtree() exits when permission is not granted for the root of the file
+        hierarchy.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.chmod('/dir1', 0o000)
+        # Errors are expected from call to this method. Set suppress_errors to
+        # True to confirm that this argument works.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=True)
+        # ensure /dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.chmod('/dir1', 0o755)
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_no_perm_on_root_dont_suppress_errors(self, testdir):
+        '''
+        Test rmtree() exits when permission is not granted for the root of the file
+        hierarchy.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.chmod('/dir1', 0o000)
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        assert_raises(libcephfs.PermissionDenied, cephfs.rmtree, 'dir1',
+                      should_cancel, suppress_errors=False)
+        # ensure /dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.chmod('/dir1', 0o755)
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_tree_with_snaps(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except
+        the branch where one of the directories contains one or many snapshots.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir2/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.mksnap('/dir1/dir2', 'snap1', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        # ensure dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.rmsnap('/dir1/dir2', 'snap1')
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_tree_with_snaps_on_root(self, testdir):
+        '''
+        Test that rmtree() successfully deletes the entire file hierarchy except
+        the branch where one of the directories contains one or many snapshots.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+        cephfs.mksnap('/dir1', 'snap1', 0o755)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        # ensure dir1 wasn't deleted
+        cephfs.stat('dir1')
+
+        # cleanup
+        cephfs.rmsnap('/dir1', 'snap1')
+        cephfs.rmtree('dir1', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def get_file_count(self, dir_path):
+        '''
+        Return the number of files present in the given directory.
+        '''
+        i = 0
+        with cephfs.opendir(dir_path) as dir_handle:
+            de = cephfs.readdir(dir_handle)
+            while de:
+                if de.d_name not in (b'.', b'..'):
+                    i += 1
+                de = cephfs.readdir(dir_handle)
+        return i
+
+    def test_rmtree_aborts_when_should_cancel_is_true(self, testdir):
+        '''
+        Test that rmtree() stops deleting the file hierarchy when the return
+        value of "should_cancel" becomes True.
+        '''
+        from threading import Event, Thread
+        cancel_flag = Event()
+        def should_cancel():
+            time.sleep(0.1)
+            return cancel_flag.is_set()
+
+        # NOTE: this method is just a wrapper to provide an appropriate location
+        # to catch the exception OpCanceled. If left uncaught the test passes
+        # but pytest fails citing this exception.
+        def rmtree(path, should_cancel, suppress_error=False):
+            assert_raises(libcephfs.OpCanceled, cephfs.rmtree, path,
+                          should_cancel, suppress_error)
+
+        cephfs.mkdir('dir6', 0o755)
+        for i in range(1, 101):
+            fd = cephfs.open(f'/dir6/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        Thread(target=rmtree, args=('dir6', should_cancel, False)).start()
+        time.sleep(1)
+
+        # this will change return value of should_cancel and therefore halt
+        # execution of rmtree()
+        cancel_flag.set()
+        # ensure dir6 wasn't deleted
+        cephfs.stat('dir6')
+        # ensure that deletion had begun but hadn't finished and was halted
+        file_count = self.get_file_count('dir6')
+        assert file_count > 0 and file_count < 100
+
+        # ensure that deletion has made no progress since it was halted
+        time.sleep(2)
+        file_count = self.get_file_count('dir6')
+        assert file_count > 0 and file_count < 100
+
+        # cleanup
+        cancel_flag.clear()
+        cephfs.rmtree('dir6', should_cancel)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_a_very_broad_tree(self, testdir):
+        '''
+        Test that rmtree() successfully deletes a file hierarchy with 200
+        subdirectories on the same level.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.chdir('dir1')
+        for i in range(1, 201):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_a_very_very_broad_tree(self, testdir):
+        '''
+        Test that rmtree() successfully deletes a file hierarchy with 2000
+        subdirectories on the same level.
+        '''
+        should_cancel = lambda: False
+
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.chdir('dir1')
+        for i in range(1, 2001):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_a_very_deep_tree(self, testdir):
+        '''
+        Test that rmtree() successfully deletes a file hierarchy with 2000
+        levels.
+        '''
+        should_cancel = lambda: False
+
+        for i in range(1, 201):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+    def test_rmtree_on_a_very_very_deep_tree(self, testdir):
+        '''
+        Test that rmtree() successfully deletes a file hierarchy with 2000
+        levels.
+        '''
+        should_cancel = lambda: False
+
+        for i in range(1, 2001):
+            dirname = f'dir{i}'
+            cephfs.mkdir(dirname, 0o755)
+            cephfs.chdir(dirname)
+        cephfs.chdir('/')
+
+        # Errors are not expected from the call to this method. Therefore, set
+        # suppress_errors to False so that tests abort as soon as any errors
+        # occur.
+        cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
+        assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')

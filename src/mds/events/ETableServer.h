@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,7 +40,7 @@ struct ETableServer : public LogEvent {
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(std::list<ETableServer*>& ls);
+  static std::list<ETableServer> generate_test_instances();
 
   void print(std::ostream& out) const override {
     out << "ETableServer " << get_mdstable_name(table) 

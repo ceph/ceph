@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -42,11 +43,13 @@ void kstore_cnode_t::dump(Formatter *f) const
   f->dump_unsigned("bits", bits);
 }
 
-void kstore_cnode_t::generate_test_instances(list<kstore_cnode_t*>& o)
+list<kstore_cnode_t> kstore_cnode_t::generate_test_instances()
 {
-  o.push_back(new kstore_cnode_t());
-  o.push_back(new kstore_cnode_t(0));
-  o.push_back(new kstore_cnode_t(123));
+  list<kstore_cnode_t> o;
+  o.push_back(kstore_cnode_t());
+  o.push_back(kstore_cnode_t(0));
+  o.push_back(kstore_cnode_t(123));
+  return o;
 }
 
 
@@ -99,8 +102,10 @@ void kstore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
 }
 
-void kstore_onode_t::generate_test_instances(list<kstore_onode_t*>& o)
+list<kstore_onode_t> kstore_onode_t::generate_test_instances()
 {
-  o.push_back(new kstore_onode_t());
+  list<kstore_onode_t> o;
+  o.push_back(kstore_onode_t());
   // FIXME
+  return o;
 }

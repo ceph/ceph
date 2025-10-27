@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -1434,7 +1434,7 @@ private:
         }
       }
     };
-    return c.cache.template get_absent_extent<internal_node_t>(
+    return c.cache.template maybe_get_absent_extent<internal_node_t>(
       c.trans,
       offset,
       node_size,
@@ -1518,7 +1518,7 @@ private:
         }
       }
     };
-    return c.cache.template get_absent_extent<leaf_node_t>(
+    return c.cache.template maybe_get_absent_extent<leaf_node_t>(
       c.trans,
       offset,
       node_size,

@@ -1087,6 +1087,8 @@ class VolumeClient(CephfsClient["Module"]):
         uid       = kwargs['uid']
         gid       = kwargs['gid']
         mode      = kwargs['mode']
+        normalization = kwargs['normalization']
+        casesensitive = kwargs['casesensitive']
 
         try:
             with open_volume(self, volname) as fs_handle:
@@ -1098,13 +1100,15 @@ class VolumeClient(CephfsClient["Module"]):
                             'gid': gid,
                             'mode': octal_str_to_decimal_int(mode),
                             'data_pool': pool,
-                            'quota': size
+                            'quota': size,
+                            'normalization': normalization,
+                            'casesensitive': casesensitive,
                         }
                         set_group_attrs(fs_handle, group.path, attrs)
                 except VolumeException as ve:
                     if ve.errno == -errno.ENOENT:
                         oct_mode = octal_str_to_decimal_int(mode)
-                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid)
+                        create_group(fs_handle, self.volspec, groupname, size, pool, oct_mode, uid, gid, normalization, casesensitive)
                     else:
                         raise
         except VolumeException as ve:
@@ -1318,6 +1322,41 @@ class VolumeClient(CephfsClient["Module"]):
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     snapshots = group.list_snapshots()
                     ret = 0, name_to_json(snapshots), ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_visibility_set(self, **kwargs):
+        ret = 0, "", ""
+        volname = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+        value = kwargs['value']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname,
+                                     SubvolumeOpType.SNAPSHOT_VISIBILITY) as subvolume:
+                        v = subvolume.snapshot_visibility_set(value)
+                        ret = 0, v, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def subvolume_snapshot_visibility_get(self, **kwargs):
+        ret = 0, "", ""
+        volname = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname = kwargs['group_name']
+
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname,
+                                     SubvolumeOpType.SNAPSHOT_VISIBILITY) as subvolume:
+                        v = subvolume.snapshot_visibility_get()
+                        ret = 0, v, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

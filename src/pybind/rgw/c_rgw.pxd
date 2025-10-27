@@ -102,7 +102,7 @@ cdef extern from "rados/rgw_file.h" nogil:
 
     int rgw_readdir(rgw_fs *fs,
                     rgw_file_handle *parent_fh, uint64_t *offset,
-                    bool (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
+                    int (*cb)(const char *name, void *arg, uint64_t offset, stat *st, uint32_t st_mask, uint32_t flags) nogil except? -9000,
                     void *cb_arg, bool *eof, uint32_t flags) except? -9000
 
     int rgw_getattr(rgw_fs *fs,

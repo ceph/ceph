@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
 * Ceph - scalable distributed file system
 *
@@ -23,6 +24,7 @@
 #include "auth/KeyRing.h"
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
+#include "common/JSONFormatter.h"
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "mgr/mgr_commands.h"

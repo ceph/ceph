@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -102,34 +103,29 @@ TEST(pg_pool_t, encodeDecode)
                           CEPH_FEATUREMASK_SERVER_MIMIC |
                           CEPH_FEATUREMASK_SERVER_NAUTILUS;
   {
-    pg_pool_t p;
-    std::list<pg_pool_t*> pools;
-
-    p.generate_test_instances(pools);
+    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
-      p1->encode(bl, features);
+      p1.encode(bl, features);
       bl.hexdump(std::cout);
       auto pbl = bl.cbegin();
       pg_pool_t p2;
       p2.decode(pbl);
-      compare_pg_pool_t(*p1, p2);
+      compare_pg_pool_t(p1, p2);
     }
   }
 
   {
     // test reef
-    pg_pool_t p;
-    std::list<pg_pool_t*> pools;
-    p.generate_test_instances(pools);
+    std::list<pg_pool_t> pools = pg_pool_t::generate_test_instances();
     for(auto p1 : pools){
       bufferlist bl;
-      p1->encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);
+      p1.encode(bl, features|CEPH_FEATUREMASK_SERVER_REEF);
       bl.hexdump(std::cout);
       auto pbl = bl.cbegin();
       pg_pool_t p2;
       p2.decode(pbl);
-      compare_pg_pool_t(*p1, p2);
+      compare_pg_pool_t(p1, p2);
     }
   }
 }

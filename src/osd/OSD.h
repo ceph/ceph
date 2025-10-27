@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1054,7 +1055,6 @@ struct OSDShard {
 		    std::set<std::pair<spg_t,epoch_t>> *merge_pgs);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
-  void update_scheduler_config();
   op_queue_type_t get_op_queue_type() const;
 
   OSDShard(
@@ -2045,6 +2045,7 @@ protected:
   // which pgs were scanned for min_lec
   std::vector<pg_t> min_last_epoch_clean_pgs;
   void send_beacon(const ceph::coarse_mono_clock::time_point& now);
+  void maybe_send_beacon();
 
   ceph_tid_t get_tid() {
     return service.get_tid();

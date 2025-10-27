@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -52,10 +53,12 @@ void client_t::dump(ceph::Formatter *f) const {
   f->dump_int("id", v);
 }
 
-void client_t::generate_test_instances(std::list<client_t*>& ls) {
-  ls.push_back(new client_t);
-  ls.push_back(new client_t(1));
-  ls.push_back(new client_t(123));
+std::list<client_t> client_t::generate_test_instances() {
+  std::list<client_t> ls;
+  ls.emplace_back();
+  ls.push_back(client_t(1));
+  ls.push_back(client_t(123));
+  return ls;
 }
 
 std::ostream& operator<<(std::ostream& out, const client_t& c) {
@@ -114,16 +117,20 @@ void shard_id_t::dump(ceph::Formatter *f) const {
   f->dump_int("id", id);
 }
 
-void shard_id_t::generate_test_instances(std::list<shard_id_t*>& ls) {
-  ls.push_back(new shard_id_t(1));
-  ls.push_back(new shard_id_t(2));
+std::list<shard_id_t> shard_id_t::generate_test_instances() {
+  std::list<shard_id_t> ls;
+  ls.push_back(shard_id_t(1));
+  ls.push_back(shard_id_t(2));
+  return ls;
 }
 
 void errorcode32_t::dump(ceph::Formatter *f) const {
   f->dump_int("code", code);
 }
 
-void errorcode32_t::generate_test_instances(std::list<errorcode32_t*>& ls) {
-  ls.push_back(new errorcode32_t(1));
-  ls.push_back(new errorcode32_t(2));
+std::list<errorcode32_t> errorcode32_t::generate_test_instances() {
+  std::list<errorcode32_t> ls;
+  ls.push_back(errorcode32_t(1));
+  ls.push_back(errorcode32_t(2));
+  return ls;
 }

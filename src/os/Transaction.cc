@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "os/Transaction.h"
 #include "common/Formatter.h"
@@ -530,46 +530,50 @@ void Transaction::dump(ceph::Formatter *f)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 
-void Transaction::generate_test_instances(list<Transaction*>& o)
+list<Transaction> Transaction::generate_test_instances()
 {
-  o.push_back(new Transaction);
+  list<Transaction> o;
 
-  Transaction *t = new Transaction;
-  t->nop();
-  o.push_back(t);
+  o.emplace_back();
+
+  Transaction t;
+  t.nop();
+  o.push_back(std::move(t));
   
-  t = new Transaction;
+  t = Transaction{};
   coll_t c(spg_t(pg_t(1,2), shard_id_t::NO_SHARD));
   coll_t c2(spg_t(pg_t(4,5), shard_id_t::NO_SHARD));
   ghobject_t o1(hobject_t("obj", "", 123, 456, -1, ""));
   ghobject_t o2(hobject_t("obj2", "", 123, 456, -1, ""));
   ghobject_t o3(hobject_t("obj3", "", 123, 456, -1, ""));
-  t->touch(c, o1);
+  t.touch(c, o1);
   bufferlist bl;
   bl.append("some data");
-  t->write(c, o1, 1, bl.length(), bl);
-  t->zero(c, o1, 22, 33);
-  t->truncate(c, o1, 99);
-  t->remove(c, o1);
-  o.push_back(t);
+  t.write(c, o1, 1, bl.length(), bl);
+  t.zero(c, o1, 22, 33);
+  t.truncate(c, o1, 99);
+  t.remove(c, o1);
+  o.push_back(std::move(t));
 
-  t = new Transaction;
-  t->setattr(c, o1, "key", bl);
+  t = Transaction{};
+  t.setattr(c, o1, "key", bl);
   map<string,bufferptr,less<>> m;
   m["a"] = buffer::copy("this", 4);
   m["b"] = buffer::copy("that", 4);
-  t->setattrs(c, o1, m);
-  t->rmattr(c, o1, "b");
-  t->rmattrs(c, o1);
+  t.setattrs(c, o1, m);
+  t.rmattr(c, o1, "b");
+  t.rmattrs(c, o1);
 
-  t->clone(c, o1, o2);
-  t->clone(c, o1, o3);
-  t->clone_range(c, o1, o2, 1, 12, 99);
+  t.clone(c, o1, o2);
+  t.clone(c, o1, o3);
+  t.clone_range(c, o1, o2, 1, 12, 99);
 
-  t->create_collection(c, 12);
-  t->collection_move_rename(c, o2, c2, o3);
-  t->remove_collection(c);
-  o.push_back(t);  
+  t.create_collection(c, 12);
+  t.collection_move_rename(c, o2, c2, o3);
+  t.remove_collection(c);
+  o.push_back(std::move(t));
+
+  return o;
 }
 
 ostream& operator<<(ostream& out, const Transaction& tx) {

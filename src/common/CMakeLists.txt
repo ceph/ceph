@@ -29,6 +29,7 @@ set(common_srcs
   FixedCDC.cc
   Formatter.cc
   Graylog.cc
+  JSONFormatter.cc
   HTMLFormatter.cc
   HeartbeatMap.cc
   LogClient.cc
@@ -39,12 +40,14 @@ set(common_srcs
   Readahead.cc
   RefCountedObj.cc
   SloppyCRCMap.cc
+  TableFormatter.cc
   Thread.cc
   Throttle.cc
   Timer.cc
   TracepointProvider.cc
   TrackedOp.cc
   WorkQueue.cc
+  XMLFormatter.cc
   admin_socket.cc
   admin_socket_client.cc
   assert.cc
@@ -109,7 +112,13 @@ set(common_srcs
   mclock_common.cc
   tcp_info.cc)
 
+if(WITH_CPUTRACE)
+  list(APPEND common_srcs
+    cputrace.cc)
+endif()
+
 include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
+
 if(WITH_SYSTEMD)
   list(APPEND common_srcs
     Journald.cc)

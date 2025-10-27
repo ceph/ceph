@@ -41,7 +41,7 @@ struct SnapRealmInfo {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapRealmInfo*>& o);
+  static std::list<SnapRealmInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfo)
 
@@ -51,15 +51,20 @@ struct SnapRealmInfoNew {
   SnapRealmInfo info;
   utime_t last_modified;
   uint64_t change_attr;
+  uint32_t flags;
+  enum {
+    SNAPDIR_VISIBILITY = 4,
+  };
 
   SnapRealmInfoNew() {
   }
 
-  SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_) {
+  SnapRealmInfoNew(const SnapRealmInfo &info_, utime_t last_modified_, uint64_t change_attr_, __u32 flags_) {
     // FIPS zeroization audit 20191115: this memset is not security related.
     info = info_;
     last_modified = last_modified_;
     change_attr = change_attr_;
+    flags = flags_;
   }
 
   inodeno_t ino() const { return inodeno_t(info.h.ino); }
@@ -71,7 +76,7 @@ struct SnapRealmInfoNew {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapRealmInfoNew*>& o);
+  static std::list<SnapRealmInfoNew> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapRealmInfoNew)
 
@@ -93,7 +98,7 @@ struct SnapContext {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapContext*>& o);
+  static std::list<SnapContext> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(SnapContext)
 

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_bucket.h"
 
@@ -137,9 +137,17 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
 				 const DoutPrefixProvider *dpp, optional_yield y)
 {
   /* Chown on the bucket */
-  int ret = bucket->chown(dpp, new_user->get_id(), y);
+  int ret = bucket->chown(dpp, new_user->get_id(), new_user->get_display_name(),
+                          y);
   if (ret < 0) {
-    set_err_msg(err_msg, "Failed to change object ownership: " + cpp_strerror(-ret));
+    set_err_msg(err_msg, "Failed to change bucket ownership: " + cpp_strerror(-ret));
+    return ret;
+  }
+
+  // skip object acls when BucketOwnerEnforced
+  if (auto ownership = rgw::s3::get_object_ownership(bucket->get_attrs());
+      ownership == rgw::s3::ObjectOwnership::BucketOwnerEnforced) {
+    return 0;
   }
 
   /* Now chown on all the objects in the bucket */

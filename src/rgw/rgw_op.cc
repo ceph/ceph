@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
 #include <errno.h>
@@ -18,6 +18,7 @@
 
 #include "common/dout.h"
 #include "include/scope_guard.h"
+#include "common/XMLFormatter.h"
 #include "common/Clock.h"
 #include "common/armor.h"
 #include "common/async/spawn_throttle.h"
@@ -618,7 +619,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       return -EINVAL;
     }
 
-    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket->get_attrs());
+    s->bucket_access_conf = get_public_access_conf_from_attr(s->bucket_attrs);
+    s->bucket_object_ownership = rgw::s3::get_object_ownership(s->bucket_attrs);
   }
 
   /* handle user ACL only for those APIs which support it */
@@ -1050,6 +1052,16 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       } 
     } else if (restore_status == rgw::sal::RGWRestoreStatus::CloudRestored) {
       // corresponds to CLOUD_RESTORED
+      if (!read_through) { //update expiry date iff its temp restored copy
+        op_ret = driver->get_rgwrestore()->update_cloud_restore_exp_date(s->bucket.get(),
+                                              		      s->object.get(), days, dpp, y);
+
+        if (op_ret < 0) {
+	        ldpp_dout(dpp, 20) << "Updating expiry-date of restored object " << s->object->get_key() << " failed - " << op_ret << dendl;
+          s->err.message = "failed to update expiry-date of the restored object";
+          return op_ret;
+        }
+      }
       return static_cast<int>(rgw::sal::RGWRestoreStatus::CloudRestored);
     } else { // first time restore or previous restore failed.
       // Restore the object.
@@ -3459,6 +3471,13 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  if (object_ownership) {
+    // x-amz-object-ownership requires s3:PutBucketOwnershipControls permission
+    if (!verify_user_permission(this, s, arn, rgw::IAM::s3PutBucketOwnershipControls, false)) {
+      return -EACCES;
+    }
+  }
+
   if (s->auth.identity->get_tenant() != s->bucket_tenant) {
     //AssumeRole is meant for cross account access
     if (s->auth.identity->get_identity_type() != TYPE_ROLE) {
@@ -3685,6 +3704,84 @@ static int select_bucket_placement(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+int put_swift_bucket_metadata(const DoutPrefixProvider* dpp,
+                              req_state* s,
+                              RGWAccessControlPolicy& policy,
+                              bool const has_policy,
+                              uint32_t policy_rw_mask,
+                              const RGWCORSConfiguration& cors_config,
+                              bool const has_cors,
+                              std::optional<std::string> swift_ver_location,
+                              const std::set<std::string>& rmattr_names,
+                              optional_yield y) {
+  std::map<std::string, ceph::bufferlist> attrs;
+  int op_ret = rgw_get_request_metadata(dpp, s->cct, s->info, attrs, false);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  return retry_raced_bucket_write(
+      dpp, s->bucket.get(),
+      [s, has_policy, policy_rw_mask, &policy, cors_config, has_cors, &attrs,
+       dpp, rmattr_names, swift_ver_location] {
+        /* Encode special metadata first as we're using std::map::emplace under
+         * the hood. This method will add the new items only if the map doesn't
+         * contain such keys yet. */
+        if (has_policy) {
+          if (s->dialect.compare("swift") == 0) {
+            rgw::swift::merge_policy(policy_rw_mask, s->bucket_acl, policy);
+          }
+          buffer::list bl;
+          policy.encode(bl);
+          attrs.emplace(RGW_ATTR_ACL, std::move(bl));
+        }
+
+        if (has_cors) {
+          buffer::list bl;
+          cors_config.encode(bl);
+          attrs.emplace(RGW_ATTR_CORS, std::move(bl));
+        }
+
+        /* It's supposed that following functions WILL NOT change any
+         * special attributes (like RGW_ATTR_ACL) if they are already
+         * present in attrs. */
+        prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+        populate_with_generic_attrs(s, attrs);
+
+        /* According to the Swift's behaviour and its container_quota
+         * WSGI middleware implementation: anyone with write permissions
+         * is able to set the bucket quota. This stays in contrast to
+         * account quotas that can be set only by clients holding
+         * reseller admin privileges. */
+        int ret = filter_out_quota_info(attrs, rmattr_names,
+                                        s->bucket->get_info().quota);
+        if (ret < 0) {
+          return ret;
+        }
+
+        if (swift_ver_location) {
+          s->bucket->get_info().swift_ver_location = *swift_ver_location;
+          s->bucket->get_info().swift_versioning =
+              (!swift_ver_location->empty());
+        }
+
+        /* Web site of Swift API. */
+        filter_out_website(attrs, rmattr_names,
+                           s->bucket->get_info().website_conf);
+        s->bucket->get_info().has_website =
+            !s->bucket->get_info().website_conf.is_empty();
+
+        /* Setting attributes also stores the provided bucket info. Due
+         * to this fact, the new quota settings can be serialized with
+         * the same call. */
+        s->bucket->set_attrs(attrs);
+        constexpr bool exclusive = false;  // overwrite
+        constexpr ceph::real_time no_set_mtime{};
+        return s->bucket->put_info(dpp, exclusive, no_set_mtime, s->yield);
+      },
+      y);
+}
+
 void RGWCreateBucket::execute(optional_yield y)
 {
   op_ret = get_params(y);
@@ -3796,6 +3893,24 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
     }
 
+    // prevent re-creation with different index type or shard count
+    if ((createparams.index_type && *createparams.index_type !=
+         info.layout.current_index.layout.type) ||
+        (createparams.index_shards && *createparams.index_shards !=
+         info.layout.current_index.layout.normal.num_shards)) {
+      s->err.message =
+          "Cannot modify existing bucket's index type or shard count";
+      op_ret = -EEXIST;
+      return;
+    }
+
+    // don't allow changes to object lock
+    if (createparams.obj_lock_enabled != info.obj_lock_enabled()) {
+      s->err.message = "Cannot modify existing bucket's object lock";
+      op_ret = -EEXIST;
+      return;
+    }
+
     // don't allow changes to the acl policy
     RGWAccessControlPolicy old_policy;
     int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
@@ -3804,6 +3919,20 @@ void RGWCreateBucket::execute(optional_yield y)
     if (r >= 0 && old_policy != policy) {
       s->err.message = "Cannot modify existing access control policy";
       op_ret = -EEXIST;
+      return;
+    }
+
+    // For s3::CreateBucket just return back if bucket exists, as we do not allow
+    // any changes in bucket config param. need_metadata_upload() is always false
+    // for S3, so use the check to decide if its s3 request and not swift request.
+    if (!need_metadata_upload()) {
+      op_ret = -ERR_BUCKET_EXISTS;
+      return;
+    } else {
+      // For swift, update the bucket metadata and do not call createbucket.
+      op_ret = put_swift_bucket_metadata(
+          this, s, policy, has_policy, policy_rw_mask, cors_config, has_cors,
+          createparams.swift_ver_location, rmattr_names, y);
       return;
     }
   }
@@ -3820,6 +3949,12 @@ void RGWCreateBucket::execute(optional_yield y)
     cors_config.encode(corsbl);
     createparams.attrs[RGW_ATTR_CORS] = std::move(corsbl);
   }
+
+  if (object_ownership) {
+    rgw::s3::OwnershipControls controls;
+    controls.object_ownership = *object_ownership;
+    encode(controls, createparams.attrs[RGW_ATTR_OWNERSHIP_CONTROLS]);
+  } // TODO: config option to set default ownership when not requested
 
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
@@ -5374,71 +5509,15 @@ void RGWPutMetadataBucket::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-
-  op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
-  if (op_ret < 0) {
-    return;
-  }
-
   if (!placement_rule.empty() &&
       placement_rule != s->bucket->get_placement_rule()) {
     op_ret = -EEXIST;
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
-      /* Encode special metadata first as we're using std::map::emplace under
-       * the hood. This method will add the new items only if the map doesn't
-       * contain such keys yet. */
-      if (has_policy) {
-	if (s->dialect.compare("swift") == 0) {
-	  rgw::swift::merge_policy(policy_rw_mask, s->bucket_acl, policy);
-	}
-	buffer::list bl;
-	policy.encode(bl);
-	emplace_attr(RGW_ATTR_ACL, std::move(bl));
-      }
-
-      if (has_cors) {
-	buffer::list bl;
-	cors_config.encode(bl);
-	emplace_attr(RGW_ATTR_CORS, std::move(bl));
-      }
-
-      /* It's supposed that following functions WILL NOT change any
-       * special attributes (like RGW_ATTR_ACL) if they are already
-       * present in attrs. */
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
-      populate_with_generic_attrs(s, attrs);
-
-      /* According to the Swift's behaviour and its container_quota
-       * WSGI middleware implementation: anyone with write permissions
-       * is able to set the bucket quota. This stays in contrast to
-       * account quotas that can be set only by clients holding
-       * reseller admin privileges. */
-      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket->get_info().quota);
-      if (op_ret < 0) {
-	return op_ret;
-      }
-
-      if (swift_ver_location) {
-	s->bucket->get_info().swift_ver_location = *swift_ver_location;
-	s->bucket->get_info().swift_versioning = (!swift_ver_location->empty());
-      }
-
-      /* Web site of Swift API. */
-      filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
-      s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
-
-      /* Setting attributes also stores the provided bucket info. Due
-       * to this fact, the new quota settings can be serialized with
-       * the same call. */
-      s->bucket->set_attrs(attrs);
-      constexpr bool exclusive = false; // overwrite
-      constexpr ceph::real_time no_set_mtime{};
-      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, s->yield);
-      return op_ret;
-    }, y);
+  op_ret = put_swift_bucket_metadata(this, s, policy, has_policy,
+                                     policy_rw_mask, cors_config, has_cors,
+                                     swift_ver_location, rmattr_names, y);
 }
 
 int RGWPutMetadataObject::verify_permission(optional_yield y)
@@ -5864,6 +5943,9 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
     params_str = url_src.substr(pos + 1);
   }
 
+  if (name_str.empty()) {
+    return false;
+  }
   if (name_str[0] == '/') // trim leading slash
     name_str.remove_prefix(1);
 
@@ -6063,9 +6145,29 @@ void RGWCopyObj::progress_cb(off_t ofs)
     return;
   }
 
-  send_partial_response(ofs);
+  std::lock_guard<std::mutex> l(progress_tracker->mtx);
+  progress_tracker->ofs_queue.push(ofs);
+  progress_tracker->cv.notify_one();
 
   last_ofs = ofs;
+}
+
+void RGWCopyObj::progress_cb_handler()
+{
+  std::unique_lock<std::mutex> l(progress_tracker->mtx);
+  while(!progress_tracker->done || !progress_tracker->ofs_queue.empty()) {
+    progress_tracker->cv.wait(l, [&]() {
+      return progress_tracker->done || !progress_tracker->ofs_queue.empty();
+    });
+
+    while (!progress_tracker->ofs_queue.empty()) {
+      auto ofs = progress_tracker->ofs_queue.front();
+      progress_tracker->ofs_queue.pop();
+      l.unlock();
+      send_partial_response(ofs);
+      l.lock();
+    }
+  }
 }
 
 void RGWCopyObj::pre_exec()
@@ -6327,10 +6429,7 @@ int RGWGetObjAttrs::verify_permission(optional_yield y)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
     }
 
-    /* XXXX the following conjunction should be &&--but iam_action2 is currently not
-     * hooked up and always fails (but should succeed if the requestor has READ
-     * acess to the object) */
-    perm = (verify_object_permission(this, s, iam_action1) || /* && */
+    perm = (verify_object_permission(this, s, iam_action1) &&
 	    verify_object_permission(this, s, iam_action2));
   }
 
@@ -6415,6 +6514,12 @@ void RGWDeleteLC::pre_exec()
 
 void RGWPutACLs::execute(optional_yield y)
 {
+  if (s->bucket_object_ownership == rgw::s3::ObjectOwnership::BucketOwnerEnforced) {
+    s->err.message = "Cannot set ACLs when ObjectOwnership is BucketOwnerEnforced.";
+    op_ret = -ERR_ACLS_NOT_SUPPORTED;
+    return;
+  }
+
   const RGWAccessControlPolicy& existing_policy = \
     (rgw::sal::Object::empty(s->object.get()) ? s->bucket_acl : s->object_acl);
 
@@ -7315,7 +7420,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   op_ret =
     upload->complete(this, y, s->cct, parts->parts, remove_objs, accounted_size,
                      compressed, cs_info, ofs, s->req_id, s->owner, olh_epoch,
-                     s->object.get(), processed_prefixes);
+                     s->object.get(), processed_prefixes, if_match, if_nomatch);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: upload complete failed ret=" << op_ret << dendl;
     return;
@@ -7656,7 +7761,9 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
+                                                 optional_yield y,
+                                                 const bool skip_olh_obj_update)
 {
   const string& key = object.get_key();
   const string& instance = object.get_version_id();
@@ -7747,11 +7854,12 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   del_op->params.if_match = object.get_if_match();
   del_op->params.size_match = object.get_size_match();
 
-  op_ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
+  op_ret = del_op->delete_obj(dpp, y,
+                              rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-      
+
   if (auto ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Any, obj.get(), s, canonical_name(), etag, obj_size, this, y, true, false); ret < 0) {
     // don't reply with an error in case of failed delete logging
     ldpp_dout(this, 5) << "WARNING: multi DELETE operation ignores bucket logging failure: " << ret << dendl;
@@ -7769,9 +7877,46 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
-void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
-                                       uint32_t max_aio,
-                                       boost::asio::yield_context yield)
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                 uint32_t max_aio,
+                                                 boost::asio::yield_context yield)
+{
+  auto group = ceph::async::spawn_throttle{yield, max_aio};
+  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
+
+  // group objects by their keys
+  for (const auto& object : objects) {
+    const std::string& key = object.get_key();
+    grouped_objects[key].push_back(object);
+  }
+
+  // for each group of objects, handle all but the last object and skip update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    for (size_t i = 0; i + 1 < objects.size(); ++i) { // skip the last element
+      group.spawn([this, &objects, i] (boost::asio::yield_context yield) {
+        handle_individual_object(objects[i], yield, true /* skip_olh_obj_update */);
+      });
+
+      rgw_flush_formatter(s, s->formatter);
+    }
+  }
+  group.wait();
+
+  // Now handle the last object of each group with update_olh
+  for (const auto& [_, objects] : grouped_objects) {
+    const auto& object = objects.back();
+    group.spawn([this, &object] (boost::asio::yield_context yield) {
+      handle_individual_object(object, yield);
+    });
+
+    rgw_flush_formatter(s, s->formatter);
+  }
+  group.wait();
+}
+
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                                     uint32_t max_aio,
+                                                     boost::asio::yield_context yield)
 {
   auto group = ceph::async::spawn_throttle{yield, max_aio};
 
@@ -7783,6 +7928,17 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
     rgw_flush_formatter(s, s->formatter);
   }
   group.wait();
+}
+
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
+                                       uint32_t max_aio,
+                                       boost::asio::yield_context yield)
+{
+  if (bucket->versioned()) {
+    handle_versioned_objects(objects, max_aio, yield);
+  } else {
+    handle_non_versioned_objects(objects, max_aio, yield);
+  }
 }
 
 void RGWDeleteMultiObj::execute(optional_yield y)
@@ -9699,6 +9855,119 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
     op_ret = s->bucket->put_info(this, false, real_time(), y);
     return op_ret;
+  }, y);
+}
+
+int RGWPutBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWPutBucketOwnershipControls::execute(optional_yield y)
+{
+  op_ret = get_params(y);
+  if (op_ret < 0) {
+    return;
+  }
+
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         &data, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  bufferlist conf_bl;
+  encode(ownership, conf_bl);
+
+  // construct a default private acl for BucketOwnerEnforced comparison
+  RGWAccessControlPolicy private_acl;
+  private_acl.create_default(s->bucket_owner.id,
+                             s->bucket_owner.display_name);
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(),
+      [this, y, &conf_bl, &private_acl] {
+        rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+
+        using rgw::s3::ObjectOwnership::BucketOwnerEnforced;
+        if (ownership.object_ownership == BucketOwnerEnforced) {
+          // reject BucketOwnerEnforced if the bucket's acl doesn't
+          // match the default private acl policy
+          RGWAccessControlPolicy bucket_acl;
+          if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
+            try {
+              auto p = i->second.cbegin();
+              decode(bucket_acl, p);
+            } catch (const buffer::error&) {
+              ldpp_dout(this, 20) << "failed to decode RGW_ATTR_ACL" << dendl;
+              return -EIO;
+            }
+            if (bucket_acl != private_acl) {
+              s->err.message = "The bucket's ACL must be made private "
+                  "before setting BucketOwnerEnforced.";
+              return -ERR_INVALID_BUCKET_ACL;
+            }
+          }
+        }
+
+        attrs[RGW_ATTR_OWNERSHIP_CONTROLS] = conf_bl;
+        return s->bucket->put_info(this, false, real_time(), y);
+      }, y);
+}
+
+int RGWGetBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWGetBucketOwnershipControls::execute(optional_yield y)
+{
+  const auto& attrs = s->bucket_attrs;
+  if (auto aiter = attrs.find(RGW_ATTR_OWNERSHIP_CONTROLS);
+      aiter == attrs.end()) {
+    op_ret = -ENOENT;
+    s->err.message = "The bucket ownership controls were not found";
+    return;
+  } else {
+    bufferlist::const_iterator iter{&aiter->second};
+    try {
+      decode(ownership, iter);
+    } catch (const buffer::error& e) {
+      ldpp_dout(this, 0) << __func__ << " failed to decode "
+          "RGW_ATTR_OWNERSHIP_CONTROLS: " << e.what() << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+}
+
+int RGWDeleteBucketOwnershipControls::verify_permission(optional_yield y)
+{
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketOwnershipControls)) {
+    return -EACCES;
+  }
+  return 0;
+}
+
+void RGWDeleteBucketOwnershipControls::execute(optional_yield y)
+{
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
+                                         nullptr, nullptr, s->info, s->err, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+  }
+
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
+    rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+    attrs.erase(RGW_ATTR_OWNERSHIP_CONTROLS);
+    return s->bucket->put_info(this, false, real_time(), y);
   }, y);
 }
 

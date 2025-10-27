@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd.h"
 
@@ -445,10 +445,9 @@ seastar::future<> OSD::start()
   LOG_PREFIX(OSD::start);
   INFO("seastar::smp::count {}", seastar::smp::count);
   if (auto cpu_cores =
-        local_conf().get_val<std::string>("crimson_seastar_cpu_cores");
+        local_conf().get_val<std::string>("crimson_cpu_set");
       cpu_cores.empty()) {
-    clog->warn() << "for optimal performance please set "
-                    "crimson_seastar_cpu_cores";
+    clog->info() << "for optimal performance please set crimson_cpu_set";
   }
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);

@@ -10,6 +10,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { of } from 'rxjs';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
+import { USER } from '~/app/shared/constants/app.constants';
 
 class MultisiteServiceMock {
   createEditSyncPipe = jest.fn().mockReturnValue(of(null));
@@ -113,7 +114,7 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
       id: 'pipi1',
       params: {
         dest: {},
-        mode: 'user',
+        mode: USER,
         priority: 0,
         source: { filter: { tags: [] } },
         user: 'dashboard'
@@ -130,7 +131,7 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     expect(putDataSpy).toHaveBeenCalled();
     expect(putDataSpy).toHaveBeenCalledWith({
       ...component.pipeForm.getRawValue(),
-      mode: 'user',
+      mode: USER,
       user: 'dashboard'
     });
   });

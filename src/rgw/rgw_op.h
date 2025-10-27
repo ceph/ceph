@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /**
  * All operations via the rados gateway are carried out by
@@ -1152,10 +1152,13 @@ class RGWCreateBucket : public RGWOp {
   RGWAccessControlPolicy policy;
   std::string location_constraint;
   bool has_cors = false;
+  bool has_policy = false;
+  uint32_t policy_rw_mask = 0;
   bool relaxed_region_enforcement = false;
   RGWCORSConfiguration cors_config;
   std::set<std::string> rmattr_names;
   bufferlist in_data;
+  std::optional<rgw::s3::ObjectOwnership> object_ownership;
 
   virtual bool need_metadata_upload() const { return false; }
 
@@ -1611,6 +1614,17 @@ protected:
   RGWObjectRetention *obj_retention;
   RGWObjectLegalHold *obj_legal_hold;
 
+  // remote copy progress helper
+  struct ProgressTracker {
+    std::mutex mtx;
+    std::condition_variable cv;
+    std::queue<off_t> ofs_queue;
+    std::atomic<bool> done{false};
+
+    ProgressTracker() {}
+  };
+  std::optional<ProgressTracker> progress_tracker;
+
   int init_common();
 
 public:
@@ -1651,6 +1665,13 @@ public:
   void pre_exec() override;
   void execute(optional_yield y) override;
   void progress_cb(off_t ofs);
+  void progress_cb_handler();
+  ProgressTracker& get_progress_tracker() {
+    if (!progress_tracker) {
+      progress_tracker.emplace();
+    }
+    return *progress_tracker;
+  }
 
   virtual int check_storage_class(const rgw_placement_rule& src_placement) {
     return 0;
@@ -1936,6 +1957,39 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWPutBucketOwnershipControls : public RGWOp {
+ protected:
+  rgw::s3::OwnershipControls ownership;
+  bufferlist data;
+ public:
+  virtual int get_params(optional_yield y) = 0;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "put_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
+class RGWGetBucketOwnershipControls : public RGWOp {
+ protected:
+  rgw::s3::OwnershipControls ownership;
+ public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "get_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+};
+
+class RGWDeleteBucketOwnershipControls : public RGWOp {
+ public:
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "delete_bucket_ownership_controls"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_OWNERSHIP_CONTROLS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+};
+
 class RGWGetRequestPayment : public RGWOp {
 protected:
   bool requester_pays;
@@ -2018,6 +2072,8 @@ protected:
   std::optional<rgw::cksum::Cksum> cksum;
   std::optional<std::string> armored_cksum;
   off_t ofs = 0;
+  const char *if_match{nullptr};
+  const char *if_nomatch{nullptr};
 
 public:
   RGWCompleteMultipart() {}
@@ -2173,14 +2229,19 @@ public:
   }
 };
 
-
 class RGWDeleteMultiObj : public RGWOp {
   /**
    * Handles the deletion of an individual object and uses
    * set_partial_response to record the outcome.
    */
-  void handle_individual_object(const RGWMultiDelObject& object, optional_yield y);
+  void handle_individual_object(const RGWMultiDelObject& object,
+                                optional_yield y,
+                                const bool skip_olh_obj_update = false);
 
+  void handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                uint32_t max_aio, boost::asio::yield_context yield);
+  void handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
+                                    uint32_t max_aio, boost::asio::yield_context yield);
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,
                       uint32_t max_aio, boost::asio::yield_context yield);
 

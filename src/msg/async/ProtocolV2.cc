@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <type_traits>
 
@@ -12,6 +12,7 @@
 #include "include/random.h"
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthSessionHandler.h" // for struct DecryptionError
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -2260,7 +2261,9 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
   std::vector<uint32_t> allowed_methods;
   std::vector<uint32_t> allowed_modes;
   messenger->auth_server->get_supported_auth_methods(
-    connection->get_peer_type(), &allowed_methods, &allowed_modes);
+    connection->get_peer_type(), &allowed_methods);
+  messenger->auth_server->get_supported_con_modes(
+    connection->get_peer_type(), auth_meta->auth_method, &allowed_modes);
   ldout(cct, 1) << __func__ << " auth_method " << auth_meta->auth_method
 		<< " r " << cpp_strerror(r)
 		<< ", allowed_methods " << allowed_methods

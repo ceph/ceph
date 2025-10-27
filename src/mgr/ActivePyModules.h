@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -26,6 +27,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "mgr/MDSPerfMetricTypes.h"
 #include "mgr/TTLCache.h"
 
 #include "DaemonState.h"
@@ -33,6 +35,7 @@
 #include "OSDPerfMetricTypes.h"
 
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 

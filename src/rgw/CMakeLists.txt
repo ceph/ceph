@@ -75,6 +75,7 @@ set(librgw_common_srcs
   rgw_multi_del.cc
   rgw_multipart_meta_filter.cc
   rgw_obj_manifest.cc
+  rgw_object_ownership.cc
   rgw_period.cc
   rgw_realm.cc
   rgw_sync.cc
@@ -142,11 +143,6 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
-  rgw_dedup.cc
-  rgw_dedup_table.cc
-  rgw_dedup_store.cc
-  rgw_dedup_utils.cc
-  rgw_dedup_cluster.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
@@ -162,7 +158,6 @@ list(APPEND librgw_common_srcs
 
 if(WITH_RADOSGW_RADOS)
   list(APPEND librgw_common_srcs
-          services/svc_finisher.cc
           services/svc_bi_rados.cc
           services/svc_bilog_rados.cc
           services/svc_bucket.cc
@@ -241,7 +236,12 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/config/realm_watcher.cc
           driver/rados/config/store.cc
           driver/rados/config/zone.cc
-          driver/rados/config/zonegroup.cc)
+          driver/rados/config/zonegroup.cc
+          driver/rados/rgw_dedup.cc
+          driver/rados/rgw_dedup_table.cc
+          driver/rados/rgw_dedup_store.cc
+          driver/rados/rgw_dedup_utils.cc
+          driver/rados/rgw_dedup_cluster.cc)
 endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -264,6 +264,7 @@ if(WITH_RADOSGW_POSIX)
   list(APPEND librgw_common_srcs
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe.cc
+	      driver/posix/posixDB.cc
 	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
@@ -372,6 +373,10 @@ if(WITH_JAEGER)
 endif()
 
 if(WITH_RADOSGW_DBSTORE)
+  target_link_libraries(rgw_common PRIVATE global dbstore)
+endif()
+
+if(WITH_RADOSGW_POSIX)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
 

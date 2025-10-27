@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include "./scrubber_generators.h"
 #include "./scrubber_test_datasets.h"
 
@@ -118,7 +119,7 @@ class TestPg : public PgScrubBeListener {
     }
 
     for (shard_id_t i; i < get_ec_sinfo().get_k(); ++i) {
-      for (int j = 0; j < get_ec_sinfo().get_chunk_size(); j++) {
+      for (int j = 0; std::cmp_less(j, get_ec_sinfo().get_chunk_size()); j++) {
         encode_map.at(i).c_str()[j] =
             chunks[j + (get_ec_sinfo().get_chunk_size() * i.id)];
         for (shard_id_t k{static_cast<int8_t>(get_ec_sinfo().get_k_plus_m())};
@@ -413,6 +414,12 @@ class TestTScrubberBe : public ::testing::Test {
    * \returns the PG info
    */
   pg_info_t setup_pg_in_map();
+
+  /**
+   * EC requires that set_stripe_data() is called before the
+   * ScrubBackend object is constructed
+   */
+  virtual void ec_set_stripe_info() {}
 };
 
 
@@ -466,6 +473,9 @@ void TestTScrubberBe::SetUp()
   test_pg = std::make_unique<TestPg>(pool, info, i_am);
   std::cout << fmt::format("{}: acting: {}", __func__, acting_shards)
 	    << std::endl;
+
+  // an EC-only hook to allocate & init the 'stripe conf' structure
+  ec_set_stripe_info();
   sbe = std::make_unique<TestScrubBackend>(*test_scrubber,
 					   *test_pg,
 					   i_am,
@@ -772,7 +782,7 @@ class TestTScrubberBe_data_2 : public TestTScrubberBe {
   TestTScrubberBe_data_2() : TestTScrubberBe() {}
 
   // basic test configuration - 3 OSDs, all involved in the pool
-  pool_conf_t pl{3,           3, 3, 3, "rep_pool", pg_pool_t::TYPE_REPLICATED,
+  pool_conf_t pl{3, 3, 3, 3, "rep_pool", pg_pool_t::TYPE_REPLICATED,
                  std::nullopt};
 
   TestTScrubberBeParams inject_params() override
@@ -853,6 +863,11 @@ class TestTScrubberBeECCorruptShards : public TestTScrubberBe {
 
     return params;
   }
+
+  void ec_set_stripe_info() override
+  {
+    test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
+  }
 };
 
 class TestTScrubberBeECNoCorruptShards : public TestTScrubberBeECCorruptShards {
@@ -861,8 +876,6 @@ class TestTScrubberBeECNoCorruptShards : public TestTScrubberBeECCorruptShards {
 };
 
 TEST_F(TestTScrubberBeECNoCorruptShards, ec_parity_inconsistency) {
-  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
-
   ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
   logger.set_expected_err_count(
       0);  // Set the number of errors we expect to see
@@ -891,8 +904,6 @@ class TestTScrubberBeECSingleCorruptDataShard
 };
 
 TEST_F(TestTScrubberBeECSingleCorruptDataShard, ec_parity_inconsistency) {
-  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
-
   ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
   logger.set_expected_err_count(
       1);  // Set the number of errors we expect to see
@@ -920,8 +931,6 @@ class TestTScrubberBeECCorruptParityShard
 };
 
 TEST_F(TestTScrubberBeECCorruptParityShard, ec_parity_inconsistency) {
-  test_pg->set_stripe_info(k, m, k * m_chunk_size, &test_pg->m_pool->info);
-
   ASSERT_TRUE(sbe);  // Assert we have a scrubber backend
   logger.set_expected_err_count(
       1);  // Set the number of errors we expect to see

@@ -441,12 +441,12 @@ options:
 - name: rgw_lc_max_wp_worker
   type: int
   level: advanced
-  desc: Number of workpool threads per LCWorker
-  long_desc: Number of threads in per-LCWorker workpools--used to accelerate per-bucket
+  desc: Number of workpool coroutines per LCWorker
+  long_desc: Number of coroutines in per-LCWorker workpools--used to accelerate per-bucket
     processing
-  fmt_desc: This option specifies the number of threads in each lifecycle
+  fmt_desc: This option specifies the number of coroutines in each lifecycle
     workers work pool. This option can help accelerate processing each bucket.
-  default: 3
+  default: 128
   services:
   - rgw
   with_legacy: true
@@ -3894,12 +3894,12 @@ options:
   services:
   - rgw
   with_legacy: true
-- name: rgw_d4n_l1_datacache_size
+- name: rgw_d4n_l1_datacache_disk_reserve
   type: size
   level: advanced
-  desc: maximum size on disk for datacache
-  long_desc: The local SSD cache uses this option to configure its size in bytes. This 
-    option is not used by the Redis cache backend. 
+  desc: amount of disk space to keep free for datacache
+  long_desc: The local SSD cache uses this option to determine how much disk space to 
+    reserve. The cache can grow until disk usage reaches (total disk space - reserved space).
   default: 1_G
   services:
   - rgw
@@ -3932,8 +3932,11 @@ options:
   long_desc: For example, to configure synchronized I/O, fcntl-linux.h defines (converted from octal)
     O_SYNC = 1052672
     O_DSYNC = 4096
+    O_DIRECT = 16384
+    O_SYNC | O_DIRECT = 1118208
+    O_DSYNC | O_DIRECT = 65552
     (0 for no modification of the flags)
-  default: 1052672
+  default: 4096
   services:
   - rgw
   with_legacy: true
@@ -4001,6 +4004,7 @@ options:
   - dbstore
   - motr
   - daos
+  - posix
 - name: rgw_config_store
   type: str
   level: advanced
@@ -4024,7 +4028,6 @@ options:
   - none
   - base
   - d4n
-  - posix
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -4119,6 +4122,13 @@ options:
   long_desc: Base path for the POSIX driver.  All operations are relative to this path.
     Defaults to /tmp/rgw_posix_driver
   default: /tmp/rgw_posix_driver
+  services:
+  - rgw
+- name: rgw_posix_userdb_dir
+  type: str
+  level: advanced
+  desc: path for the directory for storing the User db
+  default: /var/lib/ceph/radosgw
   services:
   - rgw
 - name: rgw_posix_database_root
@@ -4499,6 +4509,20 @@ options:
   services:
   - rgw
 
+- name: rgw_ratelimit_interval
+  type: uint
+  level: advanced
+  desc: Time window for rate limiting in seconds
+  long_desc: This option sets the time window for rate limiting accumulation in seconds.
+    Requests that exceed the configured rate limits within this time window will be rejected.
+    The default is a 60 second token bucket.
+  default: 60
+  min: 1
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_redis_connection_pool_size
   type: int
   level: basic
@@ -4512,7 +4536,56 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_bucket_persistent_notif_num_shards
+  type: uint
+  level: advanced
+  desc: Number of shards for a persistent topic.
+  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
+    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
+  default: 11
+  services: 
+    - rgw
+- name: rgw_usage_log_key_transition
+  type: bool
+  level: advanced
+  desc: Hhandle the co-existence of both old and new name-by-user keys
+  long_desc: The new usage log keyed by owner/payer ID has the prefix of "~"
+    for IDs starting with '0'.  This prefix is absent from the old scheme.
+    This option instructs RGW to handle the old keys if they still exist.
+    It should be set false when the old keys no longer exist to avoid
+    performance penalty.
+  fmt_desc: To handle the co-existence of both old and new name-by-user keys
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_usage_log
+  with_legacy: true
+  
+  
+- name: rgw_usage_stats_refresh_interval
+  type: int
+  level: advanced
+  desc: Interval in seconds for background refresh of usage statistics for active buckets/users
+  default: 5_min
+  services:
+  - rgw
+  see_also:
+  - rgw_user_quota_sync_interval
+  with_legacy: true
 
+- name: rgw_usage_cache_ttl
+  type: uint
+  level: advanced
+  desc: Time-to-live in seconds for cached usage statistics
+  default: 300
+  min: 60
+  max: 3600
+  services:
+  - rgw
+  with_legacy: true
+  
+  
 - name: rgw_enable_usage_perf_counters
   type: bool
   level: advanced
@@ -4540,36 +4613,4 @@ options:
   default: 1_G
   services:
   - rgw
-  with_legacy: true
-
-- name: rgw_usage_cache_ttl
-  type: uint
-  level: advanced
-  desc: Time-to-live in seconds for cached usage statistics
-  default: 300
-  min: 60
-  max: 3600
-  services:
-  - rgw
-  with_legacy: true
-
-- name: rgw_bucket_persistent_notif_num_shards
-  type: uint
-  level: advanced
-  desc: Number of shards for a persistent topic.
-  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
-    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
-  default: 11
-  services: 
-    - rgw
-
-- name: rgw_usage_stats_refresh_interval
-  type: int
-  level: advanced
-  desc: Interval in seconds for background refresh of usage statistics for active buckets/users
-  default: 5_min
-  services:
-  - rgw
-  see_also:
-  - rgw_user_quota_sync_interval
   with_legacy: true

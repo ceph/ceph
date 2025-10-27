@@ -85,6 +85,7 @@ export enum Icons {
   dataTable = 'data-table',
   idea = 'idea',
   userAccessLocked = 'user--access-locked', // User access locked
+  chevronDown = 'chevron--down',
   /* Icons for special effect */
   size16 = '16',
   size20 = '20',
@@ -98,7 +99,9 @@ export enum Icons {
   stack2x = 'fa fa-stack-2x', // To stack regularly sized icon
   pulse = 'fa fa-pulse', // To have spinner rotate with 8 steps
   spin = 'fa fa-spin', //  To get any icon to rotate
-  inverse = 'fa fa-inverse' // To get an alternative icon color
+  inverse = 'fa fa-inverse', // To get an alternative icon color
+  notification = 'notification',
+  error = 'error--filled'
 }
 
 export enum IconSize {
@@ -109,9 +112,13 @@ export enum IconSize {
 }
 
 export const ICON_TYPE = {
+  check: 'check',
   copy: 'copy',
   danger: 'danger',
+  edit: 'edit',
+  error: 'error--filled',
   infoCircle: 'info-circle',
+  notification: 'notification',
   success: 'success',
   warning: 'warning'
 } as const;

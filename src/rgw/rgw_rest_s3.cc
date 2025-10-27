@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <cstdint>
@@ -369,6 +369,25 @@ inline bool str_has_cntrl(const char* s) {
   return str_has_cntrl(_s);
 }
 
+// remove any aws-chunked entries from the comma-separated list
+static std::string content_encoding_without_aws_chunked(std::string_view value)
+{
+  std::string result;
+  result.reserve(value.size());
+
+  for (std::string_view part : ceph::split(value, ", ")) {
+    if (part == "aws-chunked") {
+      continue;
+    }
+    if (!result.empty()) {
+      result += ", ";
+    }
+    result += part;
+  }
+
+  return result;
+}
+
 int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 					      off_t bl_len)
 {
@@ -652,7 +671,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
             --len;
             s.resize(len);
           }
-          response_attrs[aiter->second] = s;
+
+          if (aiter->first == RGW_ATTR_CONTENT_ENC) {
+            // Amazon S3 stores the resulting object without the aws-chunked
+            // value in the content-encoding header. If aws-chunked is the only
+            // value that you pass in the content-encoding header, S3 considers
+            // the content-encoding header empty and does not return this header
+            // when your retrieve the object.
+            std::string encoding = content_encoding_without_aws_chunked(s);
+            if (!encoding.empty()) {
+              response_attrs[aiter->second] = std::move(encoding);
+            }
+          } else {
+            response_attrs[aiter->second] = std::move(s);
+          }
         }
       } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
         /* Special handling for content_type. */
@@ -1611,6 +1643,37 @@ void RGWDeleteBucketReplication_ObjStore_S3::send_response()
   dump_start(s);
 }
 
+int RGWListBuckets_ObjStore_S3::get_params(optional_yield y)
+{
+  auto continuation_token = s->info.args.get_optional("continuation-token");
+  if (continuation_token) {
+    marker = *continuation_token;
+  }
+
+  auto max_buckets = s->info.args.get_optional("max-buckets");
+  if (max_buckets) {
+    std::optional value = ceph::parse<int64_t>(*max_buckets);
+    if (!value) {
+      s->err.message = "max-buckets must be an integer";
+      return -EINVAL;
+    }
+    if (*value < 1 || *value > 10000) {
+      s->err.message = "max-buckets must be between 1 and 10000 inclusive";
+      return -EINVAL;
+    }
+    limit = *value;
+  }
+  // TODO: support "prefix" and "bucket-region" params?
+
+  // a request is only considered to be "paginated" if it specifies
+  // either "max-buckets" or "continuation-token"
+  if (!continuation_token && !max_buckets) {
+    limit = -1; /* no limit */
+  }
+
+  return 0;
+}
+
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
   if (op_ret)
@@ -1643,7 +1706,10 @@ void RGWListBuckets_ObjStore_S3::send_response_data(std::span<const RGWBucketEnt
 void RGWListBuckets_ObjStore_S3::send_response_end()
 {
   if (sent_data) {
-    s->formatter->close_section();
+    s->formatter->close_section(); // Buckets
+    if (!marker.empty()) {
+      s->formatter->dump_string("ContinuationToken", marker);
+    }
     list_all_buckets_end(s);
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -2526,7 +2592,8 @@ static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
   }
 
   return rgw::s3::create_canned_acl(owner, s->bucket_owner,
-                                    s->canned_acl, policy);
+                                    s->bucket_object_ownership,
+                                    s->canned_acl, policy, s->err.message);
 }
 
 class RGWLocationConstraint : public XMLObj
@@ -2690,6 +2757,15 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     createparams.obj_lock_enabled = boost::algorithm::iequals(iter->second, "true");
+  }
+
+  if (auto i = s->info.x_meta_map.find("x-amz-object-ownership");
+      i != s->info.x_meta_map.end()) {
+    rgw::s3::ObjectOwnership tmp;
+    if (!rgw::s3::parse(i->second, tmp, s->err.message)) {
+      return -EINVAL;
+    }
+    object_ownership = std::move(tmp);
   }
   return 0;
 }
@@ -3414,7 +3490,8 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
 
   ldpp_dout(this, 20) << "canned_acl=" << canned_acl << dendl;
   int r = rgw::s3::create_canned_acl(s->owner, s->bucket_owner,
-                                     canned_acl, policy);
+                                     s->bucket_object_ownership,
+                                     canned_acl, policy, s->err.message);
   if (r < 0) {
     err_msg = "Bad canned ACLs";
     return r;
@@ -3763,7 +3840,9 @@ int RGWDeleteObj_ObjStore_S3::get_params(optional_yield y)
     bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
   }
 
-  return 0;
+  // we're not reading any request body, so this should just match
+  // the sha256 hash of an empty buffer
+  return do_aws4_auth_completion();
 }
 
 void RGWDeleteObj_ObjStore_S3::send_response()
@@ -4397,6 +4476,73 @@ void RGWDeleteBucketEncryption_ObjStore_S3::send_response()
   end_header(s);
 }
 
+int RGWPutBucketOwnershipControls_ObjStore_S3::get_params(optional_yield y)
+{
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int ret = 0;
+  std::tie(ret, data) = read_all_input(s, max_size, false);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWXMLParser parser;
+  if (!parser.init()) {
+    return -EINVAL;
+  }
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    ldpp_dout(this, 5) << "ERROR: malformed XML" << dendl;
+    return -ERR_MALFORMED_XML;
+  }
+  XMLObj* o = parser.find_first("OwnershipControls");
+  if (!o) {
+    s->err.message = "Missing required element OwnershipControls";
+    return -ERR_MALFORMED_XML;
+  }
+  if (!ownership.decode_xml(o, s->err.message)) {
+    return -ERR_MALFORMED_XML;
+  }
+  return 0;
+}
+
+void RGWPutBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    if (op_ret == -ENOENT)
+      set_req_state_err(s, -ERR_NO_SUCH_OWNERSHIP_CONTROLS);
+    else
+      set_req_state_err(s, op_ret);
+  }
+
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format));
+  dump_start(s);
+
+  if (!op_ret) {
+    encode_xml("OwnershipControls", XMLNS_AWS_S3, ownership, s->formatter);
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+void RGWDeleteBucketOwnershipControls_ObjStore_S3::send_response()
+{
+  if (op_ret == 0) {
+    op_ret = STATUS_NO_CONTENT;
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s);
+}
+
 void RGWGetRequestPayment_ObjStore_S3::send_response()
 {
   dump_errno(s);
@@ -4599,6 +4745,9 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
   if (ret < 0) {
     return ret;
   }
+
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   map_qs_metadata(s, true);
 
@@ -5224,6 +5373,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWGetBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWGetBucketOwnershipControls_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -5282,6 +5433,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketPublicAccessBlock_ObjStore_S3;
   } else if (is_bucket_encryption_op()) {
     return new RGWPutBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWPutBucketOwnershipControls_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
@@ -5307,6 +5460,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteBucketPublicAccessBlock;
   } else if (is_bucket_encryption_op()) {
     return new RGWDeleteBucketEncryption_ObjStore_S3;
+  } else if (is_bucket_ownership_op()) {
+    return new RGWDeleteBucketOwnershipControls_ObjStore_S3;
   }
 
   if (s->info.args.sub_resource_exists("website")) {
@@ -6213,7 +6368,11 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
   if (opt_content) {
     content_hash = rgw::auth::s3::calc_v4_payload_hash(opt_content->to_str());
     extra_headers["x-amz-content-sha256"] = content_hash;
-
+  } else {
+    /* Some S3-compatible services require x-amz-content-sha256 header to always
+     * be present and included in the signature, even for unsigned payload.
+     * AWS S3 specification states that this header is required for all requests. */
+    extra_headers["x-amz-content-sha256"] = AWS4_UNSIGNED_PAYLOAD_HASH;
   }
 
   /* craft canonical headers */
@@ -6469,6 +6628,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
+        case RGW_OP_DELETE_OBJ:
         case RGW_OP_DELETE_MULTI_OBJ:
         case RGW_OP_ADMIN_SET_METADATA:
         case RGW_OP_SYNC_DATALOG_NOTIFY:
@@ -6499,6 +6659,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_LOGGING:
         case RGW_OP_POST_BUCKET_LOGGING:
         case RGW_OP_GET_BUCKET_LOGGING: 
+        case RGW_OP_PUT_BUCKET_OWNERSHIP_CONTROLS:
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;

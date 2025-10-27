@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,7 +19,9 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
-#include "mdstypes.h"
+#include "include/fs_types.h" // for inodeno_t
+#include "include/types.h" // for version_t
+#include "mdstypes.h" // for dirfrag_t, metareqid_t
 #include "CInode.h"
 #include "CDentry.h"
 #include "CDir.h"

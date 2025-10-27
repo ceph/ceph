@@ -18,10 +18,9 @@
 
 <ng-template #statusTpl
              let-row="data.row">
-  <span class="badge"
-        [ngClass]="row | pipeFunction:getStatusClass">
+  <cds-tag [class]="row | pipeFunction:getStatusClass">
     {{ row.status_desc }}
-  </span>
+</cds-tag>
 </ng-template>
 
 <cds-tabs

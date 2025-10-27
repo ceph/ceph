@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include "IoOp.h"
@@ -46,6 +47,7 @@ enum class Sequence {
   SEQUENCE_SEQ12,
   SEQUENCE_SEQ13,
   SEQUENCE_SEQ14,
+  SEQUENCE_SEQ15,
 
   SEQUENCE_END,
   SEQUENCE_BEGIN = SEQUENCE_SEQ0
@@ -87,6 +89,7 @@ class IoSequence {
   bool consistency_in_progress;
   bool consistency_request_sent;
   bool check_consistency;
+  bool swap;
   uint64_t obj_size;
   int step;
   int seed;
@@ -301,6 +304,35 @@ class Seq14 : public IoSequence {
   Seq14(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
 
   void setup_starts();
+  Sequence get_id() const override;
+  std::string get_name() const override;
+  std::unique_ptr<IoOp> _next() override;
+};
+
+class Seq15 : public IoSequence {
+ private:
+  uint64_t offset;
+  uint64_t length;
+  uint64_t primary_size;
+  uint64_t secondary_size;
+  bool doneread = true;
+  bool donebarrier = false;
+  enum class Stage {
+    WRITE_PRIMARY,
+    CREATE_SECONDARY,
+    WRITE_SECONDARY,
+    COPY_FROM_SECONDARY,
+    READ_SECONDARY,
+    SWAP_TO_PRIMARY,
+    TRUNCATE_PRIMARY,
+    READ_PRIMARY,
+    DONE
+  };
+  Stage stage;
+
+ public:
+  Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency);
+
   Sequence get_id() const override;
   std::string get_name() const override;
   std::unique_ptr<IoOp> _next() override;

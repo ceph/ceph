@@ -22,7 +22,7 @@ overrides:
     log-only-match:
       - CEPHADM_
 tasks:
-- cephadm.deploy_samba_ad_dc:
+- smb.deploy_samba_ad_dc:
     role: host.d
 - vip:
     count: 3
@@ -129,7 +129,7 @@ tasks:
       - cmd: rados --pool=.smb -N ac2 get cluster.meta.json /dev/stdout
 
 # Check if shares exist
-- cephadm.exec:
+- template.exec:
     host.d:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
@@ -137,7 +137,7 @@ tasks:
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -p4455 -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/s1ac2 -c ls"
 
 # verify CTDB is healthy, cluster 1 is well formed
-- cephadm.exec:
+- template.exec:
     host.a:
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.ac1\")))[-1].name' > /tmp/svcname"
       - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
@@ -148,7 +148,7 @@ tasks:
       - grep 'Number of nodes:3' /tmp/ctdb_status
       - rm -rf /tmp/svcname /tmp/ctdb_status
 # verify CTDB is healthy, cluster 2 is well formed
-- cephadm.exec:
+- template.exec:
     host.a:
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.ac2\")))[-1].name' > /tmp/svcname"
       - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
@@ -160,7 +160,7 @@ tasks:
       - rm -rf /tmp/svcname /tmp/ctdb_status
 
 # Test the two assigned VIPs on cluster 1
-- cephadm.exec:
+- template.exec:
     host.d:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP0}}/share1 -c ls"
@@ -168,7 +168,7 @@ tasks:
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP0}}/share2 -c ls"
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{VIP1}}/share2 -c ls"
 # Test the assigned VIP on cluster 2
-- cephadm.exec:
+- template.exec:
     host.d:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -p4455 -U DOMAIN1\\\\ckent%1115Rose. //{{VIP2}}/s1ac2 -c ls"

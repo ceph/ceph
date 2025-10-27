@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -69,15 +70,16 @@ void bluestore_bdev_label_t::dump(Formatter *f) const
   }
 }
 
-void bluestore_bdev_label_t::generate_test_instances(
-  list<bluestore_bdev_label_t*>& o)
+list<bluestore_bdev_label_t> bluestore_bdev_label_t::generate_test_instances()
 {
-  o.push_back(new bluestore_bdev_label_t);
-  o.push_back(new bluestore_bdev_label_t);
-  o.back()->size = 123;
-  o.back()->btime = utime_t(4, 5);
-  o.back()->description = "fakey";
-  o.back()->meta["foo"] = "bar";
+  list<bluestore_bdev_label_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().size = 123;
+  o.back().btime = utime_t(4, 5);
+  o.back().description = "fakey";
+  o.back().meta["foo"] = "bar";
+  return o;
 }
 
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
@@ -97,11 +99,13 @@ void bluestore_cnode_t::dump(Formatter *f) const
   f->dump_unsigned("bits", bits);
 }
 
-void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
+std::list<bluestore_cnode_t> bluestore_cnode_t::generate_test_instances()
 {
-  o.push_back(new bluestore_cnode_t());
-  o.push_back(new bluestore_cnode_t(0));
-  o.push_back(new bluestore_cnode_t(123));
+  std::list<bluestore_cnode_t> o;
+  o.push_back(bluestore_cnode_t());
+  o.push_back(bluestore_cnode_t(0));
+  o.push_back(bluestore_cnode_t(123));
+  return o;
 }
 
 ostream& operator<<(ostream& out, const bluestore_cnode_t& l)
@@ -373,16 +377,17 @@ void bluestore_extent_ref_map_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_extent_ref_map_t::generate_test_instances(
-  list<bluestore_extent_ref_map_t*>& o)
+list<bluestore_extent_ref_map_t> bluestore_extent_ref_map_t::generate_test_instances()
 {
-  o.push_back(new bluestore_extent_ref_map_t);
-  o.push_back(new bluestore_extent_ref_map_t);
-  o.back()->get(10, 10);
-  o.back()->get(18, 22);
-  o.back()->get(20, 20);
-  o.back()->get(10, 25);
-  o.back()->get(15, 20);
+  list<bluestore_extent_ref_map_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().get(10, 10);
+  o.back().get(18, 22);
+  o.back().get(20, 20);
+  o.back().get(10, 25);
+  o.back().get(15, 20);
+  return o;
 }
 
 ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
@@ -690,18 +695,19 @@ void bluestore_blob_use_tracker_t::dump(Formatter *f) const
   }
 }
 
-void bluestore_blob_use_tracker_t::generate_test_instances(
-  list<bluestore_blob_use_tracker_t*>& o)
+list<bluestore_blob_use_tracker_t> bluestore_blob_use_tracker_t::generate_test_instances()
 {
-  o.push_back(new bluestore_blob_use_tracker_t());
-  o.back()->init(16, 16);
-  o.back()->get(10, 10);
-  o.back()->get(10, 5);
-  o.push_back(new bluestore_blob_use_tracker_t());
-  o.back()->init(60, 16);
-  o.back()->get(18, 22);
-  o.back()->get(20, 20);
-  o.back()->get(15, 20);
+  list<bluestore_blob_use_tracker_t> o;
+  o.push_back(bluestore_blob_use_tracker_t());
+  o.back().init(16, 16);
+  o.back().get(10, 10);
+  o.back().get(10, 5);
+  o.push_back(bluestore_blob_use_tracker_t());
+  o.back().init(60, 16);
+  o.back().get(18, 22);
+  o.back().get(20, 20);
+  o.back().get(15, 20);
+  return o;
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& m)
@@ -741,10 +747,12 @@ ostream& operator<<(ostream& out, const bluestore_pextent_t& o) {
     return out << "!~" << std::hex << o.length << std::dec;
 }
 
-void bluestore_pextent_t::generate_test_instances(list<bluestore_pextent_t*>& ls)
+list<bluestore_pextent_t> bluestore_pextent_t::generate_test_instances()
 {
-  ls.push_back(new bluestore_pextent_t);
-  ls.push_back(new bluestore_pextent_t(1, 2));
+  list<bluestore_pextent_t> ls;
+  ls.emplace_back();
+  ls.push_back(bluestore_pextent_t(1, 2));
+  return ls;
 }
 
 // bluestore_blob_t
@@ -824,21 +832,23 @@ void bluestore_blob_t::dump(Formatter *f) const
   f->dump_unsigned("unused", unused);
 }
 
-void bluestore_blob_t::generate_test_instances(list<bluestore_blob_t*>& ls)
+list<bluestore_blob_t> bluestore_blob_t::generate_test_instances()
 {
-  ls.push_back(new bluestore_blob_t);
-  ls.push_back(new bluestore_blob_t(0));
-  ls.push_back(new bluestore_blob_t);
-  ls.back()->allocated_test(bluestore_pextent_t(111, 222));
-  ls.push_back(new bluestore_blob_t);
-  ls.back()->init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
-  ls.back()->csum_data = ceph::buffer::claim_malloc(4, strdup("abcd"));
-  ls.back()->add_unused(0, 3);
-  ls.back()->add_unused(8, 8);
-  ls.back()->allocated_test(bluestore_pextent_t(0x40100000, 0x10000));
-  ls.back()->allocated_test(
+  list<bluestore_blob_t> ls;
+  ls.emplace_back();
+  ls.push_back(bluestore_blob_t(0));
+  ls.emplace_back();
+  ls.back().allocated_test(bluestore_pextent_t(111, 222));
+  ls.emplace_back();
+  ls.back().init_csum(Checksummer::CSUM_XXHASH32, 16, 65536);
+  ls.back().csum_data = ceph::buffer::claim_malloc(4, strdup("abcd"));
+  ls.back().add_unused(0, 3);
+  ls.back().add_unused(8, 8);
+  ls.back().allocated_test(bluestore_pextent_t(0x40100000, 0x10000));
+  ls.back().allocated_test(
     bluestore_pextent_t(bluestore_pextent_t::INVALID_OFFSET, 0x1000));
-  ls.back()->allocated_test(bluestore_pextent_t(0x40120000, 0x10000));
+  ls.back().allocated_test(bluestore_pextent_t(0x40120000, 0x10000));
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluestore_blob_t& o)
@@ -1358,19 +1368,16 @@ void bluestore_shared_blob_t::dump(Formatter *f) const
   f->dump_object("ref_map", ref_map);
 }
 
-void bluestore_shared_blob_t::generate_test_instances(
-  list<bluestore_shared_blob_t*>& ls)
+list<bluestore_shared_blob_t> bluestore_shared_blob_t::generate_test_instances()
 {
-  std::list<bluestore_extent_ref_map_t*> extent_ref_maps;
-  bluestore_extent_ref_map_t::generate_test_instances(extent_ref_maps);
+  list<bluestore_shared_blob_t> ls;
+  auto extent_ref_maps = bluestore_extent_ref_map_t::generate_test_instances();
   // use 0 for sbid, as this field is not persited, and is always set during
   // instance construction, so including a non-default value in dumps would
   // cause ceph-dencoder verification failures when comparing original and
   // re-encoded value.
-  ls.push_back(new bluestore_shared_blob_t{0, std::move(*extent_ref_maps.front())});
-  for (auto* m : extent_ref_maps) {
-    delete m;
-  }
+  ls.push_back(bluestore_shared_blob_t{0, std::move(extent_ref_maps.front())});
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluestore_shared_blob_t& sb)
@@ -1388,13 +1395,14 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
   f->dump_unsigned("bytes", bytes);
 }
 
-void bluestore_onode_t::shard_info::generate_test_instances(
-  list<shard_info*>& o)
+auto bluestore_onode_t::shard_info::generate_test_instances() -> list<shard_info>
 {
-  o.push_back(new shard_info);
-  o.push_back(new shard_info);
-  o.back()->offset = 123;
-  o.back()->bytes = 456;
+  list<shard_info> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().offset = 123;
+  o.back().bytes = 456;
+  return o;
 }
 
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
@@ -1426,54 +1434,56 @@ void bluestore_onode_t::dump(Formatter *f) const
   f->dump_unsigned("alloc_hint_flags", alloc_hint_flags);
 }
 
-void bluestore_onode_t::generate_test_instances(list<bluestore_onode_t*>& o)
+list<bluestore_onode_t> bluestore_onode_t::generate_test_instances()
 {
+  list<bluestore_onode_t> o;
 
-  auto* onode1 = new bluestore_onode_t();
-  onode1->nid = 0xDEADBEEF;
-  onode1->size = 99999;
-  onode1->expected_object_size = 123456;
-  onode1->expected_write_size = 7890;
-  onode1->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP);
+  auto onode1 = bluestore_onode_t();
+  onode1.nid = 0xDEADBEEF;
+  onode1.size = 99999;
+  onode1.expected_object_size = 123456;
+  onode1.expected_write_size = 7890;
+  onode1.set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP | FLAG_PERPG_OMAP);
 
   ceph::buffer::ptr buf1 = ceph::buffer::create(50);
   memset(buf1.c_str(), 0x42, 50);
-  onode1->attrs["chaos_attr1"] = buf1;
+  onode1.attrs["chaos_attr1"] = buf1;
 
-  onode1->extent_map_shards.push_back({.offset = 555, .bytes = 777});
+  onode1.extent_map_shards.push_back({.offset = 555, .bytes = 777});
 
-  o.push_back(onode1);
+  o.push_back(std::move(onode1));
 
-  auto* onode2 = new bluestore_onode_t();
-  onode2->nid = 0xBAADF00D;
-  onode2->size = 54321;
-  onode2->expected_object_size = 654321;
-  onode2->expected_write_size = 4321;
-  onode2->set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
+  auto onode2 = bluestore_onode_t();
+  onode2.nid = 0xBAADF00D;
+  onode2.size = 54321;
+  onode2.expected_object_size = 654321;
+  onode2.expected_write_size = 4321;
+  onode2.set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
 
   ceph::buffer::ptr buf2 = ceph::buffer::create(30);
   memset(buf2.c_str(), 0xAB, 30);
-  onode2->attrs["glitch_attr"] = buf2;
+  onode2.attrs["glitch_attr"] = buf2;
 
-  onode2->extent_map_shards.push_back({.offset = 333, .bytes = 444});
+  onode2.extent_map_shards.push_back({.offset = 333, .bytes = 444});
 
-  o.push_back(onode2);
+  o.push_back(std::move(onode2));
 
-  auto* onode3 = new bluestore_onode_t();
-  onode3->nid = 0xFEEDFACE;
-  onode3->size = 0;
-  onode3->expected_object_size = 1;
-  onode3->expected_write_size = 1;
-  onode3->set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
+  auto onode3 = bluestore_onode_t();
+  onode3.nid = 0xFEEDFACE;
+  onode3.size = 0;
+  onode3.expected_object_size = 1;
+  onode3.expected_write_size = 1;
+  onode3.set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
 
   ceph::buffer::ptr buf3 = ceph::buffer::create(100);
   memset(buf3.c_str(), 0xFF, 100);
-  onode3->attrs["maxed_out"] = buf3;
+  onode3.attrs["maxed_out"] = buf3;
 
-  onode3->extent_map_shards.push_back({.offset = 999, .bytes = 2048});
+  onode3.extent_map_shards.push_back({.offset = 999, .bytes = 2048});
 
-  o.push_back(onode3);
+  o.push_back(std::move(onode3));
 
+  return o;
 }
 
 // bluestore_deferred_op_t
@@ -1489,14 +1499,16 @@ void bluestore_deferred_op_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_deferred_op_t::generate_test_instances(list<bluestore_deferred_op_t*>& o)
+list<bluestore_deferred_op_t> bluestore_deferred_op_t::generate_test_instances()
 {
-  o.push_back(new bluestore_deferred_op_t);
-  o.push_back(new bluestore_deferred_op_t);
-  o.back()->op = OP_WRITE;
-  o.back()->extents.push_back(bluestore_pextent_t(1, 2));
-  o.back()->extents.push_back(bluestore_pextent_t(100, 5));
-  o.back()->data.append("my data");
+  list<bluestore_deferred_op_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().op = OP_WRITE;
+  o.back().extents.push_back(bluestore_pextent_t(1, 2));
+  o.back().extents.push_back(bluestore_pextent_t(100, 5));
+  o.back().data.append("my data");
+  return o;
 }
 
 void bluestore_deferred_transaction_t::dump(Formatter *f) const
@@ -1518,16 +1530,18 @@ void bluestore_deferred_transaction_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluestore_deferred_transaction_t::generate_test_instances(list<bluestore_deferred_transaction_t*>& o)
+list<bluestore_deferred_transaction_t> bluestore_deferred_transaction_t::generate_test_instances()
 {
-  o.push_back(new bluestore_deferred_transaction_t());
-  o.push_back(new bluestore_deferred_transaction_t());
-  o.back()->seq = 123;
-  o.back()->ops.push_back(bluestore_deferred_op_t());
-  o.back()->ops.push_back(bluestore_deferred_op_t());
-  o.back()->ops.back().op = bluestore_deferred_op_t::OP_WRITE;
-  o.back()->ops.back().extents.push_back(bluestore_pextent_t(1,7));
-  o.back()->ops.back().data.append("foodata");
+  list<bluestore_deferred_transaction_t> o;
+  o.push_back(bluestore_deferred_transaction_t());
+  o.push_back(bluestore_deferred_transaction_t());
+  o.back().seq = 123;
+  o.back().ops.push_back(bluestore_deferred_op_t());
+  o.back().ops.push_back(bluestore_deferred_op_t());
+  o.back().ops.back().op = bluestore_deferred_op_t::OP_WRITE;
+  o.back().ops.back().extents.push_back(bluestore_pextent_t(1,7));
+  o.back().ops.back().data.append("foodata");
+  return o;
 }
 
 void bluestore_compression_header_t::dump(Formatter *f) const
@@ -1539,12 +1553,13 @@ void bluestore_compression_header_t::dump(Formatter *f) const
   }
 }
 
-void bluestore_compression_header_t::generate_test_instances(
-  list<bluestore_compression_header_t*>& o)
+list<bluestore_compression_header_t> bluestore_compression_header_t::generate_test_instances()
 {
-  o.push_back(new bluestore_compression_header_t);
-  o.push_back(new bluestore_compression_header_t(1));
-  o.back()->length = 1234;
+  list<bluestore_compression_header_t> o;
+  o.emplace_back();
+  o.push_back(bluestore_compression_header_t(1));
+  o.back().length = 1234;
+  return o;
 }
 
 // adds more salt to build a hash func input

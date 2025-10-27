@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,26 +20,28 @@
 #include <string_view>
 
 #include "common/admin_socket.h" // for asok_finisher
-#include "common/DecayCounter.h"
 #include "common/LogClient.h"
+#include "common/TrackedOp.h" // for class OpTracker
 
 #include "include/common_fwd.h"
 
-#include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
-#include "mon/MonClient.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
 #include "common/perf_counters.h"
 
+#include <boost/intrusive_ptr.hpp>
+
+class DecayCounter;
 class MDSContext;
 class MDSMetaRequest;
 class MMDSMap;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 namespace boost::asio { class io_context; }
 
@@ -130,6 +133,7 @@ namespace ceph {
 template <class Mutex>
 class CommonSafeTimer;
 
+class Beacon;
 class Locker;
 class MDCache;
 class MDLog;
@@ -205,7 +209,7 @@ class MDSRank {
     Session *get_session(const cref_t<Message> &m);
 
     MDSMap::DaemonState get_state() const { return state; } 
-    MDSMap::DaemonState get_want_state() const { return beacon.get_want_state(); } 
+    MDSMap::DaemonState get_want_state() const;
 
     bool is_creating() const { return state == MDSMap::STATE_CREATING; }
     bool is_starting() const { return state == MDSMap::STATE_STARTING; }
@@ -255,9 +259,7 @@ class MDSRank {
       progress_thread.signal();
     }
 
-    uint64_t get_global_id() const {
-      return monc->get_global_id();
-    }
+    uint64_t get_global_id() const;
 
     // Daemon lifetime functions: these guys break the abstraction
     // and call up into the parent MDSDaemon instance.  It's kind
@@ -304,9 +306,7 @@ class MDSRank {
      */
     void damaged_unlocked();
 
-    double last_cleared_laggy() const {
-      return beacon.last_cleared_laggy();
-    }
+    double last_cleared_laggy() const;
 
     double get_dispatch_queue_max_age(utime_t now) const;
 
@@ -389,6 +389,8 @@ class MDSRank {
     double get_inject_journal_corrupt_dentry_first() const {
       return inject_journal_corrupt_dentry_first;
     }
+
+    std::string get_path(inodeno_t ino);
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute

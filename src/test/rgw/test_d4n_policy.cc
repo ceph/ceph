@@ -70,7 +70,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       };
 
       conn = std::make_shared<connection>(net::make_strand(io));
-      rgw::cache::Partition partition_info{ .location = "RedisCache", .size = 1000 };
+      rgw::cache::Partition partition_info{ .location = "RedisCache", .reserve_size = 1073741824 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
       policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda", null_yield);
       dir = new rgw::d4n::BlockDirectory{conn};

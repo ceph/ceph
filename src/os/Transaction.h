@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -195,6 +195,7 @@ public:
     TransactionData(TransactionData&& other) noexcept :
       ops(other.ops),
       fadvise_flags(other.fadvise_flags) {
+      unused1 = unused2 = unused3 = 0;
       other.ops = 0;
       other.fadvise_flags = 0;
     }
@@ -1385,7 +1386,7 @@ public:
   }
 
   void dump(ceph::Formatter *f);
-  static void generate_test_instances(std::list<Transaction*>& o);
+  static std::list<Transaction> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ceph::os::Transaction)
 WRITE_CLASS_ENCODER(ceph::os::Transaction::TransactionData)

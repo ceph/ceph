@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 
 #ifndef CEPH_OSDMAPMAPPING_H
@@ -10,6 +10,7 @@
 
 #include "osd/osd_types.h"
 #include "common/WorkQueue.h"
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/Cond.h"
 
 class OSDMap;

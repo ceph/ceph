@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -29,6 +29,7 @@
 #include "common/async/blocked_completion.h"
 #include "common/async/concepts.h"
 #include "common/async/yield_context.h"
+#include "common/async/redirect_error.h"
 
 #include "common/dout.h"
 #include "common/dout_fmt.h"
@@ -60,13 +61,10 @@ inline int run_coro(
   std::string* what ///< Where to store the result of `what()` on exception
   ) noexcept
 {
-  try {
-    maybe_warn_about_blocking(dpp);
-    asio::co_spawn(executor, std::move(coro), async::use_blocked);
-  } catch (const std::exception&) {
-    return ceph::from_exception(std::current_exception(), what);
-  }
-  return 0;
+  std::exception_ptr e;
+  maybe_warn_about_blocking(dpp);
+  asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
+  return ceph::from_exception(e, what);
 }
 
 /// Call a coroutine and block until it completes, handling exceptions
@@ -107,13 +105,10 @@ int run_coro(
   std::string* what ///< Where to store the result of `what()`.
   ) noexcept
 {
-  try {
-    val = asio::co_spawn(executor, std::move(coro), async::use_blocked);
-    maybe_warn_about_blocking(dpp);
-  } catch (const std::exception& e) {
-    return ceph::from_exception(std::current_exception(), what);
-  }
-  return 0;
+  std::exception_ptr e;
+  maybe_warn_about_blocking(dpp);
+  val = asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
+  return ceph::from_exception(e, what);
 }
 
 /// Call a coroutine and block until it completes, handling exceptions
@@ -156,13 +151,10 @@ int run_coro(
   std::string* what ///< Where to store the result of `what()`.
   ) noexcept
 {
-  try {
-    maybe_warn_about_blocking(dpp);
-    vals = asio::co_spawn(executor, std::move(coro), async::use_blocked);
-  } catch (const std::exception& e) {
-    return ceph::from_exception(std::current_exception(), what);
-  }
-  return 0;
+  std::exception_ptr e;
+  maybe_warn_about_blocking(dpp);
+  vals = asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
+  return ceph::from_exception(e, what);
 }
 
 /// Call a coroutine and block until it completes, handling exceptions
@@ -203,19 +195,21 @@ int run_coro(
   int log_level = 5 /// What level to log at
   ) noexcept
 {
-  try {
-    if (y) {
-      auto& yield = y.get_yield_context();
-      asio::co_spawn(yield.get_executor(), std::move(coro), yield);
-    } else {
-      maybe_warn_about_blocking(dpp);
-      asio::co_spawn(executor, std::move(coro), async::use_blocked);
-    }
-  } catch (const std::exception& e) {
-    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, e.what());
-    return ceph::from_exception(std::current_exception());
+  std::exception_ptr e;
+  if (y) {
+    auto& yield = y.get_yield_context();
+    asio::co_spawn(yield.get_executor(), std::move(coro),
+		   async::redirect_error(yield, e));
+  } else {
+    maybe_warn_about_blocking(dpp);
+    asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
   }
-  return 0;
+  std::string what;
+  auto r = ceph::from_exception(e, &what);
+  if (e) [[unlikely]] {
+    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, what);
+  }
+  return r;
 }
 
 /// Call a coroutine and block until it completes, handling exceptions
@@ -260,20 +254,21 @@ int run_coro(
   int log_level = 5 /// What level to log at
   ) noexcept
 {
-  try {
-    if (y) {
-      auto& yield = y.get_yield_context();
-      val = asio::co_spawn(yield.get_executor(), std::move(coro), yield);
-    } else {
-      maybe_warn_about_blocking(dpp);
-      val = asio::co_spawn(executor, std::move(coro), async::use_blocked);
-    }
-  } catch (const std::exception& e) {
-    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, e.what());
-    return ceph::from_exception(std::current_exception());
+  std::exception_ptr e;
+  if (y) {
+    auto& yield = y.get_yield_context();
+    val = asio::co_spawn(yield.get_executor(), std::move(coro),
+			 async::redirect_error(yield, e));
+  } else {
+    maybe_warn_about_blocking(dpp);
+    val = asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
   }
-
-  return 0;
+  std::string what;
+  auto r = ceph::from_exception(e, &what);
+  if (e) [[unlikely]] {
+    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, what);
+  }
+  return r;
 }
 
 /// Call a coroutine and block until it completes, handling exceptions
@@ -317,19 +312,21 @@ int run_coro(
   int log_level = 5 /// What level to log at
   ) noexcept
 {
-  try {
-    if (y) {
-      auto& yield = y.get_yield_context();
-      vals = asio::co_spawn(yield.get_executor(), std::move(coro), yield);
-    } else {
-      maybe_warn_about_blocking(dpp);
-      vals = asio::co_spawn(executor, std::move(coro), async::use_blocked);
-    }
-  } catch (const std::exception& e) {
-    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, e.what());
-    return ceph::from_exception(std::current_exception());
+  std::exception_ptr e;
+  if (y) {
+    auto& yield = y.get_yield_context();
+    vals = asio::co_spawn(yield.get_executor(), std::move(coro),
+			  async::redirect_error(yield, e));
+  } else {
+    maybe_warn_about_blocking(dpp);
+    vals = asio::co_spawn(executor, std::move(coro), async::use_blocked[e]);
   }
-  return 0;
+  std::string what;
+  auto r = ceph::from_exception(e, &what);
+  if (e) [[unlikely]] {
+    ldpp_dout_fmt(dpp, log_level, "{}: failed: {}", name, what);
+  }
+  return r;
 }
 
 /// Call a coroutine and block until it completes, handling exceptions

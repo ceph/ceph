@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -37,8 +38,9 @@
 #include "StrayManager.h"
 #include "OpenFileTable.h"
 #include "MDSContext.h"
-#include "Mutation.h"
 #include "LogSegmentRef.h"
+
+#include <boost/intrusive_ptr.hpp>
 
 class EMetaBlob;
 class MCacheExpire;
@@ -67,6 +69,11 @@ class Migrator;
 class Session;
 
 class ESubtreeMap;
+
+struct MutationImpl;
+struct MDRequestImpl;
+typedef boost::intrusive_ptr<MutationImpl> MutationRef;
+typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
 enum {
   l_mdc_first = 3000,
@@ -1614,7 +1621,7 @@ private:
  * it'ls the lesser of two evils compared with introducing
  * yet another piece of (multiple) inheritance.
  */
-class MDCacheIOContext : public virtual MDSIOContextBase {
+class MDCacheIOContext : public MDSIOContextBase {
 protected:
   MDCache *mdcache;
   MDSRank *get_mds() override

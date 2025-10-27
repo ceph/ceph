@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Types.h"
 #include "include/ceph_assert.h"
@@ -179,21 +179,23 @@ void NotifyMessage::dump(Formatter *f) const {
   std::visit(DumpPayloadVisitor(f), payload);
 }
 
-void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
-  o.push_back(new NotifyMessage(ImageAcquirePayload()));
-  o.push_back(new NotifyMessage(ImageAcquirePayload(1, "gid")));
+std::list<NotifyMessage> NotifyMessage::generate_test_instances() {
+  std::list<NotifyMessage> o;
+  o.push_back(NotifyMessage(ImageAcquirePayload()));
+  o.push_back(NotifyMessage(ImageAcquirePayload(1, "gid")));
 
-  o.push_back(new NotifyMessage(ImageReleasePayload()));
-  o.push_back(new NotifyMessage(ImageReleasePayload(1, "gid")));
+  o.push_back(NotifyMessage(ImageReleasePayload()));
+  o.push_back(NotifyMessage(ImageReleasePayload(1, "gid")));
 
-  o.push_back(new NotifyMessage(PeerImageRemovedPayload()));
-  o.push_back(new NotifyMessage(PeerImageRemovedPayload(1, "gid", "uuid")));
+  o.push_back(NotifyMessage(PeerImageRemovedPayload()));
+  o.push_back(NotifyMessage(PeerImageRemovedPayload(1, "gid", "uuid")));
 
-  o.push_back(new NotifyMessage(SyncRequestPayload()));
-  o.push_back(new NotifyMessage(SyncRequestPayload(1, "sync_id")));
+  o.push_back(NotifyMessage(SyncRequestPayload()));
+  o.push_back(NotifyMessage(SyncRequestPayload(1, "sync_id")));
 
-  o.push_back(new NotifyMessage(SyncStartPayload()));
-  o.push_back(new NotifyMessage(SyncStartPayload(1, "sync_id")));
+  o.push_back(NotifyMessage(SyncStartPayload()));
+  o.push_back(NotifyMessage(SyncStartPayload(1, "sync_id")));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out, const NotifyOp &op) {

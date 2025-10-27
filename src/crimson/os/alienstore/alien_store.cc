@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "alien_collection.h"
 #include "alien_store.h"
@@ -103,21 +103,21 @@ seastar::future<> AlienStore::start()
     ceph_abort_msgf("unsupported objectstore type: %s", type.c_str());
   }
   /*
-   * crimson_alien_thread_cpu_cores must be set for optimal performance.
+   * crimson_bluestore_cpu_set must be set for optimal performance.
    * Otherwise, no CPU pinning will take place.
   */
   std::optional<seastar::resource::cpuset> alien_thread_cpu_cores;
 
   if (std::string conf_cpu_cores =
-        get_conf<std::string>("crimson_alien_thread_cpu_cores");
+        get_conf<std::string>("crimson_bluestore_cpu_set");
       !conf_cpu_cores.empty()) {
-    logger().debug("{} using crimson_alien_thread_cpu_cores", __func__);
+    logger().debug("{} using crimson_bluestore_cpu_set", __func__);
     alien_thread_cpu_cores =
       seastar::resource::parse_cpuset(conf_cpu_cores);
   }
 
   const auto num_threads =
-    get_conf<uint64_t>("crimson_alien_op_num_threads");
+    get_conf<uint64_t>("crimson_bluestore_num_threads");
   tp = std::make_unique<crimson::os::ThreadPool>(num_threads, 128, alien_thread_cpu_cores);
   return tp->start();
 }

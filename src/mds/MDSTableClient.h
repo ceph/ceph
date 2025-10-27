@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,9 +16,9 @@
 #ifndef CEPH_MDSTABLECLIENT_H
 #define CEPH_MDSTABLECLIENT_H
 
+#include "include/buffer.h"
 #include "include/types.h"
-#include "mds_table_types.h"
-#include "mdstypes.h" // for mds_rank_t
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "common/ref.h" // for cref_t
 #include "LogSegmentRef.h"
 
@@ -30,6 +31,8 @@ class MMDSTableRequest;
 class MMDSTableQuery;
 class MDSRank;
 class LogSegment;
+using ceph::bufferlist;
+using ceph::cref_t;
 
 class MDSTableClient {
 public:

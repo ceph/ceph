@@ -1,0 +1,219 @@
+---
+
+# Documentation on clang-format options here:
+# https://clang.llvm.org/docs/ClangFormatStyleOptions.html
+
+Language: Cpp
+Standard: c++20
+
+# Google style is a good starting point; modifiers attempt to match style
+# guide here: https://github.com/ceph/ceph/blob/main/CodingStyle
+BasedOnStyle: Google
+IndentWidth: 2
+TabWidth: 8
+UseTab: Never
+MaxEmptyLinesToKeep: 2
+ContinuationIndentWidth: 4
+
+# The intended impact here is to allow up to 96 characters, but break at 80 if
+# 96 is exceeded.
+ColumnLimit: 80
+
+# The "Penalty" concept in clang-format is not well
+# documented, see here for more: https://stackoverflow.com/questions/26635370
+#
+# Note that the penalties are not numbers of characters, they act more like
+# decision weights.
+PenaltyExcessCharacter: 50
+PenaltyBreakAssignment: 50
+PenaltyBreakBeforeFirstCallParameter: 50
+PenaltyBreakOpenParenthesis: 50
+
+# Brace wrapping to match style guide
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterCaseLabel: false
+    AfterClass: false
+    AfterControlStatement: Never
+    AfterEnum: false
+    AfterFunction: true
+    AfterNamespace: false
+    AfterStruct: false
+    BeforeCatch: false
+    BeforeElse: false
+    BeforeLambdaBody: false
+    SplitEmptyFunction: false
+    SplitEmptyRecord: false
+    SplitEmptyNamespace: false
+
+# Access modifiers indent/outdent specified relative to body, use -2 to
+# align to braces.  Also do not indent case blocks. Finally, an emply line
+# should always precede "private:" or "public:" or "protected:"
+AccessModifierOffset: -2
+IndentCaseLabels: false
+EmptyLineBeforeAccessModifier: Always
+ConstructorInitializerIndentWidth: 2
+
+#Always break after an open bracket, if the parameters don’t fit on a single line
+AlignAfterOpenBracket: AlwaysBreak
+
+# Newline escapes should be aligned and located at the leftmost alignment
+AlignEscapedNewlines: Left
+
+# Align after operands across continuation into multiple lines for binary and
+# ternary.
+AlignOperands: Align
+
+# Do not align trailing comments across multiple lines. Note that this only applies
+# to the single-line comment style using "//". Block inlines are always left alone.
+AlignTrailingComments: false
+
+# If the function declaration doesn’t fit on a line, allow putting all parameters of a
+# function declaration onto the next line even if BinPackParameters is OnePerLine
+AllowAllParametersOfDeclarationOnNextLine: false
+
+# Do not allow short enums on a single line.
+AllowShortEnumsOnASingleLine: false
+
+# Only merge functions defined inside a class. Implies empty
+AllowShortFunctionsOnASingleLine: All
+
+# Never put short ifs on the same line.
+AllowShortIfStatementsOnASingleLine: false
+
+# If true, "while (true) continue;" can be put on a single line
+AllowShortLoopsOnASingleLine: false
+
+# Always break after the return type of function definitions.
+AlwaysBreakAfterReturnType: AllDefinitions
+
+# Always break after template declaration.
+AlwaysBreakTemplateDeclarations: Yes
+
+# If false, a function declaration’s or function definition’s parameters
+# will either all be on the same line or will have one line each.
+BinPackArguments: true
+BinPackParameters: false
+
+# The break should always be after the binary and ternary operands.
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+
+# Break constructor initializers before the colon and after the commas.
+# Constructor()
+#     : initializer1(),
+#       initializer2()
+BreakConstructorInitializers: AfterColon
+
+# Pad the braced list with spaces inside the braces.
+Cpp11BracedListStyle: true
+
+# Where to put the & and the * in the case of pointers/references.
+DerivePointerAlignment: false
+PointerAlignment: Left
+
+# Keep empty lines at end of file.
+KeepEmptyLinesAtEOF: false
+
+# Keep empty lines at start of a block.
+KeepEmptyLinesAtTheStartOfBlocks: true
+
+# Align lambda body relative to the lambda signature.
+LambdaBodyIndentation: Signature
+
+# No indent in namespaces.
+NamespaceIndentation: None
+
+# No way to specify C vs C++ style comment for namespace closure, so just
+# leave them alone.
+FixNamespaceComments: true
+
+# 1 space before trailing comments
+SpacesBeforeTrailingComments: 1
+
+# Colon spacing should always be '"key" : "value"'
+BitFieldColonSpacing: Both
+
+# Do not break up strings into multi-line strings. This becomes a problem when
+# multi-line strings with no spaces are broken.
+BreakStringLiterals: true
+
+# C-tor should always break before the : and again before the {} in cases where
+# otherwise the c-tor could theoretically be one-lined. In the case where the
+# initializer list is short enough to fit on one line after the wrap, do not break
+# into individual lines.
+# Note NextLineOnly requires clang-format >= 15
+PackConstructorInitializers: NextLineOnly
+
+# includes are sorted based on the other suboptions below
+SortIncludes:    true
+# Merge multiple #include blocks together and sort as one. Then split into groups based on
+# category priority.
+IncludeBlocks: Regroup
+# Regular expressions denoting the different #include categories used for ordering #includes.
+IncludeCategories:
+  - Regex:      'debug.h'
+    Priority:   4
+  - Regex:      '\"\./[^/]+\"'
+    Priority:   1
+  - Regex:      '\"[^/]+\"'
+    Priority:   8
+  - Regex:	'boost'
+    Priority:   5
+  - Regex:      '<.*\.h'
+    Priority:   2
+  - Regex:      '<'
+    Priority:   3
+  - Regex:      '.*'
+    Priority:   6
+
+# use "template <>" instead of "template<>"
+SpaceAfterTemplateKeyword: true
+
+# Always pad assignments with a space, like "variable = 2;".
+SpaceBeforeAssignmentOperators: true
+
+# Turn off comment reflow entirely
+# TODO: This was done to prevent undoing good formatting of doxygen @brief @param
+#       etc multi-line comments (similar to this comment). Investigate comment
+#       pragmas to leave these alone?
+ReflowComments: false
+
+# There should always be an empty line between method definiton blocks.
+SeparateDefinitionBlocks: Always
+
+# The penalty for each line break introduced inside a comment.
+PenaltyBreakComment: 0
+
+# How many spaces are allowed at the start of a line comment. To disable the maximum
+# set it to -1, apart from that the maximum takes precedence over the minimum
+SpacesInLineCommentPrefix:
+  Minimum: 1
+  Maximum: -1
+
+---
+
+Language: Proto
+
+# Google style is a good starting point;
+BasedOnStyle: Google
+IndentWidth: 2
+
+# The intended impact here is to allow up to 96 characters, but break at 80 if
+# 96 is exceeded.  The "Penalty" concept in clang-format is not well
+# documented, see here for more: https://stackoverflow.com/questions/26635370
+ColumnLimit: 80
+PenaltyExcessCharacter: 50
+
+# Turn off comment reflow entirely
+# TODO: This was done to prevent undoing user-defined formatting of multi-line
+#       comments.
+ReflowComments: false
+
+---
+Language: Json
+
+# Google style is a good starting point
+BasedOnStyle: Google
+IndentWidth: 2
+MaxEmptyLinesToKeep: 2

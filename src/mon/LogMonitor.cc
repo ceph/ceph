@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -53,6 +54,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
+#include "msg/Messenger.h"
 #include "common/Graylog.h"
 #include "common/Journald.h"
 #include "common/errno.h"
@@ -91,7 +93,6 @@ using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
 using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;

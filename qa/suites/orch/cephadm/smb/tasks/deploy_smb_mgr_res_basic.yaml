@@ -14,7 +14,7 @@ overrides:
     log-only-match:
       - CEPHADM_
 tasks:
-- cephadm.configure_samba_client_container:
+- smb.configure_samba_client_container:
     role: host.b
 - cephadm:
     single_host_defaults: true
@@ -73,7 +73,7 @@ tasks:
 - cephadm.wait_for_service:
     service: smb.modusr1
 # Check if shares exist
-- cephadm.exec:
+- template.exec:
     host.b:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"

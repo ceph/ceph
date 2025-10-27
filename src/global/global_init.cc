@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <sstream>
 #include "acconfig.h"
 #ifdef HAVE_BREAKPAD
 #include <breakpad/client/linux/handler/exception_handler.h>
@@ -36,6 +38,7 @@
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "log/Log.h"
 #include "mon/MonClient.h"
 
 #ifndef _WIN32

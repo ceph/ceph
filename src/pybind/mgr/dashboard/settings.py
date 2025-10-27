@@ -88,6 +88,7 @@ class Options(object):
     PROMETHEUS_API_SSL_VERIFY = Setting(True, [bool])
     ALERTMANAGER_API_HOST = Setting('', [str])
     ALERTMANAGER_API_SSL_VERIFY = Setting(True, [bool])
+    PROM_ALERT_CREDENTIAL_CACHE_TTL = Setting(60, [int])
 
     # iSCSI management settings
     ISCSI_API_SSL_VERIFICATION = Setting(True, [bool])

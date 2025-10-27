@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_compression.h"
 
@@ -234,14 +234,16 @@ void RGWCompressionInfo::dump(Formatter *f) const
   ::encode_json("blocks", blocks, f);
 }
 
-void RGWCompressionInfo::generate_test_instances(list<RGWCompressionInfo*>& o)
+list<RGWCompressionInfo> RGWCompressionInfo::generate_test_instances()
 {
-  RGWCompressionInfo *i = new RGWCompressionInfo;
-  i->compression_type = "type";
-  i->orig_size = 1024;
-  i->blocks.push_back(compression_block());
-  i->blocks.back().old_ofs = 0;
-  i->blocks.back().new_ofs = 0;
-  i->blocks.back().len = 1024;
-  o.push_back(i);
+  list<RGWCompressionInfo> o;
+  RGWCompressionInfo i;
+  i.compression_type = "type";
+  i.orig_size = 1024;
+  i.blocks.push_back(compression_block());
+  i.blocks.back().old_ofs = 0;
+  i.blocks.back().new_ofs = 0;
+  i.blocks.back().len = 1024;
+  o.push_back(std::move(i));
+  return o;
 }

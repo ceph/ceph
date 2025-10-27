@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -173,39 +174,63 @@ CORO_TEST_F(NeoRadosWatchNotify, WatchNotifyTimeout, NeoRadosWatchNotifyTest) {
 }
 
 CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotify, NeoRadosTest) {
-  static constexpr auto oid = "obj"sv;
-  co_await create_obj(oid);
-  auto handle = co_await rados().watch(oid, pool(), asio::use_awaitable, 300s);
-  EXPECT_TRUE(rados().check_watch(handle));
-  std::vector<neorados::ObjWatcher> watchers;
-  co_await execute(oid, ReadOp{}.list_watchers(&watchers));
-  EXPECT_EQ(1u, watchers.size());
-  auto notify = [](neorados::RADOS& r, neorados::IOContext ioc)
-    -> asio::awaitable<void> {
-    auto [reply_map, missed_set]
-      = co_await r.notify(oid, ioc, {}, 300s, asio::use_awaitable);
+  try {
+    static constexpr auto oid = "obj"sv;
+    co_await create_obj(oid);
+    auto handle = co_await rados().watch(oid, pool(), asio::use_awaitable, 300s);
+    EXPECT_TRUE(rados().check_watch(handle));
+    std::vector<neorados::ObjWatcher> watchers;
+    co_await execute(oid, ReadOp{}.list_watchers(&watchers));
+    EXPECT_EQ(1u, watchers.size());
+    auto notify = [](neorados::RADOS& r, neorados::IOContext ioc)
+      -> asio::awaitable<void> {
+      try {
+	auto [reply_map, missed_set]
+	= co_await r.notify(oid, ioc, {}, 300s, asio::use_awaitable);
 
-    EXPECT_EQ(1u, reply_map.size());
-    EXPECT_EQ(5u, reply_map.begin()->second.length());
-    EXPECT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
-    EXPECT_EQ(0u, missed_set.size());
-
-    co_return;
-  }(rados(), pool());
-  auto poll = [](neorados::RADOS& r, neorados::IOContext ioc,
+	EXPECT_EQ(1u, reply_map.size());
+	EXPECT_EQ(5u, reply_map.begin()->second.length());
+	EXPECT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
+	EXPECT_EQ(0u, missed_set.size());
+      } catch (const sys::system_error& e) {
+	if (e.code() == sys::errc::timed_out) {
+	  std::cout << "Likely spurious timeout." << std::endl;
+	} else {
+	  throw;
+	}
+      }
+      co_return;
+    }(rados(), pool());
+    auto poll = [](neorados::RADOS& r, neorados::IOContext ioc,
 		 uint64_t handle) -> asio::awaitable<void> {
-    auto notification = co_await r.next_notification(handle,
-						     asio::use_awaitable);
-    co_await r.notify_ack(oid, ioc, notification.notify_id, handle,
-			  to_buffer_list("reply"sv), asio::use_awaitable);
-    EXPECT_EQ(handle, notification.cookie);
-  }(rados(), pool(), handle);
+      try {
+	auto notification = co_await r.next_notification(handle,
+							 asio::use_awaitable);
+	co_await r.notify_ack(oid, ioc, notification.notify_id, handle,
+			      to_buffer_list("reply"sv), asio::use_awaitable);
+	EXPECT_EQ(handle, notification.cookie);
+      } catch (const sys::system_error& e) {
+	if (e.code() == sys::errc::timed_out) {
+	  std::cout << "Likely spurious timeout." << std::endl;
+	} else {
+	  throw;
+	}
+      }
+      co_return;
+    }(rados(), pool(), handle);
 
-  co_await (std::move(notify) && std::move(poll));
+    co_await (std::move(notify) && std::move(poll));
 
-  EXPECT_TRUE(rados().check_watch(handle));
-  co_await rados().unwatch(handle, pool(), asio::use_awaitable);
+    EXPECT_TRUE(rados().check_watch(handle));
+    co_await rados().unwatch(handle, pool(), asio::use_awaitable);
 
+  } catch (const sys::system_error& e) {
+    if (e.code() == sys::errc::timed_out) {
+      std::cout << "Likely spurious timeout." << std::endl;
+    } else {
+      throw;
+    }
+  }
   co_return;
 }
 

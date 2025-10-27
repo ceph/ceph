@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "cls/journal/cls_journal_client.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -380,7 +380,6 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
-  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -414,7 +413,6 @@ TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
 }
 
 TEST_F(TestInternal, WriteFailsToLockImageBlocklistedWatch) {
-  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::Rados blocklist_rados;
@@ -658,8 +656,7 @@ TEST_F(TestInternal, MetadataConfApply) {
 
 TEST_F(TestInternal, SnapshotCopyup)
 {
-  //https://tracker.ceph.com/issues/58263
-  // Clone overlap is WIP
+  // https://tracker.ceph.com/issues/72727
   SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 

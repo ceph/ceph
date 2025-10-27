@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <fmt/format.h>
 
@@ -55,15 +55,12 @@ void RecoveryBackend::clean_up(ceph::os::Transaction& t,
   replica_push_targets.clear();
 
   for (auto& [soid, recovery_waiter] : recovering) {
-    if ((recovery_waiter->pull_info
-         && recovery_waiter->pull_info->is_complete())
-	|| (!recovery_waiter->pull_info
-	  && recovery_waiter->obc && recovery_waiter->obc->obs.exists)) {
+    if (recovery_waiter->obc) {
       recovery_waiter->obc->interrupt(
 	  ::crimson::common::actingset_changed(
 	      pg.is_primary()));
-      recovery_waiter->interrupt(why);
     }
+    recovery_waiter->interrupt(why);
   }
   recovering.clear();
 }
@@ -270,8 +267,9 @@ RecoveryBackend::scan_for_backfill_primary(
 	bool added_default = false;
 	for (auto & shard: backfill_targets) {
 	  if (shard_versions.contains(shard.shard)) {
-	    version = shard_versions.at(shard.shard);
-	    version_map->emplace(object, std::make_pair(shard.shard, version));
+	    auto shard_version = shard_versions.at(shard.shard);
+	    version_map->emplace(object, std::make_pair(shard.shard,
+							shard_version));
 	  } else if (!added_default) {
 	    version_map->emplace(object, std::make_pair(shard_id_t::NO_SHARD,
 							version));

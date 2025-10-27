@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, NgZone, OnInit, ViewChild } from '@angular/core';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -23,8 +23,10 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Permission } from '~/app/shared/models/permissions';
 import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 import { Router } from '@angular/router';
+import { Observable, Subscriber } from 'rxjs';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 
-const BASE_URL = 'rgw/tiering';
+const BASE_URL = 'rgw/storage-class';
 @Component({
   selector: 'cd-rgw-storage-class-list',
   templateUrl: './rgw-storage-class-list.component.html',
@@ -32,6 +34,8 @@ const BASE_URL = 'rgw/tiering';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwStorageClassListComponent extends ListWithDetails implements OnInit {
+  @ViewChild('table', { static: true })
+  table: TableComponent;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   permission: Permission;
@@ -46,7 +50,8 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     private authStorageService: AuthStorageService,
     private rgwStorageClassService: RgwStorageClassService,
     private router: Router,
-    private urlBuilder: URLBuilderService
+    private urlBuilder: URLBuilderService,
+    protected ngZone: NgZone
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().rgw;
@@ -60,7 +65,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         isHidden: true
       },
       {
-        name: $localize`Storage Class`,
+        name: $localize`Name`,
         prop: 'storage_class',
         flexGrow: 2
       },
@@ -75,11 +80,6 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       },
       {
-        name: $localize`Placement Target`,
-        prop: 'placement_target',
-        flexGrow: 2
-      },
-      {
         name: $localize`Target Region`,
         prop: 'region',
         flexGrow: 2
@@ -90,11 +90,16 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         flexGrow: 2
       }
     ];
-    const getStorageUri = () =>
-      this.selection.first() &&
-      `${encodeURI(this.selection.first().zonegroup_name)}/${encodeURI(
-        this.selection.first().placement_target
-      )}/${encodeURI(this.selection.first().storage_class)}`;
+    const getStorageUri = () => {
+      const selection = this.selection.first();
+      if (!selection) return '';
+
+      let url = `${encodeURIComponent(selection.zonegroup_name)}/${encodeURIComponent(
+        selection.placement_target
+      )}/${encodeURIComponent(selection.storage_class)}`;
+
+      return url;
+    };
     this.tableActions = [
       {
         name: this.actionLabels.CREATE,
@@ -107,7 +112,7 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        routerLink: () => [`/rgw/tiering/edit/${getStorageUri()}`]
+        routerLink: () => [`/${BASE_URL}/edit/${getStorageUri()}`]
       },
       {
         name: this.actionLabels.REMOVE,
@@ -116,9 +121,11 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
         click: () => this.removeStorageClassModal()
       }
     ];
+    this.setTableRefreshTimeout();
   }
 
   loadStorageClass(): Promise<void> {
+    this.setTableRefreshTimeout();
     return new Promise((resolve, reject) => {
       this.rgwZonegroupService.getAllZonegroupsInfo().subscribe(
         (data: ZoneGroupDetails) => {
@@ -167,25 +174,34 @@ export class RgwStorageClassListComponent extends ListWithDetails implements OnI
     const storage_class = this.selection.first().storage_class;
     const placement_target = this.selection.first().placement_target;
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Tiering Storage Class`,
+      itemDescription: $localize`Storage class`,
       itemNames: [storage_class],
       actionDescription: 'remove',
-      submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rgw/zonegroup/storage-class', {
-            placement_target: placement_target,
-            storage_class: storage_class
-          }),
-          call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
-        })
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('rgw/zonegroup/storage-class', {
+                placement_target: placement_target,
+                storage_class: storage_class
+              }),
+              call: this.rgwStorageClassService.removeStorageClass(placement_target, storage_class)
+            })
+            .subscribe({
+              error: (error: any) => {
+                observer.error(error);
+              },
+              complete: () => {
+                observer.complete();
+                this.table.refreshBtn();
+              }
+            });
+        });
+      }
     });
   }
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
-  }
-
-  setExpandedRow(expandedRow: any) {
-    super.setExpandedRow(expandedRow);
   }
 }

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
@@ -664,7 +664,7 @@ void logback_generations::operator ()(sys::error_code ec,
 				      bufferlist&& bl) {
   co_spawn(rados.get_executor(),
 	   handle_notify(ec, notify_id, cookie, notifier_id, std::move(bl)),
-	   asio::detached);
+	   async::use_blocked);
 }
 
 asio::awaitable<void>

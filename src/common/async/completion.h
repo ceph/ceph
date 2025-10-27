@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -246,8 +247,17 @@ class CompletionImpl final : public Completion<void(Args...), T> {
                                            std::forward<TArgs>(args)...)};
   }
 
-  static void operator delete(void *p) {
-    static_cast<CompletionImpl*>(p)->destroy();
+  // C++20 destroying delete.
+  // When this overload is selected by `delete ptr`, the compiler does NOT call
+  // ~CompletionImpl(). We must do the full teardown here. We route through
+  // destroy() so that:
+  //  - the completion’s custom lifecycle (defer/dispatch/post) is honored,
+  //  - the object’s destructor is invoked, and
+  //  - deallocation is performed using the matching allocator (RebindAlloc2).
+  // Keep this function noexcept; destroy() is responsible for both destruction
+  // and allocator-aware deallocation.
+  static void operator delete(CompletionImpl* ptr, std::destroying_delete_t) noexcept {
+    ptr->destroy();
   }
 };
 
