@@ -155,17 +155,16 @@ RGWBILogUpdateBatch::RGWBILogUpdateBatch(const DoutPrefixProvider *dpp,
                                           neorados::RADOS r,
                                           neorados::IOContext loc, 
                                           const RGWBucketInfo& bucket_info,
-                                          size_t max_batch_size,
-                                          bool auto_flush)
+                                          size_t max_batch_size, /* should be configurable. set to 1 for now*/ )
   : dpp(dpp), bilog_fifo(std::move(r), std::move(loc), bucket_info),
-    max_batch_size(max_batch_size), auto_flush(auto_flush) {
+    max_batch_size(max_batch_size) {
   entries.reserve(max_batch_size);
 }
 
 void RGWBILogUpdateBatch::add_entry(const rgw_bi_log_entry& entry) {
   entries.push_back(entry);
   
-  if (auto_flush && entries.size() >= max_batch_size) {
+  if (entries.size() >= max_batch_size) {
     flush();
   }
 }
@@ -299,10 +298,6 @@ size_t RGWBILogUpdateBatch::size() const {
 
 bool RGWBILogUpdateBatch::empty() const {
   return entries.empty();
-}
-
-void RGWBILogUpdateBatch::set_auto_flush(bool enable) {
-  auto_flush = enable;
 }
 
 void RGWBILogUpdateBatch::set_max_batch_size(size_t size) {

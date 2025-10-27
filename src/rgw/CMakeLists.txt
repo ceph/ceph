@@ -181,6 +181,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/group.cc
           driver/rados/groups.cc
           driver/rados/rgw_bucket.cc
+          driver/rados/rgw_bilog.cc
           driver/rados/rgw_cr_rados.cc
           driver/rados/rgw_cr_tools.cc
           driver/rados/rgw_d3n_datacache.cc

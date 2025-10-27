@@ -76,15 +76,13 @@ class RGWBILogUpdateBatch {
   RGWBILogFIFO bilog_fifo;
   std::vector<rgw_bi_log_entry> entries;
   size_t max_batch_size;
-  bool auto_flush;
 
 public:
   RGWBILogUpdateBatch(const DoutPrefixProvider *dpp, 
                       neorados::RADOS r,
                       neorados::IOContext loc, 
                       const RGWBucketInfo& bucket_info,
-                      size_t max_batch_size = 1,
-                      bool auto_flush = true);
+                      size_t max_batch_size = 1);
 
   void add_entry(const rgw_bi_log_entry& entry);
 
@@ -114,8 +112,6 @@ public:
   size_t size() const;
 
   bool empty() const;
-
-  void set_auto_flush(bool enable);
 
   void set_max_batch_size(size_t size);
 
