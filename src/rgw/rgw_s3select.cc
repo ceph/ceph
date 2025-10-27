@@ -285,6 +285,7 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
   m_start_scan_sz(0),
   m_end_scan_sz(0),
   m_object_size_for_processing(0),
+  enable_progress(false),
   m_parquet_type(false),
   m_json_type(false),
   chunk_number(0),
@@ -388,7 +389,7 @@ int RGWSelectObj_ObjStore_S3::get_params(optional_yield y)
 int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char* input, size_t input_length)
 {
   int status = 0;
-  uint32_t length_before_processing, length_post_processing;
+  uint32_t length_before_processing = 0, length_post_processing = 0;
   csv_object::csv_defintions csv;
 
   s3select_syntax.parse_query(query);
