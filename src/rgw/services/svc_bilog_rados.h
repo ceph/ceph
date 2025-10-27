@@ -151,8 +151,8 @@ class RGWSI_BILog_RADOS_FIFO : public RGWSI_BILog_RADOS
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
-  // helper method to create FIFO wrapprt
-  std::unique_ptr<RGWBILogFIFO> create_bilog_fifo(const DoutPrefixProvider *dpp, 
+  // helper method to create FIFO wrapper
+  std::unique_ptr<RGWBILogFIFO> get_or_create_fifo(const DoutPrefixProvider *dpp, 
                                                    const RGWBucketInfo& bucket_info) const;
 
 public:
@@ -242,7 +242,7 @@ class RGWSI_BILog_RADOS_BackendDispatcher : public RGWSI_BILog_RADOS
 {
   RGWSI_BILog_RADOS_InIndex backend_inindex;
   RGWSI_BILog_RADOS_FIFO backend_fifo;
-  RGWSI_BILog_RADOS& get_backend(const RGWBucketInfo& bucket_info);
+  RGWSI_BILog_RADOS& get_backend(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info);
 
 public:
   RGWSI_BILog_RADOS_BackendDispatcher(CephContext* cct, neorados::RADOS rados);

@@ -31,7 +31,7 @@ RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_Bucke
 
 void RGWSI_BucketIndex_RADOS::init(RGWSI_Zone *zone_svc,
 				   librados::Rados* rados_,
-				   RGWSI_BILog_RADOS_BackendDispatcher *bilog_svc,
+				   RGWSI_BILog_RADOS *bilog_svc,
 				   RGWDataChangesLog *datalog_rados_svc)
 {
   svc.zone = zone_svc;

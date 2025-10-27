@@ -405,14 +405,13 @@ int RGWSI_BILog_RADOS_InIndex::log_get_max_marker(const DoutPrefixProvider *dpp,
 }
 
 // FIFO interface
-
 void RGWSI_BILog_RADOS_FIFO::init(RGWSI_BucketIndex_RADOS *bi_rados_svc)
 {
   svc.bi = bi_rados_svc;
 }
 
 std::unique_ptr<RGWBILogFIFO>
-RGWSI_BILog_RADOS_FIFO::create_bilog_fifo(const DoutPrefixProvider *dpp,
+RGWSI_BILog_RADOS_FIFO::get_or_create_fifo(const DoutPrefixProvider *dpp,
                                           const RGWBucketInfo& bucket_info) const {
   librados::IoCtx index_pool;
   std::string bucket_oid;
@@ -475,7 +474,7 @@ RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp,
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
   co_return co_await bilog_fifo->trim(dpp, marker);
 }
 
@@ -493,7 +492,7 @@ RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp,
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
 
-  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
   co_return co_await bilog_fifo->list(dpp, marker, max_entries);
 }
 
@@ -507,7 +506,7 @@ RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
   }
   ceph_assert(shard_id == 0 || shard_id == -1);
   
-  auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+  auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
   co_return co_await bilog_fifo->get_max_marker(dpp);
 }
 
@@ -547,7 +546,7 @@ int RGWSI_BILog_RADOS_FIFO::log_trim(const DoutPrefixProvider *dpp, optional_yie
   ceph_assert(shard_id == 0 || shard_id == -1);
 
   try {
-    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
     
     if (y) {
       bilog_fifo->trim(dpp, marker, y.get_yield_context());
@@ -583,7 +582,7 @@ int RGWSI_BILog_RADOS_FIFO::log_list(const DoutPrefixProvider *dpp, optional_yie
   ceph_assert(shard_id == 0 || shard_id == -1);
 
   try {
-    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
     
     std::vector<rgw_bi_log_entry> entries;
     std::string out_marker;
@@ -633,7 +632,7 @@ int RGWSI_BILog_RADOS_FIFO::log_get_max_marker(const DoutPrefixProvider *dpp,
   ceph_assert(shard_id == 0 || shard_id == -1);
   
   try {
-    auto bilog_fifo = create_bilog_fifo(dpp, bucket_info);
+    auto bilog_fifo = get_or_create_fifo(dpp, bucket_info);
     
     std::string marker;
     if (y) {
@@ -678,13 +677,13 @@ void RGWSI_BILog_RADOS_BackendDispatcher::init(RGWSI_BucketIndex_RADOS *bi_rados
   backend_fifo.init(bi_rados_svc);
 }
 
-RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
+RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(const DoutPrefixProvider *dpp,
   const RGWBucketInfo& bucket_info)
 {
   // check if bucket has new FIFO-based log layout
   if (!bucket_info.layout.logs.empty() && 
       bucket_info.layout.logs.back().layout.type == rgw::BucketLogType::FIFO) {
-    ldpp_dout(this, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using FIFO backend for bucket " 
+    ldpp_dout(dpp, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using FIFO backend for bucket " 
                         << bucket_info.bucket << dendl;
     return backend_fifo;
   } 
@@ -693,7 +692,7 @@ RGWSI_BILog_RADOS& RGWSI_BILog_RADOS_BackendDispatcher::get_backend(
   // - buckets with no layout (old buckets)
   // - buckets with InIndex layout
   // - any other cases
-  ldpp_dout(this, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using InIndex backend for bucket " 
+  ldpp_dout(dpp, 20) << "RGWSI_BILog_RADOS_BackendDispatcher: Using InIndex backend for bucket " 
                       << bucket_info.bucket << dendl;
   return backend_inindex;
 }
@@ -703,7 +702,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_start(const DoutPrefixProvider *dpp
                                                    const RGWBucketInfo& bucket_info,
                                                    const rgw::bucket_log_layout_generation& log_layout,
                                                    int shard_id) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_start(dpp, y, bucket_info, log_layout, shard_id);
 }
 
@@ -711,7 +710,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_stop(const DoutPrefixProvider *dpp,
                                                   const RGWBucketInfo& bucket_info,
                                                   const rgw::bucket_log_layout_generation& log_layout,
                                                   int shard_id) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_stop(dpp, y, bucket_info, log_layout, shard_id);
 }
 
@@ -720,7 +719,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_trim(const DoutPrefixProvider *dpp,
                                                   const rgw::bucket_log_layout_generation& log_layout,
                                                   int shard_id,
                                                   std::string_view marker) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_trim(dpp, y, bucket_info, log_layout, shard_id, marker);
 }
 
@@ -732,7 +731,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_list(const DoutPrefixProvider *dpp,
                                                   uint32_t max,
                                                   std::list<rgw_bi_log_entry>& result,
                                                   bool *truncated) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_list(dpp, y, bucket_info, log_layout, shard_id, marker, max, result, truncated);
 }
 
@@ -742,7 +741,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_get_max_marker(const DoutPrefixProv
                                                            const int shard_id,
                                                            std::string *max_marker,
                                                            optional_yield y) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_get_max_marker(dpp, bucket_info, headers, shard_id, max_marker, y);
 }
 
@@ -752,7 +751,7 @@ int RGWSI_BILog_RADOS_BackendDispatcher::log_get_max_marker(const DoutPrefixProv
                                                            const int shard_id,
                                                            std::map<int, std::string> *max_markers,
                                                            optional_yield y) {
-  auto& backend = get_backend(bucket_info);
+  auto& backend = get_backend(dpp, bucket_info);
   return backend.log_get_max_marker(dpp, bucket_info, headers, shard_id, max_markers, y);
 }
 
