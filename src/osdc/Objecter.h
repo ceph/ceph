@@ -674,6 +674,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodevals {
     uint64_t max_entries;
     Vals* pattrs;
+    Vals ignore;
     bool* ptruncated;
     int* prval;
     boost::system::error_code* pec;
@@ -692,7 +693,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Vals ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -719,6 +719,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodekeys {
     uint64_t max_entries;
     Keys* pattrs;
+    Keys ignore;
     bool *ptruncated;
     int *prval;
     boost::system::error_code* pec;
@@ -737,7 +738,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Keys ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
