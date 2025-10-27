@@ -65,7 +65,7 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-std::optional<fs::path> RedisDriver::resolve_valkey_data_dir(const DoutPrefixProvider* dpp) const
+std::optional<fs::path> RedisDriver::resolve_valkey_data_dir(const DoutPrefixProvider* dpp, optional_yield y) const
 {
   try {
     boost::system::error_code ec;
@@ -73,7 +73,7 @@ std::optional<fs::path> RedisDriver::resolve_valkey_data_dir(const DoutPrefixPro
     request req;
     req.push("CONFIG", "GET", "dir");
 
-    redis_exec(conn, ec, req, resp, null_yield);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec) {
       ldpp_dout(dpp, 5) << "RedisDriver::" << __func__
@@ -109,9 +109,9 @@ std::optional<fs::path> RedisDriver::resolve_valkey_data_dir(const DoutPrefixPro
   return std::nullopt;
 }
 
-uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp)
+uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  auto data_dir = resolve_valkey_data_dir(dpp);
+  auto data_dir = resolve_valkey_data_dir(dpp, y);
   if (!data_dir) {
     ldpp_dout(dpp, 0) << __func__ << "(): ERROR: could not resolve redis data dir" << dendl;
     return 0;

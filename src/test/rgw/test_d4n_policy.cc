@@ -32,7 +32,7 @@ class Environment : public ::testing::Environment {
 			      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
       cct = _cct.get();
-      dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
+      dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Policy Test: ");
       common_init_finish(g_ceph_context);
       
       redisHost = cct->_conf->rgw_d4n_address; 
@@ -243,10 +243,8 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     policyDriver->get_cache_policy()->update(env->dpp, victimHeadObj, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     /* Remote block */
-    block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
-    block->cacheObj.hostsList.clear();  
+    block->size = bl.length(); //cacheDriver->get_free_space(env->dpp, optional_yield{yield}) + 1; /* To trigger eviction */
     block->cacheObj.hostsList.clear();
-    block->cacheObj.hostsList.insert("127.0.0.1:6000");
     block->cacheObj.hostsList.insert("127.0.0.1:6000");
 
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
