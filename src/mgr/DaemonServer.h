@@ -125,6 +125,22 @@ struct offline_pg_report {
   }
 };
 
+struct upgrade_osd_report {
+  std::vector<int> osds;
+  std::vector<int> ok_upgrade, ok_upgraded, bad_no_version;
+
+  bool ok_to_upgrade() const {
+    return !ok_upgrade.empty() && bad_no_version.empty();
+  }
+
+  bool all_osds_upgraded() const {
+    return ((osds.size() == ok_upgraded.size()) &&
+            ok_upgrade.empty() && bad_no_version.empty());
+  }
+
+  void dump(Formatter *f) const;
+};
+
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
@@ -193,6 +209,31 @@ private:
     const OSDMap& osdmap,
     const PGMap& pgmap,
     offline_pg_report *report);
+  void _maximize_ok_to_upgrade_set(
+    const std::vector<int>& orig_osds,
+    unsigned max,
+    const OSDMap& osdmap,
+    const PGMap& pgmap,
+    std::string_view ceph_version_new,
+    upgrade_osd_report *osd_report,
+    offline_pg_report *pg_report,
+    std::ostream *ss);
+  std::optional<std::string> get_osd_metadata(
+    const std::string& name,
+    const std::string& osd_id);
+  void _update_upgraded_osds(
+    const std::vector<int>& orig_osds,
+    const std::vector<int>& to_upgrade,
+    const std::vector<int>& upgraded,
+    const std::vector<int>& version_unknown,
+    upgrade_osd_report *osd_report);
+  bool _valid_bucket_type_for_upgrade_check(
+    std::string_view bucket_type_str);
+  int _populate_crush_bucket_osds(
+    const int item_id,
+    const OSDMap& osdmap,
+    std::vector<int>& crush_bucket_osds,
+    std::ostream *ss = nullptr);
 
   utime_t started_at;
   std::atomic<bool> pgmap_ready;
