@@ -128,7 +128,7 @@ TEST_F(TestMockMirrorSnapshotImageMeta, Save) {
                       "{\"resync_requested\": true}", 0);
 
   MockImageMeta mock_image_meta(&mock_image_ctx, "mirror uuid");
-  mock_image_meta.resync_requested = true;
+  mock_image_meta.set_resync_requested(true);
 
   C_SaferCond ctx;
   mock_image_meta.save(&ctx);
