@@ -161,6 +161,14 @@ COMMAND("osd ok-to-stop name=ids,type=CephString,n=N "\
 	"name=max,type=CephInt,req=false",
 	"check whether osd(s) can be safely stopped without reducing immediate"\
 	" data availability", "osd", "r")
+COMMAND("osd ok-to-upgrade " \
+        "name=crush_bucket,type=CephString " \
+        "name=ceph_version,type=CephString " \
+        "name=max,type=CephInt,req=false",
+        "determine a safe number of osd(s) subject to a maximum(if specified)" \
+        " within the provided CRUSH bucket that can be safely" \
+        " upgraded without reducing immediate data availability",
+        "osd", "r")
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
