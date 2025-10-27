@@ -4154,6 +4154,22 @@ options:
   see_also:
   - bdev_enable_discard
   - bdev_async_discard_max_pending
+- name: bdev_async_discard
+  long_desc: When set this works like an alias for 'bdev_async_discard_threads = 1"
+    mode to avoid implicit async discard mode disablement after upgrade.
+    Ignored if 'dev_asunc_discard_threads' is greater than zero.
+    This parameter is DEPRECATED and provided for backward compatibility for
+    Squid minor releases only.
+    PLEASE SWITCH TO 'bdev_async_discard_threads' USE.
+  type: bool
+  level: advanced
+  default: false
+  with_legacy: false
+  flags:
+  - runtime
+  see_also:
+  - bdev_enable_discard
+  - bdev_async_discard_threads
 - name: bdev_async_discard_max_pending
   desc: maximum number of pending discards
   long_desc: The maximum number of pending async discards that can be queued and not claimed by an
