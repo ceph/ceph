@@ -344,11 +344,16 @@ int process_request(const RGWProcessEnv& penv,
           "WARNING: failed to execute pre request script. "
           "error: " << rc << dendl;
       } else {
-        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, script);
+        int script_return_code = 0;
+        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, script, script_return_code);
         if (rc < 0) {
           ldpp_dout(op, 5) <<
             "WARNING: failed to execute pre request script. "
             "error: " << rc << dendl;
+        }
+        if (script_return_code == -EPERM) {
+          abort_early(s, op, script_return_code, handler, yield);
+          goto done;
         }
       }
     }
