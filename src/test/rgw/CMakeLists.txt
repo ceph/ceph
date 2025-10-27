@@ -400,6 +400,20 @@ target_link_libraries(ceph_test_datalog
 install(TARGETS ceph_test_datalog DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
+if(WITH_RADOSGW_RADOS)
+# ceph_test_bilog 
+add_executable(ceph_test_bilog test_bilog.cc)
+target_include_directories(ceph_test_bilog
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/services")
+target_link_libraries(ceph_test_bilog
+  libneorados
+  neoradostest-support  
+  ${UNITTEST_LIBS}
+  ${rgw_libs})
+install(TARGETS ceph_test_bilog DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
 #
 # Helper for adding RGW tests built with Catch2:
 # Note: to define a test that does not use Catch2::main(), use:
