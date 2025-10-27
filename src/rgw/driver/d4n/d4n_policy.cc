@@ -277,8 +277,9 @@ bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const s
 }
 
 CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optional_yield y) {
-  if (entries_heap.empty())
+  if (entries_heap.empty()) {
     return nullptr;
+  }
 
   /* Get victim cache block */
   LFUDAEntry* entry = entries_heap.top();
@@ -321,7 +322,7 @@ int LFUDAPolicy::exist_key(const std::string& key) {
 
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
   int ret = -1;
-  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp, y);
 
   while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop?
     std::unique_lock<std::mutex> l(lfuda_lock);
@@ -396,7 +397,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     if (perfcounter) {
       perfcounter->inc(l_rgw_d4n_cache_evictions);
     }
-    freeSpace = cacheDriver->get_free_space(dpp);
+    freeSpace = cacheDriver->get_free_space(dpp, y);
   }
   
   return 0;
@@ -994,7 +995,7 @@ int LRUPolicy::exist_key(const std::string& key)
 int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y)
 {
   const std::lock_guard l(lru_lock);
-  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp, y);
 
   while (freeSpace < size) {
     auto p = entries_lru_list.front();
@@ -1006,7 +1007,7 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
       return ret;
     }
 
-    freeSpace = cacheDriver->get_free_space(dpp);
+    freeSpace = cacheDriver->get_free_space(dpp, y);
   }
 
   return 0;

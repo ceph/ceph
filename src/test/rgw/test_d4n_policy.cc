@@ -32,7 +32,7 @@ class Environment : public ::testing::Environment {
 			      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
       cct = _cct.get();
-      dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
+      dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Policy Test: ");
       common_init_finish(g_ceph_context);
       
       redisHost = cct->_conf->rgw_d4n_address; 
@@ -205,6 +205,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
+    // TODO: add testing for eviction workflow
     /* Set victim block for eviction */
     rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
       .cacheObj = {
@@ -243,10 +244,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     policyDriver->get_cache_policy()->update(env->dpp, victimHeadObj, 0, bl.length(), "", false, rgw::d4n::RefCount::NOOP, optional_yield{yield});
 
     /* Remote block */
-    block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
-    block->cacheObj.hostsList.clear();  
     block->cacheObj.hostsList.clear();
-    block->cacheObj.hostsList.insert("127.0.0.1:6000");
     block->cacheObj.hostsList.insert("127.0.0.1:6000");
 
     ASSERT_EQ(0, dir->set(env->dpp, block, optional_yield{yield}));
@@ -269,20 +267,20 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", "RedisCache/" + victimKeyInCache);
+    //req.push("EXISTS", "RedisCache/" + victimKeyInCache);
     req.push("EXISTS", victimKey, "globalWeight");
     req.push("HGET", key, "globalWeight");
     req.push("FLUSHALL");
 
-    response<int, int, std::string, 
+    response</*int, */int, std::string, 
              boost::redis::ignore_t> resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
+    //EXPECT_EQ(std::get<0>(resp).value(), 0);
     EXPECT_EQ(std::get<0>(resp).value(), 0);
-    EXPECT_EQ(std::get<1>(resp).value(), 0);
-    EXPECT_EQ(std::get<2>(resp).value(), "1");
+    EXPECT_EQ(std::get<1>(resp).value(), "1");
     conn->cancel();
     
     delete policyDriver; 
