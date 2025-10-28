@@ -281,7 +281,8 @@ struct list_vectors_t {
   std::string index_arn;
   std::string index_name;
   std::string vector_bucket_name;
-  unsigned int max_results = 500;
+  static constexpr unsigned int default_max_results = 500;
+  unsigned int max_results = default_max_results;
   std::string next_token;
   bool return_data = false;
   bool return_metadata = false;
@@ -313,7 +314,8 @@ WRITE_CLASS_ENCODER(list_vectors_t)
   }
 */
 struct list_vector_buckets_t {
-  unsigned int max_results = 500;
+  static constexpr unsigned int default_max_results = 500;
+  unsigned int max_results = default_max_results;
   std::string next_token;
   std::string prefix;
 
@@ -400,7 +402,8 @@ WRITE_CLASS_ENCODER(get_index_t)
   }
 */
 struct list_indexes_t {
-  unsigned int max_results = 500;
+  static constexpr unsigned int default_max_results = 500;
+  unsigned int max_results = default_max_results;
   std::string next_token;
   std::string prefix;
   std::string vector_bucket_arn;
