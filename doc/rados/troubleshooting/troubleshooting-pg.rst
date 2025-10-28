@@ -736,11 +736,16 @@ cluster and that they operate only on local files:
 
 Here, ``--num-rep`` is the number of OSDs that the erasure code CRUSH rule
 needs, ``--rule`` is the value of the ``rule_id`` field that was displayed by
-``ceph osd crush rule dump``. This test will attempt to map one million values
-(in this example, the range defined by ``[--min-x,--max-x]``) and must display
-at least one bad mapping. If this test outputs nothing, all mappings have been
-successful and you can be assured that the problem with your cluster is not
-caused by bad mappings.
+``ceph osd crush rule dump``. This test will simulate a number of PG placements
+based on the CRUSH map. The exact count is based on ``[--min-x,--max-x]``. PG
+placements are independent of each other, based only on the hash and bucket
+algorithms. Any placement may fail on its own. If this test outputs nothing
+then all mappings have been successful, indicating an issue other than CRUSH
+mappings. If it does output bad mappings, as shown above, Ceph is unable to
+consistently place PGs in the current topology. As long as not all mappings are
+considered bad, the CRUSH rule can be configured to search longer for a viable
+placement.
+
 
 Changing the value of set_choose_tries
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -752,19 +757,91 @@ Changing the value of set_choose_tries
 
       crushtool --decompile crush.map > crush.txt
 
+   For illustrative purposes a simplified CRUSH map will be used in this
+   example, simulating a single host with four disks of sizes 3×1TiB and
+   1×200GiB.  The settings below are chosen specifically for this example and
+   will diverge from the :ref:`CRUSH Map Tunables <crush-map-tunables>`
+   generally found in production clusters. As defaults may change, please refer
+   to the correct version of the documentation for your release of Ceph.
+
+_
+
+   ::
+
+      tunable choose_local_tries 0
+      tunable choose_local_fallback_tries 0
+      # artificially low total tries, for illustration
+      tunable choose_total_tries 10
+      tunable chooseleaf_descend_once 1
+      tunable chooseleaf_vary_r 1
+      tunable chooseleaf_stable 1
+      tunable straw_calc_version 1
+      tunable allowed_bucket_algs 54
+
+      # devices
+      device 0 osd.0
+      device 1 osd.1
+      device 2 osd.2
+      device 3 osd.3
+
+      # types
+      type 0 osd
+      type 1 host
+      type 2 chassis
+      type 3 rack
+      type 4 row
+      type 5 pdu
+      type 6 pod
+      type 7 room
+      type 8 datacenter
+      type 9 zone
+      type 10 region
+      type 11 root
+
+      # buckets
+      host example {
+              id -2
+              alg straw2
+              hash 0  # rjenkins1
+              item osd.0 weight 1.00000
+              item osd.1 weight 1.00000
+              item osd.2 weight 1.00000
+              item osd.3 weight 0.20000
+      }
+      root default {
+              id -1
+              alg straw2
+              hash 0  # rjenkins1
+              item example weight 3.20000
+      }
+
+      # rules
+      rule ec {
+              id 0
+              type erasure
+              step set_chooseleaf_tries 5
+              # artificially low tries, for illustration
+              step set_choose_tries 5
+              step take default
+              step choose indep 0 type osd
+              step emit
+      }
+
 #. Add the following line to the rule::
 
       step set_choose_tries 100
 
-   The relevant part of the ``crush.txt`` file will resemble this::
+   If the line does exist already, as in this example, only modify the value.
+   Ensure that the rule in this ``crush.txt`` does resemble this after the
+   change::
 
-      rule erasurepool {
-              id 1
+      rule ec {
+              id 0
               type erasure
               step set_chooseleaf_tries 5
               step set_choose_tries 100
               step take default
-              step chooseleaf indep 0 type host
+              step choose indep 0 type osd
               step emit
       }
 
@@ -783,59 +860,52 @@ Changing the value of set_choose_tries
 
       crushtool -i better-crush.map --test --show-bad-mappings \
        --show-choose-tries \
-       --rule 1 \
-       --num-rep 9 \
-       --min-x 1 --max-x $((1024 * 1024))
-    ...
-    11:        42
-    12:        44
-    13:        54
-    14:        45
-    15:        35
-    16:        34
-    17:        30
-    18:        25
-    19:        19
-    20:        22
-    21:        20
-    22:        17
-    23:        13
-    24:        16
-    25:        13
-    26:        11
-    27:        11
-    28:        13
-    29:        11
-    30:        10
-    31:         6
-    32:         5
-    33:        10
-    34:         3
-    35:         7
-    36:         5
-    37:         2
-    38:         5
-    39:         5
-    40:         2
-    41:         5
-    42:         4
-    43:         1
-    44:         2
-    45:         2
-    46:         3
-    47:         1
-    48:         0
-    ...
-    102:         0
-    103:         1
-    104:         0
-    ...
+       --rule 0 \
+       --num-rep 3 \
+       --min-x 1 --max-x 10
+   ::
 
-   This output indicates that it took eleven tries to map forty-two PGs, twelve
-   tries to map forty-four PGs etc. The highest number of tries is the minimum
-   value of ``set_choose_tries`` that prevents bad mappings (for example,
-   ``103`` in the above output, because it did not take more than 103 tries for
-   any PG to be mapped).
+     0:         0
+     1:         0
+     2:         4
+     3:         3
+     4:         1
+     5:         1
+     6:         1
+     7:         0
+     8:         0
+     9:         0
+
+.. note:: The total number of lines displayed equals the ``choose_total_tries``
+   value of the CRUSH map. However the calculation done by ``crushtool`` will
+   not be affected by the setting, only the output will be truncated. The
+   ``--set-choose-total-tries`` flag can to be used to modify the value without
+   modifying the CRUSH map.
+
+The output is a histogram of the tries required for each placement. For
+``--min-x 1`` and ``--max-x 10`` this totals to 10 PG placements. All of these
+placements have been successful as is evident by the lack of the bad mapping
+diagnostic messages. This output indicates that four PGs could be placed within
+two tries, while one PG was only placed after four tries. Any failed placement
+groups would be counted in the bucket in which it failed, for example in the
+original ``crush.txt`` the eighth placement failed after the fifth try and
+would have been counted in the fifth bucket together with one other mapping
+which succeeded on the fifth try, visible in the histogram of the updated map
+showing exactly one entry for five and six tries. As mentioned above, PG
+placement is based solely on the CRUSH topology and the hash and bucket
+algorithms. Running the original ``crush.txt`` with just ``--x 8`` instead of
+the range will fail deterministically. This means that for evaluation of an
+appropriate value for production much larger ranges should be used such as the
+``1024 * 1024`` from an earlier example.
+
+To find an appropriate value for tries, or to determine whether this is the
+underlying issue with placement to begin with, setting a very high value such
+as ``500`` and testing with a large sample size (large ``x`` range) can be used
+to show the general distribution. From a statistical point of view taking the
+last non-zero value as the maximum is very unlikely to cause any failed
+placements in practice, however if a lower value is desired then the lower
+value can be used at the chance of potentially hitting one of the rare cases in
+which placement fails, requiring manual intervention.
 
 .. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
 .. _Placement Groups: ../../operations/placement-groups
