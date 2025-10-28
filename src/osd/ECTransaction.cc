@@ -1052,10 +1052,7 @@ void ECTransaction::Generate::omap_updates() {
         ghobject_t(oid, ghobject_t::NO_GEN, shard),
         to_set);
     } else if (entry->is_written_shard(shard)) {
-      t.omap_setkeys(
-        coll_t(spg_t(pgid, shard)),
-        ghobject_t(oid, ghobject_t::NO_GEN, shard),
-        to_set);
+      // Do nothing
     } // Else: Unwritten shard
   }
   // Need to handle rollbacks
