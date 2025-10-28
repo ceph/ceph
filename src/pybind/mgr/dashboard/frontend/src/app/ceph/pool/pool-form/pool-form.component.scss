@@ -1,3 +1,12 @@
 .icon-warning-color {
   margin-left: 3px;
 }
+
+.item-action-btn {
+  margin-top: 1.5rem;
+}
+
+// Added for adjusting help icon size in pool form component as size 32 is not available
+.cds--btn__icon-help {
+  margin-bottom: 10px;
+}
