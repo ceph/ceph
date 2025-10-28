@@ -19,7 +19,17 @@ describe('CrushNodeSelectionService', () => {
   // Object contains functions to get something
   const get = {
     nodeByName: (name: string): CrushNode => nodes.find((node) => node.name === name),
-    nodesByNames: (names: string[]): CrushNode[] => names.map(get.nodeByName)
+    nodesByNames: (names: string[]): CrushNode[] =>
+      names.map((name: string) => get.nodeByName(name)),
+    bucketsFromNames: (names: string[]): CrushNode[] =>
+      names.map((name: string) => {
+        const node = get.nodeByName(name);
+        return {
+          ...node,
+          content: node.name,
+          selected: node.type === 'root'
+        };
+      })
   };
 
   // Expects that are used frequently
@@ -78,7 +88,7 @@ describe('CrushNodeSelectionService', () => {
     afterEach(() => {
       // The available buckets should not change
       expect(service.buckets).toEqual(
-        get.nodesByNames(['default', 'hdd-rack', 'mix-host', 'ssd-host', 'ssd-rack'])
+        get.bucketsFromNames(['default', 'hdd-rack', 'mix-host', 'ssd-host', 'ssd-rack'])
       );
     });
 
