@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,6 +20,7 @@
 #include "MonitorDBStore.h"
 #include "messages/MMonElection.h"
 #include "messages/MMonPing.h"
+#include "msg/Messenger.h"
 
 #include "common/config.h"
 #include "include/ceph_assert.h"
@@ -47,8 +49,6 @@ using std::unique_ptr;
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
-using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::mono_clock;
 using ceph::mono_time;
 using ceph::timespan_str;

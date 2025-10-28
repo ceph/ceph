@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Client.h"
 #include "Inode.h"
@@ -638,6 +638,21 @@ bool Inode::has_recalled_deleg()
   // Either all delegations are recalled or none are. Just check the first.
   Delegation& deleg = delegations.front();
   return deleg.is_recalled();
+}
+
+bool Inode::is_write_delegated()
+{
+  if (delegations.empty()) {
+    return false;
+  }
+
+  for (auto& deleg : delegations) {
+    if (deleg.is_write_delegated() && !deleg.is_recalled()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void Inode::recall_deleg(bool skip_read)

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1018,6 +1019,58 @@ TEST(LibCephFS, FlagO_PATH) {
   ceph_shutdown(cmount);
 }
 #endif /* __linux */
+
+TEST(LibCephFS, StatfsQuota) {
+
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  const char* quota_dir = "quota_dir";
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, quota_dir, 0777));
+  EXPECT_EQ(0, ceph_setxattr(cmount, quota_dir, "ceph.quota.max_files", "10000", 05, 0));
+
+  const int num_quota_files = 1;
+  char quota_file[256];
+  sprintf(quota_file, "%s/test_statfs_quota_%d", quota_dir, getpid());
+
+  int fd = ceph_open(cmount, quota_file, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ceph_close(cmount, fd);
+
+  const int num_reg_files = 5;
+  char regular_file[256];
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    fd = ceph_open(cmount, regular_file, O_CREAT|O_RDWR, 0666);
+    ceph_close(cmount, fd);
+  }
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  struct statvfs quota_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, quota_file, &quota_stvbuf));
+  ASSERT_EQ(num_quota_files+1, quota_stvbuf.f_files); // +1 for dirent quota_dir
+
+  struct statvfs reg_stvbuf;
+  ASSERT_EQ(0, ceph_statfs(cmount, "test_statfs_regular_1", &reg_stvbuf));
+  ASSERT_GT(reg_stvbuf.f_files, quota_stvbuf.f_files);
+
+  for (int i = 0; i < num_reg_files; i++) {
+    sprintf(regular_file, "test_statfs_regular_%d", i);
+    ASSERT_EQ(0, ceph_unlink(cmount, regular_file));
+  }
+
+  ASSERT_EQ(0, ceph_unlink(cmount, quota_file));
+  ASSERT_EQ(0, ceph_rmdir(cmount, quota_dir));
+
+  ceph_shutdown(cmount);
+}
 
 TEST(LibCephFS, Symlinks) {
   struct ceph_mount_info *cmount;
@@ -4150,6 +4203,7 @@ TEST(LibCephFS, InodeGetPut) {
 }
 
 static bool write_done = false;
+static bool fsync_done = false;
 static bool read_done = false;
 static std::mutex mtx;
 static std::condition_variable cond;
@@ -4250,4 +4304,224 @@ TEST(LibCephFS, AsyncReadAndWriteMultiClient) {
   ASSERT_EQ(0, ceph_unmount(r_cmount));
   ceph_shutdown(w_cmount);
   ceph_shutdown(r_cmount);
+}
+
+TEST(LibCephFS, UmountHangAfterLlLookupFilePath) {
+  struct ceph_statx stx;
+  struct ceph_mount_info *cmount;
+  UserPerm *perms;
+  Inode *root, *file, *tmp;
+  Fh *fh;
+
+  int mypid = getpid();
+  char filename[NAME_MAX];
+
+  sprintf(filename, "test_umounthangafterlookup%u", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_userperm_new(0, 0, 0, NULL);
+
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0777,
+                 O_CREAT | O_TRUNC | O_RDWR, &file, &fh, &stx,
+                 CEPH_STATX_INO, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
+
+  ASSERT_EQ(ceph_ll_lookup(cmount, file, ".", &tmp, &stx, CEPH_STATX_INO,
+            0 , perms), -ENOTDIR);
+
+  ASSERT_EQ(ceph_ll_unlink(cmount, root, filename, perms), 0);
+
+  ceph_ll_put(cmount, file);
+  ceph_ll_put(cmount, root);
+
+  std::cout << "Before ceph_unmount()" << std::endl;
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  std::cout << "After ceph_unmount()" << std::endl;
+
+  ceph_release(cmount);
+  ceph_userperm_destroy(perms);
+}
+
+TEST(LibCephFS, UnmountHangAfterOpenatFilePath) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+
+  char c_rel_dir[64];
+  char c_dir[128];
+  sprintf(c_rel_dir, "open_test_%d", mypid);
+  sprintf(c_dir, "/%s", c_rel_dir);
+  ASSERT_EQ(ceph_mkdir(cmount, c_dir, 0777), 0);
+
+  int root_fd = ceph_open(cmount, "/", O_DIRECTORY, 0777);
+  ASSERT_GT(root_fd, 0);
+
+  int dir_fd = ceph_openat(cmount, root_fd, c_rel_dir, O_DIRECTORY, 0777);
+  ASSERT_GT(dir_fd, 0);
+
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_statxat(cmount, root_fd, c_rel_dir, &stx, 0, 0), 0);
+
+  char c_rel_path[PATH_MAX];
+  char c_path[PATH_MAX];
+  sprintf(c_rel_path, "created_file_%d", mypid);
+  sprintf(c_path, "%s/%s", c_dir, c_rel_path);
+  int file_fd = ceph_openat(cmount, dir_fd, c_rel_path, O_RDONLY | O_CREAT, 0777);
+  ASSERT_GT(file_fd, 0);
+  int fd = ceph_openat(cmount, file_fd, ".", O_RDONLY, 0777);
+  ASSERT_EQ(fd, -ENOTDIR);
+
+  ASSERT_EQ(ceph_close(cmount, file_fd), 0);
+  ASSERT_EQ(ceph_close(cmount, dir_fd), 0);
+  ASSERT_EQ(ceph_close(cmount, root_fd), 0);
+
+  ASSERT_EQ(0, ceph_unlink(cmount, c_path));
+  ASSERT_EQ(0, ceph_rmdir(cmount, c_dir));
+
+  std::cout << "Before ceph_unmount()" << std::endl;
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  std::cout << "After ceph_unmount()" << std::endl;
+
+  ASSERT_EQ(0, ceph_release(cmount));
+}
+
+void write_fsync_io_callback(struct ceph_ll_io_info *io_info) {
+  std::unique_lock lock(mtx);
+  if (io_info->write) {
+    std::cout << "written=" << io_info->result << std::endl;
+    write_done = true;
+  } else {
+    std::cout << "fsync" << std::endl;
+    fsync_done = true;
+  }
+  cond.notify_one();
+}
+
+static void writer_func(struct ceph_mount_info *cmount, Fh *fh) {
+  int iterations = 2;
+  uint8_t buf[131072];
+  struct ceph_ll_io_info io_info;
+  struct iovec iov;
+
+  io_info.callback = write_fsync_io_callback;
+  io_info.iov = &iov;
+  io_info.iovcnt = 1;
+  io_info.off = 0;
+  io_info.fh = fh;
+  io_info.write = true;
+  io_info.fsync = false;
+
+  while (--iterations > 0) {
+    iov.iov_base = buf;
+    iov.iov_len = sizeof(buf);
+    io_info.result = 0;
+    write_done = false;
+    ASSERT_EQ(ceph_ll_nonblocking_readv_writev(cmount, &io_info), 0);
+    std::cout << ": waiting for write to finish" << std::endl;
+    {
+      std::unique_lock lock(mtx);
+      cond.wait(lock, []{
+        return write_done;
+      });
+    }
+    std::cout << ": write finished" << std::endl;
+    ASSERT_EQ(io_info.result, sizeof(buf));
+  }
+}
+
+static void fsync_func(struct ceph_mount_info *cmount, Inode *in) {
+  int iterations = 1000;
+  struct ceph_ll_io_info io_info;
+
+  io_info.callback = write_fsync_io_callback;
+
+  std::cout << ": fsync thread sleeping" << std::endl;
+  sleep(3);
+  std::cout << ": fsync thread wokeup" << std::endl;
+
+  while (--iterations > 0) {
+    io_info.result = 0;
+    fsync_done = false;
+    ASSERT_EQ(ceph_ll_nonblocking_fsync(cmount, in, &io_info), 0);
+    std::cout << ": waiting for fsync to finish" << std::endl;
+    {
+      std::unique_lock lock(mtx);
+      cond.wait(lock, []{
+        return fsync_done;
+      });
+    }
+    std::cout << ": fsync finished" << std::endl;
+  }
+}
+
+static void do_unsafe_ops(struct ceph_mount_info *cmount, std::string path) {
+  int iterations = 200;
+
+  std::cout << ": setxattr thread sleeping" << std::endl;
+  sleep(2);
+  std::cout << ": setxattr thread wokeup" << std::endl;
+
+  while (--iterations > 0) {
+    ASSERT_EQ(0, ceph_setxattr(cmount, path.c_str(), "user.key1", "value1", 6, 0));
+    sleep(1);
+  }
+}
+
+TEST(LibCephFS, ConcurrentWriteAndFsync) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *parent, *inode = NULL;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX];
+
+  // for now use a single thread for performing write and fsync (each).
+  // in the future if we need to increase operation concurrency adjust
+  // @nthreads as required.
+  const int nthreads = 2;
+  std::thread unsafe_ops;
+  std::thread threads[nthreads];
+
+  sprintf(filename, "/contest_%d", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "0"));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_inject_write_delay_secs", "10"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_mount_perms(cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(cmount, parent, filename, 0744,
+                           O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+                           &inode, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  unsafe_ops = std::thread(do_unsafe_ops, cmount, std::string(filename));
+
+  for (int i = 0; i < nthreads/2; ++i) {
+    threads[i] = std::thread(writer_func, cmount, fh);
+  }
+  for (int i = 1; i < nthreads; ++i) {
+    threads[i] = std::thread(fsync_func, cmount, inode);
+  }
+
+  for (int i = 0; i < nthreads; ++i) {
+    threads[i].join();
+  }
+  unsafe_ops.join();
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
 }

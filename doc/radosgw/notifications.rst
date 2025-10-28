@@ -8,7 +8,7 @@ Bucket Notifications
    A new "v2" format for Topic and Notification metadata can be enabled with
    the :ref:`feature_notification_v2` zone feature.
    Enabling this feature after an upgrade from an older version will trigger
-   migration of the existing Topic and Notification metadata. 
+   migration of the existing Topic and Notification metadata.
    In a greenfield deployment, the new format will be used.
    The new format allows for the data to be synced between zones in the zonegroup.
 
@@ -27,7 +27,7 @@ a specific bucket. A notification entity can be created either for a subset
 of event types or for all "Removed" and "Created" event types (which is the default). The
 notification may also filter out events based on matches of the prefixes and
 suffixes of (1) the keys, (2) the metadata attributes attached to the object,
-or (3) the object tags. Regular-expression matching can also be used on these
+or (3) the object tags. Regular expression matching can also be used on these
 to create filters. Notifications and topics have a many-to-many relationship.
 A topic can receive multiple notifications and a notification could be delivered
 to multiple topics.
@@ -40,7 +40,8 @@ for the bucket notification mechanism.
 
    S3 Bucket Notification Compatibility <s3-notification-compatibility>
 
-.. note:: To enable bucket notifications API, the `rgw_enable_apis` configuration parameter should contain: "notifications".
+.. note:: To enable bucket notifications API, the ``rgw_enable_apis``
+   configuration parameter should contain: "notifications".
 
 Notification Reliability
 ------------------------
@@ -73,16 +74,28 @@ In this case, the only latency added to the original operation is the latency
 added when the notification is committed to persistent storage.
 If the endpoint of the topic to which the notification is sent is not available for a long
 period of time, the persistent storage allocated for this topic will eventually fill up.
-When this happens the triggering operations will fail with ``503 Service Unavailable``, 
+When this happens the triggering operations will fail with ``503 Service Unavailable``,
 which tells the client that it may retry later.
 
 .. note:: If the notification fails with an error, cannot be delivered, or
    times out, it is retried until it is successfully acknowledged.
-   You can control its retry with time_to_live/max_retries to have a time/retry limit and
-   control the retry frequency with retry_sleep_duration
+   You can control its retry with ``time_to_live``/``max_retries`` to have a time/retry limit and
+   control the retry frequency with ``retry_sleep_duration``.
 
-.. tip:: To minimize the latency added by asynchronous notification, we 
+.. tip:: To minimize the latency added by asynchronous notification, we
    recommended placing the "log" pool on fast media.
+
+Persistent bucket notifications are managed by the following central configuration options:
+
+.. confval:: rgw_bucket_persistent_notif_num_shards
+
+.. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
+   happen on any bucket mapped to that topic.
+   
+.. note:: Persistent topics that were created on a radosgw that does not support sharding, will be treated as a single shard topics
+
+.. tip:: It is also recommended that you avoid modifying or deleting topics created during 
+   upgrades, as this might result in orphan RADOS objects that will not be deleted when the topic is deleted.
 
 
 Topic Management via CLI
@@ -93,7 +106,7 @@ following command:
 
 .. prompt:: bash #
 
-   radosgw-admin topic list [--tenant={tenant}]  [--uid={user}]
+   radosgw-admin topic list [--tenant={tenant}] [--uid={user}]
 
 
 Fetch the configuration of a specific topic by running the following command:
@@ -103,19 +116,21 @@ Fetch the configuration of a specific topic by running the following command:
    radosgw-admin topic get --topic={topic-name} [--tenant={tenant}]
 
 
-Remove a topic by running the following command: 
+Remove a topic by running the following command:
 
 .. prompt:: bash #
 
    radosgw-admin topic rm --topic={topic-name} [--tenant={tenant}]
 
-Fetch persistent topic stats (i.e. reservations, entries and size) by running the following command: 
+Fetch persistent topic stats (i.e. reservations, entries and size) by running
+the following command:
 
 .. prompt:: bash #
 
    radosgw-admin topic stats --topic={topic-name} [--tenant={tenant}]
 
-Dump (in JSON format) all pending bucket notifications of a persistent topic by running the following command: 
+Dump (in JSON format) all pending bucket notifications of a persistent topic
+by running the following command:
 
 .. prompt:: bash #
 
@@ -125,13 +140,15 @@ Dump (in JSON format) all pending bucket notifications of a persistent topic by 
 Notification Performance Statistics
 -----------------------------------
 
-- ``persistent_topic_size``: queue size in bytes. 
+- ``persistent_topic_size``: queue size in bytes
 - ``persistent_topic_len``: shows how many notifications are currently waiting
   in the queue
-- ``pubsub_push_ok``: a running counter, for all notifications, of events successfully pushed to their endpoints
-- ``pubsub_push_fail``: a running counter, for all notifications, of events that failed to be pushed to their endpoints
-- ``pubsub_push_pending``: the gauge value of events pushed to an endpoint but
-  not acked or nacked yet. This does not include the notifications waiting in
+- ``pubsub_push_ok``: a running counter, for all notifications, of events
+  successfully pushed to their endpoints
+- ``pubsub_push_fail``: a running counter, for all notifications, of events
+  that failed to be pushed to their endpoints
+- ``pubsub_push_pending``: The gauge value of events pushed to an endpoint but
+  not acked or nacked yet: this does not include the notifications waiting in
   the persistent queue. Only the notifications that are in flight in both
   persistent and non-persistent cases are counted.
 
@@ -142,7 +159,7 @@ Notification Performance Statistics
     on each notification.
 
 Configuration Options
-------------------------------
+---------------------
 The following are global configuration options for the different endpoints:
 
 HTTP
@@ -163,7 +180,7 @@ Topics
     In all topic actions, the parameters are URL-encoded and sent in the
     message body using this content type:
     ``application/x-www-form-urlencoded``.
-   
+
 
 .. _Create a Topic:
 
@@ -208,24 +225,24 @@ updating, use the name of an existing topic and different endpoint values).
 
 Request parameters:
 
-- push-endpoint: This is the URI of an endpoint to send push notifications to.
-- OpaqueData: Opaque data is set in the topic configuration and added to all
+- ``push-endpoint``: This is the URI of an endpoint to send push notifications to.
+- ``OpaqueData``: Opaque data is set in the topic configuration and added to all
   notifications that are triggered by the topic.
-- persistent: This indicates whether notifications to this endpoint are
+- ``persistent``: This indicates whether notifications to this endpoint are
   persistent (=asynchronous) or not persistent. (This is "false" by default.)
-- time_to_live: This will limit the time (in seconds) to retain the notifications.
-  default value is taken from `rgw_topic_persistency_time_to_live`.
-  providing a value overrides the global value.
-  zero value means infinite time to live.
-- max_retries: This will limit the max retries before expiring notifications.
-  default value is taken from `rgw_topic_persistency_max_retries`.
-  providing a value overrides the global value.
-  zero value means infinite retries.
-- retry_sleep_duration: This will control the frequency of retrying the notifications.
-  default value is taken from `rgw_topic_persistency_sleep_duration`.
-  providing a value overrides the global value.
-  zero value mean there is no delay between retries.
-- Policy: This will control who can access the topic in addition to the owner of the topic.
+- ``time_to_live``: This will limit the time (in seconds) to retain the notifications.
+  Default value is taken from ``rgw_topic_persistency_time_to_live``.
+  Providing a value overrides the global value.
+  Zero value means infinite time to live.
+- ``max_retries``: This will limit the max retries before expiring notifications.
+  Default value is taken from ``rgw_topic_persistency_max_retries``.
+  Providing a value overrides the global value.
+  Zero value means infinite retries.
+- ``retry_sleep_duration``: This will control the frequency of retrying the notifications.
+  Default value is taken from ``rgw_topic_persistency_sleep_duration``.
+  Providing a value overrides the global value.
+  Zero value mean there is no delay between retries.
+- ``Policy``: This will control who can access the topic in addition to the owner of the topic.
   The policy passed needs to be a JSON string similar to bucket policy.
   For example, one can send a policy string as follows::
 
@@ -240,44 +257,46 @@ Request parameters:
     }
 
   Currently, we support only the following actions:
-  - sns:GetTopicAttributes  To list or get existing topics
-  - sns:SetTopicAttributes  To set attributes for the existing topic
-  - sns:DeleteTopic         To delete the existing topic
-  - sns:Publish             To be able to create/subscribe notification on existing topic
+
+  - ``sns:GetTopicAttributes``:  to list or get existing topics
+  - ``sns:SetTopicAttributes``:  to set attributes for the existing topic
+  - ``sns:DeleteTopic``:         to delete the existing topic
+  - ``sns:Publish``:             to be able to create/subscribe notification on existing topic
 
 - HTTP endpoint
 
  - URI: ``http[s]://<fqdn>[:<port]``
- - port: This defaults to 80 for HTTP and 443 for HTTPS.
- - verify-ssl: This indicates whether the server certificate is validated by
+ - ``port``: This defaults to 80 for HTTP and 443 for HTTPS.
+ - ``verify-ssl``: This indicates whether the server certificate is validated by
    the client. (This is "true" by default.)
- - cloudevents: This indicates whether the HTTP header should contain
+ - ``cloudevents``: This indicates whether the HTTP header should contain
    attributes according to the `S3 CloudEvents Spec`_. (This is "false" by
    default.)
 
 - AMQP0.9.1 endpoint
 
  - URI: ``amqp[s]://[<user>:<password>@]<fqdn>[:<port>][/<vhost>]``
- - user/password: This defaults to "guest/guest".
- - user/password: This must be provided only over HTTPS. Topic creation
+ - ``user``/``password``: This defaults to "guest/guest".
+
+   This must be provided only over HTTPS. Topic creation
    requests will otherwise be rejected.
- - port: This defaults to 5672 for unencrypted connections and 5671 for
+ - ``port``: This defaults to 5672 for unencrypted connections and 5671 for
    SSL-encrypted connections.
- - vhost: This defaults to "/".
- - verify-ssl: This indicates whether the server certificate is validated by
+ - ``vhost``: This defaults to "/".
+ - ``verify-ssl``: This indicates whether the server certificate is validated by
    the client. (This is "true" by default.)
  - If ``ca-location`` is provided and a secure connection is used, the
    specified CA will be used to authenticate the broker. The default CA will
-   not be used.  
- - amqp-exchange: The exchanges must exist and must be able to route messages
+   not be used.
+ - ``amqp-exchange``: The exchanges must exist and must be able to route messages
    based on topics. This parameter is mandatory.
- - amqp-ack-level: No end2end acking is required. Messages may persist in the
+ - ``amqp-ack-level``: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Three ack methods
    exist:
 
-  - "none": The message is considered "delivered" if it is sent to the broker.
-  - "broker": The message is considered "delivered" if it is acked by the broker (default).
-  - "routable": The message is considered "delivered" if the broker can route to a consumer.
+  - ``none``: The message is considered "delivered" if it is sent to the broker.
+  - ``broker``: The message is considered "delivered" if it is acked by the broker (default).
+  - ``routable``: The message is considered "delivered" if the broker can route to a consumer.
 
 .. tip:: The topic-name (see :ref:`Create a Topic`) is used for the
    AMQP topic ("routing key" for a topic exchange).
@@ -289,14 +308,27 @@ Request parameters:
    connect to the broker. (This is "false" by default.)
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
-   broker. 
- - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
- - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
- - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
- - ``user-name``: User name to use when connecting to the Kafka broker. If both this parameter and URI user are provided then this parameter overrides the URI user.
-    The same security considerations are in place for this parameter as are for user/password.
- - ``password``: Password to use when connecting to the Kafka broker. If both this parameter and URI password are provided then this parameter overrides the URI password.
-    The same security considerations are in place for this parameter as are for user/password.
+   broker.
+ - ``user``/``password``: This should be provided over HTTPS. If not, the
+   config parameter ``rgw_allow_notification_secrets_in_cleartext`` must be
+   "true" in order to create topics.
+
+   This should be provided together with ``use-ssl``. If not, the broker
+   credentials will be sent over insecure transport.
+ - ``user-name``: User name to use when connecting to the Kafka broker: if
+   both this parameter and URI ``user`` are provided then this parameter
+   overrides the URI ``user``.
+
+   The same security considerations are in place for this parameter as are
+   for ``user``/``password``.
+ - ``password``: Password to use when connecting to the Kafka broker: if
+   both this parameter and URI ``password`` are provided then this parameter
+   overrides the URI ``password``.
+
+   The same security considerations are in place for this parameter as are
+   for ``user``/``password``.
+ - ``mechanism``: May be provided together with ``user``/``password``
+   (default: ``PLAIN``). The supported SASL mechanisms are:
 
   - PLAIN
   - SCRAM-SHA-256
@@ -304,16 +336,18 @@ Request parameters:
   - GSSAPI
   - OAUTHBEARER
 
- - port: This defaults to 9092.
- - kafka-ack-level: No end2end acking is required. Messages may persist in the
+ - ``port``: This defaults to 9092.
+ - ``kafka-ack-level``: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Two ack methods
    exist:
 
-  - "none": Messages are considered "delivered" if sent to the broker.
-  - "broker": Messages are considered "delivered" if acked by the broker. (This
+  - ``none``: Messages are considered "delivered" if sent to the broker.
+  - ``broker``: Messages are considered "delivered" if acked by the broker. (This
     is the default.)
 
- - kafka-brokers: A command-separated list of host:port of kafka brokers. These brokers (may contain a broker which is defined in kafka uri) will be added to kafka uri to support sending notifcations to a kafka cluster.
+ - ``kafka-brokers``: A command-separated list of ``host:port`` of Kafka brokers:
+   these brokers (may contain a broker which is defined in Kafka URI) will be
+   added to Kafka URI to support sending notifcations to a Kafka cluster.
 
 .. note::
 
@@ -370,23 +404,23 @@ The response has the following format:
                 <entry>
                     <key>User</key>
                     <value></value>
-                </entry> 
+                </entry>
                 <entry>
                     <key>Name</key>
                     <value></value>
-                </entry> 
+                </entry>
                 <entry>
                     <key>EndPoint</key>
                     <value></value>
-                </entry> 
+                </entry>
                 <entry>
                     <key>TopicArn</key>
                     <value></value>
-                </entry> 
+                </entry>
                 <entry>
                     <key>OpaqueData</key>
                     <value></value>
-                </entry> 
+                </entry>
             </Attributes>
         </GetTopicAttributesResult>
         <ResponseMetadata>
@@ -394,31 +428,33 @@ The response has the following format:
         </ResponseMetadata>
     </GetTopicAttributesResponse>
 
-- User: the name of the user that created the topic.
-- Name: the name of the topic.
-- EndPoint: The JSON-formatted endpoint parameters, including:
-   - EndpointAddress: The push-endpoint URL.
-   - EndpointArgs: The push-endpoint args.
-   - EndpointTopic: The topic name to be sent to the endpoint (can be different
-     than the above topic name).
-   - HasStoredSecret: This is "true" if the endpoint URL contains user/password 
+- ``User``: the name of the user that created the topic
+- ``Name``: the name of the topic
+- ``EndPoint``: the JSON-formatted endpoint parameters, including:
+
+   - ``EndpointAddress``: the push-endpoint URL
+   - ``EndpointArgs``: the push-endpoint arguments
+   - ``EndpointTopic``: the topic name to be sent to the endpoint (can be different
+     than the above topic name)
+   - ``HasStoredSecret``: This is "true" if the endpoint URL contains ``user``/``password``
      information. In this case, the request must be made over HTTPS. The "topic
      get" request will otherwise be rejected.
-   - Persistent: This is "true" if the topic is persistent.
-   - TimeToLive: This will limit the time (in seconds) to retain the notifications.
-   - MaxRetries: This will limit the max retries before expiring notifications.
-   - RetrySleepDuration: This will control the frequency of retrying the notifications.
-- TopicArn: topic `ARN
-  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
-- OpaqueData: The opaque data set on the topic.
-- Policy: Any access permission set on the topic.
+   - ``Persistent``: This is "true" if the topic is persistent.
+   - ``TimeToLive``: This will limit the time (in seconds) to retain the notifications.
+   - ``MaxRetries``: This will limit the max retries before expiring notifications.
+   - ``RetrySleepDuration``: This will control the frequency of retrying the notifications.
+
+- ``TopicArn``: topic `ARN
+  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+- ``OpaqueData``: the opaque data set on the topic
+- ``Policy``: any access permission set on the topic
 
 Get Topic Information
 `````````````````````
 
 This returns information about a specific topic. This includes push-endpoint
 information, if provided.  Note that this API is now deprecated in favor of the
-AWS compliant `GetTopicAttributes` API.
+AWS compliant ``GetTopicAttributes`` API.
 
 ::
 
@@ -452,20 +488,20 @@ The response has the following format:
         </ResponseMetadata>
     </GetTopicResponse>
 
-- User: The name of the user that created the topic.
-- Name: The name of the topic.
-- EndpointAddress: The push-endpoint URL.
-- EndpointArgs: The push-endpoint args.
-- EndpointTopic: The topic name to be sent to the endpoint (which can be
-  different than the above topic name).
-- HasStoredSecret: This is "true" if the endpoint URL contains user/password
+- ``User``: the name of the user that created the topic
+- ``Name``: the name of the topic
+- ``EndpointAddress``: the push-endpoint URL
+- ``EndpointArgs``: the push-endpoint arguments
+- ``EndpointTopic``: the topic name to be sent to the endpoint (which can be
+  different than the above topic name)
+- ``HasStoredSecret``: This is "true" if the endpoint URL contains user/password
   information. In this case, the request must be made over HTTPS. The "topic
   get" request will otherwise be rejected.
-- Persistent: "true" if topic is persistent.
-- TopicArn: topic `ARN
-  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
-- OpaqueData: the opaque data set on the topic.
-- Policy: Any access permission set on the topic.
+- ``Persistent``: "true" if topic is persistent
+- ``TopicArn``: topic `ARN
+  <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_
+- ``OpaqueData``: the opaque data set on the topic
+- ``Policy``: any access permission set on the topic
 
 Delete Topic
 ````````````
@@ -481,10 +517,10 @@ This deletes the specified topic.
 
 .. note::
 
-  - Deleting an unknown notification (for example, double delete) is not
-    considered an error.
-  - Deleting a topic does not automatically delete all notifications associated
-    with it.
+    - Deleting an unknown notification (for example, double delete) is not
+      considered an error.
+    - Deleting a topic does not automatically delete all notifications associated
+      with it.
 
 The response has the following format:
 
@@ -550,8 +586,9 @@ This allows to set/modify existing attributes on the specified topic.
 
 .. note::
 
-  - The AttributeName passed will either be updated or created (if not exist) with AttributeValue passed.
-  - Any unsupported AttributeName passed will result in error 400.
+    - The ``AttributeName`` passed will either be updated or created (if not
+      exist) with ``AttributeValue`` passed.
+    - Any unsupported ``AttributeName`` passed will result in error 400.
 
 The response has the following format:
 
@@ -563,44 +600,46 @@ The response has the following format:
         </ResponseMetadata>
     </SetTopicAttributesResponse>
 
-Valid AttributeName that can be passed:
+Valid ``AttributeName`` that can be passed:
 
-  - push-endpoint: This is the URI of an endpoint to send push notifications to.
-  - OpaqueData: Opaque data is set in the topic configuration and added to all
-    notifications that are triggered by the topic.
-  - persistent: This indicates whether notifications to this endpoint are
-    persistent (=asynchronous) or not persistent. (This is "false" by default.)
-  - time_to_live: This will limit the time (in seconds) to retain the notifications.
-  - max_retries: This will limit the max retries before expiring notifications.
-  - retry_sleep_duration: This will control the frequency of retrying the notifications.
-  - Policy: This will control who can access the topic other than owner of the topic.
-  - verify-ssl: This indicates whether the server certificates must be validated by
-    the client. This is "true" by default.
-  - ``use-ssl``: If this is set to "true", a secure connection is used to
-    connect to the broker. This is "false" by default.
-  - cloudevents: This indicates whether the HTTP header should contain
-    attributes according to the `S3 CloudEvents Spec`_. 
-  - amqp-exchange: The exchanges must exist and must be able to route messages
-    based on topics.
-  - amqp-ack-level: No end2end acknowledgement is required. Messages may persist in the
-    broker before being delivered to their final destinations. 
-  - ``ca-location``: If this is provided and a secure connection is used, the
-    specified CA will be used instead of the default CA to authenticate the
-    broker. 
-  - mechanism: may be provided together with user/password (default: ``PLAIN``).
-  - kafka-ack-level: No end2end acknowledgement is required. Messages may persist in the
-    broker before being delivered to their final destinations. 
-  - kafka-brokers: Set endpoint with broker(s) as a comma-separated list of host or host:port (default port 9092).
+- ``push-endpoint``: This is the URI of an endpoint to send push notifications to.
+- ``OpaqueData``: Opaque data is set in the topic configuration and added to all
+  notifications that are triggered by the topic.
+- ``persistent``: This indicates whether notifications to this endpoint are
+  persistent (=asynchronous) or not persistent. (This is "false" by default.)
+- ``time_to_live``: This will limit the time (in seconds) to retain the notifications.
+- ``max_retries``: This will limit the max retries before expiring notifications.
+- ``retry_sleep_duration``: This will control the frequency of retrying the notifications.
+- ``Policy``: This will control who can access the topic other than owner of the topic.
+- ``verify-ssl``: This indicates whether the server certificates must be validated by
+  the client. This is "true" by default.
+- ``use-ssl``: If this is set to "true", a secure connection is used to
+  connect to the broker. This is "false" by default.
+- ``cloudevents``: This indicates whether the HTTP header should contain
+  attributes according to the `S3 CloudEvents Spec`_.
+- ``amqp-exchange``: The exchanges must exist and must be able to route messages
+  based on topics.
+- ``amqp-ack-level``: No end2end acknowledgement is required. Messages may persist in the
+  broker before being delivered to their final destinations.
+- ``ca-location``: If this is provided and a secure connection is used, the
+  specified CA will be used instead of the default CA to authenticate the
+  broker.
+- ``mechanism``: may be provided together with ``user``/``password`` (default: ``PLAIN``)
+- ``kafka-ack-level``: No end2end acknowledgement is required. Messages may persist in the
+  broker before being delivered to their final destinations.
+- ``kafka-brokers``: Set endpoint with broker(s) as a comma-separated list of
+  ``host`` or ``host:port`` (default port 9092).
 
 Notifications
 ~~~~~~~~~~~~~
 
-Detailed under: `Bucket Operations`_.
+Detailed under: :ref:`radosgw-bucketops`.
 
 .. note::
 
-    - "Abort Multipart Upload" request does not emit a notification
-    - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
+    - "Abort Multipart Upload" request does not emit a notification.
+    - Both "Initiate Multipart Upload" and "POST Object" requests will emit
+      an ``s3:ObjectCreated:Post`` notification.
 
 Events
 ~~~~~~
@@ -653,41 +692,38 @@ For example:
        }
    ]}
 
-- awsRegion: The zonegroup.
-- eventTime: The timestamp, indicating when the event was triggered.
-- eventName: For the list of supported events see: `S3 Notification
-  Compatibility`_. Note that eventName values do not start with the `s3:`
-  prefix.
-- userIdentity.principalId: The user that triggered the change.
-- requestParameters.sourceIPAddress: not supported
-- responseElements.x-amz-request-id: The request ID of the original change.
-- responseElements.x_amz_id_2: The RGW on which the change was made.
-- s3.configurationId: The notification ID that created the event.
-- s3.bucket.name: The name of the bucket.
-- s3.bucket.ownerIdentity.principalId: The owner of the bucket.
-- s3.bucket.arn: The ARN of the bucket.
-- s3.bucket.id: The ID of the bucket. (This is an extension to the S3
+- ``awsRegion``: the zonegroup
+- ``eventTime``: the timestamp, indicating when the event was triggered
+- ``eventName``: For a list of supported events, see: :ref:`radosgw-s3-notification-compatibility`.
+  Note that ``eventName`` values do not start with the ``s3:`` prefix.
+- ``userIdentity.principalId``: the user that triggered the change
+- ``requestParameters.sourceIPAddress``: not supported
+- ``responseElements.x-amz-request-id``: the request ID of the original change
+- ``responseElements.x_amz_id_2``: the RGW on which the change was made
+- ``s3.configurationId``: the notification ID that created the event
+- ``s3.bucket.name``: the name of the bucket
+- ``s3.bucket.ownerIdentity.principalId``: the owner of the bucket
+- ``s3.bucket.arn``: the ARN of the bucket
+- ``s3.bucket.id``: the ID of the bucket (This is an extension to the S3
   notification API.)
-- s3.object.key: The object key.
-- s3.object.size: The object size.
-- s3.object.eTag: The object etag.
-- s3.object.versionId: The object version, if the bucket is versioned. When a
-  copy is made, it includes the version of the target object. When a delete
-  marker is created, it includes the version of the delete marker.
-- s3.object.sequencer: The monotonically-increasing identifier of the "change
-  per object" (hexadecimal format).
-- s3.object.metadata: Any metadata set on the object that is sent as
+- ``s3.object.key``: the object key
+- ``s3.object.size``: the object size
+- ``s3.object.eTag``: the object etag
+- ``s3.object.versionId``: This contains the object version, if the bucket is
+  versioned. When a copy is made, it includes the version of the target object.
+  When a delete marker is created, it includes the version of the delete marker.
+- ``s3.object.sequencer``: the monotonically-increasing identifier of the "change
+  per object" (hexadecimal format)
+- ``s3.object.metadata``: Any metadata set on the object that is sent as
   ``x-amz-meta-`` (that is, any metadata set on the object that is sent as an
   extension to the S3 notification API).
-- s3.object.tags: Any tags set on the object. (This is an extension to the S3
+- ``s3.object.tags``: any tags set on the object (This is an extension to the S3
   notification API.)
-- s3.eventId: The unique ID of the event, which could be used for acking. (This
+- ``s3.eventId``: the unique ID of the event, which could be used for acking (This
   is an extension to the S3 notification API.)
-- s3.opaqueData: This means that "opaque data" is set in the topic configuration
+- ``s3.opaqueData``: This means that "opaque data" is set in the topic configuration
   and is added to all notifications triggered by the topic. (This is an
   extension to the S3 notification API.)
 
-.. _S3 Notification Compatibility: ../s3-notification-compatibility
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
-.. _Bucket Operations: ../s3/bucketops
 .. _S3 CloudEvents Spec: https://github.com/cloudevents/spec/blob/main/cloudevents/adapters/aws-s3.md

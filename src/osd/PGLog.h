@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -296,8 +297,8 @@ public:
 					eversion_t previous_version) {});
     }
 
-    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
-      auto divergent = pg_log_t::rewind_from_head(newhead);
+    mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead, bool *dirty_log = nullptr) {
+      auto divergent = pg_log_t::rewind_from_head(newhead, dirty_log);
       index();
       reset_rollback_info_trimmed_to_riter();
       return divergent;
@@ -1184,9 +1185,11 @@ protected:
       if (objiter->second->is_update() ||
 	  (missing.may_include_deletes && objiter->second->is_delete())) {
 	if (ec_optimizations_enabled) {
-	  // relax the assert for partial writes - missing may be newer than the
-	  // most recent log entry
-	  ceph_assert(missing.is_missing(hoid) &&
+	  // relax the assert for partial writes. The log may not contain any
+	  // updates for this object, in which case the object will not be in
+	  // the missing list. If it is in the missing list, then the need version
+	  // had better be higher or equal to the log version
+	  ceph_assert(!missing.is_missing(hoid) ||
 		      missing.get_items().at(hoid).need >= objiter->second->version);
 	} else {
 	  ceph_assert(missing.is_missing(hoid) &&
@@ -1404,11 +1407,7 @@ public:
       invalidate_stats = invalidate_stats || !p->is_error();
       if (log) {
 	ldpp_dout(dpp, 20) << "update missing, append " << *p << dendl;
-        // Skip the log entry if it is a partial write that did not involve
-        // this shard
-        if (!pool.is_nonprimary_shard(shard) || p->is_written_shard(shard)) {
-	  log->add(*p);
-	}
+	log->add(*p);
       }
       if (p->soid <= last_backfill &&
 	  !p->is_error()) {
@@ -1716,10 +1715,18 @@ public:
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		ceph_assert(miter != missing.get_items().end());
-		ceph_assert(miter->second.need == i->version);
 		// the 'have' version is reset if an object is deleted,
 		// then created again
-		ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		if (ec_optimizations_enabled) {
+		  // non-primary shards in an optimized pool may not have updates
+		  // because of partial writes, which may result in oi.version being
+		  // less than have
+		  ceph_assert(miter->second.need >= i->version);
+		  ceph_assert(miter->second.have >= oi.version || miter->second.have == eversion_t());
+		} else {
+		  ceph_assert(miter->second.need == i->version);
+		  ceph_assert(miter->second.have == oi.version || miter->second.have == eversion_t());
+		}
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());

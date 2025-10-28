@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,10 +16,11 @@
 #ifndef CEPH_MDSTABLECLIENT_H
 #define CEPH_MDSTABLECLIENT_H
 
+#include "include/buffer.h"
 #include "include/types.h"
-#include "mds_table_types.h"
-#include "mdstypes.h" // for mds_rank_t
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "common/ref.h" // for cref_t
+#include "LogSegmentRef.h"
 
 #include <list>
 #include <map>
@@ -29,6 +31,8 @@ class MMDSTableRequest;
 class MMDSTableQuery;
 class MDSRank;
 class LogSegment;
+using ceph::bufferlist;
+using ceph::cref_t;
 
 class MDSTableClient {
 public:
@@ -39,13 +43,13 @@ public:
   void handle_request(const cref_t<MMDSTableRequest> &m);
 
   void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSContext *onfinish);
-  void commit(version_t tid, LogSegment *ls);
+  void commit(version_t tid, LogSegmentRef const& ls);
 
   void resend_commits();
   void resend_prepares();
 
   // for recovery (by me)
-  void got_journaled_agree(version_t tid, LogSegment *ls);
+  void got_journaled_agree(version_t tid, LogSegmentRef const& ls);
   void got_journaled_ack(version_t tid);
 
   bool has_committed(version_t tid) const {
@@ -103,7 +107,7 @@ protected:
   std::list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
-  std::map<version_t, LogSegment*> pending_commit;
+  std::map<version_t, LogSegmentRef> pending_commit;
   std::map<version_t, std::vector<MDSContext*> > ack_waiters;
 };
 #endif

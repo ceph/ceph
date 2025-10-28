@@ -1,4 +1,3 @@
-
 """
 ceph-mgr orchestrator interface
 
@@ -74,7 +73,7 @@ class OrchestratorError(Exception):
                  errno: int = -errno.EINVAL,
                  event_kind_subject: Optional[Tuple[str, str]] = None) -> None:
         super(Exception, self).__init__(msg)
-        self.errno = errno
+        self.errno = abs(errno)
         # See OrchestratorEvent.subject
         self.event_subject = event_kind_subject
 
@@ -111,12 +110,12 @@ def handle_exception(prefix: str, perm: str, func: FuncT) -> FuncT:
             return func(*args, **kwargs)
         except (OrchestratorError, SpecValidationError) as e:
             # Do not print Traceback for expected errors.
-            return HandleCommandResult(e.errno, stderr=str(e))
+            return HandleCommandResult(retval=e.errno, stderr=str(e))
         except ImportError as e:
-            return HandleCommandResult(-errno.ENOENT, stderr=str(e))
+            return HandleCommandResult(retval=-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
-            return HandleCommandResult(-errno.ENOENT, stderr=msg)
+            return HandleCommandResult(retval=-errno.ENOENT, stderr=msg)
 
     # misuse lambda to copy `wrapper`
     wrapper_copy = lambda *l_args, **l_kwargs: wrapper(*l_args, **l_kwargs)  # noqa: E731
@@ -243,6 +242,25 @@ def raise_if_exception(c: OrchResult[T]) -> T:
         raise e
     assert c.result is not None, 'OrchResult should either have an exception or a result'
     return c.result
+
+
+def completion_to_result(c: OrchResult[T]) -> HandleCommandResult:
+    """
+    Converts an OrchResult to a HandleCommandResult,
+    preserving output and error codes.
+    """
+    if c.serialized_exception is None:
+        assert c.result is not None, "OrchResult should either have result or an exception"
+        return HandleCommandResult(stdout=c.result_str())
+
+    try:
+        e = pickle.loads(c.serialized_exception)
+    except (KeyError, AttributeError):
+        return HandleCommandResult(stderr=c.exception_str, retval=errno.EIO)
+    if isinstance(e, OrchestratorError):
+        return HandleCommandResult(stderr=str(e), retval=-e.errno)
+
+    raise e
 
 
 def _hide_in_features(f: FuncT) -> FuncT:
@@ -497,7 +515,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def host_ok_to_stop(self, hostname: str) -> OrchResult:
+    def host_ok_to_stop(self, hostname: str) -> OrchResult[str]:
         """
         Check if the specified host can be safely stopped without reducing availability
 
@@ -505,13 +523,13 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """
         raise NotImplementedError()
 
-    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult:
+    def exit_host_maintenance(self, hostname: str, force: bool = False, offline: bool = False) -> OrchResult[str]:
         """
         Return a host from maintenance, restarting the clusters systemd target
         """
@@ -568,10 +586,13 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def cert_store_cert_ls(self, show_details: bool = False) -> OrchResult[Dict[str, Any]]:
+    def cert_store_cert_ls(self,
+                           filter_by: str = '',
+                           show_details: bool = False,
+                           include_cephadm_signed: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
-    def cert_store_entity_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
+    def cert_store_bindings_ls(self) -> OrchResult[Dict[Any, Dict[str, List[str]]]]:
         raise NotImplementedError()
 
     def cert_store_reload(self) -> OrchResult[str]:
@@ -580,7 +601,7 @@ class Orchestrator(object):
     def cert_store_cert_check(self) -> OrchResult[List[str]]:
         raise NotImplementedError()
 
-    def cert_store_key_ls(self) -> OrchResult[Dict[str, Any]]:
+    def cert_store_key_ls(self, include_cephadm_generated_keys: bool = False) -> OrchResult[Dict[str, Any]]:
         raise NotImplementedError()
 
     def cert_store_get_cert(
@@ -605,7 +626,7 @@ class Orchestrator(object):
         self,
         cert: str,
         key: str,
-        entity: str,
+        consumer: str,
         cert_name: Optional[str] = None,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
@@ -619,6 +640,7 @@ class Orchestrator(object):
         cert: str,
         service_name: Optional[str] = None,
         hostname: Optional[str] = None,
+        force: bool = False
     ) -> OrchResult[str]:
         raise NotImplementedError()
 
@@ -673,6 +695,7 @@ class Orchestrator(object):
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
             'promtail': self.apply_promtail,
+            'alloy': self.apply_alloy,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
@@ -924,6 +947,10 @@ class Orchestrator(object):
         """Update existing a Promtail daemon(s)"""
         raise NotImplementedError()
 
+    def apply_alloy(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a alloy daemon(s)"""
+        raise NotImplementedError()
+
     def apply_crash(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a crash daemon(s)"""
         raise NotImplementedError()
@@ -1054,6 +1081,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'ceph-exporter': 'ceph-exporter',
         'loki': 'loki',
         'promtail': 'promtail',
+        'alloy': 'alloy',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
@@ -1089,6 +1117,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'prometheus': ['prometheus'],
         'loki': ['loki'],
         'promtail': ['promtail'],
+        'alloy': ['alloy'],
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],
         'crash': ['crash'],

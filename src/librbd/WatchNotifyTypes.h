@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef LIBRBD_WATCH_NOTIFY_TYPES_H
 #define LIBRBD_WATCH_NOTIFY_TYPES_H
 
@@ -499,7 +500,7 @@ struct NotifyMessage {
   void dump(Formatter *f) const;
   NotifyOp get_notify_op() const;
 
-  static void generate_test_instances(std::list<NotifyMessage *> &o);
+  static std::list<NotifyMessage>  generate_test_instances();
 };
 
 struct ResponseMessage {
@@ -512,7 +513,7 @@ struct ResponseMessage {
   void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<ResponseMessage *> &o);
+  static std::list<ResponseMessage> generate_test_instances();
 };
 
 std::ostream &operator<<(std::ostream &out,

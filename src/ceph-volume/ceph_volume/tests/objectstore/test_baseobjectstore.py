@@ -48,10 +48,6 @@ class TestBaseObjectStore:
         with pytest.raises(NotImplementedError):
             BaseObjectStore([]).safe_prepare(args=None)
 
-    def test_add_objectstore_opts(self):
-        with pytest.raises(NotImplementedError):
-            BaseObjectStore([]).add_objectstore_opts()
-
     @patch('ceph_volume.util.prepare.create_osd_path')
     @patch('ceph_volume.util.prepare.link_block')
     @patch('ceph_volume.util.prepare.get_monmap')
@@ -117,8 +113,9 @@ class TestBaseObjectStore:
                           '--setuser', 'ceph',
                           '--setgroup', 'ceph']
 
-    def test_osd_mkfs_ok(self, monkeypatch, fake_call):
-        bo = BaseObjectStore([])
+    def test_osd_mkfs_ok(self, monkeypatch, fake_call, objectstore):
+        args = objectstore(dmcrypt=False)
+        bo = BaseObjectStore(args)
         bo.get_osd_path = lambda: '/var/lib/ceph/osd/ceph-123/'
         bo.build_osd_mkfs_cmd = lambda: ['ceph-osd', '--mkfs', 'some', 'fake', 'args']
         monkeypatch.setattr(system, 'chown', lambda path: 0)
@@ -149,8 +146,9 @@ class TestBaseObjectStore:
 
     @patch('time.sleep', Mock())
     @patch('ceph_volume.process.call', return_value=([], [], 11))
-    def test_osd_mkfs_fails_EWOULDBLOCK(self, m_call, monkeypatch):
-        bo = BaseObjectStore([])
+    def test_osd_mkfs_fails_EWOULDBLOCK(self, m_call, monkeypatch, objectstore):
+        args = objectstore(dmcrypt=False)
+        bo = BaseObjectStore(args)
         bo.get_osd_path = lambda: '/var/lib/ceph/osd/ceph-123/'
         bo.build_osd_mkfs_cmd = lambda: ['ceph-osd', '--mkfs', 'some', 'fake', 'args']
         monkeypatch.setattr(system, 'chown', lambda path: 0)
@@ -160,3 +158,26 @@ class TestBaseObjectStore:
     def test_activate(self):
         with pytest.raises(NotImplementedError):
             BaseObjectStore([]).activate()
+
+    @patch('ceph_volume.objectstore.baseobjectstore.prepare_utils.create_key', Mock(return_value=['AQCee6ZkzhOrJRAAZWSvNC3KdXOpC2w8ly4AZQ==']))
+    def setup_method(self, m_create_key):
+        self.b = BaseObjectStore([])
+        self.b.osd_mkfs_cmd = ['binary', 'arg1']
+
+    def test_add_objectstore_opts_wal_device_path(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.system.chown', lambda path: 0)
+        self.b.wal_device_path = '/dev/nvme0n1'
+        self.b.add_objectstore_opts()
+        assert self.b.osd_mkfs_cmd == ['binary', 'arg1', '--bluestore-block-wal-path', '/dev/nvme0n1']
+
+    def test_add_objectstore_opts_db_device_path(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.system.chown', lambda path: 0)
+        self.b.db_device_path = '/dev/ssd1'
+        self.b.add_objectstore_opts()
+        assert self.b.osd_mkfs_cmd == ['binary', 'arg1', '--bluestore-block-db-path', '/dev/ssd1']
+
+    def test_add_objectstore_opts_osdspec_affinity(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.util.system.chown', lambda path: 0)
+        self.b.get_osdspec_affinity = lambda: 'foo'
+        self.b.add_objectstore_opts()
+        assert self.b.osd_mkfs_cmd == ['binary', 'arg1', '--osdspec-affinity', 'foo']

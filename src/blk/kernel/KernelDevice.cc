@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -582,6 +583,11 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
 
   uint64_t oldcount = discard_threads.size();
   uint64_t newcount = cct->_conf.get_val<uint64_t>("bdev_async_discard_threads");
+  if (newcount == 0) {
+    //backward compatibility mode to make sure legacy "bdev_async_discard" is
+    // taken into account if set.
+    newcount = cct->_conf.get_val<bool>("bdev_async_discard") ? 1 : 0;
+  }
   if (!cct->_conf.get_val<bool>("bdev_enable_discard") || !support_discard || discard_stop) {
     newcount = 0;
   }
@@ -593,12 +599,12 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
     for(uint64_t i = oldcount; i < newcount; i++)
     {
       // All threads created with the same name
-      discard_threads.emplace_back(new DiscardThread(this, i));
+      discard_threads.emplace_back(new DiscardThread(this));
       discard_threads.back()->create("bstore_discard");
     }
   // Decrease? Signal threads after telling them to stop
   } else if (newcount < oldcount) {
-    std::vector<std::shared_ptr<DiscardThread>> discard_threads_to_stop;
+    std::vector<DiscardThread*> discard_threads_to_stop;
     dout(10) << __func__ << " stopping " << (oldcount - newcount) << " existing discard threads" << dendl;
 
     // Signal the last threads to quit, and stop tracking them
@@ -609,8 +615,9 @@ void KernelDevice::_discard_update_threads(bool discard_stop)
     discard_cond.notify_all();
     discard_threads.resize(newcount);
     l.unlock();
-    for (auto &t : discard_threads_to_stop) {
+    for (auto t : discard_threads_to_stop) {
       t->join();
+      delete t;
     }
   }
   logger->set(l_blk_kernel_discard_threads, discard_threads.size());
@@ -780,19 +787,15 @@ void KernelDevice::swap_discard_queued(interval_set<uint64_t>& other)
   discard_queued.swap(other);
 }
 
-void KernelDevice::_discard_thread(uint64_t tid)
+void KernelDevice::_discard_thread(DiscardThread* thr)
 {
-  dout(10) << __func__ << " thread " << tid << " start" << dendl;
+  dout(10) << __func__ << " thread " << thr << " start" << dendl;
 
   // Thread-local list of processing discards
   interval_set<uint64_t> discard_processing;
 
   std::unique_lock l(discard_lock);
   discard_cond.notify_all();
-
-  // Keeps the shared pointer around until erased from the vector
-  // and until we leave this function
-  auto thr = discard_threads[tid];
 
   while (true) {
     ceph_assert(discard_processing.empty());
@@ -838,10 +841,10 @@ void KernelDevice::_discard_thread(uint64_t tid)
       discard_running ++;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
-      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
       for (auto p = discard_processing.begin(); p != discard_processing.end(); ++p) {
         _discard(p.get_start(), p.get_len());
       }
+      logger->inc(l_blk_kernel_device_discard_op, discard_processing.num_intervals());
 
       discard_callback(discard_callback_priv, static_cast<void*>(&discard_processing));
       discard_processing.clear();
@@ -851,7 +854,7 @@ void KernelDevice::_discard_thread(uint64_t tid)
     }
   }
 
-  dout(10) << __func__ << " thread " << tid << " finish" << dendl;
+  dout(10) << __func__ << " thread " << thr << " finish" << dendl;
 }
 
 // this is private and is expected that the caller checks that discard
@@ -891,9 +894,11 @@ bool KernelDevice::_queue_discard(interval_set<uint64_t> &to_release)
 
 // return true only if discard was queued, so caller won't have to do
 // alloc->release, otherwise return false
-bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
+bool KernelDevice::try_discard(interval_set<uint64_t> &to_release,
+                               bool async,
+                               bool force)
 {
-  if (!support_discard || !cct->_conf->bdev_enable_discard)
+  if (!support_discard || !(force || cct->_conf->bdev_enable_discard))
     return false;
 
   if (async && _discard_started()) {
@@ -902,6 +907,7 @@ bool KernelDevice::try_discard(interval_set<uint64_t> &to_release, bool async)
     for (auto p = to_release.begin(); p != to_release.end(); ++p) {
       _discard(p.get_start(), p.get_len());
     }
+    logger->inc(l_blk_kernel_device_discard_op, to_release.num_intervals());
   }
   return false;
 }
@@ -1217,10 +1223,23 @@ int KernelDevice::_discard(uint64_t offset, uint64_t len)
 	       << dendl;
     return 0;
   }
-  dout(10) << __func__
-           << " 0x" << std::hex << offset << "~" << len << std::dec
-           << dendl;
-  r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  uint64_t max_len = cct->_conf->bdev_max_discard_length;
+  if (max_len) {
+    while (len > 0 && r == 0) {
+      auto l = std::min(max_len, len);
+      dout(10) << __func__
+               << " 0x" << std::hex << offset << "~" << l << std::dec
+               << dendl;
+      r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)l);
+      offset += l;
+      len -= l;
+    }
+  } else {
+    dout(10) << __func__
+             << " 0x" << std::hex << offset << "~" << len << std::dec
+             << dendl;
+    r = BlkDev{fd_directs[WRITE_LIFE_NOT_SET]}.discard((int64_t)offset, (int64_t)len);
+  }
   return r;
 }
 
@@ -1603,14 +1622,16 @@ std::vector<std::string> KernelDevice::get_tracked_keys()
 {
   return {
     "bdev_async_discard_threads"s,
-    "bdev_enable_discard"s
+    "bdev_async_discard"s,
+    "bdev_enable_discard"s,
   };
 }
 
 void KernelDevice::handle_conf_change(const ConfigProxy& conf,
 			     const std::set <std::string> &changed)
 {
-  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_enable_discard")) {
+  if (changed.count("bdev_async_discard_threads") || changed.count("bdev_async_discard") ||
+      changed.count("bdev_enable_discard")) {
     _discard_update_threads();
   }
 }

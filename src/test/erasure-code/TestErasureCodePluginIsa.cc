@@ -43,6 +43,7 @@ TEST(ErasureCodePlugin, factory)
   for(const char **technique = techniques; *technique; technique++) {
     ErasureCodeInterfaceRef erasure_code;
     profile["technique"] = *technique;
+    profile["m"] = "2";
     EXPECT_FALSE(erasure_code);
     EXPECT_EQ(0, instance.factory("isa",
 				  g_conf().get_val<std::string>("erasure_code_dir"),

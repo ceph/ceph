@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "gtest/gtest.h"
 #include "os/bluestore/BlueStore.h"
@@ -22,10 +22,9 @@ TEST(rocksdb_bluefs_vselector, basic) {
     1ull << 30,
     level_base,
     level_multi,
-    g_ceph_context->_conf->bluestore_volume_selection_reserved_factor,
-    g_ceph_context->_conf->bluestore_volume_selection_reserved,
     g_ceph_context->_conf->bluestore_volume_selection_policy.find("use_some_extra")
       == 0);
+  selector.update_from_config(g_ceph_context);
 
   // taken from RocksDBBlueFSVolumeSelector::
   size_t log_bdev = 1; // LEVEL_LOG

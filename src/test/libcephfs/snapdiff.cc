@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -20,6 +21,7 @@
 #include "include/stringify.h"
 #include "common/ceph_context.h"
 #include "common/config_proxy.h"
+#include "common/JSONFormatter.h"
 #include "json_spirit/json_spirit.h"
 #include "boost/format/alt_sstream.hpp"
 #include <errno.h>
@@ -33,6 +35,8 @@
 #include <limits.h>
 #include <dirent.h>
 #include <optional>
+#include <random>
+#include <string.h>
 
 using namespace std;
 class TestMount {
@@ -2135,4 +2139,58 @@ TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
   ASSERT_EQ(0, test_mount.purge_dir(""));
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffDeletionRecreation) {
+  int bulk_count = 1 << 15;
+  TestMount test_mount("/SnapdiffDeletionRecreation");
+
+  ASSERT_EQ(0, test_mount.mkdir("bulk"));
+  ASSERT_EQ(0, test_mount.mkdir("test"));
+
+  int i;
+  char path[PATH_MAX];
+  for (i = 0; i < bulk_count; i++) {
+    snprintf(path, PATH_MAX - 1, "bulk/%d", i);
+    test_mount.write_full(path, path);
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap1"));
+  // creation of snap1 done
+
+  for (i = 0; i < bulk_count / 2; ++i) {
+    snprintf(path, PATH_MAX - 1, "bulk/%d", i);
+    ASSERT_EQ(0, test_mount.unlink(path));
+    if (i >= bulk_count / 4) {
+      ASSERT_EQ(0, test_mount.mkdir(path));
+    }
+  }
+  for (i = bulk_count; i < 2 * bulk_count; ++i) {
+    snprintf(path, PATH_MAX - 1, "bulk/%d", i);
+    test_mount.write_full(path, path);
+  }
+  ASSERT_EQ(0, test_mount.mksnap("snap2"));
+
+  uint64_t snapid1;
+  uint64_t snapid2;
+
+  // learn snapshot ids and do basic verification
+  ASSERT_EQ(0, test_mount.get_snapid("snap1", &snapid1));
+  ASSERT_EQ(0, test_mount.get_snapid("snap2", &snapid2));
+
+  vector <pair <string, uint64_t>> expected;
+  for (int i = 0; i < 2 * bulk_count; ++i) {
+    string dir = to_string(i);
+    if (i < bulk_count / 4) {
+      expected.push_back({dir, snapid1});
+    } else if (i >= bulk_count / 4 && i < bulk_count / 2) {
+      expected.push_back({dir, snapid1});
+      expected.push_back({dir, snapid2});
+    } else if (i >= bulk_count) {
+      expected.push_back({dir, snapid2});
+    }
+  }
+  test_mount.verify_snap_diff(expected, "bulk", "snap1", "snap2");
+
+  test_mount.rmsnap("snap1");
+  test_mount.rmsnap("snap2");
 }

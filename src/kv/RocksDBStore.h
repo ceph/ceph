@@ -1,7 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef ROCKS_DB_STORE_H
 #define ROCKS_DB_STORE_H
+
+#include <sys/types.h>
+#include <dirent.h>
 
 #include "include/types.h"
 #include "include/buffer_fwd.h"

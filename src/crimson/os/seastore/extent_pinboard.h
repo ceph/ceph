@@ -1,0 +1,35 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
+#pragma once
+
+#include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/transaction.h"
+
+namespace crimson::os::seastore {
+
+struct ExtentPinboard {
+  virtual ~ExtentPinboard() = default;
+  virtual void register_metrics() = 0;
+  virtual void move_to_top(
+    CachedExtent &extent,
+    const Transaction::src_t *p_src,
+    extent_len_t load_start,
+    extent_len_t load_length) = 0;
+  virtual void remove(CachedExtent &extent) = 0;
+  virtual void get_stats(
+    cache_stats_t &stats,
+    bool report_detail,
+    double seconds) const = 0;
+  virtual std::size_t get_current_size_bytes() const = 0;
+  virtual std::size_t get_current_num_extents() const = 0;
+  virtual void increase_cached_size(
+    CachedExtent &extent,
+    extent_len_t increased_length,
+    const Transaction::src_t *p_src) = 0;
+  virtual void clear() = 0;
+};
+using ExtentPinboardRef = std::unique_ptr<ExtentPinboard>;
+ExtentPinboardRef create_extent_pinboard(std::size_t capacity);
+
+} // namespace crimson::os::seastore

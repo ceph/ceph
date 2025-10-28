@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <array>
 #include <string>
@@ -280,6 +280,10 @@ static auto transform_old_authinfo(const RGWUserInfo& user,
       return type;
     }
 
+    std::optional<rgw::ARN> get_caller_identity() const override {
+      return std::nullopt;
+    }
+
     string get_acct_name() const override {
       return {};
     }
@@ -550,18 +554,18 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
 
       return 0;
     } catch (const int err) {
-      ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
+      ldpp_dout(dpp, 5) << "applier threw err=" << err << dendl;
       return err;
     } catch (const std::exception& e) {
-      ldpp_dout(dpp, 5) << "applier throwed unexpected err: " << e.what()
+      ldpp_dout(dpp, 5) << "applier threw unexpected err: " << e.what()
                         << dendl;
       return -EPERM;
     }
   } catch (const int err) {
-    ldpp_dout(dpp, 5) << "auth engine throwed err=" << err << dendl;
+    ldpp_dout(dpp, 5) << "auth engine threw err=" << err << dendl;
     return err;
   } catch (const std::exception& e) {
-    ldpp_dout(dpp, 5) << "auth engine throwed unexpected err: " << e.what()
+    ldpp_dout(dpp, 5) << "auth engine threw unexpected err: " << e.what()
                       << dendl;
   }
 
@@ -1022,15 +1026,24 @@ auto rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp) con
   ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
   create_account(dpp, acct_user, implicit_tenant, user->get_info());
 
-  /* Succeeded if we are here (create_account() hasn't throwed). */
+  /* Succeeded if we are here (create_account() hasn't thrown). */
   return user;
 }
 
 void rgw::auth::RemoteApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = info.acct_user.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());
+}
+
+std::optional<rgw::ARN> rgw::auth::RemoteApplier::get_caller_identity() const 
+{
+  return rgw::ARN(owner_acct_user.id, "user", owner_acct_user.tenant, true);
 }
 
 /* rgw::auth::LocalApplier */
@@ -1140,6 +1153,10 @@ auto rgw::auth::LocalApplier::load_acct_info(const DoutPrefixProvider* dpp) cons
 
 void rgw::auth::LocalApplier::modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const
 {
+  string key = "aws:userid";
+  string value = user_info.type == TYPE_ROOT ? user_info.account_id : user_info.user_id.id;
+  s->env.emplace(key, value);
+
   // copy our identity policies into req_state
   s->iam_identity_policies.insert(s->iam_identity_policies.end(),
                                   policies.begin(), policies.end());

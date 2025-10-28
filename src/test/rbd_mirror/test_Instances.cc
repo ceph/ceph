@@ -1,7 +1,8 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/rados/librados.hpp"
+#include "include/rbd_types.h" // for RBD_MIRROR_LEADER
 #include "cls/rbd/cls_rbd_client.h"
 #include "test/rbd_mirror/test_fixture.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"

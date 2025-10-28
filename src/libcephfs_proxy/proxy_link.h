@@ -13,7 +13,14 @@
  * starting with "NEG_VERSION" and do the appropriate changes in each place. */
 
 /* NEG_VERSION: Update this value to the latest implemented version. */
-#define PROXY_LINK_NEGOTIATE_VERSION 1
+#define PROXY_LINK_NEGOTIATE_VERSION 2
+
+/* Known versions for communication protocol. */
+#define PROXY_PROTOCOL_V0 0
+#define PROXY_PROTOCOL_V1 1
+
+/* The maximum supported protocol version. */
+#define PROXY_LINK_PROTOCOL_VERSION PROXY_PROTOCOL_V1
 
 /* Version 0 structure will be used to handle legacy clients that don't support
  * negotiation. */
@@ -38,11 +45,16 @@ typedef struct _proxy_link_negotiate_v1 {
 	uint32_t enabled;
 } proxy_link_negotiate_v1_t;
 
+typedef struct _proxy_link_negotiate_v2 {
+	uint32_t protocol;
+} proxy_link_negotiate_v2_t;
+
 /* NEG_VERSION: Add typedefs for new negotiate extensions above this comment. */
 
 struct _proxy_link_negotiate {
 	proxy_link_negotiate_v0_t v0;
 	proxy_link_negotiate_v1_t v1;
+	proxy_link_negotiate_v2_t v2;
 
 	/* NEG_VERSION: Add newly defined typedefs above this comment. */
 };
@@ -85,13 +97,17 @@ static inline void proxy_link_negotiate_init(proxy_link_negotiate_t *neg,
 					     uint32_t min_version,
 					     uint32_t supported,
 					     uint32_t required,
-					     uint32_t enabled)
+					     uint32_t enabled,
+					     uint32_t protocol)
 {
 	proxy_link_negotiate_init_v0(neg, PROXY_LINK_NEGOTIATE_VERSION,
 				     min_version);
+
 	neg->v1.supported = supported;
 	neg->v1.required = required;
 	neg->v1.enabled = enabled;
+
+	neg->v2.protocol = protocol;
 }
 
 static inline bool proxy_link_is_connected(proxy_link_t *link)

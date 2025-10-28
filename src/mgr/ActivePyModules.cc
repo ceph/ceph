@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -22,6 +23,7 @@
 #include "common/perf_counters_key.h"
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
+#include "json_spirit/json_spirit_writer.h"
 
 #include "mon/MonMap.h"
 #include "osd/OSDMap.h"
@@ -29,6 +31,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/TTLCache.h"
 #include "mgr/mgr_perf_counters.h"
+#include "messages/MMgrReport.h" // for class PerfCounterType
 
 #include "DaemonKey.h"
 #include "DaemonServer.h"

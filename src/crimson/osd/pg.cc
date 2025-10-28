@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "pg.h"
 
@@ -1064,12 +1064,12 @@ PG::interruptible_future<eversion_t> PG::submit_error_log(
   const std::error_code e,
   ceph_tid_t rep_tid)
 {
-  // as with submit_executer, need to ensure that log numbering and submission
-  // are atomic
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // as with submit_executer, need to ensure that log numbering and submission
+  // are atomic
+  co_await interruptor::make_interruptible(submit_lock.lock());
   LOG_PREFIX(PG::submit_error_log);
   DEBUGDPP("{} rep_tid: {} error: {}",
 	   *this, *m, rep_tid, e);
@@ -1202,12 +1202,12 @@ PG::submit_executer_fut PG::submit_executer(
   LOG_PREFIX(PG::submit_executer);
   DEBUGDPP("", *this);
 
-  // we need to build the pg log entries and submit the transaction
-  // atomically to ensure log ordering
-  co_await interruptor::make_interruptible(submit_lock.lock());
   auto unlocker = seastar::defer([this] {
     submit_lock.unlock();
   });
+  // we need to build the pg log entries and submit the transaction
+  // atomically to ensure log ordering
+  co_await interruptor::make_interruptible(submit_lock.lock());
 
   auto [submitted, completed] = co_await std::move(
     ox
@@ -1617,6 +1617,15 @@ bool PG::can_discard_op(const MOSDOp& m) const {
       // (us).
       return true;
     }
+
+  // Note: the Objecter will resend on pg split
+  // hence we can discard ops here.
+  // Refer: https://github.com/ceph/ceph/pull/13235
+  if (m.get_map_epoch() < peering_state.get_info().history.last_epoch_split) {
+    logger().debug("{} pg split in {} dropping!", __func__,
+        peering_state.get_info().history.last_epoch_split);
+    return true;
+  }
   return __builtin_expect(m.get_map_epoch()
       < peering_state.get_info().history.same_primary_since, false);
 }
@@ -1735,9 +1744,10 @@ void PG::reset_pglog_based_recovery_op() {
 }
 
 void PG::cancel_pglog_based_recovery_op() {
-  ceph_assert(pglog_based_recovery_op);
-  pglog_based_recovery_op->cancel();
-  reset_pglog_based_recovery_op();
+  if (pglog_based_recovery_op) {
+    pglog_based_recovery_op->cancel();
+    reset_pglog_based_recovery_op();
+  }
 }
 
 void PG::C_PG_FinishRecovery::finish(int r) {

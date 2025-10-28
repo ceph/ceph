@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_H
 #define CEPH_OS_BLUESTORE_BLUEFS_H
 
@@ -32,6 +33,7 @@ enum {
   l_bluefs_wal_used_bytes,
   l_bluefs_slow_total_bytes,
   l_bluefs_slow_used_bytes,
+  l_bluefs_meta_ratio,
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
@@ -86,9 +88,6 @@ enum {
   l_bluefs_wal_alloc_lat,
   l_bluefs_db_alloc_lat,
   l_bluefs_slow_alloc_lat,
-  l_bluefs_wal_alloc_max_lat,
-  l_bluefs_db_alloc_max_lat,
-  l_bluefs_slow_alloc_max_lat,
   l_bluefs_last,
 };
 
@@ -98,6 +97,13 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+
+  /**
+  *  Update config parameters from the config database.
+  *
+  */
+  virtual void update_from_config(CephContext* cct) = 0;
+
   /**
   *  Method to learn a hint (aka logic level discriminator)  specific for
   *  BlueFS log
@@ -550,8 +556,6 @@ private:
     l_bluefs_max_bytes_db,
   };
 
-  ceph::timespan max_alloc_lat[MAX_BDEV] = {ceph::make_timespan(0)};
-
   // cache
   struct {
     ceph::mutex lock = ceph::make_mutex("BlueFS::nodes.lock");
@@ -808,6 +812,7 @@ public:
   int revert_wal_to_plain();
 
   uint64_t get_used();
+  int64_t get_used_non_bluefs();
   uint64_t get_block_device_size(unsigned id);
   uint64_t get_free(unsigned id);
   uint64_t get_used(unsigned id);
@@ -863,10 +868,16 @@ public:
     vselector.reset(s);
   }
   void dump_volume_selector(std::ostream& sout) {
+    ceph_assert(vselector);
     vselector->dump(sout);
+  }
+  void update_volume_selector_from_config() {
+    ceph_assert(vselector);
+    vselector->update_from_config(cct);
   }
   void get_vselector_paths(const std::string& base,
                            BlueFSVolumeSelector::paths& res) const {
+    ceph_assert(vselector);
     return vselector->get_paths(base, res);
   }
 
@@ -953,6 +964,7 @@ public:
     uint64_t _slow_total)
     : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
 
+  void update_from_config(CephContext* cct) override {}
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 

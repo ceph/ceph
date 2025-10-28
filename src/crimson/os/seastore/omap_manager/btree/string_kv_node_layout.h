@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -597,11 +597,8 @@ public:
   }
 
   const_iterator find_string_key(std::string_view str) const {
-    auto iter = string_lower_bound(str);
-    if (iter.get_key() == str) {
-      return iter;
-    }
-    return iter_cend();
+    auto it = string_lower_bound(str);
+    return (it != iter_cend() && it.get_key() == str) ? it : iter_cend();
   }
 
   iterator find_string_key(std::string_view str) {
@@ -1182,20 +1179,14 @@ public:
   }
 
   const_iterator string_lower_bound(std::string_view str) const {
-    uint16_t start = 0, end = get_size();
-    while (start != end) {
-      unsigned mid = (start + end) / 2;
-      const_iterator iter(this, mid);
-      std::string s = iter->get_key();
-      if (s < str) {
-        start = ++mid;
-      } else if (s > str) {
-        end = mid;
-      } else {
-        return iter;
-      }
-    }
-    return const_iterator(this, start);
+    auto it = std::lower_bound(boost::make_counting_iterator<uint16_t>(0),
+                               boost::make_counting_iterator<uint16_t>(get_size()),
+                               str,
+                               [this](uint16_t i, std::string_view str) {
+                                 const_iterator iter(this, i);
+                                 return iter->get_key() < str;
+                               });
+    return const_iterator(this, *it);
   }
 
   iterator string_lower_bound(std::string_view str) {
@@ -1204,13 +1195,14 @@ public:
   }
 
   const_iterator string_upper_bound(std::string_view str) const {
-    auto ret = iter_begin();
-    for (; ret != iter_end(); ++ret) {
-      std::string s = ret->get_key();
-      if (s > str)
-        break;
-    }
-    return ret;
+    auto it = std::upper_bound(boost::make_counting_iterator<uint16_t>(0),
+                               boost::make_counting_iterator<uint16_t>(get_size()),
+                               str,
+                               [this](std::string_view str, uint16_t i) {
+                                 const_iterator iter(this, i);
+                                 return str < iter->get_key();
+                               });
+    return const_iterator(this, *it);
   }
 
   iterator string_upper_bound(std::string_view str) {
@@ -1219,14 +1211,10 @@ public:
   }
 
   const_iterator find_string_key(std::string_view str) const {
-    auto ret = iter_begin();
-    for (; ret != iter_end(); ++ret) {
-      std::string s = ret->get_key();
-      if (s == str)
-        break;
-    }
-    return ret;
+    auto it = string_lower_bound(str);
+    return (it != iter_end() && it.get_key() == str) ? it : iter_end();
   }
+
   iterator find_string_key(std::string_view str) {
     const auto &tref = *this;
     return iterator(this, tref.find_string_key(str).index);

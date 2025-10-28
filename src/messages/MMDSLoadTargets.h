@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,8 @@
 
 #ifndef CEPH_MMDSLoadTargets_H
 #define CEPH_MMDSLoadTargets_H
+
+#include <set>
 
 #include "msg/Message.h"
 #include "mds/mdstypes.h"

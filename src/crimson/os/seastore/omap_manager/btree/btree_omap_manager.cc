@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <string.h>
 
@@ -265,6 +265,26 @@ BtreeOMapManager::omap_rm_key_range(
 	return omap_rm_key(omap_root, t, key);
       });
     });
+  });
+}
+
+BtreeOMapManager::omap_iterate_ret
+BtreeOMapManager::omap_iterate(
+  const omap_root_t &omap_root,
+  Transaction &t,
+  ObjectStore::omap_iter_seek_t &start_from,
+  omap_iterate_cb_t callback)
+{
+  LOG_PREFIX(BtreeOMapManager::omap_iterate);
+  DEBUGT("{}, {}", t, omap_root, start_from);
+  return get_omap_root(
+    get_omap_context(t, omap_root),
+    omap_root
+  ).si_then([this, &t, &start_from, callback, &omap_root](auto extent) {
+    return extent->iterate(
+      get_omap_context(t, omap_root),
+      start_from,
+      callback);
   });
 }
 

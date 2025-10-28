@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 #include <boost/intrusive_ptr.hpp>
@@ -95,6 +95,12 @@ public:
     const std::string &first,
     const std::string &last,
     omap_list_config_t config) final;
+
+  omap_iterate_ret omap_iterate(
+    const omap_root_t &omap_root,
+    Transaction &t,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) final;
 
   omap_list_ret omap_list(
     const omap_root_t &omap_root,

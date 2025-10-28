@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 /*
  * Ceph - scalable distributed file system
  *
@@ -19,6 +19,7 @@
 
 #include <boost/tuple/tuple.hpp>
 #include "include/ceph_assert.h"
+#include "include/types.h" // for client_t
 #include "DynamicPerfStats.h"
 #include "OSD.h"
 #include "PG.h"
@@ -611,6 +612,13 @@ public:
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override {
     osd->send_message_osd_cluster(peer, m, from_epoch);
+  }
+  void send_message_osd_cluster(
+    int osd, MOSDPGPush* msg, epoch_t from_epoch) override {
+    std::vector wrapped_msg {
+      std::make_pair(osd, static_cast<Message*>(msg))
+    };
+    send_message_osd_cluster(wrapped_msg, from_epoch);
   }
   void send_message_osd_cluster(
     std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) override {

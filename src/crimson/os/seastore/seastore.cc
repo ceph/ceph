@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "seastore.h"
 
@@ -14,6 +14,7 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/shared_mutex.hh>
 
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "include/stringify.h"
 #include "os/Transaction.h"
@@ -47,9 +48,6 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::READ:
       name = "read";
       break;
-    case op_type_t::WRITE:
-      name = "write";
-      break;
     case op_type_t::GET_ATTR:
       name = "get_attr";
       break;
@@ -62,8 +60,8 @@ template <> struct fmt::formatter<crimson::os::seastore::op_type_t>
     case op_type_t::OMAP_GET_VALUES:
       name = "omap_get_values";
       break;
-    case op_type_t::OMAP_GET_VALUES2:
-      name = "omap_get_values2";
+    case op_type_t::OMAP_ITERATE:
+      name = "omap_iterate";
       break;
     case op_type_t::MAX:
       name = "unknown";
@@ -158,12 +156,11 @@ void SeaStore::Shard::register_metrics()
   std::pair<op_type_t, sm::label_instance> labels_by_op_type[] = {
     {op_type_t::DO_TRANSACTION,   sm::label_instance("latency", "DO_TRANSACTION")},
     {op_type_t::READ,             sm::label_instance("latency", "READ")},
-    {op_type_t::WRITE,            sm::label_instance("latency", "WRITE")},
     {op_type_t::GET_ATTR,         sm::label_instance("latency", "GET_ATTR")},
     {op_type_t::GET_ATTRS,        sm::label_instance("latency", "GET_ATTRS")},
     {op_type_t::STAT,             sm::label_instance("latency", "STAT")},
     {op_type_t::OMAP_GET_VALUES,  sm::label_instance("latency", "OMAP_GET_VALUES")},
-    {op_type_t::OMAP_GET_VALUES2, sm::label_instance("latency", "OMAP_GET_VALUES2")},
+    {op_type_t::OMAP_ITERATE,     sm::label_instance("latency", "OMAP_ITERATE")},
   };
 
   for (auto& [op_type, label] : labels_by_op_type) {
@@ -223,16 +220,12 @@ seastar::future<> SeaStore::start()
          d_type == device_type_t::RANDOM_BLOCK_SSD);
 
   ceph_assert(root != "");
-  return Device::make_device(root, d_type
-  ).then([this](DeviceRef device_obj) {
-    device = std::move(device_obj);
-    return device->start();
-  }).then([this, is_test] {
-    ceph_assert(device);
-    return shard_stores.start(root, device.get(), is_test);
-  }).then([FNAME] {
-    INFO("done");
-  });
+  DeviceRef device_obj = co_await Device::make_device(root, d_type);
+  device = std::move(device_obj);
+  co_await device->start();
+  ceph_assert(device);
+  co_await shard_stores.start(root, device.get(), is_test);
+  INFO("done");
 }
 
 seastar::future<> SeaStore::test_start(DeviceRef device_obj)
@@ -243,10 +236,8 @@ seastar::future<> SeaStore::test_start(DeviceRef device_obj)
   ceph_assert(device_obj);
   ceph_assert(root == "");
   device = std::move(device_obj);
-  return shard_stores.start_single(root, device.get(), true
-  ).then([FNAME] {
-    INFO("done");
-  });
+  co_await shard_stores.start_single(root, device.get(), true);
+  INFO("done");
 }
 
 seastar::future<> SeaStore::stop()
@@ -255,20 +246,15 @@ seastar::future<> SeaStore::stop()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return seastar::do_for_each(secondaries, [](auto& sec_dev) {
-    return sec_dev->stop();
-  }).then([this] {
-    secondaries.clear();
-    if (device) {
-      return device->stop();
-    } else {
-      return seastar::now();
-    }
-  }).then([this] {
-    return shard_stores.stop();
-  }).then([FNAME] {
-    INFO("done");
-  });
+  for (auto& sec_dev : secondaries) {
+    co_await sec_dev->stop();
+  }
+  secondaries.clear();
+  if (device) {
+    co_await device->stop();
+  }
+  co_await shard_stores.stop();
+  INFO("done");
 }
 
 SeaStore::mount_ertr::future<> SeaStore::test_mount()
@@ -277,61 +263,43 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.local().mount_managers(
-  ).then([FNAME] {
-    INFO("done");
-  });
+  co_await shard_stores.local().mount_managers();
+  INFO("done");
 }
 
-SeaStore::mount_ertr::future<> SeaStore::mount()
+Device::access_ertr::future<> SeaStore::_mount()
 {
   LOG_PREFIX(SeaStore::mount);
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return device->mount(
-  ).safe_then([this] {
-    ceph_assert(device->get_sharded_device().get_block_size()
-		>= laddr_t::UNIT_SIZE);
-    auto &sec_devices = device->get_sharded_device().get_secondary_devices();
-    return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
-      device_id_t id = device_entry.first;
-      magic_t magic = device_entry.second.magic;
-      device_type_t dtype = device_entry.second.dtype;
-      std::string path =
-        fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
-      return Device::make_device(path, dtype
-      ).then([this, path, magic](DeviceRef sec_dev) {
-        return sec_dev->start(
-        ).then([this, magic, sec_dev = std::move(sec_dev)]() mutable {
-          return sec_dev->mount(
-          ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
-	    ceph_assert(sec_dev->get_sharded_device().get_block_size()
-			>= laddr_t::UNIT_SIZE);
-            boost::ignore_unused(magic);  // avoid clang warning;
-            assert(sec_dev->get_sharded_device().get_magic() == magic);
-            secondaries.emplace_back(std::move(sec_dev));
-          });
-        }).safe_then([this] {
-          return set_secondaries();
-        });
-      });
-    });
-  }).safe_then([this] {
-    return shard_stores.invoke_on_all([](auto &local_store) {
-      return local_store.mount_managers();
-    });
-  }).safe_then([FNAME] {
-    INFO("done");
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::mount"
-    }
-  );
+  co_await device->mount();
+  ceph_assert(device->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
+
+  auto &sec_devices = device->get_sharded_device().get_secondary_devices();
+  for (auto& device_entry : sec_devices) {
+    device_id_t id = device_entry.first;
+    [[maybe_unused]] magic_t magic = device_entry.second.magic;
+    device_type_t dtype = device_entry.second.dtype;
+    std::string path = fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
+    DeviceRef sec_dev = co_await Device::make_device(path, dtype);
+    co_await sec_dev->start();
+    co_await sec_dev->mount();
+    ceph_assert(sec_dev->get_sharded_device().get_block_size() >= laddr_t::UNIT_SIZE);
+    assert(sec_dev->get_sharded_device().get_magic() == magic);
+    secondaries.emplace_back(std::move(sec_dev));
+    co_await set_secondaries();
+  }
+  co_await shard_stores.invoke_on_all([](auto &local_store) {
+    return local_store.mount_managers();
+  });
+  INFO("done");
 }
 
 seastar::future<> SeaStore::Shard::mount_managers()
 {
+  LOG_PREFIX(SeaStore::mount_managers);
+  INFO("start");
   init_managers();
   return transaction_manager->mount(
   ).handle_error(
@@ -346,107 +314,72 @@ seastar::future<> SeaStore::umount()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.invoke_on_all([](auto &local_store) {
-    return local_store.umount();
-  }).then([FNAME] {
-    INFO("done");
+  co_await shard_stores.invoke_on_all([](auto &local_store) {
+    return local_store.umount().handle_error(
+      crimson::ct_error::assert_all{"Invalid error in SeaStoreS::umount"}
+    );
   });
+  INFO("done");
 }
 
-seastar::future<> SeaStore::Shard::umount()
+base_ertr::future<> SeaStore::Shard::umount()
 {
-  return [this] {
-    if (transaction_manager) {
-      return transaction_manager->close();
-    } else {
-      return TransactionManager::close_ertr::now();
-    }
-  }().safe_then([this] {
-    return crimson::do_for_each(
-      secondaries,
-      [](auto& sec_dev) -> SegmentManager::close_ertr::future<>
-    {
-      return sec_dev->close();
-    });
-  }).safe_then([this] {
-    return device->close();
-  }).safe_then([this] {
-    secondaries.clear();
-    transaction_manager.reset();
-    collection_manager.reset();
-    onode_manager.reset();
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStoreS::umount"
-    }
-  );
+  if (transaction_manager) {
+    co_await transaction_manager->close();
+  }
+  for (auto& sec_dev : secondaries) {
+   co_await sec_dev->close();
+  }
+  co_await device->close();
+  secondaries.clear();
+  transaction_manager.reset();
+  collection_manager.reset();
+  onode_manager.reset();
 }
 
 seastar::future<> SeaStore::write_fsid(uuid_d new_osd_fsid)
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
   LOG_PREFIX(SeaStore::write_fsid);
-  return read_meta("fsid").then([this, FNAME, new_osd_fsid] (auto tuple) {
-    auto [ret, fsid] = tuple;
-    std::string str_fsid = stringify(new_osd_fsid);
-    if (ret == -1) {
-      return write_meta("fsid", stringify(new_osd_fsid));
-    } else if (ret == 0 && fsid != str_fsid) {
-      ERROR("on-disk fsid {} != provided {}",
-            fsid, stringify(new_osd_fsid));
-      throw std::runtime_error("store fsid error");
-    } else {
-      return seastar::now();
-    }
-  });
+  auto [ret, fsid] = co_await read_meta("fsid");
+  std::string str_fsid = stringify(new_osd_fsid);
+  if (ret == -1) {
+    co_return co_await write_meta("fsid", stringify(new_osd_fsid));
+  } else if (ret == 0 && fsid != str_fsid) {
+    ERROR("on-disk fsid {} != provided {}",
+          fsid, stringify(new_osd_fsid));
+    throw std::runtime_error("store fsid error");
+  };
 }
 
-seastar::future<>
+TransactionManager::alloc_extent_ertr::future<>
 SeaStore::Shard::mkfs_managers()
 {
+  LOG_PREFIX(SeaStoreS::mkfs_managers);
+  INFO("...");
   init_managers();
-  return transaction_manager->mkfs(
-  ).safe_then([this] {
-    init_managers();
-    return transaction_manager->mount();
-  }).safe_then([this] {
-
-    ++(shard_stats.io_num);
-    ++(shard_stats.pending_io_num);
-    // For TM::submit_transaction()
-    ++(shard_stats.processing_inlock_io_num);
-
-    return repeat_eagain([this] {
-      ++(shard_stats.repeat_io_num);
-
-      return transaction_manager->with_transaction_intr(
-	Transaction::src_t::MUTATE,
-	"mkfs_seastore",
-	CACHE_HINT_TOUCH,
-	[this](auto& t)
-      {
-        LOG_PREFIX(SeaStoreS::mkfs_managers);
-        DEBUGT("...", t);
-	return onode_manager->mkfs(t
-	).si_then([this, &t] {
-	  return collection_manager->mkfs(t);
-	}).si_then([this, &t](auto coll_root) {
-	  transaction_manager->write_collection_root(
-	    t, coll_root);
-	  return transaction_manager->submit_transaction(t);
-	});
-      });
-    });
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in Shard::mkfs_managers"
-    }
-  ).finally([this] {
-    assert(shard_stats.pending_io_num);
-    --(shard_stats.pending_io_num);
-    // XXX: it's wrong to assume no failure
-    --(shard_stats.processing_postlock_io_num);
-  });
+  co_await transaction_manager->mkfs();
+  init_managers();
+  co_await transaction_manager->mount();
+  ++(shard_stats.io_num);
+  ++(shard_stats.pending_io_num);
+  // For TM::submit_transaction()
+  ++(shard_stats.processing_inlock_io_num);
+  TransactionRef t = transaction_manager->create_transaction(
+    Transaction::src_t::MUTATE, "mkfs_seastore", CACHE_HINT_TOUCH);
+   co_await with_repeat_trans_intr(*t,
+    seastar::coroutine::lambda([&](auto &tr) -> TransactionManager::alloc_extent_iertr::future<> {
+    ++(shard_stats.repeat_io_num);
+    DEBUGT("...", tr);
+    co_await onode_manager->mkfs(tr);
+    auto coll_root = co_await collection_manager->mkfs(tr);
+    transaction_manager->write_collection_root(tr, coll_root);
+    co_await transaction_manager->submit_transaction(tr);
+  }));
+  assert(shard_stats.pending_io_num);
+  --(shard_stats.pending_io_num);
+   // XXX: it's wrong to assume no failure
+  --(shard_stats.processing_postlock_io_num);
 }
 
 seastar::future<> SeaStore::set_secondaries()
@@ -464,141 +397,106 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
   INFO("uuid={} ...", new_osd_fsid);
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return read_meta("mkfs_done"
-  ).then([this, new_osd_fsid, FNAME](auto tuple) {
-    auto [done, value] = tuple;
-    if (done == 0) {
-      ERROR("failed");
-      return seastar::now();
-    } 
-    return shard_stores.local().mkfs_managers(
-    ).then([this, new_osd_fsid] {
-      return prepare_meta(new_osd_fsid);
-    }).then([FNAME] {
-      INFO("done");
-    });
-  });
+  // todo: read_meta to return errorator
+  auto [done, value] = co_await read_meta("mkfs_done");
+  if (done == 0) {
+    ERROR("failed");
+    co_return;
+  }
+  co_await shard_stores.local().mkfs_managers().handle_error(
+    crimson::ct_error::assert_all{"Invalid error in SeaStore::mkfs"});
+  co_await prepare_meta(new_osd_fsid);
+  INFO("done");
 }
 
 seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
 {
+  LOG_PREFIX(SeaStore::prepare_meta);
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return write_fsid(new_osd_fsid).then([this] {
-    return read_meta("type").then([this] (auto tuple) {
-      auto [ret, type] = tuple;
-      if (ret == 0 && type == "seastore") {
-	return seastar::now();
-      } else if (ret == 0 && type != "seastore") {
-	LOG_PREFIX(SeaStore::prepare_meta);
-	ERROR("expected seastore, but type is {}", type);
-	throw std::runtime_error("store type error");
-      } else {
-	return write_meta("type", "seastore");
-      }
-    });
-  }).then([this] {
-    return write_meta("mkfs_done", "yes");
-  });
+  co_await write_fsid(new_osd_fsid);
+  // todo: read_meta to return errorator
+  auto [ret, type] = co_await read_meta("type");
+  if (ret == 0 && type == "seastore") {
+    co_return;
+  } else if (ret == 0 && type != "seastore") {
+    ERROR("expected seastore, but type is {}", type);
+    throw std::runtime_error("store type error");
+  } else {
+    co_await write_meta("type", "seastore");
+  }
+  co_await write_meta("mkfs_done", "yes");
 }
 
-SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
+Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
 {
-  LOG_PREFIX(SeaStore::mkfs);
-  INFO("uuid={}, root={} ...", new_osd_fsid, root);
-
+  LOG_PREFIX(SeaStore::_mkfs);
+  DEBUG("uuid={}, root={} ...", new_osd_fsid, root);
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return read_meta("mkfs_done"
-  ).then([this, new_osd_fsid, FNAME](auto tuple) {
-    auto [done, value] = tuple;
-    if (done == 0) {
-      ERROR("failed");
-      return seastar::now();
-    } else {
-      return seastar::do_with(
-        secondary_device_set_t(),
-        [this, new_osd_fsid, FNAME](auto& sds) {
-        auto fut = seastar::now();
-        if (!root.empty()) {
-          fut = seastar::open_directory(root
-          ).then([this, &sds, new_osd_fsid, FNAME](seastar::file rdir) mutable {
-            std::unique_ptr<seastar::file> root_f =
-              std::make_unique<seastar::file>(std::move(rdir));
-            auto sub = root_f->list_directory(
-              [this, &sds, new_osd_fsid, FNAME](auto de) mutable -> seastar::future<>
-            {
-              DEBUG("found file: {}", de.name);
-              if (de.name.find("block.") == 0
-                  && de.name.length() > 6 /* 6 for "block." */) {
-                std::string entry_name = de.name;
-                auto dtype_end = entry_name.find_first_of('.', 6);
-                device_type_t dtype =
-                  string_to_device_type(
-                    entry_name.substr(6, dtype_end - 6));
-                if (dtype == device_type_t::NONE) {
-                  // invalid device type
-                  return seastar::now();
-                }
-                auto id = std::stoi(entry_name.substr(dtype_end + 1));
-                std::string path = fmt::format("{}/{}", root, entry_name);
-                return Device::make_device(path, dtype
-                ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
-                  auto p_sec_dev = sec_dev.get();
-                  secondaries.emplace_back(std::move(sec_dev));
-                  return p_sec_dev->start(
-                  ).then([&sds, id, dtype, new_osd_fsid, p_sec_dev]() {
-                    magic_t magic = (magic_t)std::rand();
-                    sds.emplace(
-                      (device_id_t)id,
-                      device_spec_t{magic, dtype, (device_id_t)id});
-                    return p_sec_dev->mkfs(device_config_t::create_secondary(
-                      new_osd_fsid, id, dtype, magic)
-                    ).handle_error(crimson::ct_error::assert_all{"not possible"});
-                  });
-                }).then([this] {
-                   return set_secondaries();
-                });
-              }
-              return seastar::now();
-            });
-            return sub.done().then([root_f=std::move(root_f)] {});
-          });
+  // todo: read_meta to return errorator
+  auto [done, value] = co_await read_meta("mkfs_done");
+  if (done == 0) {
+    DEBUG("mkfs_done exists, Skipping mkfs");
+    co_return;
+  }
+  DEBUG("mkfs_done does not exist, starting mkfs");
+  secondary_device_set_t sds;
+  if (!root.empty()) {
+    seastar::file rdir = co_await seastar::open_directory(root);
+    // hmm?
+    auto lister = rdir.experimental_list_directory();
+    while (auto de = co_await lister()) {
+      DEBUG("found file: {}", de->name);
+      if (de->name.find("block.") == 0 && de->name.length() > 6 ) {
+      // 6 for "block."
+        std::string entry_name = de->name;
+        auto dtype_end = entry_name.find_first_of('.', 6);
+        device_type_t dtype =
+          string_to_device_type(
+            entry_name.substr(6, dtype_end - 6));
+        if (dtype == device_type_t::NONE) {
+          // invalid device type
+          co_return;
         }
-        return fut.then([this, &sds, new_osd_fsid] {
-          device_id_t id = 0;
-          device_type_t d_type = device->get_device_type();
-          assert(d_type == device_type_t::SSD ||
-            d_type == device_type_t::RANDOM_BLOCK_SSD);
-          if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
-            id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
-          }
-
-          return device->mkfs(
-            device_config_t::create_primary(new_osd_fsid, id, d_type, sds)
-          );
-        }).safe_then([this] {
-          return crimson::do_for_each(secondaries, [](auto& sec_dev) {
-            return sec_dev->mount();
-          });
-        });
-      }).safe_then([this] {
-        return device->mount();
-      }).safe_then([this] {
-        return shard_stores.invoke_on_all([] (auto &local_store) {
-          return local_store.mkfs_managers();
-        });
-      }).safe_then([this, new_osd_fsid] {
-        return prepare_meta(new_osd_fsid);
-      }).safe_then([this] {
-	return umount();
-      }).safe_then([FNAME] {
-        INFO("done");
-      }).handle_error(
-        crimson::ct_error::assert_all{
-          "Invalid error in SeaStore::mkfs"
-        }
-      );
+        auto id = std::stoi(entry_name.substr(dtype_end + 1));
+        std::string path = fmt::format("{}/{}", root, entry_name);
+        DeviceRef sec_dev = co_await Device::make_device(path, dtype);
+        auto p_sec_dev = sec_dev.get();
+        secondaries.emplace_back(std::move(sec_dev));
+        co_await p_sec_dev->start();
+        magic_t magic = (magic_t)std::rand();
+        sds.emplace((device_id_t)id, device_spec_t{magic, dtype, (device_id_t)id});
+        co_await p_sec_dev->mkfs(
+          device_config_t::create_secondary(new_osd_fsid, id, dtype, magic)
+          ).handle_error(crimson::ct_error::assert_all{"not possible"});
+        co_await set_secondaries();
+      }
     }
+    co_await rdir.close();
+  }
+
+  device_id_t id = 0;
+  device_type_t d_type = device->get_device_type();
+  assert(d_type == device_type_t::SSD ||
+      d_type == device_type_t::RANDOM_BLOCK_SSD);
+  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+      id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+  }
+  DEBUG("creating primary device");
+  co_await device->mkfs(device_config_t::create_primary(new_osd_fsid, id, d_type, sds));
+  DEBUG("mounting {} secondaries", secondaries.size());
+  for (auto& sec_dev : secondaries) {
+      co_await sec_dev->mount();
+  }
+  DEBUG("mounting primary device");
+  co_await device->mount();
+  DEBUG("mkfs managers");
+  co_await shard_stores.invoke_on_all([] (auto &local_store) {
+      return local_store.mkfs_managers().handle_error(
+      crimson::ct_error::assert_all{"Invalid error in SeaStoreS::mkfs_managers"});
   });
+  co_await prepare_meta(new_osd_fsid);
+  co_await umount();
+  INFO("done");
 }
 
 using coll_core_t = SeaStore::coll_core_t;
@@ -787,15 +685,15 @@ seastar::future<> SeaStore::report_stats()
       cache_total.add(s);
     }
 
-    cache_size_stats_t lru_sizes_ps = cache_total.lru_sizes;
-    lru_sizes_ps.divide_by(seastar::smp::count);
-    cache_io_stats_t lru_io_ps = cache_total.lru_io;
-    lru_io_ps.divide_by(seastar::smp::count);
-    INFO("cache lru: total{} {}; per-shard: total{} {}",
-         cache_total.lru_sizes,
-         cache_io_stats_printer_t{seconds, cache_total.lru_io},
-         lru_sizes_ps,
-         cache_io_stats_printer_t{seconds, lru_io_ps});
+    cache_size_stats_t queue_sizes_ps = cache_total.pinboard_sizes;
+    queue_sizes_ps.divide_by(seastar::smp::count);
+    cache_io_stats_t queue_io_ps = cache_total.pinboard_io;
+    queue_io_ps.divide_by(seastar::smp::count);
+    INFO("cache pinboard: total{} {}; per-shard: total{} {}",
+         cache_total.pinboard_sizes,
+         cache_io_stats_printer_t{seconds, cache_total.pinboard_io},
+         queue_sizes_ps,
+         cache_io_stats_printer_t{seconds, queue_io_ps});
 
     cache_size_stats_t dirty_sizes_ps = cache_total.dirty_sizes;
     dirty_sizes_ps.divide_by(seastar::smp::count);
@@ -1102,7 +1000,7 @@ SeaStore::Shard::list_collections()
   });
 }
 
-SeaStore::base_iertr::future<ceph::bufferlist>
+base_iertr::future<ceph::bufferlist>
 SeaStore::Shard::_read(
   Transaction& t,
   Onode& onode,
@@ -1279,7 +1177,7 @@ SeaStore::Shard::get_attr(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::attrs_t>
+base_iertr::future<SeaStore::Shard::attrs_t>
 SeaStore::Shard::_get_attrs(
   Transaction& t,
   Onode& onode)
@@ -1426,35 +1324,40 @@ SeaStore::Shard::omap_get_values(
   });
 }
 
-SeaStore::Shard::read_errorator::future<SeaStore::Shard::omap_values_paged_t>
-SeaStore::Shard::omap_get_values(
+SeaStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
+SeaStore::Shard::omap_iterate(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<std::string> &start,
+  ObjectStore::omap_iter_seek_t start_from,
+  omap_iterate_cb_t callback,
   uint32_t op_flags)
 {
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
-
-  return repeat_with_onode<omap_values_paged_t>(
-    ch,
-    oid,
-    Transaction::src_t::READ,
-    "omap_get_values2",
-    op_type_t::OMAP_GET_VALUES2,
-    op_flags,
-    [this, start](auto &t, auto &onode)
+  return seastar::do_with(
+    std::move(start_from),
+    [this, ch, &oid, callback, op_flags] (auto &start_from)
   {
-    auto root = select_log_omap_root(onode);
-    return omaptree_get_values(
-      t, std::move(root), start);
-  }).finally([this] {
-    assert(shard_stats.pending_read_num);
-    --(shard_stats.pending_read_num);
+    return repeat_with_onode<ObjectStore::omap_iter_ret_t>(
+      ch,
+      oid,
+      Transaction::src_t::READ,
+      "omap_iterate",
+      op_type_t::OMAP_ITERATE,
+      op_flags,
+      [this, &start_from, callback](auto &t, auto &onode)
+    {
+      auto root = select_log_omap_root(onode);
+      return omaptree_iterate(
+        t, std::move(root), start_from, callback);
+    }).finally([this] {
+      assert(shard_stats.pending_read_num);
+      --(shard_stats.pending_read_num);
+    });
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::fiemap_ret_t>
+base_iertr::future<SeaStore::Shard::fiemap_ret_t>
 SeaStore::Shard::_fiemap(
   Transaction &t,
   Onode &onode,
@@ -1533,70 +1436,88 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
+  LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
   ++(shard_stats.io_num);
   ++(shard_stats.pending_io_num);
   ++(shard_stats.starting_io_num);
 
-  // repeat_with_internal_context ensures ordering via collection lock
-  auto num_bytes = _t.get_num_bytes();
-  return repeat_with_internal_context(
-    _ch,
-    std::move(_t),
-    Transaction::src_t::MUTATE,
-    "do_transaction",
-    op_type_t::DO_TRANSACTION,
-    [this, num_bytes](auto &ctx) {
-      LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
-      return with_trans_intr(*ctx.transaction, [&ctx, this, FNAME, num_bytes](auto &t) {
-        DEBUGT("cid={}, {} operations, 0x{:x} bytes, {} colls, {} objects ...",
-               t, ctx.ch->get_cid(),
-               ctx.ext_transaction.get_num_ops(),
-               num_bytes,
-               ctx.iter.colls.size(),
-               ctx.iter.objects.size());
+  auto flags = _t.get_fadvise_flags();
+  internal_context_t ctx{
+    _ch, std::move(_t),
+    transaction_manager->create_transaction(
+      Transaction::src_t::MUTATE,
+      "do_transaction",
+      flags)
+  };
+
+  assert(shard_stats.starting_io_num);
+  --(shard_stats.starting_io_num);
+  ++(shard_stats.waiting_collock_io_num);
+
+  co_await ctx.transaction->get_handle().take_collection_lock(
+    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
+  );
+
+  assert(shard_stats.waiting_collock_io_num);
+  --(shard_stats.waiting_collock_io_num);
+  ++(shard_stats.waiting_throttler_io_num);
+
+  co_await throttler.get(1);
+
+  assert(shard_stats.waiting_throttler_io_num);
+  --(shard_stats.waiting_throttler_io_num);
+  ++(shard_stats.processing_inlock_io_num);
+
+  co_await with_repeat_trans_intr(
+    *ctx.transaction,
+    seastar::coroutine::lambda([&ctx, this, FNAME](auto &t)
+			       -> tm_ret {
+      ++(shard_stats.repeat_io_num);
 #ifndef NDEBUG
-	TRACET(" transaction dump:\n", t);
-	JSONFormatter f(true);
-	f.open_object_section("transaction");
-	ctx.ext_transaction.dump(&f);
-	f.close_section();
-	std::stringstream str;
-	f.flush(str);
-	TRACET("{}", t, str.str());
+      TRACET(" transaction dump:\n", t);
+      JSONFormatter f(true);
+      f.open_object_section("transaction");
+      ctx.ext_transaction.dump(&f);
+      f.close_section();
+      std::stringstream str;
+      f.flush(str);
+      TRACET("{}", t, str.str());
 #endif
-        return seastar::do_with(
-	  std::vector<OnodeRef>(ctx.iter.objects.size()),
-          [this, &ctx](auto& onodes)
-        {
-          return trans_intr::repeat(
-            [this, &ctx, &onodes]()
-            -> tm_iertr::future<seastar::stop_iteration>
-          {
-            if (ctx.iter.have_op()) {
-              return _do_transaction_step(
-                ctx, ctx.ch, onodes, ctx.iter
-              ).si_then([] {
-                return seastar::make_ready_future<seastar::stop_iteration>(
-                  seastar::stop_iteration::no);
-              });
-            } else {
-              return seastar::make_ready_future<seastar::stop_iteration>(
-                seastar::stop_iteration::yes);
-            };
-          });
-        }).si_then([this, &ctx] {
-          return transaction_manager->submit_transaction(*ctx.transaction);
-        });
-      }).safe_then([FNAME, &ctx] {
-        DEBUGT("done", *ctx.transaction);
-      });
-    }
-  ).finally([this] {
-    assert(shard_stats.pending_io_num);
-    --(shard_stats.pending_io_num);
-    // XXX: it's wrong to assume no failure
-    --(shard_stats.processing_postlock_io_num);
-  });
+
+      DEBUGT("cid={}, {} operations, 0x{:x} bytes, {} colls, {} objects ...",
+	     t, ctx.ch->get_cid(),
+	     ctx.ext_transaction.get_num_ops(),
+	     ctx.ext_transaction.get_num_bytes(),
+	     ctx.iter.colls.size(),
+	     ctx.iter.objects.size());
+
+      ctx.reset_preserve_handle(*transaction_manager);
+      std::vector<OnodeRef> onodes(ctx.iter.objects.size());
+      while (ctx.iter.have_op()) {
+	co_await _do_transaction_step(
+	  ctx, ctx.ch, onodes, ctx.iter);
+      }
+
+      co_await transaction_manager->submit_transaction(*ctx.transaction);
+    })
+  ).handle_error(
+    crimson::ct_error::all_same_way([&ctx](auto e) {
+      on_error(ctx.ext_transaction);
+      return seastar::now();
+    })
+  );
+
+  DEBUGT("done", *ctx.transaction);
+  add_latency_sample(
+    op_type_t::DO_TRANSACTION,
+    std::chrono::steady_clock::now() - ctx.begin_timestamp);
+
+  throttler.put();
+
+  assert(shard_stats.pending_io_num);
+  --(shard_stats.pending_io_num);
+  // XXX: it's wrong to assume no failure
+  --(shard_stats.processing_postlock_io_num);
 }
 
 
@@ -1656,6 +1577,15 @@ SeaStore::Shard::_do_transaction_step(
       i.decode_bl(hint);
       return tm_iertr::now();
     }
+    case Transaction::OP_SPLIT_COLLECTION2:
+    {
+      uint32_t bits = op->split_bits;
+      coll_t cid = i.get_cid(op->cid);
+      coll_t dest_cid = i.get_cid(op->dest_cid);
+      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}",
+	*ctx.transaction, cid, dest_cid, bits);
+      return _split_collection(ctx, cid, bits);
+    }
   }
 
   using onode_iertr = OnodeManager::get_onode_iertr::extend<
@@ -1688,7 +1618,8 @@ SeaStore::Shard::_do_transaction_step(
     }
     OnodeRef& d_onode = onodes[op->dest_oid];
     if ((op->op == Transaction::OP_CLONE
-	  || op->op == Transaction::OP_COLL_MOVE_RENAME)
+	  || op->op == Transaction::OP_COLL_MOVE_RENAME
+	  || op->op == Transaction::OP_CLONERANGE2)
 	&& !d_onode) {
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_or_create dest oid={} ...",
@@ -1862,6 +1793,22 @@ SeaStore::Shard::_do_transaction_step(
                *ctx.transaction, oid, i.get_oid(op->dest_oid));
 	return _clone(ctx, *onode, *onodes[op->dest_oid]);
       }
+      case Transaction::OP_CLONERANGE2:
+      {
+        assert(op->off <= std::numeric_limits<extent_len_t>::max());
+        assert(op->len <= std::numeric_limits<extent_len_t>::max());
+        assert(op->dest_off <= std::numeric_limits<extent_len_t>::max());
+        extent_len_t srcoff = (extent_len_t)op->off;
+        extent_len_t len = (extent_len_t)op->len;
+        extent_len_t dstoff = (extent_len_t)op->dest_off;
+        return _clone_range(
+          ctx,
+          onode,
+          onodes[op->dest_oid],
+          srcoff,
+          len,
+          dstoff);
+      }
       case Transaction::OP_COLL_MOVE_RENAME:
       {
         DEBUGT("op COLL_MOVE_RENAME, oid={}, dest oid={} ...",
@@ -1962,12 +1909,18 @@ SeaStore::Shard::_remove(
       ObjectDataHandler(max_object_size),
       [&onode, this, &ctx](auto &objhandler)
     {
-      return objhandler.clear(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          *onode,
-        });
+      auto fut = ObjectDataHandler::clone_iertr::now();
+      auto objctx = ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  *onode,
+	};
+      if (onode->need_cow()) {
+	fut = objhandler.copy_on_write(objctx);
+      }
+      return fut.si_then([&objhandler, objctx] {
+	return objhandler.clear(objctx);
+      });
     });
   }).si_then([this, &ctx, &onode] {
     return onode_manager->erase_onode(*ctx.transaction, onode);
@@ -2005,14 +1958,18 @@ SeaStore::Shard::_write(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &bl, auto &objhandler) {
-      return objhandler.write(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        bl);
+      auto fut = ObjectDataHandler::clone_iertr::now();
+      auto objctx = ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	};
+      if (onode.need_cow()) {
+	fut = objhandler.copy_on_write(objctx);
+      }
+      return fut.si_then([&objhandler, objctx, offset, &bl] {
+	return objhandler.write(objctx, offset, bl);
+      });
     });
 }
 
@@ -2028,21 +1985,82 @@ SeaStore::Shard::_clone(
   {
     auto &object_size = onode.get_layout().size;
     d_onode.update_onode_size(*ctx.transaction, object_size);
-    return objHandler.clone(
+    if (onode.is_head()) { // OP_CLONE
+      assert(onode.is_head());
+      assert(d_onode.is_snap());
+      /* The most common usage of OP_CLONE is during a write operation.
+       * The osd will submit a transaction cloning HEAD to clone and
+       * then mutating HEAD.  ObjectDataHandler::do_clone optimizes for
+       * the case where the *source* is not further mutated, so here we
+       * reverse the two onodes so that HEAD will be the target.
+       */
+      onode.swap_layout(*ctx.transaction, d_onode);
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  d_onode,
+	  &onode});
+    } else { // OP_ROLLBACK
+      assert(d_onode.is_head());
+      return objHandler.clone(
+	ObjectDataHandler::context_t{
+	  *transaction_manager,
+	  *ctx.transaction,
+	  onode,
+	  &d_onode});
+    }
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::XATTR,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::OMAP,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  }).si_then([&ctx, &onode, &d_onode, this] {
+    return omaptree_clone(
+      *ctx.transaction,
+      omap_type_t::LOG,
+      onode.is_head() ? d_onode : onode,
+      onode.is_head() ? onode : d_onode);
+  });
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_clone_range(
+  internal_context_t &ctx,
+  OnodeRef &src_onode,
+  OnodeRef &dst_onode,
+  extent_len_t srcoff,
+  extent_len_t length,
+  extent_len_t dstoff)
+{
+  LOG_PREFIX(SeaStore::_clone_range);
+  DEBUGT("src_onode={}, dst_onode={}, src {}~{}, dst {}",
+    *ctx.transaction, *src_onode, *dst_onode, srcoff, length, dstoff);
+  const auto &d_object_size = dst_onode->get_layout().size;
+  if (srcoff + length > d_object_size) {
+    dst_onode->update_onode_size(
+      *ctx.transaction,
+      std::max<uint64_t>(srcoff + length, d_object_size));
+  }
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [=, this, &ctx](auto &objHandler) {
+    return objHandler.clone_range(
       ObjectDataHandler::context_t{
 	*transaction_manager,
 	*ctx.transaction,
-	onode,
-	&d_onode});
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::XATTR, onode, d_onode);
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::OMAP, onode, d_onode);
-  }).si_then([&ctx, &onode, &d_onode, this] {
-    return omaptree_clone(
-      *ctx.transaction, omap_type_t::LOG, onode, d_onode);
+	*src_onode,
+	dst_onode.get()},
+      srcoff,
+      length,
+      dstoff);
   });
 }
 
@@ -2066,14 +2084,18 @@ SeaStore::Shard::_zero(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
-      return objhandler.zero(
-        ObjectDataHandler::context_t{
-          *transaction_manager,
-          *ctx.transaction,
-          onode,
-        },
-        offset,
-        len);
+    auto fut = ObjectDataHandler::clone_iertr::now();
+    auto objctx = ObjectDataHandler::context_t{
+	*transaction_manager,
+	*ctx.transaction,
+	onode,
+      };
+    if (onode.need_cow()) {
+      fut = objhandler.copy_on_write(objctx);
+    }
+    return fut.si_then([&objhandler, objctx, offset, len] {
+      return objhandler.zero(objctx, offset, len);
+    });
   });
 }
 
@@ -2122,13 +2144,18 @@ SeaStore::Shard::_truncate(
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
-    return objhandler.truncate(
-      ObjectDataHandler::context_t{
-        *transaction_manager,
-        *ctx.transaction,
-        onode
-      },
-      size);
+    auto fut = ObjectDataHandler::clone_iertr::now();
+    auto objctx = ObjectDataHandler::context_t{
+	*transaction_manager,
+	*ctx.transaction,
+	onode,
+      };
+    if (onode.need_cow()) {
+      fut = objhandler.copy_on_write(objctx);
+    }
+    return fut.si_then([&objhandler, objctx, size] {
+      return objhandler.truncate(objctx, size);
+    });
   });
 }
 
@@ -2232,6 +2259,40 @@ SeaStore::Shard::_rmattrs(
     *ctx.transaction,
     get_omap_root(omap_type_t::XATTR, onode),
     onode);
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_split_collection(
+  internal_context_t &ctx,
+  const coll_t &cid,
+  int bits)
+{
+  return transaction_manager->read_collection_root(
+    *ctx.transaction
+  ).si_then([=, this, &ctx](auto _cmroot) {
+    return seastar::do_with(
+      _cmroot,
+      [=, this, &ctx](auto &cmroot) {
+        return collection_manager->update(
+          cmroot,
+          *ctx.transaction,
+          cid,
+          bits
+        ).si_then([this, &ctx, &cmroot] {
+          if (cmroot.must_update()) {
+            transaction_manager->write_collection_root(
+              *ctx.transaction,
+              cmroot);
+          }
+        });
+      }
+    );
+  }).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "Invalid error in SeaStoreS::_create_collection"
+    }
+  );
 }
 
 SeaStore::Shard::tm_ret
@@ -2375,7 +2436,7 @@ SeaStore::read_meta(const std::string& key)
       DEBUG("key={}, value={}", key, *v);
       return std::make_tuple(0, std::move(*v));
     } else {
-      ERROR("key={} failed", key);
+      DEBUG("key={} coudln't find key:", key);
       return std::make_tuple(-1, std::string(""));
     }
   }).handle_error(
@@ -2399,6 +2460,8 @@ uuid_d SeaStore::Shard::get_fsid() const
 
 void SeaStore::Shard::init_managers()
 {
+  LOG_PREFIX(SeaStore::init_managers);
+  DEBUG("start");
   transaction_manager.reset();
   collection_manager.reset();
   onode_manager.reset();
@@ -2538,7 +2601,7 @@ SeaStore::Shard::omaptree_get_value(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_t>
+base_iertr::future<SeaStore::Shard::omap_values_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2583,6 +2646,29 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
+SeaStore::Shard::omaptree_iterate_ret
+SeaStore::Shard::omaptree_iterate(
+  Transaction& t,
+  omap_root_t&& root,
+  ObjectStore::omap_iter_seek_t &start_from,
+  omap_iterate_cb_t callback)
+{
+  LOG_PREFIX(SeaStoreS::omaptree_iterate);
+  auto type = root.get_type();
+  DEBUGT("{}, {} ", t, type, start_from);
+  if (root.is_null()) {
+    DEBUGT("{} root is null", t, type);
+    return seastar::make_ready_future<ObjectStore::omap_iter_ret_t>(ObjectStore::omap_iter_ret_t::NEXT);
+  }
+  return seastar::do_with(
+    BtreeOMapManager(*transaction_manager),
+    std::move(root),
+    [&t, &start_from, callback](auto &manager, auto &root)
+  {
+    return manager.omap_iterate(root, t, start_from, callback);
+  });
+}
+
 SeaStore::Shard::omaptree_list_ret
 SeaStore::Shard::omaptree_list(
   Transaction& t,
@@ -2606,7 +2692,7 @@ SeaStore::Shard::omaptree_list(
   });
 }
 
-SeaStore::base_iertr::future<SeaStore::Shard::omap_values_paged_t>
+base_iertr::future<SeaStore::Shard::omap_values_paged_t>
 SeaStore::Shard::omaptree_get_values(
   Transaction& t,
   omap_root_t&& root,
@@ -2626,7 +2712,7 @@ SeaStore::Shard::omaptree_get_values(
   });
 }
 
-SeaStore::base_iertr::future<omap_root_t>
+base_iertr::future<omap_root_t>
 SeaStore::Shard::omaptree_do_clear(
   Transaction& t,
   omap_root_t&& root)
@@ -2645,7 +2731,7 @@ SeaStore::Shard::omaptree_do_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear_no_onode(
   Transaction& t,
   omap_root_t&& root)
@@ -2679,7 +2765,7 @@ void omaptree_update_root(
   }
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clear(
   Transaction& t,
   omap_root_t&& root,
@@ -2700,7 +2786,7 @@ SeaStore::Shard::omaptree_clear(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_clone(
   Transaction& t,
   omap_type_t type,
@@ -2791,7 +2877,7 @@ SeaStore::Shard::omaptree_set_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keys(
   Transaction& t,
   omap_root_t&& root,
@@ -2827,7 +2913,7 @@ SeaStore::Shard::omaptree_rm_keys(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_keyrange(
   Transaction& t,
   omap_root_t&& root,
@@ -2868,7 +2954,7 @@ SeaStore::Shard::omaptree_rm_keyrange(
   });
 }
 
-SeaStore::base_iertr::future<>
+base_iertr::future<>
 SeaStore::Shard::omaptree_rm_key(
   Transaction& t,
   omap_root_t&& root,

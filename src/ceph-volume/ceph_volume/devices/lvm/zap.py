@@ -23,7 +23,8 @@ def zap_device(path: str) -> None:
     Args:
         path (str): The path to the device to zap.
     """
-    zap_bluestore(path)
+    if disk.has_bluestore_label(path):
+        zap_bluestore(path)
     wipefs(path)
     zap_data(path)
 

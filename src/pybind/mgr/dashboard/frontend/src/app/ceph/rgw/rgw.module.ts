@@ -2,7 +2,6 @@ import { CommonModule, TitleCasePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
-
 import {
   NgbNavModule,
   NgbPopoverModule,
@@ -84,7 +83,9 @@ import {
   TooltipModule,
   ComboBoxModule,
   ToggletipModule,
-  IconService
+  IconService,
+  LayoutModule,
+  SkeletonModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -97,6 +98,7 @@ import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
 import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
 import ToolsIcon from '@carbon/icons/es/tools/32';
 import ParentChild from '@carbon/icons/es/parent-child/20';
+import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
 import { CephSharedModule } from '../shared/ceph-shared.module';
 import { RgwUserAccountsComponent } from './rgw-user-accounts/rgw-user-accounts.component';
@@ -112,6 +114,8 @@ import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicDetailsComponent } from './rgw-topic-details/rgw-topic-details.component';
 import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component';
+import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
+import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
 
 @NgModule({
   imports: [
@@ -148,7 +152,9 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     ComboBoxModule,
     ToggletipModule,
     RadioModule,
-    SelectModule
+    SelectModule,
+    LayoutModule,
+    SkeletonModule
   ],
   exports: [
     RgwDaemonDetailsComponent,
@@ -212,7 +218,9 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
     RgwRateLimitDetailsComponent,
     RgwTopicListComponent,
     RgwTopicDetailsComponent,
-    RgwTopicFormComponent
+    RgwTopicFormComponent,
+    RgwBucketNotificationListComponent,
+    RgwNotificationFormComponent
   ],
   providers: [TitleCasePipe]
 })
@@ -229,7 +237,8 @@ export class RgwModule {
       ArrowDownIcon,
       ProgressBarRoundIcon,
       ToolsIcon,
-      ParentChild
+      ParentChild,
+      UserAccessLocked
     ]);
   }
 }
@@ -327,7 +336,7 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.CREATE }
       },
       {
-        path: `${URLVerbs.EDIT}/:bid`,
+        path: `${URLVerbs.EDIT}/:bid/:owner`,
         component: RgwBucketFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
       }
@@ -380,8 +389,8 @@ const routes: Routes = [
     ]
   },
   {
-    path: 'tiering',
-    data: { breadcrumbs: 'Tiering' },
+    path: 'storage-class',
+    data: { breadcrumbs: 'Storage class' },
     children: [
       { path: '', component: RgwStorageClassListComponent },
       {
@@ -429,8 +438,8 @@ const routes: Routes = [
     children: [{ path: '', component: RgwConfigurationPageComponent }]
   },
   {
-    path: 'topic',
-    data: { breadcrumbs: 'Topic' },
+    path: 'destination',
+    data: { breadcrumbs: 'Notification destination' },
     children: [
       { path: '', component: RgwTopicListComponent },
       {

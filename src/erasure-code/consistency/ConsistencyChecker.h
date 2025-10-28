@@ -52,8 +52,7 @@ class ConsistencyChecker {
   public:
     ConsistencyChecker(librados::Rados& rados,
                         boost::asio::io_context& asio,
-                        const std::string& pool_name,
-                        int stripe_unit);
+                        const std::string& pool_name);
     void queue_ec_read(Read read);
     bool check_object_consistency(const std::string& oid,
                                   const bufferlist& inbl);

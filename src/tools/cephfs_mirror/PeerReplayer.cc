@@ -1,11 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <stack>
 #include <fcntl.h>
 #include <algorithm>
 #include <sys/time.h>
 #include <sys/file.h>
+#include <boost/optional/optional_io.hpp>
 #include <boost/scope_exit.hpp>
 
 #include "common/admin_socket.h"

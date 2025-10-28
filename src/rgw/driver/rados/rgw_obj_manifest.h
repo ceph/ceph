@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -111,7 +111,7 @@ struct RGWObjManifestPart {
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWObjManifestPart*>& o);
+  static std::list<RGWObjManifestPart> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjManifestPart)
 
@@ -163,7 +163,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWObjManifestRule*>& o);
+  static std::list<RGWObjManifestRule> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -190,7 +190,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<RGWObjTier*>& o);
+    static std::list<RGWObjTier> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
@@ -374,7 +374,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWObjManifest*>& o);
+  static std::list<RGWObjManifest> generate_test_instances();
 
   int append(const DoutPrefixProvider *dpp, RGWObjManifest& m, const RGWZoneGroup& zonegroup,
              const RGWZoneParams& zone_params);

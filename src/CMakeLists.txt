@@ -113,6 +113,10 @@ if(NOT MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-ignored-qualifiers>)
 endif()
 
+if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wsign-compare>)
+endif()
+
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-depth-1024>)
 
 # Because Boost can't be bothered to not include its own deprecated headers
@@ -168,6 +172,7 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-mismatched-tags>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unused-private-field>)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-address-of-packed-member>)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-unknown-warning-option>)
   add_compile_options(
     -Wno-unused-function
     -Wno-unused-local-typedef
@@ -194,16 +199,12 @@ if(WITH_CEPH_DEBUG_MUTEX)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DCEPH_DEBUG_MUTEX>)
 endif()
 
+if(WITH_CPUTRACE)
+  add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DWITH_CPUTRACE>)
+endif()
+
 include(CheckCCompilerFlag)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-  CHECK_C_COMPILER_FLAG("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
-  if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-    if(HAS_FORTIFY_SOURCE)
-      add_definitions(
-        -U_FORTIFY_SOURCE
-        -D_FORTIFY_SOURCE=2)
-    endif()
-  endif()
     CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
     if (HAS_STACK_PROTECT)
       add_compile_options(-fstack-protector-strong)
@@ -241,8 +242,8 @@ if(HAVE_INTEL)
   endif()
 endif()
 
-# require c++20
-set(CMAKE_CXX_STANDARD 20)
+# require c++23
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_C_STANDARD 99)
@@ -500,7 +501,14 @@ set(libcommon_files
   ceph_ver.c
   global/global_context.cc
   xxHash/xxhash.c
+  include/filepath.cc
+  include/invoke_date.cc
+  include/object.cc
+  include/types.cc
+  include/utime.cc
+  include/uuid.cc
   common/error_code.cc
+  common/frag.cc
   common/tracer.cc
   log/Log.cc
   mon/MonCap.cc
@@ -1130,8 +1138,8 @@ endif(WITH_KVS)
 if(WITH_RADOSGW)
   if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
     if(WITH_SYSTEM_ARROW)
-      find_package(Arrow 4 REQUIRED QUIET)
-      find_package(Parquet 4 REQUIRED QUIET)
+      find_package(Arrow 9 REQUIRED QUIET)
+      find_package(Parquet 9 REQUIRED QUIET)
     else()
       # find arrow's dependencies
       if (WITH_SYSTEM_UTF8PROC)

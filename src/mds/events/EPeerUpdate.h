@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -40,7 +41,7 @@ struct link_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<link_rollback*>& ls);
+  static std::list<link_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
@@ -61,7 +62,7 @@ struct rmdir_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rmdir_rollback*>& ls);
+  static std::list<rmdir_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
@@ -81,7 +82,7 @@ struct rename_rollback {
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(std::list<drec*>& ls);
+    static std::list<drec> generate_test_instances();
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -95,7 +96,7 @@ struct rename_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<rename_rollback*>& ls);
+  static std::list<rename_rollback> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
@@ -150,7 +151,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(std::list<EPeerUpdate*>& ls);
+  static std::list<EPeerUpdate> generate_test_instances();
 
   void replay(MDSRank *mds) override;
 };

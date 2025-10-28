@@ -1,7 +1,10 @@
 #include "IoSequence.h"
 #include <algorithm>
 
+#include <iostream>
+
 using IoOp = ceph::io_exerciser::IoOp;
+using OpType = ceph::io_exerciser::OpType;
 using Sequence = ceph::io_exerciser::Sequence;
 using IoSequence = ceph::io_exerciser::IoSequence;
 
@@ -53,6 +56,9 @@ std::ostream& ceph::io_exerciser::operator<<(std::ostream& os,
     case Sequence::SEQUENCE_SEQ14:
       os << "SEQUENCE_SEQ14";
       break;
+    case Sequence::SEQUENCE_SEQ15:
+      os << "SEQUENCE_SEQ15";
+      break;
     case Sequence::SEQUENCE_END:
       os << "SEQUENCE_END";
       break;
@@ -65,54 +71,61 @@ bool IoSequence::is_supported(Sequence sequence) const {
 }
 
 std::unique_ptr<IoSequence> IoSequence::generate_sequence(
-    Sequence s, std::pair<int, int> obj_size_range, int seed) {
+    Sequence s, std::pair<int, int> obj_size_range, int seed, bool check_consistency) {
   switch (s) {
     case Sequence::SEQUENCE_SEQ0:
-      return std::make_unique<Seq0>(obj_size_range, seed);
+      return std::make_unique<Seq0>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ1:
-      return std::make_unique<Seq1>(obj_size_range, seed);
+      return std::make_unique<Seq1>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ2:
-      return std::make_unique<Seq2>(obj_size_range, seed);
+      return std::make_unique<Seq2>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ3:
-      return std::make_unique<Seq3>(obj_size_range, seed);
+      return std::make_unique<Seq3>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ4:
-      return std::make_unique<Seq4>(obj_size_range, seed);
+      return std::make_unique<Seq4>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ5:
-      return std::make_unique<Seq5>(obj_size_range, seed);
+      return std::make_unique<Seq5>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ6:
-      return std::make_unique<Seq6>(obj_size_range, seed);
+      return std::make_unique<Seq6>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ7:
-      return std::make_unique<Seq7>(obj_size_range, seed);
+      return std::make_unique<Seq7>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ8:
-      return std::make_unique<Seq8>(obj_size_range, seed);
+      return std::make_unique<Seq8>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ9:
-      return std::make_unique<Seq9>(obj_size_range, seed);
+      return std::make_unique<Seq9>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ10:
       ceph_abort_msg(
           "Sequence 10 only supported for erasure coded pools "
           "through the EcIoSequence interface");
       return nullptr;
     case Sequence::SEQUENCE_SEQ11:
-      return std::make_unique<Seq11>(obj_size_range, seed);
+      return std::make_unique<Seq11>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ12:
-      return std::make_unique<Seq12>(obj_size_range, seed);
+      return std::make_unique<Seq12>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ13:
-      return std::make_unique<Seq13>(obj_size_range, seed);
+      return std::make_unique<Seq13>(obj_size_range, seed, check_consistency);
     case Sequence::SEQUENCE_SEQ14:
-      return std::make_unique<Seq14>(obj_size_range, seed);
+      return std::make_unique<Seq14>(obj_size_range, seed, check_consistency);
+    case Sequence::SEQUENCE_SEQ15:
+      return std::make_unique<Seq15>(obj_size_range, seed, check_consistency);
     default:
       break;
   }
   return nullptr;
 }
 
-IoSequence::IoSequence(std::pair<int, int> obj_size_range, int seed)
+IoSequence::IoSequence(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
     : min_obj_size(obj_size_range.first),
       max_obj_size(obj_size_range.second),
       create(true),
       barrier(false),
       done(false),
       remove(false),
+      consistency(false),
+      consistency_in_progress(false),
+      consistency_request_sent(false),
+      check_consistency(check_consistency),
+      swap(false),
       obj_size(min_obj_size),
       step(-1),
       seed(seed) {
@@ -161,6 +174,26 @@ std::unique_ptr<IoOp> IoSequence::increment_object_size() {
   return BarrierOp::generate();
 }
 
+std::unique_ptr<IoOp> IoSequence::process_remove() {
+  if (check_consistency) {
+    if (!consistency_in_progress) {
+      consistency_in_progress = true;
+      consistency_request_sent = true;
+      return ConsistencyOp::generate();
+    }
+
+    if (consistency_request_sent) {
+      consistency_request_sent = false;
+      return BarrierOp::generate();
+    }
+  }
+
+  // Getting here means consistency and barriers have been applied if required
+  remove = false;
+  consistency_in_progress = false;
+  return RemoveOp::generate();
+}
+
 Sequence IoSequence::getNextSupportedSequenceId() const {
   Sequence sequence = get_id();
   ++sequence;
@@ -172,19 +205,26 @@ Sequence IoSequence::getNextSupportedSequenceId() const {
 
   return Sequence::SEQUENCE_END;
 }
-
 std::unique_ptr<IoOp> IoSequence::next() {
   step++;
   if (remove) {
-    remove = false;
-    return RemoveOp::generate();
+    return process_remove();
   }
   if (barrier) {
     barrier = false;
     return BarrierOp::generate();
   }
+  if (consistency) {
+    consistency = false;
+    barrier = true;
+    return ConsistencyOp::generate();
+  }
   if (done) {
     return DoneOp::generate();
+  }
+  if (swap) {
+    swap = false;
+    return SwapOp::generate();
   }
   if (create) {
     create = false;
@@ -194,8 +234,8 @@ std::unique_ptr<IoOp> IoSequence::next() {
   return _next();
 }
 
-ceph::io_exerciser::Seq0::Seq0(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset(0) {
+ceph::io_exerciser::Seq0::Seq0(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0) {
   select_random_object_size();
   length = 1 + rng(obj_size - 1);
 }
@@ -226,8 +266,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq0::_next() {
   return r;
 }
 
-ceph::io_exerciser::Seq1::Seq1(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed) {
+ceph::io_exerciser::Seq1::Seq1(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency) {
   select_random_object_size();
   count = 3 * obj_size;
 }
@@ -258,8 +298,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq1::_next() {
   }
 }
 
-ceph::io_exerciser::Seq2::Seq2(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset(0), length(0) {}
+ceph::io_exerciser::Seq2::Seq2(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {}
 
 Sequence ceph::io_exerciser::Seq2::get_id() const {
   return Sequence::SEQUENCE_SEQ2;
@@ -283,8 +323,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq2::_next() {
   return SingleReadOp::generate(offset, length);
 }
 
-ceph::io_exerciser::Seq3::Seq3(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset1(0), offset2(0) {
+ceph::io_exerciser::Seq3::Seq3(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(0) {
   set_min_object_size(2);
 }
 
@@ -310,8 +350,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq3::_next() {
   return DoubleReadOp::generate(offset1, 1, offset1 + offset2, 1);
 }
 
-ceph::io_exerciser::Seq4::Seq4(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset1(0), offset2(1) {
+ceph::io_exerciser::Seq4::Seq4(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(1) {
   set_min_object_size(3);
 }
 
@@ -338,8 +378,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq4::_next() {
                                 (offset1 * 2 + offset2) / 2, 1);
 }
 
-ceph::io_exerciser::Seq5::Seq5(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed),
+ceph::io_exerciser::Seq5::Seq5(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
       offset(0),
       length(1),
       doneread(false),
@@ -358,6 +398,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq5::_next() {
     if (!doneread) {
       if (!donebarrier) {
         donebarrier = true;
+        consistency = check_consistency;
         return BarrierOp::generate();
       }
       doneread = true;
@@ -379,8 +420,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq5::_next() {
   return r;
 }
 
-ceph::io_exerciser::Seq6::Seq6(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed),
+ceph::io_exerciser::Seq6::Seq6(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
       offset(0),
       length(1),
       doneread(false),
@@ -399,6 +440,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq6::_next() {
     if (!doneread) {
       if (!donebarrier) {
         donebarrier = true;
+        consistency = check_consistency;
         return BarrierOp::generate();
       }
       doneread = true;
@@ -423,8 +465,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq6::_next() {
   return r;
 }
 
-ceph::io_exerciser::Seq7::Seq7(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed) {
+ceph::io_exerciser::Seq7::Seq7(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency) {
   set_min_object_size(2);
   offset = obj_size;
 }
@@ -441,6 +483,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next() {
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
+      consistency = check_consistency;
       return BarrierOp::generate();
     }
     doneread = true;
@@ -462,8 +505,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq7::_next() {
   return DoubleWriteOp::generate(offset, 1, obj_size / 2, 1);
 }
 
-ceph::io_exerciser::Seq8::Seq8(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset1(0), offset2(1) {
+ceph::io_exerciser::Seq8::Seq8(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset1(0), offset2(1) {
   set_min_object_size(3);
 }
 
@@ -479,6 +522,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next() {
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
+      consistency = check_consistency;
       return BarrierOp::generate();
     }
     doneread = true;
@@ -501,8 +545,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq8::_next() {
                                  (offset1 * 2 + offset2) / 2, 1);
 }
 
-ceph::io_exerciser::Seq9::Seq9(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), offset(0), length(0) {}
+ceph::io_exerciser::Seq9::Seq9(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0), length(0) {}
 
 Sequence ceph::io_exerciser::Seq9::get_id() const {
   return Sequence::SEQUENCE_SEQ9;
@@ -516,6 +560,7 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq9::_next() {
   if (!doneread) {
     if (!donebarrier) {
       donebarrier = true;
+      consistency = check_consistency;
       return BarrierOp::generate();
     }
     doneread = true;
@@ -537,8 +582,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq9::_next() {
   return SingleWriteOp::generate(offset, length);
 }
 
-ceph::io_exerciser::Seq11::Seq11(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed),
+ceph::io_exerciser::Seq11::Seq11(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency),
       count(0),
       doneread(false),
       donebarrier(false) {}
@@ -570,8 +615,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq11::_next() {
   return SingleAppendOp::generate(obj_size);
 }
 
-ceph::io_exerciser::Seq12::Seq12(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), count(0), overlap(1), doneread(false) {}
+ceph::io_exerciser::Seq12::Seq12(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), count(0), overlap(1), doneread(false) {}
 
 Sequence ceph::io_exerciser::Seq12::get_id() const {
   return Sequence::SEQUENCE_SEQ12;
@@ -606,8 +651,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq12::_next() {
                                  obj_size + overlap);
 }
 
-ceph::io_exerciser::Seq13::Seq13(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(obj_size_range, seed), count(0), gap(1), doneread(false) {
+ceph::io_exerciser::Seq13::Seq13(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), count(0), gap(1), doneread(false) {
   set_min_object_size(2);
 }
 
@@ -643,8 +688,8 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq13::_next() {
   return SingleWriteOp::generate((count * obj_size) + gap, obj_size - gap);
 }
 
-ceph::io_exerciser::Seq14::Seq14(std::pair<int, int> obj_size_range, int seed)
-    : IoSequence(std::make_pair(0, obj_size_range.second), seed),
+ceph::io_exerciser::Seq14::Seq14(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(std::make_pair(0, obj_size_range.second), seed, check_consistency),
       offset(0),
       step(1) {
   startrng = std::default_random_engine(seed);
@@ -676,6 +721,8 @@ std::string ceph::io_exerciser::Seq14::get_name() const {
 std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq14::_next() {
   if (offset >= target_obj_size) {
     if (!doneread) {
+      consistency = check_consistency;
+      barrier = check_consistency;
       doneread = true;
       return SingleReadOp::generate(0, current_size);
     }
@@ -706,5 +753,110 @@ std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq14::_next() {
   if (offset >= target_obj_size) {
     barrier = true;
   }
+  return r;
+}
+
+ceph::io_exerciser::Seq15::Seq15(std::pair<int, int> obj_size_range, int seed, bool check_consistency)
+    : IoSequence(obj_size_range, seed, check_consistency), offset(0) {
+      select_random_object_size();
+      if (obj_size < 4) {
+        obj_size = 4;
+      }
+      primary_size = obj_size;
+      secondary_size = primary_size - 3;
+    }
+
+Sequence ceph::io_exerciser::Seq15::get_id() const {
+  return Sequence::SEQUENCE_SEQ15;
+}
+
+std::string ceph::io_exerciser::Seq15::get_name() const {
+  return "Different permutations of writes to objects of different sizes, then copy, resize and read";
+}
+
+std::unique_ptr<ceph::io_exerciser::IoOp> ceph::io_exerciser::Seq15::_next() {
+  std::unique_ptr<IoOp> r = BarrierOp::generate();
+
+  using Stage = ceph::io_exerciser::Seq15::Stage;
+  auto next_stage = [this]() {
+    stage = static_cast<Stage>(static_cast<int>(stage)+1);
+  };
+  switch (stage) {
+    case Stage::WRITE_PRIMARY:
+      // Seq0 with writes instead of reads
+      length = 1 + rng(obj_size - 1);
+      if (offset >= obj_size) {
+        offset = 0;
+        next_stage();
+        break;
+      }
+      if (offset + length > obj_size) {
+        r = SingleWriteOp::generate(offset, obj_size - offset);
+      } else {
+        r = SingleWriteOp::generate(offset, length);
+      }
+      offset += length;
+      break;
+    case Stage::CREATE_SECONDARY:
+      obj_size = secondary_size;
+      create = true;
+      r = SwapOp::generate();
+      next_stage();
+      break;
+    case Stage::WRITE_SECONDARY:
+      // Seq9
+      if (!doneread) {
+        if (!donebarrier) {
+          donebarrier = true;
+          r = BarrierOp::generate();
+          break;
+        }
+        doneread = true;
+        barrier = true;
+        r = SingleReadOp::generate(0, obj_size);
+        break;
+      }
+      length++;
+      if (length > obj_size - offset) {
+        length = 1;
+        offset++;
+        if (offset >= obj_size) {
+          offset = 0;
+          next_stage();
+          break;
+        }
+      }
+      doneread = false;
+      donebarrier = false;
+      r = SingleWriteOp::generate(offset, length);
+      break;
+    case Stage::COPY_FROM_SECONDARY:
+      r = CopyOp::generate();
+      next_stage();
+      break;
+    case Stage::READ_SECONDARY:
+      r = SingleReadOp::generate(0, obj_size);
+      next_stage();
+      break;
+    case Stage::SWAP_TO_PRIMARY:
+      r = SwapOp::generate();
+      next_stage();
+      break;
+    case Stage::TRUNCATE_PRIMARY:
+      obj_size = obj_size + 2;
+      r = TruncateOp::generate(obj_size);
+      next_stage();
+      break;
+    case Stage::READ_PRIMARY:
+      r = SingleReadOp::generate(0, obj_size);
+      next_stage();
+      break;
+    case Stage::DONE:
+      [[fallthrough]];
+    default:
+      done = true;
+      break;
+  }
+
   return r;
 }

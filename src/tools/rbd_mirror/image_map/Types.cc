@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "Types.h"
 #include "include/ceph_assert.h"
@@ -105,8 +105,10 @@ void PolicyData::dump(Formatter *f) const {
   std::visit(DumpVisitor(f, "policy_meta_type"), policy_meta);
 }
 
-void PolicyData::generate_test_instances(std::list<PolicyData *> &o) {
-  o.push_back(new PolicyData(PolicyMetaNone()));
+std::list<PolicyData> PolicyData::generate_test_instances() {
+  std::list<PolicyData> o;
+  o.push_back(PolicyData(PolicyMetaNone()));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &os, const ActionType& action_type) {

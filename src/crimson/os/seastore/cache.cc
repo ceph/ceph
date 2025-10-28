@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/cache.h"
 
@@ -31,11 +31,10 @@ namespace crimson::os::seastore {
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
-    lru(crimson::common::get_conf<Option::size_t>(
-	  "seastore_cache_lru_size"))
+    pinboard(create_extent_pinboard(
+      crimson::common::get_conf<Option::size_t>(
+       "seastore_cachepin_size_pershard")))
 {
-  LOG_PREFIX(Cache::Cache);
-  INFO("created, lru_capacity=0x{:x}B", lru.get_capacity_bytes());
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
@@ -94,8 +93,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   return retire_extent_iertr::now();
 }
 
-void Cache::retire_absent_extent_addr(
-  Transaction &t, paddr_t paddr, extent_len_t length)
+CachedExtentRef Cache::retire_absent_extent_addr(
+  Transaction &t, laddr_t laddr, paddr_t paddr, extent_len_t length)
 {
   assert(paddr.is_absolute());
 
@@ -113,10 +112,12 @@ void Cache::retire_absent_extent_addr(
   ext->init(
     CachedExtent::extent_state_t::CLEAN, paddr,
     PLACEMENT_HINT_NULL, NULL_GENERATION, TRANS_ID_NULL);
+  static_cast<RetiredExtentPlaceholder&>(*ext).set_laddr(laddr);
   DEBUGT("retire {}~0x{:x} as placeholder, add extent -- {}",
 	 t, paddr, length, *ext);
   add_extent(ext);
   t.add_absent_to_retired_set(ext);
+  return ext;
 }
 
 void Cache::dump_contents()
@@ -213,6 +214,26 @@ void Cache::register_metrics()
           return stats.access.get_cache_hit();
         },
         sm::description("total number of cache hits")
+      ),
+      sm::make_counter(
+        "refresh_parent_total",
+        cursor_stats.num_refresh_parent_total,
+        sm::description("total number of refreshed cursors")
+      ),
+      sm::make_counter(
+        "refresh_invalid_parent",
+        cursor_stats.num_refresh_invalid_parent,
+        sm::description("total number of refreshed cursors with invalid parents")
+      ),
+      sm::make_counter(
+        "refresh_unviewable_parent",
+        cursor_stats.num_refresh_unviewable_parent,
+        sm::description("total number of refreshed cursors with unviewable parents")
+      ),
+      sm::make_counter(
+        "refresh_modified_viewable_parent",
+        cursor_stats.num_refresh_modified_viewable_parent,
+        sm::description("total number of refreshed cursors with viewable but modified parents")
       ),
     }
   );
@@ -503,22 +524,10 @@ void Cache::register_metrics()
         stats.dirty_bytes,
         sm::description("total bytes of dirty extents")
       ),
-      sm::make_counter(
-	"cache_lru_size_bytes",
-	[this] {
-	  return lru.get_current_size_bytes();
-	},
-	sm::description("total bytes pinned by the lru")
-      ),
-      sm::make_counter(
-	"cache_lru_num_extents",
-	[this] {
-	  return lru.get_current_num_extents();
-	},
-	sm::description("total extents pinned by the lru")
-      ),
     }
   );
+
+  pinboard->register_metrics();
 
   /**
    * tree stats
@@ -733,18 +742,20 @@ void Cache::add_extent(CachedExtentRef ref)
   assert(ref->rewrite_generation == NULL_GENERATION);
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
-  extents_index.insert(*ref);
+  if (booting) {
+    extents_index.insert(*ref);
+  }
 }
 
 void Cache::mark_dirty(CachedExtentRef ref)
 {
   assert(ref->get_paddr().is_absolute());
   if (ref->is_stable_dirty()) {
-    assert(ref->primary_ref_list_hook.is_linked());
+    assert(ref->is_linked_to_list());
     return;
   }
 
-  lru.remove_from_lru(*ref);
+  pinboard->remove(*ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
   add_to_dirty(ref, nullptr);
 }
@@ -754,7 +765,7 @@ void Cache::add_to_dirty(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_stable_dirty());
-  assert(!ref->primary_ref_list_hook.is_linked());
+  assert(!ref->is_linked_to_list());
   ceph_assert(ref->get_modify_time() != NULL_TIME);
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
@@ -784,7 +795,7 @@ void Cache::remove_from_dirty(
     const Transaction::src_t* p_src)
 {
   assert(ref->is_stable_dirty());
-  ceph_assert(ref->primary_ref_list_hook.is_linked());
+  ceph_assert(ref->is_linked_to_list());
   assert(ref->is_fully_loaded());
   assert(ref->get_paddr().is_absolute() ||
          ref->get_paddr().is_root());
@@ -816,11 +827,11 @@ void Cache::replace_dirty(
     const Transaction::src_t& src)
 {
   assert(prev->is_stable_dirty());
-  ceph_assert(prev->primary_ref_list_hook.is_linked());
+  ceph_assert(prev->is_linked_to_list());
   assert(prev->is_fully_loaded());
 
   assert(next->is_stable_dirty());
-  assert(!next->primary_ref_list_hook.is_linked());
+  assert(!next->is_linked_to_list());
   ceph_assert(next->get_modify_time() != NULL_TIME);
   assert(next->is_fully_loaded());
 
@@ -846,7 +857,7 @@ void Cache::clear_dirty()
   for (auto i = dirty.begin(); i != dirty.end(); ) {
     auto ptr = &*i;
     assert(ptr->is_stable_dirty());
-    ceph_assert(ptr->primary_ref_list_hook.is_linked());
+    ceph_assert(ptr->is_linked_to_list());
     assert(ptr->is_fully_loaded());
 
     auto extent_length = ptr->get_length();
@@ -873,9 +884,11 @@ void Cache::remove_extent(
     remove_from_dirty(ref, p_src);
   } else if (!ref->is_placeholder()) {
     assert(ref->get_paddr().is_absolute());
-    lru.remove_from_lru(*ref);
+    pinboard->remove(*ref);
   }
-  extents_index.erase(*ref);
+  if (ref->is_linked_to_index()) {
+    extents_index.erase(*ref);
+  }
 }
 
 void Cache::commit_retire_extent(
@@ -897,19 +910,21 @@ void Cache::commit_replace_extent(
   assert(next->get_paddr() == prev->get_paddr());
   assert(next->get_paddr().is_absolute() || next->get_paddr().is_root());
   assert(next->version == prev->version + 1);
-  extents_index.replace(*next, *prev);
+  if (booting) {
+    extents_index.replace(*next, *prev);
+  }
 
   const auto t_src = t.get_src();
   if (is_root_type(prev->get_type())) {
     assert(prev->is_stable_dirty());
-    assert(prev->primary_ref_list_hook.is_linked());
+    assert(prev->is_linked_to_list());
     // add the new dirty root to front
     remove_from_dirty(prev, nullptr/* exclude root */);
     add_to_dirty(next, nullptr/* exclude root */);
   } else if (prev->is_stable_dirty()) {
     replace_dirty(next, prev, t_src);
   } else {
-    lru.remove_from_lru(*prev);
+    pinboard->remove(*prev);
     add_to_dirty(next, &t_src);
   }
 
@@ -1177,7 +1192,8 @@ CachedExtentRef Cache::duplicate_for_write(
     // deepcopy the buffer of exist clean extent beacuse it shares
     // buffer with original clean extent.
     auto bp = i->get_bptr();
-    auto nbp = ceph::bufferptr(bp.c_str(), bp.length());
+    auto nbp = ceph::bufferptr(buffer::create_page_aligned(bp.length()));
+    bp.copy_out(0, bp.length(), nbp.c_str());
     i->set_bptr(std::move(nbp));
 
     t.add_mutated_extent(i);
@@ -1421,6 +1437,14 @@ record_t Cache::prepare_record(
 	  extent->get_length(),
 	  extent->get_type()));
     } else if (is_backref_node(extent->get_type())) {
+      // The retire alloc deltas are used to identify the invalid backref extent
+      // deltas during replay when using CircularBoundedJournal, see
+      // build_paddr_seq_map in CBJournal::replay().
+      rel_delta.alloc_blk_ranges.emplace_back(
+	alloc_blk_t::create_retire(
+	  extent->get_paddr(),
+	  extent->get_length(),
+	  extent->get_type()));
       remove_backref_extent(extent->get_paddr());
     } else {
       ERRORT("Got unexpected extent type: {}", t, *extent);
@@ -1548,7 +1572,7 @@ record_t Cache::prepare_record(
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
     i->clear_modified_region();
-    touch_extent(*i, &trans_src, t.get_cache_hint());
+    touch_extent_fully(*i, &trans_src, t.get_cache_hint());
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
 
@@ -1583,7 +1607,7 @@ record_t Cache::prepare_record(
     if (i->is_stable_dirty()) {
       add_to_dirty(i, &t_src);
     } else {
-      touch_extent(*i, &t_src, t.get_cache_hint());
+      touch_extent_fully(*i, &t_src, t.get_cache_hint());
     }
 
     alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1756,6 +1780,7 @@ record_t Cache::prepare_record(
     assert(rewrite_stats.is_clear());
   }
 
+  cursor_stats.apply(t.cursor_stats);
   return record;
 }
 
@@ -1827,7 +1852,7 @@ void Cache::complete_commit(
     i->invalidate_hints();
     add_extent(i);
     const auto t_src = t.get_src();
-    touch_extent(*i, &t_src, t.get_cache_hint());
+    touch_extent_fully(*i, &t_src, t.get_cache_hint());
     i->complete_io();
     epm.commit_space_used(i->get_paddr(), i->get_length());
 
@@ -1949,20 +1974,20 @@ Cache::close_ertr::future<> Cache::close()
 {
   LOG_PREFIX(Cache::close);
   INFO("close with {}({}B) dirty, dirty_from={}, alloc_from={}, "
-       "{}({}B) lru, totally {}({}B) indexed extents",
+       "{}({}B) pinned extents, totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-       lru.get_current_num_extents(),
-       lru.get_current_size_bytes(),
+       pinboard->get_current_num_extents(),
+       pinboard->get_current_size_bytes(),
        extents_index.size(),
        extents_index.get_bytes());
   root.reset();
   clear_dirty();
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();
-  lru.clear();
+  pinboard->clear();
   return close_ertr::now();
 }
 
@@ -2026,6 +2051,14 @@ Cache::replay_delta(
     decode(alloc_delta, delta.bl);
     backref_entry_refs_t backref_entries;
     for (auto &alloc_blk : alloc_delta.alloc_blk_ranges) {
+      if (is_backref_node(alloc_blk.type)) {
+	// On startup, BackrefManager::scan_mapped_space() will scan all
+	// mappings and internal entries to rebuild the space management.
+	// It's unnecessary to apply the alloc deltas of backref extents
+	// to the cached backref entries and these deltas are only used
+	// to skip invalid deltas for RBM backends.
+	continue;
+      }
       if (alloc_blk.paddr.is_record_relative()) {
 	alloc_blk.paddr = record_base.add_relative(alloc_blk.paddr);
       } else {
@@ -2089,9 +2122,14 @@ Cache::replay_delta(
         delta.laddr,
         delta.length,
         [](CachedExtent &) {},
-        [this](CachedExtent &ext) {
+        [this, laddr=delta.laddr](CachedExtent &ext) {
+          assert(ext.is_logical() == (laddr != L_ADDR_NULL));
+          if (ext.is_logical()) {
+            // ExtentPinboardTwoQ requires the laddr is set for warm out queue.
+            ext.cast<LogicalCachedExtent>()->set_laddr(laddr);
+          }
           // replay is not included by the cache hit metrics
-          touch_extent(ext, nullptr, CACHE_HINT_TOUCH);
+          touch_extent_fully(ext, nullptr, CACHE_HINT_TOUCH);
         },
         nullptr) :
       _get_extent_if_cached(
@@ -2200,28 +2238,18 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
 	      return;
 	    }
 
-	    CachedExtentRef on_transaction;
-	    auto result = t.get_extent(ext->get_paddr(), &on_transaction);
-	    if (result == Transaction::get_extent_ret::ABSENT) {
-	      DEBUGT("extent is absent on t -- {}", t, *ext);
-	      t.add_to_read_set(ext);
-	      if (is_root_type(ext->get_type())) {
-		if (t.root) {
-		  assert(&*t.root == &*ext);
-		  ceph_assert(0 == "t.root would have to already be in the read set");
-		} else {
-		  assert(&*ext == &*root);
-		  t.root = root;
-		}
+	    DEBUGT("adding dirty extent {}", t, *ext);
+	    t.add_to_read_set(ext);
+	    if (is_root_type(ext->get_type())) {
+	      if (t.root) {
+		assert(&*t.root == &*ext);
+		ceph_assert(0 == "t.root would have to already be in the read set");
+	      } else {
+		assert(&*ext == &*root);
+		t.root = root;
 	      }
-	      ret.push_back(ext);
-	    } else if (result == Transaction::get_extent_ret::PRESENT) {
-	      DEBUGT("extent is present on t -- {}, on t {}", t, *ext, *on_transaction);
-	      ret.push_back(on_transaction);
-	    } else {
-	      assert(result == Transaction::get_extent_ret::RETIRED);
-	      DEBUGT("extent is retired on t -- {}", t, *ext);
 	    }
+	    ret.push_back(ext);
 	  });
 	}).then_interruptible([&ret] {
 	  return std::move(ret);
@@ -2249,6 +2277,118 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
   }
 }
 
+Cache::get_extent_by_type_ret
+Cache::_get_absent_extent_by_type(
+  Transaction &t,
+  extent_types_t type,
+  paddr_t offset,
+  laddr_t laddr,
+  extent_len_t length,
+  extent_init_func_t &&extent_init_func)
+{
+  LOG_PREFIX(Cache::_get_absent_extent_by_type);
+
+#ifndef NDEBUG
+  {
+    CachedExtentRef ret;
+    auto r = t.get_extent(offset, &ret);
+    if (r != Transaction::get_extent_ret::ABSENT) {
+      SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+      ceph_abort();
+    }
+    assert(!query_cache(offset));
+  }
+#endif
+
+  const auto t_src = t.get_src();
+
+  // partial read
+  CachedExtentRef ret;
+  switch (type) {
+  case extent_types_t::ROOT:
+    ceph_assert(0 == "ROOT is never directly read");
+    break;
+  case extent_types_t::BACKREF_INTERNAL:
+    ret = CachedExtent::make_cached_extent_ref<
+      backref::BackrefInternalNode>(length);
+    break;
+  case extent_types_t::BACKREF_LEAF:
+    ret = CachedExtent::make_cached_extent_ref<
+      backref::BackrefLeafNode>(length);
+    break;
+  case extent_types_t::LADDR_INTERNAL:
+    ret = CachedExtent::make_cached_extent_ref<
+      lba::LBAInternalNode>(length);
+    break;
+  case extent_types_t::LADDR_LEAF:
+    ret = CachedExtent::make_cached_extent_ref<
+      lba::LBALeafNode>(length);
+    break;
+  case extent_types_t::ROOT_META:
+    ret = CachedExtent::make_cached_extent_ref<
+      RootMetaBlock>(length);
+    break;
+  case extent_types_t::OMAP_INNER:
+    ret = CachedExtent::make_cached_extent_ref<
+      omap_manager::OMapInnerNode>(length);
+    break;
+  case extent_types_t::OMAP_LEAF:
+    ret = CachedExtent::make_cached_extent_ref<
+      omap_manager::OMapLeafNode>(length);
+    break;
+  case extent_types_t::COLL_BLOCK:
+    ret = CachedExtent::make_cached_extent_ref<
+      collection_manager::CollectionNode>(length);
+    break;
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    ret = CachedExtent::make_cached_extent_ref<
+      onode::SeastoreNodeExtent>(length);
+    break;
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    ret = CachedExtent::make_cached_extent_ref<ObjectDataBlock>(length);
+    break;
+  case extent_types_t::RETIRED_PLACEHOLDER:
+    ceph_assert(0 == "impossible");
+    break;
+  case extent_types_t::TEST_BLOCK:
+    ret = CachedExtent::make_cached_extent_ref<TestBlock>(length);
+    break;
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    ret = CachedExtent::make_cached_extent_ref<TestBlockPhysical>(length);
+    break;
+  case extent_types_t::NONE:
+    ceph_assert(0 == "NONE is an invalid extent type");
+    break;
+  default:
+    ceph_assert(0 == "impossible");
+  }
+  ret->init(CachedExtent::extent_state_t::CLEAN,
+	    offset,
+	    PLACEMENT_HINT_NULL,
+	    NULL_GENERATION,
+	    TRANS_ID_NULL);
+  DEBUGT("{} length=0x{:x} is absent, add extent ... -- {}",
+    t, type, length, *ret);
+  add_extent(ret);
+  extent_init_func(*ret);
+  cache_access_stats_t& access_stats = get_by_ext(
+    get_by_src(stats.access_by_src_ext, t_src),
+    type);
+  ++access_stats.load_absent;
+  ++stats.access.load_absent;
+  t.add_to_read_set(CachedExtentRef(ret));
+  touch_extent_fully(*ret, &t_src, t.get_cache_hint());
+  return trans_intr::make_interruptible(
+    read_extent(std::move(ret), 0, length, &t_src
+    ).safe_then([laddr](auto extent) {
+      if (extent->is_logical()) {
+	extent->template cast<LogicalCachedExtent>()->set_laddr(laddr);
+      }
+      return extent;
+    })
+  );
+}
+
 Cache::get_extent_ertr::future<CachedExtentRef>
 Cache::do_get_caching_extent_by_type(
   extent_types_t type,
@@ -2259,101 +2399,93 @@ Cache::do_get_caching_extent_by_type(
   extent_init_func_t &&on_cache,
   const Transaction::src_t* p_src)
 {
-  return [=, this, extent_init_func=std::move(extent_init_func)]() mutable {
-    switch (type) {
-    case extent_types_t::ROOT:
-      ceph_assert(0 == "ROOT is never directly read");
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
-    case extent_types_t::BACKREF_INTERNAL:
-      return do_get_caching_extent<backref::BackrefInternalNode>(
-	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::BACKREF_LEAF:
-      return do_get_caching_extent<backref::BackrefLeafNode>(
-	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::LADDR_INTERNAL:
-      return do_get_caching_extent<lba::LBAInternalNode>(
-	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::LADDR_LEAF:
-      return do_get_caching_extent<lba::LBALeafNode>(
-	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::ROOT_META:
-      return do_get_caching_extent<RootMetaBlock>(
-	offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-        return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::OMAP_INNER:
-      return do_get_caching_extent<omap_manager::OMapInnerNode>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-        return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::OMAP_LEAF:
-      return do_get_caching_extent<omap_manager::OMapLeafNode>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-        return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::COLL_BLOCK:
-      return do_get_caching_extent<collection_manager::CollectionNode>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-        return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::ONODE_BLOCK_STAGED:
-      return do_get_caching_extent<onode::SeastoreNodeExtent>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::OBJECT_DATA_BLOCK:
-      return do_get_caching_extent<ObjectDataBlock>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::RETIRED_PLACEHOLDER:
-      ceph_assert(0 == "impossible");
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
-    case extent_types_t::TEST_BLOCK:
-      return do_get_caching_extent<TestBlock>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::TEST_BLOCK_PHYSICAL:
-      return do_get_caching_extent<TestBlockPhysical>(
-        offset, length, std::move(extent_init_func), std::move(on_cache), p_src
-      ).safe_then([](auto extent) {
-	return CachedExtentRef(extent.detach(), false /* add_ref */);
-      });
-    case extent_types_t::NONE: {
-      ceph_assert(0 == "NONE is an invalid extent type");
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
-    }
-    default:
-      ceph_assert(0 == "impossible");
-      return get_extent_ertr::make_ready_future<CachedExtentRef>();
-    }
-  }().safe_then([laddr](CachedExtentRef e) {
-    assert(e->is_logical() == (laddr != L_ADDR_NULL));
-    if (e->is_logical()) {
-      e->cast<LogicalCachedExtent>()->set_laddr(laddr);
-    }
-    return get_extent_ertr::make_ready_future<CachedExtentRef>(e);
-  });
+  switch (type) {
+  case extent_types_t::ROOT:
+    ceph_assert(0 == "ROOT is never directly read");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  case extent_types_t::BACKREF_INTERNAL:
+    return do_get_caching_extent<backref::BackrefInternalNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::BACKREF_LEAF:
+    return do_get_caching_extent<backref::BackrefLeafNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::LADDR_INTERNAL:
+    return do_get_caching_extent<lba::LBAInternalNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::LADDR_LEAF:
+    return do_get_caching_extent<lba::LBALeafNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::ROOT_META:
+    return do_get_caching_extent<RootMetaBlock>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::OMAP_INNER:
+    return do_get_caching_extent<omap_manager::OMapInnerNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::OMAP_LEAF:
+    return do_get_caching_extent<omap_manager::OMapLeafNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::COLL_BLOCK:
+    return do_get_caching_extent<collection_manager::CollectionNode>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::ONODE_BLOCK_STAGED:
+    return do_get_caching_extent<onode::SeastoreNodeExtent>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    return do_get_caching_extent<ObjectDataBlock>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::RETIRED_PLACEHOLDER:
+    ceph_assert(0 == "impossible");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  case extent_types_t::TEST_BLOCK:
+    return do_get_caching_extent<TestBlock>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::TEST_BLOCK_PHYSICAL:
+    return do_get_caching_extent<TestBlockPhysical>(
+      offset, length, std::move(extent_init_func), std::move(on_cache), p_src
+    ).safe_then([](auto extent) {
+      return CachedExtentRef(extent.detach(), false /* add_ref */);
+    });
+  case extent_types_t::NONE: {
+    ceph_assert(0 == "NONE is an invalid extent type");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  }
+  default:
+    ceph_assert(0 == "impossible");
+    return get_extent_ertr::make_ready_future<CachedExtentRef>();
+  }
 }
 
 cache_stats_t Cache::get_stats(
@@ -2362,7 +2494,7 @@ cache_stats_t Cache::get_stats(
   LOG_PREFIX(Cache::get_stats);
 
   cache_stats_t ret;
-  lru.get_stats(ret, report_detail, seconds);
+  pinboard->get_stats(ret, report_detail, seconds);
 
   /*
    * dirty stats
@@ -2532,102 +2664,6 @@ cache_stats_t Cache::get_stats(
   last_access = stats.access;
 
   return ret;
-}
-
-void Cache::LRU::get_stats(
-  cache_stats_t &stats,
-  bool report_detail,
-  double seconds) const
-{
-  LOG_PREFIX(Cache::LRU::get_stats);
-
-  stats.lru_sizes = cache_size_stats_t{current_size, lru.size()};
-  stats.lru_io = overall_io;
-  stats.lru_io.minus(last_overall_io);
-
-  if (report_detail && seconds != 0) {
-    counter_by_src_t<counter_by_extent_t<cache_io_stats_t> >
-      _trans_io_by_src_ext = trans_io_by_src_ext;
-    counter_by_src_t<cache_io_stats_t> trans_io_by_src;
-    cache_io_stats_t trans_io;
-    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
-      auto src = static_cast<transaction_type_t>(_src);
-      auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
-      const auto& last_io_by_ext = get_by_src(last_trans_io_by_src_ext, src);
-      auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
-      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
-        auto ext = static_cast<extent_types_t>(_ext);
-        auto& extent_io = get_by_ext(io_by_ext, ext);
-        const auto& last_extent_io = get_by_ext(last_io_by_ext, ext);
-        extent_io.minus(last_extent_io);
-        trans_io_per_src.add(extent_io);
-      }
-      trans_io.add(trans_io_per_src);
-    }
-    cache_io_stats_t other_io = stats.lru_io;
-    other_io.minus(trans_io);
-
-    std::ostringstream oss;
-    oss << "\nlru total" << stats.lru_sizes;
-    cache_size_stats_t data_sizes;
-    cache_size_stats_t mdat_sizes;
-    cache_size_stats_t phys_sizes;
-    for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
-      auto ext = static_cast<extent_types_t>(_ext);
-      const auto& extent_sizes = get_by_ext(sizes_by_ext, ext);
-      if (is_data_type(ext)) {
-        data_sizes.add(extent_sizes);
-      } else if (is_logical_metadata_type(ext)) {
-        mdat_sizes.add(extent_sizes);
-      } else if (is_physical_type(ext)) {
-        phys_sizes.add(extent_sizes);
-      }
-    }
-    oss << "\n  data" << data_sizes
-        << "\n  mdat" << mdat_sizes
-        << "\n  phys" << phys_sizes;
-
-    oss << "\nlru io: trans-"
-        << cache_io_stats_printer_t{seconds, trans_io}
-        << "; other-"
-        << cache_io_stats_printer_t{seconds, other_io};
-    for (uint8_t _src=0; _src<TRANSACTION_TYPE_MAX; ++_src) {
-      auto src = static_cast<transaction_type_t>(_src);
-      const auto& trans_io_per_src = get_by_src(trans_io_by_src, src);
-      if (trans_io_per_src.is_empty()) {
-        continue;
-      }
-      cache_io_stats_t data_io;
-      cache_io_stats_t mdat_io;
-      cache_io_stats_t phys_io;
-      const auto& io_by_ext = get_by_src(_trans_io_by_src_ext, src);
-      for (uint8_t _ext=0; _ext<EXTENT_TYPES_MAX; ++_ext) {
-        auto ext = static_cast<extent_types_t>(_ext);
-        const auto extent_io = get_by_ext(io_by_ext, ext);
-        if (is_data_type(ext)) {
-          data_io.add(extent_io);
-        } else if (is_logical_metadata_type(ext)) {
-          mdat_io.add(extent_io);
-        } else if (is_physical_type(ext)) {
-          phys_io.add(extent_io);
-        }
-      }
-      oss << "\n  " << src << ": "
-          << cache_io_stats_printer_t{seconds, trans_io_per_src}
-          << "\n    data: "
-          << cache_io_stats_printer_t{seconds, data_io}
-          << "\n    mdat: "
-          << cache_io_stats_printer_t{seconds, mdat_io}
-          << "\n    phys: "
-          << cache_io_stats_printer_t{seconds, phys_io};
-    }
-
-    INFO("{}", oss.str());
-
-    last_trans_io_by_src_ext = trans_io_by_src_ext;
-  }
-
-  last_overall_io = overall_io;
 }
 
 }

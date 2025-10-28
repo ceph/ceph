@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -122,23 +123,25 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_bool("backfill_or_async_recovery", backfill_or_async_recovery);
 }
 
-void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
+list<ECSubWrite> ECSubWrite::generate_test_instances()
 {
-  o.push_back(new ECSubWrite());
-  o.back()->tid = 1;
-  o.back()->at_version = eversion_t(2, 100);
-  o.back()->trim_to = eversion_t(1, 40);
-  o.push_back(new ECSubWrite());
-  o.back()->tid = 4;
-  o.back()->reqid = osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678);
-  o.back()->at_version = eversion_t(10, 300);
-  o.back()->trim_to = eversion_t(5, 42);
-  o.push_back(new ECSubWrite());
-  o.back()->tid = 9;
-  o.back()->reqid = osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678);
-  o.back()->at_version = eversion_t(10, 300);
-  o.back()->trim_to = eversion_t(5, 42);
-  o.back()->pg_committed_to = eversion_t(8, 250);
+  list<ECSubWrite> o;
+  o.emplace_back();
+  o.back().tid = 1;
+  o.back().at_version = eversion_t(2, 100);
+  o.back().trim_to = eversion_t(1, 40);
+  o.emplace_back();
+  o.back().tid = 4;
+  o.back().reqid = osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678);
+  o.back().at_version = eversion_t(10, 300);
+  o.back().trim_to = eversion_t(5, 42);
+  o.emplace_back();
+  o.back().tid = 9;
+  o.back().reqid = osd_reqid_t(entity_name_t::CLIENT(123), 1, 45678);
+  o.back().at_version = eversion_t(10, 300);
+  o.back().trim_to = eversion_t(5, 42);
+  o.back().pg_committed_to = eversion_t(8, 250);
+  return o;
 }
 
 void ECSubWriteReply::encode(bufferlist &bl) const
@@ -181,16 +184,18 @@ void ECSubWriteReply::dump(Formatter *f) const
   f->dump_bool("applied", applied);
 }
 
-void ECSubWriteReply::generate_test_instances(list<ECSubWriteReply*>& o)
+list<ECSubWriteReply> ECSubWriteReply::generate_test_instances()
 {
-  o.push_back(new ECSubWriteReply());
-  o.back()->tid = 20;
-  o.back()->last_complete = eversion_t(100, 2000);
-  o.back()->committed = true;
-  o.push_back(new ECSubWriteReply());
-  o.back()->tid = 80;
-  o.back()->last_complete = eversion_t(50, 200);
-  o.back()->applied = true;
+  list<ECSubWriteReply> o;
+  o.push_back(ECSubWriteReply());
+  o.back().tid = 20;
+  o.back().last_complete = eversion_t(100, 2000);
+  o.back().committed = true;
+  o.push_back(ECSubWriteReply());
+  o.back().tid = 80;
+  o.back().last_complete = eversion_t(50, 200);
+  o.back().applied = true;
+  return o;
 }
 
 void ECSubRead::encode(bufferlist &bl, uint64_t features) const
@@ -288,24 +293,26 @@ void ECSubRead::dump(Formatter *f) const
       [](Formatter& f, const hobject_t& oid) { f.dump_stream("oid") << oid; });
 }
 
-void ECSubRead::generate_test_instances(list<ECSubRead*>& o)
+list<ECSubRead> ECSubRead::generate_test_instances()
 {
+  list<ECSubRead> o;
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
-  o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, shard_id_t(-1));
-  o.back()->tid = 1;
-  o.back()->to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
-  o.back()->to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
-  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
-  o.back()->attrs_to_read.insert(hoid1);
-  o.push_back(new ECSubRead());
-  o.back()->from = pg_shard_t(2, shard_id_t(-1));
-  o.back()->tid = 300;
-  o.back()->to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
-  o.back()->to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
-  o.back()->to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
-  o.back()->attrs_to_read.insert(hoid2);
+  o.push_back(ECSubRead());
+  o.back().from = pg_shard_t(2, shard_id_t(-1));
+  o.back().tid = 1;
+  o.back().to_read[hoid1].push_back(boost::make_tuple(100, 200, 0));
+  o.back().to_read[hoid1].push_back(boost::make_tuple(400, 600, 0));
+  o.back().to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
+  o.back().attrs_to_read.insert(hoid1);
+  o.push_back(ECSubRead());
+  o.back().from = pg_shard_t(2, shard_id_t(-1));
+  o.back().tid = 300;
+  o.back().to_read[hoid1].push_back(boost::make_tuple(300, 200, 0));
+  o.back().to_read[hoid2].push_back(boost::make_tuple(400, 600, 0));
+  o.back().to_read[hoid2].push_back(boost::make_tuple(2000, 600, 0));
+  o.back().attrs_to_read.insert(hoid2);
+  return o;
 }
 
 void ECSubReadReply::encode(bufferlist &bl) const
@@ -444,27 +451,29 @@ void ECSubReadReply::dump(Formatter* f) const
       });
 }
 
-void ECSubReadReply::generate_test_instances(list<ECSubReadReply*>& o)
+list<ECSubReadReply> ECSubReadReply::generate_test_instances()
 {
+  list<ECSubReadReply> o;
   hobject_t hoid1(sobject_t("asdf", 1));
   hobject_t hoid2(sobject_t("asdf2", CEPH_NOSNAP));
   bufferlist bl;
   bl.append_zero(100);
   bufferlist bl2;
   bl2.append_zero(200);
-  o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, shard_id_t(-1));
-  o.back()->tid = 1;
-  o.back()->buffers_read[hoid1].push_back(make_pair(20, bl));
-  o.back()->buffers_read[hoid1].push_back(make_pair(2000, bl2));
-  o.back()->buffers_read[hoid2].push_back(make_pair(0, bl));
-  o.back()->attrs_read[hoid1]["foo"] = bl;
-  o.back()->attrs_read[hoid1]["_"] = bl2;
-  o.push_back(new ECSubReadReply());
-  o.back()->from = pg_shard_t(2, shard_id_t(-1));
-  o.back()->tid = 300;
-  o.back()->buffers_read[hoid2].push_back(make_pair(0, bl2));
-  o.back()->attrs_read[hoid2]["foo"] = bl;
-  o.back()->attrs_read[hoid2]["_"] = bl2;
-  o.back()->errors[hoid1] = -2;
+  o.push_back(ECSubReadReply());
+  o.back().from = pg_shard_t(2, shard_id_t(-1));
+  o.back().tid = 1;
+  o.back().buffers_read[hoid1].push_back(make_pair(20, bl));
+  o.back().buffers_read[hoid1].push_back(make_pair(2000, bl2));
+  o.back().buffers_read[hoid2].push_back(make_pair(0, bl));
+  o.back().attrs_read[hoid1]["foo"] = bl;
+  o.back().attrs_read[hoid1]["_"] = bl2;
+  o.push_back(ECSubReadReply());
+  o.back().from = pg_shard_t(2, shard_id_t(-1));
+  o.back().tid = 300;
+  o.back().buffers_read[hoid2].push_back(make_pair(0, bl2));
+  o.back().attrs_read[hoid2]["foo"] = bl;
+  o.back().attrs_read[hoid2]["_"] = bl2;
+  o.back().errors[hoid1] = -2;
+  return o;
 }

@@ -1,11 +1,13 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_TEST_MEM_RADOS_CLIENT_H
 #define CEPH_TEST_MEM_RADOS_CLIENT_H
 
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "include/ceph_assert.h"
+#include "include/rados.h" // for CEPH_RELEASE_*
+
 #include <list>
 #include <string>
 

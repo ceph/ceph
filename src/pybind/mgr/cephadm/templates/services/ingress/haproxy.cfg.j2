@@ -47,43 +47,72 @@ defaults
 
 frontend stats
     mode http
-    bind {{ ip }}:{{ monitor_port }}
-    bind {{ local_host_ip }}:{{ monitor_port }}
+{% for monitor_ip in monitor_ips %}
+    {% if spec.monitor_ssl %}
+    bind {{ monitor_ip }}:{{ monitor_port }} ssl crt /var/lib/haproxy/{{ monitor_ssl_file }}
+    {% else %}
+    bind {{ monitor_ip }}:{{ monitor_port }}
+    {% endif %}
+{% endfor %}
+{% if spec.enable_stats %}
     stats enable
     stats uri /stats
     stats refresh 10s
     stats auth {{ user }}:{{ password }}
     http-request use-service prometheus-exporter if { path /metrics }
+{% endif %}
     monitor-uri /health
 
 frontend frontend
-{% if spec.ssl_cert %}
+{% if spec.ssl or spec.ssl_cert %}
     bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem {{ v4v6_flag }}
 {% else %}
     bind {{ ip }}:{{ frontend_port }} {{ v4v6_flag }}
 {% endif %}
+{% if mode == 'tcp' %}
+    option tcplog
+{% endif %}
     default_backend backend
 
+{% if backend_spec.service_type == 'nfs' and peer_hosts %}
+peers haproxy_peers
+    {% for hostname, ip in peer_hosts.items() %}
+     peer {{ hostname }} {{ ip }}:1024
+    {% endfor %}
+
+{% endif %}
 backend backend
 {% if mode == 'http' %}
     option forwardfor
-{% if backend_spec.ssl %}
+{% if backend_spec.ssl is defined and backend_spec.ssl %}
     default-server ssl
     default-server verify none
 {% endif %}
     balance static-rr
     option httpchk HEAD / HTTP/1.0
-    {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
-    {% endfor %}
 {% endif %}
 {% if mode == 'tcp' %}
     mode        tcp
-    balance     source
+    balance     roundrobin
+    {% if backend_spec.service_type == 'nfs' %}
+    stick-table type ip size 200k expire 30m peers haproxy_peers
+    stick on src
+    {% endif %}
     hash-type   consistent
+{% if spec.use_tcp_mode_over_rgw %}
+{% if backend_spec.ssl %}
+    option ssl-hello-chk
+{% endif %}
+{% endif %}
 {% if default_server_opts %}
     default-server {{ default_server_opts|join(" ") }}
 {% endif %}
+{% endif %}
+{% if backend_spec.service_type == 'rgw' %}
+    {% for server in servers %}
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check weight 100 inter {{ health_check_interval }}
+    {% endfor %}
+{% else %}
     {% for server in servers %}
     server {{ server.name }} {{ server.ip }}:{{ server.port }} check
     {% endfor %}

@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -19,6 +19,8 @@ class transaction_manager_test_t;
 
 namespace crimson::os::seastore {
 
+class Cache;
+
 /**
  * ExtentOolWriter
  *
@@ -26,8 +28,6 @@ namespace crimson::os::seastore {
  * Different writers write extents to different locations.
  */
 class ExtentOolWriter {
-  using base_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
 public:
   virtual ~ExtentOolWriter() {}
 
@@ -35,7 +35,8 @@ public:
 
   virtual writer_stats_t get_stats() const = 0;
 
-  using open_ertr = base_ertr;
+  using open_ertr = base_ertr::extend<
+    crimson::ct_error::enospc>;
   virtual open_ertr::future<> open() = 0;
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
@@ -195,6 +196,17 @@ private:
     ceph::bufferptr bp;
     RandomBlockManager* rbm;
     std::list<ceph::bufferptr> mergeable_bps;
+
+    extent_len_t get_mergeable_length() const {
+      if (mergeable_bps.size() == 0) {
+	return bp.length();
+      }
+      extent_len_t len = 0;
+      for (auto &p : mergeable_bps) {
+	len += p.length();
+      }
+      return len;
+    }
   };
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -255,13 +267,21 @@ struct reserve_io_result_t {
 
 class ExtentPlacementManager {
 public:
-  ExtentPlacementManager()
-    : ool_segment_seq_allocator(
+  ExtentPlacementManager(
+    rewrite_gen_t hot_tier_generations,
+    rewrite_gen_t cold_tier_generations)
+    : hot_tier_generations(hot_tier_generations),
+      cold_tier_generations(cold_tier_generations),
+      dynamic_max_rewrite_generation(cold_tier_generations),
+      ool_segment_seq_allocator(
           std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
 	  "seastore_max_data_allocation_size"))
   {
+    LOG_PREFIX(ExtentPlacementManager::ExtentPlacementManager);
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
+    SUBINFO(seastore_epm, "cold_tier_generations={}, hot_tier_generations={}",
+      cold_tier_generations, hot_tier_generations);
   }
 
   void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
@@ -343,7 +363,7 @@ public:
 #endif
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen));
+    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
@@ -390,7 +410,7 @@ public:
   ) {
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
     assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen));
+    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
@@ -582,7 +602,7 @@ private:
     } else if (hint == placement_hint_t::COLD) {
       assert(gen == INIT_GENERATION);
       if (background_process.has_cold_tier()) {
-        gen = MIN_COLD_GENERATION;
+        gen = hot_tier_generations;
       } else {
         gen = MIN_REWRITE_GENERATION;
       }
@@ -643,7 +663,7 @@ private:
 
   ExtentOolWriter* get_writer(data_category_t category,
                               rewrite_gen_t gen) {
-    assert(is_rewrite_generation(gen));
+    assert(is_rewrite_generation(gen, dynamic_max_rewrite_generation));
     assert(gen != INLINE_GENERATION);
     assert(gen <= dynamic_max_rewrite_generation);
     ExtentOolWriter* ret = nullptr;
@@ -659,7 +679,7 @@ private:
 
   const ExtentOolWriter* get_writer(data_category_t category,
                                     rewrite_gen_t gen) const {
-    assert(is_rewrite_generation(gen));
+    assert(is_rewrite_generation(gen, dynamic_max_rewrite_generation));
     assert(gen != INLINE_GENERATION);
     assert(gen <= dynamic_max_rewrite_generation);
     ExtentOolWriter* ret = nullptr;
@@ -686,7 +706,8 @@ private:
 
     void init(JournalTrimmerImplRef &&_trimmer,
               AsyncCleanerRef &&_cleaner,
-              AsyncCleanerRef &&_cold_cleaner) {
+              AsyncCleanerRef &&_cold_cleaner,
+              rewrite_gen_t hot_tier_generations) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
@@ -709,12 +730,18 @@ private:
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_default_evict_ratio"),
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_fast_evict_ratio"));
+            "seastore_multiple_tiers_fast_evict_ratio"),
+          hot_tier_generations);
       }
     }
 
     backend_type_t get_backend_type() const {
       return trimmer->get_backend_type();
+    }
+
+    const segments_info_t* get_segments_info() const {
+      assert(main_cleaner);
+      return main_cleaner->get_segments_info();
     }
 
     bool has_cold_tier() const {
@@ -737,18 +764,7 @@ private:
       return stat;
     }
 
-    using mount_ret = ExtentPlacementManager::mount_ret;
-    mount_ret mount() {
-      ceph_assert(state == state_t::STOP);
-      state = state_t::MOUNT;
-      trimmer->reset();
-      stats = {};
-      register_metrics();
-      return main_cleaner->mount(
-      ).safe_then([this] {
-        return has_cold_tier() ? cold_cleaner->mount() : mount_ertr::now();
-      });
-    }
+    ExtentPlacementManager::mount_ret mount();
 
     void start_scan_space() {
       ceph_assert(state == state_t::MOUNT);
@@ -958,10 +974,12 @@ private:
       double stop_evict_ratio;
       double default_evict_ratio;
       double fast_evict_ratio;
+      rewrite_gen_t hot_tier_generations;
 
       void init(double stop_ratio,
                 double default_ratio,
-                double fast_ratio) {
+                double fast_ratio,
+                rewrite_gen_t hot_tier_generations) {
         ceph_assert(0 <= stop_ratio);
         ceph_assert(stop_ratio < default_ratio);
         ceph_assert(default_ratio < fast_ratio);
@@ -970,6 +988,7 @@ private:
         stop_evict_ratio = stop_ratio;
         default_evict_ratio = default_ratio;
         fast_evict_ratio = fast_ratio;
+        this->hot_tier_generations = hot_tier_generations;
       }
 
       bool is_stop_mode() const {
@@ -988,15 +1007,15 @@ private:
         rewrite_gen_t ret = gen;
         switch(eviction_mode) {
         case eviction_mode_t::STOP:
-          if (gen == MIN_COLD_GENERATION) {
-            ret = MIN_COLD_GENERATION - 1;
+          if (gen == hot_tier_generations) {
+            ret = hot_tier_generations - 1;
           }
           break;
         case eviction_mode_t::DEFAULT:
           break;
         case eviction_mode_t::FAST:
-          if (gen >= MIN_REWRITE_GENERATION && gen < MIN_COLD_GENERATION) {
-            ret = MIN_COLD_GENERATION;
+          if (gen >= MIN_REWRITE_GENERATION && gen < hot_tier_generations) {
+            ret = hot_tier_generations;
           }
           break;
         default:
@@ -1062,7 +1081,10 @@ private:
       uint64_t io_blocked_count = 0;
       uint64_t io_blocked_count_trim = 0;
       uint64_t io_blocked_count_clean = 0;
+      uint64_t io_retried_blocked_count_trim = 0;
+      uint64_t io_retried_blocked_count_clean = 0;
       uint64_t io_blocked_sum = 0;
+      uint64_t io_blocked_time = 0;
     } stats;
     seastar::metrics::metric_group metrics;
 
@@ -1094,13 +1116,17 @@ private:
   Device* primary_device = nullptr;
   std::size_t num_devices = 0;
 
-  rewrite_gen_t dynamic_max_rewrite_generation = REWRITE_GENERATIONS;
+  // without cold tier, the largest generation is less than hot_tier_generations
+  const rewrite_gen_t hot_tier_generations = NULL_GENERATION;
+  const rewrite_gen_t cold_tier_generations = NULL_GENERATION;
+  rewrite_gen_t dynamic_max_rewrite_generation = NULL_GENERATION;
   BackgroundProcess background_process;
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
 
   friend class ::transaction_manager_test_t;
+  friend class Cache;
 };
 
 using ExtentPlacementManagerRef = std::unique_ptr<ExtentPlacementManager>;

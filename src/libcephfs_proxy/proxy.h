@@ -20,6 +20,8 @@
 #define PROXY_SOCKET "/run/libcephfsd.sock"
 #define PROXY_SOCKET_ENV "LIBCEPHFSD_SOCKET"
 
+#define field_size(_type, _field) sizeof(((_type *)0)->_field)
+
 #define offset_of(_type, _field) ((uintptr_t) & ((_type *)0)->_field)
 
 #define container_of(_ptr, _type, _field) \
@@ -29,11 +31,15 @@ enum {
 	/* Support for ceph_ll_nonblocking_readv_writev */
 	PROXY_FEAT_ASYNC_IO = 0x00000001,
 
+	/* Support for embedding the user credentials inside the request itself
+	 * instead of using ceph_userperm_new/ceph_userperm_destroy */
+	PROXY_FEAT_EMBEDDED_PERMS = 0x00000002,
+
 	/* Mask of all features requiring the asynchronous callback handling. */
 	PROXY_FEAT_ASYNC_CBK = 0x00000001,
 
 	/* Mask of all supported/known features. */
-	PROXY_FEAT_ALL = 0x00000001
+	PROXY_FEAT_ALL = 0x00000003
 };
 
 struct _list;

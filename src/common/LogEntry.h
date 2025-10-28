@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -83,7 +84,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogEntryKey*>& o);
+  static std::list<LogEntryKey> generate_test_instances();
 
   friend bool operator==(const LogEntryKey& l, const LogEntryKey& r) {
     return l.rank == r.rank && l.stamp == r.stamp && l.seq == r.seq;
@@ -132,7 +133,7 @@ struct LogEntry {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogEntry*>& o);
+  static std::list<LogEntry> generate_test_instances();
   static clog_type str_to_level(std::string const &str);
   static std::string_view level_to_str(clog_type t) {
     switch (t) {
@@ -191,7 +192,7 @@ struct LogSummary {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<LogSummary*>& o);
+  static std::list<LogSummary> generate_test_instances();
 };
 WRITE_CLASS_ENCODER_FEATURES(LogSummary)
 

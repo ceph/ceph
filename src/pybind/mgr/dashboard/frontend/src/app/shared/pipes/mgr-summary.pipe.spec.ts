@@ -19,11 +19,7 @@ describe('MgrSummaryPipe', () => {
   });
 
   it('transforms without value', () => {
-    expect(pipe.transform(undefined)).toEqual({
-      success: 0,
-      info: 0,
-      total: 0
-    });
+    expect(pipe.transform(undefined)).toEqual(null);
   });
 
   it('transforms with 1 active and 2 standbys', () => {

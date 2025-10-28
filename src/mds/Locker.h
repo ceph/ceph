@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -37,6 +38,7 @@ class MClientCaps;
 class MClientCapRelease;
 class MClientLease;
 class MClientReply;
+class MInodeFileCaps;
 class MDCache;
 class MLock;
 class MDSContext;
@@ -64,7 +66,7 @@ public:
 
   void tick();
 
-  void nudge_log(SimpleLock *lock);
+  bool nudge_log(SimpleLock *lock);
 
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
@@ -80,7 +82,7 @@ public:
   void drop_locks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
-  void drop_rdlocks_for_early_reply(MutationImpl *mut);
+  void handle_locks_for_early_reply(MutationImpl *mut);
   void drop_lock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
@@ -261,6 +263,7 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 			  client_t client, const ref_t<MClientCaps> &ack);
 
+  void maybe_set_subvolume_id(const CInode* head_in, ref_t<MClientCaps>& ack);
   xlist<ScatterLock*> updated_scatterlocks;
 
   // Maintain a global list to quickly find if any caps are late revoking

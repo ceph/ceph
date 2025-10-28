@@ -462,8 +462,8 @@ class btree_node {
 
   void set_parent(btree_node *p) { GetField<&base_fields::parent>() = p; }
   field_type &mutable_count() { return GetField<&base_fields::count>(); }
-  slot_type *slot(int i) { return &GetField<&leaf_fields::values>()[i]; }
-  const slot_type *slot(int i) const { return &GetField<&leaf_fields::values>()[i]; }
+  slot_type *slot(int i) { return GetField<&leaf_fields::values>() + i; }
+  const slot_type *slot(int i) const { return GetField<&leaf_fields::values>() + i; }
   void set_position(field_type v) { GetField<&base_fields::position>() = v; }
   void set_count(field_type v) { GetField<&base_fields::count>() = v; }
   // This method is only called by the node init methods.
@@ -1700,9 +1700,12 @@ void btree_node<P>::swap(btree_node *x, allocator_type *alloc) {
 
   if (!leaf()) {
     // Swap the child pointers.
-    std::swap_ranges(&smaller->mutable_child(0),
-                     &smaller->mutable_child(smaller->count() + 1),
-                     &larger->mutable_child(0));
+    auto* smaller_begin = &smaller->mutable_child(0);
+    auto* larger_begin = &larger->mutable_child(0);
+    auto count = smaller->count() + 1;
+    std::swap_ranges(smaller_begin,
+                     smaller_begin + count,
+                     larger_begin);
     // Update swapped children's parent pointers.
     int i = 0;
     for (; i <= smaller->count(); ++i) {

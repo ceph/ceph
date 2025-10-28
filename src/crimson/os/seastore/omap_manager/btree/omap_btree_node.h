@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <string>
@@ -33,8 +34,6 @@ enum class mutation_status_t : uint8_t {
 };
 
 struct OMapNode : LogicalChildNode {
-  using base_iertr = OMapManager::base_iertr;
-
   using OMapNodeRef = TCachedExtentRef<OMapNode>;
 
   struct mutation_result_t {
@@ -79,6 +78,14 @@ struct OMapNode : LogicalChildNode {
   virtual rm_key_ret rm_key(
     omap_context_t oc,
     const std::string &key) = 0;
+
+  using iterate_iertr = base_iertr;
+  using iterate_ret = OMapManager::omap_iterate_ret;
+  using omap_iterate_cb_t = OMapManager::omap_iterate_cb_t;
+  virtual iterate_ret iterate(
+    omap_context_t oc,
+    ObjectStore::omap_iter_seek_t &start_from,
+    omap_iterate_cb_t callback) = 0;
 
   using omap_list_config_t = OMapManager::omap_list_config_t;
   using list_iertr = base_iertr;

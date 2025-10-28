@@ -1,8 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #include "crimson/os/seastore/extent_placement_manager.h"
 
+#include "crimson/common/errorator-loop.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
 
@@ -191,28 +192,38 @@ void ExtentPlacementManager::init(
     AsyncCleanerRef &&cleaner,
     AsyncCleanerRef &&cold_cleaner)
 {
+  LOG_PREFIX(ExtentPlacementManager::init);
   writer_refs.clear();
   auto cold_segment_cleaner = dynamic_cast<SegmentCleaner*>(cold_cleaner.get());
-  dynamic_max_rewrite_generation = MIN_COLD_GENERATION - 1;
+  dynamic_max_rewrite_generation = hot_tier_generations - 1;
   if (cold_segment_cleaner) {
-    dynamic_max_rewrite_generation = MAX_REWRITE_GENERATION;
+    dynamic_max_rewrite_generation = hot_tier_generations + cold_tier_generations - 1;
   }
+  DEBUG("dynamic_max_rewrite_generation: {}, "
+        "hot_tier_generations{} , cold_tier_generations {}",
+        dynamic_max_rewrite_generation, hot_tier_generations,
+        cold_tier_generations);
+  ceph_assert(dynamic_max_rewrite_generation > MIN_REWRITE_GENERATION);
 
   if (trimmer->get_backend_type() == backend_type_t::SEGMENTED) {
+    DEBUG("initiating SegmentCleaner");
     auto segment_cleaner = dynamic_cast<SegmentCleaner*>(cleaner.get());
     ceph_assert(segment_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
+    DEBUG("num_writers {}", num_writers);
 
+    // DATA
     data_writers_by_gen.resize(num_writers, nullptr);
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::DATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
 
+    // METADATA
     md_writers_by_gen.resize(num_writers, {});
-    for (rewrite_gen_t gen = OOL_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = OOL_GENERATION; gen < hot_tier_generations; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
 	    data_category_t::METADATA, gen, *segment_cleaner,
             *ool_segment_seq_allocator));
@@ -224,10 +235,12 @@ void ExtentPlacementManager::init(
       add_device(device);
     }
   } else {
+    DEBUG("initiating RBMCleaner cleaner");
     assert(trimmer->get_backend_type() == backend_type_t::RANDOM_BLOCK);
     auto rb_cleaner = dynamic_cast<RBMCleaner*>(cleaner.get());
     ceph_assert(rb_cleaner != nullptr);
     auto num_writers = generation_to_writer(dynamic_max_rewrite_generation + 1);
+    DEBUG("num_writers {}", num_writers);
     data_writers_by_gen.resize(num_writers, nullptr);
     md_writers_by_gen.resize(num_writers, {});
     writer_refs.emplace_back(std::make_unique<RandomBlockOolWriter>(
@@ -241,13 +254,15 @@ void ExtentPlacementManager::init(
   }
 
   if (cold_segment_cleaner) {
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    // Cold DATA Segments
+    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::DATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
       data_writers_by_gen[generation_to_writer(gen)] = writer_refs.back().get();
     }
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations; gen <= dynamic_max_rewrite_generation; ++gen) {
+      // Cold METADATA Segments
       writer_refs.emplace_back(std::make_unique<SegmentedOolWriter>(
             data_category_t::METADATA, gen, *cold_segment_cleaner,
             *ool_segment_seq_allocator));
@@ -261,7 +276,8 @@ void ExtentPlacementManager::init(
 
   background_process.init(std::move(trimmer),
                           std::move(cleaner),
-                          std::move(cold_cleaner));
+                          std::move(cold_cleaner),
+                          hot_tier_generations);
   if (cold_segment_cleaner) {
     ceph_assert(get_main_backend_type() == backend_type_t::SEGMENTED);
     ceph_assert(background_process.has_cold_tier());
@@ -304,7 +320,7 @@ ExtentPlacementManager::get_device_stats(
     main_stats.add(main_writer_stats.back());
     // 2. mainmdat
     main_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < hot_tier_generations; ++gen) {
       const auto &writer = get_writer(METADATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       main_writer_stats.back().add(writer->get_stats());
@@ -312,7 +328,7 @@ ExtentPlacementManager::get_device_stats(
     main_stats.add(main_writer_stats.back());
     // 3. maindata
     main_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < MIN_COLD_GENERATION; ++gen) {
+    for (rewrite_gen_t gen = MIN_REWRITE_GENERATION; gen < hot_tier_generations; ++gen) {
       const auto &writer = get_writer(DATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       main_writer_stats.back().add(writer->get_stats());
@@ -333,7 +349,9 @@ ExtentPlacementManager::get_device_stats(
   if (has_cold_tier) {
     // 0. coldmdat
     cold_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations;
+        gen <= dynamic_max_rewrite_generation;
+        ++gen) {
       const auto &writer = get_writer(METADATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       cold_writer_stats.back().add(writer->get_stats());
@@ -341,7 +359,9 @@ ExtentPlacementManager::get_device_stats(
     cold_stats.add(cold_writer_stats.back());
     // 1. colddata
     cold_writer_stats.emplace_back();
-    for (rewrite_gen_t gen = MIN_COLD_GENERATION; gen < REWRITE_GENERATIONS; ++gen) {
+    for (rewrite_gen_t gen = hot_tier_generations;
+        gen <= dynamic_max_rewrite_generation;
+        ++gen) {
       const auto &writer = get_writer(DATA, gen);
       ceph_assert(writer->get_type() == backend_type_t::SEGMENTED);
       cold_writer_stats.back().add(writer->get_stats());
@@ -428,21 +448,34 @@ ExtentPlacementManager::open_ertr::future<>
 ExtentPlacementManager::open_for_write()
 {
   LOG_PREFIX(ExtentPlacementManager::open_for_write);
-  INFO("started with {} devices", num_devices);
+  DEBUG("started with {} devices", num_devices);
   ceph_assert(primary_device != nullptr);
-  return crimson::do_for_each(data_writers_by_gen, [](auto &writer) {
+
+#ifndef UNIT_TESTS_BUILT
+  auto total_writers_num =
+    data_writers_by_gen.size() + md_writers_by_gen.size();
+  if (auto segments = background_process.get_segments_info();
+      segments && // Only valid for SegmentCleaner
+      std::cmp_less(segments->get_num_empty(), total_writers_num)) {
+    ERROR("Not enough EMPTY segments! "
+          "Consider increasing the device size (needed {} got {})",
+          total_writers_num, segments->get_num_empty());
+    co_await open_ertr::future<>(crimson::ct_error::enospc::make());
+  }
+#endif
+
+  DEBUG("opening DATA writers", num_devices);
+  for (auto& writer : data_writers_by_gen) {
     if (writer) {
-      return writer->open();
+      co_await writer->open();
     }
-    return open_ertr::now();
-  }).safe_then([this] {
-    return crimson::do_for_each(md_writers_by_gen, [](auto &writer) {
-      if (writer) {
-	return writer->open();
-      }
-      return open_ertr::now();
-    });
-  });
+  }
+  DEBUG("opening METADATA writers", num_devices);
+  for (auto& writer : md_writers_by_gen) {
+    if (writer) {
+      co_await writer->open();
+    }
+  }
 }
 
 ExtentPlacementManager::dispatch_result_t
@@ -465,7 +498,7 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
       res.usage.cleaner_usage.main_usage += extent->get_length();
       t.mark_delayed_extent_inline(extent);
     } else {
-      if (extent->get_rewrite_generation() < MIN_COLD_GENERATION) {
+      if (extent->get_rewrite_generation() < hot_tier_generations) {
         res.usage.cleaner_usage.main_usage += extent->get_length();
       } else {
         assert(background_process.has_cold_tier());
@@ -564,6 +597,22 @@ void ExtentPlacementManager::BackgroundProcess::log_state(const char *caller) co
   }
 }
 
+ExtentPlacementManager::mount_ret ExtentPlacementManager::BackgroundProcess::mount() {
+  LOG_PREFIX(BackgroundProcess::mount);
+  DEBUG("start");
+  ceph_assert(state == state_t::STOP);
+  state = state_t::MOUNT;
+  trimmer->reset();
+  stats = {};
+  register_metrics();
+  DEBUG("mounting main cleaner");
+  co_await main_cleaner->mount();
+  if (has_cold_tier()) {
+    DEBUG("mounting cold cleaner");
+    co_await cold_cleaner->mount();
+  }
+}
+
 void ExtentPlacementManager::BackgroundProcess::start_background()
 {
   LOG_PREFIX(BackgroundProcess::start_background);
@@ -652,7 +701,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     io_usage_t usage)
 {
   if (!is_ready()) {
-    return seastar::now();
+    co_return;
   }
   ceph_assert(!blocking_io);
   // The pipeline configuration prevents another IO from entering
@@ -661,7 +710,7 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
 
   auto res = try_reserve_io(usage);
   if (res.is_successful()) {
-    return seastar::now();
+    co_return;
   } else {
     LOG_PREFIX(BackgroundProcess::reserve_projected_usage);
     DEBUG("blocked: inline={}, main={}, cold={}, usage={}",
@@ -681,33 +730,37 @@ ExtentPlacementManager::BackgroundProcess::reserve_projected_usage(
     stats.io_blocked_sum += stats.io_blocking_num;
 
     blocking_io = seastar::promise<>();
-    return blocking_io->get_future(
-    ).then([this, usage, FNAME] {
-      return seastar::repeat([this, usage, FNAME] {
-        ceph_assert(!blocking_io);
-        auto res = try_reserve_io(usage);
-        if (res.is_successful()) {
-          DEBUG("unblocked");
-          assert(stats.io_blocking_num == 1);
-          --stats.io_blocking_num;
-          return seastar::make_ready_future<seastar::stop_iteration>(
-            seastar::stop_iteration::yes);
-        } else {
-          DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
-                res.reserve_inline_success,
-                res.cleaner_result.reserve_main_success,
-                res.cleaner_result.reserve_cold_success,
-                usage);
-          abort_io_usage(usage, res);
-          blocking_io = seastar::promise<>();
-          return blocking_io->get_future(
-          ).then([] {
-            return seastar::make_ready_future<seastar::stop_iteration>(
-              seastar::stop_iteration::no);
-          });
+    auto begin_time = seastar::lowres_system_clock::now();
+    // we just blocked this IO, now wait until
+    // maybe_wake_blocked_io will set value to blocking_io
+    do {
+      co_await blocking_io->get_future();
+      ceph_assert(!blocking_io);
+      auto res = try_reserve_io(usage);
+      if (res.is_successful()) {
+        DEBUG("unblocked");
+        assert(stats.io_blocking_num == 1);
+        --stats.io_blocking_num;
+        auto end_time = seastar::lowres_system_clock::now();
+        auto duration = end_time - begin_time;
+        stats.io_blocked_time += std::chrono::duration_cast<
+        std::chrono::milliseconds>(duration).count();
+      } else {
+        DEBUG("blocked again: inline={}, main={}, cold={}, usage={}",
+              res.reserve_inline_success,
+              res.cleaner_result.reserve_main_success,
+              res.cleaner_result.reserve_cold_success,
+              usage);
+        abort_io_usage(usage, res);
+        if (!res.reserve_inline_success) {
+          ++stats.io_retried_blocked_count_trim;
         }
-      });
-    });
+          if (!res.cleaner_result.is_successful()) {
+          ++stats.io_retried_blocked_count_clean;
+        }
+        blocking_io = seastar::promise<>();
+      }
+    } while (blocking_io);
   }
 }
 
@@ -729,26 +782,18 @@ seastar::future<>
 ExtentPlacementManager::BackgroundProcess::run()
 {
   assert(is_running());
-  return seastar::repeat([this] {
-    if (!is_running()) {
-      log_state("run(exit)");
-      return seastar::make_ready_future<seastar::stop_iteration>(
-          seastar::stop_iteration::yes);
+  while (is_running()) {
+    if (background_should_run()) {
+      log_state("run(background)");
+      co_await do_background_cycle();
+    } else {
+      log_state("run(block)");
+      assert(!blocking_background);
+      blocking_background = seastar::promise<>();
+      co_await blocking_background->get_future();
     }
-    return seastar::futurize_invoke([this] {
-      if (background_should_run()) {
-        log_state("run(background)");
-        return do_background_cycle();
-      } else {
-        log_state("run(block)");
-        ceph_assert(!blocking_background);
-        blocking_background = seastar::promise<>();
-        return blocking_background->get_future();
-      }
-    }).then([] {
-      return seastar::stop_iteration::no;
-    });
-  });
+  }
+  log_state("run(exit)");
 }
 
 /**
@@ -971,10 +1016,16 @@ void ExtentPlacementManager::BackgroundProcess::register_metrics()
                      sm::description("IOs that are blocked by gc")),
     sm::make_counter("io_blocked_count_trim", stats.io_blocked_count_trim,
                      sm::description("IOs that are blocked by trimming")),
+    sm::make_counter("io_retried_blocked_count_clean", stats.io_blocked_count_clean,
+                     sm::description("Retried IOs that are blocked by cleaning")),
+    sm::make_counter("io_retried_blocked_count_trim", stats.io_blocked_count_trim,
+                     sm::description("Retried IOs that are blocked by trimming")),
     sm::make_counter("io_blocked_count_clean", stats.io_blocked_count_clean,
                      sm::description("IOs that are blocked by cleaning")),
     sm::make_counter("io_blocked_sum", stats.io_blocked_sum,
-                     sm::description("the sum of blocking IOs"))
+                     sm::description("the sum of blocking IOs")),
+    sm::make_counter("io_blocked_time", stats.io_blocked_time,
+                     sm::description("the sum of the time(ms) in which IOs are blocked"))
   });
 }
 
@@ -1054,7 +1105,7 @@ RandomBlockOolWriter::do_write(
 
     // TODO : allocate a consecutive address based on a transaction
     if (writes.size() != 0 &&
-        writes.back().offset + writes.back().bp.length() == paddr) {
+	writes.back().offset + writes.back().get_mergeable_length() == paddr) {
       // We can write both the currrent extent and the previous one at once
       // if the extents are located in a row
       if (writes.back().mergeable_bps.size() == 0) {
@@ -1097,7 +1148,7 @@ RandomBlockOolWriter::do_write(
       stats.num_records += writes.size();
       auto& trans_stats = get_by_src(w_stats.stats_by_src, t.get_src());
       trans_stats.num_records += writes.size();
-      return crimson::do_for_each(writes,
+      return alloc_write_ertr::parallel_for_each(writes,
         [](auto& info) {
         return info.rbm->write(info.offset, info.bp
         ).handle_error(

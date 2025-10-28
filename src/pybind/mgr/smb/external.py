@@ -49,6 +49,18 @@ def spec_backup_key(cluster_id: str) -> EntryKey:
     return (cluster_id, 'spec.smb')
 
 
+def tls_credential_key(
+    cluster_id: str, tls_credential_id: str, cred_type: str
+) -> EntryKey:
+    """Return key identifying a TLS credential in an external store."""
+    suffix = {
+        'cert': 'ssl.crt',
+        'key': 'ssl.key',
+        'ca-cert': 'ca.crt',
+    }[cred_type]
+    return (cluster_id, f'{tls_credential_id}.{suffix}')
+
+
 # Enumerate keys in a store
 
 

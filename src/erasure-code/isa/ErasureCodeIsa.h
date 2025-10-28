@@ -53,25 +53,28 @@ public:
   int w;
 
   ErasureCodeIsaTableCache &tcache;
-  const char *technique;
+  std::string technique;
   uint64_t flags;
 
-  ErasureCodeIsa(const char *_technique,
-                 ErasureCodeIsaTableCache &_tcache) :
+  ErasureCodeIsa(const std::string &_technique,
+                 ErasureCodeIsaTableCache &_tcache,
+                 const std::string &_m = "0") :
   k(0),
   m(0),
   w(0),
   tcache(_tcache),
   technique(_technique)
   {
-    flags = FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+    flags = FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED |
+            FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
             FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
             FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
             FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
 
-    if (technique == "reed_sol_van"sv ||
-        technique == "default"sv) {
-      flags |= FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED;
+    if (technique == "reed_sol_van"sv) {
+       flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
+    } else if (technique == "cauchy"sv && _m == "1"sv) {
+       flags |= FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT;
     }
   }
 
@@ -151,15 +154,15 @@ public:
   unsigned char* encode_tbls; // encoding table
 
   ErasureCodeIsaDefault(ErasureCodeIsaTableCache &_tcache,
-                        int matrix = kVandermonde) :
-
-  ErasureCodeIsa("default", _tcache),
+                        const std::string& technique,
+                        int matrix = kVandermonde,
+                        const std::string &_m = "0") :
+  ErasureCodeIsa(technique, _tcache, _m),
   encode_coeff(0), encode_tbls(0)
   {
     matrixtype = matrix;
   }
 
-  
   ~ErasureCodeIsaDefault() override
   {
 

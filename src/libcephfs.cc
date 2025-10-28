@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -31,6 +32,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/object.h"
+#include "log/Log.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"
@@ -1405,6 +1407,22 @@ extern "C" int ceph_flock(struct ceph_mount_info *cmount, int fd, int operation,
   return cmount->get_client()->flock(fd, operation, owner);
 }
 
+extern "C" int ceph_getlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
+			  uint64_t owner)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->getlk(fd, fl, owner);
+}
+
+extern "C" int ceph_setlk(struct ceph_mount_info *cmount, int fd, struct flock *fl,
+			  uint64_t owner, int sleep)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->setlk(fd, fl, owner, sleep);
+}
+
 extern "C" int ceph_truncate(struct ceph_mount_info *cmount, const char *path,
 			     int64_t size)
 {
@@ -2199,6 +2217,15 @@ private:
     io_info->callback(io_info);
   }
 };
+
+extern "C" int64_t ceph_ll_nonblocking_fsync(class ceph_mount_info *cmount,
+					     Inode *in, struct ceph_ll_io_info *io_info)
+{
+  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+
+  return (cmount->get_client()->nonblocking_fsync(
+	                in, io_info->syncdataonly, onfinish));
+}
 
 extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
 						    struct ceph_ll_io_info *io_info)

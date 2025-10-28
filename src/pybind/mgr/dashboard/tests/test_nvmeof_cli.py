@@ -7,9 +7,10 @@ from unittest.mock import MagicMock
 import pytest
 from mgr_module import CLICommand, HandleCommandResult
 
-from ..model.nvmeof import CliFlags, CliHeader
+from ..controllers import EndpointDoc
+from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..services.nvmeof_cli import AnnotatedDataTextOutputFormatter, \
-    NvmeofCLICommand, convert_from_bytes
+    NvmeofCLICommand, convert_from_bytes, convert_to_bytes
 from ..tests import CLICommandTestMixin
 
 
@@ -121,6 +122,91 @@ class TestNvmeofCLICommand:
         )
         assert result.stderr == ''
         base_call_return_none_mock.assert_called_once()
+
+    def test_command_empty_desc_by_default(self, sample_command):
+        assert NvmeofCLICommand.COMMANDS[sample_command].desc == ''
+
+    def test_command_with_endpointdoc_get_desc(self):
+        test_cmd = "test command1"
+        test_desc = 'test desc1'
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model)
+        @EndpointDoc(test_desc)
+        def func(_): # noqa # pylint: disable=unused-variable
+            return {'a': '1', 'b': 2}
+
+        assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_desc
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_command_with_endpointdoc_and_docstr_get_docstr(self):
+        test_cmd = "test command1"
+        test_desc = 'test desc1'
+        test_docstr = 'test docstr'
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model)
+        @EndpointDoc(test_desc)
+        def func(_): # noqa # pylint: disable=unused-variable
+            """test docstr"""
+            return {'a': '1', 'b': 2}
+
+        assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_docstr
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+
+    def test_command_alias_calls_command(self, base_call_mock):
+        test_cmd = "test command1"
+        test_alias = "test alias1"
+
+        class Model(NamedTuple):
+            a: str
+            b: int
+
+        @NvmeofCLICommand(test_cmd, Model, alias=test_alias)
+        def func(_): # noqa # pylint: disable=unused-variable
+            return {'a': '1', 'b': 2}
+
+        assert test_cmd in NvmeofCLICommand.COMMANDS
+        assert test_alias in NvmeofCLICommand.COMMANDS
+
+        result = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+        assert result.retval == 0
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result.stderr == ''
+        base_call_mock.assert_called_once()
+
+        result = NvmeofCLICommand.COMMANDS[test_alias].call(MagicMock(), {})
+        assert result.retval == 0
+        assert result.stdout == (
+            "+-+\n"
+            "|A|\n"
+            "+-+\n"
+            "|b|\n"
+            "+-+"
+        )
+        assert result.stderr == ''
+        assert base_call_mock.call_count == 2
+
+        del NvmeofCLICommand.COMMANDS[test_cmd]
+        del NvmeofCLICommand.COMMANDS[test_alias]
+        assert test_cmd not in NvmeofCLICommand.COMMANDS
+        assert test_alias not in NvmeofCLICommand.COMMANDS
 
 
 class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
@@ -297,6 +383,42 @@ class TestNVMeoFConfCLI(unittest.TestCase, CLICommandTestMixin):
 
 
 class TestAnnotatedDataTextOutputFormatter():
+    def test_no_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: int
+
+        data = {'name': 'Alice', 'age': 30, "byte": 20971520}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+--------+\n'
+            '|Name |Age|Byte    |\n'
+            '+-----+---+--------+\n'
+            '|Alice|30 |20971520|\n'
+            '+-----+---+--------+'
+        )
+
+    def test_none_to_empty_str_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            byte: int
+
+        data = {'name': 'Alice', 'age': 30, "byte": None}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+----+\n'
+            '|Name |Age|Byte|\n'
+            '+-----+---+----+\n'
+            '|Alice|30 |    |\n'
+            '+-----+---+----+'
+        )
+
     def test_size_bytes_annotation(self):
         class Sample(NamedTuple):
             name: str
@@ -366,6 +488,40 @@ class TestAnnotatedDataTextOutputFormatter():
             '+-----+----+'
         )
 
+    def test_field_transformation_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFieldTransformer(lambda x: 5)]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+\n'
+            '|Name |Age|\n'
+            '+-----+---+\n'
+            '|Alice|5  |\n'
+            '+-----+---+'
+        )
+
+    def test_field_transformation_with_override_header_annotation(self):
+        class Sample(NamedTuple):
+            name: str
+            age: Annotated[int, CliFieldTransformer(lambda x: 5), CliHeader("bla")]
+
+        data = {'name': 'Alice', 'age': 30}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+---+\n'
+            '|Name |Bla|\n'
+            '+-----+---+\n'
+            '|Alice|5  |\n'
+            '+-----+---+'
+        )
+
     def test_override_exclusive_list_field_annotation(self):
         class Sample(NamedTuple):
             name: str
@@ -408,6 +564,61 @@ class TestAnnotatedDataTextOutputFormatter():
 
         assert output == 'Success'
 
+    def test_flatten_internal_fields_annotation(self):
+        class SampleInternal(NamedTuple):
+            surname: str
+            height: int
+
+        class Sample(NamedTuple):
+            name: str
+            age: int
+            sample_internal: Annotated[SampleInternal, CliFlags.PROMOTE_INTERNAL_FIELDS]
+
+        class SampleList(NamedTuple):
+            status: int
+            error_message: str
+            samples: Annotated[List[Sample], CliFlags.EXCLUSIVE_LIST]
+
+        data = {"status": 0, "error_message": '',
+                "samples": [{'name': 'Alice', 'age': 30,
+                             "sample_internal": {"surname": "cohen", "height": 170}},
+                            {'name': 'Bob', 'age': 40,
+                             "sample_internal": {"surname": "levi", "height": 182}}]}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, SampleList)
+        assert output == (
+            '+-----+---+-------+------+\n'
+            '|Name |Age|Surname|Height|\n'
+            '+-----+---+-------+------+\n'
+            '|Alice|30 |cohen  |170   |\n'
+            '|Bob  |40 |levi   |182   |\n'
+            '+-----+---+-------+------+'
+        )
+
+    def test_enum_type(self):
+        from enum import Enum
+
+        class SampleEnum(Enum):
+            test = 1
+            bla = 2
+
+        class Sample(NamedTuple):
+            name: str
+            state: SampleEnum
+
+        data = {'name': 'Alice', 'state': 2}
+
+        formatter = AnnotatedDataTextOutputFormatter()
+        output = formatter.format_output(data, Sample)
+        assert output == (
+            '+-----+-----+\n'
+            '|Name |State|\n'
+            '+-----+-----+\n'
+            '|Alice|bla  |\n'
+            '+-----+-----+'
+        )
+
 
 class TestConverFromBytes:
     def test_valid_inputs(self):
@@ -416,3 +627,16 @@ class TestConverFromBytes:
         assert convert_from_bytes(1048576) == '1MB'
         assert convert_from_bytes(123) == '123B'
         assert convert_from_bytes(5368709120) == '5GB'
+
+
+class TestConvertToBytes:
+    def test_valid_inputs(self):
+        assert convert_to_bytes('200MB') == 209715200
+        assert convert_to_bytes('1MB') == 1048576
+        assert convert_to_bytes('123B') == 123
+        assert convert_to_bytes('5GB') == 5368709120
+
+    def test_default_unit(self):
+        with pytest.raises(ValueError):
+            assert convert_to_bytes('5') == 5368709120
+        assert convert_to_bytes('5', default_unit='GB') == 5368709120

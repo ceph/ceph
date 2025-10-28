@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -23,6 +23,7 @@
 #include <string>
 #include <fmt/format.h>
 
+#include "include/encoding.h"
 #include "include/types.h"
 #include "common/Formatter.h"
 
@@ -95,9 +96,11 @@ struct rgw_pool {
     f->dump_string("ns", ns);
   }
 
-  static void generate_test_instances(std::list<rgw_pool*>& o) {
-    o.push_back(new rgw_pool);
-    o.push_back(new rgw_pool("pool", "ns"));
+  static std::list<rgw_pool> generate_test_instances() {
+    std::list<rgw_pool> o;
+    o.emplace_back();
+    o.push_back(rgw_pool("pool", "ns"));
+    return o;
   }
 
   rgw_pool& operator=(const rgw_pool&) = default;

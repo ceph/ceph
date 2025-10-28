@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -72,12 +72,13 @@ public:
       const omap_keys_t& keys,
       uint32_t op_flags = 0) final;
 
-    read_errorator::future<std::tuple<bool, omap_values_t>> omap_get_values(
-      CollectionRef c,           ///< [in] collection
-      const ghobject_t &oid,     ///< [in] oid
-      const std::optional<std::string> &start, ///< [in] start, empty for begin
+    read_errorator::future<ObjectStore::omap_iter_ret_t> omap_iterate(
+      CollectionRef c,
+      const ghobject_t &oid,
+      ObjectStore::omap_iter_seek_t start_from,
+      omap_iterate_cb_t callback,
       uint32_t op_flags = 0
-      ) final;
+    ) final;
 
     get_attr_errorator::future<ceph::bufferlist> omap_get_header(
       CollectionRef c,

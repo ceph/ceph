@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -119,16 +120,18 @@ void PurgeItem::dump(Formatter *f) const
   f->close_section();
 }
 
-void PurgeItem::generate_test_instances(std::list<PurgeItem*>& ls) {
-  ls.push_back(new PurgeItem());
-  ls.push_back(new PurgeItem());
-  ls.back()->action = PurgeItem::PURGE_FILE;
-  ls.back()->ino = 1;
-  ls.back()->size = 2;
-  ls.back()->layout = file_layout_t();
-  ls.back()->old_pools = {1, 2};
-  ls.back()->snapc = SnapContext();
-  ls.back()->stamp = utime_t(3, 4);
+std::list<PurgeItem> PurgeItem::generate_test_instances() {
+  std::list<PurgeItem> ls;
+  ls.push_back(PurgeItem());
+  ls.push_back(PurgeItem());
+  ls.back().action = PurgeItem::PURGE_FILE;
+  ls.back().ino = 1;
+  ls.back().size = 2;
+  ls.back().layout = file_layout_t();
+  ls.back().old_pools = {1, 2};
+  ls.back().snapc = SnapContext();
+  ls.back().stamp = utime_t(3, 4);
+  return ls;
 }
 
 // if Objecter has any slow requests, take that as a hint and

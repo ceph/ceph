@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <fmt/chrono.h>
 #include <seastar/core/metrics.hh>
@@ -14,13 +14,6 @@ SET_SUBSYS(seastore_cleaner);
 
 namespace {
 
-enum class gc_formula_t {
-  GREEDY,
-  BENEFIT,
-  COST_BENEFIT,
-};
-constexpr auto gc_formula = gc_formula_t::COST_BENEFIT;
-
 }
 
 namespace crimson::os::seastore {
@@ -32,7 +25,6 @@ void segment_info_t::set_open(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::OPEN;
   seq = _seq;
   type = _type;
@@ -67,7 +59,6 @@ void segment_info_t::init_closed(
   ceph_assert(_seq != NULL_SEG_SEQ);
   ceph_assert(_type != segment_type_t::NULL_SEG);
   ceph_assert(_category != data_category_t::NUM);
-  ceph_assert(is_rewrite_generation(_generation));
   state = Segment::segment_state_t::CLOSED;
   seq = _seq;
   type = _type;
@@ -916,6 +907,7 @@ SegmentCleaner::SegmentCleaner(
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
   SegmentSeqAllocator &segment_seq_allocator,
+  rewrite_gen_t max_rewrite_generation,
   bool detailed,
   bool is_cold)
   : detailed(detailed),
@@ -923,8 +915,22 @@ SegmentCleaner::SegmentCleaner(
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    ool_segment_seq_allocator(segment_seq_allocator)
+    ool_segment_seq_allocator(segment_seq_allocator),
+    max_rewrite_generation(max_rewrite_generation)
 {
+  LOG_PREFIX(SegmentCleaner::SegmentCleaner);
+  auto formula = crimson::common::get_conf<std::string>(
+    "seastore_segment_cleaner_gc_formula");
+  INFO("gc_formula={}, max_rewrite_generation={}",
+    formula, max_rewrite_generation);
+  if (formula == "greedy") {
+    gc_formula = gc_formula_t::GREEDY;
+  } else if (formula == "cost_benefit") {
+    gc_formula = gc_formula_t::COST_BENEFIT;
+  } else {
+    assert(formula == "benefit");
+    gc_formula = gc_formula_t::BENEFIT;
+  }
   config.validate();
 }
 
@@ -1060,6 +1066,7 @@ segment_id_t SegmentCleaner::allocate_segment(
     auto& segment_info = it->second;
     if (segment_info.is_empty()) {
       auto old_usage = calc_utilization(seg_id);
+      ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
       segments.mark_open(seg_id, seq, type, category, generation);
       if (type == segment_type_t::JOURNAL) {
         assert(trimmer != nullptr);
@@ -1104,11 +1111,11 @@ double SegmentCleaner::calc_gc_benefit_cost(
 {
   double util = calc_utilization(id);
   ceph_assert(util >= 0 && util < 1);
-  if constexpr (gc_formula == gc_formula_t::GREEDY) {
+  if (gc_formula == gc_formula_t::GREEDY) {
     return 1 - util;
   }
 
-  if constexpr (gc_formula == gc_formula_t::COST_BENEFIT) {
+  if (gc_formula == gc_formula_t::COST_BENEFIT) {
     if (util == 0) {
       return std::numeric_limits<double>::max();
     }
@@ -1271,8 +1278,12 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
          space_tracker->calc_utilization(seg_id),
          sea_time_point_printer_t{segments.get_time_bound()});
     ceph_assert(segment_info.is_closed());
+    ceph_assert(is_rewrite_generation(
+	segment_info.generation, max_rewrite_generation));
     reclaim_state = reclaim_state_t::create(
         seg_id, segment_info.generation, segments.get_segment_size());
+    assert(is_target_rewrite_generation(
+	reclaim_state->target_generation, max_rewrite_generation));
   }
   reclaim_state->advance(config.reclaim_bytes_per_cycle);
 
@@ -1671,13 +1682,13 @@ segment_id_t SegmentCleaner::get_next_reclaim_segment() const
   segment_id_t id = NULL_SEG_ID;
   double max_benefit_cost = 0;
   sea_time_point now_time;
-  if constexpr (gc_formula != gc_formula_t::GREEDY) {
+  if (gc_formula != gc_formula_t::GREEDY) {
     now_time = seastar::lowres_system_clock::now();
   } else {
     now_time = NULL_TIME;
   }
   sea_time_point bound_time;
-  if constexpr (gc_formula == gc_formula_t::BENEFIT) {
+  if (gc_formula == gc_formula_t::BENEFIT) {
     bound_time = segments.get_time_bound();
     if (bound_time == NULL_TIME) {
       WARN("BENEFIT -- bound_time is NULL_TIME");

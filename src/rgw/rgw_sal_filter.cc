@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -885,9 +885,11 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
-  return next->chown(dpp, new_owner, y);
+int FilterBucket::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y) {
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -1064,12 +1066,12 @@ RGWAccessControlPolicy& FilterObject::get_acl()
 
 int FilterObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			     int max_parts, int marker, int* next_marker,
-			     bool* truncated, list_parts_each_t each_func,
+			     bool* truncated, list_parts_each_t&& each_func,
 			     optional_yield y)
 {
   return next->list_parts(dpp, cct, max_parts, marker, next_marker,
 			  truncated,
-			  sal::Object::list_parts_each_t(each_func),
+			  std::move(each_func),
 			  y);
 }
 
@@ -1084,10 +1086,9 @@ int FilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
   return next->set_obj_attrs(dpp, setattrs, delattrs, y, flags);
 }
 
-int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-				rgw_obj* target_obj)
+int FilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  return next->get_obj_attrs(y, dpp, target_obj);
+  return next->get_obj_attrs(y, dpp);
 }
 
 int FilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -1332,7 +1333,9 @@ int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-				    prefix_map_t& processed_prefixes)
+				    prefix_map_t& processed_prefixes,
+            const char *if_match,
+            const char *if_nomatch)
 {
   return next->complete(dpp, y, cct, part_etags, remove_objs, accounted_size,
 			compressed, cs_info, ofs, tag, owner, olh_epoch,

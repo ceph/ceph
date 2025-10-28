@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab
 
 #include "./pg_scrubber.h"  // '.' notation used to affect clang-format order
 
@@ -911,8 +911,8 @@ std::optional<uint64_t> PgScrubber::select_range()
   const int max_from_conf = static_cast<int>(size_from_conf(
       m_is_deep, conf, osd_scrub_chunk_max, osd_shallow_scrub_chunk_max));
 
+  const int min_chunk_sz = std::max(3, min_from_conf);
   const int divisor = static_cast<int>(preemption_data.chunk_divisor());
-  const int min_chunk_sz = std::max(3, min_from_conf / divisor);
   const int max_chunk_sz = std::max(min_chunk_sz, max_from_conf / divisor);
 
   dout(10) << fmt::format(
@@ -1020,7 +1020,8 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
     return false;
   }
 
-  get_labeled_counters()->inc(scrbcnt_write_blocked);
+  const auto& unlabeled_cntrs_idx = get_unlabeled_counters();
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_intersects);
   dout(20) << __func__ << " " << soid << " can preempt? "
 	   << preemption_data.is_preemptable() << " already preempted? "
 	   << preemption_data.was_preempted() << dendl;
@@ -1042,6 +1043,10 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
 
     return false;
   }
+
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_blocked);
+  // to be removed in version 'Umbrella':
+  get_labeled_counters()->inc(scrbcnt_write_blocked);
   return true;
 }
 
@@ -1828,10 +1833,17 @@ void PgScrubber::scrub_finish()
   // if the repair request comes from auto-repair and there is a large
   // number of objects known to be damaged, we cancel the auto-repair
   if (m_is_repair && m_flags.auto_repair &&
+      ScrubJob::is_repairs_count_limited(m_active_target->urgency()) &&
       m_be->authoritative_peers_count() >
-	static_cast<int>(m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
+	  static_cast<int>(
+	      m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)) {
 
-    dout(10) << __func__ << " undoing the repair" << dendl;
+    dout(5) << fmt::format(
+		   "{}: undoing the repair. Damaged objects count ({}) is "
+		   "above configured limit ({})",
+		   __func__, m_be->authoritative_peers_count(),
+		   m_pg->cct->_conf->osd_scrub_auto_repair_num_errors)
+	    << dendl;
     state_clear(PG_STATE_REPAIR);  // not expected to be set, anyway
     m_is_repair = false;
     update_op_mode_text();

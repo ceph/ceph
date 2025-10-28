@@ -105,9 +105,15 @@ class DistroKind(StrEnum):
     CENTOS8 = "centos8"
     CENTOS9 = "centos9"
     FEDORA41 = "fedora41"
+    FEDORA42 = "fedora42"
+    FEDORA43 = "fedora43"
+    ROCKY9 = "rocky9"
     ROCKY10 = "rocky10"
+    UBUNTU2004 = "ubuntu20.04"
     UBUNTU2204 = "ubuntu22.04"
     UBUNTU2404 = "ubuntu24.04"
+    DEBIAN12 = "debian12"
+    DEBIAN13 = "debian13"
 
     @classmethod
     def uses_dnf(cls):
@@ -116,6 +122,7 @@ class DistroKind(StrEnum):
             cls.CENTOS8,
             cls.CENTOS9,
             cls.FEDORA41,
+            cls.ROCKY9,
             cls.ROCKY10,
         }
 
@@ -128,36 +135,70 @@ class DistroKind(StrEnum):
     @classmethod
     def aliases(cls):
         return {
+            # EL distros
             str(cls.CENTOS10): cls.CENTOS10,
             "centos10stream": cls.CENTOS10,
             str(cls.CENTOS8): cls.CENTOS8,
             str(cls.CENTOS9): cls.CENTOS9,
             "centos9stream": cls.CENTOS9,
-            str(cls.FEDORA41): cls.FEDORA41,
-            "fc41": cls.FEDORA41,
+            str(cls.ROCKY9): cls.ROCKY9,
+            'rockylinux9': cls.ROCKY9,
             str(cls.ROCKY10): cls.ROCKY10,
             'rockylinux10': cls.ROCKY10,
+            # fedora
+            str(cls.FEDORA41): cls.FEDORA41,
+            "fc41": cls.FEDORA41,
+            str(cls.FEDORA42): cls.FEDORA42,
+            "fc42": cls.FEDORA42,
+            str(cls.FEDORA43): cls.FEDORA43,
+            "fc43": cls.FEDORA43,
+            # ubuntu
+            str(cls.UBUNTU2004): cls.UBUNTU2004,
+            "ubuntu-focal": cls.UBUNTU2004,
+            "focal": cls.UBUNTU2004,
             str(cls.UBUNTU2204): cls.UBUNTU2204,
             "ubuntu-jammy": cls.UBUNTU2204,
             "jammy": cls.UBUNTU2204,
             str(cls.UBUNTU2404): cls.UBUNTU2404,
             "ubuntu-noble": cls.UBUNTU2404,
             "noble": cls.UBUNTU2404,
+            # debian
+            str(cls.DEBIAN12): cls.DEBIAN12,
+            "debian-bookworm": cls.DEBIAN12,
+            "bookworm": cls.DEBIAN12,
+            str(cls.DEBIAN13): cls.DEBIAN13,
+            "debian-trixie": cls.DEBIAN13,
+            "trixie": cls.DEBIAN13,
         }
 
     @classmethod
     def from_alias(cls, value):
-        return cls.aliases()[value]
+        try:
+            return cls.aliases()[value]
+        except KeyError:
+            valid = ", ".join(sorted(cls.aliases()))
+            msg = f"unknown distro: {value!r} not in {valid}"
+            raise argparse.ArgumentTypeError(msg)
 
 
 class DefaultImage(StrEnum):
+    # EL distros
     CENTOS10 = "quay.io/centos/centos:stream10"
     CENTOS8 = "quay.io/centos/centos:stream8"
     CENTOS9 = "quay.io/centos/centos:stream9"
-    FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    ROCKY9 = "docker.io/rockylinux/rockylinux:9"
     ROCKY10 = "docker.io/rockylinux/rockylinux:10"
+    # fedora
+    FEDORA41 = "registry.fedoraproject.org/fedora:41"
+    FEDORA42 = "registry.fedoraproject.org/fedora:42"
+    FEDORA43 = "registry.fedoraproject.org/fedora:43"
+    # ubuntu
+    UBUNTU2004 = "docker.io/ubuntu:20.04"
     UBUNTU2204 = "docker.io/ubuntu:22.04"
     UBUNTU2404 = "docker.io/ubuntu:24.04"
+    # debian
+    DEBIAN12 = "docker.io/debian:bookworm"
+    DEBIAN13 = "docker.io/debian:trixie"
 
 
 class CommandFailed(Exception):
@@ -196,7 +237,9 @@ def _run(cmd, *args, **kwargs):
     return subprocess.run(cmd, *args, **kwargs)
 
 
-def _container_cmd(ctx, args, *, workdir=None, interactive=False):
+def _container_cmd(
+    ctx, args, *, workdir=None, interactive=False, extra_args=None
+):
     rm_container = not ctx.cli.keep_container
     cmd = [
         ctx.container_engine,
@@ -236,8 +279,14 @@ def _container_cmd(ctx, args, *, workdir=None, interactive=False):
         )
         cmd.append(f"-eCCACHE_DIR={ccdir}")
         cmd.append(f"-eCCACHE_BASEDIR={ctx.cli.homedir}")
-    for extra_arg in ctx.cli.extra or []:
-        cmd.append(extra_arg)
+    cmd.extend(extra_args or [])
+    cmd.extend(ctx.cli.extra or [])
+    if ctx.npm_cache_dir:
+        # use :z so that other builds can use the cache
+        cmd.extend([
+            f'--volume={ctx.npm_cache_dir}:/npmcache:z',
+            '--env=NPM_CACHEDIR=/npmcache'
+        ])
     cmd.append(ctx.image_name)
     cmd.extend(args)
     return cmd
@@ -287,11 +336,13 @@ class Steps(StrEnum):
     BUILD_CONTAINER = "build-container"
     CONTAINER = "container"
     CONFIGURE = "configure"
+    NPM_CACHE = "npmcache"
     BUILD = "build"
     BUILD_TESTS = "buildtests"
     TESTS = "tests"
     CUSTOM = "custom"
     SOURCE_RPM = "source-rpm"
+    FIND_SRPM = "find-srpm"
     RPM = "rpm"
     DEBS = "debs"
     PACKAGES = "packages"
@@ -318,6 +369,17 @@ class ImageSource(StrEnum):
         return ", ".join(s.value for s in cls)
 
 
+class ImageVariant(StrEnum):
+    DEFAULT = 'default'  # build everything + make check
+    # test dependencies will not be instaled, other parameters
+    # are automatically pulled from the environment (etc)
+    PACKAGES_AUTO = 'packages'
+    # test dependencies will not be installed nor crimson deps
+    PACKAGES_MINIMAL = 'packages.minimal'
+    # test dependencies skipped but crimson deps are included
+    PACKAGES_AND_CRIMSON = 'packages.crimson'
+
+
 class Context:
     """Command context."""
 
@@ -325,6 +387,7 @@ class Context:
         self.cli = cli
         self._engine = None
         self.distro_cache_name = ""
+        self.current_srpm = None
 
     @property
     def container_engine(self):
@@ -347,6 +410,91 @@ class Context:
         base = self.cli.image_repo or "ceph-build"
         return f"{base}:{self.target_tag()}"
 
+    @ftcache
+    def _env_file(self):
+        if not self.cli.env_file:
+            return None
+        with open(self.cli.env_file) as fh:
+            return fh.readlines()
+
+    @ftcache
+    def lookup_env_file(self, key):
+        """Simplistic env file parser/key lookup function.
+        Finds a value assignment in the env file, returns str unless
+        the env file parameter is not set or the key is not present,
+        in that case None will be returned.
+        """
+        # This script has minimal dependencies and so we avoid using
+        # a 3rd party "env file parser" library.
+        lines = self._env_file()
+        if not lines:
+            return None
+        prefix = f'{key}='
+        found = None
+        for line in lines:
+            if line.startswith(prefix):
+                found = line
+        if not found:
+            return None
+        temp_value = found.strip().split('=', 1)[-1]
+        # ensure there's only one value on this line, otherwise we could be
+        # reading garbage, or an arbitary shell command
+        values = shlex.split(temp_value)
+        if len(values) != 1:
+            raise ValueError(f"unexpected value in env file: {found!r}")
+        return values[0]
+
+    def packages_build(self):
+        """Return true if only packages will be build (not make check)."""
+        return self.cli.image_variant in {
+            ImageVariant.PACKAGES_AUTO,
+            ImageVariant.PACKAGES_MINIMAL,
+            ImageVariant.PACKAGES_AND_CRIMSON,
+        }
+
+    @ftcache
+    def _with_crimson(self):
+        with_crimson = os.environ.get('WITH_CRIMSON')
+        log.debug("Environment WITH_CRIMSON=%r", with_crimson)
+        with_crimson2 = self.lookup_env_file('WITH_CRIMSON')
+        log.debug("Env file WITH_CRIMSON=%r", with_crimson2)
+        if (
+            with_crimson != with_crimson2
+            and (with_crimson is not None)
+            and (with_crimson2 is not None)
+        ):
+            raise ValueError(
+                'conflicting WITH_CRIMSON values in env and env file'
+            )
+        elif with_crimson2 is not None:
+            with_crimson = with_crimson2
+        return with_crimson
+
+    def variant(self):
+        """Return calculated variant. Checks env vars to select between
+        packages with or without crimson.
+        """
+        with_crimson = self._with_crimson()
+        if (
+            self.cli.image_variant is ImageVariant.PACKAGES_AUTO
+            and with_crimson
+        ):
+            return ImageVariant.PACKAGES_AND_CRIMSON
+        elif self.cli.image_variant is ImageVariant.PACKAGES_AUTO:
+            return ImageVariant.PACKAGES_MINIMAL
+        return self.cli.image_variant
+
+    def crimson_build(self):
+        """Detects if crimson deps should be installed in the build image.
+        Returns True/False if build flag is known or None for default.
+        """
+        if self.variant() is ImageVariant.PACKAGES_AND_CRIMSON:
+            return True
+        if self.variant() is ImageVariant.DEFAULT:
+            with_crimson = self._with_crimson()
+            return None if with_crimson is None else bool(with_crimson)
+        return False
+
     def target_tag(self):
         suffix = ""
         if self.cli.tag and self.cli.tag.startswith("+"):
@@ -359,6 +507,9 @@ class Context:
                 branch = _git_current_branch(self).replace("/", "-")
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
+        variant = self.variant()
+        if variant is not ImageVariant.DEFAULT:
+            suffix = f".{variant}{suffix}"
         return f"{branch}.{self.cli.distro}{suffix}"
 
     def base_branch(self):
@@ -386,6 +537,14 @@ class Context:
             path = (
                 pathlib.Path(self.cli.dnf_cache_path) / self.distro_cache_name
             )
+            path = path.expanduser()
+            return path.resolve()
+        return None
+
+    @property
+    def npm_cache_dir(self):
+        if self.cli.npm_cache_path:
+            path = pathlib.Path(self.cli.npm_cache_path)
             path = path.expanduser()
             return path.resolve()
         return None
@@ -451,7 +610,7 @@ class Builder:
         if ctx.cli.no_prereqs and not top:
             log.info("Running prerequisite steps disabled")
             return
-        if step in self._did_steps:
+        if step in self._did_steps and not force:
             log.info("step already done: %s", step)
             return
         if not self._did_steps:
@@ -523,6 +682,14 @@ def dnf_cache_dir(ctx):
     (cache_dir / ".DNF_CACHE").touch(exist_ok=True)
 
 
+@Builder.set(Steps.NPM_CACHE)
+def npm_cache_dir(ctx):
+    """Set up an NPM cache directory for reuse across container builds."""
+    if not ctx.cli.npm_cache_path:
+        return
+    ctx.npm_cache_dir.mkdir(parents=True, exist_ok=True)
+
+
 @Builder.set(Steps.BUILD_CONTAINER)
 def build_container(ctx):
     """Generate a build environment container image."""
@@ -534,13 +701,14 @@ def build_container(ctx):
         "-t",
         ctx.image_name,
         f"--label=io.ceph.build-with-container.src={_hash_sources()}",
+        f"--label=io.ceph.build-with-container.image-variant={ctx.variant()}",
         f"--build-arg=CEPH_BASE_BRANCH={ctx.base_branch()}",
     ]
     if ctx.cli.distro:
         cmd.append(f"--build-arg=DISTRO={ctx.from_image}")
     if ctx.dnf_cache_dir and "docker" in ctx.container_engine:
         log.warning(
-            "The --volume option is not supported by docker. Skipping dnf cache dir mounts"
+            "The --volume option is not supported by docker build/buildx. Skipping dnf cache dir mounts"
         )
     elif ctx.dnf_cache_dir:
         cmd += [
@@ -548,6 +716,13 @@ def build_container(ctx):
             f"--volume={ctx.dnf_cache_dir}:/var/cache/dnf:Z",
             "--build-arg=CLEAN_DNF=no",
         ]
+    if ctx.packages_build():
+        cmd.append("--build-arg=FOR_MAKE_CHECK=false")
+    crimson_build = ctx.crimson_build()
+    if crimson_build is not None:
+        # the WITH_CRIMSON var is false only when empty (in install-deps)
+        with_crimson = '1' if crimson_build else ''
+        cmd.append(f"--build-arg=WITH_CRIMSON={with_crimson}")
     if ctx.cli.build_args:
         cmd.extend([f"--build-arg={v}" for v in ctx.cli.build_args])
     cmd += ["-f", ctx.cli.containerfile, ctx.cli.containerdir]
@@ -618,6 +793,7 @@ def get_container(ctx):
 def bc_configure(ctx):
     """Configure the build"""
     ctx.build.wants(Steps.CONTAINER, ctx)
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     cmd = _container_cmd(
         ctx,
         [
@@ -633,6 +809,7 @@ def bc_configure(ctx):
 @Builder.set(Steps.BUILD)
 def bc_build(ctx):
     """Execute a standard build."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -649,6 +826,7 @@ def bc_build(ctx):
 @Builder.set(Steps.BUILD_TESTS)
 def bc_build_tests(ctx):
     """Build the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONFIGURE, ctx)
     cmd = _container_cmd(
         ctx,
@@ -657,6 +835,9 @@ def bc_build_tests(ctx):
             "-c",
             f"cd {ctx.cli.homedir} && source ./src/script/run-make.sh && build tests",
         ],
+        # for compatibility with earlier versions that baked this env var
+        # into the build images
+        extra_args=['-eFOR_MAKE_CHECK=1'],
     )
     with ctx.user_command():
         _run(cmd, check=True, ctx=ctx)
@@ -665,6 +846,7 @@ def bc_build_tests(ctx):
 @Builder.set(Steps.TESTS)
 def bc_run_tests(ctx):
     """Execute the tests."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.BUILD_TESTS, ctx)
     cmd = _container_cmd(
         ctx,
@@ -680,7 +862,8 @@ def bc_run_tests(ctx):
 
 @Builder.set(Steps.SOURCE_RPM)
 def bc_make_source_rpm(ctx):
-    """Build SPRMs."""
+    """Build SRPMs."""
+    ctx.build.wants(Steps.NPM_CACHE, ctx)
     ctx.build.wants(Steps.CONTAINER, ctx)
     make_srpm_cmd = f"cd {ctx.cli.homedir} && ./make-srpm.sh"
     if ctx.cli.ceph_version:
@@ -715,11 +898,59 @@ def _glob_search(ctx, pattern):
     return result
 
 
-@Builder.set(Steps.RPM)
-def bc_build_rpm(ctx):
-    """Build RPMs from SRPM."""
-    srpm_glob = "ceph*.src.rpm"
-    if ctx.cli.rpm_match_sha:
+def _find_srpm_glob(ctx, pattern):
+    paths = _glob_search(ctx, pattern)
+    if len(paths) > 1:
+        raise RuntimeError(
+            "too many matching source rpms"
+            f" (rename or remove unwanted files matching {pattern} in the"
+            " ceph dir and try again)"
+        )
+    if not paths:
+        log.info("No SRPM found for pattern: %s", pattern)
+        return None
+    return paths[0]
+
+
+def _find_srpm_by_rpm_query(ctx):
+    log.info("Querying spec file for rpm versions")  # XXX: DEBUG
+    rpmquery_args = [
+        "rpm", "--qf", "%{version}-%{release}\n", "--specfile", "ceph.spec"
+    ]
+    rpmquery_cmd = ' '.join(shlex.quote(cmd) for cmd in rpmquery_args)
+    cmd = _container_cmd(
+        ctx,
+        [
+            "bash",
+            "-c",
+            f"cd {ctx.cli.homedir} && {rpmquery_cmd}",
+        ],
+    )
+    res = _run(cmd, check=False, capture_output=True)
+    if res.returncode != 0:
+        log.warning("Failed to list rpm versions")
+        return None
+    versions = set(l.strip() for l in res.stdout.decode().splitlines())
+    if len(versions) > 1:
+        raise RuntimeError("too many versions in rpm query")
+    version = list(versions)[0]
+    filename = f'ceph-{version}.src.rpm'
+    # lazily reuse the glob match function to detect file presence even tho
+    # it's not got any wildcard chars
+    return _find_srpm_glob(ctx, filename)
+
+
+@Builder.set(Steps.FIND_SRPM)
+def bc_find_srpm(ctx):
+    """Find the current/matching Source RPM."""
+    # side effects ctx setting current_srpm to a string when match is found.
+    if ctx.cli.srpm_match == 'any':
+        ctx.current_srpm = _find_srpm_glob(ctx, "ceph*.src.rpm")
+    elif ctx.cli.srpm_match == 'versionglob':
+        # in theory we could probably drop this method now that
+        # _find_srpm_by_rpm_query exists, but this is retained in case I missed
+        # something and that this is noticeably faster since it doesn't need to
+        # start a container
         if not ctx.cli.ceph_version:
             head_sha = _git_current_sha(ctx)
             srpm_glob = f"ceph*.g{head_sha}.*.src.rpm"
@@ -735,22 +966,24 @@ def bc_build_rpm(ctx):
                 ctx.cli.ceph_version
             )
             srpm_glob = f"ceph-{srpm_version}.*.src.rpm"
-    paths = _glob_search(ctx, srpm_glob)
-    if len(paths) > 1:
-        raise RuntimeError(
-            "too many matching source rpms"
-            f" (rename or remove unwanted files matching {srpm_glob} in the"
-            " ceph dir and try again)"
-        )
-    if not paths:
+        ctx.current_srpm = _find_srpm_glob(ctx, srpm_glob)
+    else:
+        ctx.current_srpm = _find_srpm_by_rpm_query(ctx)
+    if ctx.current_srpm:
+        log.info("Found SRPM: %s", ctx.current_srpm)
+
+
+@Builder.set(Steps.RPM)
+def bc_build_rpm(ctx):
+    """Build RPMs from SRPM."""
+    ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+    if not ctx.current_srpm:
         # no matches. build a new srpm
         ctx.build.wants(Steps.SOURCE_RPM, ctx)
-        paths = _glob_search(ctx, srpm_glob)
-        if not paths:
-            raise RuntimeError(
-                f"unable to find source rpm(s) matching {srpm_glob}"
-            )
-    srpm_path = pathlib.Path(ctx.cli.homedir) / paths[0]
+        ctx.build.wants(Steps.FIND_SRPM, ctx, force=True)
+        if not ctx.current_srpm:
+            raise RuntimeError("unable to find source rpm(s)")
+    srpm_path = pathlib.Path(ctx.cli.homedir) / ctx.current_srpm
     topdir = pathlib.Path(ctx.cli.homedir) / "rpmbuild"
     if ctx.cli.build_dir:
         topdir = (
@@ -863,19 +1096,15 @@ def parse_cli(build_step_names):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "--debug",
+        "--help-build-steps",
         action="store_true",
-        help="Emit debugging level logging and tracebacks",
+        help="Print executable build steps and brief descriptions",
     )
-    parser.add_argument(
-        "--container-engine",
-        help="Select container engine to use (eg. podman, docker)",
+
+    g_basic = parser.add_argument_group(
+        title="Basic options",
     )
-    parser.add_argument(
-        "--cwd",
-        help="Change working directory before executing commands",
-    )
-    parser.add_argument(
+    g_basic.add_argument(
         "--distro",
         "-d",
         choices=DistroKind.aliases().keys(),
@@ -883,48 +1112,19 @@ def parse_cli(build_step_names):
         default=str(DistroKind.CENTOS9),
         help="Specify a distro short name",
     )
-    parser.add_argument(
-        "--tag",
-        "-t",
-        help="Specify a container tag. Append to the auto generated tag"
-        " by prefixing the supplied value with the plus (+) character",
+    g_basic.add_argument(
+        "--execute",
+        "-e",
+        dest="steps",
+        action="append",
+        choices=build_step_names,
+        help="Execute the target build step(s)",
     )
-    parser.add_argument(
-        "--base-branch",
-        help="Specify a base branch name",
+    g_basic.add_argument(
+        "--cwd",
+        help="Change working directory before executing commands",
     )
-    parser.add_argument(
-        "--current-branch",
-        help="Manually specify the current branch name",
-    )
-    parser.add_argument(
-        "--image-repo",
-        help="Specify a container image repository",
-    )
-    parser.add_argument(
-        "--image-sources",
-        "-I",
-        type=ImageSource.argument,
-        help="Specify a set of valid image sources. "
-        f"May be a comma separated list of {ImageSource.hint()}",
-    )
-    parser.add_argument(
-        "--base-image",
-        help=(
-            "Supply a custom base image to use instead of the default"
-            " image for the source distro."
-        ),
-    )
-    parser.add_argument(
-        "--homedir",
-        default="/ceph",
-        help="Container image home/build dir",
-    )
-    parser.add_argument(
-        "--dnf-cache-path",
-        help="DNF caching using provided base dir",
-    )
-    parser.add_argument(
+    g_basic.add_argument(
         "--build-dir",
         "-b",
         help=(
@@ -932,7 +1132,84 @@ def parse_cli(build_step_names):
             " (the ceph source root)"
         ),
     )
-    parser.add_argument(
+    g_basic.add_argument(
+        "--env-file",
+        type=pathlib.Path,
+        help="Use this environment file when building",
+    )
+
+    g_debug = parser.add_argument_group(
+        title="Debugging options",
+    )
+    g_debug.add_argument(
+        "--debug",
+        action="store_true",
+        help="Emit debugging level logging and tracebacks",
+    )
+    g_debug.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Do not execute key commands, print and continue if possible",
+    )
+    g_debug.add_argument(
+        "--no-prereqs",
+        "-P",
+        action="store_true",
+        help="Do not execute any prerequisite steps. Only execute specified steps",
+    )
+
+    g_image = parser.add_argument_group(
+        title="Build image configuration",
+        description=(
+            'These options customize what and how the "Build Image" is'
+            " constructed"
+        ),
+    )
+    g_image.add_argument(
+        "--tag",
+        "-t",
+        help="Specify a container tag. Append to the auto generated tag"
+        " by prefixing the supplied value with the plus (+) character",
+    )
+    g_image.add_argument(
+        "--base-branch",
+        help="Specify a base branch name",
+    )
+    g_image.add_argument(
+        "--current-branch",
+        help="Manually specify the current branch name",
+    )
+    g_image.add_argument(
+        "--image-repo",
+        help="Specify a container image repository",
+    )
+    g_image.add_argument(
+        "--image-sources",
+        "-I",
+        type=ImageSource.argument,
+        help="Specify a set of valid image sources. "
+        f"May be a comma separated list of {ImageSource.hint()}",
+    )
+    g_image.add_argument(
+        "--image-variant",
+        type=ImageVariant,
+        choices=sorted(v.value for v in ImageVariant),
+        default=ImageVariant.DEFAULT.value,
+        help="Specify the variant of the build image desired.",
+    )
+    g_image.add_argument(
+        "--base-image",
+        help=(
+            "Supply a custom base image to use instead of the default"
+            " image for the source distro."
+        ),
+    )
+    g_image.add_argument(
+        "--homedir",
+        default="/ceph",
+        help="Container image home/build dir",
+    )
+    g_image.add_argument(
         "--build-arg",
         dest="build_args",
         action="append",
@@ -941,7 +1218,37 @@ def parse_cli(build_step_names):
             " Can be used to override default build image behavior."
         ),
     )
-    parser.add_argument(
+    g_image.add_argument(
+        "--containerfile",
+        default="Dockerfile.build",
+        help="Specify the path to a (build) container file",
+    )
+    g_image.add_argument(
+        "--containerdir",
+        default=".",
+        help="Specify the path to container context dir",
+    )
+
+    g_container = parser.add_argument_group(
+        title="Container options",
+        description="Options to control how the containers are run",
+    )
+    g_container.add_argument(
+        "--container-engine",
+        help="Select container engine to use (eg. podman, docker)",
+    )
+    g_container.add_argument(
+        "--extra",
+        "-x",
+        action="append",
+        help="Specify an extra argument to pass to container command",
+    )
+    g_container.add_argument(
+        "--keep-container",
+        action="store_true",
+        help="Skip removing container after executing command",
+    )
+    g_container.add_argument(
         "--overlay-dir",
         "-l",
         help=(
@@ -950,82 +1257,68 @@ def parse_cli(build_step_names):
             "use a temporary overlay (discarding writes on container exit)"
         ),
     )
-    parser.add_argument(
+
+    g_caching = parser.add_argument_group(
+        title="Persistent cache options",
+        description=(
+            "Options to control caches that persist after the containers"
+            " have exited"
+        ),
+    )
+    g_caching.add_argument(
+        "--dnf-cache-path",
+        help="DNF caching using provided base dir (during build-container build)",
+    )
+    g_caching.add_argument(
+        "--npm-cache-path",
+        help="NPM caching using provided base dir (during build)",
+    )
+    g_caching.add_argument(
         "--ccache-dir",
         help=(
             "Specify a directory (within the container) to save ccache"
             " output"
         ),
     )
-    parser.add_argument(
-        "--extra",
-        "-x",
-        action="append",
-        help="Specify an extra argument to pass to container command",
+
+    g_pkg = parser.add_argument_group(
+        title="RPM & DEB package build options",
+        description="Options specific to building packages",
     )
-    parser.add_argument(
-        "--keep-container",
-        action="store_true",
-        help="Skip removing container after executing command",
-    )
-    parser.add_argument(
-        "--containerfile",
-        default="Dockerfile.build",
-        help="Specify the path to a (build) container file",
-    )
-    parser.add_argument(
-        "--containerdir",
-        default=".",
-        help="Specify the path to container context dir",
-    )
-    parser.add_argument(
-        "--no-prereqs",
-        "-P",
-        action="store_true",
-        help="Do not execute any prerequisite steps. Only execute specified steps",
-    )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--rpm-no-match-sha",
-        dest="rpm_match_sha",
-        action="store_false",
+        dest="srpm_match",
+        action="store_const",
+        const="any",
         help=(
             "Do not try to build RPM packages that match the SHA of the current"
             " git checkout. Use any source RPM available."
+            " [DEPRECATED] Use --rpm-match=any"
         ),
     )
-    parser.add_argument(
+    g_pkg.add_argument(
+        "--srpm-match",
+        dest="srpm_match",
+        choices=("any", "versionglob", "auto"),
+        default="auto",
+        help=(
+            "Method used to detect what Source RPM (SRPM) to build:"
+            " 'any' looks for any ceph source rpms."
+            " 'versionglob' uses a glob matching against version/git id."
+            " 'auto' (the default) uses a version derived from ceph.spec."
+        ),
+    )
+    g_pkg.add_argument(
         "--rpmbuild-arg",
-        '-R',
+        "-R",
         action="append",
         help="Pass this extra argument to rpmbuild",
     )
-    parser.add_argument(
+    g_pkg.add_argument(
         "--ceph-version",
         help="Rather than infer the Ceph version, use this value",
     )
-    parser.add_argument(
-        "--execute",
-        "-e",
-        dest="steps",
-        action="append",
-        choices=build_step_names,
-        help="Execute the target build step(s)",
-    )
-    parser.add_argument(
-        "--env-file",
-        type=pathlib.Path,
-        help="Use this environment file when building",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Do not execute key commands, print and continue if possible",
-    )
-    parser.add_argument(
-        "--help-build-steps",
-        action="store_true",
-        help="Print executable build steps and brief descriptions",
-    )
+
     cli, rest = parser.parse_my_args()
     if cli.help_build_steps:
         print("Executable Build Steps")

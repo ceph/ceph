@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -39,7 +40,6 @@ struct ECSubRead;
 struct ECSubReadReply;
 class ECSwitch;
 
-struct RecoveryMessages;
 class ECSwitch;
 
 class ECBackend : public ECCommon {
@@ -61,6 +61,7 @@ class ECBackend : public ECCommon {
 
   bool _handle_message(OpRequestRef op);
   bool can_handle_while_inactive(OpRequestRef op);
+
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
   void sub_write_committed(
@@ -82,6 +83,15 @@ class ECBackend : public ECCommon {
       ECSubReadReply *reply,
       const ZTracer::Trace &trace
     );
+  void handle_sub_read_n_reply(
+    pg_shard_t from,
+    ECSubRead &op,
+    const ZTracer::Trace &trace
+#ifdef WITH_CRIMSON
+    ) override;
+#else
+    );
+#endif
   void handle_sub_write_reply(
       pg_shard_t from,
       const ECSubWriteReply &op,
@@ -175,194 +185,45 @@ class ECBackend : public ECCommon {
       bool fast_read = false
     );
 
+  bool ec_can_decode(const shard_id_set &available_shards) const;
+  shard_id_map<bufferlist> ec_encode_acting_set(const bufferlist &in_bl) const;
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const;
+  ECUtil::stripe_info_t ec_get_sinfo() const;
+
  private:
   friend struct ECRecoveryHandle;
 
   void kick_reads();
 
-  /**
-   * Recovery
-   *
-   * Recovery uses the same underlying read mechanism as client reads
-   * with the slight difference that recovery reads may come from non
-   * acting shards.  Thus, check_recovery_sources may wind up calling
-   * cancel_pull for a read originating with RecoveryOp.
-   *
-   * The recovery process is expressed as a state machine:
-   * - IDLE: Nothing is currently in progress, reads will be started and
-   *         we will transition to READING
-   * - READING: We are awaiting a pending read op.  Once complete, we will
-   *            decode the buffers and proceed to WRITING
-   * - WRITING: We are awaiting a completed push.  Once complete, we will
-   *            either transition to COMPLETE or to IDLE to continue.
-   * - COMPLETE: complete
-   *
-   * We use the existing Push and PushReply messages and structures to
-   * handle actually shuffling the data over to the replicas.  recovery_info
-   * and recovery_progress are expressed in terms of the logical offset
-   * space except for data_included which is in terms of the chunked object
-   * space (to match the passed buffer).
-   *
-   * xattrs are requested on the first read and used to initialize the
-   * object_context if missing on completion of the first read.
-   *
-   * In order to batch up reads and writes, we batch Push, PushReply,
-   * Transaction, and reads in a RecoveryMessages object which is passed
-   * among the recovery methods.
-   */
- public:
-  struct RecoveryBackend {
-    CephContext *cct;
-    const coll_t &coll;
-    ceph::ErasureCodeInterfaceRef ec_impl;
-    const ECUtil::stripe_info_t &sinfo;
-    ReadPipeline &read_pipeline;
-    UnstableHashInfoRegistry &unstable_hashinfo_registry;
-    // TODO: lay an interface down here
-    ECListener *parent;
-    ECBackend *ecbackend;
-
-    ECListener *get_parent() const { return parent; }
-
-    const OSDMapRef &get_osdmap() const {
-      return get_parent()->pgb_get_osdmap();
-    }
-
-    epoch_t get_osdmap_epoch() const {
-      return get_parent()->pgb_get_osdmap_epoch();
-    }
-
-    const pg_info_t &get_info() { return get_parent()->get_info(); }
-    void add_temp_obj(const hobject_t &oid) { get_parent()->add_temp_obj(oid); }
-
-    void clear_temp_obj(const hobject_t &oid) {
-      get_parent()->clear_temp_obj(oid);
-    }
-
-    RecoveryBackend(CephContext *cct,
-                    const coll_t &coll,
-                    ceph::ErasureCodeInterfaceRef ec_impl,
-                    const ECUtil::stripe_info_t &sinfo,
-                    ReadPipeline &read_pipeline,
-                    UnstableHashInfoRegistry &unstable_hashinfo_registry,
-                    ECListener *parent,
-                    ECBackend *ecbackend);
-
-    struct RecoveryOp {
-      hobject_t hoid;
-      eversion_t v;
-      std::set<pg_shard_t> missing_on;
-      shard_id_set missing_on_shards;
-
-      ObjectRecoveryInfo recovery_info;
-      ObjectRecoveryProgress recovery_progress;
-
-      enum state_t { IDLE, READING, WRITING, COMPLETE } state;
-
-      static const char *tostr(state_t state) {
-        switch (state) {
-        case RecoveryOp::IDLE:
-          return "IDLE";
-        case RecoveryOp::READING:
-          return "READING";
-        case RecoveryOp::WRITING:
-          return "WRITING";
-        case RecoveryOp::COMPLETE:
-          return "COMPLETE";
-        default:
-          ceph_abort();
-          return "";
-        }
-      }
-
-      // must be filled if state == WRITING
-      std::optional<ECUtil::shard_extent_map_t> returned_data;
-      std::map<std::string, ceph::buffer::list, std::less<>> xattrs;
-      ECUtil::HashInfoRef hinfo;
-      ObjectContextRef obc;
-      std::set<pg_shard_t> waiting_on_pushes;
-
-      void dump(ceph::Formatter *f) const;
-
-      RecoveryOp() : state(IDLE) {}
-
-      void print(std::ostream &os) const {
-        os << "RecoveryOp("
-            << "hoid=" << hoid
-            << " v=" << v
-            << " missing_on=" << missing_on
-            << " missing_on_shards=" << missing_on_shards
-            << " recovery_info=" << recovery_info
-            << " recovery_progress=" << recovery_progress
-            << " obc refcount=" << obc.use_count()
-            << " state=" << ECBackend::RecoveryBackend::RecoveryOp::tostr(state)
-            << " waiting_on_pushes=" << waiting_on_pushes
-            << ")";
-      }
-    };
-
-    std::map<hobject_t, RecoveryOp> recovery_ops;
-
-    uint64_t get_recovery_chunk_size() const {
-      return round_up_to(cct->_conf->osd_recovery_max_chunk,
-                         sinfo.get_stripe_width());
-    }
-
-    virtual ~RecoveryBackend() = default;
-    virtual void commit_txn_send_replies(
-        ceph::os::Transaction &&txn,
-        std::map<int, MOSDPGPushReply*> replies) = 0;
-    void dispatch_recovery_messages(RecoveryMessages &m, int priority);
-
-    PGBackend::RecoveryHandle *open_recovery_op();
-    void run_recovery_op(
-        struct ECRecoveryHandle &h,
-        int priority);
-    int recover_object(
-        const hobject_t &hoid,
-        eversion_t v,
-        ObjectContextRef head,
-        ObjectContextRef obc,
-        PGBackend::RecoveryHandle *h);
-    void continue_recovery_op(
-        RecoveryBackend::RecoveryOp &op,
-        RecoveryMessages *m);
-    void handle_recovery_read_complete(
-        const hobject_t &hoid,
-        ECUtil::shard_extent_map_t &&buffers_read,
-        std::optional<std::map<std::string, ceph::buffer::list, std::less<>>>
-          attrs,
-        const ECUtil::shard_extent_set_t &want_to_read,
-        RecoveryMessages *m);
-    void handle_recovery_push(
-        const PushOp &op,
-        RecoveryMessages *m,
-        bool is_repair);
-    void handle_recovery_push_reply(
-        const PushReplyOp &op,
-        pg_shard_t from,
-        RecoveryMessages *m);
-    friend struct RecoveryMessages;
-    void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
-  };
-
+public:
   struct ECRecoveryBackend : RecoveryBackend {
     ECRecoveryBackend(CephContext *cct,
                       const coll_t &coll,
                       ceph::ErasureCodeInterfaceRef ec_impl,
                       const ECUtil::stripe_info_t &sinfo,
                       ReadPipeline &read_pipeline,
-                      UnstableHashInfoRegistry &unstable_hashinfo_registry,
                       PGBackend::Listener *parent,
-                      ECBackend *ecbackend)
+                      ECBackend *)
       : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline,
-                        unstable_hashinfo_registry, parent->get_eclistener(),
-                        ecbackend),
+                        parent->get_eclistener()),
         parent(parent) {}
+
+    struct ECRecoveryHandle;
+
+    ECRecoveryHandle *open_recovery_op();
+
+    void run_recovery_op(
+      ECRecoveryHandle &h,
+      int priority);
 
     void commit_txn_send_replies(
         ceph::os::Transaction &&txn,
         std::map<int, MOSDPGPushReply*> replies) override;
+
+    void maybe_load_obc(
+      const std::map<std::string, ceph::bufferlist, std::less<>>& raw_attrs,
+      RecoveryOp &op) final;
 
     PGBackend::Listener *get_parent() const { return parent; }
 
@@ -370,8 +231,8 @@ class ECBackend : public ECCommon {
     PGBackend::Listener *parent;
   };
 
-  friend ostream &operator<<(ostream &lhs,
-                             const RecoveryBackend::RecoveryOp &rhs
+  friend std::ostream &operator<<(std::ostream &lhs,
+                                  const RecoveryBackend::RecoveryOp &rhs
     );
   friend struct RecoveryMessages;
   friend struct OnRecoveryReadComplete;
@@ -441,6 +302,10 @@ class ECBackend : public ECCommon {
     return sinfo.get_chunk_size();
   }
 
+  bool get_ec_supports_crc_encode_decode() const {
+    return sinfo.supports_encode_decode_crcs();
+  }
+
   uint64_t object_size_to_shard_size(const uint64_t size, shard_id_t shard
     ) const {
     return sinfo.object_size_to_shard_size(size, shard);
@@ -448,10 +313,6 @@ class ECBackend : public ECCommon {
 
   uint64_t get_is_nonprimary_shard(shard_id_t shard) const {
     return sinfo.is_nonprimary_shard(shard);
-  }
-
-  bool get_is_hinfo_required() const {
-    return sinfo.get_is_hinfo_required();
   }
 
   /**
@@ -481,20 +342,11 @@ class ECBackend : public ECCommon {
 
   const ECUtil::stripe_info_t sinfo;
 
-  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
-
-
   std::tuple<
     int,
     std::map<std::string, ceph::bufferlist, std::less<>>,
     size_t
   > get_attrs_n_size_from_disk(const hobject_t &hoid);
-
-  ECUtil::HashInfoRef get_hinfo_from_disk(hobject_t oid);
-
-  std::optional<object_info_t> get_object_info_from_obc(
-      ObjectContextRef &obc_map
-    );
 
  public:
   int object_stat(const hobject_t &hoid, struct stat *st);

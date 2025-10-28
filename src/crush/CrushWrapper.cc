@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "CrushWrapper.h"
 #include "CrushTreeDumper.h"
@@ -3966,10 +3966,12 @@ void CrushWrapper::dump_tree(
   }
 }
 
-void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
+list<CrushWrapper> CrushWrapper::generate_test_instances()
 {
-  o.push_back(new CrushWrapper);
+  list<CrushWrapper> o;
+  o.emplace_back();
   // fixme
+  return o;
 }
 
 /**

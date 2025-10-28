@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "librbd/journal/Types.h"
 #include "include/ceph_assert.h"
@@ -518,56 +518,60 @@ void EventEntry::decode_metadata(bufferlist::const_iterator& it) {
   DECODE_FINISH(it);
 }
 
-void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
-  o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345, 4096), utime_t(1, 1)));
+std::list<EventEntry> EventEntry::generate_test_instances() {
+  std::list<EventEntry> o;
+
+  o.push_back(EventEntry(AioDiscardEvent()));
+  o.push_back(EventEntry(AioDiscardEvent(123, 345, 4096), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));
-  o.push_back(new EventEntry(AioWriteEvent()));
-  o.push_back(new EventEntry(AioWriteEvent(123, 456, bl), utime_t(1, 1)));
+  o.push_back(EventEntry(AioWriteEvent()));
+  o.push_back(EventEntry(AioWriteEvent(123, 456, bl), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(AioFlushEvent()));
+  o.push_back(EventEntry(AioFlushEvent()));
 
-  o.push_back(new EventEntry(OpFinishEvent(123, -1), utime_t(1, 1)));
+  o.push_back(EventEntry(OpFinishEvent(123, -1), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapCreateEvent(), utime_t(1, 1)));
-  o.push_back(new EventEntry(SnapCreateEvent(234, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapCreateEvent(), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapCreateEvent(234, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapRemoveEvent()));
-  o.push_back(new EventEntry(SnapRemoveEvent(345, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapRemoveEvent()));
+  o.push_back(EventEntry(SnapRemoveEvent(345, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapRenameEvent()));
-  o.push_back(new EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap"),
+  o.push_back(EventEntry(SnapRenameEvent()));
+  o.push_back(EventEntry(SnapRenameEvent(456, 1, "src snap", "dest snap"),
                              utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapProtectEvent()));
-  o.push_back(new EventEntry(SnapProtectEvent(567, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapProtectEvent()));
+  o.push_back(EventEntry(SnapProtectEvent(567, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapUnprotectEvent()));
-  o.push_back(new EventEntry(SnapUnprotectEvent(678, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapUnprotectEvent()));
+  o.push_back(EventEntry(SnapUnprotectEvent(678, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(SnapRollbackEvent()));
-  o.push_back(new EventEntry(SnapRollbackEvent(789, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
+  o.push_back(EventEntry(SnapRollbackEvent()));
+  o.push_back(EventEntry(SnapRollbackEvent(789, cls::rbd::UserSnapshotNamespace(), "snap"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(RenameEvent()));
-  o.push_back(new EventEntry(RenameEvent(890, "image name"), utime_t(1, 1)));
+  o.push_back(EventEntry(RenameEvent()));
+  o.push_back(EventEntry(RenameEvent(890, "image name"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(ResizeEvent()));
-  o.push_back(new EventEntry(ResizeEvent(901, 1234), utime_t(1, 1)));
+  o.push_back(EventEntry(ResizeEvent()));
+  o.push_back(EventEntry(ResizeEvent(901, 1234), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(FlattenEvent(123), utime_t(1, 1)));
+  o.push_back(EventEntry(FlattenEvent(123), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(DemotePromoteEvent()));
+  o.push_back(EventEntry(DemotePromoteEvent()));
 
-  o.push_back(new EventEntry(UpdateFeaturesEvent()));
-  o.push_back(new EventEntry(UpdateFeaturesEvent(123, 127, true), utime_t(1, 1)));
+  o.push_back(EventEntry(UpdateFeaturesEvent()));
+  o.push_back(EventEntry(UpdateFeaturesEvent(123, 127, true), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(MetadataSetEvent()));
-  o.push_back(new EventEntry(MetadataSetEvent(123, "key", "value"), utime_t(1, 1)));
+  o.push_back(EventEntry(MetadataSetEvent()));
+  o.push_back(EventEntry(MetadataSetEvent(123, "key", "value"), utime_t(1, 1)));
 
-  o.push_back(new EventEntry(MetadataRemoveEvent()));
-  o.push_back(new EventEntry(MetadataRemoveEvent(123, "key"), utime_t(1, 1)));
+  o.push_back(EventEntry(MetadataRemoveEvent()));
+  o.push_back(EventEntry(MetadataRemoveEvent(123, "key"), utime_t(1, 1)));
+
+  return o;
 }
 
 // Journal Client
@@ -728,14 +732,16 @@ void ClientData::dump(Formatter *f) const {
   std::visit(DumpVisitor(f, "client_meta_type"), client_meta);
 }
 
-void ClientData::generate_test_instances(std::list<ClientData *> &o) {
-  o.push_back(new ClientData(ImageClientMeta()));
-  o.push_back(new ClientData(ImageClientMeta(123)));
-  o.push_back(new ClientData(MirrorPeerClientMeta()));
-  o.push_back(new ClientData(MirrorPeerClientMeta("image_id",
-                                                  {{{}, "snap 2", "snap 1", 123}},
-                                                  {{1, 2}, {3, 4}})));
-  o.push_back(new ClientData(CliClientMeta()));
+std::list<ClientData> ClientData::generate_test_instances() {
+  std::list<ClientData> o;
+  o.push_back(ClientData(ImageClientMeta()));
+  o.push_back(ClientData(ImageClientMeta(123)));
+  o.push_back(ClientData(MirrorPeerClientMeta()));
+  o.push_back(ClientData(MirrorPeerClientMeta("image_id",
+					      {{{}, "snap 2", "snap 1", 123}},
+					      {{1, 2}, {3, 4}})));
+  o.push_back(ClientData(CliClientMeta()));
+  return o;
 }
 
 // Journal Tag
@@ -782,10 +788,12 @@ void TagData::dump(Formatter *f) const {
   f->close_section();
 }
 
-void TagData::generate_test_instances(std::list<TagData *> &o) {
-  o.push_back(new TagData());
-  o.push_back(new TagData("mirror-uuid"));
-  o.push_back(new TagData("mirror-uuid", "remote-mirror-uuid", true, 123, 234));
+std::list<TagData> TagData::generate_test_instances() {
+  std::list<TagData> o;
+  o.push_back(TagData());
+  o.push_back(TagData("mirror-uuid"));
+  o.push_back(TagData("mirror-uuid", "remote-mirror-uuid", true, 123, 234));
+  return o;
 }
 
 std::ostream &operator<<(std::ostream &out, const EventType &type) {

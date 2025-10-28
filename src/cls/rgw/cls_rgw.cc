@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "include/types.h"
 
@@ -321,19 +321,25 @@ static int get_obj_vals(cls_method_context_t hctx,
  */
 static void decreasing_str(uint64_t num, string *str)
 {
+  // This buffer must be big enough to hold the string representation of
+  // the largest unsigned 64-bit integer value (+ 1 more char).
   char buf[32];
   if (num < 0x10) { /* 16 */
-    snprintf(buf, sizeof(buf), "9%02lld", 15 - (long long)num);
+    snprintf(buf, sizeof(buf), "9%02" PRIu64, 0xF - num);
   } else if (num < 0x100) { /* 256 */
-    snprintf(buf, sizeof(buf), "8%03lld", 255 - (long long)num);
+    snprintf(buf, sizeof(buf), "8%03" PRIu64, 0xFF - num);
   } else if (num < 0x1000) /* 4096 */ {
-    snprintf(buf, sizeof(buf), "7%04lld", 4095 - (long long)num);
+    snprintf(buf, sizeof(buf), "7%04" PRIu64, 0xFFF - num);
   } else if (num < 0x10000) /* 65536 */ {
-    snprintf(buf, sizeof(buf), "6%05lld", 65535 - (long long)num);
+    snprintf(buf, sizeof(buf), "6%05" PRIu64, 0xFFFF - num);
   } else if (num < 0x100000000) /* 4G */ {
-    snprintf(buf, sizeof(buf), "5%010lld", 0xFFFFFFFF - (long long)num);
+    snprintf(buf, sizeof(buf), "5%010" PRIu64, 0xFFFFFFFF - num);
+  } else if (num < 0x10000000000) /* 1T */ {
+    snprintf(buf, sizeof(buf), "4%015" PRIu64, 0xFFFFFFFFFF - num);
+  } else if (num < 0x1000000000000) /* 281T */ {
+    snprintf(buf, sizeof(buf), "3%018" PRIu64, 0xFFFFFFFFFFFF - num);
   } else {
-    snprintf(buf, sizeof(buf), "4%020lld",  (long long)-num);
+    snprintf(buf, sizeof(buf), "2%020" PRIu64,  std::numeric_limits<uint64_t>::max() - num);
   }
 
   *str = buf;
@@ -498,11 +504,21 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     if (val[0] == 'i') {
       key->instance = val.substr(1);
     } else if (val[0] == 'v') {
+      // what we are dealing here with is the string representation of the versioned epoch (as converted to by
+      // decreasing_str() func); the first char is always 'v' to indicate that it is the versioned epoch; the
+      // second char is a digit in [9-2] range that is used to separate value ranges - in order to make
+      // string representation sort in the opposite direction and to decrease string length - to speed up
+      // the lexicographical comparison; hence +2 (1 for the value indicator and one for the range prefix);
       string err;
-      const char *s = val.c_str() + 1;
-      *ver = strict_strtoll(s, 10, &err);
-      if (!err.empty()) {
-        CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+      if (val.size() > 2) {
+        const char *s = val.c_str() + 2;
+        *ver = strict_strtoull(s, 10, &err);
+        if (!err.empty()) {
+          CLS_LOG(0, "ERROR: %s: bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+          return -EIO;
+        }
+      } else {
+        CLS_LOG(0, "ERROR: %s: bad index_key (%s): empty val", __func__, escape_str(index_key).c_str());
         return -EIO;
       }
     }
@@ -1627,19 +1643,20 @@ public:
     return 0;
   }
 
-  bool start_modify(uint64_t candidate_epoch) {
-    if (candidate_epoch) {
-      if (candidate_epoch < olh_data_entry.epoch) {
-        return false; /* olh cannot be modified, old epoch */
-      }
-      olh_data_entry.epoch = candidate_epoch;
-    } else {
-      if (olh_data_entry.epoch == 0) {
-        olh_data_entry.epoch = 2; /* versioned epoch should start with 2, 1 is reserved to converted plain entries */
-      } else {
-        olh_data_entry.epoch++;
-      }
+  /**
+   * This is called when a new instance of an object (in a versioned bucket) is added (via PUT) or an existing instance is removed.
+   * A part of that process is to update the OLH entry (in the bucket index) with the correct modification timestamp (epoch).
+   * This timestamp is then used later on to guard against OLH updates for add/remove instance ops that happened *before*
+   * the latest op that updated the OLH entry.
+   * @param candidate_epoch - this is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+   */
+  bool start_modify (uint64_t candidate_epoch) {
+    // only update the olh.epoch if it is newer than the current one.
+    if (candidate_epoch < olh_data_entry.epoch) {
+      return false; /* olh cannot be modified, old epoch */
     }
+
+    olh_data_entry.epoch = candidate_epoch;
     return true;
   }
 
@@ -1889,81 +1906,95 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
 
   const uint64_t prev_epoch = olh.get_epoch();
 
-  if (!olh.start_modify(op.olh_epoch)) {
-    ret = obj.write(op.olh_epoch, false, header);
-    if (ret < 0) {
-      return ret;
-    }
-    if (removing) {
-      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
-    }
-    return write_header_while_logrecord(hctx, header);
-  }
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
+    duration_cast<std::chrono::nanoseconds>(obj.mtime().time_since_epoch()).count();
+  if (olh.start_modify(candidate_epoch)) {
+    // promote this version to current if it's a newer epoch, or if it matches the
+    // current epoch and sorts after the current instance
+    const bool promote = (olh.get_epoch() > prev_epoch) ||
+        (olh.get_epoch() == prev_epoch &&
+            olh.get_entry().key.instance >= op.key.instance);
+    const bool epoch_collision = olh.get_epoch() == prev_epoch;
 
-  // promote this version to current if it's a newer epoch, or if it matches the
-  // current epoch and sorts after the current instance
-  const bool promote = (olh.get_epoch() > prev_epoch) ||
-      (olh.get_epoch() == prev_epoch &&
-       olh.get_entry().key.instance >= op.key.instance);
-
-  if (olh_found) {
-    const string& olh_tag = olh.get_tag();
-    if (op.olh_tag != olh_tag) {
-      if (!olh.pending_removal()) {
-        CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
-        return -ECANCELED;
+    if (olh_found) {
+      const string &olh_tag = olh.get_tag();
+      if (op.olh_tag != olh_tag) {
+        if (!olh.pending_removal()) {
+          CLS_LOG(5, "NOTICE: op.olh_tag (%s) != olh.tag (%s)", op.olh_tag.c_str(), olh_tag.c_str());
+          return -ECANCELED;
+        }
+        /* if pending removal, this is a new olh instance */
+        olh.set_tag(op.olh_tag);
       }
-      /* if pending removal, this is a new olh instance */
-      olh.set_tag(op.olh_tag);
-    }
-    if (promote && olh.exists()) {
-      rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-      /* found olh, previous instance is no longer the latest, need to update */
-      if (!(olh_entry.key == op.key)) {
-        BIVerObjEntry old_obj(hctx, olh_entry.key);
+      if (epoch_collision) {
+        auto const &s_key = op.key.to_string();
+        CLS_LOG(1, "NOTICE: versioned epoch collision (%lu) for object %s", prev_epoch, s_key.c_str());
+      }
+      if (promote && olh.exists()) {
+        rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+        /* found olh, previous instance is no longer the latest, need to update */
+        if (!(olh_entry.key == op.key)) {
+          BIVerObjEntry old_obj(hctx, olh_entry.key);
 
-        ret = old_obj.demote_current(header);
-        if (ret < 0) {
-          CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
-          return ret;
+          ret = old_obj.demote_current(header);
+          if (ret < 0) {
+            CLS_LOG(0, "ERROR: could not demote current on previous key ret=%d", ret);
+            return ret;
+          }
         }
       }
+      olh.set_pending_removal(false);
+    } else {
+      bool instance_only = (op.key.instance.empty() && op.delete_marker);
+      cls_rgw_obj_key key(op.key.name);
+      ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
+        return ret;
+      }
+      olh.set_tag(op.olh_tag);
+      if (op.key.instance.empty()) {
+        obj.set_epoch(1);
+      }
     }
-    olh.set_pending_removal(false);
-  } else {
-    bool instance_only = (op.key.instance.empty() && op.delete_marker);
-    cls_rgw_obj_key key(op.key.name);
-    ret = convert_plain_entry_to_versioned(hctx, key, promote, instance_only, header);
+
+    /* update the olh log */
+    olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    }
+
+    if (promote) {
+      olh.update(op.key, op.delete_marker);
+    }
+    olh.set_exists(true);
+
+    /* write the instance and list entries */
+    ret = obj.write(olh.get_epoch(), promote, header);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: convert_plain_entry_to_versioned ret=%d", ret);
       return ret;
     }
-    olh.set_tag(op.olh_tag);
-    if (op.key.instance.empty()){
-      obj.set_epoch(1);
+
+    ret = olh.write(header);
+  }
+  else {
+    ret = obj.write(candidate_epoch, false, header);
+    if (ret < 0) {
+      return ret;
+    }
+
+    // no point here in adding CLS_RGW_OLH_OP_LINK_OLH to the pending log as we know that
+    // the epoch is already stale compared to the current - so no point in applying it;
+
+    if (removing) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
+      ret = olh.write(header);
     }
   }
 
-  /* update the olh log */
-  olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, op.key, op.delete_marker);
-  if (removing) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  }
-
-  if (promote) {
-    olh.update(op.key, op.delete_marker);
-  }
-  olh.set_exists(true);
-
-  ret = olh.write(header);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: failed to update olh ret=%d", ret);
-    return ret;
-  }
-
-  /* write the instance and list entries */
-  ret = obj.write(olh.get_epoch(), promote, header);
-  if (ret < 0) {
     return ret;
   }
 
@@ -1978,7 +2009,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
   rgw_bucket_dir_entry& entry = obj.get_dir_entry();
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   string *powner = NULL;
   string *powner_display_name = NULL;
@@ -2061,7 +2092,66 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     obj.set_epoch(1);
   }
 
-  if (!olh.start_modify(op.olh_epoch)) {
+  // op.olh_epoch is provided (> 0) in the case when a remote epoch is coming in as the result of multisite sync;
+  uint64_t candidate_epoch = op.olh_epoch ? op.olh_epoch :
+    duration_cast<std::chrono::nanoseconds>(real_clock::now().time_since_epoch()).count();
+  if (olh.start_modify(candidate_epoch)) {
+    rgw_bucket_olh_entry &olh_entry = olh.get_entry();
+    cls_rgw_obj_key &olh_key = olh_entry.key;
+    CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
+            olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
+
+    if (olh_key == dest_key) {
+      /* this is the current head, need to update the OLH! */
+      cls_rgw_obj_key next_key;
+      bool found = false;
+      ret = obj.find_next_key(&next_key, &found);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
+        return ret;
+      }
+
+      if (found) {
+        BIVerObjEntry next(hctx, next_key);
+        ret = next.write(olh.get_epoch(), true, header);
+        if (ret < 0) {
+          CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
+          return ret;
+        }
+
+        CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
+                next_key.name.c_str(), next_key.instance.c_str(), (int) next.is_delete_marker());
+
+        olh.update(next_key, next.is_delete_marker());
+        olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
+      } else {
+        // next_key is empty, but we need to preserve its name in case this entry
+        // gets resharded, because this key is used for hash placement
+        next_key.name = dest_key.name;
+        olh.update(next_key, false);
+        olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
+        olh.set_exists(false);
+        olh.set_pending_removal(true);
+      }
+    }
+
+    if (!obj.is_delete_marker()) {
+      olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
+    } else {
+      /* this is a delete marker, it's our responsibility to remove its
+       * instance entry */
+      ret = obj.unlink(header, op.key);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    ret = obj.unlink_list_entry(header);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+  else {
     ret = obj.unlink_list_entry(header);
     if (ret < 0) {
       return ret;
@@ -2071,63 +2161,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
       return 0;
     }
 
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, op.olh_epoch);
-    return olh.write(header);
-  }
-
-  rgw_bucket_olh_entry& olh_entry = olh.get_entry();
-  cls_rgw_obj_key& olh_key = olh_entry.key;
-  CLS_LOG(20, "%s: updating olh log: existing olh entry: %s[%s] (delete_marker=%d)", __func__,
-             olh_key.name.c_str(), olh_key.instance.c_str(), olh_entry.delete_marker);
-
-  if (olh_key == dest_key) {
-    /* this is the current head, need to update the OLH! */
-    cls_rgw_obj_key next_key;
-    bool found = false;
-    ret = obj.find_next_key(&next_key, &found);
-    if (ret < 0) {
-      CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
-      return ret;
-    }
-
-    if (found) {
-      BIVerObjEntry next(hctx, next_key);
-      ret = next.write(olh.get_epoch(), true, header);
-      if (ret < 0) {
-        CLS_LOG(0, "ERROR: next.write() returned ret=%d", ret);
-        return ret;
-      }
-
-      CLS_LOG(20, "%s: updating olh log: link olh -> %s[%s] (is_delete=%d)", __func__,
-              next_key.name.c_str(), next_key.instance.c_str(), (int)next.is_delete_marker());
-
-      olh.update(next_key, next.is_delete_marker());
-      olh.update_log(CLS_RGW_OLH_OP_LINK_OLH, op.op_tag, next_key, next.is_delete_marker());
-    } else {
-      // next_key is empty, but we need to preserve its name in case this entry
-      // gets resharded, because this key is used for hash placement
-      next_key.name = dest_key.name;
-      olh.update(next_key, false);
-      olh.update_log(CLS_RGW_OLH_OP_UNLINK_OLH, op.op_tag, next_key, false);
-      olh.set_exists(false);
-      olh.set_pending_removal(true);
-    }
-  }
-
-  if (!obj.is_delete_marker()) {
-    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
-  } else {
-    /* this is a delete marker, it's our responsibility to remove its
-     * instance entry */
-    ret = obj.unlink(header, op.key);
-    if (ret < 0) {
-      return ret;
-    }
-  }
-
-  ret = obj.unlink_list_entry(header);
-  if (ret < 0) {
-    return ret;
+    olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false, candidate_epoch);
   }
 
   ret = olh.write(header);
@@ -2144,7 +2178,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   rgw_bucket_entry_ver ver;
-  ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
+  ver.epoch = candidate_epoch;
 
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
@@ -3928,11 +3962,21 @@ static void usage_record_prefix_by_time(uint64_t epoch, string& key)
   key = buf;
 }
 
-static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
+static void usage_record_prefix_by_user_old(const string& user, uint64_t epoch, string& key)
 {
   char buf[user.size() + 32];
   snprintf(buf, sizeof(buf), "%s_%011llu_", user.c_str(), (long long unsigned)epoch);
   key = buf;
+}
+
+static void usage_record_prefix_by_user(const string& user, uint64_t epoch, string& key)
+{
+  usage_record_prefix_by_user_old(user, epoch, key);
+  if (user.starts_with('0')) {
+    // Use ~ prefix for name_by_user records that have keys that could potentially
+    // put them among name_by_time records.
+    key.insert(0, 1, '~');
+  }
 }
 
 static void usage_record_name_by_time(uint64_t epoch, const string& user, const string& bucket, string& key)
@@ -3942,11 +3986,21 @@ static void usage_record_name_by_time(uint64_t epoch, const string& user, const 
   key = buf;
 }
 
-static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
+static void usage_record_name_by_user_old(const string& user, uint64_t epoch, const string& bucket, string& key)
 {
   char buf[32 + user.size() + bucket.size()];
   snprintf(buf, sizeof(buf), "%s_%011llu_%s", user.c_str(), (long long unsigned)epoch, bucket.c_str());
   key = buf;
+}
+
+static void usage_record_name_by_user(const string& user, uint64_t epoch, const string& bucket, string& key)
+{
+  usage_record_name_by_user_old(user, epoch, bucket, key);
+  if (user.starts_with('0')) {
+    // Use ~ prefix for name_by_user records that have keys that could potentially
+    // put them among name_by_time records.
+    key.insert(0, 1, '~');
+  }
 }
 
 static int usage_record_decode(bufferlist& record_bl, rgw_usage_log_entry& e)
@@ -3975,6 +4029,9 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(1, "ERROR: rgw_user_usage_log_add(): failed to decode request\n");
     return -EINVAL;
   }
+
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const bool key_transition = conf->rgw_usage_log_key_transition;
 
   rgw_usage_log_info& info = op.info;
 
@@ -4014,95 +4071,169 @@ static int rgw_user_usage_log_add(cls_method_context_t hctx, bufferlist *in, buf
     ret = cls_cxx_map_set_val(hctx, key_by_user, &new_record_bl);
     if (ret < 0)
       return ret;
+
+    if (key_transition && puser->to_str().starts_with('0')) {
+      string key_by_user_old;
+      usage_record_name_by_user_old(puser->to_str(), entry.epoch, entry.bucket, key_by_user_old);
+      (void)cls_cxx_map_remove_key(hctx, key_by_user_old);
+    }
   }
 
   return 0;
 }
 
-static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64_t end, const string& user,
-                            const string& bucket, string& key_iter, uint32_t max_entries, bool *truncated,
-                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
-                            void *param)
+static int usage_handle_range(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                              const string& start_key, const string& end_key, const string& user_key,
+                              const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                              int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                              void *param)
 {
-  CLS_LOG(10, "entered %s", __func__);
-
-  map<string, bufferlist> keys;
   string filter_prefix;
-  string start_key, end_key;
-  bool by_user = !user.empty();
-  string user_key;
   bool truncated_status = false;
+  map<string, bufferlist> usage_logs;
+  bool by_user = !user_key.empty();
+  int cnt = 0;
 
-  ceph_assert(truncated != nullptr);
-
-  if (!by_user) {
-    usage_record_prefix_by_time(end, end_key);
-  } else {
-    user_key = user;
-    user_key.append("_");
-  }
-
-  if (key_iter.empty()) {
-    if (by_user) {
-      usage_record_prefix_by_user(user, start, start_key);
-    } else {
-      usage_record_prefix_by_time(start, start_key);
-    }
-  } else {
-    start_key = key_iter;
-  }
-
-  CLS_LOG(20, "usage_iterate_range start_key=%s", start_key.c_str());
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &keys, &truncated_status);
+  CLS_LOG(20, "usage_handle_range start_key=%s", start_key.c_str());
+  int ret = cls_cxx_map_get_vals(hctx, start_key, filter_prefix, max_entries, &usage_logs, &truncated_status);
   if (ret < 0)
     return ret;
 
-  *truncated = truncated_status;
+  truncated = truncated_status;
 
-  auto iter = keys.begin();
-  if (iter == keys.end())
-    return 0;
-
-  for (; iter != keys.end(); ++iter) {
-    const string& key = iter->first;
+  for (auto log : usage_logs) {
+    const string& key = log.first;
     rgw_usage_log_entry e;
 
     key_iter = key;
     if (!by_user && key.compare(end_key) >= 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
-      key_iter = key;
-      return 0;
+      CLS_LOG(20, "usage_handle_range reached key=%s, done", key.c_str());
+      truncated = false;
+      break;
     }
 
     if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
-      CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
-      *truncated = false;
-      key_iter = key;
-      return 0;
+      CLS_LOG(20, "usage_handle_range reached key=%s, done", key.c_str());
+      truncated = false;
+      break;
     }
 
-    ret = usage_record_decode(iter->second, e);
+    ret = usage_record_decode(log.second, e);
     if (ret < 0)
       return ret;
 
     if (!bucket.empty() && bucket.compare(e.bucket))
       continue;
 
-    if (e.epoch < start)
+    if (e.epoch < start_epoch)
       continue;
 
     /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end) {
-      *truncated = false;
-      return 0;
+    if (e.epoch >= end_epoch) {
+      truncated = false;
+      break;
     }
 
     ret = cb(hctx, key, e, param);
     if (ret < 0)
       return ret;
+
+    ++cnt;
   }
+
+  return cnt;
+}
+
+static int usage_iterate_range_by_user(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                            const string& user, const string& bucket, string& key_iter, uint32_t max_entries,
+                            bool& truncated, int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  ceph_assert(!user.empty());
+
+  const ConfigProxy& conf = cls_get_config(hctx);
+  const bool key_transition = conf->rgw_usage_log_key_transition;
+
+  if (key_transition &&
+      user.starts_with('0') &&
+      (key_iter.empty() || key_iter.starts_with('0'))) {
+    // During key transition for records that could have keys that fall within name_by_time records,
+    // we need to go 2 passes to cover both the old keys and the new keys.
+    // Remove this block when key_transition is deprecated.
+    string user_key = user + "_";
+    string start_key;
+    string old_key_iter = key_iter;
+    if (key_iter.empty()) {
+      usage_record_prefix_by_user_old(user, start_epoch, start_key);
+    } else {
+      start_key = key_iter;
+    }
+    int ret = usage_handle_range(hctx, start_epoch, end_epoch, start_key, "", user_key,
+                                 bucket, old_key_iter, max_entries, truncated, cb, param);
+    if (ret < 0) {
+      return ret;
+    }
+
+    if (truncated) {
+      key_iter = old_key_iter;
+      return 0;
+    } else {
+      // All old keys have been handled, start fresh on the new keys
+      key_iter.clear();
+    }
+    max_entries -= ret;
+  }
+
+  if (max_entries > 0) {
+    string start_key;
+    string user_key = user.starts_with('0') ? (std::string("~") + user + "_") : (user + "_");
+    // Handle new keys
+    if (key_iter.empty()) {
+      usage_record_prefix_by_user(user, start_epoch, start_key);
+    } else {
+      start_key = key_iter;
+    }
+
+    return usage_handle_range(hctx, start_epoch, end_epoch, start_key, "", user_key,
+                              bucket, key_iter, max_entries, truncated, cb, param);
+  }
+
   return 0;
+}
+
+static int usage_iterate_range_by_time(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch,
+                            const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  string start_key, end_key;
+
+  usage_record_prefix_by_time(end_epoch, end_key);
+
+  if (key_iter.empty()) {
+    usage_record_prefix_by_time(start_epoch, start_key);
+  } else {
+    start_key = key_iter;
+  }
+
+  return usage_handle_range(hctx, start_epoch, end_epoch, start_key, end_key, "",
+                            bucket, key_iter, max_entries, truncated, cb, param);
+}
+
+static int usage_iterate_range(cls_method_context_t hctx, uint64_t start_epoch, uint64_t end_epoch, const string& user,
+                            const string& bucket, string& key_iter, uint32_t max_entries, bool& truncated,
+                            int (*cb)(cls_method_context_t, const string&, rgw_usage_log_entry&, void *),
+                            void *param)
+{
+  CLS_LOG(10, "entered %s", __func__);
+
+  if (user.empty()) {
+    return usage_iterate_range_by_time(hctx, start_epoch, end_epoch, bucket, key_iter, max_entries, truncated, cb, param);
+  } else {
+    return usage_iterate_range_by_user(hctx, start_epoch, end_epoch, user, bucket, key_iter, max_entries, truncated, cb, param);
+  }
 }
 
 static int usage_log_read_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
@@ -4140,7 +4271,8 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   string iter = op.iter;
 #define MAX_ENTRIES 1000
   uint32_t max_entries = (op.max_entries ? op.max_entries : MAX_ENTRIES);
-  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, op.bucket, iter, max_entries, &ret_info.truncated, usage_log_read_cb, (void *)usage);
+
+  int ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.owner, op.bucket, iter, max_entries, ret_info.truncated, usage_log_read_cb, (void *)usage);
   if (ret < 0)
     return ret;
 
@@ -4151,22 +4283,36 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
+struct usage_trim_param
+{
+  bool found = false;
+  const bool key_transition = false;
+};
+
 static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
 {
-  bool *found = (bool *)param;
-  if (found) {
-    *found = true;
-  }
+  usage_trim_param *trim_param = (usage_trim_param *)param;
+
+  ceph_assert(trim_param != nullptr);
+
+  trim_param->found = true;
+
   string key_by_time;
   string key_by_user;
 
-  string o = entry.owner.to_str();
+  string o = entry.payer.empty() ? entry.owner.to_str() : entry.payer.to_str();
   usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
   usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
 
   int ret = cls_cxx_map_remove_key(hctx, key_by_time);
   if (ret < 0)
     return ret;
+
+  if (trim_param->key_transition && o.starts_with('0')) {
+    string key_by_user_old;
+    usage_record_name_by_user_old(o, entry.epoch, entry.bucket, key_by_user_old);
+    (void)cls_cxx_map_remove_key(hctx, key_by_user_old);
+  }
 
   return cls_cxx_map_remove_key(hctx, key_by_user);
 }
@@ -4192,13 +4338,16 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
   string iter;
   bool more;
-  bool found = false;
+  const ConfigProxy& conf = cls_get_config(hctx);
+  usage_trim_param trim_param{false, conf->rgw_usage_log_key_transition};
+
 #define MAX_USAGE_TRIM_ENTRIES 1000
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, op.bucket, iter, MAX_USAGE_TRIM_ENTRIES, more, usage_log_trim_cb, (void *)&trim_param);
+
   if (ret < 0)
     return ret;
 
-  if (!more && !found)
+  if (!more && !trim_param.found)
     return -ENODATA;
 
   return 0;

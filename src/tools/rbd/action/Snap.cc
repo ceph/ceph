@@ -1,11 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "tools/rbd/ArgumentTypes.h"
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
-#include "include/types.h"
+#include "include/rados.h" // for CEPH_NOSNAP
 #include "include/stringify.h"
+#include "include/types.h" // for byte_u_t
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"

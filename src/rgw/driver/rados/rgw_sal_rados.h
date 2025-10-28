@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -120,22 +120,21 @@ class RadosZone : public StoreZone {
 
 class RadosStore : public StoreDriver {
   private:
-    boost::asio::io_context& io_context;
+    neorados::RADOS neorados;
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
-    std::optional<neorados::RADOS> neorados;
     std::string topics_oid(const std::string& tenant) const;
 
   public:
-    RadosStore(boost::asio::io_context& io_context)
-      : io_context(io_context), rados(nullptr) {
-      }
+    RadosStore(neorados::RADOS neorados)
+      : neorados(neorados), rados(nullptr) {
+      ceph_assert(neorados);
+    }
     ~RadosStore() {
       delete rados;
     }
 
-    int init_neorados(const DoutPrefixProvider* dpp);
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual const std::string get_name() const override {
       return "rados";
@@ -446,8 +445,8 @@ class RadosStore : public StoreDriver {
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
-    boost::asio::io_context& get_io_context() { return io_context; }
-    neorados::RADOS& get_neorados() { return *neorados; }
+    boost::asio::io_context& get_io_context() { return neorados.get_io_context(); }
+    neorados::RADOS& get_neorados() { return neorados; }
 
     RGWServices* svc() { return &rados->svc; }
     const RGWServices* svc() const { return &rados->svc; }
@@ -609,11 +608,11 @@ class RadosObject : public StoreObject {
     /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y) override;
 
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) override;
-    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) override;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y) override;
@@ -746,7 +745,10 @@ class RadosBucket : public StoreBucket {
                          RGWBucketEnt* ent) override;
     int check_bucket_shards(const DoutPrefixProvider* dpp, uint64_t num_objs,
                             optional_yield y) override;
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) override;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
@@ -873,7 +875,9 @@ public:
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
 		       rgw::sal::Object* target_obj,
-		       prefix_map_t& processed_prefixes) override;
+		       prefix_map_t& processed_prefixes,
+           const char *if_match = nullptr,
+           const char *if_nomatch = nullptr) override;
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                      CephContext *cct, optional_yield y,
                                      const rgw_obj& obj,

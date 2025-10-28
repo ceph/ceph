@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
-// vim: ts=8 sw=8 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserved.
  *
@@ -1164,7 +1165,7 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
 	int count = 0;
-	uint64_t effective_size;
+	uint64_t effective_size = 0;
 
 	ceph_assert(size % truncbdy == 0);
 
@@ -1927,7 +1928,7 @@ logdump(void)
 		lp = &oplog[i];
 		if ((closeopen = lp->operation < 0))
 			lp->operation = ~ lp->operation;
-			
+
 		switch (lp->operation) {
 		case OP_MAPREAD:
 			prt("MAPREAD  0x%x thru 0x%x\t(0x%x bytes)",
@@ -2049,7 +2050,7 @@ save_buffer(char *buffer, off_t bufferlength, int fd)
 	ret = lseek(fd, (off_t)0, SEEK_SET);
 	if (ret == (off_t)-1)
 		prterr("save_buffer: lseek 0");
-	
+
 	byteswritten = write(fd, buffer, (size_t)bufferlength);
 	if (byteswritten != bufferlength) {
 		if (byteswritten == -1)
@@ -2066,7 +2067,7 @@ void
 report_failure(int status)
 {
 	logdump();
-	
+
 	if (fsxgoodfd) {
 		if (good_buf) {
 			save_buffer(good_buf, file_size, fsxgoodfd);
@@ -2349,7 +2350,7 @@ check_eofpage(char *s, unsigned offset, char *p, int size)
 		return;
 	/*
 	 * we landed in the last page of the file
-	 * test to make sure the VM system provided 0's 
+	 * test to make sure the VM system provided 0's
 	 * beyond the true end of the file mapping
 	 * (as required by mmap def in 1996 posix 1003.1)
 	 */
@@ -2371,7 +2372,7 @@ void
 gendata(char *original_buf, char *good_buf, unsigned offset, unsigned size)
 {
 	while (size--) {
-		good_buf[offset] = testcalls % 256; 
+		good_buf[offset] = testcalls % 256;
 		if (offset % 2)
 			good_buf[offset] += original_buf[offset];
 		offset++;

@@ -950,7 +950,13 @@ class OSDThrasher(Thrasher):
         have the option to specify which pool you
         want the PG from.
         """
-        pgs = self.ceph_manager.get_pg_stats()
+        with safe_while(sleep=5, tries=3, action="get_pg_stats") as proceed:
+            while proceed():
+                pgs = self.ceph_manager.get_pg_stats()
+                if pgs:
+                    break
+                # If pool has just been created it might not have PGs yet
+                self.log('No pgs; trying again')
         if not pgs:
             self.log('No pgs; doing nothing')
             return

@@ -262,14 +262,14 @@ with the CRUSH topology.
       ceph mon enable_stretch_mode e stretch_rule datacenter
 
 When stretch mode is enabled, PGs will become active only when they peer
-across CRUSH ``datacenter``s (or across whichever CRUSH bucket type was specified),
+across CRUSH ``datacenter`` (or across whichever CRUSH bucket type was specified),
 assuming both are available. Pools will increase in size from the default ``3`` to
 ``4``, and two replicas will be placed at each site. OSDs will be allowed to
 connect to Monitors only if they are in the same data center as the Monitors.
 New Monitors will not be allowed to join the cluster if they do not specify a
 CRUSH location.
 
-If all OSDs and Monitors in one of the ``datacenter``s become inaccessible at once,
+If all OSDs and Monitors in one of the ``datacenter`` become inaccessible at once,
 the cluster in the surviving ``datacenter`` enters  *degraded stretch mode*.
 A health state warning will be
 raised, pools' ``min_size`` will be reduced to ``1``, and the cluster will be
@@ -337,8 +337,8 @@ each data center. If pools exist in the cluster that do not have the default
 ``size`` or ``min_size``, Ceph will not enter stretch mode. An example of such
 a CRUSH rule is given above.
 
-Because stretch mode runs with poos' ``min_size`` set to ``1``
-, we recommend enabling stretch mode only when using OSDs on
+Because stretch mode runs with pools' ``min_size`` set to ``1``,
+we recommend enabling stretch mode only when using OSDs on
 SSDs. Hybrid HDD+SSD or HDD-only OSDs are not recommended
 due to the long time it takes for them to recover after connectivity between
 data centers has been restored. This reduces the potential for data loss.

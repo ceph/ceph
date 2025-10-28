@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_INCLUDE_CEPHFS_METRICS_TYPES_H
 #define CEPH_INCLUDE_CEPHFS_METRICS_TYPES_H
@@ -13,6 +13,7 @@
 #include "include/int_types.h"
 #include "include/stringify.h"
 #include "include/utime.h"
+#include "include/fs_types.h"
 
 namespace ceph { class Formatter; }
 
@@ -33,6 +34,7 @@ enum ClientMetricType {
   CLIENT_METRIC_TYPE_STDEV_WRITE_LATENCY,
   CLIENT_METRIC_TYPE_AVG_METADATA_LATENCY,
   CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY,
+  CLIENT_METRIC_TYPE_SUBVOLUME_METRICS,
 };
 inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) {
   switch(type) {
@@ -83,6 +85,9 @@ inline std::ostream &operator<<(std::ostream &os, const ClientMetricType &type) 
     break;
   case ClientMetricType::CLIENT_METRIC_TYPE_STDEV_METADATA_LATENCY:
     os << "STDEV_METADATA_LATENCY";
+    break;
+  case ClientMetricType::CLIENT_METRIC_TYPE_SUBVOLUME_METRICS:
+    os << "SUBVOLUME_METRICS";
     break;
   default:
     os << "(UNKNOWN:" << static_cast<std::underlying_type<ClientMetricType>::type>(type) << ")";
@@ -552,17 +557,248 @@ struct UnknownPayload : public ClientMetricPayloadBase {
   }
 };
 
+/**
+ * @brief Struct to hold single IO metric
+ * To save the memory for clients with high number of subvolumes, the layout is as following:
+ * 64 bits of data:
+ *  MSB - read or write (0/1)
+ *  32 bits for latency, in microsecs
+ *  31 bits for payload size, bytes
+ */
+struct SimpleIOMetric {
+    uint64_t packed_data;
+
+    // is_write flag (1 bit) - MSB
+    static constexpr uint64_t OP_TYPE_BITS = 1;
+    static constexpr uint64_t OP_TYPE_SHIFT = 64 - OP_TYPE_BITS; // 63
+    static constexpr uint64_t OP_TYPE_MASK = 1ULL << OP_TYPE_SHIFT; // 0x8000000000000000ULL
+
+    // latency in microseconds (32 bits)
+    // directly after is_write bit
+    static constexpr uint64_t LATENCY_BITS = 32;
+    static constexpr uint64_t LATENCY_SHIFT = OP_TYPE_SHIFT - LATENCY_BITS; // 63 - 32 = 31
+    static constexpr uint64_t LATENCY_MASK = ((1ULL << LATENCY_BITS) - 1) << LATENCY_SHIFT;
+
+    // payload size (31 bits)
+    // Placed directly after latency, occupying the lowest 31 bits
+    static constexpr uint64_t PAYLOAD_SIZE_BITS = 31;
+    static constexpr uint64_t PAYLOAD_SIZE_SHIFT = 0; // Starts from the LSB (bit 0)
+    static constexpr uint64_t PAYLOAD_SIZE_MASK = (1ULL << PAYLOAD_SIZE_BITS) - 1;
+
+    static constexpr uint32_t MAX_LATENCY_US = (1ULL << LATENCY_BITS) - 1; // 2^32 - 1 microseconds
+    static constexpr uint32_t MAX_PAYLOAD_SIZE = (1ULL << PAYLOAD_SIZE_BITS) - 1; // 2^31 - 1 bytes
+
+    SimpleIOMetric(bool is_write, utime_t latency, uint32_t payload_size) : packed_data(0) {
+      if (is_write) {
+        packed_data |= OP_TYPE_MASK;
+      }
+
+      uint64_t current_latency_usec = latency.usec();
+
+      // if less than 1 microsecond - set to 1 microsecond
+      if (current_latency_usec == 0) {
+        current_latency_usec = 1;
+      }
+
+      // handle overflow
+      if (current_latency_usec > MAX_LATENCY_US) {
+        current_latency_usec = MAX_LATENCY_US; // Truncate if too large
+      }
+      packed_data |= (current_latency_usec << LATENCY_SHIFT) & LATENCY_MASK;
+
+
+      // payload_size (31 bits)
+      if (payload_size > MAX_PAYLOAD_SIZE) {
+        payload_size = MAX_PAYLOAD_SIZE; // Truncate if too large
+      }
+      packed_data |= (static_cast<uint64_t>(payload_size) << PAYLOAD_SIZE_SHIFT) & PAYLOAD_SIZE_MASK;
+    }
+
+    SimpleIOMetric() : packed_data(0) {}
+
+    bool is_write() const {
+      return (packed_data & OP_TYPE_MASK) != 0;
+    }
+
+    uint32_t get_latency_us() const {
+      return static_cast<uint32_t>((packed_data & LATENCY_MASK) >> LATENCY_SHIFT);
+    }
+
+    uint32_t get_payload_size() const {
+      return static_cast<uint32_t>((packed_data & PAYLOAD_SIZE_MASK) >> PAYLOAD_SIZE_SHIFT);
+    }
+
+    // --- Dump method ---
+    void dump(Formatter *f) const {
+      f->dump_string("op", is_write() ? "w" : "r");
+      f->dump_unsigned("lat_us", get_latency_us());
+      f->dump_unsigned("size", get_payload_size());
+    }
+};
+
+/**
+ * brief holds result of the SimpleIOMetrics aggregation, for each subvolume, on the client
+ * the aggregation occurs just before sending metrics to the MDS
+ */
+struct AggregatedIOMetrics {
+    inodeno_t subvolume_id = 0;
+    uint32_t read_count = 0;
+    uint32_t write_count = 0;
+    uint64_t read_bytes = 0;
+    uint64_t write_bytes = 0;
+    uint64_t read_latency_us = 0;
+    uint64_t write_latency_us = 0;
+    uint64_t time_stamp = 0; // set on MDS
+
+    void add(const SimpleIOMetric& m) {
+      auto lat = m.get_latency_us();
+      if (m.is_write()) {
+        ++write_count;
+        write_bytes += m.get_payload_size();
+        write_latency_us += lat;
+      } else {
+        ++read_count;
+        read_bytes += m.get_payload_size();
+        read_latency_us += lat;
+      }
+    }
+
+    uint64_t avg_read_throughput_Bps() const {
+      return read_latency_us > 0 ? (read_bytes * 1'000'000ULL) / read_latency_us : 0;
+    }
+
+    uint64_t avg_write_throughput_Bps() const {
+      return write_latency_us > 0 ? (write_bytes * 1'000'000ULL) / write_latency_us : 0;
+    }
+
+    uint64_t avg_read_latency_us() const {
+      return read_count ? read_latency_us / read_count : 0;
+    }
+
+    uint64_t avg_write_latency_us() const {
+      return write_count ? write_latency_us / write_count : 0;
+    }
+
+    double read_iops() const {
+      return read_latency_us > 0 ? static_cast<double>(read_count) * 1e6 / read_latency_us : 0.0;
+    }
+
+    double write_iops() const {
+      return write_latency_us > 0 ? static_cast<double>(write_count) * 1e6 / write_latency_us : 0.0;
+    }
+
+    void dump(Formatter *f) const {
+      f->dump_unsigned("subvolume_id", subvolume_id);
+      f->dump_unsigned("read_count", read_count);
+      f->dump_unsigned("read_bytes", read_bytes);
+      f->dump_unsigned("avg_read_latency_us", avg_read_latency_us());
+      f->dump_unsigned("read_iops", read_iops());
+      f->dump_float("avg_read_tp_Bps", avg_read_throughput_Bps());
+      f->dump_unsigned("write_count", write_count);
+      f->dump_unsigned("write_bytes", write_bytes);
+      f->dump_unsigned("avg_write_latency_us", avg_write_latency_us());
+      f->dump_float("write_iops", write_iops());
+      f->dump_float("avg_write_tp_Bps", avg_write_throughput_Bps());
+      f->dump_unsigned("time_stamp", time_stamp);
+    }
+
+    friend std::ostream& operator<<(std::ostream& os, const AggregatedIOMetrics& m) {
+      os << "{subvolume_id=\""    << m.subvolume_id
+         << "\", read_count="      << m.read_count
+         << ", write_count="       << m.write_count
+         << ", read_bytes="        << m.read_bytes
+         << ", write_bytes="       << m.write_bytes
+         << ", read_latency_ns="   << m.read_latency_us
+         << ", write_latency_ns="  << m.write_latency_us
+         << ", time_stamp_ms="  << m.time_stamp
+         << "}";
+      return os;
+    }
+
+    void encode(bufferlist& bl) const {
+      using ceph::encode;
+      ENCODE_START(1, 1, bl);
+      encode(subvolume_id, bl);
+      encode(read_count, bl);
+      encode(write_count, bl);
+      encode(read_bytes, bl);
+      encode(write_bytes, bl);
+      encode(read_latency_us, bl);
+      encode(write_latency_us, bl);
+      encode(time_stamp, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& p) {
+      using ceph::decode;
+      DECODE_START(1, p);
+      decode(subvolume_id, p);
+      decode(read_count, p);
+      decode(write_count, p);
+      decode(read_bytes, p);
+      decode(write_bytes, p);
+      decode(read_latency_us, p);
+      decode(write_latency_us, p);
+      decode(time_stamp, p);
+      DECODE_FINISH(p);
+    }
+};
+
+struct SubvolumeMetricsPayload : public ClientMetricPayloadBase {
+  std::vector<AggregatedIOMetrics> subvolume_metrics;
+
+  SubvolumeMetricsPayload() : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_SUBVOLUME_METRICS) { }
+  SubvolumeMetricsPayload(std::vector<AggregatedIOMetrics> metrics)
+  : ClientMetricPayloadBase(ClientMetricType::CLIENT_METRIC_TYPE_SUBVOLUME_METRICS), subvolume_metrics(std::move(metrics)) {}
+
+  void encode(bufferlist &bl) const {
+    using ceph::encode;
+    ENCODE_START(1, 1, bl);
+    encode(subvolume_metrics.size(), bl);
+    for(auto const& m : subvolume_metrics) {
+      m.encode(bl);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator &iter) {
+    using ceph::decode;
+    DECODE_START(1, iter) ;
+    size_t size = 0;
+    decode(size, iter);
+    subvolume_metrics.clear();
+    subvolume_metrics.reserve(size);
+    for (size_t i = 0; i < size; ++i) {
+      subvolume_metrics.emplace_back();
+      subvolume_metrics.back().decode(iter);
+    }
+    DECODE_FINISH(iter);
+  }
+
+  void dump(Formatter *f) const {
+    f->open_array_section("metrics");
+    for(auto const& m : subvolume_metrics)
+      m.dump(f);
+    f->close_section();
+  }
+
+  void print(std::ostream *out) const {
+    *out << "metrics_count: " << subvolume_metrics.size();
+  }
+};
+
 typedef std::variant<CapInfoPayload,
-		     ReadLatencyPayload,
-		     WriteLatencyPayload,
-		     MetadataLatencyPayload,
-		     DentryLeasePayload,
-		     OpenedFilesPayload,
-		     PinnedIcapsPayload,
-		     OpenedInodesPayload,
-		     ReadIoSizesPayload,
-		     WriteIoSizesPayload,
-		     UnknownPayload> ClientMetricPayload;
+        ReadLatencyPayload,
+        WriteLatencyPayload,
+        MetadataLatencyPayload,
+        DentryLeasePayload,
+        OpenedFilesPayload,
+        PinnedIcapsPayload,
+        OpenedInodesPayload,
+        ReadIoSizesPayload,
+        WriteIoSizesPayload,
+        SubvolumeMetricsPayload,
+        UnknownPayload> ClientMetricPayload;
 
 // metric update message sent by clients
 struct ClientMetricMessage {
@@ -676,6 +912,9 @@ public:
     case ClientMetricType::CLIENT_METRIC_TYPE_WRITE_IO_SIZES:
       payload = WriteIoSizesPayload();
       break;
+    case ClientMetricType::CLIENT_METRIC_TYPE_SUBVOLUME_METRICS:
+      payload = SubvolumeMetricsPayload();
+      break;
     default:
       payload = UnknownPayload(static_cast<ClientMetricType>(metric_type));
       break;
@@ -688,8 +927,10 @@ public:
     std::visit(DumpPayloadVisitor(f), payload);
   }
 
-  static void generate_test_instances(std::list<ClientMetricMessage*>& ls) {
-    ls.push_back(new ClientMetricMessage(CapInfoPayload(1, 2, 3)));
+  static std::list<ClientMetricMessage> generate_test_instances() {
+    std::list<ClientMetricMessage> ls;
+    ls.push_back(ClientMetricMessage(CapInfoPayload(1, 2, 3)));
+    return ls;
   }
 
   void print(std::ostream *out) const {

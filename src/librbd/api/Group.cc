@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "common/Cond.h"
 #include "common/errno.h"
@@ -180,10 +180,10 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 				const std::string& group_header_oid) {
 
   CephContext *cct = (CephContext *)group_ioctx.cct();
+  std::vector<librados::IoCtx> ioctxs;
+  std::vector<librbd::ImageCtx*> ictxs;
   std::vector<C_SaferCond*> on_finishes;
   int r, ret_code;
-
-  std::vector<librbd::ImageCtx*> ictxs;
 
   cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
 				      group_snap.id};
@@ -192,15 +192,18 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   int snap_count = group_snap.snaps.size();
 
   for (int i = 0; i < snap_count; ++i) {
-    librbd::IoCtx image_io_ctx;
+    librados::IoCtx image_io_ctx;
     r = util::create_ioctx(group_ioctx, "image", group_snap.snaps[i].pool, {},
                            &image_io_ctx);
     if (r < 0) {
       return r;
     }
+    ioctxs.push_back(std::move(image_io_ctx));
+  }
 
+  for (int i = 0; i < snap_count; ++i) {
     librbd::ImageCtx* image_ctx = new ImageCtx("", group_snap.snaps[i].image_id,
-					       nullptr, image_io_ctx, false);
+					       nullptr, ioctxs[i], false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
@@ -286,10 +289,10 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
                                   const std::string& group_id,
                                   ProgressContext& pctx) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
+  std::vector<librados::IoCtx> ioctxs;
+  std::vector<librbd::ImageCtx*> ictxs;
   std::vector<C_SaferCond*> on_finishes;
   int r, ret_code;
-
-  std::vector<librbd::ImageCtx*> ictxs;
 
   cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
                                       group_snap.id};
@@ -304,9 +307,12 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
     if (r < 0) {
       return r;
     }
+    ioctxs.push_back(std::move(image_io_ctx));
+  }
 
+  for (int i = 0; i < snap_count; ++i) {
     librbd::ImageCtx* image_ctx = new ImageCtx("", group_snap.snaps[i].image_id,
-                                               nullptr, image_io_ctx, false);
+                                               nullptr, ioctxs[i], false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
@@ -460,7 +466,7 @@ int GroupSnapshot_to_group_snap_info2(
   image_snaps.reserve(cls_group_snap.snaps.size());
 
   for (const auto& snap : cls_group_snap.snaps) {
-    librbd::IoCtx image_ioctx;
+    librados::IoCtx image_ioctx;
     int r = util::create_ioctx(group_ioctx, "image", snap.pool, {},
                                &image_ioctx);
     if (r < 0) {
@@ -972,7 +978,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   for (auto image: images) {
-    librbd::IoCtx image_io_ctx;
+    librados::IoCtx image_io_ctx;
     r = util::create_ioctx(group_ioctx, "image", image.spec.pool_id, {},
                            &image_io_ctx);
     if (r < 0) {

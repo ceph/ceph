@@ -1,11 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <string.h>
 #include <iostream>
 #include <map>
 
-#include "common/Formatter.h"
+#include "common/XMLFormatter.h"
 #include <common/errno.h>
 #include "rgw_lc.h"
 #include "rgw_lc_tier.h"
@@ -405,7 +405,7 @@ int rgw_cloud_tier_get_object(RGWLCCloudTierCtx& tier_ctx, bool head,
     }
   }
 
-  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Sucessfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
+  ldpp_dout(tier_ctx.dpp, 20) << __func__ << "(): Successfully fetched object from cloud bucket:" << dest_bucket << ", object: " << target_obj_name << dendl;
   return ret;
 }
 
@@ -1019,8 +1019,10 @@ int cloud_tier_restore(const DoutPrefixProvider *dpp, RGWRESTConn& dest_conn,
   bufferlist bl, out_bl;
   string resource = obj_to_aws_path(dest_obj);
 
-  const std::string tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
-
+  std::optional<std::string> tier_v;
+  if (glacier_params.glacier_restore_tier_type != GlacierRestoreTierType::NoTier) {
+    tier_v = (glacier_params.glacier_restore_tier_type == GlacierRestoreTierType::Expedited) ? "Expedited" : "Standard";
+  }
   struct RestoreRequest {
 	  std::optional<uint64_t> days;
 	  std::optional<std::string> tier;

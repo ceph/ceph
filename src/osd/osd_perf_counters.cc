@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "osd_perf_counters.h"
 #include "include/common_fwd.h"
@@ -407,6 +407,14 @@ PerfCounters *build_osd_logger(CephContext *cct) {
       l_osd_scrub_rppool_failed_elapsed,
       "failed_scrubs_replicated_elapsed",
       "time to scrub failure replicated");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_write_intersects,
+      "scrub_replicated_io_intersects",
+      "client write op intersects chunk range");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_rppool_write_blocked,
+      "scrub_replicated_io_blocked",
+      "write op did not preempt the scrub");
 
   // the replica reservation process - replicated pool
   osd_plb.add_u64_counter(
@@ -456,6 +464,14 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_time_avg(
       l_osd_scrub_ec_failed_elapsed, "failed_scrubs_ec_elapsed",
       "time to scrub failure ec");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_write_intersects,
+      "scrub_ec_io_intersects",
+      "client write op intersects chunk range");
+  osd_plb.add_u64_counter(
+      l_osd_scrub_ec_write_blocked,
+      "scrub_ec_io_blocked",
+      "write op did not preempt the scrub");
 
   // the secondaries reservation process - EC
   osd_plb.add_u64_counter(

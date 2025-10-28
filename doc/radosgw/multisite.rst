@@ -99,7 +99,7 @@ At the bottom of this diagram, we see the data distributed into the Ceph
 Storage Cluster.
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
-Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
+Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`_.
 
 Functional Changes from Infernalis
 ==================================
@@ -1536,9 +1536,8 @@ Setting a Zone
 
 Configuring a zone involves specifying a series of Ceph Object Gateway
 pools. For consistency, we recommend using a pool prefix that is the
-same as the zone name. See
-`Pools <http://docs.ceph.com/en/latest/rados/operations/pools/#pools>`__
-for details of configuring pools.
+same as the zone name. See :ref:`rados_pools` for details of
+configuring pools.
 
 To set a zone, create a JSON object consisting of the pools, save the
 object to a file (e.g., ``zone.json``); then, run the following

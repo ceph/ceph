@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 #define CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 
@@ -30,7 +31,7 @@ public:
   }
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_extent_t*>&);
+  static std::list<bluefs_extent_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluefs_extent_t)
 
@@ -284,8 +285,7 @@ struct bluefs_fnode_t {
   bluefs_fnode_delta_t* make_delta(bluefs_fnode_delta_t* delta);
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_fnode_t*>& ls);
-
+  static std::list<bluefs_fnode_t> generate_test_instances();
 };
 WRITE_CLASS_DENC(bluefs_fnode_t)
 
@@ -309,7 +309,7 @@ struct bluefs_layout_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_layout_t*>& ls);
+  static std::list<bluefs_layout_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_layout_t)
 
@@ -337,7 +337,7 @@ struct bluefs_super_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_super_t*>& ls);
+  static std::list<bluefs_super_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_super_t)
 
@@ -440,7 +440,7 @@ struct bluefs_transaction_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<bluefs_transaction_t*>& ls);
+  static std::list<bluefs_transaction_t> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 

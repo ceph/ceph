@@ -1,3 +1,5 @@
+.. _rados_operations_monitoring_osd_pg:
+
 =========================
  Monitoring OSDs and PGs
 =========================
@@ -548,8 +550,8 @@ performing the migration. For details, see the `Architecture`_ section.
 .. _data placement: ../data-placement
 .. _pool: ../pools
 .. _placement group: ../placement-groups
-.. _mClock: ../../configuration/mclock-config-ref.rst
-.. _mClock backfill: ../../configuration/mclock-config-ref.rst#recovery-backfill-options
+.. _mClock: ../../configuration/mclock-config-ref
+.. _mClock backfill: ../../configuration/mclock-config-ref#recovery-backfill-options
 .. _Architecture: ../../../architecture
 .. _OSD Not Running: ../../troubleshooting/troubleshooting-osd#osd-not-running
 .. _Troubleshooting PG Errors: ../../troubleshooting/troubleshooting-pg#troubleshooting-pg-errors

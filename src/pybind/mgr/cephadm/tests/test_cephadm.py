@@ -1132,7 +1132,7 @@ class TestCephadm(object):
             _run_cephadm.assert_any_call(
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
-                    '--no-auto', '/dev/sdb', '--yes', '--no-systemd'],
+                    '--no-auto', '/dev/sdb', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=foo'], error_ok=True,
                 stdin='{"config": "", "keyring": ""}')
             _run_cephadm.assert_any_call(
@@ -1178,7 +1178,7 @@ class TestCephadm(object):
                 'test', 'osd', 'ceph-volume',
                 ['--config-json', '-', '--', 'lvm', 'batch',
                     '--no-auto', '/dev/sdb', '--db-devices', '/dev/sdc',
-                    '--wal-devices', '/dev/sdd', '--yes', '--no-systemd'],
+                    '--wal-devices', '/dev/sdd', '--objectstore', 'bluestore', '--yes', '--no-systemd'],
                 env_vars=['CEPH_VOLUME_OSDSPEC_AFFINITY=noncollocated'],
                 error_ok=True, stdin='{"config": "", "keyring": ""}',
             )
@@ -1266,15 +1266,15 @@ class TestCephadm(object):
         "devices, preview, exp_commands",
         [
             # no preview and only one disk, prepare is used due the hack that is in place.
-            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --yes --no-systemd"]),
+            (['/dev/sda'], False, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd"]),
             # no preview and multiple disks, uses batch
             (['/dev/sda', '/dev/sdb'], False,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd"]),
             # preview and only one disk needs to use batch again to generate the preview
-            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --yes --no-systemd --report --format json"]),
+            (['/dev/sda'], True, ["lvm batch --no-auto /dev/sda --objectstore bluestore --yes --no-systemd --report --format json"]),
             # preview and multiple disks work the same
             (['/dev/sda', '/dev/sdb'], True,
-             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --yes --no-systemd --report --format json"]),
+             ["CEPH_VOLUME_OSDSPEC_AFFINITY=test.spec lvm batch --no-auto /dev/sda /dev/sdb --objectstore bluestore --yes --no-systemd --report --format json"]),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -1868,12 +1868,10 @@ class TestCephadm(object):
             ), CephadmOrchestrator.apply_container),
         ]
     )
-    @mock.patch("subprocess.run", None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     @mock.patch("cephadm.services.nfs.NFSService.run_grace_tool", mock.MagicMock())
     @mock.patch("cephadm.services.nfs.NFSService.create_rados_config_obj", mock.MagicMock())
     @mock.patch("cephadm.services.nfs.NFSService.purge", mock.MagicMock())
-    @mock.patch("subprocess.run", mock.MagicMock())
     def test_apply_save(self, spec: ServiceSpec, meth, cephadm_module: CephadmOrchestrator):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
@@ -2242,8 +2240,7 @@ osd_k2 = osd_v2
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         def check_registry_credentials(url, username, password):
-            assert json.loads(cephadm_module.get_store('registry_credentials')) == {
-                'url': url, 'username': username, 'password': password}
+            assert json.loads(cephadm_module.get_store('registry_credentials')) == {'registry_credentials': [{'url': url, 'username': username, 'password': password}]}
 
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
@@ -2282,7 +2279,7 @@ osd_k2 = osd_v2
             # test bad login where args are valid but login command fails
             _run_cephadm.side_effect = async_side_effect(('{}', 'error', 1))
             code, out, err = cephadm_module.registry_login('fail-url', 'fail-user', 'fail-password')
-            assert err == 'Host test failed to login to fail-url as fail-user with given password'
+            assert err == 'Host test failed to login to all registries'
             check_registry_credentials('json-url', 'json-user', 'json-pass')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(json.dumps({
@@ -2526,7 +2523,7 @@ Traceback (most recent call last):
             cephadm_module.cache.facts = facts
             assert cephadm_module._validate_tunedprofile_settings(spec) == expected_value
 
-    @mock.patch("cephadm.CephadmOrchestrator.set_maintenance_healthcheck", lambda _: None)
+    @mock.patch("cephadm.CephadmOrchestrator.update_maintenance_healthcheck", lambda _: None)
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_tuned_profiles_validation(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
@@ -2888,3 +2885,33 @@ Traceback (most recent call last):
         # on nvmeof.foo.foo's daemons
         nvmeof_bar_blocking_hosts = NvmeofService(cephadm_module).get_blocking_daemon_hosts('nvmeof.bar.bar')
         assert set([h.hostname for h in nvmeof_bar_blocking_hosts]) == set(['host1', 'host2'])
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch("cephadm.inventory.HostCache.get_daemons_by_type")
+    def test_set_osd_spec_non_osd_service(self, _get_daemons_by_type, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            osd_daemon = DaemonDescription(daemon_type='osd', daemon_id='1', hostname='test')
+            _get_daemons_by_type.return_value = [osd_daemon]
+
+            mgr_service = ServiceSpec('mgr', placement=PlacementSpec(hosts=['test']))
+
+            with with_service(cephadm_module, mgr_service):
+                with pytest.raises(OrchestratorError) as e:
+                    cephadm_module.set_osd_spec('mgr', ['1'])
+
+                assert "Service 'mgr' is not an OSD service (type: mgr). OSDs can only be assigned to OSD service specs." in str(e.value)
+
+                # Move osd.1 to osd.foo service
+                spec = DriveGroupSpec(
+                    service_id='foo',
+                    placement=PlacementSpec(
+                        host_pattern='*',
+                    ),
+                    data_devices=DeviceSelection(
+                        all=True
+                    )
+                )
+                c = cephadm_module.apply([spec])
+                assert wait(cephadm_module, c) == ['Scheduled osd.foo update...']
+
+                cephadm_module.set_osd_spec('osd.foo', ['1'])

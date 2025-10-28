@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -125,7 +125,7 @@ struct rgw_data_sync_info {
     JSONDecoder::decode_json("num_shards", num_shards, obj);
     JSONDecoder::decode_json("instance_id", instance_id, obj);
   }
-  static void generate_test_instances(std::list<rgw_data_sync_info*>& o);
+  static std::list<rgw_data_sync_info> generate_test_instances();
 
   rgw_data_sync_info() : state((int)StateInit), num_shards(0) {}
 };
@@ -203,7 +203,7 @@ struct rgw_data_sync_marker {
     JSONDecoder::decode_json("timestamp", t, obj);
     timestamp = t.to_real_time();
   }
-  static void generate_test_instances(std::list<rgw_data_sync_marker*>& o);
+  static std::list<rgw_data_sync_marker> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_marker)
 
@@ -235,7 +235,7 @@ struct rgw_data_sync_status {
     JSONDecoder::decode_json("info", sync_info, obj);
     JSONDecoder::decode_json("markers", sync_markers, obj);
   }
-  static void generate_test_instances(std::list<rgw_data_sync_status*>& o);
+  static std::list<rgw_data_sync_status> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(rgw_data_sync_status)
 

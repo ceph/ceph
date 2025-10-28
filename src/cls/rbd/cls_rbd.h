@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef __CEPH_CLS_RBD_H
 #define __CEPH_CLS_RBD_H
@@ -93,11 +93,13 @@ struct cls_rbd_parent {
     }
   }
 
-  static void generate_test_instances(std::list<cls_rbd_parent*>& o) {
-    o.push_back(new cls_rbd_parent{});
-    o.push_back(new cls_rbd_parent{{1, "", "image id", 234}, {}});
-    o.push_back(new cls_rbd_parent{{1, "", "image id", 234}, {123}});
-    o.push_back(new cls_rbd_parent{{1, "ns", "image id", 234}, {123}});
+  static std::list<cls_rbd_parent> generate_test_instances() {
+    std::list<cls_rbd_parent> o;
+    o.emplace_back();
+    o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {}});
+    o.push_back(cls_rbd_parent{{1, "", "image id", 234}, {123}});
+    o.push_back(cls_rbd_parent{{1, "ns", "image id", 234}, {123}});
+    return o;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(cls_rbd_parent)
@@ -225,21 +227,22 @@ struct cls_rbd_snap {
     }
   }
 
-  static void generate_test_instances(std::list<cls_rbd_snap*>& o) {
-    o.push_back(new cls_rbd_snap{});
+  static std::list<cls_rbd_snap> generate_test_instances() {
+    std::list<cls_rbd_snap> o;
+    o.emplace_back();
     // the parent field is ignored in v8 and up, so let's avoid setting it.
     // otherwise check-generated.sh would fail due to the disprepancies between
     // the original dump and re-encoded dump
-    o.push_back(new cls_rbd_snap{1, "snap", 123456,
-                                 RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
-                                 cls::rbd::UserSnapshotNamespace{}, 543, {}});
-    o.push_back(new cls_rbd_snap{1, "snap", 123456,
-                                 RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
-                                 cls::rbd::UserSnapshotNamespace{}, 543, {0}});
-    o.push_back(new cls_rbd_snap{1, "snap", 123456,
-                                 RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
-                                 cls::rbd::UserSnapshotNamespace{}, 543,
-                                 {123}});
+    o.push_back(cls_rbd_snap{1, "snap", 123456,
+                             RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
+                             cls::rbd::UserSnapshotNamespace{}, 543, {}});
+    o.push_back(cls_rbd_snap{1, "snap", 123456,
+                             RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
+                             cls::rbd::UserSnapshotNamespace{}, 543, {0}});
+    o.push_back(cls_rbd_snap{1, "snap", 123456,
+                             RBD_PROTECTION_STATUS_PROTECTED, {}, 31, {},
+                             cls::rbd::UserSnapshotNamespace{}, 543, {123}});
+    return o;
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(cls_rbd_snap)

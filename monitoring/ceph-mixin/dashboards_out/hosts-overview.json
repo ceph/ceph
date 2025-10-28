@@ -555,6 +555,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -634,6 +635,7 @@
       },
       {
          "datasource": "$datasource",
+         "description": "",
          "fieldConfig": {
             "defaults": {
                "color": {
@@ -805,7 +807,7 @@
             "multi": false,
             "name": "mds_hosts",
             "options": [ ],
-            "query": "label_values(ceph_mds_inodes{hostname, cluster=~\"$cluster\", })",
+            "query": "label_values(ceph_mds_inodes{cluster=~\"$cluster\"}, hostname)",
             "refresh": 1,
             "regex": "mds.(.*)",
             "sort": 1,
@@ -825,7 +827,7 @@
             "multi": false,
             "name": "rgw_hosts",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{hostname, cluster=~\"$cluster\", })",
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster\"}, hostname)",
             "refresh": 1,
             "regex": "rgw.(.*)",
             "sort": 1,

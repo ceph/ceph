@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <random>
 
@@ -46,9 +46,9 @@ struct allocator_test_t :
     }
     return seastar::now();
   }
-  void init_alloc(uint64_t block_size, uint64_t total_size) {
+  void init_alloc(uint64_t block_size, uint64_t total_size, uint64_t base_addr = 0) {
     assert(allocator);
-    allocator->init(0, total_size, block_size);
+    allocator->init(base_addr, total_size, block_size);
   }
   void close() {
     assert(allocator);
@@ -119,6 +119,35 @@ TEST_P(allocator_test_t, test_scattered_alloc)
     result = allocates(block_size * 512);
     ASSERT_EQ(false, result.has_value());
   }
+}
+
+TEST_P(allocator_test_t, test_base_addr)
+{
+  uint64_t block_size = 8192;
+  uint64_t capacity = 1024 * block_size;
+
+  auto run_case = [&](uint64_t base_addr) {
+    init_alloc(block_size, capacity, base_addr);
+
+    allocator->mark_extent_used(base_addr, block_size * 256);
+    allocator->mark_extent_used(base_addr + (block_size * 512), block_size * 256);
+
+    auto result = allocate(block_size * 512);
+    ASSERT_EQ(false, result.has_value());
+
+    result = allocates(block_size * 512);
+    ASSERT_EQ(true, result.has_value());
+
+    free(base_addr, block_size * 512);
+
+    result = allocate(block_size * 512);
+    ASSERT_EQ(true, result.has_value());
+
+    close();
+  };
+
+  run_case(0 /* base_addr */);
+  run_case(capacity /* base_addr */);
 }
 
 TEST_P(allocator_test_t, test_random_alloc_verify)

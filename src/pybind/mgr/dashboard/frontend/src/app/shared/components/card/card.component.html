@@ -9,7 +9,7 @@
     <svg [cdsIcon]="icons.deploy"
          [size]="icons.size20"
          ></svg>
-    <span class="badge badge-info">{{ cardTitle }}</span>
+    <cds-tag class="tag-info">{{ cardTitle }}</cds-tag>
   </h4>
   <h5 *ngIf="cardType === 'syncCards'"
       class="text-center card-title">

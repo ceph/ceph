@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -29,8 +29,6 @@ namespace crimson::os::seastore {
  */
 class LBAManager {
 public:
-  using base_iertr = Cache::base_iertr;
-
   using mkfs_iertr = base_iertr;
   using mkfs_ret = mkfs_iertr::future<>;
   virtual mkfs_ret mkfs(
@@ -62,7 +60,23 @@ public:
   using get_mapping_ret = get_mapping_iertr::future<LBAMapping>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
-    laddr_t offset) = 0;
+    laddr_t offset,
+    bool search_containing = false) = 0;
+
+  /*
+   * Fetches the mapping corresponding to the "extent"
+   *
+   */
+  virtual get_mapping_ret get_mapping(
+    Transaction &t,
+    LogicalChildNode &extent) = 0;
+
+
+#ifdef UNIT_TESTS_BUILT
+  using get_end_mapping_iertr = base_iertr;
+  using get_end_mapping_ret = get_end_mapping_iertr::future<LBAMapping>;
+  virtual get_end_mapping_ret get_end_mapping(Transaction &t) = 0;
+#endif
 
   /**
    * Allocates a new mapping referenced by LBARef
@@ -86,24 +100,67 @@ public:
     laddr_t hint,
     std::vector<LogicalChildNodeRef> extents,
     extent_ref_count_t refcount) = 0;
-
-  virtual alloc_extent_ret clone_mapping(
+  /*
+   * Allocate extents at "pos"
+   *
+   * Returns the inserted lba mappings
+   */
+  virtual alloc_extents_ret alloc_extents(
     Transaction &t,
-    laddr_t hint,
-    extent_len_t len,
-    laddr_t intermediate_key,
-    laddr_t intermediate_base) = 0;
+    LBAMapping pos,
+    std::vector<LogicalChildNodeRef> ext) = 0;
+
+  struct clone_mapping_ret_t {
+    LBAMapping cloned_mapping;
+    LBAMapping orig_mapping;
+  };
+  using clone_mapping_iertr = alloc_extent_iertr;
+  using clone_mapping_ret = clone_mapping_iertr::future<clone_mapping_ret_t>;
+  /*
+   * Clones (part of) "mapping" at the position "pos" with the new lba key "laddr".
+   */
+  virtual clone_mapping_ret clone_mapping(
+    Transaction &t,
+    LBAMapping pos,		// the destined position
+    LBAMapping mapping,		// the mapping to be cloned
+    laddr_t laddr,		// the new lba key of the cloned mapping
+    extent_len_t offset,	// the offset of the part to be cloned,
+				// relative to the start of the mapping.
+    extent_len_t len,		// the length of the part to be cloned
+    bool updateref		// whether to update the refcount of the
+				// direct mapping
+  ) = 0;
 
   virtual alloc_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
     extent_len_t len) = 0;
 
-  struct ref_update_result_t {
-    laddr_t direct_key;
+  /*
+   * Inserts a zero mapping at the position "pos" with
+   * the key "laddr" and length "len"
+   */
+  virtual alloc_extent_ret reserve_region(
+    Transaction &t,
+    LBAMapping pos,
+    laddr_t hint,
+    extent_len_t len) = 0;
+
+  struct mapping_update_result_t {
+    laddr_t key;
     extent_ref_count_t refcount = 0;
     pladdr_t addr;
     extent_len_t length = 0;
+    LBAMapping mapping; // the mapping pointing to the updated lba entry if
+			// refcount is non-zero; the next lba entry or the
+			// end mapping otherwise.
+    bool need_to_remove_extent() const {
+      return refcount == 0 && addr.is_paddr() && !addr.get_paddr().is_zero();
+    }
+  };
+  struct ref_update_result_t {
+    mapping_update_result_t result;
+    std::optional<mapping_update_result_t> direct_result;
   };
   using ref_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
@@ -112,19 +169,60 @@ public:
   /**
    * Removes a mapping and deal with indirection
    *
-   * @return returns resulting refcount
+   * @return returns the information about the removed
+   * mappings including the corresponding direct mapping
+   * if the mapping of laddr is indirect.
    */
   virtual ref_ret remove_mapping(
     Transaction &t,
     laddr_t addr) = 0;
 
+  /*
+   * Removes the mapping and deal with indirection
+   *
+   * @return returns the information about the removed
+   * mappings including the corresponding direct mapping
+   * if the mapping of laddr is indirect.
+   */
+  virtual ref_ret remove_mapping(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
+  /*
+   * remove_indirect_mapping_only
+   *
+   * Remove the indirect mapping without touch the corresponding
+   * direct one.
+   *
+   * @return returns the information about the removed
+   * indirect mapping.
+   */
+  virtual ref_ret remove_indirect_mapping_only(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
+  /**
+   * Increments ref count on extent
+   *
+   * @return returns resulting refcount
+   */
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr) = 0;
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    LBAMapping mapping) = 0;
+
   struct remap_entry_t {
     extent_len_t offset;
     extent_len_t len;
-    remap_entry_t(extent_len_t _offset, extent_len_t _len) {
-      offset = _offset;
-      len = _len;
-    }
+    LogicalChildNode* extent = nullptr;
+    remap_entry_t(
+      extent_len_t _offset,
+      extent_len_t _len,
+      LogicalChildNode *extent = nullptr)
+      : offset(_offset), len(_len), extent(extent)
+    {}
   };
   using remap_iertr = ref_iertr;
   using remap_ret = remap_iertr::future<std::vector<LBAMapping>>;
@@ -138,9 +236,7 @@ public:
   virtual remap_ret remap_mappings(
     Transaction &t,
     LBAMapping orig_mapping,
-    std::vector<remap_entry_t> remaps,
-    std::vector<LogicalChildNodeRef> extents  // Required if and only
-						 // if pin isn't indirect
+    std::vector<remap_entry_t> remaps
     ) = 0;
 
   /**
@@ -195,7 +291,7 @@ public:
   using update_mapping_ret = base_iertr::future<extent_ref_count_t>;
   virtual update_mapping_ret update_mapping(
     Transaction& t,
-    laddr_t laddr,
+    LBAMapping mapping,
     extent_len_t prev_len,
     paddr_t prev_addr,
     LogicalChildNode& nextent) = 0;
@@ -230,9 +326,15 @@ public:
     laddr_t laddr,
     extent_len_t len) = 0;
 
-  using refresh_lba_mapping_iertr = base_iertr;
-  using refresh_lba_mapping_ret = refresh_lba_mapping_iertr::future<LBAMapping>;
-  virtual refresh_lba_mapping_ret refresh_lba_mapping(
+  using complete_lba_mapping_iertr = get_mappings_iertr;
+  using complete_lba_mapping_ret =
+    complete_lba_mapping_iertr::future<LBAMapping>;
+  /*
+   * Completes an incomplete indirect mappings
+   *
+   * No effect if the indirect mapping is already complete
+   */
+  virtual complete_lba_mapping_ret complete_indirect_lba_mapping(
     Transaction &t,
     LBAMapping mapping) = 0;
 

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -26,7 +26,6 @@ class LogicalChildNode;
 
 namespace crimson::os::seastore::lba {
 
-using base_iertr = Cache::base_iertr;
 using LBANode = FixedKVNode<laddr_t>;
 
 class BtreeLBAMapping;
@@ -217,13 +216,20 @@ struct LBALeafNode
     op_context_t c,
     uint16_t pos,
     laddr_t key) const {
-    return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key);
+    return parent_node_t::is_child_stable(c.trans, c.cache, pos, key);
   }
   bool is_child_data_stable(
     op_context_t c,
     uint16_t pos,
     laddr_t key) const {
-    return parent_node_t::_is_child_stable(c.trans, c.cache, pos, key, true);
+    return parent_node_t::is_child_stable(c.trans, c.cache, pos, key, true);
+  }
+  bool is_child_initial_pending(
+    op_context_t c,
+    uint16_t pos,
+    laddr_t key) const {
+    return parent_node_t::is_child_initial_pending(
+      c.trans, c.cache, pos, key);
   }
 
   void on_split(
@@ -259,6 +265,8 @@ struct LBALeafNode
     uint32_t pivot_idx,
     LBALeafNode &replacement_left,
     LBALeafNode &replacement_right) final {
+    // We should do full merge if pivot_idx == right.get_size().
+    ceph_assert(pivot_idx != right.get_size());
     this->balance_child_ptrs(
       t, left, right, pivot_idx, replacement_left, replacement_right);
   }

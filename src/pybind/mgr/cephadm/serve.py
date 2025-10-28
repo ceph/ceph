@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime
 import ipaddress
 import hashlib
 import json
@@ -26,7 +26,7 @@ import orchestrator
 from orchestrator import OrchestratorError, set_exception_subject, OrchestratorEvent, \
     DaemonDescriptionStatus, daemon_type_to_service
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
-from cephadm.schedule import HostAssignment
+from cephadm.schedule import HostAssignment, HostSelector
 from cephadm.autotune import MemoryAutotuner
 from cephadm.utils import forall_hosts, cephadmNoImage, is_repo_digest, \
     CephadmNoImage, CEPH_TYPES, ContainerInspectInfo, SpecialHostLabels
@@ -64,7 +64,7 @@ class CephadmServe:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
         self.log = logger
-        self.last_certificates_check: Optional[datetime] = None
+        self.last_certificates_check: Optional[datetime.datetime] = None
 
     def serve(self) -> None:
         """
@@ -89,6 +89,7 @@ class CephadmServe:
                 self._check_for_strays()
 
                 self._update_paused_health()
+                self.mgr.update_maintenance_healthcheck()
 
                 if self.mgr.need_connect_dashboard_rgw and self.mgr.config_dashboard:
                     self.mgr.need_connect_dashboard_rgw = False
@@ -172,6 +173,7 @@ class CephadmServe:
                 self.mgr.facts_cache_timeout,
                 self.mgr.daemon_cache_timeout,
                 self.mgr.device_cache_timeout,
+                self.mgr.stray_daemon_check_interval,
             )
         )
         self.log.debug('Sleeping for %d seconds', sleep_interval)
@@ -465,6 +467,9 @@ class CephadmServe:
             (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
+        cutoff = datetime_now() - datetime.timedelta(seconds=self.mgr.stray_daemon_check_interval)
+        if self.mgr.last_stray_daemon_check is not None and self.mgr.last_stray_daemon_check >= cutoff:
+            return
         self.log.debug('_check_for_strays')
         for k in ['CEPHADM_STRAY_HOST',
                   'CEPHADM_STRAY_DAEMON']:
@@ -515,6 +520,7 @@ class CephadmServe:
             if self.mgr.warn_on_stray_daemons and daemon_detail:
                 self.mgr.set_health_warning(
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
+            self.mgr.last_stray_daemon_check = datetime_now()
 
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
         if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
@@ -796,6 +802,14 @@ class CephadmServe:
                         )
                         found = True
                         break
+                if not found and ingress_spec.virtual_interface_networks:
+                    for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                        if subnet in ingress_spec.virtual_interface_networks:
+                            logger.debug(
+                                f'{subnet} found in virtual_interface_networks list {list(ingress_spec.virtual_interface_networks)}'
+                            )
+                            found = True
+                            break
                 if not found:
                     self.log.info(
                         f"Filtered out host {host}: Host has no interface available for VIP: {vip}"
@@ -811,6 +825,7 @@ class CephadmServe:
         rank_map = None
         if svc.ranked(spec):
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+        host_selector = _host_selector(svc)
         ha = HostAssignment(
             spec=spec,
             hosts=self.mgr.cache.get_non_draining_hosts() if spec.service_name(
@@ -826,6 +841,8 @@ class CephadmServe:
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
+            upgrade_in_progress=(self.mgr.upgrade.upgrade_state is not None),
+            host_selector=host_selector,
         )
 
         try:
@@ -1139,7 +1156,19 @@ class CephadmServe:
                     # the daemon is written, which we rewrite on redeploy, but not
                     # on reconfig.
                     action = 'redeploy'
-
+                elif dd.daemon_type == 'nfs':
+                    # check what has changed, based on that decide action
+                    only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
+                    if not only_kmip_updated:
+                        action = 'redeploy'
+            elif dd.daemon_type == 'haproxy':
+                if spec and hasattr(spec, 'backend_service'):
+                    backend_spec = self.mgr.spec_store[spec.backend_service].spec
+                    if backend_spec.service_type == 'nfs':
+                        svc = service_registry.get_service('ingress')
+                        if svc.has_placement_changed(deps, spec):
+                            self.log.debug(f'Redeploy {spec.service_name()} as placement has changed')
+                            action = 'redeploy'
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
@@ -1161,6 +1190,7 @@ class CephadmServe:
                     dd.daemon_type in CEPH_TYPES:
                 self.log.info('Reconfiguring %s (extra config changed)...' % dd.name())
                 action = 'reconfig'
+
             if action:
                 if self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name()) == 'redeploy' \
                         and action == 'reconfig':
@@ -1405,6 +1435,14 @@ class CephadmServe:
                 self.log.info('%s daemon %s on %s' % (
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
+
+                termination_grace_period = None
+                if daemon_spec.service_name in self.mgr.spec_store:
+                    svc_spec = self.mgr.spec_store[daemon_spec.service_name].spec
+                    termination_grace_period = getattr(svc_spec, 'termination_grace_period_seconds', None)
+
+                if termination_grace_period is not None:
+                    daemon_params['termination_grace_period_seconds'] = int(termination_grace_period)
 
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host,
@@ -1814,15 +1852,15 @@ class CephadmServe:
         return r
 
     # function responsible for logging single host into custom registry
-    async def _registry_login(self, host: str, registry_json: Dict[str, str]) -> Optional[str]:
+    async def _registry_login(self, host: str, registry_json: Dict[str, list[Dict[str, str]]]) -> Optional[str]:
         self.log.debug(
-            f"Attempting to log host {host} into custom registry @ {registry_json['url']}")
+            f"Attempting to log host {host} into custom registries")
         # want to pass info over stdin rather than through normal list of args
         out, err, code = await self._run_cephadm(
             host, 'mon', 'registry-login',
             ['--registry-json', '-'], stdin=json.dumps(registry_json), error_ok=True)
         if code:
-            return f"Host {host} failed to login to {registry_json['url']} as {registry_json['username']} with given password"
+            return f"Host {host} failed to login to all registries"
         return None
 
     async def _deploy_cephadm_binary(self, host: str, addr: Optional[str] = None) -> None:
@@ -1830,3 +1868,9 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
                                               self.mgr._cephadm, addr=addr)
+
+
+def _host_selector(svc: Any) -> Optional[HostSelector]:
+    if hasattr(svc, 'filter_host_candidates'):
+        return cast(HostSelector, svc)
+    return None

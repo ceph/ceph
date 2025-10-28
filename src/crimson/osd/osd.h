@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -221,8 +221,8 @@ private:
   seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
                                         Ref<MOSDMarkMeDown> m);
 
-  seastar::future<> committed_osd_maps(version_t first,
-                                       version_t last,
+  seastar::future<> committed_osd_maps(epoch_t first,
+                                       epoch_t last,
                                        Ref<MOSDMap> m);
 
   seastar::future<> check_osdmap_features();

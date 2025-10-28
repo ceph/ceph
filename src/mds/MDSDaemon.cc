@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -164,12 +165,16 @@ void MDSDaemon::asok_command(
     dump_status(f);
     r = 0;
   } else if (command == "lockup") {
-    int64_t millisecs;
-    cmd_getval(cmdmap, "millisecs", millisecs);
-    derr << "(lockup) sleeping with mds_lock for " << millisecs << dendl;
-    std::lock_guard l(mds_lock);
-    std::this_thread::sleep_for(std::chrono::milliseconds(millisecs));
-    r = 0;
+    int64_t millisecs{};
+    if (cmd_getval(cmdmap, "millisecs", millisecs)) {
+      derr << "(lockup) sleeping with mds_lock for " << millisecs << dendl;
+      std::lock_guard l(mds_lock);
+      std::this_thread::sleep_for(std::chrono::milliseconds(millisecs));
+      r = 0;
+    } else {
+      ss << "millisecs setting not found";
+      r = -EINVAL;
+    }
   } else if (command == "exit") {
     outbl.append("Exiting...\n");
     r = 0;
@@ -923,6 +928,13 @@ void MDSDaemon::suicide()
   // to wait for us to go laggy. Only do this if we're actually in the MDSMap,
   // because otherwise the MDSMonitor will drop our message.
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DNE);
+
+  /* Unlock the mds_lock while waiting for beacon ACK to avoid a
+   * deadlock with the dispatcher thread which may try to acquire
+   * mds_lock, preventing it from receiving the beacon ACK.
+   */
+  mds_lock.unlock();
+
   if (!mdsmap->is_dne_gid(mds_gid_t(monc->get_global_id()))) {
     beacon.send_and_wait(1);
   }
@@ -930,6 +942,8 @@ void MDSDaemon::suicide()
 
   if (mgrc.is_initialized())
     mgrc.shutdown();
+
+  mds_lock.lock();
 
   if (mds_rank) {
     mds_rank->shutdown();

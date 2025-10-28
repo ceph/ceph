@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,12 +22,64 @@
 #include "events/ETableServer.h"
 #include "common/debug.h"
 
+#include "messages/MMDSTableRequest.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << rank << ".tableserver(" << get_mdstable_name(table) << ") "
 
 using namespace std;
+
+struct MDSTableServer::notify_info_t {
+  notify_info_t() {}
+  std::set<mds_rank_t> notify_ack_gather;
+  mds_rank_t mds;
+  ref_t<MMDSTableRequest> reply = NULL;
+  MDSContext *onfinish = nullptr;
+};
+
+MDSTableServer::MDSTableServer(MDSRank *m, int tab) :
+    MDSTable(m, get_mdstable_name(tab), false), table(tab) {}
+
+MDSTableServer::~MDSTableServer() = default;
+
+MDSTableServer::MDSTableServer(const MDSTableServer &) = default;
+MDSTableServer &MDSTableServer::operator=(const MDSTableServer &) = default;
+
+void MDSTableServer::_note_prepare(mds_rank_t mds, uint64_t reqid, bool replay) {
+  version++;
+  if (replay)
+    projected_version = version;
+  pending_for_mds[version].mds = mds;
+  pending_for_mds[version].reqid = reqid;
+  pending_for_mds[version].tid = version;
+}
+
+void MDSTableServer::_note_commit(uint64_t tid, bool replay) {
+  version++;
+  if (replay)
+    projected_version = version;
+  pending_for_mds.erase(tid);
+}
+
+void MDSTableServer::_note_rollback(uint64_t tid, bool replay) {
+  version++;
+  if (replay)
+    projected_version = version;
+  pending_for_mds.erase(tid);
+}
+
+void MDSTableServer::_note_server_update(bufferlist& bl, bool replay) {
+  version++;
+  if (replay)
+    projected_version = version;
+}
+
+void MDSTableServer::reset_state() {
+  pending_for_mds.clear();
+  ++version;
+}
 
 void MDSTableServer::handle_request(const cref_t<MMDSTableRequest> &req)
 {
@@ -295,6 +348,16 @@ void MDSTableServer::_do_server_recovery()
     mds->send_message_mds(reply, p);
   }
   recovered = true;
+}
+
+void MDSTableServer::encode_state(bufferlist& bl) const {
+  encode_server_state(bl);
+  encode(pending_for_mds, bl);
+}
+
+void MDSTableServer::decode_state(bufferlist::const_iterator& bl) {
+  decode_server_state(bl);
+  decode(pending_for_mds, bl);
 }
 
 void MDSTableServer::finish_recovery(set<mds_rank_t>& active)

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,6 +19,8 @@
 
 #include <iostream> // for std::cerr
 
+#include "include/encoding.h"
+#include "include/int_types.h" // for __u32
 #include "include/types.h"
 #include "include/rados/librados.hpp"
 

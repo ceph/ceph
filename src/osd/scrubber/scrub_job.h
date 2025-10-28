@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 #include <chrono>
@@ -375,6 +376,13 @@ class ScrubJob {
   static bool is_repair_implied(urgency_t urgency);
 
   static bool is_autorepair_allowed(urgency_t urgency);
+
+  /**
+   * should we cancel the repair if the number of damaged objects
+   * exceeds the configured limit ('osd_scrub_auto_repair_num_errors')?
+   * This does not apply to any repair that was operator-initiated.
+   */
+  static bool is_repairs_count_limited(urgency_t urgency);
 };
 }  // namespace Scrub
 

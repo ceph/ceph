@@ -2,44 +2,34 @@
 ---
 
 options:
-- name: crimson_osd_obc_lru_size
-  type: uint
-  level: advanced
-  desc: Number of obcs to cache
-  default: 512
-- name: crimson_osd_scheduler_concurrency
-  type: uint
-  level: advanced
-  desc: The maximum number concurrent IO operations, 0 for unlimited
-  default: 0
-- name: crimson_alien_op_num_threads
-  type: uint
-  level: advanced
-  desc: The number of threads for serving alienized ObjectStore
-  default: 6
-  flags:
-  - startup
-- name: crimson_seastar_cpu_cores
+
+# Crimson CPU options:
+
+- name: crimson_cpu_set
   type: str
   level: advanced
-  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
+  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+  long_desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+             overrides crimson_cpu_num.
+             smp::count is deduced from this option
   flags:
   - startup
-- name: crimson_alien_thread_cpu_cores
-  type: str
-  level: advanced
-  desc: CPU cores on which alienstore threads will run in cpuset(7) format
-  flags:
-  - startup
-- name: crimson_seastar_num_threads
+
+- name: crimson_cpu_num
   type: uint
   level: advanced
   default: 0
-  desc: The number of threads for serving seastar reactors without CPU pinning, overridden if crimson_seastar_cpu_cores is set
+  desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
+  long_desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
+             overridden if crimson_cpu_set is set.
+             smp::count is deduced from this option.
   flags:
   - startup
   min: 0
   max: 32
+
+# Reactor options:
+
 - name: crimson_reactor_task_quota_ms
   type: float
   level: advanced
@@ -49,6 +39,7 @@ options:
              Shorter time between pools will result in larger CPU utilization.
   flags:
   - startup
+
 - name: crimson_reactor_idle_poll_time_us
   type: uint
   level: advanced
@@ -58,6 +49,7 @@ options:
              Longer reactor poll time will result in larger CPU utilization.
   flags:
   - startup
+
 - name: crimson_reactor_io_latency_goal_ms
   type: float
   level: advanced
@@ -69,6 +61,20 @@ options:
              Increasing this value will allow more IO requests to be dispatched concurrently.
   flags:
   - startup
+
+# Crimson OSD options:
+
+- name: crimson_osd_obc_lru_size
+  type: uint
+  level: advanced
+  desc: Number of obcs to cache
+  default: 512
+- name: crimson_osd_scheduler_concurrency
+  type: uint
+  level: advanced
+  desc: The maximum number concurrent IO operations, 0 for unlimited
+  default: 0
+
 - name: crimson_osd_stat_interval
   type: int
   level: advanced
@@ -80,6 +86,23 @@ options:
   level: advanced
   default: false
   desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  flags:
+  - startup
+
+# Bluestore options:
+
+- name: crimson_bluestore_num_threads
+  type: uint
+  level: advanced
+  desc: The number of POSIX threads alienized to seastar for serving Bluestore
+  default: 6
+  flags:
+  - startup
+
+- name: crimson_bluestore_cpu_set
+  type: str
+  level: advanced
+  desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
   flags:
   - startup
 
@@ -147,18 +170,32 @@ options:
   level: advanced
   desc: Max size in bytes that an extent can be, 0 to disable
   default: 0
-- name: seastore_cache_lru_size
+- name: seastore_cachepin_size_pershard
   type: size
   level: advanced
   desc: Size in bytes of extents to keep in cache (per reactor).
   default: 2_G
-- name: seastore_obj_data_write_amplification
+- name: seastore_cachepin_type
+  type: str
+  level: dev
+  desc: The cache replacement algorithm used by extent pinboard in seastore. (LRU/2Q)
+  default: LRU
+  enum_values:
+  - LRU
+  - 2Q
+- name: seastore_cachepin_2q_in_ratio
   type: float
   level: advanced
-  desc: split extent if ratio of total extent size to write size exceeds this value
-  default: 1.25
-# TODO: seastore_obj_data_write_amplification is no longer correct if 
-#       seastore_data_delta_based_overwrite is enabled. So, this should be reconsidered.
+  desc: Ratio of A1_in queue size to cache size(seastore_cachepin_size_pershard) in 2Q cache algorithm.
+        Note that the size of Am(primary) queue in 2Q is cache_size * (1 - in_ratio).
+  default: 0.5
+- name: seastore_cachepin_2q_out_ratio
+  type: float
+  level: advanced
+  desc: Ratio of A1_out queue size to cache size(seastore_cachepin_size_pershard) in 2Q cache algorithm.
+        Note this size ratio does not reflect actual memory usage, as it represents the size of evicted
+        pages from A1_in queue.
+  default: 0.5
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
@@ -189,6 +226,26 @@ options:
   level: advanced
   desc: Begin fast eviction when the used ratio of the main tier reaches this value.
   default: 0.7
+- name: seastore_hot_tier_generations
+  type: uint
+  level: advanced
+  desc: The number of generations in the hot tier or the whole SeaStore instance if there's only one tier.
+  default: 5
+  min: 5
+- name: seastore_cold_tier_generations
+  type: uint
+  level: advanced
+  desc: The number of generations in the cold tier if it exists.
+  default: 3
+- name: seastore_segment_cleaner_gc_formula
+  type: str
+  level: advanced
+  desc: The algorithm that SegmentCleaner will use to select segments to reclaim
+  default: cost_benefit
+  enum_values:
+  - greedy
+  - cost_benefit
+  - benefit
 - name: seastore_data_delta_based_overwrite
   type: size
   level: dev

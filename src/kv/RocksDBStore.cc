@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <filesystem>
 #include <map>
@@ -22,6 +22,7 @@
 #include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
+#include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "common/strtol.h"
@@ -30,6 +31,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
+#include "include/utime.h"
 #include "KeyValueDB.h"
 #include "RocksDBStore.h"
 
@@ -1248,7 +1250,7 @@ int RocksDBStore::do_open(ostream &out,
   ceph_assert(default_cf != nullptr);
   
   PerfCountersBuilder plb(cct, "rocksdb", l_rocksdb_first, l_rocksdb_last);
-  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency");
+  plb.add_time_avg(l_rocksdb_get_latency, "get_latency", "Get latency", nullptr, PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_rocksdb_submit_latency, "submit_latency", "Submit Latency");
   plb.add_time_avg(l_rocksdb_submit_sync_latency, "submit_sync_latency", "Submit Sync Latency");
   plb.add_u64_counter(l_rocksdb_compact, "compact", "Compactions");

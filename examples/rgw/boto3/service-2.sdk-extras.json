@@ -25,6 +25,17 @@
             "documentationUrl":"https://docs.ceph.com/docs/master/radosgw/s3/bucketops/#post-bucket-logging",
             "documentation":"<p>Flushes the logging objects of the buckets.</p>"
         },
+   			"PutBucketLogging":{
+      		"name":"PutBucketLogging",
+      		"http":{
+        		"method":"PUT",
+        		"requestUri":"/{Bucket}?logging"
+      		},
+      		"input":{"shape":"PutBucketLoggingRequest"},
+          "output": {"shape": "PutBucketLoggingOutput"},
+          "documentationUrl":"https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html",
+          "documentation":"<p>Put bucket logging configuration on source bucket.</p>"
+        },
         "GetUsageStats":{
             "name":"GetUsageStats",
             "http":{
@@ -394,6 +405,15 @@
             }
         },
         "PostBucketLoggingOutput": {
+            "type":"structure",
+            "members":{
+              "FlushedLoggingObject": {
+                "shape":"FlushedLoggingObject",
+                "documentation":"<p>Name of the pending logging object that was flushed.</p>"
+              }
+            }
+        },
+        "PutBucketLoggingOutput": {
             "type":"structure",
             "members":{
               "FlushedLoggingObject": {

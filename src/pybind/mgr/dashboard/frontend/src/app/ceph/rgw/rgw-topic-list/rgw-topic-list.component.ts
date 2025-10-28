@@ -11,7 +11,6 @@ import { Permission } from '~/app/shared/models/permissions';
 
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RgwTopicService } from '~/app/shared/api/rgw-topic.service';
-
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -23,7 +22,7 @@ import { Topic } from '~/app/shared/models/topic.model';
 import { BehaviorSubject, Observable, of, Subscriber } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
-const BASE_URL = 'rgw/topic';
+const BASE_URL = 'rgw/destination';
 @Component({
   selector: 'cd-rgw-topic-list',
   templateUrl: './rgw-topic-list.component.html',
@@ -130,13 +129,13 @@ export class RgwTopicListComponent extends ListWithDetails implements OnInit {
     const key = this.selection.first().key;
     const name = this.selection.first().name;
     this.modalService.show(DeleteConfirmationModalComponent, {
-      itemDescription: $localize`Topic`,
+      itemDescription: $localize`Notification destination`,
       itemNames: [name],
       submitActionObservable: () => {
         return new Observable((observer: Subscriber<any>) => {
           this.taskWrapper
             .wrapTaskAroundCall({
-              task: new FinishedTask('rgw/topic/delete', {
+              task: new FinishedTask(`${BASE_URL}/delete`, {
                 name: [name]
               }),
               call: this.rgwTopicService.delete(key)

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -69,20 +70,20 @@ int ObjectStore::probe_block_device_fsid(
   const string& path,
   uuid_d *fsid)
 {
-  int r;
-
 #if defined(WITH_BLUESTORE)
   // first try bluestore -- it has a crc on its header and will fail
   // reliably.
-  r = BlueStore::get_block_device_fsid(cct, path, fsid);
+  int r = BlueStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
 			  << *fsid << dendl;
     return r;
+  } else {
+    return -EINVAL;
   }
-#endif
-
+#else
   return -EINVAL;
+#endif
 }
 
 int ObjectStore::write_meta(const std::string& key,

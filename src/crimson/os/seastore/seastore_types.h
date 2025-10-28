@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -22,7 +22,12 @@
 #include "include/uuid.h"
 #include "include/rados.h"
 
+#include "crimson/common/errorator.h"
+
 namespace crimson::os::seastore {
+
+using base_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
 
 class cache_hint_t {
   enum hint_t {
@@ -117,6 +122,11 @@ constexpr device_id_t DEVICE_ID_MAX_VALID_SEGMENT = DEVICE_ID_MAX >> 1;
 constexpr device_id_t DEVICE_ID_SEGMENTED_MIN = 0;
 constexpr device_id_t DEVICE_ID_RANDOM_BLOCK_MIN = 
   1 << (std::numeric_limits<device_id_t>::digits - 1);
+
+// TODO this Signature is only applicable for segment devices(SSD/HDD) not
+// for other two devices like ZBD/RANDOM_BLOCK_SSD
+constexpr const char SEASTORE_SUPERBLOCK_SIGN[] = "seastore block device\n";
+constexpr std::size_t SEASTORE_SUPERBLOCK_SIGN_LEN = sizeof(SEASTORE_SUPERBLOCK_SIGN) - 1;
 
 struct device_id_printer_t {
   device_id_t id;
@@ -1125,18 +1135,33 @@ public:
       assert(offset < laddr_t::UNIT_SIZE);
     }
 
-    laddr_t get_roundup_laddr() const {
+    laddr_t get_roundup_laddr(size_t alignment) const {
+      ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
       if (offset == 0) {
-	return laddr_t(base);
+	return laddr_t(p2roundup(base, alignment >> laddr_t::UNIT_SHIFT));
       } else {
 	assert(offset < laddr_t::UNIT_SIZE);
-	return laddr_t(base + 1);
+	return laddr_t(p2roundup(base + 1, alignment >> laddr_t::UNIT_SHIFT));
       }
     }
-    laddr_t get_aligned_laddr() const { return laddr_t(base); }
+    laddr_t get_aligned_laddr(size_t alignment) const {
+      ceph_assert(alignment % laddr_t::UNIT_SIZE == 0);
+      return laddr_t(p2align(base, alignment >> laddr_t::UNIT_SHIFT));
+    }
+    laddr_t get_laddr() const {
+      return laddr_t{base};
+    }
     extent_len_t get_offset() const {
       assert(offset < laddr_t::UNIT_SIZE);
       return offset;
+    }
+    bool has_offset() const {
+      return offset != 0;
+    }
+    bool is_aligned(size_t alignment) const {
+      assert(alignment % laddr_t::UNIT_SIZE == 0);
+      return !has_offset() &&
+	base % (alignment >> UNIT_SHIFT) == 0;
     }
     laddr_t checked_to_laddr() const {
       assert(offset == 0);
@@ -1177,8 +1202,7 @@ public:
     friend laddr_offset_t operator+(const laddr_offset_t &laddr_offset,
 				    const loffset_t &offset) {
       // laddr_offset_t could access (laddr_t + loffset_t) overload.
-      return laddr_offset.get_aligned_laddr()
-	  + (laddr_offset.get_offset() + offset);
+      return laddr_offset.get_laddr() + (laddr_offset.get_offset() + offset);
     }
     friend laddr_offset_t operator+(const loffset_t &offset,
 				    const laddr_offset_t &loffset) {
@@ -1189,11 +1213,11 @@ public:
 				    const loffset_t &offset) {
       if (laddr_offset.get_offset() >= offset) {
 	return laddr_offset_t(
-	  laddr_offset.get_aligned_laddr(),
+	  laddr_offset.get_laddr(),
 	  laddr_offset.get_offset() - offset);
       } else {
 	// laddr_offset_t could access (laddr_t - loffset_t) overload.
-	return laddr_offset.get_aligned_laddr()
+	return laddr_offset.get_laddr()
 	    - (offset - laddr_offset.get_offset());
       }
     }
@@ -1231,12 +1255,12 @@ public:
   friend bool operator==(const laddr_t&, const laddr_t&) = default;
   friend bool operator==(const laddr_t &laddr,
 			 const laddr_offset_t &laddr_offset) {
-    return laddr == laddr_offset.get_aligned_laddr()
+    return laddr == laddr_offset.get_laddr()
 	&& 0 == laddr_offset.get_offset();
   }
   friend bool operator==(const laddr_offset_t &laddr_offset,
 			 const laddr_t &laddr) {
-    return laddr_offset.get_aligned_laddr() == laddr
+    return laddr_offset.get_laddr() == laddr
 	&& laddr_offset.get_offset() == 0;
   }
   friend auto operator<=>(const laddr_t&, const laddr_t&) = default;
@@ -1273,6 +1297,11 @@ public:
   friend struct laddr_le_t;
   friend struct pladdr_le_t;
 
+  struct laddr_hash_t {
+    std::size_t operator()(const laddr_t &laddr) const {
+      return static_cast<std::size_t>(laddr.value);
+    }
+  };
 private:
   // Prevent direct construction of laddr_t with an integer,
   // always use laddr_t::from_raw_uint instead.
@@ -1284,7 +1313,6 @@ using laddr_offset_t = laddr_t::laddr_offset_t;
 constexpr laddr_t L_ADDR_MAX = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX);
 constexpr laddr_t L_ADDR_MIN = laddr_t::from_raw_uint(0);
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
-constexpr laddr_t L_ADDR_ROOT = laddr_t::from_raw_uint(laddr_t::RAW_VALUE_MAX - 1);
 
 struct __attribute__((packed)) laddr_le_t {
   ceph_le64 laddr;
@@ -1587,10 +1615,6 @@ constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
 constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
-// without cold tier, the largest generation is less than MIN_COLD_GENERATION
-constexpr rewrite_gen_t MIN_COLD_GENERATION = 5;
-constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 7;
-constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr rewrite_gen_t NULL_GENERATION =
   std::numeric_limits<rewrite_gen_t>::max();
 
@@ -1606,16 +1630,20 @@ constexpr std::size_t generation_to_writer(rewrite_gen_t gen) {
 }
 
 // before EPM decision
-constexpr bool is_target_rewrite_generation(rewrite_gen_t gen) {
+constexpr bool is_target_rewrite_generation(
+  rewrite_gen_t gen,
+  rewrite_gen_t max_gen) {
   return gen == INIT_GENERATION ||
          (gen >= MIN_REWRITE_GENERATION &&
-          gen <= REWRITE_GENERATIONS);
+	  gen <= max_gen + 1);
 }
 
 // after EPM decision
-constexpr bool is_rewrite_generation(rewrite_gen_t gen) {
+constexpr bool is_rewrite_generation(
+  rewrite_gen_t gen,
+  rewrite_gen_t max_gen) {
   return gen >= INLINE_GENERATION &&
-         gen < REWRITE_GENERATIONS;
+	 gen <= max_gen;
 }
 
 enum class data_category_t : uint8_t {
@@ -1796,6 +1824,9 @@ public:
     reserved_data_len = 0;
   }
 };
+constexpr object_data_t get_null_object_data() {
+  return object_data_t{L_ADDR_NULL, 0};
+}
 
 struct __attribute__((packed)) object_data_le_t {
   laddr_le_t reserved_data_base = laddr_le_t(L_ADDR_NULL);
@@ -2079,6 +2110,7 @@ struct alloc_blk_t {
       extent_len_t len,
       extent_types_t type) {
     assert(is_backref_mapped_type(type) ||
+	   is_backref_node(type) ||
 	   is_retired_placeholder_type(type));
     return alloc_blk_t(paddr, L_ADDR_NULL, len, type);
   }
@@ -3061,15 +3093,15 @@ struct cache_access_stats_printer_t {
 std::ostream& operator<<(std::ostream&, const cache_access_stats_printer_t&);
 
 struct cache_stats_t {
-  cache_size_stats_t lru_sizes;
-  cache_io_stats_t lru_io;
+  cache_size_stats_t pinboard_sizes;
+  cache_io_stats_t pinboard_io;
   cache_size_stats_t dirty_sizes;
   dirty_io_stats_t dirty_io;
   cache_access_stats_t access;
 
   void add(const cache_stats_t& o) {
-    lru_sizes.add(o.lru_sizes);
-    lru_io.add(o.lru_io);
+    pinboard_sizes.add(o.pinboard_sizes);
+    pinboard_io.add(o.pinboard_io);
     dirty_sizes.add(o.dirty_sizes);
     dirty_io.add(o.dirty_io);
     access.add(o.access);
@@ -3133,3 +3165,19 @@ template <> struct fmt::formatter<crimson::os::seastore::write_result_t> : fmt::
 template <> struct fmt::formatter<crimson::os::seastore::omap_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ceph::buffer::list> : fmt::ostream_formatter {};
 #endif
+
+template <>
+struct std::hash<crimson::os::seastore::laddr_t> {
+  using Laddr = crimson::os::seastore::laddr_t;
+  std::size_t operator()(const Laddr &laddr) const {
+    return Laddr::laddr_hash_t()(laddr);
+  }
+};
+
+template <>
+struct boost::hash<crimson::os::seastore::laddr_t> {
+  using Laddr = crimson::os::seastore::laddr_t;
+  std::size_t operator()(const Laddr &laddr) const {
+    return Laddr::laddr_hash_t()(laddr);
+  }
+};

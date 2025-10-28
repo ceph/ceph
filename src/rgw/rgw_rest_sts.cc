@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
+
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/pem.h>
@@ -552,7 +553,7 @@ WebTokenEngine::connect_to_host_get_cert_chain(const DoutPrefixProvider* dpp, co
   return chain_pem;
 }
 
-void
+bool
 WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const std::string &algorithm, const std::string& n, const std::string& e) const
 {
   try {
@@ -571,18 +572,48 @@ WebTokenEngine::validate_signature_using_n_e(const DoutPrefixProvider* dpp, cons
     }
   } catch (const std::exception& e) {
     ldpp_dout(dpp, 10) << std::string("Signature validation using n, e failed: ") + e.what() << dendl;
-    throw std::system_error(EACCES, std::system_category(), std::string("Signature validation using n, e failed: ") + e.what());
+    return false;
   }
   ldpp_dout(dpp, 10) << "Verified signature using n and e"<< dendl;
-  return;
+  return true;
+}
+
+bool WebTokenEngine::verify_oidc_thumbprint(const DoutPrefixProvider* dpp, const std::string& cert_url,
+    const std::vector<std::string>& thumbprints) const
+{
+  if (!cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification")) {
+    ldpp_dout(dpp, 5) << "Verification of JWKS endpoint is turned off." << dendl;
+    return true;
+  }
+
+  // Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
+  const auto hostname = get_top_level_domain_from_host(dpp, cert_url);
+  ldpp_dout(dpp, 20) << "Validating hostname: " << hostname << dendl;
+  const auto cert_chain = connect_to_host_get_cert_chain(dpp, hostname, 443);
+  std::string cert;
+  try {
+    cert = extract_last_certificate(dpp, cert_chain);
+    ldpp_dout(dpp, 20) << "last cert: " << cert << dendl;
+  } catch(const std::exception& e) {
+    ldpp_dout(dpp, 20) << "Extracting last cert of jwks uri failed with: " << e.what() << dendl;
+    return false;
+  }
+
+  if (!is_cert_valid(thumbprints, cert)) {
+    ldpp_dout(dpp, 20) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
+    return false;
+  }
+
+  return true;
 }
 
 void
 WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::decoded_jwt& decoded, const string& algorithm, const string& iss, const vector<string>& thumbprints, optional_yield y) const
 {
   if (algorithm != "HS256" && algorithm != "HS384" && algorithm != "HS512") {
-    string cert_url = get_cert_url(iss, dpp, y);
-    if (cert_url.empty()) {
+    const auto cert_url = get_cert_url(iss, dpp, y);
+    if (cert_url.empty() || !verify_oidc_thumbprint(dpp, cert_url, thumbprints)) {
+      ldpp_dout(dpp, 5) << "Not able to validate JWKS url with registered thumbprints" << dendl;
       throw std::system_error(EINVAL, std::system_category());
     }
 
@@ -609,33 +640,30 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
         for (auto &key : keys) {
           JSONParser k_parser;
           vector<string> x5c;
-          std::string use;
-          bool skip{false};
+          std::string use, kid;
           if (k_parser.parse(key.c_str(), key.size())) {
-            if (JSONDecoder::decode_json("use", use, &k_parser)) {
-              if (use == "enc") { //if key is for encryption then don't use x5c or n and e for signature validation
-                skip = true;
-              } else if (use == "sig") {
-                skip = false;
-              }
+            if (JSONDecoder::decode_json("kid", kid, &k_parser)) {
+              ldpp_dout(dpp, 20) << "Checking key id: " << kid << dendl;
             }
-            if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
-              if (skip == true) {
+            if (JSONDecoder::decode_json("use", use, &k_parser) && use != "sig") {
                 continue;
-              }
+            }
+
+            if (JSONDecoder::decode_json("x5c", x5c, &k_parser)) {
               string cert;
               bool found_valid_cert = false;
+              bool skip_thumbprint_verification = cct->_conf.get_val<bool>("rgw_enable_jwks_url_verification");
               for (auto& it : x5c) {
                 cert = "-----BEGIN CERTIFICATE-----\n" + it + "\n-----END CERTIFICATE-----";
                 ldpp_dout(dpp, 20) << "Certificate is: " << cert.c_str() << dendl;
-                if (is_cert_valid(thumbprints, cert)) {
+                if (skip_thumbprint_verification || is_cert_valid(thumbprints, cert)) {
                   found_valid_cert = true;
                   break;
                 }
               }
-              if (! found_valid_cert) {
-                ldpp_dout(dpp, 0) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
-                throw std::system_error(EINVAL, std::system_category());
+              if (!found_valid_cert) {
+                ldpp_dout(dpp, 10) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
+                continue;
               }
               try {
                 //verify method takes care of expired tokens also
@@ -694,53 +722,35 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
                   verifier.verify(decoded);
                   return;
                 } else {
-                  ldpp_dout(dpp, 0) << "Unsupported algorithm: " << algorithm << dendl;
-                  throw std::system_error(EINVAL, std::system_category());
+                  ldpp_dout(dpp, 5) << "Unsupported algorithm: " << algorithm << dendl;
                 }
               }
               catch (const std::exception& e) {
-                ldpp_dout(dpp, 0) << "Signature validation using x5c failed" << e.what() << dendl;
-                throw std::system_error(EACCES, std::system_category());
+                ldpp_dout(dpp, 10) << "Signature validation using x5c failed" << e.what() << dendl;
               }
             } else {
+              // Try bare key validation
+              ldpp_dout(dpp, 20) << "Trying bare key validation" << dendl;
+              std::string kty;
+              if (JSONDecoder::decode_json("kty", kty, &k_parser) && kty != "RSA") {
+                ldpp_dout(dpp, 10) << "Only RSA bare key validation is currently supported" << dendl;
+                continue;
+              }
+
               if (algorithm == "RS256" || algorithm == "RS384" || algorithm == "RS512") {
-                string n, e; //modulus and exponent
+                std::string n, e; //modulus and exponent
                 if (JSONDecoder::decode_json("n", n, &k_parser) && JSONDecoder::decode_json("e", e, &k_parser)) {
-                  if (skip == true) {
-                    continue;
+                  if (validate_signature_using_n_e(dpp, decoded, algorithm, n, e)) {
+                    return;
                   }
-                  //Fetch and verify cert according to https://docs.aws.amazon.com/IAM/latest/UserGuide/id_roles_providers_create_oidc_verify-thumbprint.html
-                  //and the same must be installed as part of create oidc provider in rgw
-                  //this can be made common to all types of keys(x5c, n&e), making thumbprint validation similar to
-                  //AWS
-                  std::string hostname = get_top_level_domain_from_host(dpp, cert_url);
-                  //connect to host and get back cert chain from it
-                  std::string cert_chain = connect_to_host_get_cert_chain(dpp, hostname, 443);
-                  std::string cert;
-                  try {
-                    cert = extract_last_certificate(dpp, cert_chain);
-                    ldpp_dout(dpp, 20) << "last cert: " << cert << dendl;
-                  } catch(const std::exception& e) {
-                    ldpp_dout(dpp, 20) << "Extracting last cert of jwks uri failed with: " << e.what() << dendl;
-                    throw std::system_error(EINVAL, std::system_category());
-                  }
-                  if (!is_cert_valid(thumbprints, cert)) {
-                    ldpp_dout(dpp, 20) << "Cert doesn't match that with the thumbprints registered with oidc provider: " << cert.c_str() << dendl;
-                    throw std::system_error(EINVAL, std::system_category());
-                  }
-                  validate_signature_using_n_e(dpp, decoded, algorithm, n, e);
-                  return;
                 }
-                ldpp_dout(dpp, 0) << "x5c not present or n, e not present" << dendl;
-                throw std::system_error(EINVAL, std::system_category());
-              } else {
-                throw std::system_error(EINVAL, std::system_category(), "Invalid algorithm: " + algorithm);
+                ldpp_dout(dpp, 10) << "Bare key parameters (n&e) are not present for key" << dendl;
               }
             }
-            ldpp_dout(dpp, 0) << "Signature can not be validated with the input given in keys: "<< dendl;
-            throw std::system_error(EINVAL, std::system_category());
           } //end k_parser.parse
-        }//end for iterate through keys
+        } //end for iterate through keys
+        ldpp_dout(dpp, 0) << "Signature can not be validated with the JWKS present." << dendl;
+        throw std::system_error(EINVAL, std::system_category());
       } else { //end val->is_array
         ldpp_dout(dpp, 0) << "keys not present in JSON" << dendl;
         throw std::system_error(EINVAL, std::system_category());
@@ -1055,6 +1065,45 @@ void RGWSTSAssumeRole::execute(optional_yield y)
   }
 }
 
+int RGWSTSGetCallerIdentity::verify_permission(optional_yield y)
+{
+  // https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html
+  // Permissions are not required because the same information is returned when access is denied.
+
+  return 0;
+}
+
+void RGWSTSGetCallerIdentity::execute(optional_yield y)
+{
+  std::string account;
+  std::string userid;
+  std::string arn;
+
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+  }
+
+  if(account.empty()) {
+    account = s->user->get_tenant();
+  }
+  if (auto it = s->env.find("aws:userid"); it != s->env.end()) {
+    userid = it->second;
+  }
+
+  auto a = s->auth.identity->get_caller_identity();
+  if(a) {
+    arn = a->to_string();
+  }
+
+  s->formatter->open_object_section_in_ns("GetCallerIdentityResponse", RGW_REST_STS_XMLNS);
+  s->formatter->open_object_section("GetCallerIdentityResult");
+  encode_json("Arn",  arn, s->formatter);
+  encode_json("UserId", userid, s->formatter);
+  encode_json("Account", account, s->formatter);
+  s->formatter->close_section();
+  s->formatter->close_section();
+}
+
 int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
                             const rgw::auth::StrategyRegistry& auth_registry,
@@ -1067,7 +1116,8 @@ using op_generator = RGWOp*(*)();
 static const std::unordered_map<std::string_view, op_generator> op_generators = {
   {"AssumeRole", []() -> RGWOp* {return new RGWSTSAssumeRole;}},
   {"GetSessionToken", []() -> RGWOp* {return new RGWSTSGetSessionToken;}},
-  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
+  {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}},
+  {"GetCallerIdentity", []() -> RGWOp* {return new RGWSTSGetCallerIdentity;}}
 };
 
 bool RGWHandler_REST_STS::action_exists(const req_state* s)

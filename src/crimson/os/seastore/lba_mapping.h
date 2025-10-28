@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -19,9 +19,13 @@ class LBAMapping {
     : direct_cursor(std::move(direct)),
       indirect_cursor(std::move(indirect))
   {
-    assert(is_linked_direct());
-    assert(!direct_cursor->is_indirect());
+    assert(!is_linked_direct() || !direct_cursor->is_indirect());
     assert(!indirect_cursor || indirect_cursor->is_indirect());
+    // if the mapping is indirect, it mustn't be at the end
+    if (is_indirect() && is_linked_direct()) {
+      assert((bool)direct_cursor->val
+	    && direct_cursor->key != L_ADDR_NULL);
+    }
   }
 
 public:
@@ -31,28 +35,64 @@ public:
   }
 
   static LBAMapping create_direct(LBACursorRef direct) {
+    assert(!direct->is_indirect());
     return LBAMapping(std::move(direct), nullptr);
   }
 
-  LBAMapping(const LBAMapping &) = delete;
+  LBAMapping() = delete;
+  LBAMapping(const LBAMapping &) = default;
   LBAMapping(LBAMapping &&) = default;
-  LBAMapping &operator=(const LBAMapping &) = delete;
+  LBAMapping &operator=(const LBAMapping &) = default;
   LBAMapping &operator=(LBAMapping &&) = default;
   ~LBAMapping() = default;
+
+  // whether the removal of this mapping would cause
+  // other mappings to be removed.
+  //
+  // Note that this should only be called on complete
+  // indirect mappings
+  bool would_cascade_remove() const {
+    assert(is_indirect());
+    assert(is_complete_indirect());
+    return direct_cursor->get_refcount() == 1;
+  }
+
+  // whether the mapping corresponds to a pending extent
+  bool is_pending() const {
+    return !is_indirect() && !is_data_stable();
+  }
+
+  // whether the mapping corresponds to an initial pending extent
+  bool is_initial_pending() const;
 
   bool is_linked_direct() const {
     return (bool)direct_cursor;
   }
 
+  bool is_end() const {
+    bool end = !is_indirect() && !direct_cursor->val;
+    // if the mapping is at the end, it can't be indirect and
+    // the physical cursor must be L_ADDR_NULL
+    assert(end
+      ? (!indirect_cursor && direct_cursor->key == L_ADDR_NULL)
+      : true);
+    return end;
+  }
+
   bool is_indirect() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     return (bool)indirect_cursor;
   }
 
   bool is_viewable() const {
-    assert(is_linked_direct());
-    return direct_cursor->is_viewable()
-	&& (!indirect_cursor || indirect_cursor->is_viewable());
+    assert(!is_null());
+    if (is_complete_indirect()) {
+      return indirect_cursor->is_viewable() && direct_cursor->is_viewable();
+    }
+    if (is_indirect()) {
+      return indirect_cursor->is_viewable();
+    }
+    return direct_cursor->is_viewable();
   }
 
   // For reserved mappings, the return values are
@@ -60,43 +100,62 @@ public:
   bool is_stable() const;
   bool is_data_stable() const;
   bool is_clone() const {
+    assert(!is_null());
+    if (is_indirect()) {
+      return false;
+    }
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_refcount() > 1;
   }
   bool is_zero_reserved() const {
-    assert(is_linked_direct());
-    return get_val().is_zero();
+    return !is_indirect() && get_val().is_zero();
+  }
+  // true if the mapping corresponds to real data
+  bool is_real() const {
+    return !is_indirect() && !get_val().is_zero();
   }
 
   extent_len_t get_length() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     if (is_indirect()) {
+      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_length();
     }
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_length();
   }
 
   paddr_t get_val() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_paddr();
   }
 
   checksum_t get_checksum() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_checksum();
   }
 
   laddr_t get_key() const {
-    assert(is_linked_direct());
+    assert(!is_null());
     if (is_indirect()) {
+      assert(!indirect_cursor->is_end());
       return indirect_cursor->get_laddr();
     }
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_laddr();
+  }
+
+  laddr_t get_end() const {
+    return (get_key() + get_length()).checked_to_laddr();
   }
 
    // An lba pin may be indirect, see comments in lba/btree_lba_manager.h
   laddr_t get_intermediate_key() const {
     assert(is_indirect());
+    assert(!indirect_cursor->is_end());
     return indirect_cursor->get_intermediate_key();
   }
   laddr_t get_intermediate_base() const {
@@ -105,6 +164,7 @@ public:
   }
   extent_len_t get_intermediate_length() const {
     assert(is_linked_direct());
+    assert(!direct_cursor->is_end());
     return direct_cursor->get_length();
   }
   // The start offset of the indirect cursor related to direct cursor
@@ -118,21 +178,42 @@ public:
   }
 
   get_child_ret_t<lba::LBALeafNode, LogicalChildNode>
-  get_logical_extent(Transaction &t);
+  get_logical_extent(Transaction &t) const;
 
-  LBAMapping duplicate() const {
-    auto dup_iter = [](const LBACursorRef &iter) -> LBACursorRef {
-      if (iter) {
-	return iter->duplicate();
-      } else {
-	return nullptr;
-      }
-    };
-    return LBAMapping(dup_iter(direct_cursor), dup_iter(indirect_cursor));
-  }
+  LogicalChildNodeRef peek_logical_extent(Transaction &t) const;
+
+  //TODO: should be changed to return future<> once all calls
+  //	  to refresh are through co_await. We return LBAMapping
+  //	  for now to avoid mandating the callers to make sure
+  //	  the life of the lba mapping survives the refresh.
+  base_iertr::future<LBAMapping> refresh();
+
+  base_iertr::future<LBAMapping> next();
 
 private:
   friend lba::BtreeLBAManager;
+  friend class TransactionManager;
+  friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
+
+  LBACursor& get_effective_cursor() {
+    if (is_indirect()) {
+      return *indirect_cursor;
+    }
+    return *direct_cursor;
+  }
+
+  bool is_null() const {
+    return !direct_cursor && !indirect_cursor;
+  }
+
+  bool is_complete_indirect() const {
+    assert(!is_null());
+    return (bool)indirect_cursor && (bool)direct_cursor;
+  }
+
+  bool is_complete() const {
+    return !is_indirect() || is_complete_indirect();
+  }
 
   // To support cloning, there are two kinds of lba mappings:
   //    1. direct lba mapping: the pladdr in the value of which is the paddr of

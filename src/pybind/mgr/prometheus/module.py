@@ -89,6 +89,11 @@ OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
                 'front_iface', 'hostname', 'objectstore', 'public_addr',
                 'ceph_version')
 
+
+OSD_NEARFULL_RATIO = ()
+
+OSD_FULL_RATIO = ()
+
 OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
@@ -100,10 +105,17 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
+RBD_IMAGE_METADATA = ('pool_id', 'image_name')
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
+
+SMB_METADATA = ('smb_version', 'volume',
+                'subvolume_group', 'subvolume', 'netbiosname', 'share')
+
+CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
 
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
@@ -700,6 +712,18 @@ class Module(MgrModule, OrchestratorClientMixin):
             'OSD Metadata',
             OSD_METADATA
         )
+        metrics['osd_nearfull_ratio'] = Metric(
+            'gauge',
+            'osd_nearfull_ratio',
+            'OSD cluster-wide nearfull ratio',
+            ()
+        )
+        metrics['osd_full_ratio'] = Metric(  # <-- Add this block
+            'gauge',
+            'osd_full_ratio',
+            'OSD cluster-wide full ratio',
+            ()
+        )
 
         # The reason for having this separate to OSD_METADATA is
         # so that we can stably use the same tag names that
@@ -740,6 +764,13 @@ class Module(MgrModule, OrchestratorClientMixin):
             RBD_MIRROR_METADATA
         )
 
+        metrics['rbd_image_metadata'] = Metric(
+            'untyped',
+            'rbd_image_metadata',
+            'RBD Image Metadata',
+            RBD_IMAGE_METADATA
+        )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -766,6 +797,19 @@ class Module(MgrModule, OrchestratorClientMixin):
             'daemon_health_metrics',
             'Health metrics for Ceph daemons',
             ('type', 'ceph_daemon',)
+        )
+
+        metrics['smb_metadata'] = Metric(
+            'untyped',
+            'smb_metadata',
+            'SMB Metadata',
+            SMB_METADATA
+        )
+        metrics['cephadm_daemon_status'] = Metric(
+            'gauge',
+            'cephadm_daemon_status',
+            'Status of cephadm daemons (0=stopped, 1=running, 2=errored)',
+            CEPHADM_DAEMON_STATUS
         )
 
         for flag in OSD_FLAGS:
@@ -958,6 +1002,30 @@ class Module(MgrModule, OrchestratorClientMixin):
                 )
 
     @profile_method()
+    def set_cephadm_daemon_status_metrics(self) -> None:
+        try:
+            daemons = raise_if_exception(self.list_daemons())
+            for daemon in daemons:
+                service_type = getattr(daemon, 'daemon_type', '')
+                daemon_name = getattr(daemon, 'daemon_name', '')
+                hostname = str(getattr(daemon, 'hostname', ''))
+                status = getattr(daemon, 'status', '')
+                service_name_attr = getattr(daemon, 'service_name', '')
+                service_name = service_name_attr() if callable(service_name_attr) else str(service_name_attr)
+
+                self.metrics['cephadm_daemon_status'].set(
+                    int(status),
+                    (
+                        service_type,
+                        daemon_name,
+                        hostname,
+                        service_name,
+                    )
+                )
+        except Exception as e:
+            self.log.error(f"Failed to collect cephadm daemon status: {e}")
+
+    @profile_method()
     def get_df(self) -> None:
         # maybe get the to-be-exported metrics from a config?
         df = self.get('df')
@@ -1128,6 +1196,14 @@ class Module(MgrModule, OrchestratorClientMixin):
     @profile_method()
     def get_metadata_and_osd_status(self) -> None:
         osd_map = self.get('osd_map')
+
+        cluster_nearfull_ratio = osd_map.get('nearfull_ratio', None)
+        cluster_full_ratio = osd_map.get('full_ratio', None)
+        if cluster_nearfull_ratio is not None:
+            self.metrics['osd_nearfull_ratio'].set(cluster_nearfull_ratio, ('cluster',))
+        if cluster_full_ratio is not None:
+            self.metrics['osd_full_ratio'].set(cluster_full_ratio, ('cluster',))
+
         osd_flags = osd_map['flags'].split(',')
         for flag in OSD_FLAGS:
             self.metrics['osd_flag_{}'.format(flag)].set(
@@ -1325,6 +1401,20 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rbd_mirror_metadata'].set(
                     1, rbd_mirror_metadata
                 )
+        try:
+            rbd = RBD()
+            for pool in osd_map['pools']:
+                pool_id = pool['pool']
+                pool_name = pool['pool_name']
+                if 'rbd' in pool.get('application_metadata', {}):
+                    with self.rados.open_ioctx(pool_name) as ioctx:
+                        for image_meta in rbd.list2(ioctx):
+                            image_name = image_meta['name']
+                            self.metrics['rbd_image_metadata'].set(
+                                1, (str(pool_id), image_name)
+                            )
+        except Exception as e:
+            self.log.error(f"Failed to collect RBD image metadata: {e}")
 
     @profile_method()
     def get_num_objects(self) -> None:
@@ -1700,6 +1790,68 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.metrics[path].set(value, labels)
         self.add_fixed_name_metrics()
 
+    @profile_method()
+    def get_smb_metadata(self) -> None:
+        try:
+            mgr_map = self.get('mgr_map')
+            enabled_modules = mgr_map['modules']
+            if 'smb' not in enabled_modules:
+                self.log.debug("SMB module is not enabled, skipping SMB metadata collection")
+                return
+
+            if not self.available()[0]:
+                self.log.debug("Orchestrator not available")
+                return
+
+            smb_version = ""
+
+            try:
+                daemons = raise_if_exception(self.list_daemons(daemon_type='smb'))
+                if daemons:
+                    smb_version = str(daemons[0].version)
+            except Exception as e:
+                self.log.error(f"Failed to get SMB daemons: {str(e)}")
+                return
+
+            ret, out, err = self.mon_command({
+                'prefix': 'smb show',
+                'format': 'json'
+            })
+            if ret != 0:
+                self.log.error(f"Failed to get SMB info: {err}")
+                return
+
+            try:
+                smb_data = json.loads(out)
+
+                for resource in smb_data.get('resources', []):
+                    if resource.get('resource_type') == 'ceph.smb.share':
+                        self.log.info("Processing SMB share resource")
+                        cluster_id = resource.get('cluster_id')
+                        if not cluster_id:
+                            self.log.debug("Skipping share with missing cluster_id")
+                            continue
+
+                        share_id = resource.get('share_id', '')
+                        cephfs = resource.get('cephfs', {})
+                        cephfs_volume = cephfs.get('volume', '')
+                        cephfs_subvolumegroup = cephfs.get('subvolumegroup', '_nogroup')
+                        cephfs_subvolume = cephfs.get('subvolume', '')
+                        self.metrics['smb_metadata'].set(1, (
+                            smb_version,
+                            cephfs_volume,
+                            cephfs_subvolumegroup,
+                            cephfs_subvolume,
+                            cluster_id,
+                            share_id
+                        ))
+            except json.JSONDecodeError:
+                self.log.error("Failed to decode SMB module output")
+            except Exception as e:
+                self.log.error(f"Error processing SMB metadata: {str(e)}")
+        except Exception as e:
+            self.log.error(f"Failed to get SMB metadata: {str(e)}")
+
     @profile_method(True)
     def collect(self) -> str:
         # Clear the metrics before scraping
@@ -1719,6 +1871,8 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_pool_repaired_objects()
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
+        self.get_smb_metadata()
+        self.set_cephadm_daemon_status_metrics()
 
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
@@ -1763,6 +1917,7 @@ class Module(MgrModule, OrchestratorClientMixin):
     def configure(self, server_addr: str, server_port: int) -> None:
         cmd = {'prefix': 'orch get-security-config'}
         ret, out, _ = self.mon_command(cmd)
+
         if ret == 0 and out is not None:
             try:
                 security_config = json.loads(out)
@@ -1770,8 +1925,14 @@ class Module(MgrModule, OrchestratorClientMixin):
                     self.setup_tls_config(server_addr, server_port)
                     return
             except Exception as e:
-                self.log.exception(f'Failed to setup cephadm based secure monitoring stack: {e}\n',
-                                   'Falling back to default configuration')
+                self.log.exception(
+                    'Failed to setup cephadm based secure monitoring stack: %s\n'
+                    'Falling back to default configuration',
+                    e
+                )
+
+        # In any error fallback to plain http mode
+        self.setup_default_config(server_addr, server_port)
 
     def setup_default_config(self, server_addr: str, server_port: int) -> None:
         cherrypy.config.update({

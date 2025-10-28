@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1598,7 +1599,7 @@ void Objecter::_check_op_pool_dne(Op *op, std::unique_lock<std::shared_mutex> *s
 		     << " dne" << dendl;
       if (op->has_completion()) {
 	num_in_flight--;
-	op->complete(osdc_errc::pool_dne, -ENOENT, service.get_executor());
+	op->complete(make_error_code(osdc_errc::pool_dne), -ENOENT, service.get_executor());
       }
 
       OSDSession *s = op->session;
@@ -1633,7 +1634,8 @@ void Objecter::_check_op_pool_eio(Op *op, std::unique_lock<std::shared_mutex> *s
 		 << " has eio" << dendl;
   if (op->has_completion()) {
     num_in_flight--;
-    op->complete(osdc_errc::pool_eio, -EIO, service.get_executor());
+    op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+		 service.get_executor());
   }
 
   OSDSession *s = op->session;
@@ -1733,13 +1735,15 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
       if (op->on_reg_commit) {
 	asio::defer(service.get_executor(),
 		    asio::append(std::move(op->on_reg_commit),
-				 osdc_errc::pool_dne, cb::list{}));
+				 make_error_code(osdc_errc::pool_dne),
+				 cb::list{}));
 	op->on_reg_commit = nullptr;
       }
       if (op->on_notify_finish) {
 	asio::defer(service.get_executor(),
 		    asio::append(std::move(op->on_notify_finish),
-				 osdc_errc::pool_dne, cb::list{}));
+				 make_error_code(osdc_errc::pool_dne),
+				 cb::list{}));
         op->on_notify_finish = nullptr;
       }
       *need_unregister = true;
@@ -1757,12 +1761,12 @@ void Objecter::_check_linger_pool_eio(LingerOp *op)
   if (op->on_reg_commit) {
     asio::defer(service.get_executor(),
 		asio::append(std::move(op->on_reg_commit),
-			     osdc_errc::pool_dne, cb::list{}));
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
   }
   if (op->on_notify_finish) {
     asio::defer(service.get_executor(),
 		asio::append(std::move(op->on_notify_finish),
-			     osdc_errc::pool_dne, cb::list{}));
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
   }
 }
 
@@ -2469,7 +2473,8 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
     break;
   case RECALC_OP_TARGET_POOL_EIO:
     if (op->has_completion()) {
-      op->complete(osdc_errc::pool_eio, -EIO, service.get_executor());
+      op->complete(make_error_code(osdc_errc::pool_eio), -EIO,
+		   service.get_executor());
     }
     return;
   }
@@ -2564,7 +2569,8 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   ldout(cct, 5) << num_in_flight << " in flight" << dendl;
 }
 
-int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
+int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r,
+			bs::error_code ec)
 {
   ceph_assert(initialized);
 
@@ -2590,13 +2596,65 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
   Op *op = p->second;
   if (op->has_completion()) {
     num_in_flight--;
-    op->complete(osdcode(r), r, service.get_executor());
+    op->complete(ec, r, service.get_executor());
   }
   _op_cancel_map_check(op);
   _finish_op(op, r);
   sl.unlock();
 
   return 0;
+}
+
+void Objecter::subsystem_cancel(uint64_t subsystem, bs::error_code ec)
+{
+  unique_lock wl(rwlock);
+
+  ldout(cct, 5) << __func__ << ": cancelling subsystem " << subsystem
+		<< " ec=" << ec.message() << dendl;
+
+  auto next_subsystem_op = [subsystem](const decltype(OSDSession::ops)& ops) {
+    auto i = std::find_if(
+      ops.begin(), ops.end(),
+      [subsystem](const auto& el) -> std::optional<ceph_tid_t> {
+	return el.second->subsystem == subsystem;
+      });
+    if (i != ops.cend()) {
+      return std::make_optional(i->second->tid);
+    }
+    return std::optional<ceph_tid_t>{std::nullopt};
+  };
+
+  // Since we only do this at shutdown, better to have it be slow than
+  // make it fast and introduce another cost per op.
+
+start:
+
+  for (auto siter = osd_sessions.begin();
+       siter != osd_sessions.end(); ++siter) {
+    auto s = siter->second;
+    shared_lock sl(s->lock);
+    while (auto tid = next_subsystem_op(s->ops)) {
+      sl.unlock();
+      auto ret = op_cancel(s, *tid, ceph::from_error_code(ec), ec);
+      if (ret == -ENOENT) {
+	/* oh no! raced, maybe tid moved to another session, restarting */
+	goto start;
+      }
+      sl.lock();
+    }
+  }
+
+  // Handle case where the op is in homeless session
+  shared_lock sl(homeless_session->lock);
+  while (auto tid = next_subsystem_op(homeless_session->ops)) {
+    sl.unlock();
+    auto ret = op_cancel(homeless_session, *tid, ceph::from_error_code(ec), ec);
+    if (ret == -ENOENT) {
+      /* oh no! raced, maybe tid moved to another session, restarting */
+      goto start;
+    }
+  }
+  sl.unlock();
 }
 
 int Objecter::op_cancel(ceph_tid_t tid, int r)
@@ -2634,7 +2692,7 @@ start:
     shared_lock sl(s->lock);
     if (s->ops.find(tid) != s->ops.end()) {
       sl.unlock();
-      ret = op_cancel(s, tid, r);
+      ret = op_cancel(s, tid, r, osdcode(r));
       if (ret == -ENOENT) {
 	/* oh no! raced, maybe tid moved to another session, restarting */
 	goto start;
@@ -2650,7 +2708,7 @@ start:
   shared_lock sl(homeless_session->lock);
   if (homeless_session->ops.find(tid) != homeless_session->ops.end()) {
     sl.unlock();
-    ret = op_cancel(homeless_session, tid, r);
+    ret = op_cancel(homeless_session, tid, r, osdcode(r));
     if (ret == -ENOENT) {
       /* oh no! raced, maybe tid moved to another session, restarting */
       goto start;
@@ -2689,7 +2747,7 @@ epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
     sl.unlock();
 
     for (auto titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
-      int cancel_result = op_cancel(s, *titer, r);
+      int cancel_result = op_cancel(s, *titer, r, osdcode(r));
       // We hold rwlock across search and cancellation, so cancels
       // should always succeed
       ceph_assert(cancel_result == 0);
@@ -3018,8 +3076,16 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
     t->pg_num_pending = pg_num_pending;
     spg_t spgid(actual_pgid);
     if (pi->is_erasure()) {
+      // Optimized EC pools need to be careful when calculating the shard
+      // because an OSD may have multiple shards and the primary shard
+      // might not be the first one in the acting set. The lookup
+      // therefoere has to be done in primaryfirst order.
+      std::vector<int> pg_temp = t->acting;
+      if (osdmap->has_pgtemp(actual_pgid)) {
+	pg_temp = osdmap->pgtemp_primaryfirst(*pi, t->acting);
+      }
       for (uint8_t i = 0; i < t->acting.size(); ++i) {
-        if (t->acting[i] == acting_primary) {
+        if (pg_temp[i] == acting_primary) {
 	  spgid.reset_shard(osdmap->pgtemp_undo_primaryfirst(*pi, actual_pgid, shard_id_t(i)));
           break;
         }
@@ -4027,7 +4093,8 @@ void Objecter::create_pool_snap(int64_t pool, std::string_view snap_name,
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne, cb::list{}));
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne), cb::list{}));
     return;
   }
   if (p->snap_exists(snap_name)) {
@@ -4096,14 +4163,17 @@ void Objecter::delete_pool_snap(
   const pg_pool_t *p = osdmap->get_pg_pool(pool);
   if (!p) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
     return;
   }
 
   if (!p->snap_exists(snap_name)) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::snapshot_dne, cb::list{}));
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::snapshot_dne),
+			     cb::list{}));
     return;
   }
 
@@ -4144,7 +4214,8 @@ void Objecter::create_pool(std::string_view name,
 
   if (osdmap->lookup_pg_pool_name(name) >= 0) {
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_exists,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_exists),
 			     cb::list{}));
     return;
   }
@@ -4169,7 +4240,8 @@ void Objecter::delete_pool(int64_t pool,
 
   if (!osdmap->have_pg_pool(pool))
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
   else
     _do_delete_pool(pool, std::move(onfinish));
@@ -4185,7 +4257,8 @@ void Objecter::delete_pool(std::string_view pool_name,
   if (pool < 0)
     // This only returns one error: -ENOENT.
     asio::defer(service.get_executor(),
-		asio::append(std::move(onfinish), osdc_errc::pool_dne,
+		asio::append(std::move(onfinish),
+			     make_error_code(osdc_errc::pool_dne),
 			     cb::list{}));
   else
     _do_delete_pool(pool, std::move(onfinish));

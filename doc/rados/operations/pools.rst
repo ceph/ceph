@@ -15,8 +15,8 @@ Pools provide:
   
   For example: a typical configuration stores three replicas
   (copies) of each RADOS object (that is: ``size = 3``), but you can configure
-  the number of replicas on a per-pool basis. For `erasure-coded pools
-  <../erasure-code>`_, resilience is defined as the number of coding (aka parity) chunks 
+  the number of replicas on a per-pool basis. For :ref:`erasure-coded pools
+  <ecpool>`, resilience is defined as the number of coding (aka parity) chunks
   (for example, ``m = 2`` in the default erasure code profile).
 
 - **Placement Groups**: The :ref:`autoscaler <pg-autoscaler>` sets the number
@@ -99,12 +99,12 @@ To retrieve even more information, you can execute this command with the ``--for
 Creating a Pool
 ===============
 
-Before creating a pool, consult `Pool, PG and CRUSH Config Reference`_. The
+Before creating a pool, consult :ref:`rados_config_pool_pg_crush_ref`. The
 Ceph central configuration database contains a default setting
 (namely, ``osd_pool_default_pg_num``) that determines the number of PGs assigned
 to a new pool if no specific value has been specified. It is possible to change
 this value from its default. For more on the subject of setting the number of
-PGs per pool, see `setting the number of placement groups`_.
+PGs per pool, see :ref:`setting the number of placement groups`.
 
 .. note:: In Luminous and later releases, each pool must be associated with the
    application that will be using the pool. For more information, see
@@ -163,7 +163,7 @@ following:
 
    The pool's data protection strategy. This can be either ``replicated``
    (like RAID1 and RAID10) ``erasure (a kind
-   of `generalized parity RAID <../erasure-code>`_ strategy like RAID6 but
+   of :ref:`generalized parity RAID <ecpool>` strategy like RAID6 but
    more flexible).  A 
    ``replicated`` pool yields less usable capacity for a given amount of
    raw storage but is suitable for all Ceph components and use cases.
@@ -185,12 +185,12 @@ following:
 
    :Type: String
    :Required: No.
-   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` `erasure code profile`_ is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
+   :Default: For ``replicated`` pools, it is by default the rule specified by the :confval:`osd_pool_default_crush_rule` configuration option. This rule must exist.  For ``erasure`` pools, it is the ``erasure-code`` rule if the ``default`` :ref:`erasure code profile <erasure-code-profiles>` is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
-   For ``erasure`` pools only. Instructs Ceph to use the specified `erasure
-   code profile`_. This profile must be an existing profile as defined via
+   For ``erasure`` pools only. Instructs Ceph to use the specified :ref:`erasure
+   code profile <erasure-code-profiles>`. This profile must be an existing profile as defined via
    the dashboard or invoking ``osd erasure-code-profile set``.  Note that
    changes to the EC profile of a pool after creation do *not* take effect.
    To change the EC profile of an existing pool one must modify the pool to
@@ -198,8 +198,6 @@ following:
 
   :Type: String
   :Required: No.
-
-.. _erasure code profile: ../erasure-code-profile
 
 .. describe:: --autoscale-mode=<on,off,warn>
 
@@ -275,9 +273,7 @@ To remove a pool, you must set the ``mon_allow_pool_delete`` flag to ``true``
 in central configuration, otherwise the Ceph  monitors will refuse to remove
 pools.
 
-For more information, see `Monitor Configuration`_.
-
-.. _Monitor Configuration: ../../configuration/mon-config-ref
+For more information, see :ref:`Monitor Configuration <monitor-config-reference>`.
 
 If there are custom CRUSH rules that are no longer in use or needed, consider
 deleting those rules.
@@ -420,7 +416,7 @@ You may set values for the following keys:
 
 .. describe:: min_size
    
-   :Description: Sets the minimum number of active replicas (or shards) required for PGs to be active and thus for I/O operations to proceed.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than ``K``. If I/O is allowed with only ``K`` shards available, there will be no redundancy and data will be lost in the event of an additional, permanent OSD failure. For more information, see `Erasure Code <../erasure-code>`_
+   :Description: Sets the minimum number of active replicas (or shards) required for PGs to be active and thus for I/O operations to proceed.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than ``K``. If I/O is allowed with only ``K`` shards available, there will be no redundancy and data will be lost in the event of an additional, permanent OSD failure. For more information, see :ref:`ecpool`
    :Type: Integer
    :Version: ``0.54`` and above
 
@@ -455,7 +451,14 @@ You may set values for the following keys:
    :Type: Boolean
 
    .. versionadded:: 12.2.0
+
+.. describe:: allow_ec_optimizations
    
+   :Description: Enables performance and capacity optimizations for an erasure-coded pool. These optimizations were designed for CephFS and RBD workloads; RGW workloads with signficant numbers of small objects or with small random access reads of objects will also benefit. RGW workloads with large sequential read and writes will see little benefit. For more details, see :ref:`rados_ops_erasure_coding_optimizations`:
+   :Type: Boolean
+
+   .. versionadded:: 20.2.0
+
 .. describe:: hashpspool
 
    :Description: Sets or unsets the ``HASHPSPOOL`` flag on a given pool.
@@ -902,9 +905,7 @@ Here are the break downs of the argument:
    :Type: String
    :Required: Yes.
 
-.. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
 .. _Bloom Filter: https://en.wikipedia.org/wiki/Bloom_filter
-.. _setting the number of placement groups: ../placement-groups#set-the-number-of-placement-groups
 .. _Erasure Coding with Overwrites: ../erasure-code#erasure-coding-with-overwrites
 .. _Block Device Commands: ../../../rbd/rados-rbd-cmds/#create-a-block-device-pool
 .. _pgcalc: ../pgcalc

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_JOURNAL_ENTRY_H
 #define CEPH_JOURNAL_ENTRY_H
@@ -45,7 +45,7 @@ public:
   bool operator==(const Entry& rhs) const;
 
   static bool is_readable(bufferlist::const_iterator iter, uint32_t *bytes_needed);
-  static void generate_test_instances(std::list<Entry *> &o);
+  static std::list<Entry> generate_test_instances();
 
 private:
   static const uint64_t preamble = 0x3141592653589793;

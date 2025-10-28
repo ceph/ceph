@@ -1,6 +1,6 @@
 :orphan:
 
-.. _man-ceph-fuse: 
+.. _man-ceph-fuse:
 
 =========================================
  ceph-fuse -- FUSE-based client for ceph

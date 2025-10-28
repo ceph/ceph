@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,16 +24,19 @@
 #include <unordered_map>
 #include <vector>
 
+#include "common/ref.h" // for cref_t
+#include "include/cephfs/types.h" // for mds_rank_t
+#include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
 
 #include "Capability.h"
+#include "LogSegmentRef.h"
+#include "mdstypes.h" // for dirfrag_t, metareqid_t
 
 #include "common/StackStringStream.h"
 #include "common/TrackedOp.h"
-#include "messages/MClientRequest.h"
-#include "messages/MMDSPeerRequest.h"
 
 class LogSegment;
 class BatchOp;
@@ -46,6 +50,9 @@ class ScatterLock;
 class SimpleLock;
 struct sr_t;
 struct MDLockCache;
+class Message;
+class MClientRequest;
+class MMDSPeerRequest;
 
 struct MutationImpl : public TrackedOp {
 public:
@@ -241,7 +248,7 @@ public:
   metareqid_t reqid;
   std::optional<int> result;
   __u32 attempt = 0;      // which attempt for this request
-  LogSegment *ls = nullptr;  // the log segment i'm committing to
+  LogSegmentRef ls = nullptr;  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
@@ -360,7 +367,8 @@ struct MDRequestImpl : public MutationImpl {
   // ---------------------------------------------------
   struct Params {
     // keep these default values synced to MutationImpl's
-    Params() {}
+    Params();
+    ~Params() noexcept;
     const utime_t& get_recv_stamp() const {
       return initiated;
     }
@@ -386,11 +394,7 @@ struct MDRequestImpl : public MutationImpl {
     int internal_op = -1;
     bool continuous = false;
   };
-  MDRequestImpl(const Params* params, OpTracker *tracker) :
-    MutationImpl(tracker, params->initiated,
-		 params->reqid, params->attempt, params->peer_to),
-    item_session_request(this), client_request(params->client_req),
-    internal_op(params->internal_op) {}
+  MDRequestImpl(const Params* params, OpTracker *tracker);
   ~MDRequestImpl() override;
   
   More* more();

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_MDSTYPES_H
 #define CEPH_MDSTYPES_H
 
@@ -10,6 +11,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <shared_mutex>
 
 #include "common/DecayCounter.h"
 #include "common/entity_name.h"
@@ -17,8 +19,11 @@
 #include "include/frag.h"
 #include "include/interval_set.h"
 #include "include/fs_types.h"
+#include "include/types.h" // for ceph_tid_t, version_t
+#include "include/utime.h"
 
 #include "include/ceph_assert.h"
+#include "include/cephfs/dump.h"
 #include "include/cephfs/types.h"
 
 #define MDS_PORT_CACHE   0x200
@@ -164,7 +169,7 @@ struct old_inode_t {
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<old_inode_t*>& ls);
+  static std::list<old_inode_t> generate_test_instances();
 };
 
 // These methods may be moved back to mdstypes.cc when we have pmr
@@ -202,16 +207,17 @@ void old_inode_t<Allocator>::dump(ceph::Formatter *f) const
 }
 
 template<template<typename> class Allocator>
-void old_inode_t<Allocator>::generate_test_instances(std::list<old_inode_t<Allocator>*>& ls)
+auto old_inode_t<Allocator>::generate_test_instances() -> std::list<old_inode_t<Allocator>>
 {
-  ls.push_back(new old_inode_t<Allocator>);
-  ls.push_back(new old_inode_t<Allocator>);
-  ls.back()->first = 2;
-  std::list<inode_t<Allocator>*> ils;
-  inode_t<Allocator>::generate_test_instances(ils);
-  ls.back()->inode = *ils.back();
-  ls.back()->xattrs["user.foo"] = ceph::buffer::copy("asdf", 4);
-  ls.back()->xattrs["user.unprintable"] = ceph::buffer::copy("\000\001\002", 3);
+  std::list<old_inode_t<Allocator>> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().first = 2;
+  std::list<inode_t<Allocator>> ils = inode_t<Allocator>::generate_test_instances();
+  ls.back().inode = ils.back();
+  ls.back().xattrs["user.foo"] = ceph::buffer::copy("asdf", 4);
+  ls.back().xattrs["user.unprintable"] = ceph::buffer::copy("\000\001\002", 3);
+  return ls;
 }
 
 template<template<typename> class Allocator>
@@ -235,7 +241,7 @@ struct fnode_t {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
-  static void generate_test_instances(std::list<fnode_t*>& ls);
+  static std::list<fnode_t> generate_test_instances();
 
   version_t version = 0;
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
@@ -257,7 +263,7 @@ struct old_rstat_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<old_rstat_t*>& ls);
+  static std::list<old_rstat_t> generate_test_instances();
 
   void print(std::ostream& out) const;
 
@@ -327,7 +333,7 @@ public:
   void decode(ceph::buffer::list::const_iterator &p);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static void generate_test_instances(std::list<feature_bitset_t*>& ls);
+  static std::list<feature_bitset_t> generate_test_instances();
 private:
   void init_array(const std::vector<size_t>& v);
 
@@ -366,7 +372,7 @@ struct metric_spec_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<metric_spec_t*>& ls);
+  static std::list<metric_spec_t> generate_test_instances();
   void print(std::ostream& out) const;
 
   // set of metrics that a client is capable of forwarding
@@ -413,7 +419,7 @@ struct client_metadata_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<client_metadata_t*>& ls);
+  static std::list<client_metadata_t> generate_test_instances();
 
   kv_map_t kv_map;
   feature_bitset_t features;
@@ -439,7 +445,7 @@ struct session_info_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<session_info_t*>& ls);
+  static std::list<session_info_t> generate_test_instances();
 
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
@@ -532,7 +538,7 @@ struct string_snap_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<string_snap_t*>& ls);
+  static std::list<string_snap_t> generate_test_instances();
 
   std::string name;
   snapid_t snapid;
@@ -558,7 +564,7 @@ struct mds_table_pending_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<mds_table_pending_t*>& ls);
+  static std::list<mds_table_pending_t> generate_test_instances();
 
   uint64_t reqid = 0;
   __s32 mds = 0;
@@ -598,7 +604,7 @@ struct metareqid_t {
   }
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static void generate_test_instances(std::list<metareqid_t*>& ls);
+  static std::list<metareqid_t> generate_test_instances();
   entity_name_t name;
   uint64_t tid = 0;
 };
@@ -651,7 +657,7 @@ struct cap_reconnect_t {
   void decode_old(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<cap_reconnect_t*>& ls);
+  static std::list<cap_reconnect_t> generate_test_instances();
 
   std::string path;
   mutable ceph_mds_cap_reconnect capinfo = {};
@@ -673,7 +679,7 @@ struct snaprealm_reconnect_t {
   void decode_old(ceph::buffer::list::const_iterator& bl);
 
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<snaprealm_reconnect_t*>& ls);
+  static std::list<snaprealm_reconnect_t> generate_test_instances();
 
   mutable ceph_mds_snaprealm_reconnect realm = {};
 };
@@ -746,7 +752,7 @@ struct dirfrag_t {
     decode(frag, bl);
   }
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<dirfrag_t*>& ls);
+  static std::list<dirfrag_t> generate_test_instances();
 
   inodeno_t ino = 0;
   frag_t frag;
@@ -800,7 +806,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<inode_load_vec_t*>& ls);
+  static std::list<inode_load_vec_t> generate_test_instances();
 
 private:
   std::array<DecayCounter, NUM> vec;
@@ -847,7 +853,7 @@ public:
   void dump(ceph::Formatter *f) const;
   void dump(ceph::Formatter *f, const DecayRate& rate) const;
   void print(std::ostream& out) const;
-  static void generate_test_instances(std::list<dirfrag_load_vec_t*>& ls);
+  static std::list<dirfrag_load_vec_t> generate_test_instances();
 
   const DecayCounter &get(int t) const {
     return vec[t];
@@ -920,7 +926,7 @@ struct mds_load_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<mds_load_t*>& ls);
+  static std::list<mds_load_t> generate_test_instances();
 };
 inline void encode(const mds_load_t &c, ceph::buffer::list &bl) {
   c.encode(bl);
@@ -947,7 +953,7 @@ public:
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   void print(std::ostream& out) const;
-  static void generate_test_instances(std::list<MDSCacheObjectInfo*>& ls);
+  static std::list<MDSCacheObjectInfo> generate_test_instances();
 
   inodeno_t ino = 0;
   dirfrag_t dirfrag;
@@ -979,9 +985,42 @@ struct BlockDiff {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<BlockDiff*>& ls);
+  static std::list<BlockDiff> generate_test_instances();
   void print(std::ostream& out) const;
 };
 WRITE_CLASS_ENCODER(BlockDiff);
 
+/**
+ *
+ * @brief Represents aggregated metric per subvolume
+ * This aggregation is a result of aggregating multiple
+ * AggregatedIOMetric instances from various clients
+ * (AggregatedIOMetric is created on the client by aggregating multiple SimpleIOMetric instances)
+ */
+struct SubvolumeMetric {
+    std::string subvolume_path;
+    uint64_t read_ops = 0;
+    uint64_t write_ops = 0;
+    uint64_t read_size = 0;
+    uint64_t write_size = 0;
+    uint64_t avg_read_latency = 0;
+    uint64_t avg_write_latency = 0;
+    uint64_t time_stamp = 0;
+
+    DENC(SubvolumeMetric, v, p) {
+      DENC_START(1, 1, p);
+      denc(v.subvolume_path, p);
+      denc(v.read_ops, p);
+      denc(v.write_ops, p);
+      denc(v.read_size, p);
+      denc(v.write_size, p);
+      denc(v.avg_read_latency, p);
+      denc(v.avg_write_latency, p);
+      denc(v.time_stamp, p);
+      DENC_FINISH(p);
+    }
+
+    void dump(Formatter *f) const;
+    friend std::ostream& operator<<(std::ostream& os, const SubvolumeMetric &m);
+};
 #endif

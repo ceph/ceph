@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_data_sync.h"
 
@@ -2693,6 +2693,7 @@ int RGWUserPermHandler::Bucket::init(RGWUserPermHandler *handler,
              info->env,
              info->identity.get(),
              bucket_info,
+             rgw::s3::ObjectOwnership::ObjectWriter,
              info->identity->get_perm_mask(),
              false, /* defer to bucket acls */
              nullptr, /* referer */
@@ -6669,28 +6670,34 @@ int rgw_read_bucket_inc_sync_status(const DoutPrefixProvider *dpp,
                                                   status));
 }
 
-void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)
+list<rgw_data_sync_info> rgw_data_sync_info::generate_test_instances()
 {
-  auto info = new rgw_data_sync_info;
-  info->state = rgw_data_sync_info::StateBuildingFullSyncMaps;
-  info->num_shards = 8;
-  o.push_back(info);
-  o.push_back(new rgw_data_sync_info);
+  list<rgw_data_sync_info> o;
+  rgw_data_sync_info info;
+  info.state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+  info.num_shards = 8;
+  o.push_back(std::move(info));
+  o.emplace_back();
+  return o;
 }
 
-void rgw_data_sync_marker::generate_test_instances(list<rgw_data_sync_marker*>& o)
+list<rgw_data_sync_marker> rgw_data_sync_marker::generate_test_instances()
 {
-  auto marker = new rgw_data_sync_marker;
-  marker->state = rgw_data_sync_marker::IncrementalSync;
-  marker->marker = "01234";
-  marker->pos = 5;
-  o.push_back(marker);
-  o.push_back(new rgw_data_sync_marker);
+  list<rgw_data_sync_marker> o;
+  rgw_data_sync_marker marker;
+  marker.state = rgw_data_sync_marker::IncrementalSync;
+  marker.marker = "01234";
+  marker.pos = 5;
+  o.push_back(std::move(marker));
+  o.emplace_back();
+  return o;
 }
 
-void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& o)
+list<rgw_data_sync_status> rgw_data_sync_status::generate_test_instances()
 {
-  o.push_back(new rgw_data_sync_status);
+  list<rgw_data_sync_status> o;
+  o.emplace_back();
+  return o;
 }
 
 void rgw_bucket_shard_full_sync_marker::dump(Formatter *f) const

@@ -99,23 +99,25 @@ manually.
 MON_DISK_LOW
 ____________
 
-One or more monitors are low on storage space. This health check is raised if
-the percentage of available space on the file system used by the monitor
-database (normally ``/var/lib/ceph/mon``) drops below the percentage value
+One or more Monitors are low on storage space. This health check is raised when
+available space on the file system used by the Monitor
+database (normally ``/var/lib/ceph/<fsid>/mon.<monid>``) drops below the threshold
 ``mon_data_avail_warn`` (default: 30%).
 
 This alert might indicate that some other process or user on the system is
-filling up the file system used by the monitor. It might also indicate that the
-monitor database is too large (see ``MON_DISK_BIG`` below).  Another common
+filling up the file system used by the Monitor. It might also indicate that the
+Monitor database is too large (see ``MON_DISK_BIG`` below).  Another common
 scenario is that Ceph logging subsystem levels have been raised for
 troubleshooting purposes without subsequent return to default levels.  Ongoing
 verbose logging can easily fill up the files system containing ``/var/log``. If
 you trim logs that are currently open, remember to restart or instruct your
-syslog or other daemon to re-open the log file.
+syslog or other daemon to re-open the log file. Another common dynamic is
+that users or processes have written a large amount of data to ``/tmp`` or ``/var/tmp``,
+which may be on the same filesystem.
 
 If space cannot be freed, the monitor's data directory might need to be moved
-to another storage device or file system (this relocation process must be
-carried out while the monitor daemon is not running).
+to another storage device or file system. This relocation process must be
+carried out while the Monitor daemon is not running.
 
 
 MON_DISK_CRIT
@@ -136,10 +138,12 @@ raised if the size of the monitor database is larger than
 A large database is unusual, but does not necessarily indicate a problem.
 Monitor databases might grow in size when there are placement groups that have
 not reached an ``active+clean`` state in a long time, or when extensive cluster
-recovery, expansion, or topology changes have recently occurred.
+recovery, expansion, or topology changes have recently occurred.  It is recommended
+that when conducting large scale cluster changes that the cluster thus be
+left to "rest" for at least a few hours once each week.
 
 This alert may also indicate that the monitor's database is not properly
-compacting, an issue that has been observed with some older versions of
+compacting, an issue that has been observed with older versions of
 RocksDB. Forcing compaction with ``ceph daemon mon.<id> compact`` may suffice
 to shrink the database's storage usage.
 
@@ -909,6 +913,8 @@ potentially replaced.
 ``log_latency_fn slow operation observed for upper_bound, latency = 6.25955s``
 ``log_latency slow operation observed for submit_transaction..``
 
+This may also be reflected by the ``BLUESTORE_SLOW_OP_ALERT`` cluster health flag.
+
 As there can be false positive ``slow ops`` instances, a mechanism has
 been added for more reliability. If in the last ``bluestore_slow_ops_warn_lifetime``
 seconds the number of ``slow ops`` indications are found greater than or equal to
@@ -920,20 +926,20 @@ The defaults for :confval:`bluestore_slow_ops_warn_lifetime` and
 :confval:`bluestore_slow_ops_warn_threshold` may be overidden globally or for
 specific OSDs.
 
-To change this, run the following command:
+To change this, run a command of the following form:
 
 .. prompt:: bash $
 
-   ceph config set global bluestore_slow_ops_warn_lifetime 10
+   ceph config set global bluestore_slow_ops_warn_lifetime 300
    ceph config set global bluestore_slow_ops_warn_threshold 5
 
 this may be done for specific OSDs or a given mask, for example:
 
 .. prompt:: bash $
 
-   ceph config set osd.123 bluestore_slow_ops_warn_lifetime 10
+   ceph config set osd.123 bluestore_slow_ops_warn_lifetime 300
    ceph config set osd.123 bluestore_slow_ops_warn_threshold 5
-   ceph config set class:ssd bluestore_slow_ops_warn_lifetime 10
+   ceph config set class:ssd bluestore_slow_ops_warn_lifetime 300
    ceph config set class:ssd bluestore_slow_ops_warn_threshold 5
 
 Device health
@@ -957,7 +963,7 @@ that recovery can proceed from surviving healthly OSDs.  This must be
 done with extreme care and attention to failure domains so that data availability
 is not compromised.
 
-To check device health, run the following command:
+To check device health, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1036,7 +1042,7 @@ command:
 In most cases, the root cause of this issue is that one or more OSDs are
 currently ``down``: see ``OSD_DOWN`` above.
 
-To see the state of a specific problematic PG, run the following command:
+To see the state of a specific problematic PG, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1064,7 +1070,7 @@ command:
 In most cases, the root cause of this issue is that one or more OSDs are
 currently "down": see ``OSD_DOWN`` above.
 
-To see the state of a specific problematic PG, run the following command:
+To see the state of a specific problematic PG, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1145,7 +1151,7 @@ can be caused by RGW-bucket index objects that do not have automatic resharding
 enabled. For more information on resharding, see :ref:`RGW Dynamic Bucket Index
 Resharding <rgw_dynamic_bucket_index_resharding>`.
 
-To adjust the thresholds mentioned above, run the following commands:
+To adjust the thresholds mentioned above, run a command of following form:
 
 .. prompt:: bash $
 
@@ -1161,7 +1167,7 @@ target threshold, write requests to the pool might block while data is flushed
 and evicted from the cache. This state normally leads to very high latencies
 and poor performance.
 
-To adjust the cache pool's target size, run the following commands:
+To adjust the cache pool's target size, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1190,12 +1196,11 @@ POOL_PG_NUM_NOT_POWER_OF_TWO
 ____________________________
 
 One or more pools have a ``pg_num`` value that is not a power of two.  Although
-this is not strictly incorrect, it does lead to a less balanced distribution of
-data because some Placement Groups will have roughly twice as much data as
-others have.
+this is not fatal, it does lead to a less balanced distribution of
+data because some placement groups will comprise much more data than others.
 
 This is easily corrected by setting the ``pg_num`` value for the affected
-pool(s) to a nearby power of two. To do so, run the following command:
+pool(s) to a nearby power of two. Enable the PG Autoscaler or run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1206,6 +1211,9 @@ To disable this health check, run the following command:
 .. prompt:: bash $
 
    ceph config set global mon_warn_on_pool_pg_num_not_power_of_two false
+
+Note that disabling this health check is not recommended.
+
 
 POOL_TOO_FEW_PGS
 ________________
@@ -1224,14 +1232,14 @@ running the following command:
    ceph osd pool set <pool-name> pg_autoscale_mode off
 
 To allow the cluster to automatically adjust the number of PGs for the pool,
-run the following command:
+run a command of following form:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode on
 
 Alternatively, to manually set the number of PGs for the pool to the
-recommended amount, run the following command:
+recommended amount, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1256,7 +1264,7 @@ The simplest way to mitigate the problem is to increase the number of OSDs in
 the cluster by adding more hardware. Note that, because the OSD count that is
 used for the purposes of this health check is the number of ``in`` OSDs,
 marking ``out`` OSDs ``in`` (if there are any ``out`` OSDs available) can also
-help. To do so, run the following command:
+help. To do so, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1282,14 +1290,14 @@ running the following command:
    ceph osd pool set <pool-name> pg_autoscale_mode off
 
 To allow the cluster to automatically adjust the number of PGs for the pool,
-run the following command:
+run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode on
 
 Alternatively, to manually set the number of PGs for the pool to the
-recommended amount, run the following command:
+recommended amount, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1329,7 +1337,7 @@ in order to estimate the expected size of the pool.  Only one of these
 properties should be non-zero. If both are set to a non-zero value, then
 ``target_size_ratio`` takes precedence and ``target_size_bytes`` is ignored.
 
-To reset ``target_size_bytes`` to zero, run the following command:
+To reset ``target_size_bytes`` to zero, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1356,7 +1364,7 @@ out the `split` step when the PG count is adjusted from the data migration that
 is needed when ``pgp_num`` is changed.
 
 This issue is normally resolved by setting ``pgp_num`` to match ``pg_num``, so
-as to trigger the data migration, by running the following command:
+as to trigger the data migration, by running a command of the following form:
 
 .. prompt:: bash $
 
@@ -1387,7 +1395,7 @@ A pool exists but the pool has not been tagged for use by a particular
 application.
 
 To resolve this issue, tag the pool for use by an application. For
-example, if the pool is used by RBD, run the following command:
+example, if the pool is used by RBD, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1409,15 +1417,15 @@ One or more pools have reached (or are very close to reaching) their quota. The
 threshold to raise this health check is determined by the
 ``mon_pool_quota_crit_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) by running the following
-commands:
+Pool quotas can be adjusted up or down (or removed) by running commands of the the following
+forms:
 
 .. prompt:: bash $
 
    ceph osd pool set-quota <pool> max_bytes <bytes>
    ceph osd pool set-quota <pool> max_objects <objects>
 
-To disable a quota, set the quota value to 0.
+To disable a quota, set the quota value to ``0``.
 
 POOL_NEAR_FULL
 ______________
@@ -1427,8 +1435,8 @@ One or more pools are approaching a configured fullness threshold.
 One of the several thresholds that can raise this health check is determined by
 the ``mon_pool_quota_warn_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) by running the following
-commands:
+Pool quotas can be adjusted up or down (or removed) by running commands of the following
+forms:
 
 .. prompt:: bash $
 
@@ -1463,8 +1471,8 @@ Read or write requests to unfound objects will block.
 
 Ideally, a "down" OSD that has a more recent copy of the unfound object can be
 brought back online. To identify candidate OSDs, check the peering state of the
-PG(s) responsible for the unfound object. To see the peering state, run the
-following command:
+PG(s) responsible for the unfound object. To see the peering state, run a command
+of the following form:
 
 .. prompt:: bash $
 
@@ -1488,13 +1496,13 @@ following command from the daemon's host:
 
    ceph daemon osd.<id> ops
 
-To see a summary of the slowest recent requests, run the following command:
+To see a summary of the slowest recent requests, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph daemon osd.<id> dump_historic_ops
 
-To see the location of a specific OSD, run the following command:
+To see the location of a specific OSD, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1517,7 +1525,7 @@ they are to be cleaned, and not that they have been examined and found to be
 clean). Misplaced or degraded PGs will not be flagged as ``clean`` (see
 *PG_AVAILABILITY* and *PG_DEGRADED* above).
 
-To manually initiate a scrub of a clean PG, run the following command:
+To manually initiate a scrub of a clean PG, run a command of the following form:
 
 .. prompt: bash $
 
@@ -1546,7 +1554,7 @@ the Manager daemon.
 First Method
 ~~~~~~~~~~~~
 
-To manually initiate a deep scrub of a clean PG, run the following command:
+To manually initiate a deep scrub of a clean PG, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1580,7 +1588,7 @@ See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
 Second Method
 ~~~~~~~~~~~~~
 
-To manually initiate a deep scrub of a clean PG, run the following command:
+To manually initiate a deep scrub of a clean PG, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1723,14 +1731,14 @@ To list recent crashes, run the following command:
 
    ceph crash ls-new
 
-To examine information about a specific crash, run the following command:
+To examine information about a specific crash, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph crash info <crash-id>
 
 To silence this alert, you can archive the crash (perhaps after the crash
-has been examined by an administrator) by running the following command:
+has been examined by an administrator) by running a command of the following form:
 
 .. prompt:: bash $
 
@@ -1772,7 +1780,7 @@ running the following command:
    ceph crash info <crash-id>
 
 To silence this alert, you can archive the crash (perhaps after the crash has
-been examined by an administrator) by running the following command:
+been examined by an administrator) by running a command of the following form:
 
 .. prompt:: bash $
 
@@ -1842,7 +1850,7 @@ were set with an older version of Ceph that did not properly validate the
 syntax of those capabilities, or if (2) the syntax of the capabilities has
 changed.
 
-To remove the user(s) in question, run the following command:
+To remove the user(s) in question, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -1851,8 +1859,8 @@ To remove the user(s) in question, run the following command:
 (This resolves the health check, but it prevents clients from being able to
 authenticate as the removed user.)
 
-Alternatively, to update the capabilities for the user(s), run the following
-command:
+Alternatively, to update the capabilities for the user(s), run a command of the following
+form:
 
 .. prompt:: bash $
 
@@ -1892,3 +1900,21 @@ To disable the debug mode, run the following command:
 .. prompt:: bash $
 
    ceph dashboard debug disable
+
+BLAUM_ROTH_W_IS_NOT_PRIME
+_________________________
+
+An EC pool is using the ``blaum_roth`` technique and ``w + 1`` is not a prime number. 
+This can result in data corruption.
+
+To check the list of Erasure Code Profiles use the command:
+
+.. prompt:: bash $
+   
+   ceph osd erasure-code-profile ls
+
+Then to check the ``w`` value for a particular profile use the command:
+
+.. prompt:: bash $
+
+   ceph osd erasure-code-profile get <name of profile>

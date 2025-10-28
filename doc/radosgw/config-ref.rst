@@ -63,28 +63,29 @@ instances or all radosgw-admin options can be put into the ``[global]`` or the
 Lifecycle Settings
 ==================
 
-Bucket Lifecycle configuration can be used to manage your objects so they are stored
-effectively throughout their lifetime. In past releases Lifecycle processing was rate-limited
-by single threaded processing. With the Nautilus release this has been addressed and the
-Ceph Object Gateway now allows for parallel thread processing of bucket lifecycles across
-additional Ceph Object Gateway instances and replaces the in-order
-index shard enumeration with a random ordered sequence.
+Bucket Lifecycle (LC) configuration can be used to manage your objects so that
+they are stored effectively throughout their lifetimes. In past releases,
+lifecycle processing was rate-limited by single-threaded processing. As of the
+Nautilus release, the Ceph Object Gateway allows for parallel-thread processing
+of bucket lifecycles across additional Ceph Object Gateway instances and
+replaces in-order index-shard enumeration with a random ordered sequence.
 
-There are two options in particular to look at when looking to increase the
-aggressiveness of lifecycle processing:
+Two options in particular are relevant to adjusting the aggressiveness of
+lifecycle processing:
 
 .. confval:: rgw_lc_max_worker
 .. confval:: rgw_lc_max_wp_worker
 
-These values can be tuned based upon your specific workload to further increase the
-aggressiveness of lifecycle processing. For a workload with a large number of buckets (thousands)
-you would raise the number of workers by increasing :confval:`rgw_lc_max_worker`
-from the default value of 3. Whereas for a workload with a higher number of objects per bucket
-(hundreds of thousands) you would raise the number of parallel threads
-by increasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
+These values can be tuned based upon your specific workload to further increase
+the aggressiveness of lifecycle processing. For a workload with a large number
+of buckets (thousands), raise the number of workers by increasing
+:confval:`rgw_lc_max_worker` from the default value of 3. But for a workload
+with a higher number of objects per bucket (hundreds of thousands), raise the
+number of parallel threads by increasing :confval:`rgw_lc_max_wp_worker` from
+the default value of 3.
 
-.. note:: When looking to tune either of these specific values please validate the
-   current Cluster performance and Ceph Object Gateway utilization before increasing.
+.. note:: Before increasing either of these values, validate the current
+   Cluster performance and Ceph Object Gateway utilization.
 
 The lifecycle maintenance thread must also be enabled on at least one RGW
 daemon for each zone. 
@@ -103,7 +104,7 @@ from the Ceph Storage cluster is known as Garbage Collection or GC.
 
 To view the queue of objects awaiting garbage collection, execute the following
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    radosgw-admin gc list
 
@@ -229,7 +230,7 @@ Keystone Settings
 .. confval:: rgw_keystone_service_token_accepted_roles
 .. confval:: rgw_keystone_expired_token_cache_expiration
 
-Server-side encryption Settings
+Server-side Encryption Settings
 ===============================
 
 .. confval:: rgw_crypt_s3_kms_backend
@@ -271,12 +272,12 @@ SSE-S3 Settings
 .. confval:: rgw_crypt_sse_s3_vault_ssl_clientkey
 
 
-QoS settings
+QoS Settings
 ============
 
 .. versionadded:: Nautilus
 
-The older and now non-default``civetweb`` frontend has a threading model that uses a thread per
+The older and now non-default ``civetweb`` frontend has a threading model that uses a thread per
 connection and hence is automatically throttled by :confval:`rgw_thread_pool_size`
 when accepting connections. The newer and default ``beast`` frontend is
 not limited by the thread pool size when it comes to accepting new
@@ -325,7 +326,7 @@ below.
 
 .. confval:: rgw_d4n_address
 .. confval:: rgw_d4n_l1_datacache_persistent_path
-.. confval:: rgw_d4n_l1_datacache_size
+.. confval:: rgw_d4n_l1_datacache_disk_reserve
 .. confval:: rgw_d4n_l1_evict_cache_on_start
 .. confval:: rgw_d4n_l1_fadvise
 .. confval:: rgw_d4n_libaio_aio_threads
@@ -333,7 +334,7 @@ below.
 .. confval:: rgw_lfuda_sync_frequency
 .. confval:: rgw_d4n_l1_datacache_address
 
-Topic persistency settings
+Topic Persistency Settings
 ==========================
 
 Topic persistency will repeatedly push notifications until they succeed.
@@ -355,7 +356,7 @@ retention is indefinite, and notifications are retried as frequently as possible
 
 .. _Bucket Notifications: ../notifications
    
-Cloud Restore settings
+Cloud Restore Settings
 ======================
 
 Cloud Restore feature currently enables the restoration of objects transitioned to S3-compatible cloud services into Ceph Object Gateway (RGW). The restore requests are asynchronously processed by Restore worker thread in the background. 

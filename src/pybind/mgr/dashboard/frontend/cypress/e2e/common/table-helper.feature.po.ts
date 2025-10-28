@@ -79,7 +79,7 @@ And('I should see row {string} have {string}', (row: string, options: string) =>
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .badge`, option).should('exist');
+      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('exist');
     }
   }
 });
@@ -88,7 +88,7 @@ And('I should see row {string} of the expanded row to have a usage bar', (row: s
   cy.get('[data-testid="datatable-row-detail"]').within(() => {
     cy.get('.cds--search-input').first().clear().type(row);
     cy.contains(`[cdstablerow] [cdstabledata]`, row).should('exist');
-    cy.get('[cdstablerow] [cdstabledata] cd-usage-bar .progress').should('exist');
+    cy.get('[cdstablerow] [cdstabledata] cd-usage-bar').should('exist');
   });
 });
 
@@ -96,7 +96,7 @@ And('I should see row {string} does not have {string}', (row: string, options: s
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .badge`, option).should('not.exist');
+      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('not.exist');
     }
   }
 });

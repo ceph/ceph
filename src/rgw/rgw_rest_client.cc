@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
@@ -587,7 +587,9 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
 
   /* merge params with extra args so that we can sign correctly */
   for (auto iter = params.begin(); iter != params.end(); ++iter) {
-    new_info->args.append(iter->first, iter->second);
+    constexpr bool encode_slash = false; // not for query params
+    new_info->args.append(url_encode(iter->first, encode_slash),
+                          url_encode(iter->second, encode_slash));
   }
 
   url = _url + resource + params_str;
@@ -902,7 +904,7 @@ int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAcces
 int RGWRESTStreamRWRequest::send(RGWHTTPManager *mgr)
 {
   if (!headers_gen) {
-    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likey a bug!" << dendl;
+    ldpp_dout(this, 0) << "ERROR: " << __func__ << "(): send_prepare() was not called: likely a bug!" << dendl;
     return -EINVAL;
   }
 

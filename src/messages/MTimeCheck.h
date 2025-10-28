@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,14 @@
 
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
+
+#include <cstdint>
+#include <map>
+
+#include "include/encoding.h"
+#include "include/utime.h"
+#include "include/types.h" // for version_t
+#include "msg/Message.h"
 
 class MTimeCheck final : public Message {
 public:

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -13,14 +13,16 @@
  *
  */
 
+#include <optional>
+
 #include <errno.h>
 #include <stdlib.h>
-#include <system_error>
 #include <unistd.h>
-#include <sstream>
 
 #include "common/errno.h"
 //#include "common/dout.h"
+
+#include "common/async/blocked_completion.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -30,6 +32,10 @@
 
 #ifdef WITH_RADOSGW_DBSTORE
 #include "rgw_sal_dbstore.h"
+#include "driver/dbstore/config/store.h"
+#endif
+#ifdef WITH_RADOSGW_POSIX
+#include "driver/posix/rgw_sal_posix.h"
 #include "driver/dbstore/config/store.h"
 #endif
 #ifdef WITH_RADOSGW_D4N
@@ -49,10 +55,13 @@
 
 extern "C" {
 #ifdef WITH_RADOSGW_RADOS
-extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);
+extern rgw::sal::Driver* newRadosStore(void* io_context, CephContext* cct);
 #endif
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_POSIX
+extern rgw::sal::Driver* newPOSIXDriver(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Driver* newMotrStore(CephContext *cct);
@@ -60,14 +69,27 @@ extern rgw::sal::Driver* newMotrStore(CephContext *cct);
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
 #endif
-#ifdef WITH_RADOSGW_POSIX
-extern rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next);
-#endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
-extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context);
+extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
 }
+
+
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context) {
+  try {
+    auto neorados = neorados::RADOS::make_with_cct(cct, io_context,
+						   ceph::async::use_blocked);
+    return neorados;
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "Failed constructing neroados handle: " << e.what()
+		  << dendl;
+  }
+  return std::nullopt;
+}
+#endif
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
 						     CephContext* cct,
@@ -84,13 +106,13 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool use_cache,
 						     bool use_gc,
 						     bool background_tasks,
-						    optional_yield y, rgw::sal::ConfigStore* cfgstore)
+						    optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin)
 {
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
 #ifdef WITH_RADOSGW_RADOS
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, cct);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -119,7 +141,11 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #ifdef WITH_RADOSGW_RADOS
   else if (cfg.store_name.compare("d3n") == 0) {
-    driver = new rgw::sal::RadosStore(io_context);
+    auto neorados = make_neorados(cct, io_context);
+    if (!neorados) {
+      return nullptr;
+    }
+    driver = new rgw::sal::RadosStore(*neorados);
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
     dynamic_cast<rgw::sal::RadosStore*>(driver)->setRados(rados);
     rados->set_store(static_cast<rgw::sal::RadosStore* >(driver));
@@ -172,6 +198,17 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #endif
 
+#ifdef WITH_RADOSGW_POSIX
+  else if (cfg.store_name.compare("posix") == 0) {
+    driver = newPOSIXDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+  }
+#endif
+
 #ifdef WITH_RADOSGW_MOTR
   else if (cfg.store_name.compare("motr") == 0) {
     driver = newMotrStore(cct);
@@ -215,20 +252,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 #ifdef WITH_RADOSGW_D4N 
   else if (cfg.filter_name.compare("d4n") == 0) {
     rgw::sal::Driver* next = driver;
-    driver = newD4NFilter(next, io_context);
-
-    if (driver->initialize(cct, dpp) < 0) {
-      delete driver;
-      delete next;
-      return nullptr;
-    }
-  }
-#endif
-#ifdef WITH_RADOSGW_POSIX
-  else if (cfg.filter_name.compare("posix") == 0) {
-    rgw::sal::Driver* next = driver;
-    ldpp_dout(dpp, 20) << "Creating POSIX driver" << dendl;
-    driver = newPOSIXDriver(next);
+    driver = newD4NFilter(next, io_context, admin);
 
     if (driver->initialize(cct, dpp) < 0) {
       delete driver;
@@ -248,7 +272,7 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
 #ifdef WITH_RADOSGW_RADOS
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, cct);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     rados->set_context(cct);
@@ -275,6 +299,17 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
     driver = newDBStore(cct);
 
     if ((*(rgw::sal::DBStore*)driver).initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+#else
+    driver = nullptr;
+#endif
+  } else if (cfg.store_name.compare("posix") == 0) {
+#ifdef WITH_RADOSGW_POSIX
+    driver = newPOSIXDriver(cct);
+
+    if (driver->initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
     }
@@ -353,6 +388,11 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
     cfg.store_name = "dbstore";
   }
 #endif
+#ifdef WITH_RADOSGW_POSIX
+  else if (config_store == "posix") {
+    cfg.store_name = "posix";
+  }
+#endif
 #ifdef WITH_RADOSGW_MOTR
   else if (config_store == "motr") {
     cfg.store_name = "motr";
@@ -369,8 +409,6 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     cfg.filter_name = "base";
-  } else if (config_filter == "posix") {
-    cfg.filter_name = "posix";
   }
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {
@@ -393,6 +431,12 @@ auto DriverManager::create_config_store(const DoutPrefixProvider* dpp,
 #endif
 #ifdef WITH_RADOSGW_DBSTORE
     if (type == "dbstore") {
+      const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
+      return rgw::dbstore::create_config_store(dpp, uri);
+    }
+#endif
+#ifdef WITH_RADOSGW_POSIX
+    if (type == "posix") {
       const auto uri = g_conf().get_val<std::string>("dbstore_config_uri");
       return rgw::dbstore::create_config_store(dpp, uri);
     }

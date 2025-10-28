@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,6 +29,7 @@
 #include "common/errno.h"
 #include "common/DecayCounter.h"
 #include "common/perf_counters.h"
+#include "common/strescape.h" // for get_trimmed_path()
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 
@@ -630,6 +632,7 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 void Session::dump(Formatter *f, bool cap_dump) const
 {
   f->dump_int("id", info.inst.name.num());
+  f->dump_object("auth_name", info.auth_name);
   f->dump_object("entity", info.inst);
   f->dump_string("state", get_state_name());
   f->dump_int("num_leases", leases.size());
@@ -699,10 +702,12 @@ Session* SessionMapStore::get_or_add_session(const entity_inst_t& i) {
   return s;
 }
 
-void SessionMapStore::generate_test_instances(std::list<SessionMapStore*>& ls)
+std::list<SessionMapStore> SessionMapStore::generate_test_instances()
 {
+  std::list<SessionMapStore> ls;
   // pretty boring for now
-  ls.push_back(new SessionMapStore());
+  ls.push_back(SessionMapStore());
+  return ls;
 }
 
 void SessionMap::wipe()
@@ -1086,7 +1091,7 @@ void Session::decode(bufferlist::const_iterator &p)
   _update_human_name();
 }
 
-int Session::check_access(CInode *in, unsigned mask,
+int Session::check_access(std::string_view fs_name, CInode *in, unsigned mask,
 			  int caller_uid, int caller_gid,
 			  const vector<uint64_t> *caller_gid_list,
 			  int new_uid, int new_gid)
@@ -1119,11 +1124,14 @@ int Session::check_access(CInode *in, unsigned mask,
     }
   }
 
+  string trimmed_path = "";
   if (!path.empty()) {
     dout(20) << __func__ << " stray_prior_path " << path << dendl;
   } else {
     in->make_path_string(path, true);
-    dout(20) << __func__ << " path " << path << dendl;
+    /* Log only 10 final components fo the path to since logging entire
+     * path is not useful and also reduces readability. */
+    dout(20) << __func__ << " path " << get_trimmed_path_str(path) << dendl;
   }
   if (path.length())
     path = path.substr(1);    // drop leading /
@@ -1137,10 +1145,9 @@ int Session::check_access(CInode *in, unsigned mask,
     return -EIO;
   }
 
-  if (!auth_caps.is_capable(path, inode->uid, inode->gid, inode->mode,
+  if (!auth_caps.is_capable(fs_name, path, inode->uid, inode->gid, inode->mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
-			    new_uid, new_gid,
-			    info.inst.addr)) {
+			    new_uid, new_gid, info.inst.addr, trimmed_path)) {
     return -EACCES;
   }
   return 0;

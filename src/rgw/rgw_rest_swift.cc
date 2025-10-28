@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
@@ -811,9 +811,6 @@ static int get_swift_versioning_settings(
 
 int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
 {
-  bool has_policy;
-  uint32_t policy_rw_mask = 0;
-
   int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
@@ -1030,6 +1027,8 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   supplied_etag = s->info.env->get("HTTP_ETAG");
+  if_match = s->info.env->get("HTTP_IF_MATCH");
+  if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
 
   if (!s->generic_attrs.count(RGW_ATTR_CONTENT_TYPE)) {
     ldpp_dout(this, 5) << "content type wasn't provided, trying to guess" << dendl;

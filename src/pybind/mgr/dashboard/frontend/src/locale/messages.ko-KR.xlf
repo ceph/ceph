@@ -11479,7 +11479,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="516206233d06e9835536cd886aeb1d0c95694cb6" datatype="html">
-        <source>Fetching registry informations <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;i [ngClass]=&quot;[icons.spin, icons.spinner]&quot;&gt;"/><x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;/span&gt;   &lt;/d"/></source>
+        <source>Fetching registry information <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;i [ngClass]=&quot;[icons.spin, icons.spinner]&quot;&gt;"/><x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;/span&gt;   &lt;/d"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/upgrade/upgrade.component.html</context>
           <context context-type="linenumber">194,197</context>
@@ -11493,7 +11493,7 @@
         </context-group>
       </trans-unit>
       <trans-unit id="584342c52d131aaac16203e4b55a697d94fb4da5" datatype="html">
-        <source><x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;/i&gt;     Failed to fetch registry in"/><x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="Failed to fet"/> Failed to fetch registry informations </source>
+        <source><x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="&lt;/i&gt;     Failed to fetch registry in"/><x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="Failed to fet"/> Failed to fetch registry information </source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/upgrade/upgrade.component.html</context>
           <context context-type="linenumber">217,219</context>

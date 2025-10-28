@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #include <asm-generic/errno-base.h>
 #include <chrono>
 #include <fmt/compile.h>
@@ -10,6 +11,7 @@
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/JSONFormatter.h"
 #include "common/perf_counters.h"
 #include "Allocator.h"
 #include "include/buffer_fwd.h"
@@ -256,6 +258,9 @@ void BlueFS::_init_logger()
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
 	    "Used bytes (slow device)",
 	    "slou", PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64(l_bluefs_meta_ratio, "meta_ratio_micros",
+	    "Actual metadata/userdata ratio * 1e3",
+	    "mera", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64(l_bluefs_num_files, "num_files", "File count",
 	    "f", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
@@ -457,18 +462,6 @@ void BlueFS::_init_logger()
                 "Average allocation latency for primary/shared device",
                 "bsal",
                 PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time(l_bluefs_wal_alloc_max_lat, "alloc_wal_max_lat",
-             "Max allocation latency for wal device",
-             "awxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_db_alloc_max_lat, "alloc_db_max_lat",
-             "Max allocation latency for db device",
-             "adxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
-  b.add_time(l_bluefs_slow_alloc_max_lat, "alloc_slow_max_lat",
-             "Max allocation latency for primary/shared device",
-             "asxt",
-             PerfCountersBuilder::PRIO_INTERESTING);
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -495,6 +488,22 @@ void BlueFS::_update_logger_stats()
     logger->set(l_bluefs_slow_total_bytes, _get_block_device_size(BDEV_SLOW));
     logger->set(l_bluefs_slow_used_bytes, _get_used(BDEV_SLOW));
   }
+  double r = 0.0;
+  int64_t in_data = 0;
+  int64_t in_meta = 0;
+  in_data = get_used_non_bluefs();
+  in_meta = _get_used(BDEV_SLOW) + _get_used(BDEV_DB) + _get_used(BDEV_WAL);
+  if (in_data > 0) {
+    dout(10) << __func__ << " got meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+    r = double(in_meta) / double(in_data);
+  } else {
+    dout(5) << __func__ << " got weird meta ratio parameters, "
+            << "data: " << in_data << ", meta: " << in_meta
+            << dendl;
+  }
+  logger->set(l_bluefs_meta_ratio, r * 1000);
 }
 
 int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
@@ -533,7 +542,9 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   if (trim) {
     interval_set<uint64_t> whole_device;
     whole_device.insert(0, b->get_size());
-    b->try_discard(whole_device, false);
+    dout(5) << __func__ << " trimming device:" << path << dendl;
+    b->try_discard(whole_device, false, true);
+    dout(5) << __func__ << " trimmed device:" << path << dendl;
   }
 
   dout(1) << __func__ << " bdev " << id << " path " << path
@@ -580,6 +591,17 @@ uint64_t BlueFS::get_used()
     used += _get_used(id);
   }
   return used;
+}
+
+int64_t BlueFS::get_used_non_bluefs()
+{
+  uint64_t ret = 0;
+  if (shared_alloc_id > 0 && shared_alloc && shared_alloc->a) {
+    ret = (int64_t)_get_block_device_size(shared_alloc_id) -
+          shared_alloc->a->get_free() -
+          shared_alloc->bluefs_used;
+  }
+  return ret;
 }
 
 uint64_t BlueFS::_get_used(unsigned id) const
@@ -665,12 +687,25 @@ void BlueFS::dump_block_extents(ostream& out)
     }
     auto total = get_block_device_size(i);
     auto free = get_free(i);
-
-    out << i << " : device size 0x" << std::hex << total
-        << "(" << byte_u_t(total) << ")"
-        << " : using 0x" << total - free
-        << "(" << byte_u_t(total - free) << ")"
-        << std::dec << std::endl;
+    if (i != shared_alloc_id) {
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << std::dec << std::endl;
+    } else {
+      auto bluefs_used = get_used(i);
+      auto non_bluefs_used = get_used_non_bluefs();
+      out << i << " : device size 0x" << std::hex << total
+            << "(" << byte_u_t(total) << ")"
+          << " : using 0x" << total - free
+            << "(" << byte_u_t(total - free) << ")"
+          << " : bluefs used 0x" << bluefs_used
+            << "(" << byte_u_t(bluefs_used) << ")"
+          << " : non-bluefs used 0x" << non_bluefs_used
+            << "(" << byte_u_t(non_bluefs_used) << ")"
+          << std::dec << std::endl;
+    }
   }
 }
 
@@ -703,6 +738,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_logger();
@@ -1070,6 +1106,7 @@ int BlueFS::mount()
         _get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
         _get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+    vselector->update_from_config(cct);
   }
 
   _init_alloc();
@@ -4351,25 +4388,13 @@ void BlueFS::_update_allocate_stats(uint8_t id, const ceph::timespan& d)
 {
   switch(id) {
     case BDEV_SLOW:
-      logger->tinc(l_bluefs_slow_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_slow_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_slow_alloc_lat, d);
       break;
     case BDEV_DB:
-      logger->tinc(l_bluefs_db_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_db_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_db_alloc_lat, d);
       break;
     case BDEV_WAL:
-      logger->tinc(l_bluefs_wal_alloc_lat, d);
-      if (d > max_alloc_lat[id]) {
-        logger->tset(l_bluefs_wal_alloc_max_lat, utime_t(d));
-        max_alloc_lat[id] = d;
-      }
+      logger->tinc_with_max(l_bluefs_wal_alloc_lat, d);
       break;
   }
 }
@@ -4747,6 +4772,7 @@ void BlueFS::collect_alerts(osd_alert_list_t& alerts) {
   if (bdev[BDEV_WAL]) {
     bdev[BDEV_WAL]->collect_alerts(alerts, "WAL");
   }
+  _update_logger_stats(); // just to have it updated more frequently
 }
 
 int BlueFS::open_for_read(
@@ -5357,10 +5383,7 @@ void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) cons
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
 void OriginalVolumeSelector::dump(ostream& sout) {
-  sout<< "wal_total:" << wal_total
-    << ", db_total:" << db_total
-    << ", slow_total:" << slow_total
-    << std::endl;
+  sout << "*** no stats ***" << std::endl;
 }
 
 // ===============================================

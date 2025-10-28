@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -60,9 +60,13 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
     boost::asio::io_context& io_context;
+    optional_yield y;
+
+    // Redis connection pool
+    std::shared_ptr<rgw::d4n::RedisPool> redis_pool;
 
   public:
-    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context, bool admin);
     virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
@@ -84,6 +88,9 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
     rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
+    void save_y(optional_yield y) { this->y = y; }
+    std::shared_ptr<connection> get_conn() { return conn; }
+    std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
     void shutdown() override;
 };
 
@@ -136,6 +143,7 @@ class D4NFilterObject : public FilterObject {
     bool delete_marker{false};
     bool exists_in_cache{false};
     bool load_from_store{false};
+    bool attrs_read_from_cache{false};
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -145,14 +153,17 @@ class D4NFilterObject : public FilterObject {
 	    D4NFilterDriver* filter;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
-	    int64_t ofs = 0, len = 0;
+	    int64_t start_ofs = 0, len = 0, end_ofs = 0;
       int64_t adjusted_start_ofs{0};
+      int64_t adjusted_end_ofs{0};
 	    bufferlist bl_rem;
 	    bool last_part{false};
 	    bool write_to_cache{true};
 	    const DoutPrefixProvider* dpp;
 	    optional_yield* y;
-      int part_count{0};
+      int part_num{0}, num_parts{0};
+      int len_sent = 0;
+      std::vector<rgw::d4n::CacheBlock> blocks, dest_blocks;
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, D4NFilterObject* _source) : filter(_filter),
@@ -164,9 +175,11 @@ class D4NFilterObject : public FilterObject {
               this->dpp = dpp;
               this->y = y;
             }
-	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+	    void set_start_ofs(uint64_t ofs) { this->start_ofs = ofs; }
+      void set_len(uint64_t len) { this->len = len; }
       void set_adjusted_start_ofs(uint64_t adjusted_start_ofs) { this->adjusted_start_ofs = adjusted_start_ofs; }
-      void set_part_num(uint64_t part_num) { this->part_count = part_num; }
+      void set_part_num(uint64_t part_num) { this->part_num = part_num; }
+      void set_num_parts(uint64_t num_parts) { this->num_parts = num_parts; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
@@ -251,8 +264,7 @@ class D4NFilterObject : public FilterObject {
                              bool follow_olh = true) override;
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
                             Attrs* delattrs, optional_yield y, uint32_t flags) override;
-    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
-                            rgw_obj* target_obj = NULL) override;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) override;
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp,
 			       uint32_t flags = rgw::sal::FLAG_LOG_OP) override;
@@ -342,7 +354,9 @@ public:
 				    std::string& tag, ACLOwner& owner,
 				    uint64_t olh_epoch,
 				    rgw::sal::Object* target_obj,
-            prefix_map_t& processed_prefixes) override;
+            prefix_map_t& processed_prefixes,
+            const char *if_match = nullptr,
+            const char *if_nomatch = nullptr) override;
 };
 
 } } // namespace rgw::sal

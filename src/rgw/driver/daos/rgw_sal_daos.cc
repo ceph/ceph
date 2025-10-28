@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=2 sw=2 expandtab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -509,7 +509,9 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
+int DaosBucket::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_user,
+                      const std::string& new_owner_name,
                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }

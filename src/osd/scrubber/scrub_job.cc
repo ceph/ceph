@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "./scrub_job.h"
 
@@ -423,5 +423,11 @@ bool ScrubJob::is_autorepair_allowed(urgency_t urgency)
 {
   // note: 'after-repair' scrubs are not allowed to auto-repair
   return urgency == urgency_t::periodic_regular ||
+	 urgency == urgency_t::operator_requested ||
 	 urgency == urgency_t::repairing || urgency == urgency_t::must_repair;
+}
+
+bool ScrubJob::is_repairs_count_limited(urgency_t urgency)
+{
+  return urgency < urgency_t::operator_requested;
 }

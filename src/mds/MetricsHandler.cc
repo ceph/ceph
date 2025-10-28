@@ -1,11 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "MetricsHandler.h"
 
+#include <variant>
+
 #include "common/debug.h"
 #include "common/errno.h"
-#include "include/cephfs/metrics/Types.h"
 
 #include "messages/MClientMetrics.h"
 #include "messages/MMDSMetrics.h"
@@ -322,6 +323,56 @@ void MetricsHandler::handle_payload(Session *session, const WriteIoSizesPayload 
   metrics.write_io_sizes_metric.updated = true;
 }
 
+void MetricsHandler::handle_payload(Session* session,  const SubvolumeMetricsPayload& payload, std::unique_lock<ceph::mutex>& lk) {
+  dout(20) << ": type=" << payload.get_type() << ", session=" << session
+      << " , subv_metrics count=" << payload.subvolume_metrics.size() << dendl;
+
+  ceph_assert(lk.owns_lock()); // caller must hold the lock
+
+  std::vector<std::string> resolved_paths;
+  resolved_paths.reserve(payload.subvolume_metrics.size());
+
+  // RAII guard: unlock on construction, re-lock on destruction (even on exceptions)
+  struct UnlockGuard {
+    std::unique_lock<ceph::mutex> &lk;
+    explicit UnlockGuard(std::unique_lock<ceph::mutex>& l) : lk(l) { lk.unlock(); }
+    ~UnlockGuard() noexcept {
+      if (!lk.owns_lock()) {
+        try { lk.lock(); }
+        catch (...) {
+          dout(0) << "failed to re-lock in UnlockGuard dtor" << dendl;
+        }
+      }
+    }
+  } unlock_guard{lk};
+
+  // unlocked: resolve paths, no contention with mds lock
+  for (const auto& metric : payload.subvolume_metrics) {
+    std::string path = mds->get_path(metric.subvolume_id);
+    if (path.empty()) {
+      dout(10) << " path not found for " << metric.subvolume_id << dendl;
+    }
+    resolved_paths.emplace_back(std::move(path));
+  }
+
+  // locked again (via UnlockGuard dtor): update metrics map
+  const auto now_ms = static_cast<int64_t>(
+  std::chrono::duration_cast<std::chrono::milliseconds>(
+std::chrono::steady_clock::now().time_since_epoch()).count());
+
+  // Keep index pairing but avoid double map lookup
+  for (size_t i = 0; i < resolved_paths.size(); ++i) {
+    const auto& path = resolved_paths[i];
+    if (path.empty()) continue;
+
+    auto& vec = subvolume_metrics_map[path];
+
+    dout(20) << " accumulating subv_metric " << payload.subvolume_metrics[i] << dendl;
+    vec.emplace_back(std::move(payload.subvolume_metrics[i]));
+    vec.back().time_stamp = now_ms;
+  }
+}
+
 void MetricsHandler::handle_payload(Session *session, const UnknownPayload &payload) {
   dout(5) << ": type=Unknown, session=" << session << ", ignoring unknown payload" << dendl;
 }
@@ -332,7 +383,7 @@ void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
     return;
   }
 
-  std::scoped_lock locker(lock);
+  std::unique_lock locker(lock);
 
   Session *session = mds->get_session(m);
   dout(20) << ": session=" << session << dendl;
@@ -343,7 +394,14 @@ void MetricsHandler::handle_client_metrics(const cref_t<MClientMetrics> &m) {
   }
 
   for (auto &metric : m->updates) {
-    std::visit(HandlePayloadVisitor(this, session), metric.payload);
+    // Special handling for SubvolumeMetricsPayload to avoid lock contention
+    if (auto* subv_payload = std::get_if<SubvolumeMetricsPayload>(&metric.payload)) {
+      // this handles the subvolume metrics payload without acquiring the mds lock
+      // should not call the visitor pattern here
+      handle_payload(session, *subv_payload, locker);
+    } else {
+      std::visit(HandlePayloadVisitor(this, session), metric.payload);
+    }
   }
 }
 
@@ -410,14 +468,65 @@ void MetricsHandler::update_rank0() {
     }
   }
 
+  // subvolume metrics, reserve 100 entries per subvolume ? good enough?
+  metrics_message.subvolume_metrics.reserve(subvolume_metrics_map.size()* 100);
+  for (auto &[path, aggregated_metrics] : subvolume_metrics_map) {
+    metrics_message.subvolume_metrics.emplace_back();
+    aggregate_subvolume_metrics(path, aggregated_metrics, metrics_message.subvolume_metrics.back());
+  }
+  // if we need to show local MDS metrics, we need to save a last copy...
+  subvolume_metrics_map.clear();
+
   // only start incrementing when its kicked via set_next_seq()
   if (next_seq != 0) {
     ++last_updated_seq;
   }
 
-  dout(20) << ": sending metric updates for " << update_client_metrics_map.size()
-           << " clients to rank 0 (address: " << *addr_rank0 << ") with sequence number "
-           << next_seq << ", last updated sequence number " << last_updated_seq << dendl;
+  dout(20) << ": sending " << metrics_message.subvolume_metrics.size() << " subv_metrics to aggregator"
+	   << dendl;
 
   mds->send_message_mds(make_message<MMDSMetrics>(std::move(metrics_message)), *addr_rank0);
+}
+
+void MetricsHandler::aggregate_subvolume_metrics(const std::string& subvolume_path,
+                                 const std::vector<AggregatedIOMetrics>& metrics_list, SubvolumeMetric &res) {
+  dout(20) << ": aggregating " << metrics_list.size() << " subv_metrics" << dendl;
+  res.subvolume_path = subvolume_path;
+
+  uint64_t weighted_read_latency_sum = 0;
+  uint64_t weighted_write_latency_sum = 0;
+
+  res.read_ops = 0;
+  res.write_ops = 0;
+  res.read_size = 0;
+  res.write_size = 0;
+  res.avg_read_latency = 0;
+  res.avg_write_latency = 0;
+  res.time_stamp = 0;
+
+  for (const auto& m : metrics_list) {
+    res.read_ops += m.read_count;
+    res.write_ops += m.write_count;
+    res.read_size += m.read_bytes;
+    res.write_size += m.write_bytes;
+    // we want to have more metrics in the sliding window (on the aggregator),
+    // so we set the latest timestamp of all received metrics
+    res.time_stamp = std::max(res.time_stamp, m.time_stamp);
+
+    if (m.read_count > 0) {
+      weighted_read_latency_sum += m.read_latency_us * m.read_count;
+    }
+
+    if (m.write_count > 0) {
+      weighted_write_latency_sum += m.write_latency_us * m.write_count;
+    }
+  }
+
+  // normalize latencies
+  res.avg_read_latency = (res.read_ops > 0)
+                         ? (weighted_read_latency_sum / res.read_ops)
+                         : 0;
+  res.avg_write_latency = (res.write_ops > 0)
+                          ? (weighted_write_latency_sum / res.write_ops)
+                          : 0;
 }

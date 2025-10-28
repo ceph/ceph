@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/crimson/gtest_seastar.h"
 
@@ -110,7 +110,12 @@ struct cache_test_t : public seastar_test_suite_t {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
       current = paddr_t::make_seg_paddr(segment_id_t(segment_manager->get_device_id(), 0), 0);
       epm->test_init_no_background(segment_manager.get());

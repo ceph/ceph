@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -555,6 +555,10 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
         rgw_raw_obj raw_head_obj;
         store->get_raw_obj(manifest.get_head_placement_rule(), head_obj, &raw_head_obj);
 
+        // tag for cls_refcount
+        const std::string tag = (astate->tail_tag.length() > 0
+                               ? astate->tail_tag.to_str()
+                               : astate->obj_tag.to_str());
         for (; miter != manifest.obj_end(dpp) && max_aio--; ++miter) {
           if (!max_aio) {
             ret = drain_aio(handles);
@@ -571,7 +575,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
             continue;
           }
 
-          ret = store->getRados()->delete_raw_obj_aio(dpp, last_obj, handles);
+          ret = store->getRados()->delete_tail_obj_aio(dpp, last_obj, tag, handles);
           if (ret < 0) {
             ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
             return ret;
@@ -709,8 +713,10 @@ int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, o
                                              y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
-{
+int RadosBucket::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y) {
   // unlink from the owner, but don't update the entrypoint until link()
   int r = this->unlink(dpp, info.owner, y, false);
   if (r < 0) {
@@ -730,13 +736,26 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner
     try {
       auto p = i->second.cbegin();
 
-      RGWAccessControlPolicy acl;
-      decode(acl, p);
+      RGWAccessControlPolicy policy;
+      decode(policy, p);
+      //Get the ACL from the policy
+      RGWAccessControlList& acl = policy.get_acl();
+      ACLOwner& owner = policy.get_owner();
 
-      acl.get_owner().id = new_owner;
+      //Remove grant that is set to old owner
+      acl.remove_canon_user_grant(owner.id);
+
+      //Create a grant and add grant
+      ACLGrant grant;
+      grant.set_canon(new_owner, new_owner_name, RGW_PERM_FULL_CONTROL);
+      acl.add_grant(grant);
+
+      //Update the ACL owner to the new user
+      owner.id = new_owner;
+      owner.display_name = new_owner_name;
 
       bufferlist bl;
-      encode(acl, bl);
+      encode(policy, bl);
 
       i->second = std::move(bl);
     } catch (const buffer::error&) {
@@ -1138,7 +1157,7 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
     return -EIO;
   }
   bufferlist bl;
-  const int ret = rgw_get_system_obj(store->svc()->sysobj,
+  if (const int ret = rgw_get_system_obj(store->svc()->sysobj,
                                data_pool,
                                obj_name_oid,
                                bl,
@@ -1147,13 +1166,12 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
                                y,
                                dpp,
                                nullptr,
-                               nullptr);
-  if (ret < 0) {
-    if (ret == -ENOENT) {
-      ldpp_dout(dpp, 20) << "INFO: logging object name '" << obj_name_oid << "' not found. ret = " << ret << dendl;
-      return ret;
+                               nullptr); ret < 0) {
+    if (ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "INFO: logging object name does not exist at '" << obj_name_oid << "'" << dendl;
     }
-    ldpp_dout(dpp, 1) << "ERROR: failed to get logging object name from '" << obj_name_oid << "'. ret = " << ret << dendl;
     return ret;
   }
   obj_name = bl.to_str();
@@ -1274,7 +1292,7 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
   std::map<string, bufferlist> obj_attrs;
   ceph::real_time mtime;
   bufferlist bl_data;
-  if (const auto ret = rgw_get_system_obj(store->svc()->sysobj,
+  if (auto ret = rgw_get_system_obj(store->svc()->sysobj,
                      data_pool,
                      temp_obj_name,
                      bl_data,
@@ -1284,13 +1302,28 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
                      dpp,
                      &obj_attrs,
                      nullptr); ret < 0) {
-    if (ret == -ENOENT) {
-      ldpp_dout(dpp, 5) << "WARNING: temporary logging object '" << temp_obj_name << "' does not exists" << dendl;
-    } else {
+    if (ret != -ENOENT) {
       ldpp_dout(dpp, 1) << "ERROR: failed to read logging data when committing object '" << temp_obj_name
         << ". error: " << ret << dendl;
+      return ret;
     }
-    return ret;
+    ldpp_dout(dpp, 20) << "INFO: temporary logging object '" << temp_obj_name << "' does not exist. committing it empty" << dendl;
+    // creating an empty object
+    if (ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
+                   data_pool,
+                   temp_obj_name,
+                   bl_data, // empty bufferlist
+                   true, // exclusive
+                   nullptr,
+                   ceph::real_time::clock::now(),
+                   y); ret < 0) {
+      if (ret == -EEXIST) {
+        ldpp_dout(dpp, 5) << "WARNING: race detected in committing an empty logging object '" << temp_obj_name << dendl;
+      } else {
+        ldpp_dout(dpp, 1) << "ERROR: failed to commit empty logging object '" << temp_obj_name << "'. error: " << ret << dendl;
+      }
+      return ret;
+    }
   }
 
   uint64_t size = bl_data.length();
@@ -2268,25 +2301,12 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
-int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
-  if (!neorados) try {
-      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
-						ceph::async::use_blocked);
-    } catch (const boost::system::system_error& e) {
-      ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
-			<< e.what() << dendl;
-      return ceph::from_error_code(e.code());
-    }
-  return 0;
-}
-
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<ZoneGroup> zg =
     std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
   zone = make_unique<RadosZone>(this, std::move(zg));
-
-  return init_neorados(dpp);
+  return 0;
 }
 
 int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
@@ -2677,7 +2697,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
 
 int RadosObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y)
 {
   int ret{0};
@@ -2782,6 +2802,9 @@ int RadosObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
 
   int ret = store->getRados()->get_obj_state(dpp, rados_ctx, bucket->get_info(), get_obj(), &pstate, &manifest, follow_olh, y);
   if (ret < 0) {
+    if (ret == -ENOENT) {
+      state.is_dm = pstate->is_dm;
+    }
     return ret;
   }
 
@@ -2824,19 +2847,30 @@ int RadosObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, A
 			y, log_op, mtime);
 }
 
-int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
+int RadosObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
 {
   RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Read read_op(&op_target);
+  rgw_obj target = get_obj();
 
-  return read_attrs(dpp, read_op, y, target_obj);
+  int r = read_attrs(dpp, read_op, y, &target);
+  if (r < 0) {
+    return r;
+  }
+
+  set_instance(target.key.instance);
+
+  return 0;
 }
 
 int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
 {
   rgw_obj target = get_obj();
   rgw_obj save = get_obj();
-  int r = get_obj_attrs(y, dpp, &target);
+  RGWRados::Object op_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
+  RGWRados::Object::Read read_op(&op_target);
+
+  int r = read_attrs(dpp, read_op, y, &target);
   if (r < 0) {
     return r;
   }
@@ -2844,8 +2878,10 @@ int RadosObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, o
   /* Temporarily set target */
   state.obj = target;
   set_atomic(true);
-  state.attrset[attr_name] = attr_val;
-  r = set_obj_attrs(dpp, &state.attrset, nullptr, y, flags);
+
+  Attrs mattr;
+  mattr[attr_name] = attr_val;
+  r = set_obj_attrs(dpp, &mattr, nullptr, y, flags);
   /* Restore target */
   state.obj = save;
 
@@ -3138,7 +3174,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     return ret;
   }
 
-  ldpp_dout(dpp, 20) << "Sucessfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
+  ldpp_dout(dpp, 20) << "Successfully restored object(" << get_key() << ") from the cloud endpoint(" << endpoint << ")" << dendl;
 
   return ret;
 }
@@ -3238,18 +3274,20 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
     obj_key.instance = "null";
   }
 
-  real_time read_mtime;
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(get_read_op());
-  read_op->params.lastmod = &read_mtime;
-  ret = read_op->prepare(y, dpp);
+  ret = get_obj_attrs(y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "handle_obj_expiry Obj:" << get_key() << 
-	    ", read_op failed ret=" << ret << dendl;
+	    ", getting object attrs failed ret=" << ret << dendl;
     return ret;
   }
 
   if (obj_key.instance == "null") {
     obj_key.instance.clear();
+  }
+
+  // ensure object is not overwritten and is really expired
+  if (!is_expired()) {
+    return 0;
   }
 
   set_atomic(true);
@@ -3283,7 +3321,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           obj_op.meta.if_nomatch = NULL;
           obj_op.meta.user_data = NULL;
           obj_op.meta.zones_trace = NULL;
-          obj_op.meta.set_mtime = read_mtime;
+          obj_op.meta.set_mtime = state.mtime;
 
           RGWObjManifest *pmanifest;
           pmanifest = &m;
@@ -3314,6 +3352,7 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
           attrs.erase(RGW_ATTR_RESTORE_EXPIRY_DATE);
           attrs.erase(RGW_ATTR_CLOUDTIER_STORAGE_CLASS);
       	  attrs.erase(RGW_ATTR_RESTORE_VERSIONED_EPOCH);
+      	  attrs.erase(RGW_ATTR_DELETE_AT);
 
           bufferlist bl;
           bl.append(tier_config.name);
@@ -3335,12 +3374,9 @@ int RadosObject::handle_obj_expiry(const DoutPrefixProvider* dpp, optional_yield
     }
   }
   // object is not restored/temporary; go for regular deletion
-  // ensure object is not overwritten and is really expired
-  if (is_expired()) {
     ldpp_dout(dpp, 10) << "Deleting expired obj:" << get_key() << dendl;
 
     ret = obj->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP, nullptr, nullptr);
-  }
 
   return ret;
 }
@@ -3519,6 +3555,11 @@ RadosObject::RadosReadOp::RadosReadOp(RadosObject *_source, RGWObjectCtx *_octx)
 int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   uint64_t obj_size;
+  ceph::real_time mtime;
+
+  if (!params.lastmod) {
+    params.lastmod = &mtime;
+  }
 
   parent_op.conds.mod_ptr = params.mod_ptr;
   parent_op.conds.unmod_ptr = params.unmod_ptr;
@@ -3539,6 +3580,7 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
 
   source->set_instance(parent_op.state.obj.key.instance);
   source->set_obj_size(obj_size);
+  source->set_mtime(*params.lastmod);
   params.parts_count = parent_op.params.parts_count;
 
   return ret;
@@ -3580,7 +3622,10 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.remove_objs = params.remove_objs;
   parent_op.params.expiration_time = params.expiration_time;
   parent_op.params.unmod_since = params.unmod_since;
+  parent_op.params.last_mod_time_match = params.last_mod_time_match;
   parent_op.params.mtime = params.mtime;
+  parent_op.params.size_match = params.size_match;
+  parent_op.params.if_match = params.if_match;
   parent_op.params.high_precision_time = params.high_precision_time;
   parent_op.params.zones_trace = params.zones_trace;
   parent_op.params.abortmp = params.abortmp;
@@ -3590,7 +3635,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
       parent_op.params.check_objv = params.objv_tracker->version_for_check();
   }
 
-  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
   if (ret < 0) {
     return ret;
   }
@@ -3621,7 +3666,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   // convert flags to bool params
-  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP);
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP, flags & FLAG_FORCE_OP, flags & FLAG_SKIP_UPDATE_OLH);
 } // RadosObject::delete_object
 
 int RadosObject::copy_object(const ACLOwner& owner,
@@ -4121,7 +4166,9 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
 				   rgw::sal::Object* target_obj,
-				   prefix_map_t& processed_prefixes)
+				   prefix_map_t& processed_prefixes,
+           const char *if_match,
+           const char *if_nomatch)
 {
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -4312,6 +4359,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
 
   const req_context rctx{dpp, y, nullptr};
   ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx, get_trace());
@@ -5471,10 +5520,16 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void* io_context)
+void* newRadosStore(void* io_context_, CephContext* cct)
 {
-  rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
-    *static_cast<boost::asio::io_context*>(io_context));
+  auto& io_context = *static_cast<boost::asio::io_context*>(io_context_);
+  ceph_assert(!io_context.stopped());
+  auto neorados = make_neorados(cct, io_context);
+  if (!neorados || !*neorados) {
+    return nullptr;
+  }
+  rgw::sal::RadosStore* store = nullptr;
+    store = new rgw::sal::RadosStore(*neorados);
   if (store) {
     RGWRados* rados = new RGWRados();
 
@@ -5488,5 +5543,4 @@ void* newRadosStore(void* io_context)
 
   return store;
 }
-
 }

@@ -15,7 +15,9 @@ import {
   DialogModule,
   SelectModule,
   TagModule,
-  LayerModule
+  LayerModule,
+  InputModule,
+  GridModule
 } from 'carbon-components-angular';
 import AddIcon from '@carbon/icons/es/add/16';
 import FilterIcon from '@carbon/icons/es/filter/16';
@@ -25,6 +27,8 @@ import CheckIcon from '@carbon/icons/es/checkmark/16';
 import CloseIcon from '@carbon/icons/es/close/16';
 import MaximizeIcon from '@carbon/icons/es/maximize/16';
 import ArrowDown from '@carbon/icons/es/caret--down/16';
+import ChevronDwon from '@carbon/icons/es/chevron--down/16';
+import CheckMarkIcon from '@carbon/icons/es/checkmark/32';
 
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
@@ -98,7 +102,9 @@ import { TableDetailDirective } from './directives/table-detail.directive';
     ThemeModule,
     SelectModule,
     TagModule,
-    LayerModule
+    LayerModule,
+    InputModule,
+    GridModule
   ],
   declarations: [
     TableComponent,
@@ -136,7 +142,9 @@ export class DataTableModule {
       CheckIcon,
       CloseIcon,
       MaximizeIcon,
-      ArrowDown
+      ArrowDown,
+      ChevronDwon,
+      CheckMarkIcon
     ]);
   }
 }

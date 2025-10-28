@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,7 @@
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
 #include "NVMeofGwMap.h"
+#include "Monitor.h"
 #include "OSDMonitor.h"
 #include "mon/health_check.h"
 
@@ -188,6 +190,26 @@ int NVMeofGwMap::cfg_delete_gw(
     return do_delete_gw(gw_id, group_key);
   }
   return -EINVAL;
+}
+
+void NVMeofGwMap::check_all_gws_in_deleting_state(const NvmeGwId &gw_id,
+    const NvmeGroupKey& group_key) {
+  for (auto& gws_states: created_gws[group_key]) {
+    auto& state = gws_states.second;
+    if (state.availability != gw_availability_t::GW_DELETING) {
+      return;
+    }
+  }
+  dout(5) << "all gws in DELETING state, remove them from the map: pool/group "
+		  << group_key << dendl;
+  /* Monitor have to force remove GWs because otherwise all GW will stay forever
+   * in  DELETING state - no beacons from the group and monitor cannot update
+   * number namespaces in each group so delete condition newer turns true.
+  */
+  for (auto& gws_states: created_gws[group_key]) {
+    do_delete_gw(gws_states.first, group_key);
+  }
+  return;
 }
 
 int  NVMeofGwMap::do_erase_gw_id(const NvmeGwId &gw_id,

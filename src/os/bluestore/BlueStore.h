@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -638,8 +639,6 @@ public:
     void dump(CephContext *cct);
   };
 
-//#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
-
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
@@ -660,9 +659,6 @@ public:
   private:
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
-#ifdef CACHE_BLOB_BL
-    mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
-#endif
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_blob_use_tracker_t used_in_blob;
 
@@ -731,9 +727,6 @@ public:
     void dup(Blob& o) {
       o.set_shared_blob(shared_blob);
       o.blob = blob;
-#ifdef CACHE_BLOB_BL
-      o.blob_bl = blob_bl;
-#endif
     }
     void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
@@ -747,9 +740,6 @@ public:
       return blob;
     }
     inline bluestore_blob_t& dirty_blob() {
-#ifdef CACHE_BLOB_BL
-      blob_bl.clear();
-#endif
       return blob;
     }
 
@@ -790,46 +780,6 @@ public:
 
     ~Blob();
 
-#ifdef CACHE_BLOB_BL
-    void _encode() const {
-      if (blob_bl.length() == 0 ) {
-	encode(blob, blob_bl);
-      } else {
-	ceph_assert(blob_bl.length());
-      }
-    }
-    void bound_encode(
-      size_t& p,
-      bool include_ref_map) const {
-      _encode();
-      p += blob_bl.length();
-      if (include_ref_map) {
-	used_in_blob.bound_encode(p);
-      }
-    }
-    void encode(
-      ceph::buffer::list::contiguous_appender& p,
-      bool include_ref_map) const {
-      _encode();
-      p.append(blob_bl);
-      if (include_ref_map) {
-	used_in_blob.encode(p);
-      }
-    }
-    void decode(
-      ceph::buffer::ptr::const_iterator& p,
-      bool include_ref_map,
-      Collection */*coll*/) {
-      const char *start = p.get_pos();
-      denc(blob, p);
-      const char *end = p.get_pos();
-      blob_bl.clear();
-      blob_bl.append(start, end - start);
-      if (include_ref_map) {
-	used_in_blob.decode(p);
-      }
-    }
-#else
     void bound_encode(
       size_t& p,
       uint64_t struct_v,
@@ -862,7 +812,6 @@ public:
       uint64_t* sbid,
       bool include_ref_map,
       Collection *coll);
-#endif
   };
   typedef boost::intrusive_ptr<Blob> BlobRef;
   typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
@@ -1111,6 +1060,23 @@ public:
       bool just_after_reshard //true to indicate that update should now respect shard boundaries
     );                        //as no further resharding will be done
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
+
+    struct ReshardPlan {
+      std::vector<bluestore_onode_t::shard_info> new_shard_info;
+      unsigned shard_index_begin;
+      unsigned shard_index_end;
+      uint32_t spanning_scan_begin;
+      uint32_t spanning_scan_end;
+    };
+
+    ReshardPlan reshard_decision(uint32_t segment_size);
+
+    void reshard_action(
+      ReshardPlan& plan,
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
+
+
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t,
@@ -4486,6 +4452,7 @@ class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
   uint64_t level0_size = 0;
   uint64_t level_base = 0;
   uint64_t level_multiplier = 0;
+  bool new_pol = false;
   size_t extra_level = 0;
   enum {
     OLD_POLICY,
@@ -4500,37 +4467,49 @@ public:
     uint64_t _level0_size,
     uint64_t _level_base,
     uint64_t _level_multiplier,
-    double reserved_factor,
-    uint64_t reserved,
-    bool new_pol)
-  {
+    bool _new_pol) {
+
     l_totals[LEVEL_LOG - LEVEL_FIRST] = 0; // not used at the moment
     l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
     l_totals[LEVEL_DB - LEVEL_FIRST] = _db_total;
     l_totals[LEVEL_SLOW - LEVEL_FIRST] = _slow_total;
 
+    level0_size = _level0_size;
+    level_base = _level_base;
+    level_multiplier = _level_multiplier;
+
+    new_pol = _new_pol;
+  }
+
+  void update_from_config(CephContext* cct) override
+  {
     if (!new_pol) {
       return;
     }
+
+    db_avail4slow = 0;
+    extra_level = 0;
+    double reserved_factor =
+      cct->_conf->bluestore_volume_selection_reserved_factor;
+    uint64_t reserved = cct->_conf->bluestore_volume_selection_reserved;
+
+    auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
     // Calculating how much extra space is available at DB volume.
     // Depending on the presence of explicit reserved size specification it might be either
     // * DB volume size - reserved
     // or
     // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
     if (!reserved) {
-      level0_size = _level0_size;
-      level_base = _level_base;
-      level_multiplier = _level_multiplier;
-      uint64_t prev_levels = _level0_size;
-      uint64_t cur_level = _level_base;
+      uint64_t prev_levels = level0_size;
+      uint64_t cur_level = level_base;
       extra_level = 1;
       do {
-	uint64_t next_level = cur_level * _level_multiplier;
+	uint64_t next_level = cur_level * level_multiplier;
         uint64_t next_threshold = prev_levels + cur_level + next_level;
         ++extra_level;
-        if (_db_total <= next_threshold) {
+        if (db_total <= next_threshold) {
 	  uint64_t cur_threshold = prev_levels + cur_level * reserved_factor;
-          db_avail4slow = cur_threshold < _db_total ? _db_total - cur_threshold : 0;
+          db_avail4slow = cur_threshold < db_total ? db_total - cur_threshold : 0;
           break;
         } else {
           prev_levels += cur_level;
@@ -4538,7 +4517,7 @@ public:
         }
       } while (true);
     } else {
-      db_avail4slow = reserved < _db_total ? _db_total - reserved : 0;
+      db_avail4slow = reserved < db_total ? db_total - reserved : 0;
       extra_level = 0;
     }
   }

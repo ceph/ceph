@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -25,6 +26,7 @@
 #include <variant>
 
 #include <boost/container/small_vector.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <boost/asio/any_completion_handler.hpp>
 #include <boost/asio/append.hpp>
 #include <boost/asio/async_result.hpp>
@@ -672,6 +674,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodevals {
     uint64_t max_entries;
     Vals* pattrs;
+    Vals ignore;
     bool* ptruncated;
     int* prval;
     boost::system::error_code* pec;
@@ -690,7 +693,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Vals ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -717,6 +719,7 @@ struct ObjectOperation {
   struct CB_ObjectOperation_decodekeys {
     uint64_t max_entries;
     Keys* pattrs;
+    Keys ignore;
     bool *ptruncated;
     int *prval;
     boost::system::error_code* pec;
@@ -735,7 +738,6 @@ struct ObjectOperation {
 	  if (pattrs)
 	    decode(*pattrs, p);
 	  if (ptruncated) {
-	    Keys ignore;
 	    if (!pattrs) {
 	      decode(ignore, p);
 	      pattrs = &ignore;
@@ -1713,6 +1715,7 @@ public:
 
 private:
   std::atomic<uint64_t> last_tid{0};
+  std::atomic<uint64_t> last_subsystem{0};
   std::atomic<unsigned> inflight_ops{0};
   std::atomic<int> client_inc{-1};
   uint64_t max_linger_id{0};
@@ -1795,6 +1798,11 @@ public:
   void maybe_request_map();
 
   void enable_blocklist_events();
+
+  uint64_t unique_subsystem_id() {
+    return ++last_subsystem;
+  }
+
 private:
 
   void _maybe_request_map();
@@ -2034,6 +2042,7 @@ public:
 
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
+    std::uint64_t subsystem = 0;
     const jspan_context* otel_trace = nullptr;
 
     static bool has_completion(decltype(onfinish)& f) {
@@ -2065,7 +2074,7 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
        int f, OpComp fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr) :
+       ZTracer::Trace *parent_trace = nullptr, uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
       out_bl(ops.size(), nullptr),
@@ -2074,7 +2083,7 @@ public:
       out_ec(ops.size(), nullptr),
       onfinish(std::move(fin)),
       objver(ov),
-      data_offset(offset) {
+      data_offset(offset), subsystem(subsystem) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
       if (parent_trace && parent_trace->valid()) {
@@ -2085,7 +2094,8 @@ public:
 
     Op(const object_t& o, const object_locator_t& ol, osdc_opvec&& _ops,
        int f, Context* fin, version_t *ov, int *offset = nullptr,
-       ZTracer::Trace *parent_trace = nullptr, const jspan_context *otel_trace = nullptr) :
+       ZTracer::Trace *parent_trace = nullptr, const jspan_context *otel_trace = nullptr,
+       uint64_t subsystem = 0) :
       target(o, ol, f),
       ops(std::move(_ops)),
       out_bl(ops.size(), nullptr),
@@ -2095,6 +2105,7 @@ public:
       onfinish(fin),
       objver(ov),
       data_offset(offset),
+      subsystem(subsystem),
       otel_trace(otel_trace) {
       if (target.base_oloc.key == o)
 	target.base_oloc.key.clear();
@@ -2895,9 +2906,9 @@ public:
       }, consigned);
   }
 
-  auto wait_for_latest_osdmap(std::unique_ptr<ceph::async::Completion<OpSignature>> c) {
+  auto wait_for_latest_osdmap(boost::asio::any_completion_handler<OpSignature> c) {
     wait_for_latest_osdmap([c = std::move(c)](boost::system::error_code e) mutable {
-      c->dispatch(std::move(c), e);
+      boost::asio::dispatch(boost::asio::append(std::move(c), e));
     });
   }
 
@@ -2932,7 +2943,8 @@ public:
 
   /// cancel an in-progress request with the given return code
 private:
-  int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int op_cancel(OSDSession *s, ceph_tid_t tid, int r,
+		boost::system::error_code ec);
   int _op_cancel(ceph_tid_t tid, int r);
 
   int get_read_flags(int flags) {
@@ -2949,6 +2961,7 @@ private:
 
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  void subsystem_cancel(uint64_t subsystem, boost::system::error_code e);
   int op_cancel(const std::vector<ceph_tid_t>& tidls, int r);
 
   /**
@@ -3054,10 +3067,10 @@ public:
 	      ceph::real_time mtime, int flags,
 	      Op::OpComp oncommit,
 	      version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-	      ZTracer::Trace *parent_trace = nullptr) {
+	      ZTracer::Trace *parent_trace = nullptr, uint32_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
 		   CEPH_OSD_FLAG_WRITE, std::move(oncommit), objver,
-		   nullptr, parent_trace);
+		   nullptr, parent_trace, subsystem);
     o->priority = op.priority;
     o->mtime = mtime;
     o->snapc = snapc;
@@ -3068,18 +3081,6 @@ public:
     o->reqid = reqid;
     op.clear();
     op_submit(o);
-  }
-
-  void mutate(const object_t& oid, const object_locator_t& oloc,
-	      ObjectOperation&& op, const SnapContext& snapc,
-	      ceph::real_time mtime, int flags,
-	      std::unique_ptr<ceph::async::Completion<Op::OpSig>> oncommit,
-	      version_t *objver = NULL, osd_reqid_t reqid = osd_reqid_t(),
-	      ZTracer::Trace *parent_trace = nullptr) {
-    mutate(oid, oloc, std::move(op), snapc, mtime, flags,
-	   [c = std::move(oncommit)](boost::system::error_code ec) mutable {
-	     c->dispatch(std::move(c), ec);
-	   }, objver, reqid, parent_trace);
   }
 
   Op *prepare_read_op(
@@ -3125,10 +3126,11 @@ public:
 	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
 	    int flags, Op::OpComp onack,
 	    version_t *objver = nullptr, int *data_offset = nullptr,
-	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr) {
+	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr,
+	    uint64_t subsystem = 0) {
     Op *o = new Op(oid, oloc, std::move(op.ops), get_read_flags(flags),
 		   std::move(onack), objver,
-		   data_offset, parent_trace);
+		   data_offset, parent_trace, subsystem);
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
@@ -3145,18 +3147,6 @@ public:
     op.clear();
     op_submit(o);
   }
-
-  void read(const object_t& oid, const object_locator_t& oloc,
-	    ObjectOperation&& op, snapid_t snapid, ceph::buffer::list *pbl,
-	    int flags, std::unique_ptr<ceph::async::Completion<Op::OpSig>> onack,
-	    version_t *objver = nullptr, int *data_offset = nullptr,
-	    uint64_t features = 0, ZTracer::Trace *parent_trace = nullptr) {
-    read(oid, oloc, std::move(op), snapid, pbl, flags,
-	 [c = std::move(onack)](boost::system::error_code e) mutable {
-	   c->dispatch(std::move(c), e);
-	 }, objver, data_offset, features, parent_trace);
-  }
-
 
   Op *prepare_pg_read_op(
     uint32_t hash, object_locator_t oloc,

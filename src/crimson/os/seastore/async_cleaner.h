@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -16,6 +16,7 @@
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
 #include "crimson/os/seastore/backref_mapping.h"
 
@@ -289,10 +290,6 @@ std::ostream &operator<<(std::ostream &, const segments_info_t &);
  */
 class ExtentCallbackInterface {
 public:
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
-
   virtual ~ExtentCallbackInterface() = default;
 
   virtual shard_stats_t& get_shard_stats() = 0;
@@ -1181,12 +1178,12 @@ using RBMSpaceTrackerRef = std::unique_ptr<RBMSpaceTracker>;
 class AsyncCleaner {
 public:
   using state_t = BackgroundListener::state_t;
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
 
   virtual void set_background_callback(BackgroundListener *) = 0;
 
   virtual void set_extent_callback(ExtentCallbackInterface *) = 0;
+
+  virtual const segments_info_t* get_segments_info() const = 0;
 
   virtual store_statfs_t get_stat() const = 0;
 
@@ -1291,6 +1288,7 @@ public:
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
     SegmentSeqAllocator &segment_seq_allocator,
+    rewrite_gen_t max_rewrite_generation,
     bool detailed,
     bool is_cold);
 
@@ -1303,11 +1301,13 @@ public:
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
       SegmentSeqAllocator &ool_seq_allocator,
+      rewrite_gen_t max_rewrite_generation,
       bool detailed,
       bool is_cold = false) {
     return std::make_unique<SegmentCleaner>(
         config, std::move(sm_group), backref_manager,
-        ool_seq_allocator, detailed, is_cold);
+        ool_seq_allocator, max_rewrite_generation,
+	detailed, is_cold);
   }
 
   /*
@@ -1352,6 +1352,10 @@ public:
     extent_callback = cb;
   }
 
+  const segments_info_t* get_segments_info() const final {
+   return &segments;
+  }
+
   store_statfs_t get_stat() const final {
     store_statfs_t st;
     st.total = segments.get_total_bytes();
@@ -1387,6 +1391,7 @@ public:
   bool should_block_io_on_clean() const final {
     assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
+      // No CLOSED segments to reclaim
       return false;
     }
     auto aratio = get_projected_available_ratio();
@@ -1472,7 +1477,6 @@ private:
         segment_id_t segment_id,
         rewrite_gen_t generation,
         segment_off_t segment_size) {
-      ceph_assert(is_rewrite_generation(generation));
 
       rewrite_gen_t target_gen;
       if (generation < MIN_REWRITE_GENERATION) {
@@ -1483,7 +1487,6 @@ private:
         target_gen = generation + 1;
       }
 
-      assert(is_target_rewrite_generation(target_gen));
       return {generation,
               target_gen,
               segment_size,
@@ -1611,6 +1614,7 @@ private:
     ceph_assert(s_type == segment_type_t::OOL ||
                 trimmer != nullptr); // segment_type_t::JOURNAL
     auto old_usage = calc_utilization(segment);
+    ceph_assert(is_rewrite_generation(generation, max_rewrite_generation));
     segments.init_closed(segment, seq, s_type, category, generation);
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
@@ -1670,6 +1674,14 @@ private:
 
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocator &ool_segment_seq_allocator;
+  const rewrite_gen_t max_rewrite_generation = NULL_GENERATION;
+
+  enum class gc_formula_t {
+    GREEDY,
+    BENEFIT,
+    COST_BENEFIT,
+  };
+  gc_formula_t gc_formula;
 };
 
 class RBMCleaner;
@@ -1704,6 +1716,10 @@ public:
 
   void set_extent_callback(ExtentCallbackInterface *cb) final {
     extent_callback = cb;
+  }
+
+  const segments_info_t* get_segments_info() const final {
+   return nullptr;
   }
 
   store_statfs_t get_stat() const final {
@@ -1796,7 +1812,8 @@ public:
     auto rbs = rb_group->get_rb_managers();
     size_t total = 0;
     for (auto p : rbs) {
-      total += p->get_device()->get_available_size();
+      total += p->get_size();
+      total += p->get_journal_size();
     }
     return total;
   }

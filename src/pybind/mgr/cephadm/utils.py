@@ -26,10 +26,11 @@ CEPH_TYPES = ['mgr', 'mon', 'crash', 'osd', 'mds', 'rgw',
               'rbd-mirror', 'cephfs-mirror', 'ceph-exporter']
 GATEWAY_TYPES = ['iscsi', 'nfs', 'nvmeof', 'smb']
 MONITORING_STACK_TYPES = ['node-exporter', 'prometheus',
-                          'alertmanager', 'grafana', 'loki', 'promtail']
+                          'alertmanager', 'grafana', 'loki', 'promtail', 'alloy']
+MGMT_GATEWAY_STACK_TYPES = ['mgmt-gateway', 'oauth2-proxy']
 RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES = ['haproxy', 'nfs']
 
-CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES
+CEPH_UPGRADE_ORDER = CEPH_TYPES + GATEWAY_TYPES + MONITORING_STACK_TYPES + MGMT_GATEWAY_STACK_TYPES
 
 # these daemon types use the ceph container image
 CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
@@ -37,7 +38,7 @@ CEPH_IMAGE_TYPES = CEPH_TYPES + ['iscsi', 'nfs', 'node-proxy']
 # these daemons do not use the ceph image. There are other daemons
 # that also don't use the ceph image, but we only care about those
 # that are part of the upgrade order here
-NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb']
+NON_CEPH_IMAGE_TYPES = MONITORING_STACK_TYPES + ['nvmeof', 'smb'] + MGMT_GATEWAY_STACK_TYPES
 
 # Used for _run_cephadm used for check-host etc that don't require an --image parameter
 cephadmNoImage = CephadmNoImage.token

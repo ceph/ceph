@@ -96,7 +96,7 @@
             Dashboard</span>
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
-        <cds-sidenav-menu title="Multi-Cluster"
+        <cds-sidenav-menu title="Multi-cluster"
                           *ngIf="permissions.configOpt.read"
                           i18n-title>
           <svg cdsIcon="edge-cluster"
@@ -108,10 +108,10 @@
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_multiCluster_overview"><span i18n>Overview</span></cds-sidenav-item>
           <cds-sidenav-item route="/multi-cluster/manage-clusters"
-                            title="Manage Clusters"
+                            title="Manage clusters"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage Clusters</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage clusters</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Cluster -->
         <cds-sidenav-menu title="Cluster"
@@ -141,16 +141,16 @@
                             class="tc_submenuitem tc_submenuitem_cluster_osds"><span i18n>OSDs</span></cds-sidenav-item>
           <cds-sidenav-item route="/inventory"
                             [useRouter]="true"
-                            title="Physical Disks"
+                            title="Physical disks"
                             i18n-title
                             *ngIf="permissions.hosts.read"
-                            class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical Disks</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical disks</span></cds-sidenav-item>
           <cds-sidenav-item route="/crush-map"
                             [useRouter]="true"
-                            title="CRUSH Map"
+                            title="CRUSH map"
                             i18n-title
                             *ngIf="permissions.osd.read"
-                            class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH Map</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH map</span></cds-sidenav-item>
           <cds-sidenav-item route="/monitor"
                             [useRouter]="true"
                             title="Monitors"
@@ -179,10 +179,14 @@
                             *ngIf="permissions.rbdMirroring.read && enabledFeature.mirroring"
                             class="tc_submenuitem tc_submenuitem_block_mirroring">
             <span i18n>Mirroring
-              <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
-                     class="badge badge-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
-              <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
-                     class="badge badge-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
+              <cds-tag *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
+                       class="tag-warning">
+                {{ summaryData?.rbd_mirroring?.warnings }}
+              </cds-tag>
+              <cds-tag *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
+                       class="tag-danger">
+                {{ summaryData?.rbd_mirroring?.errors }}
+              </cds-tag>
             </span>
           </cds-sidenav-item>
           <cds-sidenav-item route="/block/iscsi"
@@ -211,25 +215,25 @@
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_rgw_overview"><span i18n>Overview</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/user"
-                            title="Users"
+                            title="User management"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_rgw_users"><span i18n>Users</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_rgw_users"><span i18n>User management</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/bucket"
                             title="Buckets"
                             i18n-title
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_rgw_buckets"><span i18n>Buckets</span></cds-sidenav-item>
-          <cds-sidenav-item route="/rgw/topic"
+          <cds-sidenav-item route="/rgw/destination"
                             [useRouter]="true"
-                            title="Topics"
+                            title="Notification destination"
                             i18n-title
-                            class="tc_submenuitem tc_submenuitem_rgw_topics"><span i18n>Topics</span></cds-sidenav-item>
-          <cds-sidenav-item route="/rgw/tiering"
-                            title="Tiering"
+                            class="tc_submenuitem tc_submenuitem_rgw_notification"><span i18n>Notification destination</span></cds-sidenav-item>
+          <cds-sidenav-item route="/rgw/storage-class"
+                            title="Storage class"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_rgw_tiering"><span i18n>Tiering</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_rgw_storage_class"><span i18n>Storage class</span></cds-sidenav-item>
           <cds-sidenav-item route="/rgw/multisite"
                             title="Multi-site"
                             i18n-title
@@ -255,17 +259,17 @@
         <!-- Filesystem -->
         <cds-sidenav-menu title="File"
                           i18n-title
-                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs || permissions.smb.read"
+                          *ngIf="permissions.nfs.read && enabledFeature.nfs || permissions.cephfs.read && enabledFeature.cephfs || permissions?.smb?.read"
                           class="tc_menuitem_file">
           <svg cdsIcon="file-storage"
                icon
                size="20"></svg>
           <cds-sidenav-item route="/cephfs/fs"
                             [useRouter]="true"
-                            title="File Systems"
+                            title="File systems"
                             i18n-title
                             *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
-                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File Systems</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File systems</span></cds-sidenav-item>
           <cds-sidenav-item route="/cephfs/nfs"
                             [useRouter]="true"
                             title="NFS"
@@ -276,7 +280,7 @@
                             [useRouter]="true"
                             title="SMB"
                             i18n-title
-                            *ngIf="permissions.smb.read"
+                            *ngIf="permissions?.smb?.read"
                             class="tc_submenuitem tc_submenuitem_file_smb"><span i18n>SMB</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Observability -->
@@ -301,10 +305,10 @@
                             class="tc_submenuitem tc_submenuitem_observe_monitoring">
             <span i18n>
               <ng-container>Alerts</ng-container>
-              <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
-                     class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
-              <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
-                     class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
+              <cds-tag *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
+                     class="tag-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</cds-tag>
+              <cds-tag *ngIf="prometheusAlertService.activeWarningAlerts > 0"
+                     class="tag-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</cds-tag>
             </span>
           </cds-sidenav-item>
         </cds-sidenav-menu>
@@ -330,16 +334,16 @@
                             class="tc_submenuitem tc_submenuitem_admin_upgrade"><span i18n>Upgrade</span></cds-sidenav-item>
           <cds-sidenav-item route="/ceph-users"
                             [useRouter]="true"
-                            title="Ceph Users"
+                            title="Ceph users"
                             i18n-title
                             *ngIf="permissions.configOpt.read"
-                            class="tc_submenuitem tc_submenuitem_admin_users"><span i18n>Ceph Users</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_admin_users"><span i18n>Ceph users</span></cds-sidenav-item>
           <cds-sidenav-item route="/mgr-modules"
                             [useRouter]="true"
-                            title="Manager Modules"
+                            title="Manager modules"
                             i18n-title
                             *ngIf="permissions.configOpt.read"
-                            class="tc_submenuitem tc_submenuitem_admin_modules"><span i18n>Manager Modules</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_admin_modules"><span i18n>Manager modules</span></cds-sidenav-item>
           <cds-sidenav-item route="/configuration"
                             [useRouter]="true"
                             title="Configuration"

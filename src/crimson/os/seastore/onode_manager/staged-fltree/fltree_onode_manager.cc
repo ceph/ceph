@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/logging.h"
 
@@ -20,6 +20,18 @@ void FLTreeOnode::Recorder::apply_value_delta(
     ceph::decode(op, bliter);
     auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
     switch (op) {
+    case delta_op_t::UNSET_NEED_COW:
+      DEBUG("setting need_cow");
+      bliter.copy(
+	sizeof(mlayout.need_cow),
+	(char *)&mlayout.need_cow);
+      break;
+    case delta_op_t::SET_NEED_COW:
+      DEBUG("setting need_cow");
+      bliter.copy(
+	sizeof(mlayout.need_cow),
+	(char *)&mlayout.need_cow);
+      break;
     case delta_op_t::UPDATE_ONODE_SIZE:
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
@@ -80,6 +92,18 @@ void FLTreeOnode::Recorder::encode_update(
   auto &encoded = get_encoded(payload_mut);
   ceph::encode(op, encoded);
   switch(op) {
+  case delta_op_t::UNSET_NEED_COW:
+    DEBUG("setting need_cow");
+    encoded.append(
+      (const char *)&layout.need_cow,
+      sizeof(layout.need_cow));
+    break;
+  case delta_op_t::SET_NEED_COW:
+    DEBUG("setting need_cow");
+    encoded.append(
+      (const char *)&layout.need_cow,
+      sizeof(layout.need_cow));
+    break;
   case delta_op_t::UPDATE_ONODE_SIZE:
     DEBUG("update onode size");
     encoded.append(

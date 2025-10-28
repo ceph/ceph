@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -163,6 +163,7 @@ static constexpr uint32_t FLAG_PREVENT_VERSIONING = 0x0002;
 // if cannot do all elements of op, do as much as possible (e.g.,
 // delete object where head object is missing)
 static constexpr uint32_t FLAG_FORCE_OP = 0x0004;
+static constexpr uint32_t FLAG_SKIP_UPDATE_OLH = 0x0008;
 
 enum class RGWRestoreStatus : uint8_t {
   None  = 0,
@@ -262,9 +263,6 @@ struct TopicList {
   /// The next marker to resume listing, or empty
   std::string next_marker;
 };
-
-/** A list of key-value attributes */
-  using Attrs = std::map<std::string, ceph::buffer::list>;
 
 /**
  * @brief Base singleton representing a Store or Filter
@@ -935,7 +933,10 @@ class Bucket {
                                     uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
     /** Get the owner of this bucket */
@@ -1160,7 +1161,10 @@ class Object {
         std::list<rgw_obj_index_key>* remove_objs{nullptr};
         ceph::real_time expiration_time;
         ceph::real_time unmod_since;
+        ceph::real_time last_mod_time_match;
         ceph::real_time mtime;
+        std::optional<uint64_t> size_match;
+        const char *if_match{nullptr};
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};
@@ -1223,6 +1227,8 @@ class Object {
     virtual void set_compressed() = 0;
     /** Check if this object is compressed */
     virtual bool is_compressed() = 0;
+    /** True if this object is a delete marker (newest version is deleted) */
+    virtual bool is_delete_marker() = 0;
     /** Check if object is synced */
     virtual bool is_sync_completed(const DoutPrefixProvider* dpp,
                                    optional_yield y,
@@ -1242,7 +1248,7 @@ class Object {
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
     /** Get attributes for this object */
-    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj = NULL) = 0;
+    virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp) = 0;
     /** Modify attributes for this object. */
     virtual int modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp,
                                  uint32_t flags = rgw::sal::FLAG_LOG_OP) = 0;
@@ -1303,7 +1309,7 @@ class Object {
     /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
     virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y) = 0;
 
     /** Get the cached attributes for this object */
@@ -1344,8 +1350,6 @@ class Object {
     virtual void set_hash_source(std::string s) = 0;
     /** Build an Object Identifier string for this object */
     virtual std::string get_oid(void) const = 0;
-    /** True if this object is a delete marker (newest version is deleted) */
-    virtual bool get_delete_marker(void) = 0;
     /** True if this object is stored in the extra data pool */
     virtual bool get_in_extra_data(void) = 0;
     /** True if this object exists in the store */
@@ -1523,7 +1527,9 @@ public:
 		       std::string& tag, ACLOwner& owner,
 		       uint64_t olh_epoch,
 		       rgw::sal::Object* target_obj,
-                       prefix_map_t& processed_prefixes) = 0;
+           prefix_map_t& processed_prefixes,
+           const char *if_match = nullptr,
+           const char *if_nomatch = nullptr) = 0;
   /** Cleanup orphaned parts caused by racing condition involving part upload retry */
   virtual int cleanup_orphaned_parts(const DoutPrefixProvider *dpp,
                                      CephContext *cct, optional_yield y,
@@ -1943,7 +1949,8 @@ public:
 				      optional_yield y,
               rgw::sal::ConfigStore* cfgstore,
 				      bool use_cache = true,
-				      bool use_gc = true) {
+				      bool use_gc = true,
+                                      bool admin = false) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
 						   site_config,
 						   use_gc_thread,
@@ -1954,7 +1961,7 @@ public:
 						   run_reshard_thread,
                run_notification_thread,
 						   use_cache, use_gc,
-						   background_tasks, y, cfgstore);
+						   background_tasks, y, cfgstore, admin);
     return driver;
   }
   /** Get a stripped down driver by service name */
@@ -1984,7 +1991,7 @@ public:
             bool run_notification_thread,
 						bool use_metadata_cache,
 						bool use_gc, bool background_tasks,
-						optional_yield y, rgw::sal::ConfigStore* cfgstore);
+						optional_yield y, rgw::sal::ConfigStore* cfgstore, bool admin);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
@@ -2004,5 +2011,10 @@ public:
       -> std::unique_ptr<rgw::sal::ConfigStore>;
 
 };
+
+#ifdef WITH_RADOSGW_RADOS
+std::optional<neorados::RADOS>
+make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+#endif
 
 /** @} */

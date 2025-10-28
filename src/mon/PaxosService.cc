@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -17,6 +18,7 @@
 #include "common/config.h"
 #include "include/stringify.h"
 #include "include/ceph_assert.h"
+#include "messages/PaxosServiceMessage.h"
 #include "mon/MonOpRequest.h"
 
 using std::ostream;
@@ -391,8 +393,8 @@ void PaxosService::maybe_trim()
   version_t trim_to = get_trim_to();
   dout(20) << __func__ << " " << first_committed << "~" << trim_to << dendl;
 
-  if (trim_to < first_committed) {
-    dout(10) << __func__ << " trim_to " << trim_to << " < first_committed "
+  if (trim_to <= first_committed) {
+    dout(10) << __func__ << " trim_to " << trim_to << " <= first_committed "
 	     << first_committed << dendl;
     return;
   }

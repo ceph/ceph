@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -45,7 +45,7 @@ struct ObjectMetaInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<ObjectMetaInfo*>& o);
+  static std::list<ObjectMetaInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
@@ -90,7 +90,7 @@ struct ObjectCacheInfo {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<ObjectCacheInfo*>& o);
+  static std::list<ObjectCacheInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(ObjectCacheInfo)
 
@@ -122,7 +122,7 @@ struct RGWCacheNotifyInfo {
     DECODE_FINISH(ibl);
   }
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<RGWCacheNotifyInfo*>& o);
+  static std::list<RGWCacheNotifyInfo> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 inline std::ostream& operator <<(std::ostream& m, const RGWCacheNotifyInfo& cni) {

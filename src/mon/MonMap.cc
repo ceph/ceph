@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "MonMap.h"
 
@@ -120,16 +120,18 @@ void mon_info_t::dump(ceph::Formatter *f) const
   encode_json("crush_location", crush_loc, f);
 }
 
-void mon_info_t::generate_test_instances(list<mon_info_t*>& ls)
+list<mon_info_t> mon_info_t::generate_test_instances()
 {
-  ls.push_back(new mon_info_t);
-  ls.push_back(new mon_info_t);
-  ls.back()->name = "noname";
-  ls.back()->public_addrs.parse("v1:1.2.3.4:567/890");
-  ls.back()->priority = 1;
-  ls.back()->weight = 1.0;
-  ls.back()->crush_loc.emplace("root", "default");
-  ls.back()->crush_loc.emplace("host", "foo");
+  list<mon_info_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().name = "noname";
+  ls.back().public_addrs.parse("v1:1.2.3.4:567/890");
+  ls.back().priority = 1;
+  ls.back().weight = 1.0;
+  ls.back().crush_loc.emplace("root", "default");
+  ls.back().crush_loc.emplace("host", "foo");
+  return ls;
 }
 namespace {
   struct rank_cmp {
@@ -323,26 +325,27 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   DECODE_FINISH(p);
 }
 
-void MonMap::generate_test_instances(list<MonMap*>& o)
+list<MonMap> MonMap::generate_test_instances()
 {
-  o.push_back(new MonMap);
-  o.push_back(new MonMap);
-  o.back()->epoch = 1;
-  o.back()->last_changed = utime_t(123, 456);
-  o.back()->created = utime_t(789, 101112);
-  o.back()->add("one", entity_addrvec_t());
+  list<MonMap> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().epoch = 1;
+  o.back().last_changed = utime_t(123, 456);
+  o.back().created = utime_t(789, 101112);
+  o.back().add("one", entity_addrvec_t());
 
-  MonMap *m = new MonMap;
+  MonMap m;
   {
-    m->epoch = 1;
-    m->last_changed = utime_t(123, 456);
+    m.epoch = 1;
+    m.last_changed = utime_t(123, 456);
 
     entity_addrvec_t empty_addr_one = entity_addrvec_t(entity_addr_t());
     empty_addr_one.v[0].set_nonce(1);
-    m->add("empty_addr_one", empty_addr_one);
+    m.add("empty_addr_one", empty_addr_one);
     entity_addrvec_t empty_addr_two = entity_addrvec_t(entity_addr_t());
     empty_addr_two.v[0].set_nonce(2);
-    m->add("empty_addr_two", empty_addr_two);
+    m.add("empty_addr_two", empty_addr_two);
 
     const char *local_pub_addr_s = "127.0.1.2";
 
@@ -350,11 +353,12 @@ void MonMap::generate_test_instances(list<MonMap*>& o)
     entity_addrvec_t local_pub_addr;
     local_pub_addr.parse(local_pub_addr_s, &end_p);
 
-    m->add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
+    m.add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
 
-    m->add("empty_addr_zero", entity_addrvec_t());
+    m.add("empty_addr_zero", entity_addrvec_t());
   }
-  o.push_back(m);
+  o.push_back(std::move(m));
+  return o;
 }
 
 // read from/write to a file

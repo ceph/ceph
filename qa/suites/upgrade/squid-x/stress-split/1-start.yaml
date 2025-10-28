@@ -20,6 +20,11 @@ overrides:
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - Replacing daemon mds
+      - MDS_ALL_DOWN
+      - MDS_UP_LESS_THAN_MAX
+      - filesystem is offline
+      - with fewer MDS than max_mds
 tasks:
 - install:
     branch: squid

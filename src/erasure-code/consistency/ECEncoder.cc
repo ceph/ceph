@@ -106,7 +106,7 @@ std::optional<ceph::bufferlist> ECEncoder<stripe_info_o_t>::do_encode(ceph::buff
 
   sinfo.ro_range_to_shard_extent_map(0, inbl.length(), inbl, encoded_data);
   encoded_data.insert_parity_buffers();
-  int r = encoded_data.encode(ec_impl, nullptr, encoded_data.get_ro_end());
+  int r = encoded_data.encode(ec_impl);
   if (r < 0) {
     std::cerr << "Failed to encode: " << cpp_strerror(r) << std::endl;
     return {};
@@ -197,6 +197,17 @@ template <typename SInfo>
 int ECEncoder<SInfo>::get_m()
 {
   return stripe_info->get_m();
+}
+
+/**
+ * Return chunksize for the stripe
+ *
+ * @returns int Chunksize for the stripe
+ */
+template <typename SInfo>
+int ECEncoder<SInfo>::get_chunk_size()
+{
+  return stripe_info->get_chunk_size();
 }
 }
 }

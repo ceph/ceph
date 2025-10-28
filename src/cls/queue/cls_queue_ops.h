@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_CLS_QUEUE_OPS_H
 #define CEPH_CLS_QUEUE_OPS_H
@@ -36,12 +36,14 @@ struct cls_queue_init_op {
     f->dump_unsigned("urgent_data_len", bl_urgent_data.length());
   }
 
-  static void generate_test_instances(std::list<cls_queue_init_op*>& o) {
-    o.push_back(new cls_queue_init_op);
-    o.push_back(new cls_queue_init_op);
-    o.back()->queue_size = 1024;
-    o.back()->max_urgent_data_size = 1024;
-    o.back()->bl_urgent_data.append(std::string_view("data"));
+  static std::list<cls_queue_init_op> generate_test_instances() {
+    std::list<cls_queue_init_op> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().queue_size = 1024;
+    o.back().max_urgent_data_size = 1024;
+    o.back().bl_urgent_data.append(std::string_view("data"));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_init_op)
@@ -67,11 +69,13 @@ struct cls_queue_enqueue_op {
     f->dump_unsigned("data_vec_len", bl_data_vec.size());
   }
 
-  static void generate_test_instances(std::list<cls_queue_enqueue_op*>& o) {
-    o.push_back(new cls_queue_enqueue_op);
-    o.push_back(new cls_queue_enqueue_op);
-    o.back()->bl_data_vec.push_back(ceph::buffer::list());
-    o.back()->bl_data_vec.back().append(std::string_view("data"));
+  static std::list<cls_queue_enqueue_op> generate_test_instances() {
+    std::list<cls_queue_enqueue_op> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().bl_data_vec.push_back(ceph::buffer::list());
+    o.back().bl_data_vec.back().append(std::string_view("data"));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_enqueue_op)
@@ -106,11 +110,13 @@ struct cls_queue_list_op {
     f->dump_string("start_marker", start_marker);
   }
 
-  static void generate_test_instances(std::list<cls_queue_list_op*>& o) {
-    o.push_back(new cls_queue_list_op);
-    o.push_back(new cls_queue_list_op);
-    o.back()->max = 123;
-    o.back()->start_marker = "foo";
+  static std::list<cls_queue_list_op> generate_test_instances() {
+    std::list<cls_queue_list_op> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().max = 123;
+    o.back().start_marker = "foo";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_list_op)
@@ -144,14 +150,16 @@ struct cls_queue_list_ret {
     encode_json("entries", entries, f);
   }
 
-  static void generate_test_instances(std::list<cls_queue_list_ret*>& o) {
-    o.push_back(new cls_queue_list_ret);
-    o.back()->is_truncated = true;
-    o.back()->next_marker = "foo";
-    o.back()->entries.push_back(cls_queue_entry());
-    o.back()->entries.push_back(cls_queue_entry());
-    o.back()->entries.back().marker = "id";
-    o.back()->entries.back().data.append(std::string_view("data"));
+  static std::list<cls_queue_list_ret> generate_test_instances() {
+    std::list<cls_queue_list_ret> o;
+    o.emplace_back();
+    o.back().is_truncated = true;
+    o.back().next_marker = "foo";
+    o.back().entries.push_back(cls_queue_entry());
+    o.back().entries.push_back(cls_queue_entry());
+    o.back().entries.back().marker = "id";
+    o.back().entries.back().data.append(std::string_view("data"));
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_list_ret)
@@ -176,10 +184,12 @@ struct cls_queue_remove_op {
   void dump(ceph::Formatter *f) const {
     f->dump_string("end_marker", end_marker);
   }
-  static void generate_test_instances(std::list<cls_queue_remove_op*>& o) {
-    o.push_back(new cls_queue_remove_op);
-    o.push_back(new cls_queue_remove_op);
-    o.back()->end_marker = "foo";
+  static std::list<cls_queue_remove_op> generate_test_instances() {
+    std::list<cls_queue_remove_op> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().end_marker = "foo";
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_remove_op)
@@ -204,9 +214,11 @@ struct cls_queue_get_capacity_ret {
   void dump(ceph::Formatter *f) const {
     f->dump_unsigned("queue_capacity", queue_capacity);
   }
-  static void generate_test_instances(std::list<cls_queue_get_capacity_ret*>& o) {
-    o.push_back(new cls_queue_get_capacity_ret);
-    o.back()->queue_capacity = 123;
+  static std::list<cls_queue_get_capacity_ret> generate_test_instances() {
+    std::list<cls_queue_get_capacity_ret> o;
+    o.emplace_back();
+    o.back().queue_capacity = 123;
+    return o;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_get_capacity_ret)

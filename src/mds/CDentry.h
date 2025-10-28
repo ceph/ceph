@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -28,6 +29,7 @@
 #include "MDSCacheObject.h"
 #include "SimpleLock.h"
 #include "LocalLockC.h"
+#include "LogSegmentRef.h"
 
 class filepath;
 class BatchOp;
@@ -251,8 +253,14 @@ public:
   const CDentry& operator= (const CDentry& right);
 
   // misc
-  void make_path_string(std::string& s, bool projected=false) const;
-  void make_path(filepath& fp, bool projected=false) const;
+  void make_trimmed_path_string(std::string& s, bool projected,
+				int path_comp_count=10) const;
+  void make_path_string(std::string& s, bool projected=false,
+		        int path_comp_count=-1) const;
+  void make_path(filepath& fp, bool projected=false,
+		 int path_comp_count=-1) const;
+  void make_trimmed_path(filepath& fp, bool projected=false,
+			 int path_comp_count=10) const;
 
   // -- version --
   version_t get_version() const { return version; }
@@ -263,8 +271,8 @@ public:
   mds_authority_t authority() const override;
 
   version_t pre_dirty(version_t min=0);
-  void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t pv, LogSegment *ls);
+  void _mark_dirty(LogSegmentRef const& ls);
+  void mark_dirty(version_t pv, LogSegmentRef const& ls);
   void mark_clean();
 
   void mark_new();
@@ -302,7 +310,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegment *ls) {
+  void decode_import(ceph::buffer::list::const_iterator& blp, LogSegmentRef const& ls) {
     DECODE_START(1, blp);
     decode(first, blp);
     __u32 nstate;

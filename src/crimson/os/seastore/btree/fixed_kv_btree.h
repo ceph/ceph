@@ -1,5 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab expandtab
+// vim: ts=8 sw=2 sts=2 expandtab expandtab
 
 #pragma once
 
@@ -12,6 +12,7 @@
 
 #include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/seastore_types.h"
+#include "crimson/os/seastore/transaction_interruptor.h"
 #include "crimson/os/seastore/btree/btree_types.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/linked_tree_node.h"
@@ -51,10 +52,6 @@ class FixedKVBtree {
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
   using LeafNodeRef = TCachedExtentRef<leaf_node_t>;
-
-  using base_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error>;
-  using base_iertr = trans_iertr<base_ertr>;
 
   class iterator;
   using iterator_fut = base_iertr::future<iterator>;
@@ -286,14 +283,13 @@ public:
     }
 
     // handle_boundary() must be called before get_cursor
-    std::unique_ptr<cursor_t> get_cursor(op_context_t ctx) const {
-      assert(!is_end());
-      return std::make_unique<cursor_t>(
+    boost::intrusive_ptr<cursor_t> get_cursor(op_context_t ctx) const {
+      return new cursor_t(
         ctx,
 	leaf.node,
         leaf.node->modifications,
-        get_key(),
-        std::make_optional(get_val()),
+        is_end() ? min_max_t<node_key_t>::max : get_key(),
+        is_end() ? std::nullopt : std::make_optional(get_val()),
         leaf.pos);
     }
 
@@ -491,31 +487,37 @@ public:
 
   iterator make_partial_iter(
     op_context_t c,
+    cursor_t &cursor)
+  {
+    return make_partial_iter(
+      c,
+      cursor.parent->template cast<leaf_node_t>(),
+      cursor.key,
+      cursor.pos);
+  }
+
+  boost::intrusive_ptr<cursor_t> get_cursor(
+    op_context_t c,
+    TCachedExtentRef<leaf_node_t> leaf,
+    node_key_t key)
+  {
+    auto it = leaf->lower_bound(key);
+    assert(it != leaf->end());
+    return new cursor_t(
+      c, leaf, leaf->modifications,
+      key, it.get_val(), it.get_offset());
+  }
+
+  boost::intrusive_ptr<cursor_t> get_cursor(
+    op_context_t c,
     TCachedExtentRef<leaf_node_t> leaf,
     node_key_t key,
     uint16_t pos)
   {
-    assert(leaf->is_valid());
-    assert(leaf->is_viewable_by_trans(c.trans).first);
-
-    auto depth = get_root().get_depth();
-#ifndef NDEBUG
-    auto ret = iterator(
-      depth,
-      depth == 1
-        ? iterator::state_t::FULL
-        : iterator::state_t::PARTIAL);
-#else
-    auto ret = iterator(depth);
-#endif
-    ret.leaf.node = leaf;
-    ret.leaf.pos = pos;
-    if (ret.is_end()) {
-      ceph_assert(key == min_max_t<node_key_t>::max);
-    } else {
-      ceph_assert(key == ret.get_key());
-    }
-    return ret;
+    assert(leaf->get_size() != pos);
+    auto it = leaf->iter_idx(pos);
+    assert(it.get_key() == key);
+    return new cursor_t(c, leaf, leaf->modifications, key, it.get_val(), pos);
   }
 
   /**
@@ -1358,6 +1360,35 @@ public:
 private:
   RootBlockRef root_block;
 
+  iterator make_partial_iter(
+    op_context_t c,
+    TCachedExtentRef<leaf_node_t> leaf,
+    node_key_t key,
+    uint16_t pos)
+  {
+    assert(leaf->is_valid());
+    assert(leaf->is_viewable_by_trans(c.trans).first);
+
+    auto depth = get_root().get_depth();
+#ifndef NDEBUG
+    auto ret = iterator(
+      depth,
+      depth == 1
+        ? iterator::state_t::FULL
+        : iterator::state_t::PARTIAL);
+#else
+    auto ret = iterator(depth);
+#endif
+    ret.leaf.node = leaf;
+    ret.leaf.pos = pos;
+    if (ret.is_end()) {
+      ceph_assert(key == min_max_t<node_key_t>::max);
+    } else {
+      ceph_assert(key == ret.get_key());
+    }
+    return ret;
+  }
+
   template <typename T>
   using node_position_t = typename iterator::template node_position_t<T>;
 
@@ -1403,7 +1434,7 @@ private:
         }
       }
     };
-    return c.cache.template get_absent_extent<internal_node_t>(
+    return c.cache.template maybe_get_absent_extent<internal_node_t>(
       c.trans,
       offset,
       node_size,
@@ -1487,7 +1518,7 @@ private:
         }
       }
     };
-    return c.cache.template get_absent_extent<leaf_node_t>(
+    return c.cache.template maybe_get_absent_extent<leaf_node_t>(
       c.trans,
       offset,
       node_size,

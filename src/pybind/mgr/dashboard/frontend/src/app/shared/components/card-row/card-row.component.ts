@@ -15,7 +15,7 @@ export class CardRowComponent implements OnChanges {
   link: string;
 
   @Input()
-  data: any;
+  data: any = null;
 
   @Input()
   summaryType = 'default';
@@ -25,15 +25,15 @@ export class CardRowComponent implements OnChanges {
 
   hwNames = HardwareNameMapping;
   icons = Icons;
-  total: number;
+  total: number = null;
   dropdownTotalError: number = 0;
   dropdownToggled: boolean = false;
 
   ngOnChanges(): void {
-    if (this.data.total || this.data.total === 0) {
-      this.total = this.data.total;
+    if (this.data?.total || this.data?.total === 0) {
+      this.total = this.data?.total;
     } else if (this.summaryType === 'iscsi') {
-      this.total = this.data.up + this.data.down || 0;
+      this.total = this.data?.up + this.data?.down;
     } else {
       this.total = this.data;
     }

@@ -94,6 +94,28 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 ENDOFKEY
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
+
+        # From ceph-build.git:src/scripts/build_utils.sh:setup_gcc_hook.
+        # Do this here instead of in the hook when running in a container
+        # (like build-with-container.py).  Test if pid1 is init or systemd.
+
+        if ! ps -p 1 -o comm= | grep -qE "init|systemd"; then
+            $SUDO update-alternatives --remove-all gcc
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+            $SUDO update-alternatives \
+              --install /usr/bin/gcc gcc /usr/bin/gcc-\${old} 10 \
+              --slave   /usr/bin/g++ g++ /usr/bin/g++-\${old}
+
+            $SUDO update-alternatives --auto gcc
+
+            # cmake uses the latter by default
+            $SUDO ln -nsf /usr/bin/gcc /usr/bin/\${ARCH}-linux-gnu-gcc
+            $SUDO ln -nsf /usr/bin/g++ /usr/bin/\${ARCH}-linux-gnu-g++
+        fi
     fi
 }
 
@@ -320,13 +342,22 @@ function preload_wheels_for_tox() {
 }
 
 for_make_check=false
-if tty -s; then
+if [ "$FOR_MAKE_CHECK" ]; then
+    case "$FOR_MAKE_CHECK" in
+        true|1|yes)
+            for_make_check=true
+        ;;
+        false|0|no)
+            for_make_check=false
+        ;;
+        *)
+            echo "error: unexpected FOR_MAKE_CHECK value: ${FOR_MAKE_CHECK}"
+            exit 2
+        ;;
+    esac
+elif tty -s; then
     # interactive
     for_make_check=true
-elif [ $FOR_MAKE_CHECK ]; then
-    for_make_check=true
-else
-    for_make_check=false
 fi
 
 if [ x$(uname)x = xFreeBSDx ]; then
@@ -426,8 +457,9 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 ;;
             *Jammy*)
-                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 $SUDO apt-get install -y gcc
+		ensure_decent_gcc_on_ubuntu 12 jammy
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -503,14 +535,11 @@ else
                     $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = centos -a $MAJOR_VERSION = 9 ; then
+                elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
                     $SUDO dnf config-manager --set-enabled crb
-                elif test $ID = centos -a $MAJOR_VERSION = 10 ; then
-                    $SUDO dnf config-manager --set-enabled crb
-                    setup_lab_extras_repo
-                elif test $ID = rocky -a $MAJOR_VERSION = 10 ; then
-                    $SUDO dnf config-manager --set-enabled crb
-                    setup_lab_extras_repo
+                    if [ "$MAJOR_VERSION" -eq 10 ]; then
+                        setup_lab_extras_repo
+                    fi
                 elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
                     dts_ver=11
                     $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"

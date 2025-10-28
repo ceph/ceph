@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -84,7 +85,7 @@ namespace ECTransactionL {
 	extent_set raw_write_set;
 	for (auto &&extent: op.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
-	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
+	  if (std::holds_alternative<BufferUpdate::CloneRange>(extent.get_val())) {
 	    ceph_assert(
 	      0 ==
 	      "CloneRange is not allowed, do_op should have returned ENOTSUPP");

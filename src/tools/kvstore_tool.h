@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -47,7 +47,6 @@ public:
             bool read_only,
 	    bool need_open_db = true,
 	    bool need_stats = false);
-  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
   uint32_t traverse(const std::string& prefix,
                     const bool do_crc,
                     const bool do_value_dump,
@@ -80,4 +79,9 @@ public:
 
   int print_stats() const;
   int build_size_histogram(const std::string& prefix) const;
+
+#ifdef WITH_BLUESTORE
+private:
+  int load_bluestore(const std::string& path, bool read_only, bool need_open_db);
+#endif // WITH_BLUESTORE
 };

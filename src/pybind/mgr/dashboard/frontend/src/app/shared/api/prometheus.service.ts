@@ -1,16 +1,27 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, forkJoin, timer } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, Subscription, forkJoin, of, timer } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
 import {
   AlertmanagerAlert,
   AlertmanagerNotification,
+  GroupAlertmanagerAlert,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
 import moment from 'moment';
+
+export type PromethuesGaugeMetricResult = {
+  metric: Record<string, string>; // metric metadata
+  value: [number, string]; // timestamp, value
+};
+
+export type PromqlGuageMetric = {
+  resultType: 'vector';
+  result: PromethuesGaugeMetricResult[];
+};
 
 @Injectable({
   providedIn: 'root'
@@ -38,8 +49,14 @@ export class PrometheusService {
     }
   }
 
+  // Range Queries
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
+  }
+
+  // Guage Queries
+  getPrometheusQueryData(params: { params: string }): Observable<PromqlGuageMetric> {
+    return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
@@ -61,6 +78,11 @@ export class PrometheusService {
   getAlerts(clusterFilteredAlerts = false, params = {}): Observable<AlertmanagerAlert[]> {
     params['cluster_filter'] = clusterFilteredAlerts;
     return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
+  }
+
+  getGroupedAlerts(clusterFilteredAlerts = false, params: Record<string, any> = {}) {
+    params['cluster_filter'] = clusterFilteredAlerts;
+    return this.http.get<GroupAlertmanagerAlert[]>(`${this.baseURL}/alertgroup`, { params });
   }
 
   getSilences(params = {}): Observable<AlertmanagerSilence[]> {
@@ -131,47 +153,71 @@ export class PrometheusService {
     return data.value || data.instance || '';
   }
 
-  getPrometheusQueriesData(
-    selectedTime: any,
-    queries: any,
-    queriesResults: any,
-    checkNan?: boolean
-  ) {
+  getGaugeQueryData(query: string): Observable<PromqlGuageMetric> {
+    let result$: Observable<PromqlGuageMetric> = of({ result: [] } as PromqlGuageMetric);
+
+    this.ifPrometheusConfigured(() => {
+      result$ = this.getPrometheusQueryData({ params: query }).pipe(
+        map((result: PromqlGuageMetric) => result),
+        catchError(() => of({ result: [] } as PromqlGuageMetric))
+      );
+    });
+
+    return result$;
+  }
+
+  formatGuageMetric(data: string): number {
+    const value: number = parseFloat(data ?? '');
+    // Guage value can be "Nan", "+inf", "-inf" in case of errors
+    return isFinite(value) ? value : null;
+  }
+
+  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
     this.ifPrometheusConfigured(() => {
       if (this.timerGetPrometheusDataSub) {
         this.timerGetPrometheusDataSub.unsubscribe();
       }
-      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-        selectedTime = this.updateTimeStamp(selectedTime);
-        for (const queryName in queries) {
-          if (queries.hasOwnProperty(queryName)) {
-            const query = queries[queryName];
-            this.getPrometheusData({
-              params: encodeURIComponent(query),
-              start: selectedTime['start'],
-              end: selectedTime['end'],
-              step: selectedTime['step']
-            }).subscribe((data: any) => {
-              if (data.result.length) {
-                queriesResults[queryName] = data.result[0].values;
-              } else {
-                queriesResults[queryName] = [];
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime)
+        .pipe(
+          switchMap(() => {
+            selectedTime = this.updateTimeStamp(selectedTime);
+            const observables = [];
+            for (const queryName in queries) {
+              if (queries.hasOwnProperty(queryName)) {
+                const query = queries[queryName];
+                observables.push(
+                  this.getPrometheusData({
+                    params: encodeURIComponent(query),
+                    start: selectedTime['start'],
+                    end: selectedTime['end'],
+                    step: selectedTime['step']
+                  }).pipe(map((data: any) => ({ queryName, data })))
+                );
               }
-              if (
-                queriesResults[queryName] !== undefined &&
-                queriesResults[queryName] !== '' &&
-                checkNan
-              ) {
-                queriesResults[queryName].forEach((valueArray: any[]) => {
-                  if (isNaN(parseFloat(valueArray[1]))) {
-                    valueArray[1] = '0';
-                  }
-                });
-              }
-            });
-          }
-        }
-      });
+            }
+            return forkJoin(observables);
+          })
+        )
+        .subscribe((results: any) => {
+          results.forEach(({ queryName, data }: any) => {
+            if (data.result.length) {
+              queriesResults[queryName] = data.result[0].values;
+            } else {
+              queriesResults[queryName] = [];
+            }
+            if (
+              queriesResults[queryName] !== undefined &&
+              queriesResults[queryName] !== '' &&
+              checkNan
+            ) {
+              queriesResults[queryName].forEach((valueArray: any[]) => {
+                if (isNaN(parseFloat(valueArray[1]))) {
+                  valueArray[1] = '0';
+                }
+              });
+            }
+          });
+        });
     });
     return queriesResults;
   }

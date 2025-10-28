@@ -17,4 +17,8 @@ export class DashboardV3PageHelper extends PageHelper {
 
     return cy.get('@cards').its(indexOrTitle);
   }
+
+  cardRow(rowName: string) {
+    return cy.get(`[data-testid=${rowName}]`);
+  }
 }

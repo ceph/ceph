@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -12,7 +13,6 @@
 #pragma once
 
 #include <concepts>
-#include <coroutine>
 #include <cstddef>
 #include <string>
 #include <type_traits>
@@ -34,6 +34,10 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+
+#if !defined(__clang__) && defined(__GNUC__) && (__GNUC__ < 13)
+#define BROKEN_CO_COMPOSED
+#endif
 
 /// \file neorados/cls/common.h
 ///

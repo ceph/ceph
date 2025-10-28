@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -374,6 +375,7 @@ IGNORE_DEPRECATED
 END_IGNORE_DEPRECATED
     }
   };
+
   std::unique_ptr<ECRecPred> get_is_recoverable_predicate() const {
     return std::make_unique<ECRecPred>(ec_impl);
   }
@@ -381,9 +383,13 @@ END_IGNORE_DEPRECATED
   unsigned get_ec_data_chunk_count() const {
     return ec_impl->get_data_chunk_count();
   }
+
   int get_ec_stripe_chunk_size() const {
     return sinfo.get_chunk_size();
   }
+
+  bool get_ec_supports_crc_encode_decode() const { return false; }
+
   uint64_t object_size_to_shard_size(const uint64_t size) const {
     if (size == std::numeric_limits<uint64_t>::max()) {
       return size;

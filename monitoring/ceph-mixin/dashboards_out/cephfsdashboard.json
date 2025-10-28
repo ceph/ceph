@@ -876,7 +876,7 @@
                      }
                   ]
                },
-               "unit": "percentunit"
+               "unit": "percent"
             }
          },
          "gridPos": {
@@ -1038,7 +1038,7 @@
                      }
                   ]
                },
-               "unit": "percentunit"
+               "unit": "percent"
             }
          },
          "gridPos": {
@@ -3011,7 +3011,7 @@
                            "viz": false
                         },
                         "lineInterpolation": "linear",
-                        "lineWidth": 0,
+                        "lineWidth": 1,
                         "pointSize": 5,
                         "scaleDistribution": {
                            "type": "linear"
@@ -3648,7 +3648,7 @@
                            "viz": false
                         },
                         "lineInterpolation": "linear",
-                        "lineWidth": 0,
+                        "lineWidth": 1,
                         "pointSize": 5,
                         "scaleDistribution": {
                            "type": "linear"
@@ -4312,7 +4312,7 @@
             },
             "hide": 0,
             "includeAll": true,
-            "label": "Name",
+            "label": "Filesystem",
             "multi": false,
             "name": "name",
             "options": [ ],

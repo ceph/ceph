@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,8 +15,16 @@
 #ifndef CEPH_MDBALANCER_H
 #define CEPH_MDBALANCER_H
 
-#include "mdstypes.h"
+#include <cstdint>
+#include <map>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "mdstypes.h" // for dirfrag_t, mds_load_t
 #include "include/types.h"
+#include "common/ceph_time.h" // for coarse_mono_time()
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "common/Clock.h"
 #include "common/ref.h"
 

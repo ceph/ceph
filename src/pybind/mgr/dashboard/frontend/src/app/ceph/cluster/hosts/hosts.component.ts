@@ -223,29 +223,23 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTemplate: this.hostNameTpl
       },
       {
-        name: $localize`Service Instances`,
-        prop: 'service_instances',
-        flexGrow: 1.5,
-        cellTemplate: this.servicesTpl
-      },
-      {
         name: $localize`Labels`,
         prop: 'labels',
         flexGrow: 1,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
-          class: 'badge-dark'
+          class: 'tag-dark'
         }
       },
       {
         name: $localize`Status`,
         prop: 'status',
         flexGrow: 0.8,
-        cellTransformation: CellTemplate.badge,
+        cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' },
-            available: { class: 'badge-success' }
+            maintenance: { class: 'tag-warning' },
+            available: { class: 'tag-success' }
           }
         }
       },

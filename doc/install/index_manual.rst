@@ -9,7 +9,7 @@ Get Software
 ============
 
 There are several methods for getting Ceph software. The easiest and most common
-method is to `get packages`_ by adding repositories for use with package
+method is to :ref:`get packages <packages>` by adding repositories for use with package
 management tools such as the Advanced Package Tool (APT) or Yellowdog Updater,
 Modified (YUM). You may also retrieve pre-compiled packages from the Ceph
 repository. Finally, you can retrieve tarballs or clone the Ceph source code
@@ -66,4 +66,3 @@ sequence.
 .. toctree::
    :maxdepth: 2
 
-.. _get packages: ../get-packages

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_s3select_private.h"
 
@@ -812,7 +812,7 @@ int RGWSelectObj_ObjStore_S3::parquet_processing(bufferlist& bl, off_t ofs, off_
     }
     ldout(s->cct, 10) << "S3select:append_in_callback = " << append_in_callback << dendl;
     if (requested_buffer.size() < m_request_range) {
-      ldout(s->cct, 10) << "S3select: need another round buffe-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
+      ldout(s->cct, 10) << "S3select: need another round buffer-size: " << requested_buffer.size() << " request range length:" << m_request_range << dendl;
       return 0;
     } else {//buffer is complete
       ldout(s->cct, 10) << "S3select: buffer is complete " << requested_buffer.size() << " request range length:" << m_request_range << dendl;

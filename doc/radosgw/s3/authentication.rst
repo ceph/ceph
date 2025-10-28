@@ -42,7 +42,7 @@ In a radosgw instance that is configured with authentication against
 OpenStack Keystone, it is possible to use Keystone as an authoritative
 source for S3 API authentication. To do so, you must set:
 
-* the ``rgw keystone`` configuration options explained in :doc:`../keystone`,
+* the ``rgw keystone`` configuration options explained in :ref:`radosgw-keystone`,
 * ``rgw s3 auth use keystone = true``.
 
 In addition, a user wishing to use the S3 API must obtain an AWS-style
@@ -66,7 +66,7 @@ access to radosgw.
 
 .. note:: Consider that most production radosgw deployments
           authenticating against OpenStack Keystone are also set up
-          for :doc:`../multitenancy`, for which special
+          for :ref:`rgw-multitenancy`, for which special
           considerations apply with respect to S3 signed URLs and
           public read ACLs.
 

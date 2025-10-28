@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 /* The standard bitset library does not behave like a "std::set", making it
  * hard to use as a drop-in replacement. This templated class is intended to
@@ -39,7 +39,11 @@ class bitset_set {
     KeyT pos;
 
    public:
+    using value_type = const KeyT;
     using difference_type = std::int64_t;
+    using pointer = const value_type *;
+    using reference = const value_type &;
+    using iterator_category = std::forward_iterator_tag;
 
     const_iterator() : set(nullptr), pos(0) {
     }
@@ -279,6 +283,29 @@ class bitset_set {
   const_iterator find(const KeyT &k) const {
     if (contains(k)) {
       return const_iterator(this, k);
+    }
+    return end();
+  }
+
+  /** @return a const_iterator to the nth key or end if it does not exist.
+   *
+   * This is called "find_nth" rather an overloading find, as its clearer
+   * what it is doing find(4) may imply "find(Key(4))"
+   */
+  const_iterator find_nth(unsigned int n) const {
+    for (size_t i = 0; i < word_count; ++i) {
+      unsigned int bits_set = std::popcount(words[i]);
+      if (bits_set > n) {
+        uint64_t tmp = words[i];
+        // This could be optimised with BMI _pdep_u64
+        for (unsigned int j = 0; j < n; ++j) {
+          // This clears the least significant bit that is set to 1.
+          tmp &= tmp - 1;
+        }
+        return const_iterator(this,
+          std::countr_zero(tmp) + i * bits_per_uint64_t);
+      }
+      n -= bits_set;
     }
     return end();
   }

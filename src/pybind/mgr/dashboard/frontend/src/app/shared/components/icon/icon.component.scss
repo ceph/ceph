@@ -1,0 +1,40 @@
+@use '@carbon/styles/scss/theme';
+
+/*
+!important required to override the parent component's carbon css.
+
+e.g. carbon header adds following which changes colors of notification panel icons:
+
+.cds--btn.cds--btn--icon-only.cds--header__action svg {
+    fill: var(--cds-icon-secondary, #c6c6c6);
+ }
+
+Also  using 'fill' as that is coming from carbon (see above example).
+Using `color` in css and seyting svg will fill="currentColor does not work.
+*/
+
+.success-icon {
+  fill: theme.$support-success !important;
+}
+
+.danger-icon {
+  fill: theme.$support-error !important;
+}
+
+//@TODO: this naming needs to be changed
+// Do this after converting Icons enum to const
+.infoCircle-icon {
+  fill: theme.$support-info !important;
+}
+
+.warning-icon {
+  fill: theme.$support-caution-major !important;
+}
+
+.error-icon {
+  fill: theme.$support-error !important;
+}
+
+.info-icon {
+  fill: theme.$support-info !important;
+}

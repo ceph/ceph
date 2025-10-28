@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -106,16 +107,18 @@ void osd_info_t::decode(ceph::buffer::list::const_iterator& bl)
   decode(lost_at, bl);
 }
 
-void osd_info_t::generate_test_instances(list<osd_info_t*>& o)
+list<osd_info_t> osd_info_t::generate_test_instances()
 {
-  o.push_back(new osd_info_t);
-  o.push_back(new osd_info_t);
-  o.back()->last_clean_begin = 1;
-  o.back()->last_clean_end = 2;
-  o.back()->up_from = 30;
-  o.back()->up_thru = 40;
-  o.back()->down_at = 5;
-  o.back()->lost_at = 6;
+  list<osd_info_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().last_clean_begin = 1;
+  o.back().last_clean_end = 2;
+  o.back().up_from = 30;
+  o.back().up_thru = 40;
+  o.back().down_at = 5;
+  o.back().lost_at = 6;
+  return o;
 }
 
 ostream& operator<<(ostream& out, const osd_info_t& info)
@@ -188,14 +191,16 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
-void osd_xinfo_t::generate_test_instances(list<osd_xinfo_t*>& o)
+list<osd_xinfo_t> osd_xinfo_t::generate_test_instances()
 {
-  o.push_back(new osd_xinfo_t);
-  o.push_back(new osd_xinfo_t);
-  o.back()->down_stamp = utime_t(2, 3);
-  o.back()->laggy_probability = .123;
-  o.back()->laggy_interval = 123456;
-  o.back()->old_weight = 0x7fff;
+  list<osd_xinfo_t> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().down_stamp = utime_t(2, 3);
+  o.back().laggy_probability = .123;
+  o.back().laggy_interval = 123456;
+  o.back().old_weight = 0x7fff;
+  return o;
 }
 
 ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
@@ -369,7 +374,7 @@ bool OSDMap::subtree_type_is_down(
 {
   if (id >= 0) {
     bool is_down_ret = is_down(id);
-    if (!is_out(id)) {
+    if (!is_out(id) && !(osd_state[id] & CEPH_OSD_NEW)) {
       if (is_down_ret) {
         down_in_osds->insert(id);
       } else {
@@ -1387,9 +1392,11 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->close_section();
 }
 
-void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
+auto OSDMap::Incremental::generate_test_instances() -> list<Incremental>
 {
-  o.push_back(new Incremental);
+  list<Incremental> o;
+  o.emplace_back();
+  return o;
 }
 
 // ----------------------------------
@@ -2034,9 +2041,17 @@ void OSDMap::clean_temps(CephContext *cct,
       // force a change of primary shard - do not remove pg_temp
       // if it is being used for this purpose
       if (pool->allows_ecoptimizations()) {
-	if (nextmap._pick_primary(pg.second) != primary) {
-	  // pg_temp still required
-	  keep = true;
+        // primary might not be in raw_up - so keep pg_temp unless
+	// proven that the primary is not a non-primary shard
+	keep = true;
+        for (unsigned int i = 0; i < raw_up.size(); ++i) {
+	  if (raw_up[i] == primary) {
+	    if (!pool->is_nonprimary_shard(shard_id_t(i))) {
+	      // pg_temp not required
+	      keep = false;
+	    }
+	    break;
+	  }
 	}
       }
       if (!keep) {
@@ -4251,17 +4266,19 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->close_section();
 }
 
-void OSDMap::generate_test_instances(list<OSDMap*>& o)
+list<OSDMap> OSDMap::generate_test_instances()
 {
-  o.push_back(new OSDMap);
+  list<OSDMap> o;
+  o.emplace_back();
 
   CephContext *cct = new CephContext(CODE_ENVIRONMENT_UTILITY);
-  o.push_back(new OSDMap);
+  o.emplace_back();
   uuid_d fsid;
-  o.back()->build_simple(cct, 1, fsid, 16);
-  o.back()->created = o.back()->modified = utime_t(1, 2);  // fix timestamp
-  o.back()->blocklist[entity_addr_t()] = utime_t(5, 6);
+  o.back().build_simple(cct, 1, fsid, 16);
+  o.back().created = o.back().modified = utime_t(1, 2);  // fix timestamp
+  o.back().blocklist[entity_addr_t()] = utime_t(5, 6);
   cct->put();
+  return o;
 }
 
 string OSDMap::get_flag_string(unsigned f)

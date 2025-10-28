@@ -312,11 +312,13 @@ options:
 - name: mon_target_pg_per_osd
   type: uint
   level: advanced
-  desc: Automated PG management creates this many PGs per OSD
-  long_desc: When creating pools, the automated PG management logic will attempt to
-    reach this target.  In some circumstances, it may exceed this target, up to the
+  desc: Target number of PG replicas per OSD
+  long_desc: The placement group (PG) autoscaler will arrange for approximately this number of PG
+    replicas on each OSD as shown by the PGS column of a ``ceph osd df``
+    report. In some circumstances it may exceed this target, up to the
     ``mon_max_pg_per_osd`` limit. Conversely, a lower number of PGs per OSD may be
-    created if the cluster is not yet fully utilised
+    set if the cluster is not yet fully utilized or when the sum of power-of-two
+    per-pool ``pg_num`` values does not permit a perfect fit.
   default: 100
   min: 1
 # min pgs per osd for reweight-by-pg command

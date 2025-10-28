@@ -27,14 +27,13 @@ class Environment : public ::testing::Environment {
 
     void SetUp() override {
       std::vector<const char*> args;
-      std::string conf_file_list;
-      std::string cluster = "";
-      CephInitParameters iparams = ceph_argparse_early_args(
-	args, CEPH_ENTITY_TYPE_CLIENT,
-	&cluster, &conf_file_list);
+      auto _cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			      CODE_ENVIRONMENT_UTILITY,
+			      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-      cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {}); 
+      cct = _cct.get();
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
+      common_init_finish(g_ceph_context);
       
       redisHost = cct->_conf->rgw_d4n_address; 
     }
@@ -71,9 +70,9 @@ class LFUDAPolicyFixture : public ::testing::Test {
       };
 
       conn = std::make_shared<connection>(net::make_strand(io));
-      rgw::cache::Partition partition_info{ .location = "RedisCache", .size = 1000 };
+      rgw::cache::Partition partition_info{ .location = "RedisCache", .reserve_size = 1073741824 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
-      policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
+      policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda", null_yield);
       dir = new rgw::d4n::BlockDirectory{conn};
 
       ASSERT_NE(dir, nullptr);

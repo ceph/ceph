@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "crimson/os/seastore/seastore_types.h"
 
@@ -99,7 +99,7 @@ std::ostream &operator<<(std::ostream &out, const laddr_t &laddr) {
 }
 
 std::ostream &operator<<(std::ostream &out, const laddr_offset_t &laddr_offset) {
-  return out << laddr_offset.get_aligned_laddr()
+  return out << laddr_offset.get_laddr()
 	     << "+0x" << std::hex << laddr_offset.get_offset() << std::dec;
 }
 
@@ -287,8 +287,6 @@ std::ostream &operator<<(std::ostream &out, rewrite_gen_printer_t gen)
     return out << "GEN_INL";
   } else if (gen.gen == OOL_GENERATION) {
     return out << "GEN_OOL";
-  } else if (gen.gen > REWRITE_GENERATIONS) {
-    return out << "GEN_INVALID(" << (unsigned)gen.gen << ")!";
   } else {
     return out << "GEN(" << (unsigned)gen.gen << ")";
   }

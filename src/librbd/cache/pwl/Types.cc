@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <iostream>
 #include "Types.h"
@@ -71,22 +71,24 @@ void WriteLogCacheEntry::dump(Formatter *f) const {
   f->dump_unsigned("entry_index", entry_index);
 }
 
-void WriteLogCacheEntry::generate_test_instances(std::list<WriteLogCacheEntry*>& ls) {
-  ls.push_back(new WriteLogCacheEntry());
-  ls.push_back(new WriteLogCacheEntry);
-  ls.back()->sync_gen_number = 1;
-  ls.back()->write_sequence_number = 1;
-  ls.back()->image_offset_bytes = 1;
-  ls.back()->write_bytes = 1;
-  ls.back()->write_data_pos = 1;
-  ls.back()->set_entry_valid(true);
-  ls.back()->set_sync_point(true);
-  ls.back()->set_sequenced(true);
-  ls.back()->set_has_data(true);
-  ls.back()->set_discard(true);
-  ls.back()->set_writesame(true);
-  ls.back()->ws_datalen = 1;
-  ls.back()->entry_index = 1;
+std::list<WriteLogCacheEntry> WriteLogCacheEntry::generate_test_instances() {
+  std::list<WriteLogCacheEntry> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().sync_gen_number = 1;
+  ls.back().write_sequence_number = 1;
+  ls.back().image_offset_bytes = 1;
+  ls.back().write_bytes = 1;
+  ls.back().write_data_pos = 1;
+  ls.back().set_entry_valid(true);
+  ls.back().set_sync_point(true);
+  ls.back().set_sequenced(true);
+  ls.back().set_has_data(true);
+  ls.back().set_discard(true);
+  ls.back().set_writesame(true);
+  ls.back().ws_datalen = 1;
+  ls.back().entry_index = 1;
+  return ls;
 }
 
 void WriteLogPoolRoot::dump(Formatter *f) const {
@@ -100,17 +102,19 @@ void WriteLogPoolRoot::dump(Formatter *f) const {
   f->dump_unsigned("first_valid_entry", first_valid_entry);
 }
 
-void WriteLogPoolRoot::generate_test_instances(std::list<WriteLogPoolRoot*>& ls) {
-  ls.push_back(new WriteLogPoolRoot());
-  ls.push_back(new WriteLogPoolRoot);
-  ls.back()->layout_version = 2;
-  ls.back()->cur_sync_gen = 1;
-  ls.back()->pool_size = 1024;
-  ls.back()->flushed_sync_gen = 1;
-  ls.back()->block_size = 4096;
-  ls.back()->num_log_entries = 10000000;
-  ls.back()->first_free_entry = 1;
-  ls.back()->first_valid_entry = 0;
+std::list<WriteLogPoolRoot> WriteLogPoolRoot::generate_test_instances() {
+  std::list<WriteLogPoolRoot> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().layout_version = 2;
+  ls.back().cur_sync_gen = 1;
+  ls.back().pool_size = 1024;
+  ls.back().flushed_sync_gen = 1;
+  ls.back().block_size = 4096;
+  ls.back().num_log_entries = 10000000;
+  ls.back().first_free_entry = 1;
+  ls.back().first_valid_entry = 0;
+  return ls;
 }
 #endif
 

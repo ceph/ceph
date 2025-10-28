@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,9 +16,9 @@
 #ifndef PURGE_QUEUE_H_
 #define PURGE_QUEUE_H_
 
-#include "mds/mdstypes.h"
 #include "common/Finisher.h"
 #include "common/snap_types.h" // for class SnapContext
+#include "include/cephfs/types.h" // for mds_rank_t
 #include "osdc/Journaler.h"
 #include "include/frag.h"
 
@@ -58,7 +59,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(std::list<PurgeItem*>& ls);
+  static std::list<PurgeItem> generate_test_instances();
 
   std::string_view get_type_str() const;
 

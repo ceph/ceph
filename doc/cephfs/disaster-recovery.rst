@@ -22,42 +22,44 @@ separate page: :ref:`disaster-recovery-experts`.
 Data pool damage (files affected by lost data PGs)
 --------------------------------------------------
 
-If a PG is lost in a *data* pool, then the file system will continue
-to operate normally, but some parts of some files will simply
-be missing (reads will return zeros).
+If a PG is lost in a *data* pool, then the file system continues to operate
+normally, but some parts of some files will simply be missing (reads will
+return zeros).
 
-Losing a data PG may affect many files.  Files are split into many objects,
-so identifying which files are affected by loss of particular PGs requires
-a full scan over all object IDs that may exist within the size of a file. 
-This type of scan may be useful for identifying which files require
-restoring from a backup.
+Losing a data pool PG may affect many files. Files are split into many RADOS
+objects, so identifying which files have been affected by the loss of
+particular PGs requires a scan of all RADOS objects storing data for the file.
+This type of scan may be useful for identifying which files must be restored
+from a backup.
 
 .. danger::
 
     This command does not repair any metadata, so when restoring files in
-    this case you must *remove* the damaged file, and replace it in order
-    to have a fresh inode.  Do not overwrite damaged files in place.
+    this case you must *remove* the damaged file and replace it in order
+    to have a fresh inode. Do not overwrite damaged files in place.
 
 If you know that objects have been lost from PGs, use the ``pg_files``
-subcommand to scan for files that may have been damaged as a result:
+subcommand to scan for the files that may have been damaged as a result:
 
 ::
 
     cephfs-data-scan pg_files <path> <pg id> [<pg id>...]
 
-For example, if you have lost data from PGs 1.4 and 4.5, and you would like
-to know which files under /home/bob might have been damaged:
+For example, if you have lost data from PGs 1.4 and 4.5 and you want to know
+which files under ``/home/bob`` have been damaged:
 
 ::
 
     cephfs-data-scan pg_files /home/bob 1.4 4.5
 
-The output will be a list of paths to potentially damaged files, one
+The output is a list of paths to potentially damaged files. One file is listed
 per line.
 
-Note that this command acts as a normal CephFS client to find all the
-files in the file system and read their layouts, so the MDS must be
-up and running.
+.. note:: 
+
+   This command acts as a normal CephFS client to find all the files in the
+   file system and read their layouts. This means that the MDS must be up and
+   running in order for this command to be usable.
 
 Using first-damage.py
 ---------------------

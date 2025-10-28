@@ -3,7 +3,9 @@ import {
   TierTarget,
   TIER_TYPE,
   ZoneGroup,
-  ZoneGroupDetails
+  ZoneGroupDetails,
+  StorageClassDetails,
+  Zone
 } from '../models/rgw-storage-class.model';
 
 export class BucketTieringUtils {
@@ -32,23 +34,59 @@ export class BucketTieringUtils {
 
   private static getTierTargets(tierTarget: TierTarget, zoneGroup: string, targetName: string) {
     const val = tierTarget.val;
-    if (val.tier_type === TIER_TYPE.CLOUD_TIER) {
+    const tierType = val.tier_type;
+    const commonProps = {
+      zonegroup_name: zoneGroup,
+      placement_target: targetName,
+      storage_class: val.storage_class,
+      tier_type: tierType
+    };
+    const cloudProps = {
+      ...commonProps,
+      retain_head_object: val.retain_head_object,
+      allow_read_through: val.allow_read_through,
+      restore_storage_class: val.restore_storage_class,
+      read_through_restore_days: val.read_through_restore_days,
+      acls: val.s3.acl_mappings,
+      ...val.s3
+    };
+
+    if (!tierType || tierType === TIER_TYPE.LOCAL) {
+      return commonProps;
+    }
+
+    if (tierType === TIER_TYPE.GLACIER) {
       return {
-        zonegroup_name: zoneGroup,
-        placement_target: targetName,
-        storage_class: val.storage_class,
-        retain_head_object: val.retain_head_object,
-        allow_read_through: val.allow_read_through,
-        tier_type: val.tier_type,
-        ...val.s3
-      };
-    } else {
-      return {
-        zonegroup_name: zoneGroup,
-        placement_target: targetName,
-        storage_class: val.storage_class,
-        tier_type: TIER_TYPE.LOCAL
+        ...cloudProps,
+        ...val['s3-glacier']
       };
     }
+    return cloudProps;
+  }
+
+  static getZoneInfoHelper(zones: Zone[], selectedStorageClass: Partial<StorageClassDetails>) {
+    if (zones && zones.length > 0 && selectedStorageClass) {
+      const zoneFound = zones.find((zone) =>
+        zone.placement_pools.some(
+          (placement) =>
+            placement.key === selectedStorageClass?.placement_target &&
+            placement.val.storage_classes[selectedStorageClass?.storage_class]
+        )
+      );
+
+      if (zoneFound) {
+        const placement = zoneFound.placement_pools.find(
+          (p) =>
+            p.key === selectedStorageClass?.placement_target &&
+            p.val.storage_classes[selectedStorageClass?.storage_class]
+        );
+        const storageClassEntry =
+          placement?.val.storage_classes[selectedStorageClass?.storage_class];
+        if (storageClassEntry) {
+          return { zone_name: zoneFound.name, data_pool: storageClassEntry.data_pool };
+        }
+      }
+    }
+    return { zone_name: '', data_pool: '' };
   }
 }

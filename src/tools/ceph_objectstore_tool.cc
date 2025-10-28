@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -38,7 +39,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
-#include "osd/ECUtil.h"
+#include "osd/ECUtilL.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -2899,9 +2900,9 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     }
   }
   bufferlist hattr;
-  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  gr = store->getattr(ch, ghobj, ECLegacy::ECUtilL::get_hinfo_key(), hattr);
   if (gr == 0) {
-    ECUtil::HashInfo hinfo;
+    ECLegacy::ECUtilL::HashInfo hinfo;
     auto hp = hattr.cbegin();
     try {
       decode(hinfo, hp);
@@ -4172,6 +4173,11 @@ int main(int argc, char **argv)
         }
 	if (pgidstr != "meta") {
 	  auto ch = fs->open_collection(coll_t(pgid));
+	  if (!ch) {
+	    stringstream ss;
+	    cerr << "PG '" << pgid << "' not found" << std::endl;
+	    throw std::runtime_error(ss.str());
+	  }
 	  if (!ghobj.match(fs->collection_bits(ch), pgid.ps())) {
 	    stringstream ss;
 	    ss << "object " << ghobj << " not contained by pg " << pgid;

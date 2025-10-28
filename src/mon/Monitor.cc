@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -375,28 +376,45 @@ int Monitor::do_admin_command(
     start_election();
     elector.stop_participating();
     out << "stopped responding to quorum, initiated new election";
-  } else if (command == "ops") {
-    (void)op_tracker.dump_ops_in_flight(f);
   } else if (command == "sessions") {
     f->open_array_section("sessions");
     for (auto p : session_map.sessions) {
       f->dump_object("session", *p);
     }
     f->close_section();
-  } else if (command == "dump_historic_ops") {
-    if (!op_tracker.dump_historic_ops(f)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_ops_by_duration" ) {
-    if (op_tracker.dump_historic_ops(f, true)) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
-    }
-  } else if (command == "dump_historic_slow_ops") {
-    if (op_tracker.dump_historic_slow_ops(f, {})) {
-      err << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-        please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+  } else if (command == "dump_ops_in_flight" ||
+             command == "ops" ||
+             command == "dump_historic_ops" ||
+             command == "dump_historic_ops_by_duration" ||
+             command == "dump_historic_slow_ops") {
+    const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
+even those get stuck. Please enable \"mon_enable_op_tracker\", and the tracker \
+will start to track new ops received afterwards.";
+    if (command == "dump_historic_ops") {
+      if (!op_tracker.dump_historic_ops(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_ops_by_duration" ) {
+      if (!op_tracker.dump_historic_ops(f, true)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "dump_historic_slow_ops") {
+      if (!op_tracker.dump_historic_slow_ops(f, {})) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
+    } else if (command == "ops" ||
+               command == "dump_ops_in_flight") {
+      if (!op_tracker.dump_ops_in_flight(f)) {
+        err << error_str;
+        r = -EINVAL;
+        goto abort;
+      }
     }
   } else if (command == "quorum") {
     string quorumcmd;
@@ -647,7 +665,8 @@ std::vector<std::string> Monitor::get_tracked_keys() const noexcept
     "mon_osdmap_full_prune_txsize"s,
     // debug options - observed, not handled
     "mon_debug_extra_checks"s,
-    "mon_debug_block_osdmap_trim"s
+    "mon_debug_block_osdmap_trim"s,
+    "mon_enable_op_tracker"s,
   };
 }
 
@@ -686,6 +705,10 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
       std::lock_guard l{lock};
       scrub_update_interval(scrub_interval);
     }});
+  }
+  
+  if (changed.count("mon_enable_op_tracker")) {
+    op_tracker.set_tracking(conf.get_val<bool>("mon_enable_op_tracker"));
   }
 }
 
@@ -7059,4 +7082,20 @@ void Monitor::disconnect_disallowed_stretch_sessions()
     ++i;
     session_stretch_allowed(*j, blank);
   }
+}
+
+// A utility function that will check to see if the given value is prime using a set of the first 55 prime numbers
+bool Monitor::is_prime(int value) {
+  int prime55[] = {
+    2,3,5,7,11,13,17,19,23,29,31,37,41,43,47,53,59,61,67,71,
+    73,79,83,89,97,101,103,107,109,113,127,131,137,139,149,
+    151,157,163,167,173,179,
+    181,191,193,197,199,211,223,227,229,233,239,241,251,257
+  };
+
+  for (int i: prime55)
+    if (value == i) 
+      return true;
+  
+  return false;
 }

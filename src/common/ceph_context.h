@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -18,12 +19,12 @@
 #include <atomic>
 #include <map>
 #include <memory>
-#include <mutex>
 #include <set>
 #include <string>
 #include <string_view>
 #include <typeinfo>
 #include <typeindex>
+#include <vector>
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -36,11 +37,9 @@
 #include "msg/msg_types.h"
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
-#include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
-#include "common/perf_counters_collection.h"
 #endif
 
 
@@ -151,6 +150,10 @@ public:
   ceph::logging::Log *_log;
 #ifdef HAVE_BREAKPAD
   std::unique_ptr<google_breakpad::ExceptionHandler> _ex_handler;
+  static_assert(sizeof(std::unique_ptr<google_breakpad::ExceptionHandler>) == sizeof(std::unique_ptr<char>));
+#else
+  // Reserve the space for the case when part of ceph is compiled with and other without HAVE_BREAKPAD
+  std::unique_ptr<char> _ex_handler;
 #endif
 
   /* init ceph::crypto */
@@ -409,9 +412,19 @@ private:
     l_mempool_items,
     l_mempool_last
   };
+  // This is just how PerfCounters indices work, we have a bunch of
+  // bare enums all over.
+  enum {
+    // Picked by grepping for the current highest value and adding 1000
+    l_service_first = 1001000,
+    l_service_unique_id,
+    l_service_last
+  };
   PerfCounters *_cct_perf = nullptr;
   PerfCounters* _mempool_perf = nullptr;
   std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+  std::string service_unique_id;
+  PerfCounters* _service_perf = nullptr;
 
   /**
    * Enable the performance counters.

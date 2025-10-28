@@ -678,97 +678,6 @@ TEST_F(BlockDirectoryFixture, IncrYield)
   }
 }
 
-TEST_F(BlockDirectoryFixture, MultiExecuteYield)
-{
-  boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
-    {
-      boost::system::error_code ec;
-      {
-        request req;
-        response<std::string> resp;
-        req.push("MULTI");                       // Start transaction
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        std::cout << "MULTI value: " << std::get<0>(resp).value() << std::endl;
-      }
-      {
-        request req;
-        response<std::string> resp;
-        req.push("SET", "key1", "value1");       // Command 1
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        std::cout << "SET value: " << std::get<0>(resp).value() << std::endl;
-      }
-      {
-        request req;
-        response<std::string> resp;
-        req.push("SET", "key2", "value2");       // Command 2
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        std::cout << "SET value: " << std::get<0>(resp).value() << std::endl;
-      }
-      {
-        request req;
-        response<std::string> resp;
-        req.push("ZADD", "key4", "1", "v1");                  // Command 3
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        std::cout << "ZADD value: " << std::get<0>(resp).value() << std::endl;
-      }
-      {
-        request req;
-        /* string as response here as the command is only getting queued, not executed
-           if response type is changed to int then the operation fails */
-        response<std::string> resp;
-        req.push("DEL", "key3");                  // Command 4
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        std::cout << "DEL value: " << std::get<0>(resp).value() << std::endl;
-      }
-      {
-        request req;
-        req.push("EXEC");                        // Execute transaction
-
-        boost::redis::generic_response resp;
-        conn->async_exec(req, resp, yield[ec]);
-        ASSERT_EQ((bool)ec, false);
-        for (uint64_t i = 0; i < resp.value().size(); i++) {
-          std::cout << "EXEC: " << resp.value().front().value << std::endl;
-          boost::redis::consume_one(resp);
-        }
-      }
-    }
-    //test multi/exec using directory methods
-    {
-      ASSERT_EQ(0, dir->multi(env->dpp, optional_yield{yield}));
-      ASSERT_EQ(0, dir->set(env->dpp, block, yield));
-      block->cacheObj.objName = "testBlockNew";
-      ASSERT_EQ(0, dir->set(env->dpp, block, yield));
-      block->cacheObj.objName = "testBlockA";
-      ASSERT_EQ(0, dir->del(env->dpp, block, yield, true));
-      block->cacheObj.objName = "testBlockB";
-      ASSERT_EQ(0, dir->zadd(env->dpp, block, 100, "version1", yield, true));
-      std::vector<std::string> responses;
-      ASSERT_EQ(0, dir->exec(env->dpp, responses, optional_yield{yield}));
-      for (auto r : responses) {
-        std::cout << "EXEC: " << r << std::endl;
-      }
-    }
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-    }
-
-    conn->cancel();
-  }, rethrow);
-
-  io.run();
-}
-
 TEST_F(BlockDirectoryFixture, ZScan)
 {
   boost::asio::spawn(io, [this] (boost::asio::yield_context yield) {
@@ -901,6 +810,7 @@ TEST_F(BlockDirectoryFixture, Pipeline)
       ASSERT_EQ((bool)ec, false);
     }
     {
+      //using boost::redis::response
       std::vector<std::string> fields;
       fields.push_back("name");
       request req;
@@ -917,6 +827,59 @@ TEST_F(BlockDirectoryFixture, Pipeline)
       for (auto vec : responses) {
         if (!vec.empty()) {
           std::cout << "HMGET: " << vec[0] << std::endl;
+        }
+      }
+    }
+    {
+      //using boost::redis::generic_response
+      std::vector<std::string> fields;
+      fields.push_back("name");
+      request req;
+      req.push("HGETALL", "testkey1");
+      req.push("HGETALL", "testkey2");
+
+      ASSERT_EQ(req.get_commands(), 2);
+      boost::redis::generic_response resp;
+      conn->async_exec(req, resp, yield[ec]);
+      ASSERT_EQ((bool)ec, false);
+
+      //1st node gives data type and number of elements of that type
+      //if data type is aggrgate, like array, map, then next n elements will be values of the aggregate type
+      std::unordered_map<std::string, std::unordered_map<std::string,std::string> > key_val_map;
+      auto i = 0, j = 0;
+      std::string key, fieldkey, fieldval;
+      int num_elements = 0;
+      for (auto& element : resp.value()) {
+        if (element.data_type == boost::redis::resp3::type::array || element.data_type == boost::redis::resp3::type::map) {
+          num_elements = element.aggregate_size;
+          if (j == 0) {
+            key = "testkey1";
+            j++;
+          } else {
+            key = "testkey2";
+          }
+          continue;
+        } else {
+          if (i < num_elements) {
+            fieldkey = element.value;
+            i++;
+          } else {
+            fieldval = element.value;
+            key_val_map.emplace(key, std::unordered_map<std::string,std::string>{{fieldkey,fieldval}});
+            key.clear();
+            fieldkey.clear();
+            fieldval.clear();
+            i = 0;
+          }
+        }
+      }
+      std::cout << "HGETALL response size is: " << key_val_map.size() << std::endl;
+      for (auto& it : key_val_map) {
+        std::cout << "key: " << it.first << std::endl;
+        std::unordered_map<std::string,std::string> field_key_val_map = it.second;
+        for (auto& inner_it : field_key_val_map) {
+          std::cout << "fieldkey: " << inner_it.first << std::endl;
+          std::cout << "fieldval: " << inner_it.second << std::endl;
         }
       }
     }

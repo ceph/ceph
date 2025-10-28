@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "auth/AuthRegistry.h"
 
@@ -327,7 +327,7 @@ bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp)
   std::vector<uint32_t> modes;
 
   reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
-  ldpp_dout(dpp, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+  ldpp_dout(dpp, 20) << __func__ << "(): auth registry supported: methods=" << methods << " modes=" << modes << dendl;
 
   for (auto method : methods) {
     if (!reg.is_secure_method(method)) {

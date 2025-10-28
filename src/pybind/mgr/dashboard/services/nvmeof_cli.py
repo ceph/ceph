@@ -2,6 +2,7 @@
 import errno
 import json
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Annotated, Any, Dict, List, NamedTuple, Optional, Type, \
     Union, get_args, get_origin, get_type_hints
 
@@ -10,8 +11,7 @@ from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
     CLIWriteCommand, HandleCommandResult, HandlerFuncType
 from prettytable import PrettyTable
 
-from ..exceptions import DashboardException
-from ..model.nvmeof import CliFlags, CliHeader
+from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
@@ -53,6 +53,33 @@ def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
         return 0, 'Success', ''
     except ManagedByOrchestratorException as ex:
         return -errno.EINVAL, '', str(ex)
+
+
+MULTIPLES = ['', "K", "M", "G", "T", "P"]
+UNITS = {
+    f"{prefix}{suffix}": 1024 ** mult
+    for mult, prefix in enumerate(MULTIPLES)
+    for suffix in ['', 'B', 'iB']
+    if not (prefix == '' and suffix == 'iB')
+}
+
+
+def convert_to_bytes(size: Union[int, str], default_unit=None):
+    if isinstance(size, int):
+        number = size
+        size = str(size)
+    else:
+        num_str = ''.join(filter(str.isdigit, size))
+        number = int(num_str)
+    unit_str = ''.join(filter(str.isalpha, size))
+    if not unit_str:
+        if not default_unit:
+            raise ValueError("default unit was not provided")
+        unit_str = default_unit
+
+    if unit_str in UNITS:
+        return number * UNITS[unit_str]
+    raise ValueError(f"Invalid unit: {unit_str}")
 
 
 def convert_from_bytes(num_in_bytes):
@@ -97,23 +124,26 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             return self._get_list_text_output(data)
         return self._get_object_text_output(data)
 
+    def _get_row(self, columns, data_obj):
+        row = []
+        for col in columns:
+            col_val = data_obj.get(col)
+            if col_val is None:
+                col_val = ''
+            row.append(str(col_val))
+        return row
+
     def _get_list_text_output(self, data):
         columns = list(dict.fromkeys([key for obj in data for key in obj.keys()]))
         table = self._create_table(columns)
         for d in data:
-            row = []
-            for col in columns:
-                row.append(str(d.get(col)))
-            table.add_row(row)
+            table.add_row(self._get_row(columns, d))
         return table.get_string()
 
     def _get_object_text_output(self, data):
         columns = [k for k in data.keys() if k not in ["status", "error_message"]]
         table = self._create_table(columns)
-        row = []
-        for col in columns:
-            row.append(str(data.get(col)))
-        table.add_row(row)
+        table.add_row(self._get_row(columns, data))
         return table.get_string()
 
     def _is_list_of_complex_type(self, value):
@@ -136,7 +166,14 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
     def is_namedtuple_type(self, obj):
         return isinstance(obj, type) and issubclass(obj, tuple) and hasattr(obj, '_fields')
 
-    # pylint: disable=too-many-branches
+    def get_enum_class(self, maybe_enum: Any) -> Optional[Type[Enum]]:
+        if isinstance(maybe_enum, type) and issubclass(maybe_enum, Enum):
+            return maybe_enum
+        if issubclass(type(maybe_enum), Enum):
+            return type(maybe_enum)
+        return None
+
+    # pylint: disable=too-many-branches, too-many-nested-blocks
     def process_dict(self, input_dict: dict,
                      nt_class: Type[NamedTuple],
                      is_top_level: bool) -> Union[Dict, str, List]:
@@ -165,16 +202,24 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
                         break
                     if isinstance(annotation, CliHeader):
                         output_name = annotation.label
-                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
+                    if isinstance(annotation, CliFieldTransformer):
+                        value = annotation.transform(value)
+                    if is_top_level and annotation == CliFlags.EXCLUSIVE_LIST:
                         assert get_origin(actual_type) == list
                         assert len(get_args(actual_type)) == 1
                         return [self.process_dict(item, get_args(actual_type)[0],
                                                   False) for item in value]
-                    elif is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
+                    if is_top_level and annotation == CliFlags.EXCLUSIVE_RESULT:
                         return f"Failure: {input_dict.get('error_message')}" if bool(
                             input_dict[field]) else "Success"
-                    elif annotation == CliFlags.SIZE:
+                    if annotation == CliFlags.SIZE:
                         value = convert_from_bytes(int(input_dict[field]))
+                    elif annotation == CliFlags.PROMOTE_INTERNAL_FIELDS:
+                        object_to_promote = self.process_dict(value, actual_type, False)
+                        if isinstance(object_to_promote, dict):
+                            for field_name, value in object_to_promote.items():
+                                result[field_name] = value
+                            skip = True
 
             if skip:
                 continue
@@ -182,6 +227,9 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
             # If it's a nested namedtuple and value is a dict, recurse
             if self.is_namedtuple_type(actual_type) and isinstance(value, dict):
                 result[output_name] = self.process_dict(value, actual_type, False)
+            # If it's an enum type or enum instance, take its name
+            elif (enum_cls := self.get_enum_class(actual_type)):
+                result[output_name] = enum_cls(value).name
             else:
                 result[output_name] = value
 
@@ -198,20 +246,28 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
 
 
 class NvmeofCLICommand(CLICommand):
-    def __init__(self, prefix, model: Type[NamedTuple], perm='rw', poll=False):
+    desc: str
+
+    def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
         super().__init__(prefix, perm, poll)
         self._output_formatter = AnnotatedDataTextOutputFormatter()
         self._model = model
+        self._alias = alias
+        self._alias_cmd: Optional[NvmeofCLICommand] = None
+
+    def _use_api_endpoint_desc_if_available(self, func):
+        if not self.desc and hasattr(func, 'doc_info'):
+            self.desc = func.doc_info.get('summary', '')
 
     def __call__(self, func) -> HandlerFuncType:  # type: ignore
-        # pylint: disable=useless-super-delegation
-        """
-        This method is being overriden solely to be able to disable the linters checks for typing.
-        The NvmeofCLICommand decorator assumes a different type returned from the
-        function it wraps compared to CLICmmand, breaking a Liskov substitution principal,
-        hence triggering linters alerts.
-        """
-        return super().__call__(func)
+        if self._alias:
+            self._alias_cmd = NvmeofCLICommand(self._alias, model=self._model)
+            assert self._alias_cmd is not None
+            self._alias_cmd(func)
+
+        resp = super().__call__(func)
+        self._use_api_endpoint_desc_if_available(func)
+        return resp
 
     def call(self,
              mgr: Any,
@@ -232,5 +288,5 @@ class NvmeofCLICommand(CLICommand):
                 return HandleCommandResult(-errno.EINVAL, '',
                                            f"format '{out_format}' is not implemented")
             return HandleCommandResult(0, out, '')
-        except DashboardException as e:
+        except Exception as e:  # pylint: disable=broad-except
             return HandleCommandResult(-errno.EINVAL, '', str(e))

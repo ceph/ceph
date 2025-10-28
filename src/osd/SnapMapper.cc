@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -56,19 +57,42 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
   e.g., clean up on deletion).
 
   "SNA_"
-  + ("%lld" % poolid)
-  + "_"
-  + ("%016x" % snapid)
-  + "_"
-  + (".%x" % shard_id)
-  + "_"
+  + ("%lld" % poolid) + "_"
+
+  + ("%016x" % snapid) + "_"
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
+  + (".%x" % shard_id) + "_"
+
   + hobject_t::to_str() ("%llx.%8x.%lx.name...." % pool, hash, snap)
+
   -> SnapMapping::Mapping { snap, hoid }
 
+  -----
+
   "OBJ_" +
+
+  // shard_id formatting is skipped for shard_id_t::NO_SHARD (See: make_shard_prefix)
   + (".%x" % shard_id)
+
   + hobject_t::to_str()
+
    -> SnapMapper::object_snaps { oid, set<snapid_t> }
+
+  -----
+
+  Key formats when shard exists (EC):
+
+  <SNA_><pool>_<snapid>_.<shardid>_<hobject_t::to_str()>
+
+  <OBJ_>_.<shardid>_<hobject_t::to_str()>
+
+  Otherwise, for shard_id_t::NO_SHARD (Replicated):
+
+  <SNA_><pool>_<snapid>_<hobject_t::to_str()>
+
+  <OBJ_>_<hobject_t::to_str()>
+
 
   */
 
@@ -108,24 +132,42 @@ int OSDriver::get_next(
 {
   CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
-    ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+  ObjectStore::omap_iter_seek_t start_from{
+    key,
+    ObjectStore::omap_iter_seek_t::UPPER_BOUND
+  };
+  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
+    [key, next] (std::string_view _key, std::string_view _value)
+  {
     CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
-    if (auto nit = std::begin(vals);
-        nit == std::end(vals) || !SnapMapper::is_mapping(nit->first)) {
+    if (!SnapMapper::is_mapping(std::string(_key))) {
       CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
-      return -ENOENT;
+      return ObjectStore::omap_iter_ret_t::NEXT;
     } else {
-      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", nit->first);
-      ceph_assert(nit->first > key);
-      *next = *nit;
-      return 0;
+      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", _key);
+      ceph_assertf(_key > key,
+        "Key order violation: input_key='%s' got_key='%s'",
+         key.c_str(), std::string(_key).c_str());
+      ceph::bufferlist bl;
+      bl.append(_value);
+      *next = std::make_pair(_key, bl);
+      return ObjectStore::omap_iter_ret_t::STOP;
     }
-  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-    CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
-    return -EINVAL;
-  }))); // this requires seastar::thread
+  };
+  return interruptor::green_get(
+    os->omap_iterate(ch, hoid, start_from, callback
+    ).safe_then([key] (auto ret) {
+      if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
+        CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+        return -ENOENT;
+      }
+      return 0; // found and Stopped
+    }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+        CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
+        return -EINVAL;
+      })
+    )
+  ); // this requires seastar::thread
 }
 
 int OSDriver::get_next_or_current(
@@ -309,14 +351,15 @@ void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
   f->dump_stream("snaps") << snaps;
 }
 
-void SnapMapper::object_snaps::generate_test_instances(
-  std::list<object_snaps *> &o)
+auto SnapMapper::object_snaps::generate_test_instances() -> std::list<object_snaps>
 {
-  o.push_back(new object_snaps);
-  o.push_back(new object_snaps);
-  o.back()->oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
-  o.back()->snaps.insert(1);
-  o.back()->snaps.insert(2);
+  std::list<object_snaps> o;
+  o.emplace_back();
+  o.emplace_back();
+  o.back().oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
+  o.back().snaps.insert(1);
+  o.back().snaps.insert(2);
+  return o;
 }
 
 bool SnapMapper::check(const hobject_t &hoid) const
@@ -957,8 +1000,8 @@ bool SnapMapper::Scrubber::_parse_m(
   {
     unsigned long long p, s;
     long sh;
-    int r = sscanf(key.data(), "SNA_%lld_%llx.%lx", &p, &s, &sh);
-    if (r != 1) {
+    int r = sscanf(key.data(), "SNA_%lld_%llx_.%lx", &p, &s, &sh);
+    if (r != 3) {
       shard = shard_id_t::NO_SHARD;
     } else {
       shard = shard_id_t(sh);

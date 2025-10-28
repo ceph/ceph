@@ -1,8 +1,11 @@
+.. _MDS Config Reference:
+
 ======================
  MDS Config Reference
 ======================
 
 .. confval:: mds_cache_mid
+.. confval:: mds_allow_batched_ops
 .. confval:: mds_dir_max_commit_size
 .. confval:: mds_dir_max_entries
 .. confval:: mds_decay_halflife
@@ -64,3 +67,4 @@
 .. confval:: mds_min_caps_per_client
 .. confval:: mds_symlink_recovery
 .. confval:: mds_extraordinary_events_dump_interval
+.. confval:: subv_metrics_window_interval

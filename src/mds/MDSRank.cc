@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,15 +17,18 @@
 #include "osdc/Journaler.h"
 
 #include <typeinfo>
+#include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/fair_mutex.h"
+#include "common/JSONFormatterFile.h"
 #include "common/likely.h"
 #include "common/Timer.h"
 #include "common/async/blocked_completion.h"
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
 #include "messages/MMDSMap.h"
@@ -33,6 +37,7 @@
 
 #include "mgr/MgrClient.h"
 
+#include "Beacon.h"
 #include "MDCache.h"
 #include "MDLog.h"
 #include "MDSDaemon.h"
@@ -897,6 +902,15 @@ MDSTableServer *MDSRank::get_table_server(int t)
   }
 }
 
+MDSMap::DaemonState MDSRank::get_want_state() const
+{
+  return beacon.get_want_state();
+}
+
+uint64_t MDSRank::get_global_id() const {
+  return monc->get_global_id();
+}
+
 void MDSRank::suicide()
 {
   if (suicide_hook) {
@@ -940,6 +954,11 @@ void MDSRank::damaged_unlocked()
 {
   std::lock_guard l(mds_lock);
   damaged();
+}
+
+double MDSRank::last_cleared_laggy() const
+{
+  return beacon.last_cleared_laggy();
 }
 
 void MDSRank::handle_write_error(int err)
@@ -2031,8 +2050,9 @@ void MDSRank::rejoin_done()
 
   // funny case: is our cache empty?  no subtrees?
   if (!mdcache->is_subtrees()) {
-    if (whoami == 0) {
-      // The root should always have a subtree!
+    if (whoami == 0 && mdlog->get_num_events() > 1) {
+      // The root should always have a subtree except when
+      // the mdlog contains only the ELid event
       clog->error() << "No subtrees found for root MDS rank!";
       damaged();
       ceph_assert(mdcache->is_subtrees());
@@ -2551,7 +2571,7 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   {
-    map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
+    std::map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
       MDSContext::vec ls;
       ls.swap(p->second);
@@ -4056,6 +4076,15 @@ epoch_t MDSRank::get_osd_epoch() const
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));
 }
 
+std::string MDSRank::get_path(inodeno_t ino) {
+  std::lock_guard locker(mds_lock);
+  CInode* inode = mdcache->get_inode(ino);
+  if (!inode) return {};
+  std::string res;
+  inode->make_path_string(res);
+  return res;
+}
+
 std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     const noexcept
 {
@@ -4070,6 +4099,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "fsid",
     "host",
     "mds_allow_async_dirops",
+    "mds_allow_batched_ops",
     "mds_alternate_name_max",
     "mds_bal_export_pin",
     "mds_bal_fragment_dirs",
@@ -4145,7 +4175,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_session_cap_acquisition_throttle",
     "mds_session_max_caps_throttle_ratio",
     "mds_session_metadata_threshold",
-    "mds_symlink_recovery"
+    "mds_symlink_recovery",
+    "mds_use_global_snaprealm_seq_for_subvol"
   });
   static_assert(std::is_sorted(as_sv.begin(), as_sv.end()),
                 "keys are not sorted!");

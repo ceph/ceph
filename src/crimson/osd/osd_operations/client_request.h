@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -269,7 +269,7 @@ private:
       ::crimson::osd::IOInterruptCondition,
       Errorator>;
 
-  bool is_misdirected(const PG& pg) const;
+  bool is_misdirected_replica_read(const PG& pg) const;
 
   const SnapContext get_snapc(
     PG &pg,

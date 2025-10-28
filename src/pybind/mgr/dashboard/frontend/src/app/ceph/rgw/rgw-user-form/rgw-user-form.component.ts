@@ -6,7 +6,7 @@ import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -29,7 +29,8 @@ import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 import { Account } from '../models/rgw-user-accounts';
-import { RGW } from '../utils/constants';
+import { ManagedPolicyArnMap, ManagedPolicyName, RGW } from '../utils/constants';
+import { ComboBoxItem } from '~/app/shared/models/combo-box.model';
 
 @Component({
   selector: 'cd-rgw-user-form',
@@ -56,6 +57,19 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   previousTenant: string = null;
   @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
   accounts: Account[] = [];
+  initialUserPolicies: string[] = [];
+  managedPolicies: ComboBoxItem[] = [
+    {
+      content: ManagedPolicyName.AmazonS3FullAccess,
+      name: ManagedPolicyArnMap[ManagedPolicyName.AmazonS3FullAccess],
+      selected: false
+    },
+    {
+      content: ManagedPolicyName.AmazonS3ReadOnlyAccess,
+      name: ManagedPolicyArnMap[ManagedPolicyName.AmazonS3ReadOnlyAccess],
+      selected: false
+    }
+  ];
 
   constructor(
     private formBuilder: CdFormBuilder,
@@ -117,6 +131,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       ],
       account_id: [null, [this.tenantedAccountValidator.bind(this)]],
       account_root_user: [false],
+      account_policies: [[]],
       max_buckets_mode: [1],
       max_buckets: [
         1000,
@@ -214,7 +229,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
               break;
           }
           // Map the quota values.
-          ['user', 'bucket'].forEach((type) => {
+          [USER, 'bucket'].forEach((type) => {
             const quota = resp[1][type + '_quota'];
             value[type + '_quota_enabled'] = quota.enabled;
             if (quota.max_size < 0) {
@@ -261,6 +276,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
           });
           this.capabilities = resp[0].caps;
           this.uid = this.getUID();
+          this.initialUserPolicies = resp[0].managed_user_policies ?? [];
+
+          this.managedPolicies.forEach((policy) => {
+            policy.selected = this.initialUserPolicies.includes(policy.name);
+          });
+
+          // Optionally, update form control with selected items
+          const selectedItems = this.managedPolicies.filter((p) => p.selected).map((p) => p.name);
+          this.userForm.get('account_policies')?.setValue(selectedItems);
         },
         () => {
           this.loadingError();
@@ -294,6 +318,12 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
         this.userForm.get('display_name').updateValueAndValidity();
         this.userForm.get('account_root_user').enable();
       }
+    });
+  }
+
+  multiSelector(event: ComboBoxItem[]) {
+    this.managedPolicies.forEach((policy) => {
+      policy.selected = !!event.find((selected) => selected.name === policy.name);
     });
   }
 
@@ -655,7 +685,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       'system',
       'suspended',
       'account_id',
-      'account_root_user'
+      'account_root_user',
+      'account_policies'
     ].some((path) => {
       return this.userForm.get(path).dirty;
     });
@@ -700,8 +731,6 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   private _getCreateArgs() {
     const result = {
       uid: this.getUID(),
-      account_id: this.userForm.getValue('account_id') ? this.userForm.getValue('account_id') : '',
-      account_root_user: this.userForm.getValue('account_root_user'),
       display_name: this.userForm.getValue('display_name'),
       system: this.userForm.getValue('system'),
       suspended: this.userForm.getValue('suspended'),
@@ -729,6 +758,16 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       //  0 => Unlimited bucket creation.
       _.merge(result, { max_buckets: maxBucketsMode });
     }
+    if (this.userForm.getValue('account_id')) {
+      _.merge(result, {
+        account_id: this.userForm.getValue('account_id'),
+        account_root_user: this.userForm.getValue('account_root_user')
+      });
+    }
+    const accountPolicies = this._getAccountManagedPolicies();
+    if (this.userForm.getValue('account_id') && !this.userForm.getValue('account_root_user')) {
+      _.merge(result, { account_policies: accountPolicies });
+    }
     return result;
   }
 
@@ -738,25 +777,23 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getUpdateArgs() {
     const result: Record<string, any> = {};
-    const keys = [
-      'display_name',
-      'email',
-      'max_buckets',
-      'system',
-      'suspended',
-      'account_root_user'
-    ];
+    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
     }
     if (this.userForm.getValue('account_id')) {
       result['account_id'] = this.userForm.getValue('account_id');
+      result['account_root_user'] = this.userForm.getValue('account_root_user');
     }
     const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
     if (_.includes([-1, 0], maxBucketsMode)) {
       // -1 => Disable bucket creation.
       //  0 => Unlimited bucket creation.
       result['max_buckets'] = maxBucketsMode;
+    }
+    const accountPolicies = this._getAccountManagedPolicies();
+    if (this.userForm.getValue('account_id') && !this.userForm.getValue('account_root_user')) {
+      result['account_policies'] = accountPolicies;
     }
     return result;
   }
@@ -767,7 +804,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   _getUserQuotaArgs(): Record<string, any> {
     const result = {
-      quota_type: 'user',
+      quota_type: USER,
       enabled: this.userForm.getValue('user_quota_enabled'),
       max_size_kb: -1,
       max_objects: -1
@@ -829,6 +866,25 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     });
     result = _.uniq(result);
     return result;
+  }
+
+  /**
+   * Get the account managed policies to attach/detach.
+   * @returns {Object} Returns an object with attach and detach arrays.
+   */
+  private _getAccountManagedPolicies() {
+    const selectedPolicies = this.managedPolicies.filter((p) => p.selected).map((p) => p.name);
+
+    const initialPolicies = this.initialUserPolicies;
+    const toAttach = selectedPolicies.filter((p) => !initialPolicies.includes(p));
+    const toDetach = initialPolicies.filter((p) => !selectedPolicies.includes(p));
+
+    const payload = {
+      attach: toAttach,
+      detach: toDetach
+    };
+
+    return payload;
   }
 
   onMaxBucketsModeChange(mode: string) {

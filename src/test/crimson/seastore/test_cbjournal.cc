@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/crimson/gtest_seastar.h"
 
@@ -198,7 +198,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   seastar::future<> tear_down_fut() final {
-    return close();
+    return close(
+    ).then([this] {
+      cbj.reset();
+    });
   }
 
   extent_t generate_extent(size_t blocks) {

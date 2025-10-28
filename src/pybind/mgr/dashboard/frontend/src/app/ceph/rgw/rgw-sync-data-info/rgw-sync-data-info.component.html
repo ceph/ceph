@@ -1,7 +1,8 @@
 <ul class="me-2">
   <ng-template #upToDateTpl>
-    <li class="badge badge-success"
-        i18n>Up to Date</li>
+    <li i18n>
+      <cds-tag class="tag-success">Up to Date</cds-tag>
+    </li>
   </ng-template>
   <cds-toggletip  [dropShadow]="true"
                   [align]="align">
@@ -25,28 +26,33 @@
     </li>
   </div>
   <div cdsToggletipContent>
-    <ul class="text-center">
-      <li><h5><b i18n>Sync Status:</b></h5></li>
-      <li *ngFor="let status of zone.fullSyncStatus">
-        <span *ngIf="!status?.includes(zone.name) && !status?.includes(zone.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
-          <span *ngIf="status?.includes(':')">
-            <b>{{ status.split(': ')[0] | titlecase }}</b>:{{ status.split(': ')[1] | titlecase}}
+    <div class="cds--popover-scroll-container">
+      <ul class="text-center">
+        <li><h5><b i18n>Sync Status:</b></h5></li>
+        <li *ngFor="let status of zone.fullSyncStatus">
+          <span *ngIf="!status?.includes(zone.name) && !status?.includes(zone.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
+            <span *ngIf="status?.includes(':')">
+              <b>{{ status.split(': ')[0] | titlecase }}</b>:{{ status.split(': ')[1] | titlecase}}
+            </span>
+            <span *ngIf="!status?.includes(':')">
+              <b>{{ status | titlecase }}</b>
+            </span>
           </span>
-          <span *ngIf="!status?.includes(':')">
-            <b>{{ status | titlecase }}</b>
+          <span *ngIf="status?.includes('failed') || status?.includes('error')">
+            {{ status | titlecase }}
           </span>
-        </span>
-        <span *ngIf="status?.includes('failed') || status?.includes('error')">
-          {{ status | titlecase }}
-        </span>
-      </li>
-    </ul>
+        </li>
+      </ul>
+    </div>
   </div>
   </cds-toggletip>
   <li class="mt-4 fw-bold"
       i18n>
       Last Synced:
   </li>
-  <li class="badge badge-info"
-      *ngIf="zone.timestamp; else upToDateTpl">{{ zone.timestamp | relativeDate }}</li>
+  <li *ngIf="zone.timestamp; else upToDateTpl">
+    <cds-tag class="tag-info">
+      {{ zone.timestamp | relativeDate }}
+    </cds-tag>
+  </li>
 </ul>

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Tests for Ceph delegation handling
  *
@@ -405,6 +406,44 @@ TEST(LibCephFS, RecalledGetattr) {
   ASSERT_EQ(ceph_ll_close(cmount2, fh), 0);
   ceph_unmount(cmount2);
   ceph_release(cmount2);
+  ceph_unmount(cmount1);
+  ceph_release(cmount1);
+}
+
+TEST(LibCephFS, DelegTestWithWrite) {
+  struct ceph_mount_info *cmount1;
+  ASSERT_EQ(ceph_create(&cmount1, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount1, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount1, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount1, "client_oc", "0"));
+  ASSERT_EQ(ceph_mount(cmount1, "/"), 0);
+  ASSERT_EQ(set_default_deleg_timeout(cmount1), 0);
+
+  Inode *root, *file;
+  ASSERT_EQ(ceph_ll_lookup_root(cmount1, &root), 0);
+
+  char filename[32];
+  sprintf(filename, "delegtestwrite%x", getpid());
+
+  Fh *fh;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount1);
+
+  ASSERT_EQ(ceph_ll_create(cmount1, root, filename, 0666,
+			   O_RDWR|O_CREAT|O_EXCL, &file, &fh, &stx, 0, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_write(cmount1, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
+  ASSERT_EQ(ceph_ll_close(cmount1, fh), 0);
+
+  std::atomic_bool recalled(false);
+  ASSERT_EQ(ceph_ll_lookup(cmount1, root, filename, &file, &stx, 0, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_open(cmount1, file, O_WRONLY, &fh, perms), 0);
+  ASSERT_EQ(ceph_ll_delegation_wait(cmount1, fh, CEPH_DELEGATION_WR, dummy_deleg_cb, &recalled), 0);
+  ASSERT_EQ(ceph_ll_write(cmount1, fh, 0, sizeof(filename), filename),
+	    static_cast<int>(sizeof(filename)));
+  ASSERT_EQ(0, ceph_ll_fsync(cmount1, fh, false));
+  ASSERT_EQ(ceph_ll_close(cmount1, fh), 0);
+
   ceph_unmount(cmount1);
   ceph_release(cmount1);
 }

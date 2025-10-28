@@ -11,32 +11,53 @@
       </div>
 
       <!-- Share Id -->
-      <div class="form-item">
-        <cds-text-label
-          labelInputID="share_id"
-          i18n
-          helperText="Unique share identifier"
-          i18n-helperText
-          cdRequiredField="Share Name"
-          [invalid]="smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty"
-          [invalidText]="shareError"
-          >Share Name
-          <input
-            cdsText
-            type="text"
-            id="share_id"
-            formControlName="share_id"
-            [invalid]="smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty"
-          />
-        </cds-text-label>
-        <ng-template #shareError>
-          <span
-            class="invalid-feedback"
-            *ngIf="smbShareForm.showError('share_id', formDir, 'required')"
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="share_id"
             i18n
-            >This field is required.</span
-          >
-        </ng-template>
+            helperText="A unique identifier for share"
+            i18n-helperText
+            cdRequiredField="Share ID"
+            [invalid]="
+              smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty
+            "
+            [invalidText]="shareError"
+            >Share ID
+            <input
+              cdsText
+              type="text"
+              id="share_id"
+              formControlName="share_id"
+              [invalid]="
+                smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty
+              "
+              [invalidText]="shareError"
+            />
+          </cds-text-label>
+          <ng-template #shareError>
+            <span
+              class="invalid-feedback"
+              *ngIf="smbShareForm.showError('share_id', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
+
+        <!-- Share Name -->
+        <div cdsCol>
+          <cds-text-label labelInputID="name"
+                          i18n
+                          helperText="Name of the Share"
+                          i18n-helperText>Share Name
+            <input cdsText
+                   type="text"
+                   id="name"
+                   formControlName="name" />
+          </cds-text-label>
+        </div>
       </div>
 
       <!-- Volume -->
@@ -49,7 +70,8 @@
           (change)="volumeChangeHandler()"
           [invalid]="smbShareForm.controls.volume.invalid && smbShareForm.controls.volume.dirty"
           [invalidText]="volumeError"
-          i18n-label>
+          i18n-label
+        >
           <option *ngIf="allFsNames?.length === 0"
                   value=""
                   i18n>
@@ -84,7 +106,8 @@
           id="subvolume_group"
           (change)="getSubVol()"
           [skeleton]="allsubvolgrps === null"
-          i18n-label>
+          i18n-label
+        >
           <option *ngIf="allsubvolgrps === null"
                   value=""
                   i18n>Loading...</option>
@@ -137,50 +160,50 @@
         </cds-select>
       </div>
 
-    <!-- Path -->
-    <div class="form-item form-item-append"
-         cdsRow>
-      <div cdsCol>
-        <cds-text-label labelInputID="prefixedPath"
-                        i18n
-                        helperText="A path is a relative path.">Prefixed Path
-          <input cdsText
-                 type="text"
-                 id="prefixedPath"
-                 formControlName="prefixedPath" />
-        </cds-text-label>
-      </div>
-      <div cdsCol>
-        <cds-text-label
-          labelInputID="inputPath"
-          i18n
-          [invalid]="
-            smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
-          "
-          [invalidText]="pathError"
-          helperText="A relative path in a cephFS file system."
-          cdRequiredField="Path"
-          >Input Path
-          <input
-            cdsText
-            type="text"
-            id="inputPath"
-            formControlName="inputPath"
+      <!-- Path -->
+      <div class="form-item form-item-append"
+           cdsRow>
+        <div cdsCol>
+          <cds-text-label labelInputID="prefixedPath"
+                          i18n
+                          helperText="A path is a relative path.">Prefixed Path
+            <input cdsText
+                   type="text"
+                   id="prefixedPath"
+                   formControlName="prefixedPath" />
+          </cds-text-label>
+        </div>
+        <div cdsCol>
+          <cds-text-label
+            labelInputID="inputPath"
+            i18n
             [invalid]="
               smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
             "
-          />
-        </cds-text-label>
-        <ng-template #pathError>
-          <span
-            class="invalid-feedback"
-            *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-        </ng-template>
+            [invalidText]="pathError"
+            helperText="A relative path in a cephFS file system."
+            cdRequiredField="Path"
+            >Input Path
+            <input
+              cdsText
+              type="text"
+              id="inputPath"
+              formControlName="inputPath"
+              [invalid]="
+                smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
+              "
+            />
+          </cds-text-label>
+          <ng-template #pathError>
+            <span
+              class="invalid-feedback"
+              *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
+          </ng-template>
+        </div>
       </div>
-    </div>
 
       <!-- Browseable -->
       <div class="form-item">

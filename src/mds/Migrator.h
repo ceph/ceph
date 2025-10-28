@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -21,6 +22,7 @@
 
 #include "Capability.h"
 #include "Mutation.h" // for MDRequestRef
+#include "LogSegmentRef.h"
 
 #include <map>
 #include <list>
@@ -76,6 +78,7 @@ public:
 
   // -- cons --
   Migrator(MDSRank *m, MDCache *c);
+  ~Migrator() noexcept;
 
   static std::string_view get_export_statename(int s) {
     switch (s) {
@@ -117,68 +120,25 @@ public:
   int get_export_queue_size() const { return export_queue.size(); }
   
   // -- status --
-  int is_exporting(CDir *dir) const {
-    auto it = export_state.find(dir);
-    if (it != export_state.end()) return it->second.state;
-    return 0;
-  }
+  int is_exporting(CDir *dir) const;
   bool is_exporting() const { return !export_state.empty(); }
-  int is_importing(dirfrag_t df) const {
-    auto it = import_state.find(df);
-    if (it != import_state.end()) return it->second.state;
-    return 0;
-  }
+  int is_importing(dirfrag_t df) const;
   bool is_importing() const { return !import_state.empty(); }
 
-  bool is_ambiguous_import(dirfrag_t df) const {
-    auto it = import_state.find(df);
-    if (it == import_state.end())
-      return false;
-    if (it->second.state >= IMPORT_LOGGINGSTART &&
-	it->second.state < IMPORT_ABORTING)
-      return true;
-    return false;
-  }
+  bool is_ambiguous_import(dirfrag_t df) const;
 
-  int get_import_state(dirfrag_t df) const {
-    auto it = import_state.find(df);
-    ceph_assert(it != import_state.end());
-    return it->second.state;
-  }
-  int get_import_peer(dirfrag_t df) const {
-    auto it = import_state.find(df);
-    ceph_assert(it != import_state.end());
-    return it->second.peer;
-  }
-
-  int get_export_state(CDir *dir) const {
-    auto it = export_state.find(dir);
-    ceph_assert(it != export_state.end());
-    return it->second.state;
-  }
+  int get_import_state(dirfrag_t df) const;
+  int get_import_peer(dirfrag_t df) const;
+  int get_export_state(CDir *dir) const;
   // this returns true if we are export @dir,
   // and are not waiting for @who to be
   // be warned of ambiguous auth.
   // only returns meaningful results during EXPORT_WARNING state.
-  bool export_has_warned(CDir *dir, mds_rank_t who) {
-    auto it = export_state.find(dir);
-    ceph_assert(it != export_state.end());
-    ceph_assert(it->second.state == EXPORT_WARNING);
-    return (it->second.warning_ack_waiting.count(who) == 0);
-  }
+  bool export_has_warned(CDir *dir, mds_rank_t who);
 
-  bool export_has_notified(CDir *dir, mds_rank_t who) const {
-    auto it = export_state.find(dir);
-    ceph_assert(it != export_state.end());
-    ceph_assert(it->second.state == EXPORT_NOTIFYING);
-    return (it->second.notify_ack_waiting.count(who) == 0);
-  }
+  bool export_has_notified(CDir *dir, mds_rank_t who) const;
 
-  void export_freeze_inc_num_waiters(CDir *dir) {
-    auto it = export_state.find(dir);
-    ceph_assert(it != export_state.end());
-    it->second.num_remote_waiters++;
-  }
+  void export_freeze_inc_num_waiters(CDir *dir);
   void find_stale_export_freeze();
 
   // -- misc --
@@ -234,7 +194,7 @@ public:
   void export_caps(CInode *in);
 
   void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
-			   mds_rank_t oldauth, LogSegment *ls,
+			   mds_rank_t oldauth, LogSegmentRef const& ls,
 			   std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
 			   std::list<ScatterLock*>& updated_scatterlocks);
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
@@ -247,7 +207,7 @@ public:
 			mds_rank_t oldauth,
 			CDir *import_root,
 			EImportStart *le, 
-			LogSegment *ls,
+			LogSegmentRef const& ls,
 			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
 			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
 
@@ -269,65 +229,10 @@ protected:
   };
 
   // export fun
-  struct export_state_t {
-    export_state_t() {}
-
-    void set_state(int s) {
-      ceph_assert(s != state);
-      if (state != EXPORT_CANCELLED) {
-	auto& t = state_history.at(state);
-	t.second = double(ceph_clock_now()) - double(t.first);
-      }
-      state = s;
-      state_history[state] = std::pair<utime_t, double>(ceph_clock_now(), 0.0);
-    }
-    utime_t get_start_time(int s) const {
-      ceph_assert(state_history.count(s) > 0);
-      return state_history.at(s).first;
-    }
-    double get_time_spent(int s) const {
-      ceph_assert(state_history.count(s) > 0);
-      const auto& t = state_history.at(s);
-      return s == state ? double(ceph_clock_now()) - double(t.first) : t.second;
-    }
-    double get_freeze_tree_time() const {
-      ceph_assert(state >= EXPORT_DISCOVERING);
-      ceph_assert(state_history.count((int)EXPORT_DISCOVERING) > 0);
-      return double(ceph_clock_now()) - double(state_history.at((int)EXPORT_DISCOVERING).first);
-    };
-
-    int state = EXPORT_CANCELLED;
-    mds_rank_t peer = MDS_RANK_NONE;
-    uint64_t tid = 0;
-    std::set<mds_rank_t> warning_ack_waiting;
-    std::set<mds_rank_t> notify_ack_waiting;
-    std::map<inodeno_t,std::map<client_t,Capability::Import> > peer_imported;
-    MutationRef mut;
-    size_t approx_size = 0;
-    // record the start time and time spent of each export state
-    std::map<int, std::pair<utime_t, double> > state_history;
-    // record the clients whose sessions need to be flushed
-    std::set<client_t> export_client_set;
-    // for freeze tree deadlock detection
-    utime_t last_cum_auth_pins_change;
-    int last_cum_auth_pins = 0;
-    int num_remote_waiters = 0; // number of remote authpin waiters
-    std::shared_ptr<export_base_t> parent;
-  };
+  struct export_state_t;
 
   // import fun
-  struct import_state_t {
-    import_state_t() : mut() {}
-    int state = 0;
-    mds_rank_t peer = 0;
-    uint64_t tid = 0;
-    std::set<mds_rank_t> bystanders;
-    std::list<dirfrag_t> bound_ls;
-    std::list<ScatterLock*> updated_scatterlocks;
-    std::map<client_t,std::pair<Session*,uint64_t> > session_map;
-    std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
-    MutationRef mut;
-  };
+  struct import_state_t;
 
   typedef std::map<CDir*, export_state_t>::iterator export_state_iterator;
 

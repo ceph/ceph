@@ -463,8 +463,8 @@ Miscellaneous
 .. _pool: ../../operations/pools
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
-.. _mClock: ../mclock-config-ref.rst
-.. _mClock backfill: ../mclock-config-ref.rst#recovery-backfill-options
+.. _mClock: ../mclock-config-ref
+.. _mClock backfill: ../mclock-config-ref#recovery-backfill-options
 .. _Pool & PG Config Reference: ../pool-pg-config-ref
 .. _Journal Config Reference: ../journal-ref
 .. _cache target dirty high ratio: ../../operations/pools#cache-target-dirty-high-ratio

@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -153,8 +154,15 @@ public:
 	       std::pair<ceph::buffer::list*, Context*> > > &to_read,
                Context *on_complete,
                bool fast_read = false) override;
+  bool get_ec_supports_crc_encode_decode() const override;
+  ECUtil::stripe_info_t ec_get_sinfo() const override;
+  bool ec_can_decode(const shard_id_set &available_shards) const override;
+  shard_id_map<bufferlist> ec_encode_acting_set(
+      const bufferlist &in_bl) const override;
+  shard_id_map<bufferlist> ec_decode_acting_set(
+      const shard_id_map<bufferlist> &shard_map, int chunk_size) const override;
 
-private:
+ private:
   // push
   struct push_info_t {
     ObjectRecoveryProgress recovery_progress;

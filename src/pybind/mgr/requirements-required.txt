@@ -15,3 +15,4 @@ scipy
 werkzeug
 natsort
 bcrypt
+cheroot~=10.0

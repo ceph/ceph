@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -308,6 +309,34 @@ void ReplicatedBackend::objects_read_async(
   bool fast_read)
 {
   ceph_abort_msg("async read is not used by replica pool");
+}
+
+bool ReplicatedBackend::get_ec_supports_crc_encode_decode() const {
+  ceph_abort_msg("crc encode decode is not used by replica pool");
+  return false;
+}
+
+bool ReplicatedBackend::ec_can_decode(
+    const shard_id_set &available_shards) const {
+  ceph_abort_msg("can decode is not used by replica pool");
+  return false;
+}
+
+shard_id_map<bufferlist> ReplicatedBackend::ec_encode_acting_set(
+    const bufferlist &in_bl) const {
+  ceph_abort_msg("encode is not used by replica pool");
+  return {0};
+}
+
+shard_id_map<bufferlist> ReplicatedBackend::ec_decode_acting_set(
+    const shard_id_map<bufferlist> &shard_map, int chunk_size) const {
+  ceph_abort_msg("decode is not used by replica pool");
+  return {0};
+}
+
+ECUtil::stripe_info_t ReplicatedBackend::ec_get_sinfo() const {
+  ceph_abort_msg("get_ec_sinfo is not used by replica pool");
+  return {0, 0, 0};
 }
 
 class C_OSD_OnOpCommit : public Context {

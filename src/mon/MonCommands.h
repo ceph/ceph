@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -1524,7 +1525,15 @@ COMMAND_WITH_FLAG("dump_historic_ops",
             "show recent ops",
             "mon", "r",
             FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_ops_by_duration",
+            "show recent ops sorted by duration",
+            "mon", "r",
+            FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_slow_ops",
             "show recent slow ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_ops_in_flight",
+            "show the ops currently in flight",
             "mon", "r",
             FLAG(TELL))

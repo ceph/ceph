@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,8 @@
 
 #ifndef CEPH_CLIENT_H
 #define CEPH_CLIENT_H
+
+#include <dirent.h>
 
 #include "common/admin_socket.h"
 #include "common/CommandTable.h"
@@ -53,6 +56,7 @@
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
+#include <shared_mutex>
 
 using std::set;
 using std::map;
@@ -256,6 +260,40 @@ struct dir_result_t {
   struct dirent de;
 
   int fd;                // fd attached using fdopendir (-1 if none)
+};
+
+/**
+ * @brief The subvolume metric tracker.
+ *
+ * Maps subvolume_id(which is in fact inode id) to the vector of SimpleIOMetric instances.
+ * Each simple metric records the single IO operation on the client.
+ * On clients metric message to the MDS, client will aggregate all simple metrics for each subvolume
+ * into the AggregatedIOMetric struct and clear the current metrics list.
+ * TODO: limit the cap for each subvolume? in the case client sends metrics to the MDS not so often?
+ */
+class SubvolumeMetricTracker {
+public:
+    struct SubvolumeEntry {
+        AggregatedIOMetrics metrics;
+
+        void dump(Formatter *f) const {
+          f->dump_object("", metrics);
+        }
+    };
+
+    SubvolumeMetricTracker(CephContext *ct, client_t id);
+    void dump(Formatter *f);
+    void add_inode(inodeno_t inode, inodeno_t subvol);
+    void remove_inode(inodeno_t inode);
+    void add_metric(inodeno_t inode, SimpleIOMetric&& metric);
+    std::vector<AggregatedIOMetrics> aggregate(bool clean);
+protected:
+    std::vector<AggregatedIOMetrics> last_subvolume_metrics;
+    std::unordered_map<inodeno_t, SubvolumeEntry> subvolume_metrics;
+    std::unordered_map<inodeno_t, inodeno_t> inode_subvolume;
+    CephContext *cct = nullptr;
+    client_t whoami;
+    std::shared_mutex metrics_lock;
 };
 
 class Client : public Dispatcher, public md_config_obs_t {
@@ -478,7 +516,9 @@ public:
                 const UserPerm& perms);
   int flock(int fd, int operation, uint64_t owner);
   int truncate(const char *path, loff_t size, const UserPerm& perms);
-
+  int getlk(int fd, struct flock *fl, uint64_t owner);
+  int setlk(int fd, struct flock *fl, uint64_t owner, int sleep);
+  
   // file ops
   int mknod(const char *path, mode_t mode, const UserPerm& perms, dev_t rdev=0);
 
@@ -681,6 +721,7 @@ public:
                             Context *onfinish = nullptr,
                             bufferlist *blp = nullptr,
                             bool do_fsync = false, bool syncdataonly = false);
+  int64_t nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
@@ -1068,7 +1109,7 @@ protected:
     bool is_rename = false;
     bool require_target = true;
   };
-  int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
+  int path_walk(InodeRef dirinode, const filepath& fp, struct walk_dentry_result* result, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options, std::string trimmed_path=std::string());
   int path_walk(InodeRef dirinode, const filepath& fp, InodeRef *end, const UserPerm& perms, const PathWalk_ExtraOptions& extra_options);
 
   // fake inode number for 32-bits ino_t
@@ -1175,6 +1216,7 @@ protected:
   void force_session_readonly(MetaSession *s);
 
   void dump_status(Formatter *f);  // debug
+  void dump_subvolume_metrics(Formatter* f);
 
   Dispatcher::dispatch_result_t ms_dispatch2(const MessageRef& m) override;
 
@@ -1345,6 +1387,10 @@ protected:
   struct mount_state_t mount_state;
   struct initialize_state_t initialize_state;
 
+  int get_injected_write_delay_secs() const {
+    return injected_write_delay_secs;
+  }
+
 private:
   class C_Read_Finisher : public Context {
   public:
@@ -1353,11 +1399,11 @@ private:
 
     C_Read_Finisher(Client *clnt, Context *onfinish, Context *iofinish,
                     bool is_read_async, int have_caps, bool movepos,
-                    utime_t start, Fh *f, Inode *in, uint64_t fpos,
+                    Fh *f, Inode *in, uint64_t fpos,
                     int64_t offset, uint64_t size)
       : clnt(clnt), onfinish(onfinish), iofinish(iofinish),
         is_read_async(is_read_async), have_caps(have_caps), f(f), in(in),
-        start(start), fpos(fpos), offset(offset), size(size), movepos(movepos) {
+        start(mono_clock_now()), fpos(fpos), offset(offset), size(size), movepos(movepos) {
       iofinished = false;
     }
 
@@ -1406,7 +1452,7 @@ private:
                             uint64_t fpos, uint64_t off, uint64_t len,
                             bufferlist *bl, Filer *filer, int have_caps)
       : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), bl(bl),
-        filer(filer), have_caps(have_caps)
+        filer(filer), have_caps(have_caps), start_time(mono_clock_now())
     {
       left = len;
       wanted = len;
@@ -1430,6 +1476,7 @@ private:
     bufferlist tbl;
     Filer *filer;
     int have_caps;
+    utime_t start_time;
     int read;
     uint64_t pos;
     bool fini;
@@ -1448,7 +1495,7 @@ private:
   public:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                           uint64_t fpos, uint64_t off, uint64_t len)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len) {}
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), start_time(mono_clock_now()) {}
 
   private:
     Client *clnt;
@@ -1457,6 +1504,7 @@ private:
     Inode *in;
     uint64_t off;
     uint64_t len;
+    utime_t start_time;
 
     void finish(int r) override;
   };
@@ -1483,11 +1531,11 @@ private:
     void finish_fsync(int r);
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
-                     bool is_file_write, utime_t start, Fh *f, Inode *in,
+                     bool is_file_write, Fh *f, Inode *in,
                      uint64_t fpos, int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly)
       : clnt(clnt), onfinish(onfinish),
-        is_file_write(is_file_write), start(start), f(f), in(in), fpos(fpos),
+        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
         offset(offset), size(size), syncdataonly(syncdataonly) {
       iofinished_r = 0;
       onuninlinefinished_r = 0;
@@ -1567,7 +1615,7 @@ private:
     C_nonblocking_fsync_state(Client *clnt, Inode *in, bool syncdataonly, Context *onfinish)
       : clnt(clnt), in(in), syncdataonly(syncdataonly), onfinish(onfinish) {
       flush_tid = 0;
-      start = ceph_clock_now();
+      start = mono_clock_now();
       progress = 0;
       flush_wait = false;
       flush_completed = false;
@@ -1612,6 +1660,7 @@ private:
 
     Client *client;
     Fh *f;
+    utime_t start_time = 0;
   };
 
   /*
@@ -1758,9 +1807,9 @@ private:
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
           int64_t offset, uint64_t size, Inode *in);
-  int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
-          const struct iovec *iov, int iovcnt, Context *onfinish = nullptr,
-          bool do_fsync = false, bool syncdataonly = false);
+  int64_t _write(Fh *fh, int64_t offset, uint64_t size, bufferlist bl,
+          Context *onfinish = nullptr, bool do_fsync = false,
+          bool syncdataonly = false);
   int64_t _preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                  int iovcnt, int64_t offset,
                                  bool write, bool clamp_to_int,
@@ -1771,7 +1820,7 @@ private:
                       int64_t offset, bool write, Context *onfinish = nullptr,
                       bufferlist *blp = nullptr);
   int _flush(Fh *fh);
-  void nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish);
+
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
@@ -1863,6 +1912,8 @@ private:
   int _lookup_vino(vinodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
+  int _statfs(Inode *in, struct statvfs *stbuf, const UserPerm& perms);
+
   void collect_and_send_metrics();
   void collect_and_send_global_metrics();
 
@@ -1921,6 +1972,9 @@ private:
   // Cluster fsid
   fs_cluster_id_t fscid;
 
+  // subvolume metrics tracker
+  std::unique_ptr<SubvolumeMetricTracker> subvolume_tracker = nullptr;
+
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   std::unordered_map<int, Fh*> fd_map;
@@ -1955,6 +2009,7 @@ private:
 
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
+  int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
 
@@ -2004,6 +2059,7 @@ private:
   bool is_fuse = false;
   bool client_permissions;
   bool fuse_default_permissions;
+  bool respect_subvolume_snapshot_visibility;
 
   std::locale m_locale;
 };

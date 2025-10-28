@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -57,8 +58,6 @@ TEST(ectransaction, two_writes_separated_append)
     0,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -95,8 +94,6 @@ TEST(ectransaction, two_writes_separated_misaligned_overwrite)
     oi.size,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -135,8 +132,6 @@ TEST(ectransaction, partial_write)
     0,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -177,8 +172,6 @@ TEST(ectransaction, overlapping_write_non_aligned)
     8,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -220,8 +213,6 @@ TEST(ectransaction, test_appending_write_non_aligned)
     8,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -263,8 +254,6 @@ TEST(ectransaction, append_with_large_hole)
     4096,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -306,8 +295,6 @@ TEST(ectransaction, test_append_not_page_aligned_with_large_hole)
     EC_ALIGN_SIZE,
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -351,8 +338,6 @@ TEST(ectransaction, test_overwrite_with_missing)
     42*(EC_ALIGN_SIZE / 4),
     oi,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -392,8 +377,6 @@ TEST(ectransaction, truncate_to_bigger_without_write)
     4096,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -423,8 +406,6 @@ TEST(ectransaction, truncate_to_smalelr_without_write) {
     16*EC_ALIGN_SIZE,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;
@@ -470,8 +451,6 @@ TEST(ectransaction, delete_and_write_misaligned) {
     16*EC_ALIGN_SIZE,
     std::nullopt,
     std::nullopt,
-    ECUtil::HashInfoRef(new ECUtil::HashInfo(1)),
-    nullptr,
     0);
 
   generic_derr << "plan " << plan << dendl;

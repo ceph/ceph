@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef OSD_PERF_METRIC_H_
 #define OSD_PERF_METRIC_H_
@@ -11,7 +11,13 @@
 
 #include "mgr/Types.h"
 
+#include <iosfwd>
+#include <list>
+#include <map>
 #include <regex>
+#include <set>
+#include <string>
+#include <vector>
 
 typedef std::vector<std::string> OSDPerfMetricSubKey; // array of regex match
 typedef std::vector<OSDPerfMetricSubKey> OSDPerfMetricKey;
@@ -77,16 +83,18 @@ struct OSDPerfMetricSubKeyDescriptor {
     f->dump_string("regex", regex_str);
   }
 
-  static void generate_test_instances(std::list<OSDPerfMetricSubKeyDescriptor*>& o) {
-    o.push_back(new OSDPerfMetricSubKeyDescriptor());
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ID, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ADDRESS, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::POOL_ID, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::NAMESPACE, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OSD_ID, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::PG_ID, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OBJECT_NAME, ".*"));
-    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::SNAP_ID, ".*"));
+  static std::list<OSDPerfMetricSubKeyDescriptor> generate_test_instances() {
+    std::list<OSDPerfMetricSubKeyDescriptor> o;
+    o.push_back(OSDPerfMetricSubKeyDescriptor());
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ID, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ADDRESS, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::POOL_ID, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::NAMESPACE, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OSD_ID, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::PG_ID, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OBJECT_NAME, ".*"));
+    o.push_back(OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::SNAP_ID, ".*"));
+    return o;
   }
 };
 WRITE_CLASS_DENC(OSDPerfMetricSubKeyDescriptor)
@@ -206,17 +214,19 @@ struct PerformanceCounterDescriptor {
     f->dump_unsigned("type", static_cast<uint8_t>(type));
   }
 
-  static void generate_test_instances(std::list<PerformanceCounterDescriptor*>& o) {
-    o.push_back(new PerformanceCounterDescriptor());
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::OPS));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::BYTES));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_BYTES));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_BYTES));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::LATENCY));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_LATENCY));
-    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_LATENCY));
+  static std::list<PerformanceCounterDescriptor> generate_test_instances() {
+    std::list<PerformanceCounterDescriptor> o;
+    o.push_back(PerformanceCounterDescriptor());
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::OPS));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::BYTES));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::WRITE_BYTES));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::READ_BYTES));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::LATENCY));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::WRITE_LATENCY));
+    o.push_back(PerformanceCounterDescriptor(PerformanceCounterType::READ_LATENCY));
+    return o;
   }
 
   void pack_counter(const PerformanceCounter &c, ceph::buffer::list *bl) const;
@@ -347,20 +357,22 @@ struct OSDPerfMetricQuery {
                 performance_counter_descriptors, f);
   }
 
-  static void generate_test_instances(std::list<OSDPerfMetricQuery*> &o) {
-    o.push_back(new OSDPerfMetricQuery());
-    o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
-                                       PerformanceCounterDescriptors()));
-    o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
-                                       PerformanceCounterDescriptors{
-                                         PerformanceCounterType::WRITE_OPS,
-                                         PerformanceCounterType::READ_OPS,
-                                         PerformanceCounterType::BYTES,
-                                         PerformanceCounterType::WRITE_BYTES,
-                                         PerformanceCounterType::READ_BYTES,
-                                         PerformanceCounterType::LATENCY,
-                                         PerformanceCounterType::WRITE_LATENCY,
-                                         PerformanceCounterType::READ_LATENCY}));
+  static std::list<OSDPerfMetricQuery> generate_test_instances() {
+    std::list<OSDPerfMetricQuery> o;
+    o.push_back(OSDPerfMetricQuery());
+    o.push_back(OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+				   PerformanceCounterDescriptors()));
+    o.push_back(OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+				   PerformanceCounterDescriptors{
+				     PerformanceCounterType::WRITE_OPS,
+				     PerformanceCounterType::READ_OPS,
+				     PerformanceCounterType::BYTES,
+				     PerformanceCounterType::WRITE_BYTES,
+				     PerformanceCounterType::READ_BYTES,
+				     PerformanceCounterType::LATENCY,
+				     PerformanceCounterType::WRITE_LATENCY,
+				     PerformanceCounterType::READ_LATENCY}));
+    return o;
   }
 
   void get_performance_counter_descriptors(
@@ -418,15 +430,17 @@ struct OSDPerfMetricReport {
                 group_packed_performance_counters, f);
   }
 
-  static void generate_test_instances(std::list<OSDPerfMetricReport *> &o) {
-    o.push_back(new OSDPerfMetricReport);
-    o.push_back(new OSDPerfMetricReport);
-    o.back()->performance_counter_descriptors.push_back(
+  static std::list<OSDPerfMetricReport> generate_test_instances() {
+    std::list<OSDPerfMetricReport> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().performance_counter_descriptors.push_back(
         PerformanceCounterDescriptor(PerformanceCounterType::OPS));
-    o.back()->performance_counter_descriptors.push_back(
+    o.back().performance_counter_descriptors.push_back(
         PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
-    o.back()->performance_counter_descriptors.push_back(
+    o.back().performance_counter_descriptors.push_back(
         PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
+    return o;
   }
 };
 WRITE_CLASS_DENC(OSDPerfMetricReport)

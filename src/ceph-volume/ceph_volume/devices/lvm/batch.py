@@ -278,6 +278,18 @@ class Batch(object):
             help='Reuse existing OSD ids',
             type=arg_validators.valid_osd_id
         )
+        parser.add_argument(
+            '--dmcrypt-format-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksFormat options (use the same syntax as the cryptsetup CLI)",
+        )
+        parser.add_argument(
+            '--dmcrypt-open-opts',
+            type=str,
+            default=None,
+            help="Additional cryptsetup luksOpen options (use the same syntax as the cryptsetup CLI)",
+        )
         self.args = parser.parse_args(argv)
         if self.args.bluestore:
             self.args.objectstore = 'bluestore'
@@ -373,11 +385,14 @@ class Batch(object):
     def _execute(self, plan: List["OSD"]) -> None:
         defaults = common.get_default_args()
         global_args = [
+            'objectstore',
             'bluestore',
             'dmcrypt',
             'with_tpm',
             'crush_device_class',
             'no_systemd',
+            'dmcrypt_format_opts',
+            'dmcrypt_open_opts',
         ]
         defaults.update({arg: getattr(self.args, arg) for arg in global_args})
         for osd in plan:
@@ -417,8 +432,7 @@ class Batch(object):
             return plan
         requested_osds = self.args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
-        if self.args.objectstore == 'bluestore':
-            fast_type = 'block_db'
+        fast_type = 'block_db'
         fast_allocations = self.fast_allocations(fast_devices,
                                                  requested_osds,
                                                  num_osds,

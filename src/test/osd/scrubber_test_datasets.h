@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #pragma once
 
 /// \file data-sets used by the scrubber unit tests
@@ -11,6 +12,11 @@ namespace ScrubDatasets {
  * Two objects with some clones. No inconsitencies.
  */
 extern ScrubGenerator::RealObjsConf minimal_snaps_configuration;
+
+/*
+ * Dataset to represent an erasure coded configuration.
+ */
+extern ScrubGenerator::RealObj erasure_code_obj;
 
 // and a part of this configuration, one that we will corrupt in a test:
 extern hobject_t hobj_ms1_snp30;

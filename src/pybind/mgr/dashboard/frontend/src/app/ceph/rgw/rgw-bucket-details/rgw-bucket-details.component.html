@@ -136,7 +136,7 @@
       <a ngbNavLink
          i18n>Policies</a>
       <ng-template ngbNavContent>
-        <div class="table-scroller">
+        <div>
           <table class="cds--data-table--sort cds--data-table--no-border cds--data-table cds--data-table--md">
             <tbody>
               <tr>
@@ -236,6 +236,13 @@
       <ng-template ngbNavContent>
         <cd-rgw-bucket-lifecycle-list [bucket]="selection"
                                       (updateBucketDetails)="updateBucketDetails(extractLifecycleDetails.bind(this))"></cd-rgw-bucket-lifecycle-list>
+      </ng-template>
+    </ng-container>
+    <ng-container ngbNavItem="notification">
+      <a ngbNavLink
+         i18n>Notification</a>
+      <ng-template ngbNavContent>
+        <cd-rgw-bucket-notification-list [bucket]="selection"></cd-rgw-bucket-notification-list>
       </ng-template>
     </ng-container>
   </nav>

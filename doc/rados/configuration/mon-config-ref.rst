@@ -628,6 +628,14 @@ Miscellaneous
 .. confval:: mon_memory_target
 .. confval:: mon_memory_autotune
 .. confval:: enable_availability_tracking
+.. confval:: pool_availability_update_interval
+
+NVMe-oF Monitor Client
+======================
+
+.. confval:: nvmeof_mon_client_disconnect_panic
+.. confval:: nvmeof_mon_client_connect_panic
+.. confval:: nvmeof_mon_client_tick_period
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 .. _Monitor Keyrings: ../../../dev/mon-bootstrap#secret-keys

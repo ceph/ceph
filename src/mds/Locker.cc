@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -900,16 +901,26 @@ void Locker::drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
     issue_caps_set(*pneed_issue);
 }
 
-void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
+void Locker::handle_locks_for_early_reply(MutationImpl *mut)
 {
   set<CInode*> need_issue;
+  bool nudged = false;
+
+  dout(10) << __func__ << ": " << *mut << dendl;
 
   for (auto it = mut->locks.begin(); it != mut->locks.end(); ) {
+    SimpleLock *lock = it->lock;
+    if (!nudged) {
+      /* A request may finally early reply only after another request has
+       * triggered an unstable state change. We need to nudge the log now to
+       * move things along.
+       */
+      nudged = nudge_log(lock);
+    }
     if (!it->is_rdlock()) {
       ++it;
       continue;
     }
-    SimpleLock *lock = it->lock;
     // make later mksnap/setlayout (at other mds) wait for this unsafe request
     if (lock->get_type() == CEPH_LOCK_ISNAP ||
 	lock->get_type() == CEPH_LOCK_IPOLICY) {
@@ -1839,11 +1850,17 @@ bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut, bool as_ano
   return false;
 }
 
-void Locker::nudge_log(SimpleLock *lock)
+bool Locker::nudge_log(SimpleLock *lock)
 {
-  dout(10) << "nudge_log " << *lock << " on " << *lock->get_parent() << dendl;
-  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked())    // as with xlockdone, or cap flush
+   // as with xlockdone, or cap flush
+  if (lock->get_parent()->is_auth() && lock->is_unstable_and_locked() && lock->has_any_waiter()) {
+    dout(10) << __func__ << " YES " << *lock << " on " << *lock->get_parent() << dendl;
     mds->mdlog->flush();
+    return true;
+  } else {
+    dout(20) << __func__ << " NO " << *lock << " on " << *lock->get_parent() << dendl;
+    return false;
+  }
 }
 
 void Locker::rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue)
@@ -2473,6 +2490,13 @@ Capability* Locker::issue_new_caps(CInode *in,
   cap->dec_suppress();
 
   return cap;
+}
+
+void Locker::maybe_set_subvolume_id(const CInode* inode, ref_t<MClientCaps>& ack) {
+ if (ack && inode) {
+   ack->subvolume_id = inode->get_subvolume_id();
+   dout(10) << "setting subvolume id " << ack->subvolume_id << " for inode " << inode->ino().val << dendl;
+ }
 }
 
 void Locker::issue_caps_set(set<CInode*>& inset)
@@ -3382,6 +3406,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       if (mds->logger) mds->logger->inc(l_mdss_handle_client_caps_dirty);
   }
 
+  CInode *head_in = mdcache->get_inode(m->get_ino());
   if (m->get_client_tid() > 0 && session &&
       session->have_completed_flush(m->get_client_tid())) {
     dout(7) << "handle_client_caps already flushed tid " << m->get_client_tid()
@@ -3390,9 +3415,11 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     if (op == CEPH_CAP_OP_FLUSHSNAP) {
       if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flushsnap_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSHSNAP_ACK, m->get_ino(), 0, 0, 0, 0, 0, dirty, 0, 0, mds->get_osd_epoch_barrier());
+      maybe_set_subvolume_id(head_in, ack);
     } else {
       if (mds->logger) mds->logger->inc(l_mdss_ceph_cap_op_flush_ack);
       ack = make_message<MClientCaps>(CEPH_CAP_OP_FLUSH_ACK, m->get_ino(), 0, m->get_cap_id(), m->get_seq(), m->get_caps(), 0, dirty, 0, 0, mds->get_osd_epoch_barrier());
+      maybe_set_subvolume_id(head_in, ack);
     }
     ack->set_snap_follows(follows);
     ack->set_client_tid(m->get_client_tid());
@@ -3429,7 +3456,6 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
     }
   }
 
-  CInode *head_in = mdcache->get_inode(m->get_ino());
   if (!head_in) {
     if (mds->is_clientreplay()) {
       dout(7) << "handle_client_caps on unknown ino " << m->get_ino()
@@ -3518,6 +3544,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
       ack->set_snap_follows(follows);
       ack->set_client_tid(m->get_client_tid());
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
+      maybe_set_subvolume_id(head_in, ack);
     }
 
     if (in == head_in ||
@@ -3606,6 +3633,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
           m->get_caps(), 0, dirty, 0, cap->get_last_issue(), mds->get_osd_epoch_barrier());
       ack->set_client_tid(m->get_client_tid());
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
+      maybe_set_subvolume_id(head_in, ack);
     }
 
     // filter wanted based on what we could ever give out (given auth/replica status)

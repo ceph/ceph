@@ -24,6 +24,7 @@ import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.componen
 import { By } from '@angular/platform-browser';
 import { CheckboxModule, NumberModule, SelectModule } from 'carbon-components-angular';
 import { LoadingStatus } from '~/app/shared/forms/cd-form';
+import { USER } from '~/app/shared/constants/app.constants';
 
 describe('RgwUserFormComponent', () => {
   let component: RgwUserFormComponent;
@@ -230,9 +231,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -248,8 +247,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: -1,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -268,9 +266,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -286,8 +282,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 0,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -308,9 +303,7 @@ describe('RgwUserFormComponent', () => {
         secret_key: '',
         suspended: false,
         system: false,
-        uid: null,
-        account_id: '',
-        account_root_user: false
+        uid: null
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -327,8 +320,7 @@ describe('RgwUserFormComponent', () => {
         email: null,
         max_buckets: 100,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
       expect(spyRateLimit).toHaveBeenCalled();
     });
@@ -358,8 +350,7 @@ describe('RgwUserFormComponent', () => {
         email: '',
         max_buckets: 1000,
         suspended: false,
-        system: false,
-        account_root_user: false
+        system: false
       });
     });
 
@@ -590,7 +581,7 @@ describe('RgwUserFormComponent', () => {
 
       // Assertions
       expect(result).toEqual({
-        quota_type: 'user',
+        quota_type: USER,
         enabled: true,
         max_size_kb: -1,
         max_objects: -1
@@ -614,7 +605,7 @@ describe('RgwUserFormComponent', () => {
       const result = component._getUserQuotaArgs();
       expect(toBytesSpy).toHaveBeenCalledWith(2048);
       expect(result).toEqual({
-        quota_type: 'user',
+        quota_type: USER,
         enabled: true,
         max_size_kb: '2048', // Expect the converted KB value
         max_objects: -1
@@ -634,7 +625,7 @@ describe('RgwUserFormComponent', () => {
       const result = component._getUserQuotaArgs();
 
       expect(result).toEqual({
-        quota_type: 'user',
+        quota_type: USER,
         enabled: true,
         max_size_kb: -1,
         max_objects: 1000

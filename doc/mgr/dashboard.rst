@@ -129,16 +129,6 @@ updates on any changes in the cluster and allows quick access to other sections 
 
 .. image:: dashboard-landing-page.png
 
-
-.. note::
-  You can change the landing page to the previous version from:
-  ``Cluster >> Manager Modules >> Dashboard >> Edit``.
-  Editing the ``FEATURE_TOGGLE_DASHBOARD`` option will change the landing page, from one view to another.
-
-  Note that the previous version of the landing page will be disabled in future releases.
-
-.. _dashboard-landing-page-details:
-
 Details
 """""""
 Provides an overview of the cluster configuration, displaying various critical aspects of the cluster.
@@ -253,6 +243,19 @@ For example, a key pair can be generated with a command similar to:
    openssl req -new -nodes -x509 \
    -subj "/O=IT/CN=ceph-mgr-dashboard" -days 3650 \
    -keyout dashboard.key -out dashboard.crt -extensions v3_ca
+
+.. note::
+
+   Currently, the Ceph Dashboard supports only RSA private keys for SSL/TLS
+   certificates. If you attempt to configure the dashboard with an ECDSA/EC
+   key, the module will fail to start with an error similar to:
+
+   ``MGR_MODULE_ERROR: Module 'dashboard' has failed: key type unsupported``
+
+   This limitation exists because the verification routine in the Ceph Manager
+   uses pyOpenSSL, which supports only RSA keys in its
+   ``PKey.check()`` method. Until this restriction is lifted, generate or
+   request certificates with RSA keys.
 
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for Ceph manager instances by running the following commands:
@@ -1626,21 +1629,20 @@ debugging.
 
      .. prompt:: bash #
 
-        bin/ceph config set mgr mgr/dashboard/log_level debug
+        ceph config set mgr mgr/dashboard/log_level debug
 
 3. High log levels can result in considerable log volume, which can
-easily fill up your filesystem. Set a calendar reminder for an hour, a day,
-or a week in the future to revert this temporary logging increase.  This looks
-something like this:
+easily fill up your filesystem or central log store. Set a calendar reminder for an hour, a day,
+or a week in the future to revert a temporary logging increase. Any current, non-default setting
+may be shown with the below command:
 
    .. prompt:: bash #
 
-      ceph config log
+      ceph config dump | grep mgr/dashboard/log_level
 
    ::
-
       ...
-      --- 11 --- 2020-11-07 11:11:11.960659 --- mgr.x/dashboard/log_level = debug ---
+      mgr advanced  mgr/dashboard/log_level debug
       ...
     
    .. prompt:: bash #

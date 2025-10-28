@@ -1,21 +1,27 @@
+.. _radosgw-s3-notification-compatibility:
+
 =====================================
 S3 Bucket Notifications Compatibility
 =====================================
 
-Ceph's `Bucket Notifications`_ API follows `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
+Ceph's `Bucket Notifications`_ API follows `AWS S3 Bucket Notifications API`_.
+However, some differences exist, as listed below.
 
 
-.. note:: 
+.. note::
 
-    Compatibility is different depending on which of the above mechanism is used
+   Compatibility is different depending on which of the below mechanisms
+   is used.
 
 Supported Destination
 ---------------------
 
-AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
+AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS
+internal destinations).
 Currently, we support: **HTTP/S**, **Kafka** and **AMQP**.
 
-We are using the **SNS** ARNs to represent the **HTTP/S**, **Kafka** and **AMQP** destinations.
+We are using the **SNS** ARNs to represent the **HTTP/S**, **Kafka** and
+**AMQP** destinations.
 
 Notification Configuration XML
 ------------------------------
@@ -30,18 +36,21 @@ Following tags (and the tags inside them) are not supported:
 | ``<CloudFunctionConfiguration>``  | not needed, we treat all destinations as SNS |
 +-----------------------------------+----------------------------------------------+
 
-REST API Extension 
+REST API Extension
 ------------------
 
 Ceph's bucket notification API has the following extensions:
 
-- Deletion of a specific notification, or all notifications on a bucket, using the ``DELETE`` verb
+- Deletion of a specific notification, or all notifications on a bucket,
+  using the ``DELETE`` verb
 
- - In S3, all notifications are deleted when the bucket is deleted, or when an empty notification is set on the bucket
+  - In S3, all notifications are deleted when the bucket is deleted, or
+    when an empty notification is set on the bucket.
 
-- Getting the information on a specific notification (when more than one exists on a bucket)
+- Getting the information on a specific notification (when more than one
+  exists on a bucket)
 
-  - In S3, it is only possible to fetch all notifications on a bucket
+  - In S3, it is only possible to fetch all notifications on a bucket.
 
 - In addition to filtering based on prefix/suffix of object keys we support:
 
@@ -51,15 +60,18 @@ Ceph's bucket notification API has the following extensions:
 
   - Filtering based on object tags
 
-- Each one of the additional filters extends the S3 API and using it will require extension of the client SDK (unless you are using plain HTTP). 
+- Each one of the additional filters extends the S3 API and using it will
+  require extension of the client SDK (unless you are using plain HTTP).
 
-- Filtering overlapping is allowed, so that same event could be sent as different notification
+- Filtering overlapping is allowed, so that same event could be sent as
+  different notification.
 
 
 Unsupported Fields in the Event Record
 --------------------------------------
 
-The records sent for bucket notification follows the format described in: `Event Message Structure`_.
+The records sent for bucket notification follows the format described in:
+`Event Message Structure`_.
 However, the ``requestParameters.sourceIPAddress`` field will be sent empty.
 
 
@@ -112,7 +124,7 @@ Event Types
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectSynced:*``                                  | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
-| ``s3:ObjectSynced:Create``                             | Ceph Extension                            |
+| ``s3:ObjectSynced:Create``                             | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
 | ``s3:ObjectSynced:Delete``                             | Ceph extension                            |
 +--------------------------------------------------------+-------------------------------------------+
@@ -137,34 +149,41 @@ Event Types
 | ``s3:ReducedRedundancyLostObject``                     | Not applicable                            |
 +--------------------------------------------------------+-------------------------------------------+
 
-.. note:: 
+.. note::
 
-   The ``s3:ObjectRemoved:DeleteMarkerCreated`` event presents information on the latest version of the object
+   The ``s3:ObjectRemoved:DeleteMarkerCreated`` event presents information
+   on the latest version of the object.
 
 .. note::
 
-   In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload`` notification will be sent at the end of the process.
-   
+   In case of multipart upload, an ``ObjectCreated:CompleteMultipartUpload``
+   notification will be sent at the end of the process.
+
 .. note::
 
-   The ``s3:ObjectSynced:Create`` event is sent when an object successfully syncs to a zone. It must be explicitly set for each zone. 
+   The ``s3:ObjectSynced:Create`` event is sent when an object successfully
+   syncs to a zone. It must be explicitly set for each zone.
 
 Topic Configuration
 -------------------
-In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_. 
-Note that most of the API is not applicable to Ceph, and only the following actions are implemented:
+In the case of bucket notifications, the topics management API will be
+derived from `AWS Simple Notification Service API`_.
+Note that most of the API is not applicable to Ceph, and only the following
+actions are implemented:
 
- - ``CreateTopic``
- - ``DeleteTopic``
- - ``ListTopics``
+- ``CreateTopic``
+- ``DeleteTopic``
+- ``ListTopics``
 
-We also have the following extensions to topic configuration: 
+We also have the following extensions to topic configuration:
 
- - In ``GetTopic`` we allow fetching a specific topic, instead of all user topics
- - In ``CreateTopic``
+- In ``GetTopic`` we allow fetching a specific topic, instead of all
+  user topics.
+- In ``CreateTopic``:
 
-  - we allow setting endpoint attributes
-  - we allow setting opaque data that will be sent to the endpoint in the notification
+  - We allow setting endpoint attributes.
+  - We allow setting opaque data that will be sent to the endpoint in
+    the notification.
 
 
 .. _AWS Simple Notification Service API: https://docs.aws.amazon.com/sns/latest/api/API_Operations.html

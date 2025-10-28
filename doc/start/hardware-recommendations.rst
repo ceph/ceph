@@ -68,15 +68,21 @@ is advised.
 	 on a small initial cluster footprint.
 
 There is an :confval:`osd_memory_target` setting for BlueStore OSDs that
-defaults to 4GB.  Factor in a prudent margin for the operating system and
+defaults to 4 GiB. Factor in a prudent margin for the operating system and
 administrative tasks (like monitoring and metrics) as well as increased
-consumption during recovery:  provisioning ~8GB *per BlueStore OSD* is thus
-advised.
+consumption during recovery. We recommend ensuring that total server RAM
+is greater than (number of OSDs * ``osd_memory_target`` * 2), which
+allows for usage by the OS and by other Ceph daemons. A 1U server with
+8-10 OSDs thus is well-provisioned with 128 GB of physical memory. Enabling
+:confval:`osd_memory_target_autotune` can help avoid OOMing under heavy load or when
+non-OSD daemons migrate onto a node. An effective :confval:`osd_memory_target` of
+at least 6 GiB can help mitigate slow requests on HDD OSDs.
+
 
 Monitors and Managers (ceph-mon and ceph-mgr)
 ---------------------------------------------
 
-Monitor and manager daemon memory usage scales with the size of the
+Monitor and Manager memory usage scales with the size of the
 cluster.  Note that at boot-time and during topology changes and recovery these
 daemons will need more RAM than they do during steady-state operation, so plan
 for peak usage. For very small clusters, 32 GB suffices. For clusters of up to,
@@ -99,8 +105,8 @@ its cache. We recommend 1 GB as a minimum for most systems.  See
 Memory
 ======
 
-Bluestore uses its own memory to cache data rather than relying on the
-operating system's page cache. In Bluestore you can adjust the amount of memory
+BlueStore uses its own memory to cache data rather than relying on the
+operating system's page cache. When using the BlueStore OSD back end you can adjust the amount of memory
 that the OSD attempts to consume by changing the :confval:`osd_memory_target`
 configuration option.
 
@@ -137,13 +143,14 @@ configuration option.
 
 .. tip:: Configuring the operating system with swap to provide additional
 	 virtual memory for daemons is not advised for modern systems.  Doing
-	 may result in lower performance, and your Ceph cluster may well be
+	 so may result in lower performance, and your Ceph cluster may well be
 	 happier with a daemon that crashes vs one that slows to a crawl.
 
-When using the legacy FileStore back end, the OS page cache was used for caching
-data, so tuning was not normally needed. When using the legacy FileStore backend,
-the OSD memory consumption was related to the number of PGs per daemon in the
-system.
+When using the legacy Filestore back end, the OS page cache was used for caching
+data, so tuning was not normally needed. OSD memory consumption is related
+to the workload and number of PGs that it serves. BlueStore OSDs do not use
+the page cache, so the autotuner is recommended to ensure that RAM is used
+fully but prudently.
 
 
 Data Storage
@@ -173,8 +180,8 @@ drives:
 
 For more
 information on how to effectively use a mix of fast drives and slow drives in
-your Ceph cluster, see the `block and block.db`_ section of the Bluestore
-Configuration Reference.
+your Ceph cluster, see the :ref:`block and block.db <bluestore-mixed-device-config>`
+section of the BlueStore Configuration Reference.
 
 Hard Disk Drives
 ----------------
@@ -507,19 +514,19 @@ core / spine network switches or routers, often at least 40 Gb/s.
 Baseboard Management Controller (BMC)
 -------------------------------------
 
-Your server chassis should have a Baseboard Management Controller (BMC).
+Your server chassis likely has a Baseboard Management Controller (BMC).
 Well-known examples are iDRAC (Dell), CIMC (Cisco UCS), and iLO (HPE).
 Administration and deployment tools may also use BMCs extensively, especially
 via IPMI or Redfish, so consider the cost/benefit tradeoff of an out-of-band
-network for security and administration.  Hypervisor SSH access, VM image uploads,
+network for security and administration. Hypervisor SSH access, VM image uploads,
 OS image installs, management sockets, etc. can impose significant loads on a network.
 Running multiple networks may seem like overkill, but each traffic path represents
 a potential capacity, throughput and/or performance bottleneck that you should
 carefully consider before deploying a large scale data cluster.
 
-Additionally BMCs as of 2023 rarely sport network connections faster than 1 Gb/s,
+Additionally, BMCs as of 2025 rarely offer network connections faster than 1 Gb/s,
 so dedicated and inexpensive 1 Gb/s switches for BMC administrative traffic
-may reduce costs by wasting fewer expenive ports on faster host switches.
+may reduce costs by wasting fewer expensive ports on faster host switches.
 
 
 Failure Domains
@@ -613,7 +620,6 @@ found above and elsewhere within this documentation.
 
 
 
-.. _block and block.db: https://docs.ceph.com/en/latest/rados/configuration/bluestore-config-ref/#block-and-block-db
 .. _Ceph blog: https://ceph.com/community/blog/
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/

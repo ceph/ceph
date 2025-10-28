@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <vector>
 #include <string>
@@ -45,8 +45,10 @@ class DatalogTrimImplCR : public RGWSimpleCoroutine {
   int send_request(const DoutPrefixProvider *dpp) override {
     set_status() << "sending request";
     cn = stack->create_completion_notifier();
-    return store->svc()->datalog_rados->trim_entries(dpp, shard, marker,
-						     cn->completion());
+    // Call cannot fail, all errors will be reported through the completion
+    store->svc()->datalog_rados->trim_entries(dpp, shard, marker,
+					      cn->completion());
+    return 0;
   }
   int request_complete() override {
     int r = cn->completion()->get_return_value();

@@ -13,13 +13,13 @@
 </cd-select>
 
 <span *ngFor="let dataItem of data">
-  <span class="badge badge-dark me-2">
+  <cds-tag class="tag-dark me-2">
     <span class="me-2">{{ dataItem }}</span>
-      <a  class="badge-remove"
+      <a  class="tags-remove"
           (click)="cdSelect.removeItem(dataItem)">
       <svg [cdsIcon]="icons.destroy"
            [size]="icons.size20"
            class="cds-white"></svg>
     </a>
-  </span>
+  </cds-tag>
 </span>

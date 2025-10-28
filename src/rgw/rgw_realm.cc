@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <optional>
 
@@ -83,11 +83,12 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+list<RGWRealm> RGWRealm::generate_test_instances()
 {
-  RGWRealm *z = new RGWRealm;
-  o.push_back(z);
-  o.push_back(new RGWRealm);
+  list<RGWRealm> o;
+  o.emplace_back();
+  o.emplace_back();
+  return o;
 }
 
 void RGWRealm::dump(Formatter *f) const

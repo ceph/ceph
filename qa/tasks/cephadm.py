@@ -4,16 +4,12 @@ Ceph cluster task, deployed via cephadm orchestrator
 import argparse
 import configobj
 import contextlib
-import functools
 import json
 import logging
 import os
 import re
-import time
 import uuid
 import yaml
-
-import jinja2
 
 from copy import deepcopy
 from io import BytesIO, StringIO
@@ -30,6 +26,7 @@ from textwrap import dedent
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
 from tasks.daemonwatchdog import DaemonWatchdog
 from tasks.util import chacra
+from tasks import template
 
 # these items we use from ceph.py should probably eventually move elsewhere
 from tasks.ceph import get_mons, healthy
@@ -37,73 +34,6 @@ from tasks.ceph import get_mons, healthy
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'prometheus']
 
 log = logging.getLogger(__name__)
-
-
-def _convert_strs_in(o, conv):
-    """A function to walk the contents of a dict/list and recurisvely apply
-    a conversion function (`conv`) to the strings within.
-    """
-    if isinstance(o, str):
-        return conv(o)
-    if isinstance(o, dict):
-        for k in o:
-            o[k] = _convert_strs_in(o[k], conv)
-    if isinstance(o, list):
-        o[:] = [_convert_strs_in(v, conv) for v in o]
-    return o
-
-
-def _apply_template(jinja_env, rctx, template):
-    """Apply jinja2 templating to the template string `template` via the jinja
-    environment `jinja_env`, passing a dictionary containing top-level context
-    to render into the template.
-    """
-    if '{{' in template or '{%' in template:
-        return jinja_env.from_string(template).render(**rctx)
-    return template
-
-
-def _template_transform(ctx, config, target):
-    """Apply jinja2 based templates to strings within the target object,
-    returning a transformed target. Target objects may be a list or dict or
-    str.
-
-    Note that only string values in the list or dict objects are modified.
-    Therefore one can read & parse yaml or json that contain templates in
-    string values without the risk of changing the structure of the yaml/json.
-    """
-    jenv = getattr(ctx, '_jinja_env', None)
-    if jenv is None:
-        loader = jinja2.BaseLoader()
-        jenv = jinja2.Environment(loader=loader)
-        jenv.filters['role_to_remote'] = _role_to_remote
-        setattr(ctx, '_jinja_env', jenv)
-    rctx = dict(ctx=ctx, config=config, cluster_name=config.get('cluster', ''))
-    _vip_vars(rctx)
-    conv = functools.partial(_apply_template, jenv, rctx)
-    return _convert_strs_in(target, conv)
-
-
-def _vip_vars(rctx):
-    """For backwards compat with the previous subst_vip function."""
-    ctx = rctx['ctx']
-    if 'vnet' in getattr(ctx, 'vip', {}):
-        rctx['VIPPREFIXLEN'] = str(ctx.vip["vnet"].prefixlen)
-        rctx['VIPSUBNET'] = str(ctx.vip["vnet"].network_address)
-    if 'vips' in getattr(ctx, 'vip', {}):
-        vips = ctx.vip['vips']
-        for idx, vip in enumerate(vips):
-            rctx[f'VIP{idx}'] = str(vip)
-
-
-@jinja2.pass_context
-def _role_to_remote(rctx, role):
-    """Return the first remote matching the given role."""
-    ctx = rctx['ctx']
-    for remote, roles in ctx.cluster.remotes.items():
-        if role in roles:
-            return remote
-    return None
 
 
 def _shell(ctx, cluster_name, remote, args, extra_cephadm_args=[], **kwargs):
@@ -282,6 +212,7 @@ def _fetch_cephadm_from_rpm(ctx):
 def _fetch_cephadm_from_github(ctx, config, ref):
     ref = config.get('cephadm_branch', ref)
     git_url = config.get('cephadm_git_url', teuth_config.get_ceph_git_url())
+    file_path = config.get('cephadm_file_path', 'src/cephadm/cephadm')
     log.info('Downloading cephadm (repo %s ref %s)...' % (git_url, ref))
     if git_url.startswith('https://github.com/'):
         # git archive doesn't like https:// URLs, which we use with github.
@@ -290,7 +221,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
         ctx.cluster.run(
             args=[
                 'curl', '--silent',
-                'https://raw.githubusercontent.com/' + rest + '/' + ref + '/src/cephadm/cephadm',
+                f'https://raw.githubusercontent.com/{rest}/{ref}/{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -305,7 +236,7 @@ def _fetch_cephadm_from_github(ctx, config, ref):
                 run.Raw('&&'),
                 'cd', 'testrepo',
                 run.Raw('&&'),
-                'git', 'show', f'{ref}:src/cephadm/cephadm',
+                'git', 'show', f'{ref}:{file_path}',
                 run.Raw('>'),
                 ctx.cephadm,
                 run.Raw('&&'),
@@ -1512,22 +1443,6 @@ def stop(ctx, config):
     yield
 
 
-def _expand_roles(ctx, config):
-    if 'all-roles' in config and len(config) == 1:
-        a = config['all-roles']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if not id_.startswith('host.'))
-    elif 'all-hosts' in config and len(config) == 1:
-        a = config['all-hosts']
-        roles = teuthology.all_roles(ctx.cluster)
-        config = dict((id_, a) for id_ in roles if id_.startswith('host.'))
-    elif 'all-roles' in config or 'all-hosts' in config:
-        raise ValueError(
-            'all-roles/all-hosts may not be combined with any other roles'
-        )
-    return config
-
-
 def shell(ctx, config):
     """
     Execute (shell) commands
@@ -1540,8 +1455,8 @@ def shell(ctx, config):
     for k in config.pop('volumes', []):
         args.extend(['-v', k])
 
-    config = _expand_roles(ctx, config)
-    config = _template_transform(ctx, config, config)
+    config = template.expand_roles(ctx, config)
+    config = template.transform(ctx, config, config)
     for role, cmd in config.items():
         (remote,) = ctx.cluster.only(role).remotes.keys()
         log.info('Running commands on role %s host %s', role, remote.name)
@@ -1574,31 +1489,6 @@ def _shell_command(obj):
     raise ValueError(f'invalid command item: {obj!r}')
 
 
-def exec(ctx, config):
-    """
-    This is similar to the standard 'exec' task, but does template substitutions.
-
-    TODO: this should probably be moved out of cephadm.py as it's pretty generic.
-    """
-    assert isinstance(config, dict), "task exec got invalid config"
-    testdir = teuthology.get_testdir(ctx)
-    config = _expand_roles(ctx, config)
-    for role, ls in config.items():
-        (remote,) = ctx.cluster.only(role).remotes.keys()
-        log.info('Running commands on role %s host %s', role, remote.name)
-        for c in ls:
-            c.replace('$TESTDIR', testdir)
-            remote.run(
-                args=[
-                    'sudo',
-                    'TESTDIR={tdir}'.format(tdir=testdir),
-                    'bash',
-                    '-ex',
-                    '-c',
-                    _template_transform(ctx, config, c)],
-                )
-
-
 def apply(ctx, config):
     """
     Apply spec
@@ -1621,7 +1511,7 @@ def apply(ctx, config):
     cluster_name = config.get('cluster', 'ceph')
 
     specs = config.get('specs', [])
-    specs = _template_transform(ctx, config, specs)
+    specs = template.transform(ctx, config, specs)
     y = yaml.dump_all(specs)
 
     log.info(f'Applying spec(s):\n{y}')
@@ -1994,292 +1884,6 @@ def initialize_config(ctx, config):
     yield
 
 
-def _disable_systemd_resolved(ctx, remote):
-    r = remote.run(args=['ss', '-lunH'], stdout=StringIO())
-    # this heuristic tries to detect if systemd-resolved is running
-    if '%lo:53' not in r.stdout.getvalue():
-        return
-    log.info('Disabling systemd-resolved on %s', remote.shortname)
-    # Samba AD DC container DNS support conflicts with resolved stub
-    # resolver when using host networking. And we want host networking
-    # because it is the simplest thing to set up.  We therefore will turn
-    # off the stub resolver.
-    r = remote.run(
-        args=['sudo', 'cat', '/etc/systemd/resolved.conf'],
-        stdout=StringIO(),
-    )
-    resolved_conf = r.stdout.getvalue()
-    setattr(ctx, 'orig_resolved_conf', resolved_conf)
-    new_resolved_conf = (
-        resolved_conf + '\n# EDITED BY TEUTHOLOGY: deploy_samba_ad_dc\n'
-    )
-    if '[Resolve]' not in new_resolved_conf.splitlines():
-        new_resolved_conf += '[Resolve]\n'
-    new_resolved_conf += 'DNSStubListener=no\n'
-    remote.write_file(
-        path='/etc/systemd/resolved.conf',
-        data=new_resolved_conf,
-        sudo=True,
-    )
-    remote.run(args=['sudo', 'systemctl', 'restart', 'systemd-resolved'])
-    r = remote.run(args=['ss', '-lunH'], stdout=StringIO())
-    assert '%lo:53' not in r.stdout.getvalue()
-    # because docker is a big fat persistent deamon, we need to bounce it
-    # after resolved is restarted
-    remote.run(args=['sudo', 'systemctl', 'restart', 'docker'])
-
-
-def _reset_systemd_resolved(ctx, remote):
-    orig_resolved_conf = getattr(ctx, 'orig_resolved_conf', None)
-    if not orig_resolved_conf:
-        return  # no orig_resolved_conf means nothing to reset
-    log.info('Resetting systemd-resolved state on %s', remote.shortname)
-    remote.write_file(
-        path='/etc/systemd/resolved.conf',
-        data=orig_resolved_conf,
-        sudo=True,
-    )
-    remote.run(args=['sudo', 'systemctl', 'restart', 'systemd-resolved'])
-    setattr(ctx, 'orig_resolved_conf', None)
-
-
-def _samba_ad_dc_conf(ctx, remote, cengine):
-    # this config has not been tested outside of smithi nodes. it's possible
-    # that this will break when used elsewhere because we have to list
-    # interfaces explicitly. Later I may add a feature to sambacc to exclude
-    # known-unwanted interfaces that having to specify known good interfaces.
-    cf = {
-        "samba-container-config": "v0",
-        "configs": {
-            "demo": {
-                "instance_features": ["addc"],
-                "domain_settings": "sink",
-                "instance_name": "dc1",
-            }
-        },
-        "domain_settings": {
-            "sink": {
-                "realm": "DOMAIN1.SINK.TEST",
-                "short_domain": "DOMAIN1",
-                "admin_password": "Passw0rd",
-                "interfaces": {
-                    "exclude_pattern": "^docker[0-9]+$",
-                },
-            }
-        },
-        "domain_groups": {
-            "sink": [
-                {"name": "supervisors"},
-                {"name": "employees"},
-                {"name": "characters"},
-                {"name": "bulk"},
-            ]
-        },
-        "domain_users": {
-            "sink": [
-                {
-                    "name": "bwayne",
-                    "password": "1115Rose.",
-                    "given_name": "Bruce",
-                    "surname": "Wayne",
-                    "member_of": ["supervisors", "characters", "employees"],
-                },
-                {
-                    "name": "ckent",
-                    "password": "1115Rose.",
-                    "given_name": "Clark",
-                    "surname": "Kent",
-                    "member_of": ["characters", "employees"],
-                },
-                {
-                    "name": "user0",
-                    "password": "1115Rose.",
-                    "given_name": "George0",
-                    "surname": "Hue-Sir",
-                    "member_of": ["bulk"],
-                },
-                {
-                    "name": "user1",
-                    "password": "1115Rose.",
-                    "given_name": "George1",
-                    "surname": "Hue-Sir",
-                    "member_of": ["bulk"],
-                },
-                {
-                    "name": "user2",
-                    "password": "1115Rose.",
-                    "given_name": "George2",
-                    "surname": "Hue-Sir",
-                    "member_of": ["bulk"],
-                },
-                {
-                    "name": "user3",
-                    "password": "1115Rose.",
-                    "given_name": "George3",
-                    "surname": "Hue-Sir",
-                    "member_of": ["bulk"],
-                },
-            ]
-        },
-    }
-    cf_json = json.dumps(cf)
-    remote.run(args=['sudo', 'mkdir', '-p', '/var/tmp/samba'])
-    remote.write_file(
-        path='/var/tmp/samba/container.json', data=cf_json, sudo=True
-    )
-    return [
-        '--volume=/var/tmp/samba:/etc/samba-container:ro',
-        '-eSAMBACC_CONFIG=/etc/samba-container/container.json',
-    ]
-
-
-@contextlib.contextmanager
-def configure_samba_client_container(ctx, config):
-    # TODO: deduplicate logic between this task and deploy_samba_ad_dc
-    role = config.get('role')
-    samba_client_image = config.get(
-        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
-    )
-    if not role:
-        raise ConfigError(
-            "you must specify a role to discover container engine / pull image"
-        )
-    (remote,) = ctx.cluster.only(role).remotes.keys()
-    cengine = 'podman'
-    try:
-        log.info("Testing if podman is available")
-        remote.run(args=['sudo', cengine, '--help'])
-    except CommandFailedError:
-        log.info("Failed to find podman. Using docker")
-        cengine = 'docker'
-
-    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
-    samba_client_container_cmd = [
-        'sudo',
-        cengine,
-        'run',
-        '--rm',
-        '--net=host',
-        '-eKRB5_CONFIG=/dev/null',
-        samba_client_image,
-    ]
-
-    setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
-    try:
-        yield
-    finally:
-        setattr(ctx, 'samba_client_container_cmd', None)
-
-
-@contextlib.contextmanager
-def deploy_samba_ad_dc(ctx, config):
-    role = config.get('role')
-    ad_dc_image = config.get(
-        'ad_dc_image', 'quay.io/samba.org/samba-ad-server:latest'
-    )
-    samba_client_image = config.get(
-        'samba_client_image', 'quay.io/samba.org/samba-client:latest'
-    )
-    test_user_pass = config.get('test_user_pass', 'DOMAIN1\\ckent%1115Rose.')
-    if not role:
-        raise ConfigError(
-            "you must specify a role to allocate a host for the AD DC"
-        )
-    (remote,) = ctx.cluster.only(role).remotes.keys()
-    ip = remote.ssh.get_transport().getpeername()[0]
-    cengine = 'podman'
-    try:
-        log.info("Testing if podman is available")
-        remote.run(args=['sudo', cengine, '--help'])
-    except CommandFailedError:
-        log.info("Failed to find podman. Using docker")
-        cengine = 'docker'
-    remote.run(args=['sudo', cengine, 'pull', ad_dc_image])
-    remote.run(args=['sudo', cengine, 'pull', samba_client_image])
-    _disable_systemd_resolved(ctx, remote)
-    remote.run(
-        args=[
-            'sudo',
-            'mkdir',
-            '-p',
-            '/var/lib/samba/container/logs',
-            '/var/lib/samba/container/data',
-        ]
-    )
-    remote.run(
-        args=[
-            'sudo',
-            cengine,
-            'run',
-            '-d',
-            '--name=samba-ad',
-            '--network=host',
-            '--privileged',
-        ]
-        + _samba_ad_dc_conf(ctx, remote, cengine)
-        + [ad_dc_image]
-    )
-
-    # test that the ad dc is running and basically works
-    connected = False
-    samba_client_container_cmd = [
-        'sudo',
-        cengine,
-        'run',
-        '--rm',
-        '--net=host',
-        f'--dns={ip}',
-        '-eKRB5_CONFIG=/dev/null',
-        samba_client_image,
-    ]
-    for idx in range(10):
-        time.sleep((2 ** (1 + idx)) / 8)
-        log.info("Probing SMB status of DC %s, idx=%s", ip, idx)
-        cmd = samba_client_container_cmd + [
-            'smbclient',
-            '-U',
-            test_user_pass,
-            '//domain1.sink.test/sysvol',
-            '-c',
-            'ls',
-        ]
-        try:
-            remote.run(args=cmd)
-            connected = True
-            log.info("SMB status probe succeeded")
-            break
-        except CommandFailedError:
-            pass
-    if not connected:
-        raise RuntimeError('failed to connect to AD DC SMB share')
-
-    setattr(ctx, 'samba_ad_dc_ip', ip)
-    setattr(ctx, 'samba_client_container_cmd', samba_client_container_cmd)
-    try:
-        yield
-    finally:
-        try:
-            remote.run(args=['sudo', cengine, 'stop', 'samba-ad'])
-        except CommandFailedError:
-            log.error("Failed to stop samba-ad container")
-        try:
-            remote.run(args=['sudo', cengine, 'rm', 'samba-ad'])
-        except CommandFailedError:
-            log.error("Failed to remove samba-ad container")
-        remote.run(
-            args=[
-                'sudo',
-                'rm',
-                '-rf',
-                '/var/lib/samba/container/logs',
-                '/var/lib/samba/container/data',
-            ]
-        )
-        _reset_systemd_resolved(ctx, remote)
-        setattr(ctx, 'samba_ad_dc_ip', None)
-        setattr(ctx, 'samba_client_container_cmd', None)
-
-
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -2303,6 +1907,16 @@ def task(ctx, config):
               url:  registry-url
               username: registry-user
               password: registry-password
+
+    By default, the image tag is determined as a suite 'branch' value,
+    or 'sha1' if provided. However, the tag value can be overridden by
+    including ':TAG' or '@DIGEST' in the container image name, for example,
+    for the tag 'latest', the 'overrides' section looks like:
+
+        overrides:
+          cephadm:
+            containers:
+              image: 'quay.io/ceph-ci/ceph:latest'
 
     :param ctx: the argparse.Namespace object
     :param config: the config dict
@@ -2351,7 +1965,10 @@ def task(ctx, config):
         sha1 = config.get('sha1')
         flavor = config.get('flavor', 'default')
 
-        if sha1:
+        if any(_ in container_image_name for _ in (':', '@')):
+            log.info('Provided image contains tag or digest, using it as is')
+            ctx.ceph[cluster_name].image = container_image_name
+        elif sha1:
             if flavor == "crimson-debug" or flavor == "crimson-release":
                 ctx.ceph[cluster_name].image = container_image_name + ':' + sha1 + '-' + flavor
             else:

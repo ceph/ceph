@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -14,6 +15,8 @@
 #include <boost/tokenizer.hpp>
 #include "include/stringify.h"
 #include "NVMeofGwMon.h"
+#include "Monitor.h"
+#include "messages/MMonCommand.h"
 #include "messages/MNVMeofGwBeacon.h"
 #include "messages/MNVMeofGwMap.h"
 
@@ -29,11 +32,21 @@ void NVMeofGwMon::init()
   dout(10) <<  "called " << dendl;
 }
 
+void NVMeofGwMon::cleanup_pending_map()
+{
+  dout(10) << "cleanup pending :" << pending_map  << dendl;
+  pending_map.created_gws.clear();
+  pending_map.fsm_timers.clear();
+  pending_map.gw_epoch.clear();
+  pending_map.epoch = 0;
+}
+
 void NVMeofGwMon::on_restart()
 {
   dout(10) <<  "called " << dendl;
   last_beacon.clear();
   last_tick = ceph::coarse_mono_clock::now();
+  cleanup_pending_map();
   synchronize_last_beacon();
 }
 
@@ -168,6 +181,11 @@ void NVMeofGwMon::restore_pending_map_info(NVMeofGwMap & tmp_map) {
     NvmeGwMonStates& gw_created_map = created_map_pair.second;
     for (auto& gw_created_pair: gw_created_map) {
       auto gw_id = gw_created_pair.first;
+      auto& pending_gws_states = pending_map.created_gws[group_key];
+      auto  gw_state = pending_gws_states.find(gw_id);
+      if (gw_state == pending_gws_states.end()) {
+        continue;
+      }
       if (gw_created_pair.second.allow_failovers_ts > now) {
         // restore not persistent information upon new epochs
         dout(10) << " restore skip-failovers timeout for gw  " << gw_id  << dendl;
@@ -560,6 +578,7 @@ bool NVMeofGwMon::prepare_command(MonOpRequestRef op)
         // Simulate  immediate Failover of this GW
         process_gw_down(id, group_key, propose,
            gw_availability_t::GW_UNAVAILABLE);
+        pending_map.check_all_gws_in_deleting_state(id, group_key);
       } else if (rc == -EINVAL) {
 	dout (4) << "Error: GW not found in the database " << id << " "
 		 << pool << " " << group << "  rc " << rc << dendl;

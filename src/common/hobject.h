@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -344,7 +345,7 @@ public:
   void decode(ceph::bufferlist::const_iterator& bl);
   void decode(json_spirit::Value& v);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<hobject_t*>& o);
+  static std::list<hobject_t> generate_test_instances();
   friend int cmp(const hobject_t& l, const hobject_t& r);
   constexpr auto operator<=>(const hobject_t &rhs) const noexcept {
     auto cmp = max <=> rhs.max;
@@ -594,7 +595,7 @@ struct ghobject_t {
   void decode(json_spirit::Value& v);
   size_t encoded_size() const;
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ghobject_t*>& o);
+  static std::list<ghobject_t> generate_test_instances();
   friend int cmp(const ghobject_t& l, const ghobject_t& r);
   constexpr auto operator<=>(const ghobject_t&) const = default;
   bool operator==(const ghobject_t&) const = default;

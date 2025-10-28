@@ -521,6 +521,9 @@ The following CLI commands are used to configure the cluster:
   the command line or at runtime via admin socket, ``ceph tell``, or ``ceph daemon``
   commands. The source of each option value is displayed.
 
+* ``ceph config show-with-defaults <who>`` is like the above,
+  but also shows all defaults, and for changed values, where they are changed.
+
 * ``ceph config assimilate-conf -i <input_file> -o <output_file>`` ingests a
   configuration file from *input_file* and sets any valid options found into the
   Monitor configuration database. Any settings that are unrecognized, are
@@ -528,6 +531,8 @@ The following CLI commands are used to configure the cluster:
   abbreviated configuration file stored in *output_file*. This command is
   useful when transitioning from legacy configuration files to centralized
   Monitor-based configuration.
+
+* ``ceph-conf --show-config`` is a legacy command.
 
 Note that ``ceph config get <who> [<option>]`` and ``ceph config show
 <who>`` will not necessarily return the same values. The former
@@ -684,6 +689,8 @@ Override values can be set in two ways:
 .. note:: In the output of the ``ceph config show`` command, these temporary
    values are shown to have a source of ``override``.
 
+
+.. _configuring_ceph_runtime_view:
 
 Viewing Runtime Settings
 ========================

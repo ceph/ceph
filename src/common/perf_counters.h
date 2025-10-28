@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -22,6 +23,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <tuple>
 #include <memory>
 #include <atomic>
 #include <cstdint>
@@ -178,12 +180,10 @@ public:
         description(other.description),
         nick(other.nick),
 	 type(other.type),
-	 unit(other.unit),
-	 u64(other.u64.load()) {
-      auto a = other.read_avg();
-      u64 = a.first;
-      avgcount = a.second;
-      avgcount2 = a.second;
+	 unit(other.unit) {
+      std::tie(u64, avgcount, max_u64_inc) = other.read_avg_ex();
+      avgcount2 = avgcount.load();
+
       if (other.histogram) {
         histogram.reset(new PerfHistogram<>(*other.histogram));
       }
@@ -196,6 +196,7 @@ public:
     enum perfcounter_type_d type;
     enum unit_t unit;
     std::atomic<uint64_t> u64 = { 0 };
+    std::atomic<uint64_t> max_u64_inc = { 0 };
     std::atomic<uint64_t> avgcount = { 0 };
     std::atomic<uint64_t> avgcount2 = { 0 };
     std::unique_ptr<PerfHistogram<>> histogram;
@@ -204,6 +205,7 @@ public:
     {
       if (type != PERFCOUNTER_U64) {
 	    u64 = 0;
+	    max_u64_inc = 0;
 	    avgcount = 0;
 	    avgcount2 = 0;
       }
@@ -222,6 +224,15 @@ public:
 	sum = u64;
       } while (avgcount != count);
       return { sum, count };
+    }
+    std::tuple<uint64_t,uint64_t, uint64_t> read_avg_ex() const {
+      uint64_t _sum, _count, _max;
+      do {
+	_count = avgcount2;
+	_sum = u64;
+	_max = max_u64_inc;
+      } while (avgcount != _count);
+      return { _sum, _count, _max };
     }
   };
 
@@ -244,6 +255,7 @@ public:
   ~PerfCounters();
 
   void inc(int idx, uint64_t v = 1);
+  void inc_with_max(int idx, uint64_t v = 1);
   void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
   uint64_t get(int idx) const;
@@ -252,6 +264,8 @@ public:
   void tset(int idx, ceph::timespan v);
   void tinc(int idx, utime_t v);
   void tinc(int idx, ceph::timespan v);
+  void tinc_with_max(int idx, utime_t v);
+  void tinc_with_max(int idx, ceph::timespan v);
   utime_t tget(int idx) const;
 
   void hinc(int idx, int64_t x, int64_t y);

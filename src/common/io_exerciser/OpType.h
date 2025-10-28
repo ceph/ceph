@@ -17,6 +17,8 @@ enum class OpType {
   Barrier,               // Barrier - all prior I/Os must complete
   Create,                // Create object and pattern with data
   Remove,                // Remove object
+  Consistency,           // Check consistency of an object
+  Swap,                  // Swap primary and secondary object
   Read,                  // Read
   Read2,                 // Two reads in a single op
   Read3,                 // Three reads in a single op
@@ -28,6 +30,7 @@ enum class OpType {
   FailedWrite,           // A write which should fail
   FailedWrite2,          // Two writes in one op which should fail
   FailedWrite3,          // Three writes in one op which should fail
+  Copy,                  // Copy from primary to secondary object
   InjectReadError,       // Op to tell OSD to inject read errors
   InjectWriteError,      // Op to tell OSD to inject write errors
   ClearReadErrorInject,  // Op to tell OSD to clear read error injects
@@ -59,6 +62,12 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "Create");
       case ceph::io_exerciser::OpType::Remove:
         return fmt::format_to(ctx.out(), "Remove");
+      case ceph::io_exerciser::OpType::Consistency:
+        return fmt::format_to(ctx.out(), "Consistency");
+      case ceph::io_exerciser::OpType::Swap:
+        return fmt::format_to(ctx.out(), "Swap");
+      case ceph::io_exerciser::OpType::Copy:
+        return fmt::format_to(ctx.out(), "Copy");
       case ceph::io_exerciser::OpType::Read:
         return fmt::format_to(ctx.out(), "Read");
       case ceph::io_exerciser::OpType::Read2:

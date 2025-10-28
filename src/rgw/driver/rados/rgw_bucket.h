@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -212,6 +212,7 @@ extern int rgw_object_get_attr(rgw::sal::Driver* driver, rgw::sal::Object* obj,
 
 void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
                                     const rgw_owner& owner,
+                                    const std::string& owner_name,
                                     const std::string& tenant,
                                     bool fix, optional_yield y,
                                     const DoutPrefixProvider *dpp);

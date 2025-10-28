@@ -473,11 +473,14 @@ class CLICommand(object):
         self.desc, self.arg_spec, self.first_default, self.args = \
             self._load_func_metadata(f)
 
-    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+    def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
         self.func = func
         self.COMMANDS[self.prefix] = self
         return self.func
+
+    def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
+        return self._register_handler(func)
 
     def _get_arg_value(self, kwargs_switch: bool, key: str, val: Any) -> Tuple[bool, str, Any]:
         def start_kwargs() -> bool:
@@ -2503,11 +2506,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         return self._ceph_have_mon_connection()
 
+    @API.perm('w')
+    @API.expose
     def update_progress_event(self,
                               evid: str,
                               desc: str,
                               progress: float,
-                              add_to_ceph_s: bool) -> None:
+                              add_to_ceph_s: bool = False) -> None:
         return self._ceph_update_progress_event(evid, desc, progress, add_to_ceph_s)
 
     @API.perm('w')

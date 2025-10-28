@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -47,9 +48,11 @@ struct raw_shard_id_t {
   void dump(ceph::Formatter *f) const {
     f->dump_int("id", id);
   }
-  static void generate_test_instances(std::list<raw_shard_id_t*>& ls) {
-    ls.push_back(new raw_shard_id_t(1));
-    ls.push_back(new raw_shard_id_t(2));
+  static std::list<raw_shard_id_t> generate_test_instances() {
+    std::list<raw_shard_id_t> ls;
+    ls.push_back(raw_shard_id_t(1));
+    ls.push_back(raw_shard_id_t(2));
+    return ls;
   }
   raw_shard_id_t& operator++() { ++id; return *this; }
   friend constexpr std::strong_ordering operator<=>(const raw_shard_id_t &lhs, const raw_shard_id_t &rhs) { return lhs.id <=> rhs.id; }

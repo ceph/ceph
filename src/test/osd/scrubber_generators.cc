@@ -1,9 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/osd/scrubber_generators.h"
 
 #include <fmt/ranges.h>
+
+#include "scrubber_test_datasets.h"
 
 using namespace ScrubGenerator;
 
@@ -37,19 +39,60 @@ std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
   return {bl, sns.clones};
 }
 
+RealObjsConf ScrubGenerator::make_erasure_code_configuration(int8_t k,
+                                                             int8_t m) {
+  RealObjsConf erasure_code_configuration;
+  for (shard_id_t i{0}; i < k + m; ++i) {
+    RealObj erasure_code_obj = ScrubDatasets::erasure_code_obj;
+    erasure_code_obj.ghobj.shard_id = i;
+    erasure_code_configuration.objs.push_back(erasure_code_obj);
+  }
+
+  return erasure_code_configuration;
+}
+
+CorruptFuncList ScrubGenerator::make_erasure_code_hash_corruption_functions(
+    int num_osds) {
+  CorruptFuncList ret_list = {};
+  for (int i = 0; i < num_osds; ++i) {
+    ret_list.insert({i, &crpt_object_hash});
+  }
+
+  return ret_list;
+}
+
 RealObjsConfList ScrubGenerator::make_real_objs_conf(
   int64_t pool_id,
   const RealObjsConf& blueprint,
-  std::vector<int32_t> active_osds)
+  std::vector<int32_t> active_osds,
+  std::set<pg_shard_t> acting_shards,
+  bool erasure_coded_pool)
 {
   RealObjsConfList all_osds;
 
   for (auto osd : active_osds) {
+    shard_id_t shard = std::find_if(acting_shards.begin(), acting_shards.end(),
+                                    [&osd](pg_shard_t pg_shard) {
+                                      return osd == pg_shard.osd;
+                                    })
+                           ->shard;
+
     RealObjsConfRef this_osd_fakes = std::make_unique<RealObjsConf>(blueprint);
     // now - fix & corrupt every "object" in the blueprint
     for (RealObj& robj : this_osd_fakes->objs) {
+      if (!erasure_coded_pool || robj.ghobj.shard_id == shard) {
+        robj.ghobj.hobj.pool = pool_id;
+      }
+    }
 
-      robj.ghobj.hobj.pool = pool_id;
+    if (erasure_coded_pool) {
+      this_osd_fakes->objs.erase(std::remove_if(this_osd_fakes->objs.begin(),
+                                                this_osd_fakes->objs.end(),
+                                                [pool_id](RealObj& robj) {
+                                                  return robj.ghobj.hobj.pool !=
+                                                         pool_id;
+                                                }),
+                                 this_osd_fakes->objs.end());
     }
 
     all_osds[osd] = std::move(this_osd_fakes);
@@ -92,6 +135,7 @@ ScrubGenerator::SmapEntry ScrubGenerator::make_smobject(
   }
   ret.smobj.size = blueprint.data.size;
   ret.smobj.digest = blueprint.data.hash;
+  ret.smobj.digest_present = true;
   /// \todo handle the 'present' etc'
 
   ret.smobj.object_omap_keys = blueprint.data.omap.size();

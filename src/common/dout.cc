@@ -1,3 +1,4 @@
+#include "dout.h"
 
 #include <iostream>
 

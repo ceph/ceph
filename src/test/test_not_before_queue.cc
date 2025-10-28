@@ -1,10 +1,11 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <iostream>
 #include <string_view>
 
 #include "common/not_before_queue.h"
+#include "include/types.h" // for operator<<
 #include "gtest/gtest.h"
 
 // Just to have a default constructor that sets it to 0

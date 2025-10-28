@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
 #ifndef CEPH_PAXOSSERVICEMESSAGE_H
 #define CEPH_PAXOSSERVICEMESSAGE_H
@@ -6,7 +6,7 @@
 #include "msg/Message.h"
 #include "mon/Session.h"
 #include "include/encoding.h"
-#include "include/types.h" // for epoch_t
+#include "include/types.h" // for epoch_t, version_t
 
 #include <cstdint>
 #include <string_view>

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 
 #include <cstring>
@@ -202,6 +202,7 @@ static const actpair actpairs[] =
  { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
  { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
  { "iam:SimulatePrincipalPolicy", iamSimulatePrincipalPolicy},
+ { "iam:GetAccountSummary", iamGetAccountSummary},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -904,120 +905,104 @@ bool Condition::eval(const Environment& env) const {
     // String!
   case TokenID::ForAnyValueStringEquals:
   case TokenID::StringEquals:
-    return orrible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEquals:
-    return orrible(std::not_fn(std::equal_to<std::string>()),
-		   itr, isruntime? runtime_vals : vals);
+    return multimap_none(std::equal_to<std::string>(),
+     itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringEqualsIgnoreCase:
   case TokenID::StringEqualsIgnoreCase:
-    return orrible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(std::not_fn(ci_equal_to()), itr, isruntime? runtime_vals : vals);
+    return multimap_none(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAnyValueStringLike:
   case TokenID::StringLike:
-    return orrible(string_like(), itr, isruntime? runtime_vals : vals);
+    return multimap_any(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::StringNotLike:
-    return orrible(std::not_fn(string_like()), itr, isruntime? runtime_vals : vals);
+    return multimap_none(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringEquals:
-    return andible(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(std::equal_to<std::string>(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringLike:
-    return andible(string_like(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(string_like(), itr, isruntime? runtime_vals : vals);
 
   case TokenID::ForAllValuesStringEqualsIgnoreCase:
-    return andible(ci_equal_to(), itr, isruntime? runtime_vals : vals);
+    return multimap_all(ci_equal_to(), itr, isruntime? runtime_vals : vals);
 
     // Numeric
   case TokenID::NumericEquals:
-    return shortible(std::equal_to<double>(), as_number, s, vals);
+    return typed_any(std::equal_to<double>(), as_number, s, vals);
 
   case TokenID::NumericNotEquals:
-    return shortible(std::not_fn(std::equal_to<double>()),
-		     as_number, s, vals);
+    return typed_none(std::equal_to<double>(),
+       as_number, s, vals);
 
 
   case TokenID::NumericLessThan:
-    return shortible(std::less<double>(), as_number, s, vals);
+    return typed_any(std::less<double>(), as_number, s, vals);
 
 
   case TokenID::NumericLessThanEquals:
-    return shortible(std::less_equal<double>(), as_number, s, vals);
+    return typed_any(std::less_equal<double>(), as_number, s, vals);
 
   case TokenID::NumericGreaterThan:
-    return shortible(std::greater<double>(), as_number, s, vals);
+    return typed_any(std::greater<double>(), as_number, s, vals);
 
   case TokenID::NumericGreaterThanEquals:
-    return shortible(std::greater_equal<double>(), as_number, s, vals);
+    return typed_any(std::greater_equal<double>(), as_number, s,
+       vals);
 
     // Date!
   case TokenID::DateEquals:
-    return shortible(std::equal_to<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::equal_to<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateNotEquals:
-    return shortible(std::not_fn(std::equal_to<ceph::real_time>()),
-		     as_date, s, vals);
-
+    return typed_none(std::equal_to<ceph::real_time>(),
+       as_date, s, vals);
   case TokenID::DateLessThan:
-    return shortible(std::less<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::less<ceph::real_time>(), as_date, s, vals);
 
 
   case TokenID::DateLessThanEquals:
-    return shortible(std::less_equal<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::less_equal<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateGreaterThan:
-    return shortible(std::greater<ceph::real_time>(), as_date, s, vals);
+    return typed_any(std::greater<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateGreaterThanEquals:
-    return shortible(std::greater_equal<ceph::real_time>(), as_date, s,
+    return typed_any(std::greater_equal<ceph::real_time>(), as_date, s,
 		     vals);
 
     // Bool!
   case TokenID::Bool:
-    return shortible(std::equal_to<bool>(), as_bool, s, vals);
+    return typed_any(std::equal_to<bool>(), as_bool, s, vals);
 
     // Binary!
   case TokenID::BinaryEquals:
-    return shortible(std::equal_to<ceph::bufferlist>(), as_binary, s,
+    return typed_any(std::equal_to<ceph::bufferlist>(), as_binary, s,
 		     vals);
 
     // IP Address!
   case TokenID::IpAddress:
-    return shortible(std::equal_to<MaskedIP>(), as_network, s, vals);
+    return typed_any(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    {
-      auto xc = as_network(s);
-      if (!xc) {
-	return false;
-      }
-
-      for (const string& d : vals) {
-	auto xd = as_network(d);
-	if (!xd) {
-	  continue;
-	}
-
-	if (xc == xd) {
-	  return false;
-	}
-      }
-      return true;
-    }
+    return typed_none(std::equal_to<MaskedIP>(),
+      as_network, s, vals);
 
     // Amazon Resource Names!
     // The ArnEquals and ArnLike condition operators behave identically.
   case TokenID::ArnEquals:
   case TokenID::ArnLike:
-    return orrible(arn_like, itr, isruntime? runtime_vals : vals);
+    return multimap_any(arn_like, itr, isruntime? runtime_vals : vals);
   case TokenID::ArnNotEquals:
   case TokenID::ArnNotLike:
-    return orrible(std::not_fn(arn_like), itr, isruntime? runtime_vals : vals);
+    return multimap_none(arn_like, itr, isruntime? runtime_vals : vals);
 
   default:
     return false;
@@ -1703,6 +1688,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamSimulatePrincipalPolicy:
     return "iam:SimulatePrincipalPolicy";
+
+  case iamGetAccountSummary:
+    return "iam:GetAccountSummary";
 
   case stsAssumeRole:
     return "sts:AssumeRole";

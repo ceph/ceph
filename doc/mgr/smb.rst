@@ -57,7 +57,7 @@ Create Cluster
 
    ceph smb cluster create <cluster_id> {user|active-directory} [--domain-realm=<domain_realm>] [--domain-join-user-pass=<domain_join_user_pass>] [--define-user-pass=<define_user_pass>] [--custom-dns=<custom_dns>] [--placement=<placement>] [--clustering=<clustering>] [--password-filter=<password_filter>] [--password-filter-out=<password_filter_out>]
 
-Create a new logical cluster, identified by the cluster id value. The cluster
+Create a new logical cluster, identified by the cluster ID value. The cluster
 create command must specify the authentication mode the cluster will use. This
 may either be one of:
 
@@ -278,7 +278,7 @@ password_filter
 ``resource_name`` arguments can take the following forms:
 
 - ``ceph.smb.cluster``: show all cluster resources
-- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster id
+- ``ceph.smb.cluster.<cluster_id>``: show specific cluster with given cluster ID
 - ``ceph.smb.share``: show all share resources
 - ``ceph.smb.share.<cluster_id>``: show all share resources part of the given
   cluster
@@ -450,12 +450,28 @@ custom_dns
 custom_ports
     Optional. A mapping of service names to port numbers that will override the
     default ports used for those services. The service names are:
-    ``smb``, ``smbmetrics``, and ``ctdb``. If a service name is not
-    present in the mapping the default port will be used.
+    ``smb``, ``smbmetrics``, ``ctdb``, and ``remote-control``. If a service
+    name is not present in the mapping the default port will be used.
     For example, ``{"smb": 4455, "smbmetrics": 9009}`` will change the
-    ports used by smb for client access and the metrics exporter, but
+    ports used by SMB for client access and the metrics exporter, but
     not change the port used by the CTDB clustering daemon.
     Note - not all SMB clients are able to use alternate port numbers.
+bind_addrs
+    Optional. A list of objects indicating what IP address or IP network the
+    SMB and related services may bind to. The fields described for these
+    objects are mutually exclusive, but at least one field is required.
+    (The behavior of this option changes when used with clustering and
+    ``public_addrs``. See note below.)
+    Fields:
+
+    address
+        Optional. A single IP address represented as a string. For example,
+        ``192.168.7.50``.
+    network
+        Optional. A single IP network represented as a string. A network
+        can be used to specify a range of many IP addresses. The network
+        string always includes a "/" character before a prefix length.
+        For example, ``192.168.7.0/24``.
 placement
     Optional. A Ceph Orchestration :ref:`placement specifier
     <orchestrator-cli-placement-spec>`.  Defaults to one host if not provided
@@ -472,6 +488,8 @@ public_addrs
     Assign "virtual" IP addresses that will be managed by the clustering
     subsystem and may automatically move between nodes running Samba
     containers.
+    (The behavior of this option changes when used with ``bind_addrs``. See
+    note below.)
     Fields:
 
     address
@@ -488,6 +506,32 @@ public_addrs
         host. Run ``cephadm list-networks`` for an example of these mappings.
         If destination is not supplied the network is automatically determined
         using the address value supplied and taken as the destination.
+remote_control
+    Optional object. This object configures an SMB cluster to deploy an extra
+    ``remote control`` service. This service provides a gRPC server that
+    can be used to enumerate connected clients and disconnect clients from
+    shares. This service uses mTLS for authentication. By default, this service
+    uses port 54445. The port can be configured using the ``custom_ports``
+    parameter in the cluster resource. If the service is enabled and any of the
+    ``cert``, ``key``, or ``ca_cert`` fields are not populated mTLS will be
+    disabled and the service will operate in a read-only mode. Running the
+    service with mTLS disabled is not recommended.
+    Fields:
+
+    enabled
+        Optional boolean. If explicitly set to ``true`` or ``false`` this
+        field will enable or disable the remote control service. If left
+        unset the TLS fields will be checked - if the TLS fields are filled
+        automatically enable the service.
+    cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    key
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
+    ca_cert
+        Optional object. The fields are described in :ref:`tls source
+        fields<tls-source-fields>`
 custom_smb_global_options
     Optional mapping. Specify key-value pairs that will be directly added to
     the global ``smb.conf`` options (or equivalent) of a Samba server.  Do
@@ -512,6 +556,16 @@ custom_smb_global_options
    placement. In particular, be aware that running multiple instances of the
    same ``smb`` service without clustering enabled can cause unexpected behavior.
 
+.. warning::
+   The behavior of the system when combining ``bind_addrs`` and
+   ``public_addrs`` on a cluster could lead to unexpected results. The ``smbd``
+   process can only dynamically add/remove public addresses when assigned to
+   monitor a network device (e.g. ``eth0``) versus a specific address. If the
+   network device is assigned multiple addresses and those addreses overlap
+   with a different smb cluster it is possible the services may fail to start.
+   Currently, one must manually ensure that the devices used by a IP or network
+   is exclusvely used for that network to ensure SMB services start properly.
+
 
 .. _join-source-fields:
 
@@ -531,7 +585,17 @@ source_type
     Optional. One of ``resource`` (the default) or ``empty``
 ref
     String. Required for ``source_type: resource``. Must refer to the ID of a
-    ``ceph.smb.join.auth`` resource
+    ``ceph.smb.usersgroups`` resource
+
+.. _tls-source-fields:
+
+A TLS source object supports the following fields:
+
+source_type
+    Optional. Must be ``resource`` if specified.
+ref
+    String. Required for ``source_type: resource``. Must refer to the ID of a
+    ``ceph.smb.tls.credential`` resource
 
 .. note::
    The ``source_type`` ``empty`` is generally only for debugging and testing
@@ -602,6 +666,13 @@ readonly
 browseable
     Optional boolean, defaulting to true. If true the share will be included in
     share listings visible to clients
+comment
+    Optional string. A single line description used to provide human-readable
+    explanation or notes about the share.
+max_connections
+    Optional integer. Specifies the maximum number of simultaneous client
+    connections to a specific share. The default value is 0 and it indicates
+    that there is no limit on the number of connections
 cephfs
     Required object. Fields:
 
@@ -706,7 +777,7 @@ auth
     password
         Required string. The AD user's password
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -749,7 +820,7 @@ values
         name
             The name of the group
 linked_to_cluster:
-    Optional. A string containing a cluster id. If set, the resource may only
+    Optional. A string containing a cluster ID. If set, the resource may only
     be used with the linked cluster and will automatically be removed when the
     linked cluster is removed.
 
@@ -767,6 +838,52 @@ Example:
         - name: steves
           password: F00Bar123
         groups: []
+
+
+TLS Credential Resource
+------------------------
+
+TLS credential resources store copies of TLS files such as Certificates, Keys,
+or CA Certificates.
+A TLS credential resource supports the following fields:
+
+resource_type
+    A literal string ``ceph.smb.tls.credential``
+tls_credential_id
+    A short string identifying the TLS credential resource
+intent
+    One of ``present`` or ``removed``. If not provided, ``present`` is assumed.
+    If ``removed`` all following fields are optional
+credential_type
+    Required string.  The value may be one of ``cert``, ``key``, or ``ca-cert``.
+    This value indicates what type of TLS credential the value field holds.
+value:
+    A string containing the TLS certificate or key value in PEM encoding.
+linked_to_cluster:
+    Optional. A string containing a cluster ID. If set, the resource may only
+    be used with the linked cluster and will automatically be removed when the
+    linked cluster is removed.
+
+Example:
+
+.. code-block:: yaml
+
+    resource_type: ceph.smb.tls.credential
+    tls_credential_id: mycert1
+    credential_type: cert
+    # NOTE: The value below is truncated to make the documentation more
+    # consise. A real embedded certificate is expected to be valid and
+    # will be longer than this example.
+    value: |
+      -----BEGIN CERTIFICATE-----
+      MIIFDjCCA/agAwIBAgISBtFQfoXc4RmyVabbv28RClKdMA0GCSqGSIb3DQEBCwUA
+      MDMxCzAJBgNVBAYTAlVTMRYwFAYDVQQKEw1MZXQncyBFbmNyeXB0MQwwCgYDVQQD
+      EwNSMTAwHhcNMjUwNTE5MTAyNzUyWhcNMjUwODE3MTAyNzUxWjASMRAwDgYDVQQD
+      EwdjZXBoLmlvMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAx6fif6PQ
+      LOTdnO8d1JHcF7D+oB/mQlplFz4vwq/GB6Y4oWK3uCQ4PPz/qyvE4wyvc5EPhjfg
+      d8XNc4ajEBcSUoRj3UwWwiA4oht0SyoJIfwVGp/kF5jxHhVCLdoaaqAxv7nAghWM
+      6Dg=
+      -----END CERTIFICATE-----
 
 
 A Declarative Configuration Example

@@ -1,10 +1,12 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #ifndef CEPH_MDS_METRICS_HANDLER_H
 #define CEPH_MDS_METRICS_HANDLER_H
 
 #include <map>
+#include <mutex>
+#include <unordered_map>
 #include <thread>
 #include <utility>
 
@@ -12,6 +14,7 @@
 #include "common/ceph_mutex.h"
 
 #include "MDSPerfMetricTypes.h"
+#include "include/cephfs/metrics/Types.h"
 
 #include <boost/optional.hpp>
 #include <boost/variant/static_visitor.hpp>
@@ -26,7 +29,9 @@ struct PinnedIcapsPayload;
 struct OpenedInodesPayload;
 struct ReadIoSizesPayload;
 struct WriteIoSizesPayload;
+struct SubvolumeMetricsPayload;
 struct UnknownPayload;
+struct AggregatedIOMetrics;
 class MClientMetrics;
 class MDSMap;
 class MDSRank;
@@ -71,7 +76,16 @@ private:
     inline void operator()(const ClientMetricPayload &payload) const {
       metrics_handler->handle_payload(session, payload);
     }
+    
+    // Specialization for SubvolumeMetricsPayload - should not be called
+    // as it's handled specially in handle_client_metrics
+    // just for the compiler to be happy with visitor pattern
+    inline void operator()(const SubvolumeMetricsPayload &) const {
+      ceph_abort_msg("SubvolumeMetricsPayload should be handled specially");
+    }
   };
+
+  std::unique_ptr<PerfCounters> create_subv_perf_counter(const std::string& subv_name);
 
   MDSRank *mds;
   // drop this lock when calling ->send_message_mds() else mds might
@@ -89,8 +103,10 @@ private:
 
   std::thread updater;
   std::map<entity_inst_t, std::pair<version_t, Metrics>> client_metrics_map;
-
-  // address of rank 0 mds, so that the message can be sent without
+  // maps subvolume path -> aggregated metrics from all clients reporting to this MDS instance
+  std::unordered_map<std::string, std::vector<AggregatedIOMetrics>> subvolume_metrics_map;
+  uint64_t subv_metrics_tracker_window_time_sec = 300;
+  // address of rank 0 mds, so that the message can be sent withoutå
   // acquiring mds_lock. misdirected messages to rank 0 are taken
   // care of by rank 0.
   boost::optional<entity_addrvec_t> addr_rank0;
@@ -107,6 +123,7 @@ private:
   void handle_payload(Session *session, const OpenedInodesPayload &payload);
   void handle_payload(Session *session, const ReadIoSizesPayload &payload);
   void handle_payload(Session *session, const WriteIoSizesPayload &payload);
+  void handle_payload(Session *session, const SubvolumeMetricsPayload &payload, std::unique_lock<ceph::mutex> &lock_guard);
   void handle_payload(Session *session, const UnknownPayload &payload);
 
   void set_next_seq(version_t seq);
@@ -116,6 +133,9 @@ private:
   void handle_mds_ping(const cref_t<MMDSPing> &m);
 
   void update_rank0();
+
+  void aggregate_subvolume_metrics(const std::string& subvolume_path,
+                                   const std::vector<AggregatedIOMetrics>& metrics_list, SubvolumeMetric &res);
 };
 
 #endif // CEPH_MDS_METRICS_HANDLER_H

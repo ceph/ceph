@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "cyan_store.h"
 
@@ -7,6 +7,7 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 
+#include "common/JSONFormatter.h"
 #include "common/safe_io.h"
 #include "os/Transaction.h"
 
@@ -390,12 +391,13 @@ auto CyanStore::Shard::omap_get_values(
   return seastar::make_ready_future<omap_values_t>(std::move(values));
 }
 
-auto CyanStore::Shard::omap_get_values(
+auto CyanStore::Shard::omap_iterate(
   CollectionRef ch,
   const ghobject_t &oid,
-  const std::optional<string> &start,
+  ObjectStore::omap_iter_seek_t start_from,
+  omap_iterate_cb_t callback,
   uint32_t op_flags)
-  -> CyanStore::Shard::read_errorator::future<std::tuple<bool, omap_values_t>>
+  -> CyanStore::Shard::read_errorator::future<ObjectStore::omap_iter_ret_t>
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}", __func__, c->get_cid(), oid);
@@ -403,16 +405,19 @@ auto CyanStore::Shard::omap_get_values(
   if (!o) {
     return crimson::ct_error::enoent::make();
   }
-  omap_values_t values;
-  for (auto i = start ? o->omap.upper_bound(*start) : o->omap.begin();
-       i != o->omap.end();
-       ++i) {
-    values.insert(*i);
+  auto ret = ObjectStore::omap_iter_ret_t::NEXT;
+  auto i = (start_from.seek_type == ObjectStore::omap_iter_seek_t::LOWER_BOUND) ?
+            o->omap.lower_bound(start_from.seek_position) :
+            o->omap.upper_bound(start_from.seek_position);
+  for (; i != o->omap.end(); ++i) {
+    ceph::bufferlist bl = i->second;
+    std::string result(bl.c_str(), bl.length());
+    ret = callback(i->first, result);
+    if (ret == ObjectStore::omap_iter_ret_t::STOP)
+      break;
   }
-  return seastar::make_ready_future<std::tuple<bool, omap_values_t>>(
-    std::make_tuple(true, std::move(values)));
+  return read_errorator::make_ready_future<ObjectStore::omap_iter_ret_t>(ret);
 }
-
 auto CyanStore::Shard::omap_get_header(
   CollectionRef ch,
   const ghobject_t& oid,

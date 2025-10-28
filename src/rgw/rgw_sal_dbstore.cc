@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 /*
  * Ceph - scalable distributed file system
@@ -230,8 +230,10 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_owner& new_owner, optional_yield y)
-  {
+  int DBBucket::chown(const DoutPrefixProvider* dpp,
+                      const rgw_owner& new_owner,
+                      const std::string& new_owner_name,
+                      optional_yield y) {
     int ret;
 
     ret = store->getDB()->update_bucket(dpp, "owner", info, false, &new_owner, nullptr, nullptr, nullptr);
@@ -492,7 +494,7 @@ namespace rgw::sal {
 
   int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			   int max_parts, int marker, int* next_marker,
-			   bool* truncated, list_parts_each_t each_func,
+			   bool* truncated, list_parts_each_t&& each_func,
 			   optional_yield y)
   {
     return -EOPNOTSUPP;
@@ -544,18 +546,21 @@ namespace rgw::sal {
     return op_target.set_attrs(dpp, setattrs ? *setattrs : empty, delattrs);
   }
 
-  int DBObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, rgw_obj* target_obj)
+  int DBObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp)
   {
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
     DB::Object::Read read_op(&op_target);
 
-    return read_attrs(dpp, read_op, y, target_obj);
+    return read_attrs(dpp, read_op, y, nullptr);
   }
 
   int DBObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, optional_yield y, const DoutPrefixProvider* dpp, uint32_t flags)
   {
     rgw_obj target = get_obj();
-    int r = get_obj_attrs(y, dpp, &target);
+    DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
+    DB::Object::Read read_op(&op_target);
+
+    int r = read_attrs(dpp, read_op, y, &target);
     if (r < 0) {
       return r;
     }
@@ -709,7 +714,9 @@ namespace rgw::sal {
     parent_op.params.remove_objs = params.remove_objs;
     parent_op.params.expiration_time = params.expiration_time;
     parent_op.params.unmod_since = params.unmod_since;
+    parent_op.params.last_mod_time_match = params.last_mod_time_match;
     parent_op.params.mtime = params.mtime;
+    parent_op.params.size_match = params.size_match;
     parent_op.params.high_precision_time = params.high_precision_time;
     parent_op.params.zones_trace = params.zones_trace;
     parent_op.params.abortmp = params.abortmp;
@@ -922,7 +929,9 @@ namespace rgw::sal {
 				   std::string& tag, ACLOwner& owner,
 				   uint64_t olh_epoch,
 				   rgw::sal::Object* target_obj,
-				   prefix_map_t& processed_prefixes)
+				   prefix_map_t& processed_prefixes,
+           const char *if_match,
+           const char *if_nomatch)
   {
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];

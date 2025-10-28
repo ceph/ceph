@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -30,6 +31,8 @@
 #else
 #include "common/perf_counters_collection.h"
 #endif
+
+#include "LogSegmentRef.h"
 
 #include <boost/intrusive_ptr.hpp>
 
@@ -127,6 +130,7 @@ enum {
   l_mdss_last,
 };
 
+
 class Server {
 public:
   using clock = ceph::coarse_mono_clock;
@@ -161,7 +165,7 @@ public:
   void handle_client_session(const cref_t<MClientSession> &m);
   void _session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
 		       const interval_set<inodeno_t>& inos_to_free, version_t piv,
-		       const interval_set<inodeno_t>& inos_to_purge, LogSegment *ls);
+		       const interval_set<inodeno_t>& inos_to_purge, LogSegmentRef const& ls);
   version_t prepare_force_open_sessions(std::map<client_t,entity_inst_t> &cm,
 					std::map<client_t,client_metadata_t>& cmm,
 					std::map<client_t,std::pair<Session*,uint64_t> >& smap);
@@ -497,26 +501,29 @@ private:
            xattr_name == "ceph.dir.charmap"sv ||
            xattr_name == "ceph.dir.normalization"sv ||
            xattr_name == "ceph.dir.encoding"sv ||
-           xattr_name == "ceph.dir.casesensitive"sv;
+           xattr_name == "ceph.dir.casesensitive"sv ||
+           xattr_name == "ceph.dir.subvolume.snaps.visible"sv;
   }
 
   static bool is_ceph_dir_vxattr(std::string_view xattr_name) {
     return xattr_name == "ceph.dir.layout" ||
-	    xattr_name == "ceph.dir.layout.json" ||
-	    xattr_name == "ceph.dir.layout.object_size" ||
-	    xattr_name == "ceph.dir.layout.stripe_unit" ||
-	    xattr_name == "ceph.dir.layout.stripe_count" ||
-	    xattr_name == "ceph.dir.layout.pool" ||
-	    xattr_name == "ceph.dir.layout.pool_name" ||
-	    xattr_name == "ceph.dir.layout.pool_id" ||
-	    xattr_name == "ceph.dir.layout.pool_namespace" ||
-	    xattr_name == "ceph.dir.pin" ||
-	    xattr_name == "ceph.dir.pin.random" ||
-	    xattr_name == "ceph.dir.pin.distributed" ||
-            xattr_name == "ceph.dir.charmap"sv ||
-            xattr_name == "ceph.dir.normalization"sv ||
-            xattr_name == "ceph.dir.encoding"sv ||
-            xattr_name == "ceph.dir.casesensitive"sv;
+	   xattr_name == "ceph.dir.layout.json" ||
+	   xattr_name == "ceph.dir.layout.object_size" ||
+	   xattr_name == "ceph.dir.layout.stripe_unit" ||
+	   xattr_name == "ceph.dir.layout.stripe_count" ||
+	   xattr_name == "ceph.dir.layout.pool" ||
+	   xattr_name == "ceph.dir.layout.pool_name" ||
+	   xattr_name == "ceph.dir.layout.pool_id" ||
+	   xattr_name == "ceph.dir.layout.pool_namespace" ||
+	   xattr_name == "ceph.dir.pin" ||
+	   xattr_name == "ceph.dir.pin.random" ||
+	   xattr_name == "ceph.dir.pin.distributed" ||
+	   xattr_name == "ceph.dir.charmap"sv ||
+	   xattr_name == "ceph.dir.normalization"sv ||
+	   xattr_name == "ceph.dir.encoding"sv ||
+	   xattr_name == "ceph.dir.casesensitive"sv ||
+	   xattr_name == "ceph.dir.subvolume"sv ||
+     xattr_name == "ceph.dir.subvolume.snaps.visible"sv;
   }
 
   static bool is_ceph_file_vxattr(std::string_view xattr_name) {
@@ -607,6 +614,7 @@ private:
   unsigned delegate_inos_pct = 0;
   uint64_t dir_max_entries = 0;
   int64_t bal_fragment_size_max = 0;
+  bool allow_batched_ops = true;
 
   double inject_rename_corrupt_dentry_first = 0.0;
 

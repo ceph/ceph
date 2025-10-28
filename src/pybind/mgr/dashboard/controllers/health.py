@@ -110,6 +110,56 @@ HEALTH_MINIMAL_SCHEMA = ({
     'scrub_status': (str, '')
 })
 
+HEALTH_SNAPSHOT_SCHEMA = ({
+    'fsid': (str, 'Cluster filesystem ID'),
+    'health': ({
+        'status': (str, 'Overall health status'),
+        'checks': ({
+            '<check_name>': ({
+                'severity': (str, 'Health severity level'),
+                'summary': ({
+                    'message': (str, 'Human-readable summary'),
+                    'count': (int, 'Occurrence count')
+                }, 'Summary details'),
+                'muted': (bool, 'Whether the check is muted')
+            }, 'Individual health check object')
+        }, 'Health checks keyed by name'),
+        'mutes': ([str], 'List of muted check names')
+    }, 'Cluster health overview'),
+    'monmap': ({
+        'num_mons': (int, 'Number of monitors')
+    }, 'Monitor map details'),
+    'osdmap': ({
+        'in': (int, 'Number of OSDs in'),
+        'up': (int, 'Number of OSDs up'),
+        'num_osds': (int, 'Total OSD count')
+    }, 'OSD map details'),
+    'pgmap': ({
+        'pgs_by_state': ([{
+            'state_name': (str, 'Placement group state'),
+            'count': (int, 'Count of PGs in this state')
+        }], 'List of PG counts by state'),
+        'num_pools': (int, 'Number of pools'),
+        'num_pgs': (int, 'Total PG count'),
+        'bytes_used': (int, 'Used capacity in bytes'),
+        'bytes_total': (int, 'Total capacity in bytes'),
+    }, 'Placement group map details'),
+    'mgrmap': ({
+        'num_active': (int, 'Number of active managers'),
+        'num_standbys': (int, 'Standby manager count')
+    }, 'Manager map details'),
+    'fsmap': ({
+        'num_active': (int, 'Number of active mds'),
+        'num_standbys': (int, 'Standby MDS count'),
+    }, 'Filesystem map details'),
+    'num_rgw_gateways': (int, 'Count of RGW gateway daemons running'),
+    'num_iscsi_gateways': ({
+        'up': (int, 'Count of iSCSI gateways running'),
+        'down': (int, 'Count of iSCSI gateways not running')
+    }, 'Iscsi gateways status'),
+    'num_hosts': (int, 'Count of hosts')
+})
+
 
 class HealthData(object):
     """
@@ -281,15 +331,28 @@ class HealthData(object):
 class Health(BaseController):
     def __init__(self):
         super().__init__()
-        self.health_full = HealthData(self._has_permissions, minimal=False)
-        self.health_minimal = HealthData(self._has_permissions, minimal=True)
+        self._health_full = None
+        self._health_minimal = None
+
+    @property
+    def health_full(self):
+        if self._health_full is None:
+            self._health_full = HealthData(self._has_permissions, minimal=False)
+        return self._health_full
+
+    @property
+    def health_minimal(self):
+        if self._health_minimal is None:
+            self._health_minimal = HealthData(self._has_permissions, minimal=True)
+        return self._health_minimal
 
     @Endpoint()
+    @EndpointDoc("Get Cluster's detailed health report")
     def full(self):
         return self.health_full.all_health()
 
     @Endpoint()
-    @EndpointDoc("Get Cluster's minimal health report",
+    @EndpointDoc("Get Cluster's health report with lesser details",
                  responses={200: HEALTH_MINIMAL_SCHEMA})
     def minimal(self):
         return self.health_minimal.all_health()
@@ -305,3 +368,87 @@ class Health(BaseController):
     @Endpoint()
     def get_telemetry_status(self):
         return mgr.get_module_option_ex('telemetry', 'enabled', False)
+
+    @Endpoint()
+    @EndpointDoc(
+        "Get a quick overview of cluster health at a moment, analogous to "
+        "the ceph status command in CLI.",
+        responses={200: HEALTH_SNAPSHOT_SCHEMA})
+    def snapshot(self):
+        data = CephService.send_command('mon', 'status')
+
+        summary = {
+            'fsid': data.get('fsid'),
+            'health': {
+                'status': data.get('health', {}).get('status'),
+                'checks': data.get('health', {}).get('checks', {}),
+                'mutes': data.get('health', {}).get('mutes', []),
+            },
+        }
+
+        if self._has_permissions(Permission.READ, Scope.MONITOR):
+            summary['monmap'] = {
+                'num_mons': data.get('monmap', {}).get('num_mons'),
+            }
+
+        if self._has_permissions(Permission.READ, Scope.OSD):
+            summary['osdmap'] = {
+                'in': data.get('osdmap', {}).get('num_in_osds'),
+                'up': data.get('osdmap', {}).get('num_up_osds'),
+                'num_osds': data.get('osdmap', {}).get('num_osds'),
+            }
+            summary['pgmap'] = {
+                'pgs_by_state': data.get('pgmap', {}).get('pgs_by_state', []),
+                'num_pools': data.get('pgmap', {}).get('num_pools'),
+                'num_pgs': data.get('pgmap', {}).get('num_pgs'),
+                'bytes_used': data.get('pgmap', {}).get('bytes_used'),
+                'bytes_total': data.get('pgmap', {}).get('bytes_total'),
+            }
+
+        if self._has_permissions(Permission.READ, Scope.MANAGER):
+            mgrmap = data.get('mgrmap', {})
+            available = mgrmap.get('available', False)
+            num_standbys = mgrmap.get('num_standbys')
+            num_active = 1 if available else 0
+            summary['mgrmap'] = {
+                'num_active': num_active,
+                'num_standbys': num_standbys,
+            }
+
+        if self._has_permissions(Permission.READ, Scope.CEPHFS):
+            fsmap = data.get('fsmap', {})
+            by_rank = fsmap.get('by_rank', [])
+
+            active_count = 0
+            standby_replay_count = 0
+
+            for mds in by_rank:
+                state = mds.get('status', '')
+                if state == 'up:standby-replay':
+                    standby_replay_count += 1
+                elif state.startswith('up:'):
+                    active_count += 1
+
+            summary['fsmap'] = {
+                'num_active': active_count,
+                'num_standbys': fsmap.get('up:standby', 0) + standby_replay_count,
+            }
+
+        if self._has_permissions(Permission.READ, Scope.RGW):
+            daemons = (
+                data.get('servicemap', {})
+                .get('services', {})
+                .get('rgw', {})
+                .get('daemons', {})
+                or {}
+            )
+            daemons.pop("summary", None)
+            summary['num_rgw_gateways'] = len(daemons)
+
+        if self._has_permissions(Permission.READ, Scope.ISCSI):
+            summary['num_iscsi_gateways'] = self.health_minimal.iscsi_daemons()
+
+        if self._has_permissions(Permission.READ, Scope.HOSTS):
+            summary['num_hosts'] = len(get_hosts())
+
+        return summary

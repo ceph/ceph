@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #pragma once
 
@@ -14,7 +14,6 @@
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/root_block.h"
 #include "crimson/os/seastore/seastore_types.h"
-#include "crimson/os/seastore/transaction_interruptor.h"
 
 namespace crimson::os::seastore {
 
@@ -78,6 +77,24 @@ struct rewrite_stats_t {
     num_n_dirty -= o.num_n_dirty;
     num_dirty -= o.num_dirty;
     dirty_version -= o.dirty_version;
+  }
+};
+
+struct btree_cursor_stats_t {
+  uint64_t num_refresh_parent_total = 0;
+  uint64_t num_refresh_invalid_parent = 0;
+  uint64_t num_refresh_unviewable_parent = 0;
+  uint64_t num_refresh_modified_viewable_parent = 0;
+
+  void apply(btree_cursor_stats_t &stats) {
+    num_refresh_parent_total +=
+      stats.num_refresh_parent_total;
+    num_refresh_invalid_parent +=
+      stats.num_refresh_invalid_parent;
+    num_refresh_unviewable_parent +=
+      stats.num_refresh_unviewable_parent;
+    num_refresh_modified_viewable_parent +=
+      stats.num_refresh_modified_viewable_parent;
   }
 };
 
@@ -431,7 +448,6 @@ public:
     OrderingHandle &&handle,
     bool weak,
     src_t src,
-    journal_seq_t initiated_after,
     on_destruct_func_t&& f,
     transaction_id_t trans_id,
     cache_hint_t cache_hint
@@ -460,7 +476,7 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
-  void reset_preserve_handle(journal_seq_t initiated_after) {
+  void reset_preserve_handle() {
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -603,6 +619,7 @@ public:
     return cache_hint;
   }
 
+  btree_cursor_stats_t cursor_stats;
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -840,7 +857,6 @@ inline TransactionRef make_test_transaction() {
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
-    JOURNAL_SEQ_NULL,
     [](Transaction&) {},
     ++next_id,
     CACHE_HINT_TOUCH

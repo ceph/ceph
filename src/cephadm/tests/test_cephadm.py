@@ -603,7 +603,7 @@ class TestCephAdm(object):
             ['registry-login', '--registry-json', 'sample-json'])
         with pytest.raises(Exception) as e:
             assert _cephadm.command_registry_login(ctx)
-        assert str(e.value) == ("json provided for custom registry login did not include all necessary fields. "
+        assert str(e.value).startswith("json provided for custom registry login did not include all necessary fields. "
                         "Please setup json file as\n"
                         "{\n"
                           " \"url\": \"REGISTRY_URL\",\n"
@@ -1501,8 +1501,14 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
     ])
     def test_get_ceph_cluster_count(self, test_input, expected):
         ctx = _cephadm.CephadmContext()
-        with mock.patch('os.listdir', return_value=test_input):
-            assert _cephadm.get_ceph_cluster_count(ctx) == expected
+        with mock.patch('os.path.isdir', return_value=True):
+            with mock.patch('os.listdir', return_value=test_input):
+                assert _cephadm.get_ceph_cluster_count(ctx) == expected
+
+    def test_get_ceph_cluster_count_missing_datadir(self):
+        ctx = _cephadm.CephadmContext()
+        with mock.patch('os.path.isdir', return_value=False):
+            assert _cephadm.get_ceph_cluster_count(ctx) == 0
 
     def test_set_image_minimize_config(self):
         def throw_cmd(cmd):

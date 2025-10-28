@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include <algorithm>
 #include "bluefs_types.h"
@@ -25,13 +25,15 @@ void bluefs_extent_t::dump(Formatter *f) const
   f->dump_unsigned("bdev", bdev);
 }
 
-void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
+list<bluefs_extent_t> bluefs_extent_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_extent_t);
-  ls.push_back(new bluefs_extent_t);
-  ls.back()->offset = 1;
-  ls.back()->length = 2;
-  ls.back()->bdev = 1;
+  list<bluefs_extent_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().offset = 1;
+  ls.back().length = 2;
+  ls.back().bdev = 1;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_extent_t& e)
@@ -163,13 +165,15 @@ void bluefs_layout_t::dump(Formatter *f) const
   f->dump_stream("dedicated_wal") << dedicated_wal;
 }
 
-void bluefs_layout_t::generate_test_instances(list<bluefs_layout_t*>& ls)
+list<bluefs_layout_t> bluefs_layout_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_layout_t);
-  ls.push_back(new bluefs_layout_t);
-  ls.back()->shared_bdev = 1;
-  ls.back()->dedicated_db = true;
-  ls.back()->dedicated_wal = true;
+  list<bluefs_layout_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().shared_bdev = 1;
+  ls.back().dedicated_db = true;
+  ls.back().dedicated_wal = true;
+  return ls;
 }
 
 // bluefs_super_t
@@ -217,12 +221,14 @@ void bluefs_super_t::dump(Formatter *f) const
   f->dump_object("log_fnode", log_fnode);
 }
 
-void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
+list<bluefs_super_t> bluefs_super_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_super_t);
-  ls.push_back(new bluefs_super_t);
-  ls.back()->seq = 1;
-  ls.back()->block_size = 4096;
+  list<bluefs_super_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().seq = 1;
+  ls.back().block_size = 4096;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
@@ -304,16 +310,18 @@ void bluefs_fnode_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
+list<bluefs_fnode_t> bluefs_fnode_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_fnode_t);
-  ls.push_back(new bluefs_fnode_t);
-  ls.back()->ino = 123;
-  ls.back()->size = 1048576;
-  ls.back()->mtime = utime_t(123,45);
-  ls.back()->extents.push_back(bluefs_extent_t(0, 1048576, 4096));
-  ls.back()->__unused__ = 1;
-  ls.back()->encoding = 0;
+  list<bluefs_fnode_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().ino = 123;
+  ls.back().size = 1048576;
+  ls.back().mtime = utime_t(123,45);
+  ls.back().extents.push_back(bluefs_extent_t(0, 1048576, 4096));
+  ls.back().__unused__ = 1;
+  ls.back().encoding = 0;
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
@@ -408,21 +416,22 @@ void bluefs_transaction_t::dump(Formatter *f) const
   f->dump_unsigned("crc", op_bl.crc32c(-1));
 }
 
-void bluefs_transaction_t::generate_test_instances(
-  list<bluefs_transaction_t*>& ls)
+list<bluefs_transaction_t> bluefs_transaction_t::generate_test_instances()
 {
-  ls.push_back(new bluefs_transaction_t);
-  ls.push_back(new bluefs_transaction_t);
-  ls.back()->op_init();
-  ls.back()->op_dir_create("dir");
-  ls.back()->op_dir_create("dir2");
+  list<bluefs_transaction_t> ls;
+  ls.emplace_back();
+  ls.emplace_back();
+  ls.back().op_init();
+  ls.back().op_dir_create("dir");
+  ls.back().op_dir_create("dir2");
   bluefs_fnode_t fnode;
   fnode.ino = 2;
-  ls.back()->op_file_update(fnode);
-  ls.back()->op_dir_link("dir", "file1", 2);
-  ls.back()->op_dir_unlink("dir", "file1");
-  ls.back()->op_file_remove(2);
-  ls.back()->op_dir_remove("dir2");
+  ls.back().op_file_update(fnode);
+  ls.back().op_dir_link("dir", "file1", 2);
+  ls.back().op_dir_unlink("dir", "file1");
+  ls.back().op_file_remove(2);
+  ls.back().op_dir_remove("dir2");
+  return ls;
 }
 
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)

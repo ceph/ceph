@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -116,12 +117,14 @@ void MirrorInfo::dump(ceph::Formatter *f) const {
   f->close_section(); // peers
 }
 
-void MirrorInfo::generate_test_instances(std::list<MirrorInfo*>& ls) {
-  ls.push_back(new MirrorInfo());
-  ls.push_back(new MirrorInfo());
-  ls.back()->mirrored = true;
-  ls.back()->peers.insert(Peer());
-  ls.back()->peers.insert(Peer());
+std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
+  std::list<MirrorInfo> ls;
+  ls.push_back(MirrorInfo());
+  ls.push_back(MirrorInfo());
+  ls.back().mirrored = true;
+  ls.back().peers.insert(Peer());
+  ls.back().peers.insert(Peer());
+  return ls;
 }
 
 void MirrorInfo::print(std::ostream& out) const {
@@ -195,23 +198,23 @@ FSMap &FSMap::operator=(const FSMap &rhs)
   return *this;
 }
 
-void FSMap::generate_test_instances(std::list<FSMap*>& ls)
+std::list<FSMap> FSMap::generate_test_instances()
 {
-  FSMap* fsmap = new FSMap();
+  std::list<FSMap> ls;
 
-  std::list<MDSMap*> mds_map_instances;
-  MDSMap::generate_test_instances(mds_map_instances);
+  FSMap fsmap;
 
   int k = 20;
-  for (auto& mdsmap : mds_map_instances) {
+  for (auto& mdsmap : MDSMap::generate_test_instances()) {
     auto fs = Filesystem();
     fs.fscid = k++;
-    fs.mds_map = *mdsmap;
-    fsmap->filesystems[fs.fscid] = fs;
-    delete mdsmap;
+    fs.mds_map = mdsmap;
+    fsmap.filesystems[fs.fscid] = fs;
   }
 
-  ls.push_back(fsmap);
+  ls.push_back(std::move(fsmap));
+
+  return ls;
 }
 
 void FSMap::print(ostream& out) const
@@ -1234,7 +1237,7 @@ void FSMap::erase_filesystem(fs_cluster_id_t fscid)
       });
     }
   }
-  for ([[maybe_unused]] auto& [fscid, fs] : filesystems) {
+  for ([[maybe_unused]] auto& [remaining_fscid, fs] : filesystems) {
     for (auto& [gid, info] : fs.mds_map.get_mds_info()) {
       if (info.join_fscid == fscid) {
         modify_daemon(gid, [](auto& info) {

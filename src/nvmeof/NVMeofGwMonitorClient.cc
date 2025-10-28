@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2
 /*
  * Ceph - scalable distributed file system
@@ -40,6 +40,7 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   gwmap_epoch(0),
   last_map_time(std::chrono::steady_clock::now()),
   reset_timestamp(std::chrono::steady_clock::now()),
+  start_time(last_map_time),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
   objecter{g_ceph_context, client_messenger.get(), &monc, poolctx},
@@ -263,10 +264,27 @@ void NVMeofGwMonitorClient::disconnect_panic()
   }
 }
 
+void NVMeofGwMonitorClient::connect_panic()
+{
+  // Return immediately if the gateway was assigned group ID by the monitor
+  if (set_group_id) {
+    return;
+  }
+  // If the gateway has not been assigned a group ID, panic after timeout
+  auto connect_panic_duration = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_connect_panic").count();
+  auto now = std::chrono::steady_clock::now();
+  auto elapsed_seconds = std::chrono::duration_cast<std::chrono::seconds>(now - start_time).count();
+  if (elapsed_seconds > connect_panic_duration) {
+    dout(4) << "Triggering a panic: did not receive initial map from monitor, elapsed " << elapsed_seconds << ", configured connect panic duration " << connect_panic_duration << " seconds." << dendl;
+    throw std::runtime_error("Did not receive initial map from monitor (connect panic).");
+  }
+}
+
 void NVMeofGwMonitorClient::tick()
 {
   dout(10) << dendl;
 
+  connect_panic();
   disconnect_panic();
   send_beacon();
   first_beacon = false;
@@ -339,7 +357,7 @@ void NVMeofGwMonitorClient::handle_nvmeof_gw_map(ceph::ref_t<MNVMeofGwMap> nmap)
       dout(10) << "Can not find new gw state" << dendl;
       return;
     }
-    bool set_group_id = false;
+    ceph_assert(!set_group_id);
     while (!set_group_id) {
       NVMeofGwMonitorGroupClient monitor_group_client(
           grpc::CreateChannel(monitor_address, gw_creds()));

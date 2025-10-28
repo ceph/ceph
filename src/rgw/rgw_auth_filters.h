@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab ft=cpp
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #pragma once
 
@@ -95,6 +95,10 @@ public:
 
   uint32_t get_identity_type() const override {
     return get_decoratee().get_identity_type();
+  }
+
+  std::optional<rgw::ARN> get_caller_identity() const override {
+    return get_decoratee().get_caller_identity();
   }
 
   std::string get_acct_name() const override {

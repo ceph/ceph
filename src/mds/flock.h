@@ -1,5 +1,6 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*- 
+// vim: ts=8 sw=2 sts=2 expandtab
+
 #ifndef CEPH_MDS_FLOCK_H
 #define CEPH_MDS_FLOCK_H
 
@@ -123,7 +124,7 @@ public:
   void encode(ceph::bufferlist& bl) const;
   void decode(ceph::bufferlist::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<ceph_lock_state_t*>& ls);
+  static std::list<ceph_lock_state_t> generate_test_instances();
   bool empty() const {
     return held_locks.empty() && waiting_locks.empty() &&
 	   client_held_lock_counts.empty() &&

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 #include "test/crimson/gtest_seastar.h"
 
@@ -139,7 +139,12 @@ struct btree_test_base :
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this, *this);
-      epm.reset(new ExtentPlacementManager());
+      rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_hot_tier_generations");
+      rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
+	"seastore_cold_tier_generations");
+      epm.reset(new ExtentPlacementManager(
+	hot_tier_generations, cold_tier_generations));
       cache.reset(new Cache(*epm));
 
       block_size = segment_manager->get_block_size();
@@ -597,10 +602,10 @@ struct btree_lba_manager_test : btree_test_base {
 	  t,
 	  target->first
 	).si_then([this, &t, target](auto result) {
-	  EXPECT_EQ(result.refcount, target->second.refcount);
-	  if (result.refcount == 0) {
+	  EXPECT_EQ(result.result.refcount, target->second.refcount);
+	  if (result.result.refcount == 0) {
 	    return cache->retire_extent_addr(
-	      t, result.addr.get_paddr(), result.length);
+	      t, result.result.addr.get_paddr(), result.result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});

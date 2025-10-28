@@ -70,14 +70,13 @@ class Environment : public ::testing::Environment {
 
     void SetUp() override {
       std::vector<const char*> args;
-      std::string conf_file_list;
-      std::string cluster = "";
-      CephInitParameters iparams = ceph_argparse_early_args(
-        args, CEPH_ENTITY_TYPE_CLIENT,
-        &cluster, &conf_file_list);
+      auto _cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			      CODE_ENVIRONMENT_UTILITY,
+			      CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
-      cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {});
+      cct = _cct.get();
       dpp = new DoutPrefix(cct->get(), dout_subsys, "SSD backed Cache backend Test: ");
+      common_init_finish(g_ceph_context);
     }
 
     CephContext* cct;
@@ -87,8 +86,8 @@ class Environment : public ::testing::Environment {
 class SSDDriverFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-        rgw::cache::Partition partition_info{.name = "d4n", .type = "read-cache", .location = "rgw_d4n_datacache", .size = 5368709120};
-        cacheDriver = new rgw::cache::SSDDriver{partition_info};
+        rgw::cache::Partition partition_info{.name = "d4n", .type = "read-cache", .location = "rgw_d4n_datacache", .reserve_size = 1073741824};
+        cacheDriver = new rgw::cache::SSDDriver{partition_info, false};
 
         ASSERT_NE(cacheDriver, nullptr);
 

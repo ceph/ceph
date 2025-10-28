@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=8 sw=2 sts=2 expandtab
 
 /*
  * Ceph - scalable distributed file system
@@ -34,6 +34,7 @@
 #include "include/types.h"
 
 #include "common/ceph_time.h"
+#include "common/Formatter.h"
 
 class JSONObj;
 
@@ -58,11 +59,13 @@ struct objv {
     f->dump_string("instance", instance);
     f->dump_unsigned("ver", ver);
   }
-  static void generate_test_instances(std::list<objv*>& o) {
-    o.push_back(new objv);
-    o.push_back(new objv);
-    o.back()->instance = "instance";
-    o.back()->ver = 1;
+  static std::list<objv> generate_test_instances() {
+    std::list<objv> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().instance = "instance";
+    o.back().ver = 1;
+    return o;
   }
   void decode_json(JSONObj* obj);
 
@@ -117,12 +120,14 @@ struct data_params {
     f->dump_unsigned("max_entry_size", max_entry_size);
     f->dump_unsigned("full_size_threshold", full_size_threshold);
   }
-  static void generate_test_instances(std::list<data_params*>& o) {
-    o.push_back(new data_params);
-    o.push_back(new data_params);
-    o.back()->max_part_size = 1;
-    o.back()->max_entry_size = 2;
-    o.back()->full_size_threshold = 3;
+  static std::list<data_params> generate_test_instances() {
+    std::list<data_params> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().max_part_size = 1;
+    o.back().max_entry_size = 2;
+    o.back().full_size_threshold = 3;
+    return o;
   }
   void decode_json(JSONObj* obj);
 
@@ -437,20 +442,22 @@ struct info {
     }
     f->close_section();
   }
-  static void generate_test_instances(std::list<info*>& o) {
-    o.push_back(new info);
-    o.push_back(new info);
-    o.back()->id = "myid";
-    o.back()->version = objv();
-    o.back()->oid_prefix = "myprefix";
-    o.back()->params = data_params();
-    o.back()->tail_part_num = 123;
-    o.back()->head_part_num = 456;
-    o.back()->min_push_part_num = 789;
-    o.back()->max_push_part_num = 101112;
-    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 1));
-    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 2));
-    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 3));
+  static std::list<info> generate_test_instances() {
+    std::list<info> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().id = "myid";
+    o.back().version = objv();
+    o.back().oid_prefix = "myprefix";
+    o.back().params = data_params();
+    o.back().tail_part_num = 123;
+    o.back().head_part_num = 456;
+    o.back().min_push_part_num = 789;
+    o.back().max_push_part_num = 101112;
+    o.back().journal.insert(journal_entry(journal_entry::Op::create, 1));
+    o.back().journal.insert(journal_entry(journal_entry::Op::create, 2));
+    o.back().journal.insert(journal_entry(journal_entry::Op::create, 3));
+    return o;
   }
   void decode_json(JSONObj* obj);
 
@@ -610,4 +617,8 @@ template<>
 struct fmt::formatter<rados::cls::fifo::info> : fmt::ostream_formatter {};
 template<>
 struct fmt::formatter<rados::cls::fifo::part_header> : fmt::ostream_formatter {};
+template<>
+struct fmt::formatter<rados::cls::fifo::journal_entry> : fmt::ostream_formatter {};
+template<>
+struct fmt::formatter<rados::cls::fifo::update> : fmt::ostream_formatter {};
 #endif

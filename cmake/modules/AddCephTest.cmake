@@ -32,8 +32,8 @@ function(add_ceph_test test_name test_path)
     set_property(TEST ${test_name}
       APPEND
       PROPERTY ENVIRONMENT
-      ASAN_OPTIONS=detect_odr_violation=0
-      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp)
+      ASAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/asan.supp,detect_odr_violation=0
+      LSAN_OPTIONS=suppressions=${CMAKE_SOURCE_DIR}/qa/lsan.supp,print_suppressions=0)
   endif()
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
@@ -91,7 +91,7 @@ endfunction()
 function(add_tox_test name)
   set(test_name run-tox-${name})
   set(venv_path ${CEPH_BUILD_VIRTUALENV}/${name}-virtualenv)
-  cmake_parse_arguments(TOXTEST "" "TOX_PATH" "TOX_ENVS" ${ARGN})
+  cmake_parse_arguments(TOXTEST "" "TOX_PATH;LABELS" "TOX_ENVS" ${ARGN})
   if(DEFINED TOXTEST_TOX_PATH)
     set(tox_path ${TOXTEST_TOX_PATH})
   else()
@@ -124,6 +124,18 @@ function(add_tox_test name)
               --venv-path ${venv_path})
   set_tests_properties(${test_name} PROPERTIES
     FIXTURES_REQUIRED venv-for-${name})
+  set(toxtest_default_labels "PurePython;PythonTox")
+  if(DEFINED TOXTEST_LABELS)
+    set_tests_properties(
+        ${test_name}
+        PROPERTIES
+        LABELS "${toxtest_default_labels};${TOXTEST_LABELS}")
+  else()
+    set_tests_properties(
+        ${test_name}
+        PROPERTIES
+        LABELS "${toxtest_default_labels}")
+  endif()
   set_property(
     TEST ${test_name}
     PROPERTY ENVIRONMENT
