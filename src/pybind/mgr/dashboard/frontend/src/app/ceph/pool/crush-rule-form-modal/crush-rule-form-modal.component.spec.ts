@@ -107,9 +107,20 @@ describe('CrushRuleFormComponent', () => {
   describe('lists', () => {
     afterEach(() => {
       // The available buckets should not change
-      expect(component.buckets).toEqual(
-        get.nodesByNames(['default', 'hdd-rack', 'mix-host', 'ssd-host', 'ssd-rack'])
-      );
+      const expectedBuckets = get.nodesByNames([
+        'default',
+        'hdd-rack',
+        'mix-host',
+        'ssd-host',
+        'ssd-rack'
+      ]);
+      // Add the 'content' and 'selected' properties that are added by the component
+      const mockBuckets = expectedBuckets.map((bucket: CrushNode) => ({
+        ...bucket,
+        content: bucket.name,
+        selected: bucket.type === 'root'
+      }));
+      expect(component.buckets).toEqual(mockBuckets);
     });
 
     it('has the following lists after init', () => {
