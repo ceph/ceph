@@ -504,9 +504,10 @@ class Context:
         branch = self.cli.current_branch
         if not branch:
             try:
-                branch = _git_current_branch(self).replace("/", "-")
+                branch = _git_current_branch(self)
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
+        branch = branch.replace("/", "-")
         variant = self.variant()
         if variant is not ImageVariant.DEFAULT:
             suffix = f".{variant}{suffix}"
