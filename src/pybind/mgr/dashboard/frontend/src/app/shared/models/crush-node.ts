@@ -14,4 +14,5 @@ export class CrushNode {
   primary_affinity?: number;
   reweight?: number;
   status?: string;
+  content?: string; // Used when mapping buckets to nodes
 }

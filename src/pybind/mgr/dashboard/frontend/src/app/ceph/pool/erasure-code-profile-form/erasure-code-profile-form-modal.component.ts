@@ -1,4 +1,4 @@
-import { Component, EventEmitter, OnInit, Output } from '@angular/core';
+import { ChangeDetectorRef, Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -46,6 +46,7 @@ export class ErasureCodeProfileFormModalComponent
   dCalc: boolean;
   lrcGroups: number;
   lrcMultiK: number;
+  selectedCrushRoot: CrushNode;
 
   public CrushFailureDomains = CrushFailureDomains;
 
@@ -54,7 +55,8 @@ export class ErasureCodeProfileFormModalComponent
     public activeModal: NgbActiveModal,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private cdr: ChangeDetectorRef
   ) {
     super();
     this.action = this.actionLabels.CREATE;
@@ -397,6 +399,14 @@ export class ErasureCodeProfileFormModalComponent
           this.names = names;
           this.form.silentSet('directory', directory);
           this.preValidateNumericInputFields();
+
+          setTimeout(() => {
+            const selectElement = document.getElementById('crushRoot') as any;
+            if (selectElement) {
+              selectElement.value = this.form.get('crushRoot').value;
+            }
+            this.cdr.detectChanges();
+          }, 0);
         }
       );
   }
@@ -430,7 +440,7 @@ export class ErasureCodeProfileFormModalComponent
           this.form.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
           this.submitAction.emit(profile);
         }
       });
