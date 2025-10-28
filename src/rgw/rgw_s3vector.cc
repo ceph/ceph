@@ -332,7 +332,7 @@ void list_vectors_t::dump(ceph::Formatter* f) const {
 void list_vectors_t::decode_json(JSONObj* obj) {
   decode_name_or_arn("indexName", "indexArn", index_name, index_arn, obj);
   decode_name("vectorBucketName", vector_bucket_name, obj);
-  JSONDecoder::decode_json("maxResults", max_results, obj);
+  JSONDecoder::decode_json("maxResults", max_results, default_max_results, obj);
   JSONDecoder::decode_json("nextToken", next_token, obj);
   JSONDecoder::decode_json("returnData", return_data, obj);
   JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
@@ -377,16 +377,16 @@ void list_vector_buckets_t::dump(ceph::Formatter* f) const {
 }
 
 void list_vector_buckets_t::decode_json(JSONObj* obj) {
-  JSONDecoder::decode_json("maxResults", max_results, obj);
+  JSONDecoder::decode_json("maxResults", max_results, default_max_results, obj);
   JSONDecoder::decode_json("nextToken", next_token, obj);
   JSONDecoder::decode_json("prefix", prefix, obj);
 
-  if (max_results < 1 || max_results > 1000) {
-    throw JSONDecoder::err(fmt::format("maxResults must be between 1 and 1000, got {}", max_results));
+  if (max_results < 1 || max_results > 500) {
+    throw JSONDecoder::err(fmt::format("maxResults must be between 1 and 500, got {}", max_results));
   }
 
-  if (!next_token.empty() && (next_token.length() < 1 || next_token.length() > 2048)) {
-    throw JSONDecoder::err(fmt::format("nextToken length must be between 1 and 2048, got {}", next_token.length()));
+  if (!next_token.empty() && (next_token.length() < 1 || next_token.length() > 512)) {
+    throw JSONDecoder::err(fmt::format("nextToken length must be between 1 and 512, got {}", next_token.length()));
   }
 
   if (!prefix.empty() && (prefix.length() < 1 || prefix.length() > 63)) {
@@ -456,7 +456,7 @@ void list_indexes_t::dump(ceph::Formatter* f) const {
 }
 
 void list_indexes_t::decode_json(JSONObj* obj) {
-  JSONDecoder::decode_json("maxResults", max_results, obj);
+  JSONDecoder::decode_json("maxResults", max_results, default_max_results, obj);
   JSONDecoder::decode_json("nextToken", next_token, obj);
   JSONDecoder::decode_json("prefix", prefix, obj);
   decode_name_or_arn("vectorBucketName", "vectorBucketArn", vector_bucket_name, vector_bucket_arn, obj);
