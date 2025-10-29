@@ -29,6 +29,7 @@ struct RGWLCCloudTierCtx {
 
   /* Remote */
   RGWRESTConn& conn;
+  std::string location_constraint;
   std::string target_bucket_name;
   std::string target_storage_class;
 
