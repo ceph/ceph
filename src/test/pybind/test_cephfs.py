@@ -1550,6 +1550,9 @@ class TestRmtree:
         # this will change return value of should_cancel and therefore halt
         # execution of rmtree()
         cancel_flag.set()
+        # give a little time for cephs.rmtree() to catch the raised exception
+        # due to cancel flag.
+        time.sleep(0.1)
         # ensure dir6 wasn't deleted
         cephfs.stat('dir6')
         # ensure that deletion had begun but hadn't finished and was halted
@@ -1562,6 +1565,8 @@ class TestRmtree:
         assert file_count > 0 and file_count < 100
 
         # cleanup
+
+        # clear flag so that coming call to rmtree() doesn't cancel.
         cancel_flag.clear()
         cephfs.rmtree('dir6', should_cancel)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
