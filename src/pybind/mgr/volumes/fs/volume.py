@@ -94,8 +94,8 @@ class VolumeClient(CephfsClient["Module"]):
 
     ### volume operations -- create, rm, ls
 
-    def create_fs_volume(self, volname, placement):
-        return create_volume(self.mgr, volname, placement)
+    def create_fs_volume(self, volname, placement, data_pool, meta_pool):
+        return create_volume(self.mgr, volname, placement, data_pool, meta_pool)
 
     def delete_fs_volume(self, volname, confirm):
         if confirm != "--yes-i-really-mean-it":

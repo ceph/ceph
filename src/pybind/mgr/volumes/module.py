@@ -49,7 +49,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs volume create '
                    f'name=name,type=CephString,goodchars={goodchars} '
-                   'name=placement,type=CephString,req=false ',
+                   'name=placement,type=CephString,req=false '
+                  f'name=meta_pool,type=CephString,goodchars={goodchars},req=false '
+                  f'name=data_pool,type=CephString,goodchars={goodchars},req=false ',
             'desc': "Create a CephFS volume",
             'perm': 'rw'
         },
@@ -590,7 +592,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_volume_create(self, inbuf, cmd):
         vol_id = cmd['name']
         placement = cmd.get('placement', '')
-        return self.vc.create_fs_volume(vol_id, placement)
+        data_pool = cmd.get('data_pool', None)
+        meta_pool = cmd.get('meta_pool', None)
+        return self.vc.create_fs_volume(vol_id, placement, data_pool, meta_pool)
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_rm(self, inbuf, cmd):
