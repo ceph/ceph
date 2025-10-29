@@ -10,8 +10,8 @@ def splitall(path):
     return splitall(s[0]) + [s[1]]
 
 
-def resolve(vol_spec, path):
-    parts = splitall(path)
+def resolve_group_and_subvolume_name(vol_spec, sv_path):
+    parts = splitall(sv_path)
     if len(parts) != 4 or os.path.join(parts[0], parts[1]) != vol_spec.subvolume_prefix:
         return None
     groupname = None if parts[2] == Group.NO_GROUP_NAME else parts[2]
