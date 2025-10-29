@@ -410,6 +410,52 @@ for i in ${image2} ${image4}; do
     remove_image_retry ${CLUSTER2} ${POOL} ${i}
 done
 
+testlog "TEST: request image resync when remote is not primary"
+test_resync_image=test_resync_image
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${test_resync_image} ${RBD_MIRROR_MODE}
+write_image ${CLUSTER2} ${POOL} ${test_resync_image} 100
+wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${test_resync_image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL} ${test_resync_image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${test_resync_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+replaying'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+stopped'
+write_image ${CLUSTER2} ${POOL} ${test_resync_image} 100
+demote_image ${CLUSTER2} ${POOL} ${test_resync_image}
+request_resync_image ${CLUSTER1} ${POOL} ${test_resync_image} test_resync_image_id
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+unknown' 'remote image is not primary'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+unknown' 'remote image is not primary'
+promote_image ${CLUSTER1} ${POOL} ${test_resync_image}
+wait_for_image_replay_started ${CLUSTER2} ${POOL} ${test_resync_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+stopped'
+wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+replaying'
+compare_images ${POOL} ${test_resync_image}
+remove_image_retry ${CLUSTER1} ${POOL} ${test_resync_image}
+
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  testlog "TEST: request image resync when remote is not primary and daemon is offline"
+  test_resync_image=test_resync_image
+  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${test_resync_image} ${RBD_MIRROR_MODE}
+  write_image ${CLUSTER2} ${POOL} ${test_resync_image} 100
+  wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${test_resync_image}
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${test_resync_image}
+  wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${test_resync_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+replaying'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+stopped'
+  stop_mirrors ${CLUSTER1}
+  write_image ${CLUSTER2} ${POOL} ${test_resync_image} 100
+  demote_image ${CLUSTER2} ${POOL} ${test_resync_image}
+  request_resync_image ${CLUSTER1} ${POOL} ${test_resync_image} test_resync_image_id
+  start_mirrors ${CLUSTER1}
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+unknown' 'remote image is not primary'
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+unknown' 'remote image is not primary'
+  promote_image ${CLUSTER1} ${POOL} ${test_resync_image}
+  wait_for_image_replay_started ${CLUSTER2} ${POOL} ${test_resync_image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${test_resync_image} 'up+stopped'
+  wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${test_resync_image} 'up+replaying'
+  compare_images ${POOL} ${test_resync_image}
+  remove_image_retry ${CLUSTER1} ${POOL} ${test_resync_image}
+fi
+
 testlog "TEST: disable mirror while daemon is stopped"
 stop_mirrors ${CLUSTER1}
 stop_mirrors ${CLUSTER2}
