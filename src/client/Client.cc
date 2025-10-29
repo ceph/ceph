@@ -8571,9 +8571,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
   if (mask & CEPH_SETATTR_SIZE) {
     auto stx_size = stx->stx_size;
-
+    ldout(cct, 10) << "enter setattr size" << dendl;
     if (paux && !(mask & CEPH_SETATTR_FSCRYPT_FILE)) {
       mask |= CEPH_SETATTR_FSCRYPT_FILE;
+      ldout(cct, 10) << "paux is set setting fscrypt_file mask" << dendl;
     }
 
 #if defined(__linux__)
@@ -8731,6 +8732,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
                (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
     } else {
+      ldout(cct, 10) << "removing fscrypt_file mask" << dendl;
       mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
     }
   }
@@ -8808,6 +8810,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH) {
     req->fscrypt_auth = *aux;
   } else if (mask & CEPH_SETATTR_FSCRYPT_FILE && paux) {
+    ldout(cct, 10) << "adding paux to req" << dendl;
     req->fscrypt_file = *paux;
   }
   req->head.args.setattr.mask = mask;

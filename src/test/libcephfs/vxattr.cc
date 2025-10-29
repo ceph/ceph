@@ -390,6 +390,7 @@ TEST(LibCephFS, FsCrypt) {
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ceph_conf_set(cmount, "debug_client", "20");
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
   char test_xattr_file[NAME_MAX];
