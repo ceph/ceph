@@ -2867,8 +2867,9 @@ cdef class LibCephFS(object):
         # st_b = stat buffer
         st_b = self.stat(trash_path, AT_SYMLINK_NOFOLLOW)
         if stat.S_ISDIR(st_b.st_mode):
-            NonRecursiveRmtree(self, trash_path, should_cancel,
-                               suppress_errors).rmtree()
+            rmtree_worker = RmtreeWorker(self, trash_path, should_cancel,
+                                         suppress_errors)
+            rmtree_worker.start()
         else:
             try:
                 self.unlink(trash_path)
@@ -2879,7 +2880,7 @@ cdef class LibCephFS(object):
                 raise
 
 
-class NonRecursiveRmtree:
+class RmtreeWorker:
     '''
     Contains code to delete entire file tree under a directory with a
     depth-first, non-recursive approach along with some helper code.
@@ -2945,7 +2946,7 @@ class NonRecursiveRmtree:
         parent_dir = self.stack[-2]
         parent_dir.add_to_de_ignore_list(self.curr_dir.name)
 
-    def rmtree(self):
+    def start(self):
         '''
         This is where depth-first, non-recursive traversal is done.
         '''
