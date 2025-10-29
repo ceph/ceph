@@ -20,16 +20,19 @@
   </cd-alert-panel>
   <div [cdsStack]="'horizontal'"
        [gap]="4">
-    <cd-table-actions [permission]="permissions.rgw"
+    <cd-table-actions class="btn-group"
+                      [permission]="permissions.rgw"
                       [selection]="selection"
                       [tableActions]="multisiteReplicationActions">
     </cd-table-actions>
     <cd-table-actions *ngIf="showMigrateAndReplicationActions"
+                      class="btn-group"
                       [permission]="permissions.rgw"
                       [selection]="selection"
                       [tableActions]="migrateTableAction">
     </cd-table-actions>
-    <cd-table-actions [permission]="permissions.rgw"
+    <cd-table-actions class="btn-group multisite-actions"
+                      [permission]="permissions.rgw"
                       [selection]="selection"
                       [tableActions]="createTableActions"
                       dropDownOnly="Actions"
