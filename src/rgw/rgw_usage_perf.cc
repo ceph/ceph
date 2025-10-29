@@ -7,10 +7,6 @@
 #include "common/dout.h"
 #include "common/perf_counters_collection.h"
 #include "common/errno.h" 
-#include "rgw_sal.h"
-#include "rgw_sal_rados.h"
-#include "rgw_bucket.h"
-#include "rgw_user.h"
 #include "common/async/yield_context.h"
 
 #define dout_subsys ceph_subsys_rgw

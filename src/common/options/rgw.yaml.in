@@ -4616,16 +4616,6 @@ options:
   - rgw
   with_legacy: true
 
-- name: rgw_bucket_persistent_notif_num_shards
-  type: uint
-  level: advanced
-  desc: Number of shards for a persistent topic.
-  long_desc: Number of shards of persistent topics. The notifications will be sharded by a combination of 
-    the bucket and key name. Changing the number effect only new topics and does not change exiting ones.
-  default: 11
-  services: 
-    - rgw
-
 - name: rgw_usage_stats_refresh_interval
   type: int
   level: advanced

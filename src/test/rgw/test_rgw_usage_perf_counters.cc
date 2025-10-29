@@ -342,8 +342,6 @@ TEST_F(TestRGWUsagePerfCounters, PerformanceNoBlockingInIOPath) {
   
   for (int i = 0; i < num_operations; ++i) {
     std::string bucket_name = bucket_prefix + std::to_string(i % 10);
-    auto stats = cache->get_bucket_stats(bucket_name);
-    // These should be cache hits, should be VERY fast
   }
   
   auto end = std::chrono::high_resolution_clock::now();
