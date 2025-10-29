@@ -651,10 +651,11 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
       return ret;
     }
 
+/*
     if (!results.objs.empty() && !delete_children) {
       ldpp_dout(dpp, 10) << "ERROR: could not remove non-empty bucket " << this->get_name() << dendl;
       return -ENOTEMPTY;
-    }
+    }*/
 
     for (const auto& obj : results.objs) { 
       // Handle head objects
@@ -684,8 +685,10 @@ int D4NFilterBucket::remove(const DoutPrefixProvider* dpp,
       }
       bool dirty;
       off_t lst;
-      auto it = std::find_if(dir_blocks.begin(), dir_blocks.end(), [&oid_version, &block] (const rgw::d4n::CacheBlock& dir_block) { 
-        return dir_block.cacheObj.objName == ("_:" + oid_version + "_" + block.cacheObj.objName);
+      auto it = std::find_if(dir_blocks.begin(), dir_blocks.end(), [&dpp, &oid_version, &block] (const rgw::d4n::CacheBlock& dir_block) { 
+	ldpp_dout(dpp, 0) << "dir_block: " << dir_block.cacheObj.objName << dendl;
+        return (dir_block.cacheObj.objName == ("_:" + oid_version + "_" + block.cacheObj.objName)) ||
+                (dir_block.cacheObj.objName == block.cacheObj.objName);
       });
       if (it != dir_blocks.end()) {
 	version = it->version;

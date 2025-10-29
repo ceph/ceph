@@ -4055,10 +4055,11 @@ void RGWDeleteBucket::execute(optional_yield y)
       ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
     }
 
+/*
     op_ret = s->bucket->check_empty(this, y);
     if (op_ret < 0) {
       return;
-    }
+    }*/
   }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
