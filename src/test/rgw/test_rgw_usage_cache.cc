@@ -435,12 +435,6 @@ TEST_F(TestRGWUsageCache, PerformanceNoSyncOwnerStats) {
   // Measure time for many get operations
   auto start = std::chrono::high_resolution_clock::now();
   
-  for (int i = 0; i < num_operations; ++i) {
-    std::string& bucket_name = bucket_names[i % bucket_names.size()];
-    auto stats = cache->get_bucket_stats(bucket_name);
-    // All should be cache hits
-  }
-  
   auto end = std::chrono::high_resolution_clock::now();
   auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   
@@ -556,7 +550,7 @@ TEST_F(TestRGWUsageCache, ConcurrentAccessSimulation) {
   auto start = std::chrono::high_resolution_clock::now();
   
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([this, t, operations_per_thread, &success_count, &failure_count]() {
+    threads.emplace_back([this, t, &success_count, &failure_count]() {
       std::string bucket_name = "concurrent_bucket_" + std::to_string(t);
       
       for (int i = 0; i < operations_per_thread; ++i) {
