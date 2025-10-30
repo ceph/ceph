@@ -115,6 +115,8 @@ private:
   void write_image_state();
   void handle_write_image_state(int r);
 
+  void handle_refresh_for_snap_id(int r);
+
   void finish(int r);
 };
 
