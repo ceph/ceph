@@ -150,11 +150,13 @@ set(librbd_internal_srcs
   migration/Utils.cc
   mirror/DemoteRequest.cc
   mirror/DisableRequest.cc
+  mirror/DrainImageWatchersRequest.cc
   mirror/EnableRequest.cc
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
   mirror/GetUuidRequest.cc
   mirror/GroupEnableRequest.cc
+  mirror/GroupPromoteRequest.cc
   mirror/GroupGetInfoRequest.cc
   mirror/ImageRemoveRequest.cc
   mirror/ImageStateUpdateRequest.cc

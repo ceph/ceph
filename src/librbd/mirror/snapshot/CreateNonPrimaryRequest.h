@@ -69,6 +69,9 @@ private:
    *    v
    * CREATE_SNAPSHOT
    *    |
+   *    v (skip if not needed)
+   * REFRESH_IMAGE
+   *    |
    *    v
    * WRITE_IMAGE_STATE
    *    |
@@ -111,6 +114,9 @@ private:
 
   void create_snapshot();
   void handle_create_snapshot(int r);
+
+  void refresh_image_for_snap_id();
+  void handle_refresh_image_for_snap_id(int r);
 
   void write_image_state();
   void handle_write_image_state(int r);

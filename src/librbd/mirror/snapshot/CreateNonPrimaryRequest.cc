@@ -224,6 +224,39 @@ void CreateNonPrimaryRequest<I>::handle_create_snapshot(int r) {
     return;
   }
 
+  if (m_snap_id != nullptr && is_orphan()) {
+    // image refresh is required to retrieve orphan snapshot id
+    // in case of group promote --force as the snapshot
+    // is created via remote RPC
+    refresh_image_for_snap_id();
+    return;
+  }
+
+  write_image_state();
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::refresh_image_for_snap_id() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << dendl;
+
+  auto ctx = create_context_callback<
+    CreateNonPrimaryRequest<I>,
+    &CreateNonPrimaryRequest<I>::handle_refresh_image_for_snap_id>(this);
+  m_image_ctx->state->refresh(ctx);
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::handle_refresh_image_for_snap_id(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "failed to refresh image: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
   write_image_state();
 }
 
