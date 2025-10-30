@@ -36,11 +36,11 @@ GroupImageCreatePrimaryRequest<I>::GroupImageCreatePrimaryRequest(
     const std::vector<std::string> &global_image_ids,
     uint64_t group_snap_create_flags, uint32_t flags,
     const std::string &group_snap_id, std::vector<uint64_t> *snap_ids,
-    Context *on_finish)
+    bool acquire_exclusive_locks, Context *on_finish)
   : m_cct(cct), m_image_ctxs(image_ctxs), m_global_image_ids(global_image_ids),
     m_group_snap_create_flags(group_snap_create_flags), m_flags(flags),
     m_group_snap_id(group_snap_id), m_snap_ids(snap_ids),
-    m_on_finish(on_finish) {
+    m_acquire_exclusive_locks(acquire_exclusive_locks), m_on_finish(on_finish) {
   ceph_assert(!m_image_ctxs.empty());
   ceph_assert(!m_group_snap_id.empty());
   ceph_assert(m_global_image_ids.size() == m_image_ctxs.size());
@@ -200,7 +200,10 @@ void GroupImageCreatePrimaryRequest<I>::handle_notify_quiesce(int r) {
 template <typename I>
 void GroupImageCreatePrimaryRequest<I>::acquire_exclusive_locks() {
   ldout(m_cct, 15) << dendl;
-
+  if (!m_acquire_exclusive_locks) {
+    create_snapshots();
+    return;
+  }
   m_release_locks = true;
 
   auto ctx = librbd::util::create_context_callback<
