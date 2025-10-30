@@ -229,11 +229,24 @@ void CreateNonPrimaryRequest<I>::handle_create_snapshot(int r) {
 
 template <typename I>
 void CreateNonPrimaryRequest<I>::write_image_state() {
+  CephContext *cct = m_image_ctx->cct;
   uint64_t snap_id;
   {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     snap_id = m_image_ctx->get_snap_id(
       cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
+  }
+
+  if (m_snap_id != nullptr && snap_id == CEPH_NOSNAP) {
+    ldout(cct, 10) << "snap_id not found, refreshing image and will retry"
+                   << dendl;
+
+    auto ctx = create_context_callback<
+      CreateNonPrimaryRequest<I>,
+      &CreateNonPrimaryRequest<I>::handle_refresh_for_snap_id>(this);
+
+    m_image_ctx->state->refresh(ctx);
+    return;
   }
 
   if (m_snap_id != nullptr) {
@@ -245,7 +258,6 @@ void CreateNonPrimaryRequest<I>::write_image_state() {
     return;
   }
 
-  CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
   auto ctx = create_context_callback<
@@ -270,6 +282,22 @@ void CreateNonPrimaryRequest<I>::handle_write_image_state(int r) {
   }
 
   finish(0);
+}
+
+template <typename I>
+void CreateNonPrimaryRequest<I>::handle_refresh_for_snap_id(int r) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 15) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(cct) << "refresh failed while resolving snapshot id: " << cpp_strerror(r)
+               << dendl;
+    finish(r);
+    return;
+  }
+
+ // After refresh, attempt to lookup again for snap id
+  write_image_state();
 }
 
 template <typename I>
