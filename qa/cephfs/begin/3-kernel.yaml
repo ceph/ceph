@@ -8,16 +8,19 @@
 teuthology:
   postmerge:
     - |
-      local branch = yaml.kernel.branch
-      if branch and not yaml.kernel.branch:find "-all$" then
-        log.debug("removing default kernel specification: %s", yaml.kernel)
-        py_attrgetter(yaml.kernel).pop('branch', nil)
-        py_attrgetter(yaml.kernel).pop('deb', nil)
-        py_attrgetter(yaml.kernel).pop('flavor', nil)
-        py_attrgetter(yaml.kernel).pop('kdb', nil)
-        py_attrgetter(yaml.kernel).pop('koji', nil)
-        py_attrgetter(yaml.kernel).pop('koji_task', nil)
-        py_attrgetter(yaml.kernel).pop('rpm', nil)
-        py_attrgetter(yaml.kernel).pop('sha1', nil)
-        py_attrgetter(yaml.kernel).pop('tag', nil)
+      local kernel = py_attrgetter(yaml).get('kernel')
+      if kernel ~= nil then
+        local branch = yaml.kernel.branch
+        if branch and not yaml.kernel.branch:find "-all$" then
+          log.debug("removing default kernel specification: %s", yaml.kernel)
+          py_attrgetter(yaml.kernel).pop('branch', nil)
+          py_attrgetter(yaml.kernel).pop('deb', nil)
+          py_attrgetter(yaml.kernel).pop('flavor', nil)
+          py_attrgetter(yaml.kernel).pop('kdb', nil)
+          py_attrgetter(yaml.kernel).pop('koji', nil)
+          py_attrgetter(yaml.kernel).pop('koji_task', nil)
+          py_attrgetter(yaml.kernel).pop('rpm', nil)
+          py_attrgetter(yaml.kernel).pop('sha1', nil)
+          py_attrgetter(yaml.kernel).pop('tag', nil)
+        end
       end
