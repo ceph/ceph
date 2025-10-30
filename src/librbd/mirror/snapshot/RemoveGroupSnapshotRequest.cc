@@ -42,7 +42,7 @@ void RemoveGroupSnapshotRequest<I>::remove_group_image_snapshots() {
   }
 
   auto ctx = create_context_callback<
-      RemoveGroupSnapshotRequest,
+      RemoveGroupSnapshotRequest<I>,
       &RemoveGroupSnapshotRequest<I>::handle_remove_group_image_snapshots>(this);
 
   C_Gather *gather_ctx = new C_Gather(m_cct, ctx);
