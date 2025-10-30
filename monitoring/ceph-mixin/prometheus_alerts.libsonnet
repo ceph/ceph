@@ -1047,5 +1047,20 @@
         },
       ],
     },
+    {
+      name: 'certmgr',
+      rules: [
+        {
+          alert: 'CephCertificateWarning',
+          'for': '1m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_ERROR"} == 1',
+          labels: { severity: 'warning', type: 'ceph_default' },
+          annotations: {
+            summary: 'Ceph certificate error detected%(cluster)s' % $.MultiClusterSummary(),
+            description: "{{ $labels.message }}. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue.",
+          },
+        },
+      ],
+    },
   ],
 }

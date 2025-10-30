@@ -122,7 +122,7 @@ HEALTH_CHECKS = [
     alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process'),
 ]
 
-HEALTHCHECK_DETAIL = ('name', 'severity')
+HEALTHCHECK_DETAIL = ('name', 'severity', 'message')
 
 
 class Severity(enum.Enum):
@@ -980,13 +980,42 @@ class Module(MgrModule, OrchestratorClientMixin):
                     # health check is not active, so give it a default of 0
                     self.metrics[path].set(0)
 
+        if 'CEPHADM_CERT_ERROR' in active_names:
+            cert_error_data = active_healthchecks['CEPHADM_CERT_ERROR']
+            severity = cert_error_data.get('severity', 'unknown')
+            detail_messages = cert_error_data.get('detail', [])
+            if detail_messages:
+                self.log.debug(f"Processing {len(detail_messages)} certificate error messages")
+                for detail_entry in detail_messages:
+                    message = detail_entry.get('message', '')
+                    if not message:
+                        continue
+
+                    try:
+                        self.metrics['health_detail'].set(
+                            1,
+                            (
+                                'CEPHADM_CERT_ERROR',
+                                str(severity),
+                                str(message)
+                            )
+                        )
+                        self.log.debug(f"Certificate error: {message}")
+                    except Exception as e:
+                        self.log.error(f"Failed to process certificate error message '{message}': {e}")
+                        continue
+
         self.health_history.check(health)
         for name, info in self.health_history.healthcheck.items():
+            # Skip CEPHADM_CERT_ERROR as it's handled specially above with message details
+            if name == 'CEPHADM_CERT_ERROR':
+                continue
             v = 1 if info.active else 0
             self.metrics['health_detail'].set(
                 v, (
                     name,
-                    str(info.severity))
+                    str(info.severity),
+                    '')
             )
 
     @profile_method()
