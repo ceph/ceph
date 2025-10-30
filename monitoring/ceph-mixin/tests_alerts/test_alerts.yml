@@ -3207,3 +3207,30 @@ tests:
         exp_annotations:
           summary: "Host (nqn.2) was disconnected 1 times from subsystem (nqn.2016-06.io.spdk:cnode1.mygroup) in last 24 hours"
           description: "Host was disconnected due to host keep alive timeout"
+
+# Certificate Management
+ - interval: 1m
+   input_series:
+    - series: 'ceph_cephadm_certificate_error{cluster="mycluster",message="Certificate expires soon"}'
+      values: '0+0x2 1+0x10'
+   promql_expr_test:
+    - expr: ceph_cephadm_certificate_error == 1
+      eval_time: 3m
+      exp_samples:
+        - labels: '{__name__="ceph_cephadm_certificate_error", cluster="mycluster", message="Certificate expires soon"}'
+          value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: CephCertificateWarning
+      exp_alerts: []
+    - eval_time: 10m
+      alertname: CephCertificateWarning
+      exp_alerts:
+      - exp_labels:
+          cluster: mycluster
+          message: Certificate expires soon
+          severity: warning
+          type: ceph_default
+        exp_annotations:
+          summary: Ceph certificate error detected on cluster mycluster
+          description: "Certificate expires soon. Please check 'ceph health detail' for more information and take appropriate action to resolve the certificate issue."
