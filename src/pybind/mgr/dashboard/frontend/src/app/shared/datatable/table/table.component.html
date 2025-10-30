@@ -477,3 +477,9 @@
   </div>
   }
 </ng-template>
+
+<ng-template #redirectTpl
+             let-value="data.value"
+             let-column="data.column">
+  <a [routerLink]="column.customTemplateConfig?.redirectLink">{{value}}</a>
+</ng-template>
