@@ -328,14 +328,6 @@ int commit_logging_object(const configuration& conf,
       << ret << dendl;
     return ret;
   }
-  return commit_logging_object(conf, target_bucket, dpp, y, last_committed);
-}
-
-int commit_logging_object(const configuration& conf,
-    const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
-    const DoutPrefixProvider *dpp,
-    optional_yield y,
-    std::string* last_committed) {
   std::string obj_name;
   if (const int ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
