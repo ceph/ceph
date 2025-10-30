@@ -124,9 +124,6 @@
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
-/* AsyncMessenger SMC conditional compilation */
-#cmakedefine HAVE_SMC
-
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 
