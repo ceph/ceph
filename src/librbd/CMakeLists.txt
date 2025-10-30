@@ -153,7 +153,9 @@ set(librbd_internal_srcs
   mirror/GetInfoRequest.cc
   mirror/GetStatusRequest.cc
   mirror/GetUuidRequest.cc
+  mirror/UnregisterImageWatchersRequest.cc
   mirror/GroupEnableRequest.cc
+  mirror/GroupPromoteRequest.cc
   mirror/GroupGetInfoRequest.cc
   mirror/ImageRemoveRequest.cc
   mirror/ImageStateUpdateRequest.cc
