@@ -1032,11 +1032,11 @@ void ECTransaction::Generate::omap_updates() {
         const std::string& first_key = key_list.front();
         const std::string& last_key = key_list.back();
         for (auto &&[shard, t]: transactions) {
-        if (!sinfo.is_nonprimary_shard(shard)) {
-          t.omap_rmkeyrange(
-            coll_t(spg_t(pgid, shard)),
-            ghobject_t(oid, ghobject_t::NO_GEN, shard),
-            first_key, last_key);
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t.omap_rmkeyrange(
+              coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
+              first_key, last_key);
           }
         }
       }
