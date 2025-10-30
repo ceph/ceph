@@ -501,6 +501,12 @@ int log_record(rgw::sal::Driver* driver,
     return ret;
   }
 
+  // make sure that the logging source attribute is up-to-date
+  if (ret = update_bucket_logging_sources(dpp, target_bucket, s->bucket->get_key(), true, y); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+        << "' in logging bucket '" << target_bucket_id << "'. error: " << ret << dendl;
+  }
+
   const auto region = driver->get_zone()->get_zonegroup().get_api_name();
   std::string obj_name;
   RGWObjVersionTracker objv_tracker;
