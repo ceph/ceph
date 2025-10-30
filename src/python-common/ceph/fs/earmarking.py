@@ -78,10 +78,8 @@ class CephFSVolumeEarmarking:
                 log.info(f"No earmark set for the path while {action}. Returning empty result.")
                 return ''
             else:
-                log.error(f"Error {action} earmark: {e}")
                 raise EarmarkException(-e.errno, e.strerror) from e
         else:
-            log.error(f"Unexpected error {action} earmark: {e}")
             raise EarmarkException(errno.EFAULT, f"Unexpected error {action} earmark: {e}") from e
 
     @staticmethod
