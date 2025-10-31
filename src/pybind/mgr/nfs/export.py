@@ -495,8 +495,8 @@ class ExportMgr:
                 export_block = raw_config_parsed['EXPORT']
                 # optional blocks
                 opt_blocks = self.prepare_opt_block_from_raw_config(raw_config_parsed)
-                ganesha_export = GaneshaExport(Export.from_export_block(export_block, rados_namespace),
-                                               **opt_block)
+                ganesha_export = GaneshaExport(Export.from_export_block(export_block, cluster_id),
+                                               **opt_blocks)
                 log.debug(f'export: {ganesha_export}')
                 return ganesha_export
         except ObjectNotFound:
