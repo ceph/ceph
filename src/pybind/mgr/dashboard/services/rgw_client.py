@@ -47,6 +47,15 @@ logger = logging.getLogger('rgw_client')
 _SYNC_GROUP_ID = 'dashboard_admin_group'
 _SYNC_FLOW_ID = 'dashboard_admin_flow'
 _SYNC_PIPE_ID = 'dashboard_admin_pipe'
+DEFAULT_USER_RATELIMIT = {
+    "user_ratelimit": {
+        "max_read_ops": 0,
+        "max_write_ops": 0,
+        "max_read_bytes": 0,
+        "max_write_bytes": 0,
+        "enabled": False
+    }
+}
 
 
 class NoRgwDaemonsException(Exception):
@@ -1717,6 +1726,8 @@ class RgwRateLimit:
         try:
             exit_code, out, err = mgr.send_rgwadmin_command(rate_limit_cmd)
             if exit_code > 0:
+                if "No such file or directory" in str(err):
+                    return DEFAULT_USER_RATELIMIT
                 raise DashboardException(f'Unable to get rate limit: {err}',
                                          http_status_code=500, component='rgw')
             return out
