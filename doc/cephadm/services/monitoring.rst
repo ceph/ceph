@@ -103,6 +103,7 @@ few minutes until all components are fully operational. The updated secure confi
 #. Alertmanager: basic authentication is required to access the web portal and TLS is enabled for secure communication.
 #. Node Exporter: TLS is enabled for secure communication.
 #. Grafana: TLS is enabled and authentication is requiered to access the datasource information.
+#. Cephadm service discovery endpoint: basic authentication is required to access service discovery information, and TLS is enabled for secure communication.
 
 In this secure setup, users will need to setup authentication
 (username/password) for both Prometheus and Alertmanager. By default the
@@ -113,6 +114,32 @@ flexibility to input the username/password either as parameters or via a JSON
 file, which enhances security. Additionally, Cephadm provides the commands
 ``orch prometheus get-credentials`` and ``orch alertmanager get-credentials`` to
 retrieve the current credentials.
+
+.. note::
+
+   The credentials used for the cephadm service discovery endpoint (the
+   endpoint that listens on ``https://<mgr-ip>:8765/sd/`` when security is
+   enabled) can be retrieved and updated using the following config-key
+   commands. For example, to retrieve the current credentials run:
+
+   .. prompt:: bash #
+
+     ceph config-key get mgr/cephadm/service_discovery/root/username
+     ceph config-key get mgr/cephadm/service_discovery/root/password
+
+   To update the credentials (username/password) for service discovery,
+   run:
+
+   .. prompt:: bash #
+
+     ceph config-key set mgr/cephadm/service_discovery/root/username <username>
+     ceph config-key set mgr/cephadm/service_discovery/root/password <password>
+
+   After changing these credentials, redeploy the Manager so the changes take effect.
+
+   .. prompt:: bash #
+
+     ceph orch redeploy mgr
 
 .. _cephadm-monitoring-centralized-logs:
 
@@ -417,8 +444,12 @@ Here's an example Prometheus job definition that uses the cephadm service discov
 
      - job_name: 'ceph-exporter'  
        http_sd_configs:  
-       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
-
+       - url: https://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
+         basic_auth:  
+           username: '<username>'  
+           password: '<password>'  
+         tls_config:  
+           ca_file: '/path/to/ca.crt'  
 
 * To enable the dashboard's Prometheus-based alerting, see :ref:`dashboard-alerting`.
 
