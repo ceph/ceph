@@ -1,6 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwMultisiteSyncFlowModalComponent } from './rgw-multisite-sync-flow-modal.component';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
@@ -9,6 +8,7 @@ import { CommonModule } from '@angular/common';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { of } from 'rxjs';
 import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
+import { ComboBoxModule, ModalModule, SelectModule } from 'carbon-components-angular';
 
 enum FlowType {
   symmetrical = 'symmetrical',
@@ -32,16 +32,31 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
         ToastrModule.forRoot(),
         PipesModule,
         ReactiveFormsModule,
-        CommonModule
+        CommonModule,
+        SelectModule,
+        ModalModule,
+        ComboBoxModule
       ],
       schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [NgbActiveModal, { provide: RgwMultisiteService, useClass: MultisiteServiceMock }]
+      providers: [
+        { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
+        { provide: 'groupType', useValue: FlowType.symmetrical },
+        { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
+        {
+          provide: 'flowSelectedRow',
+          useValue: { id: 'symmetrical', zones: ['zone1-zg1-realm1'] }
+        },
+        { provide: 'action', useValue: 'create' }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncFlowModalComponent);
     multisiteServiceMock = (TestBed.inject(RgwMultisiteService) as unknown) as MultisiteServiceMock;
     component = fixture.componentInstance;
     component.groupType = FlowType.symmetrical;
+    component.groupExpandedRow = { groupName: 'new', bucket: 'bucket1' };
+    component.flowSelectedRow = { id: 'symmetrical', zones: ['zone1-zg1-realm1'] };
+    component.action = 'create';
     fixture.detectChanges();
   });
 
@@ -61,12 +76,12 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
 
   it('should call createEditSyncFlow for creating/editing symmetrical sync flow', () => {
     component.editing = false;
+    component.ngOnInit();
     component.currentFormGroupContext.patchValue({
       flow_id: 'symmetrical',
       group_id: 'new',
-      zones: { added: ['zone1-zg1-realm1'], removed: [] }
+      zones: ['zone1-zg1-realm1']
     });
-    component.zones.data.selected = ['zone1-zg1-realm1'];
     const spy = jest.spyOn(component, 'submit');
     const putDataSpy = jest
       .spyOn(multisiteServiceMock, 'createEditSyncFlow')
@@ -74,19 +89,21 @@ describe('RgwMultisiteSyncFlowModalComponent', () => {
     component.submit();
     expect(spy).toHaveBeenCalled();
     expect(putDataSpy).toHaveBeenCalled();
-    expect(putDataSpy).toHaveBeenCalledWith(component.currentFormGroupContext.getRawValue());
+    expect(putDataSpy).toHaveBeenCalledWith({
+      ...component.currentFormGroupContext.getRawValue(),
+      zones: { added: ['zone1-zg1-realm1'], removed: [] }
+    });
   });
 
   it('should call createEditSyncFlow for creating/editing directional sync flow', () => {
     component.editing = false;
     component.groupType = FlowType.directional;
     component.ngOnInit();
-    fixture.detectChanges();
     component.currentFormGroupContext.patchValue({
       flow_id: 'directional',
       group_id: 'new',
-      source_zone: { added: ['zone1-zg1-realm1'], removed: [] },
-      destination_zone: { added: ['zone2-zg1-realm1'], removed: [] }
+      source_zone: ['zone1-zg1-realm1'],
+      destination_zone: ['zone2-zg1-realm1']
     });
     const spy = jest.spyOn(component, 'submit');
     const putDataSpy = jest
