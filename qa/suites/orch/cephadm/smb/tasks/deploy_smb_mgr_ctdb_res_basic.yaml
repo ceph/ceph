@@ -88,14 +88,14 @@ tasks:
       - cmd: rados --pool=.smb -N uctdb1 get cluster.meta.json /dev/stdout
 
 # Check if shares exist
-- cephadm.exec:
+- template.exec:
     host.d:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user2%t3stP4ss2 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
 
 # verify CTDB is healthy, cluster well formed
-- cephadm.exec:
+- template.exec:
     host.a:
       - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.uctdb1\")))[-1].name' > /tmp/svcname"
       - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
@@ -107,7 +107,7 @@ tasks:
       - rm -rf /tmp/svcname /tmp/ctdb_status
 
 # Test a different host in the cluster
-- cephadm.exec:
+- template.exec:
     host.d:
       - sleep 30
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.c'|role_to_remote|attr('ip_address')}}/share1 -c ls"

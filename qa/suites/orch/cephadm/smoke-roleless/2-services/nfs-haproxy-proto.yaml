@@ -7,7 +7,7 @@ tasks:
       - ceph orch device ls --refresh
 
 # stop kernel nfs server, if running
-- vip.exec:
+- exec:
     all-hosts:
       - systemctl stop nfs-server
 
@@ -26,7 +26,7 @@ tasks:
 
 # make sure mount can be reached over VIP, ensuring both that
 # keepalived is maintaining the VIP and that the nfs has bound to it
-- vip.exec:
+- template.exec:
     host.a:
       - mkdir /mnt/happy
       - sleep 1
