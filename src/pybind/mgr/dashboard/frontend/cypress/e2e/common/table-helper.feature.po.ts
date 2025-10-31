@@ -79,7 +79,7 @@ And('I should see row {string} have {string}', (row: string, options: string) =>
   if (options) {
     cy.get('.cds--search-input').first().clear().type(row);
     for (const option of options.split(',')) {
-      cy.contains(`[cdstablerow] [cdstabledata] .tag`, option).should('exist');
+      cy.contains(`[cdstablerow] [cdstabledata] cds-tag span`, option).should('exist');
     }
   }
 });

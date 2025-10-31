@@ -37,7 +37,6 @@ Feature: Grafana panels
             | Total Requests/sec by RGW Instance | foo.ceph-node-00, foo.ceph-node-01, foo.ceph-node-02 |
             | GET Latencies by RGW Instance | foo.ceph-node-00, foo.ceph-node-01, foo.ceph-node-02 |
             | Bandwidth by RGW Instance | foo.ceph-node-00, foo.ceph-node-01, foo.ceph-node-02 |
-            | PUT Latencies by RGW Instance | foo.ceph-node-00, foo.ceph-node-01, foo.ceph-node-02 |
             | Average GET/PUT Latencies by RGW Instance | GET, PUT |
             | Bandwidth Consumed by Type | GETs, PUTs |
 
