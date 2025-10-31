@@ -5658,10 +5658,13 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
+      del_op->params.last_mod_time_match = last_mod_time_match;
       del_op->params.high_precision_time = s->system_request;
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
       del_op->params.null_verid = null_verid;
+      del_op->params.size_match = size_match;
+      del_op->params.if_match = if_match;
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -7520,8 +7523,11 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
   entry.delete_multi_obj_meta.objects = std::move(ops_log_entries);
 }
 
-void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_yield y, const bool skip_olh_obj_update)
+void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object, optional_yield y, const bool skip_olh_obj_update)
 {
+  const string& key = object.get_key();
+  const string& instance = object.get_version_id();
+  rgw_obj_key o(key, instance);
   // add the object key to the dout prefix so we can trace concurrent calls
   struct ObjectPrefix : public DoutPrefixPipe {
     const rgw_obj_key& o;
@@ -7604,6 +7610,9 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.obj_owner = s->owner;
   del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
+  del_op->params.last_mod_time_match = object.get_last_mod_time();
+  del_op->params.if_match = object.get_if_match();
+  del_op->params.size_match = object.get_size_match();
 
   op_ret = del_op->delete_obj(dpp, y,
                               rgw::sal::FLAG_LOG_OP | (skip_olh_obj_update ? rgw::sal::FLAG_SKIP_UPDATE_OLH : 0));
@@ -7628,16 +7637,16 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret);
 }
 
-void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                                  uint32_t max_aio,
                                                  boost::asio::yield_context yield)
 {
   auto group = ceph::async::spawn_throttle{yield, max_aio};
-  std::map<std::string, std::vector<rgw_obj_key>> grouped_objects;
+  std::map<std::string, std::vector<RGWMultiDelObject>> grouped_objects;
 
   // group objects by their keys
   for (const auto& object : objects) {
-    const std::string& key = object.name;
+    const std::string& key = object.get_key();
     grouped_objects[key].push_back(object);
   }
 
@@ -7665,7 +7674,7 @@ void RGWDeleteMultiObj::handle_versioned_objects(const std::vector<rgw_obj_key>&
   group.wait();
 }
 
-void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<RGWMultiDelObject>& objects,
                                                      uint32_t max_aio,
                                                      boost::asio::yield_context yield)
 {
@@ -7681,7 +7690,7 @@ void RGWDeleteMultiObj::handle_non_versioned_objects(const std::vector<rgw_obj_k
   group.wait();
 }
 
-void RGWDeleteMultiObj::handle_objects(const std::vector<rgw_obj_key>& objects,
+void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
                                        uint32_t max_aio,
                                        boost::asio::yield_context yield)
 {
@@ -7742,8 +7751,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
 
   if (s->bucket->get_info().mfa_enabled()) {
     bool has_versioned = false;
-    for (auto i : multi_delete->objects) {
-      if (!i.instance.empty()) {
+    for (auto object : multi_delete->objects) {
+      const string& instance = object.get_version_id();
+      if (instance.empty()) {
         has_versioned = true;
         break;
       }
