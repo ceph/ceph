@@ -640,6 +640,21 @@ bool Inode::has_recalled_deleg()
   return deleg.is_recalled();
 }
 
+bool Inode::is_write_delegated()
+{
+  if (delegations.empty()) {
+    return false;
+  }
+
+  for (auto& deleg : delegations) {
+    if (deleg.is_write_delegated() && !deleg.is_recalled()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void Inode::recall_deleg(bool skip_read)
 {
   if (delegations.empty())

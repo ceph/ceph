@@ -12327,9 +12327,13 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
     // FIXME: this can starve
-    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+    int nr_refs = 0;
+    if (in->is_write_delegated()) {
+      ++nr_refs;
+    }
+    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > nr_refs) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
-		     << " uncommitted, waiting" << dendl;
+		     << " uncommitted (nrefs: " << nr_refs << "), waiting" << dendl;
       wait_on_context_list(in->waitfor_commit);
     }
   }
