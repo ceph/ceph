@@ -327,37 +327,53 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
   } else {
     /* Set metadata locally */
-    RGWObjState* astate;
-    source->get_obj_state(dpp, &astate, y);
+    RGWQuotaInfo quota_info;
+    source->load_obj_state(dpp, y);
 
-    for (auto it = newMetadata.begin(); it != newMetadata.end(); ++it) {
-      if (!std::strcmp(it->first.data(), "mtime")) {
-        parse_time(it->second.data(), &astate->mtime); 
-      } else if (!std::strcmp(it->first.data(), "object_size")) {
-	source->set_obj_size(std::stoull(it->second));
-      } else if (!std::strcmp(it->first.data(), "accounted_size")) {
-	astate->accounted_size = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "epoch")) {
-	astate->epoch = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "version_id")) {
-	source->set_instance(it->second);
-      } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
-	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
+    for (auto& attr : newAttrs) {
+      if (attr.second.length() > 0) {
+	if (attr.first == "mtime") {
+	  ceph::real_time mtime;
+	  parse_time(attr.second.c_str(), &mtime);
+	  source->set_mtime(mtime);
+	} else if (attr.first == "object_size") {
+	  source->set_obj_size(std::stoull(attr.second.c_str()));
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "accounted_size") {
+	  source->set_accounted_size(std::stoull(attr.second.c_str()));
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "epoch") {
+	  source->set_epoch(std::stoull(attr.second.c_str()));
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "version_id") {
+	  source->set_instance(attr.second.c_str());
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "source_zone_short_id") {
+	  source->set_short_zone_id(static_cast<uint32_t>(std::stoul(attr.second.c_str())));
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "user_quota.max_size") {
+	  quota_info.max_size = std::stoull(attr.second.c_str());
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "user_quota.max_objects") {
+	  quota_info.max_objects = std::stoull(attr.second.c_str());
+	  newAttrs.erase(attr.first);
+	} else if (attr.first == "max_buckets") {
+	  newAttrs.erase(attr.first);
+	} else {
+	  ldpp_dout(dpp, 20) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): Unexpected attribute; not locally set." << dendl;
+	}
+      }
+   
+      /* Set attributes locally */
+      int setAttrsReturn = source->set_attrs(newAttrs);
+
+      if (setAttrsReturn < 0) {
+	ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
+      } else {
+	ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
       }
     }
-
-    source->set_obj_state(*astate);
-   
-    /* Set attributes locally */
-    int setAttrsReturn = source->set_attrs(newAttrs);
-
-    if (setAttrsReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
-    }   
   }
-
   return ret;
 }
 
@@ -412,6 +428,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -436,17 +453,16 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   }
    
   /* Retrieve complete set of attrs */
-  RGWObjState* astate;
-  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
+  int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs, cksum,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, rctx, flags);
   obj->get_obj_attrs(rctx.y, save_dpp, NULL);
-  obj->get_obj_state(save_dpp, &astate, rctx.y);
 
   /* Append additional metadata to attributes */ 
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
   rgw::sal::Attrs attrs_temp = baseAttrs;
   buffer::list bl;
+  obj->load_obj_state(save_dpp, rctx.y);
 
   bl.append(to_iso_8601(obj->get_mtime()));
   baseAttrs.insert({"mtime", bl});
@@ -460,7 +476,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   baseAttrs.insert({"accounted_size", bl});
   bl.clear();
  
-  bl.append(std::to_string(astate->epoch));
+  bl.append(std::to_string(obj->get_epoch()));
   baseAttrs.insert({"epoch", bl});
   bl.clear();
 
@@ -476,7 +492,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
   if (iter != attrs_temp.end()) {
-    bl.append(std::to_string(astate->zone_short_id));
+    bl.append(std::to_string(obj->get_short_zone_id()));
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   } else {

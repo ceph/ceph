@@ -15,15 +15,19 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
 #include "common/tracer.h"
+#include "rgw_cksum.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_req_context.h"
 #include "include/random.h"
+#include "include/function2.hpp"
 
 // FIXME: following subclass dependencies
 #include "driver/rados/rgw_user.h"
@@ -82,49 +86,6 @@ struct RGWClusterStat {
   uint64_t kb_avail;
   /// number of objects
   uint64_t num_objects;
-};
-
-struct RGWObjState {
-  rgw_obj obj;
-  bool is_atomic{false};
-  bool has_attrs{false};
-  bool exists{false};
-  uint64_t size{0}; //< size of raw object
-  uint64_t accounted_size{0}; //< size before compression, encryption
-  ceph::real_time mtime;
-  uint64_t epoch{0};
-  bufferlist obj_tag;
-  bufferlist tail_tag;
-  std::string write_tag;
-  bool fake_tag{false};
-  std::string shadow_obj;
-  bool has_data{false};
-  bufferlist data;
-  bool prefetch_data{false};
-  bool is_olh{false};
-  bufferlist olh_tag;
-  uint64_t pg_ver{false};
-  uint32_t zone_short_id{0};
-  bool compressed{false};
-
-  /* important! don't forget to update copy constructor */
-
-  RGWObjVersionTracker objv_tracker;
-
-  std::map<std::string, ceph::buffer::list> attrset;
-
-  RGWObjState();
-  RGWObjState(const RGWObjState& rhs);
-  ~RGWObjState();
-
-  bool get_attr(std::string name, bufferlist& dest) {
-    auto iter = attrset.find(name);
-    if (iter != attrset.end()) {
-      dest = iter->second;
-      return true;
-    }
-    return false;
-  }
 };
 
 /**
@@ -228,6 +189,7 @@ class ObjectProcessor : public DataProcessor {
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1098,8 +1060,8 @@ class Object {
 
         /// If non-null, read data/attributes from the given multipart part.
         int* part_num{nullptr};
-        /// If part_num is specified and the object is multipart, the total
-        /// number of multipart parts is assigned to this output parameter.
+        /// If the object is multipart, the total number of multipart
+        /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
       } params;
 
@@ -1184,6 +1146,9 @@ class Object {
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
+
+    /** return logging subsystem */
+    virtual unsigned get_subsys() { return ceph_subsys_rgw; };
     /** Get the ACL for this object */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this object */
@@ -1212,10 +1177,8 @@ class Object {
     /** Get the name of this object */
     virtual const std::string &get_name() const = 0;
 
-    /** Get the object state for this object.  Will be removed in the future */
-    virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) = 0;
-    /** Set the object state for this object */
-    virtual void set_obj_state(RGWObjState& _state) = 0;
+    /** Load the object state for this object. */
+    virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) = 0;
     /** Set attributes for this object from the backing store.  Attrs can be set or
      * deleted.  @note the attribute APIs may be revisited in the future. */
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs, Attrs* delattrs, optional_yield y, uint32_t flags) = 0;
@@ -1254,6 +1217,28 @@ class Object {
     /** Dump driver-specific object layout info in JSON */
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) = 0;
 
+  /* A transfer data type describing metadata specific to one part of a
+   * completed multipart upload object, following the GetObjectAttributes
+   * response syntax for Object::Parts here:
+   * https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObjectAttributes.html */
+    class Part
+    {
+    public:
+      int part_number;
+      uint32_t part_size;
+      rgw::cksum::Cksum cksum;
+    }; /* Part */
+
+    /* callback function/object used by list_parts */
+    using list_parts_each_t =
+      const fu2::unique_function<int(const Part&) const>;
+  
+    /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+    virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y) = 0;
+
     /** Get the cached attributes for this object */
     virtual Attrs& get_attrs(void) = 0;
     /** Get the (const) cached attributes for this object */
@@ -1262,10 +1247,26 @@ class Object {
     virtual int set_attrs(Attrs a) = 0;
     /** Check to see if attributes are cached on this object */
     virtual bool has_attrs(void) = 0;
+    /** Check to see if an attribute exists, and return it's value if it does */
+    virtual bool get_attr(const std::string& name, bufferlist &dest) = 0;
     /** Get the cached modification time for this object */
     virtual ceph::real_time get_mtime(void) const = 0;
+    /** Set the cached modification time for this object */
+    virtual void set_mtime(ceph::real_time&) = 0;
     /** Get the cached size for this object */
     virtual uint64_t get_obj_size(void) const = 0;
+    /** Get the cached accounted size for this object */
+    virtual uint64_t get_accounted_size(void) const = 0;
+    /** Set the cached accounted size for this object */
+    virtual void set_accounted_size(uint64_t) = 0;
+    /** Get the cached epoch for this object */
+    virtual uint64_t get_epoch(void) const = 0;
+    /** Set the cached epoch for this object */
+    virtual void set_epoch(uint64_t) = 0;
+    /** Get the cached short zone id for this object */
+    virtual uint32_t get_short_zone_id(void) const = 0;
+    /** Set the cached short zone id for this object */
+    virtual void set_short_zone_id(uint32_t) = 0;
     /** Get the bucket containing this object */
     virtual Bucket* get_bucket(void) const = 0;
     /** Set the bucket containing this object */
@@ -1280,6 +1281,8 @@ class Object {
     virtual bool get_delete_marker(void) = 0;
     /** True if this object is stored in the extra data pool */
     virtual bool get_in_extra_data(void) = 0;
+    /** True if this object exists in the store */
+    virtual bool exists(void) = 0;
     /** Set the in_extra_data field */
     virtual void set_in_extra_data(bool i) = 0;
     /** Helper to sanitize object size, offset, and end values */
@@ -1385,6 +1388,8 @@ public:
   virtual const std::string& get_etag() = 0;
   /** Get the modification time of this part */
   virtual ceph::real_time& get_mtime() = 0;
+  /** Get computed (or default/empty) checksum */
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() = 0;
 };
 
 /**
@@ -1403,6 +1408,11 @@ public:
   //object lock
   std::optional<RGWObjectRetention> obj_retention = std::nullopt;
   std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+
+  rgw::cksum::Type cksum_type = rgw::cksum::Type::none;
+
+  // only a few (currently CRC) checksums are not composite
+  uint16_t cksum_flags{rgw::cksum::Cksum::FLAG_COMPOSITE};
 
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
@@ -1431,7 +1441,7 @@ public:
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) = 0;
   /** List all the parts of this upload, filling the parts cache */
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
-			 int num_parts, int marker,
+			 int max_parts, int marker,
 			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) = 0;
   /** Abort this upload */
@@ -1667,6 +1677,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
