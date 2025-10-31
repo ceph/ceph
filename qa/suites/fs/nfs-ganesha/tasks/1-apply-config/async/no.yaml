@@ -1,0 +1,3 @@
+overrides:
+  ganesha-reconf:
+      async: no

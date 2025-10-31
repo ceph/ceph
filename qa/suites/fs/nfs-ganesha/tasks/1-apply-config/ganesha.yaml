@@ -1,0 +1,11 @@
+tasks:
+- ganesha-reconf:
+    cluster_id: 'nfs-ganesha-test'
+    pseudo_path: '/nfsganesha'
+
+- cephadm.shell:
+    mon.a:
+      # sleep a bit
+      - cmd: sleep 30
+      # more debug
+      - cmd: ceph orch ps
