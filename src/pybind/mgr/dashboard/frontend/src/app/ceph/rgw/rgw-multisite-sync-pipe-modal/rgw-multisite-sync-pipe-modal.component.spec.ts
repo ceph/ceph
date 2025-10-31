@@ -11,6 +11,8 @@ import { of } from 'rxjs';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
 import { CUSTOM_ELEMENTS_SCHEMA, NO_ERRORS_SCHEMA } from '@angular/core';
 import { USER } from '~/app/shared/constants/app.constants';
+import { FlowType } from '../models/rgw-multisite';
+import { ComboBoxModule } from 'carbon-components-angular';
 
 class MultisiteServiceMock {
   createEditSyncPipe = jest.fn().mockReturnValue(of(null));
@@ -29,10 +31,26 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
         ToastrModule.forRoot(),
         PipesModule,
         ReactiveFormsModule,
-        CommonModule
+        CommonModule,
+        ComboBoxModule
       ],
       schemas: [NO_ERRORS_SCHEMA, CUSTOM_ELEMENTS_SCHEMA],
-      providers: [NgbActiveModal, { provide: RgwMultisiteService, useClass: MultisiteServiceMock }]
+      providers: [
+        NgbActiveModal,
+        { provide: RgwMultisiteService, useClass: MultisiteServiceMock },
+        { provide: 'groupType', useValue: FlowType.symmetrical },
+        { provide: 'groupExpandedRow', useValue: { groupName: 'new', bucket: 'bucket1' } },
+        {
+          provide: 'pipeSelectedRow',
+          useValue: {
+            source: { zones: ['zone1-zg1-realm1'], bucket: 'bucket1' },
+            dest: { zones: ['zone2-zg1-realm1'], bucket: 'bucket1' },
+            id: 'pipe1',
+            params: { user: 'dashboard', mode: USER }
+          }
+        },
+        { provide: 'action', useValue: 'create' }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncPipeModalComponent);
@@ -77,16 +95,21 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
 
   it('should call createEditSyncPipe for creating/editing sync pipe', () => {
     component.editing = false;
+    component.ngOnInit();
     component.pipeForm.patchValue({
       pipe_id: 'pipe1',
       group_id: 'new',
       source_bucket: '',
-      source_zones: { added: ['zone1-zg1-realm1'], removed: [] },
+      source_zones: ['zone1-zg1-realm1'],
       destination_bucket: '',
-      destination_zones: { added: ['zone2-zg1-realm1'], removed: [] }
+      destination_zones: ['zone2-zg1-realm1']
     });
-    component.sourceZones.data.selected = ['zone1-zg1-realm1'];
-    component.destZones.data.selected = ['zone2-zg1-realm1'];
+    component.sourceZones = [
+      { name: 'zone1-zg1-realm1', content: 'zone1-zg1-realm1', selected: true }
+    ];
+    component.destZones = [
+      { name: 'zone2-zg1-realm1', content: 'zone2-zg1-realm1', selected: true }
+    ];
     const spy = jest.spyOn(component, 'submit');
     const putDataSpy = jest.spyOn(multisiteServiceMock, 'createEditSyncPipe');
     component.submit();
@@ -94,6 +117,8 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     expect(putDataSpy).toHaveBeenCalled();
     expect(putDataSpy).toHaveBeenCalledWith({
       ...component.pipeForm.getRawValue(),
+      source_zones: { added: ['zone1-zg1-realm1'], removed: [] },
+      destination_zones: { added: ['zone2-zg1-realm1'], removed: [] },
       mode: '',
       user: ''
     });
@@ -105,25 +130,26 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
       pipe_id: 'pipe1',
       group_id: 's3-bucket-replication:enabled',
       source_bucket: '',
-      source_zones: { added: ['zone1-zg1-realm1'], removed: [] },
+      source_zones: ['zone1-zg1-realm1'],
       destination_bucket: '',
-      destination_zones: { added: ['zone2-zg1-realm1'], removed: [] }
+      destination_zones: ['zone2-zg1-realm1']
     });
     component.pipeSelectedRow = {
       dest: { bucket: '*', zones: ['zone2-zg1-realm1'] },
       id: 'pipi1',
       params: {
-        dest: {},
         mode: USER,
-        priority: 0,
-        source: { filter: { tags: [] } },
         user: 'dashboard'
       },
       source: { bucket: '*', zones: ['zone1-zg1-realm1'] }
     };
 
-    component.sourceZones.data.selected = ['zone1-zg1-realm1'];
-    component.destZones.data.selected = ['zone2-zg1-realm1'];
+    component.sourceZones = [
+      { name: 'zone1-zg1-realm1', content: 'zone1-zg1-realm1', selected: true }
+    ];
+    component.destZones = [
+      { name: 'zone2-zg1-realm1', content: 'zone2-zg1-realm1', selected: true }
+    ];
     const spy = jest.spyOn(component, 'submit');
     const putDataSpy = jest.spyOn(multisiteServiceMock, 'createEditSyncPipe');
     component.submit();
@@ -131,6 +157,8 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     expect(putDataSpy).toHaveBeenCalled();
     expect(putDataSpy).toHaveBeenCalledWith({
       ...component.pipeForm.getRawValue(),
+      source_zones: { added: ['zone1-zg1-realm1'], removed: [] },
+      destination_zones: { added: ['zone2-zg1-realm1'], removed: [] },
       mode: USER,
       user: 'dashboard'
     });
