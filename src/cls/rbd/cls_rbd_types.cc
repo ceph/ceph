@@ -1465,6 +1465,24 @@ std::ostream& operator<<(std::ostream& os, MirrorSnapshotState state) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os, MirrorGroupSnapshotCompleteState state) {
+  switch (state) {
+  case MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED:
+    os << "unknown";
+    break;
+  case MIRROR_GROUP_SNAPSHOT_INCOMPLETE:
+    os << "incomplete";
+    break;
+  case MIRROR_GROUP_SNAPSHOT_COMPLETE:
+    os << "complete";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
 void GroupSnapshotNamespaceMirror::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(state, bl);
@@ -1486,7 +1504,7 @@ void GroupSnapshotNamespaceMirror::decode(uint8_t version,
 
 void GroupSnapshotNamespaceMirror::dump(Formatter *f) const {
   f->dump_stream("state") << state;
-  f->dump_bool("complete", complete);
+  f->dump_stream("complete") << complete;
   f->open_array_section("mirror_peer_uuids");
   for (auto &peer : mirror_peer_uuids) {
     f->dump_string("mirror_peer_uuid", peer);
@@ -1599,7 +1617,8 @@ void GroupSnapshotNamespace::generate_test_instances(
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceUser()));
   o.push_back(new GroupSnapshotNamespace(GroupSnapshotNamespaceMirror(
                                              MIRROR_SNAPSHOT_STATE_PRIMARY,
-                                             {"peer uuid"}, "", "")));
+                                             {"peer uuid"}, "", "",
+                                             MIRROR_GROUP_SNAPSHOT_COMPLETE)));
 }
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceType& type) {
@@ -1644,11 +1663,11 @@ std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespaceUnknown& 
 
 std::ostream& operator<<(std::ostream& os, GroupSnapshotState state) {
   switch (state) {
-  case GROUP_SNAPSHOT_STATE_INCOMPLETE:
-    os << "incomplete";
+  case GROUP_SNAPSHOT_STATE_CREATING:
+    os << "creating";
     break;
-  case GROUP_SNAPSHOT_STATE_COMPLETE:
-    os << "complete";
+  case GROUP_SNAPSHOT_STATE_CREATED:
+    os << "created";
     break;
   default:
     os << "unknown (" << static_cast<uint32_t>(state) << ")";
@@ -1727,13 +1746,13 @@ void GroupSnapshot::dump(Formatter *f) const {
 void GroupSnapshot::generate_test_instances(std::list<GroupSnapshot *> &o) {
   o.push_back(new GroupSnapshot("10152ae8944a", GroupSnapshotNamespaceUser{},
                                 "groupsnapshot1",
-                                GROUP_SNAPSHOT_STATE_INCOMPLETE));
+                                GROUP_SNAPSHOT_STATE_CREATING));
   o.push_back(new GroupSnapshot("1018643c9869",
                                 GroupSnapshotNamespaceMirror{
                                     MIRROR_SNAPSHOT_STATE_NON_PRIMARY, {},
-                                    "uuid", "id"},
+                                    "uuid", "id", MIRROR_GROUP_SNAPSHOT_COMPLETE},
                                 "groupsnapshot2",
-                                GROUP_SNAPSHOT_STATE_COMPLETE));
+                                GROUP_SNAPSHOT_STATE_CREATED));
 }
 
 void TrashImageSpec::encode(bufferlist& bl) const {

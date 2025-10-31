@@ -977,12 +977,35 @@ struct GroupSnapshotNamespaceUser {
   }
 };
 
+enum MirrorGroupSnapshotCompleteState {
+  MIRROR_GROUP_SNAPSHOT_COMPLETE_IF_CREATED = 0,
+  MIRROR_GROUP_SNAPSHOT_INCOMPLETE          = 1,
+  MIRROR_GROUP_SNAPSHOT_COMPLETE            = 2,
+};
+
+inline void encode(const MirrorGroupSnapshotCompleteState& state, ceph::buffer::list& bl)
+{
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(MirrorGroupSnapshotCompleteState& state,
+                   ceph::buffer::list::const_iterator& it)
+{
+  uint8_t int_state;
+  using ceph::decode;
+  decode(int_state, it);
+  state = static_cast<MirrorGroupSnapshotCompleteState>(int_state);
+}
+
+std::ostream& operator<<(std::ostream& os, MirrorGroupSnapshotCompleteState state);
+
 struct GroupSnapshotNamespaceMirror {
   static const GroupSnapshotNamespaceType GROUP_SNAPSHOT_NAMESPACE_TYPE =
     GROUP_SNAPSHOT_NAMESPACE_TYPE_MIRROR;
 
   MirrorSnapshotState state = MIRROR_SNAPSHOT_STATE_NON_PRIMARY;
-  bool complete = false; // TODO: modify methods to handle this field
+  MirrorGroupSnapshotCompleteState complete = MIRROR_GROUP_SNAPSHOT_INCOMPLETE;
   std::set<std::string> mirror_peer_uuids;
 
   std::string primary_mirror_uuid;
@@ -993,8 +1016,9 @@ struct GroupSnapshotNamespaceMirror {
   GroupSnapshotNamespaceMirror(MirrorSnapshotState state,
                                const std::set<std::string> &mirror_peer_uuids,
                                const std::string &primary_mirror_uuid,
-                               const std::string &primary_snap_id)
-    : state(state), mirror_peer_uuids(mirror_peer_uuids),
+                               const std::string &primary_snap_id,
+                               MirrorGroupSnapshotCompleteState complete)
+    : state(state), complete(complete), mirror_peer_uuids(mirror_peer_uuids),
       primary_mirror_uuid(primary_mirror_uuid),
       primary_snap_id(primary_snap_id) {
   }
@@ -1082,8 +1106,8 @@ GroupSnapshotNamespaceType get_group_snap_namespace_type(
     const GroupSnapshotNamespace& snapshot_namespace);
 
 enum GroupSnapshotState {
-  GROUP_SNAPSHOT_STATE_INCOMPLETE = 0,
-  GROUP_SNAPSHOT_STATE_COMPLETE = 1,
+  GROUP_SNAPSHOT_STATE_CREATING = 0,
+  GROUP_SNAPSHOT_STATE_CREATED = 1,
 };
 
 inline void encode(const GroupSnapshotState &state, ceph::buffer::list& bl, uint64_t features=0)
@@ -1141,7 +1165,7 @@ struct GroupSnapshot {
   GroupSnapshotNamespace snapshot_namespace = {GroupSnapshotNamespaceUser{}};
   std::string name;
 
-  GroupSnapshotState state = GROUP_SNAPSHOT_STATE_INCOMPLETE;
+  GroupSnapshotState state = GROUP_SNAPSHOT_STATE_CREATING;
   std::vector<ImageSnapshotSpec> snaps;
 
   GroupSnapshot() {}
