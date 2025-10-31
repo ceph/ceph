@@ -1181,7 +1181,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
       .bucketName = this->get_bucket()->get_bucket_id(),
       .creationTime = std::to_string(ceph::real_clock::to_double(this->get_mtime())),
       .dirty = dirty,
-      .hostsList = { dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address },
+      .hostsList = { dpp->get_cct()->_conf->rgw_d4n_local_rgw_address },
       .etag = etag,
       .size = this->get_accounted_size(),
       .user_id = user_id,
@@ -1325,7 +1325,7 @@ int D4NFilterObject::set_head_obj_dir_entry(const DoutPrefixProvider* dpp, std::
     .display_name = display_name,
     };
 
-    version_object.hostsList.insert({ dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address });
+    version_object.hostsList.insert({ dpp->get_cct()->_conf->rgw_d4n_local_rgw_address });
 
     rgw::d4n::CacheBlock version_block = rgw::d4n::CacheBlock{
       .cacheObj = version_object,
@@ -1378,7 +1378,7 @@ int D4NFilterObject::set_data_block_dir_entries(const DoutPrefixProvider* dpp, o
 
   for (auto& block : blocks) {
     block.cacheObj.dirty = dirty;
-    block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+    block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
     block.version = version;
   }
   if ((ret = blockDir->set(dpp, blocks, y)) < 0) {
@@ -1879,7 +1879,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
         dest_block.cacheObj.dirty = true; //writing to cache
         dest_block.blockID = ofs;
         dest_block.size = len;
-        dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+        dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
         dest_block.version = dest_version;
         dest_block.cacheObj.dirty = true;
         std::string key =  get_key_in_cache(get_cache_block_prefix(source->dest_object, dest_version), std::to_string(ofs), std::to_string(len));
@@ -2018,10 +2018,10 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
             }
             break;
           } //end if block.version != version
-          auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+          auto it = block.cacheObj.hostsList.find(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
           auto hostsListSize = block.cacheObj.hostsList.size();
           if (it != block.cacheObj.hostsList.end()) {
-            if ((r = block_dir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address, y)) < 0) {
+            if ((r = block_dir->remove_host(dpp, &block, dpp->get_cct()->_conf->rgw_d4n_local_rgw_address, y)) < 0) {
               ldpp_dout(dpp, 10) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to remove incorrect host from block with oid=" << oid_in_cache <<", ret=" << r << dendl;
               hostsListSize = hostsListSize - 1;
             }
@@ -2183,7 +2183,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       D4NFilterObject* d4n_dest_object = dynamic_cast<D4NFilterObject*>(source->dest_object);
       std::string dest_version = d4n_dest_object->get_object_version();
       dest_prefix = get_cache_block_prefix(source->dest_object, dest_version);
-      dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+      dest_block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
       dest_block.cacheObj.objName = source->dest_object->get_key().get_oid();
       dest_block.cacheObj.bucketName = source->dest_object->get_bucket()->get_bucket_id();
       //dest_block.cacheObj.creationTime = std::to_string(ceph::real_clock::to_time_t(source->get_mtime()));
@@ -2314,7 +2314,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 
       for (auto& block : blocks) {
         block.cacheObj.dirty = false;
-        block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_l1_datacache_address);
+        block.cacheObj.hostsList.insert(dpp->get_cct()->_conf->rgw_d4n_local_rgw_address);
         block.version = version;
       }
       if ((ret = blockDir->set(dpp, blocks, *y)) < 0) {
