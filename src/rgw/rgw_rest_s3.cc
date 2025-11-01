@@ -553,18 +553,29 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 	try {
 	  rgw::cksum::Cksum cksum;
 	  decode(cksum, i->second);
-	  auto cksum_type =
-	    rgw::cksum::get_checksum_type(cksum,
-	      (multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  rgw::cksum::ChecksumTypeResult cksum_type;
+	  if (multipart_part_num) {
+	    cksum_type = rgw::cksum::get_part_checksum_type(cksum);
+	  } else {
+	    cksum_type = rgw::cksum::get_checksum_type(cksum,
+		(multipart_parts_count && multipart_parts_count > 0) /* is_multipart */);
+	  }
 	  if (std::get<0>(cksum_type) == rgw::cksum::Cksum::FLAG_COMPOSITE) {
 	    /* cksum was computed with a digest algorithm, or predates the 2025
 	       update that introduced CRC combining */
-	    ldpp_dout_fmt(this, 16,
-			  "INFO: {} ChecksumMode==ENABLED element-name {} value {}-{}",
-			  __func__, cksum.element_name(), cksum.to_armor(),
-			  *multipart_parts_count);
-	    dump_header(s, cksum.header_name(),
-			fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	    if (multipart_part_num) {
+	      ldpp_dout_fmt(this, 16,
+		  "INFO: {} ChecksumMode==ENABLED element-name {} value {}",
+		  __func__, cksum.element_name(), cksum.to_armor());
+	      dump_header(s, cksum.header_name(), cksum.to_armor());
+	    } else {
+	      ldpp_dout_fmt(this, 16,
+		  "INFO: {} ChecksumMode==ENABLED element-name {} value {}-{}",
+		  __func__, cksum.element_name(), cksum.to_armor(),
+		  *multipart_parts_count);
+	      dump_header(s, cksum.header_name(),
+		  fmt::format("{}-{}", cksum.to_armor(), *multipart_parts_count));
+	    }
 	  } else {
 	    /* a full object checksum, if multipart, because the checksum is CRC family */
 	    auto elt_name = cksum.element_name();
