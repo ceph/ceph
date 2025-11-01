@@ -17,6 +17,7 @@
 
 #include "common/perf_counters_collection.h"
 #include "common/perf_counters_key.h"
+#include "mgr/DaemonHealthMetric.h"
 #include "mgr/MgrContext.h"
 #include "mon/MonMap.h"
 
@@ -54,6 +55,8 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_, MonMap *monmap_)
 {
   ceph_assert(cct != nullptr);
 }
+
+MgrClient::~MgrClient() noexcept = default;
 
 void MgrClient::init()
 {
