@@ -13683,83 +13683,6 @@ int BlueStore::_collection_list(
   return 0;
 }
 
-int BlueStore::omap_get(
-  CollectionHandle &c_,    ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
-  )
-{
-  Collection *c = static_cast<Collection *>(c_.get());
-  return _omap_get(c, oid, header, out);
-}
-
-int BlueStore::_omap_get(
-  Collection *c,    ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
-  )
-{
-  dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
-  std::shared_lock l(c->lock);
-  int r = 0;
-  OnodeRef o = c->get_onode(oid, false);
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  r = _onode_omap_get(o, header, out);
- out:
-  dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
-	   << dendl;
-  return r;
-}
-
-int BlueStore::_onode_omap_get(
-  const OnodeRef &o,           ///< [in] Object containing omap
-  bufferlist *header,          ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
-)
-{
-  int r = 0;
-  if (!o || !o->exists) {
-    r = -ENOENT;
-    goto out;
-  }
-  if (!o->onode.has_omap())
-    goto out;
-  o->flush();
-  {
-    const string& prefix = o->get_omap_prefix();
-    string head, tail;
-    o->get_omap_header(&head);
-    o->get_omap_tail(&tail);
-    KeyValueDB::Iterator it = db->get_iterator(prefix, 0, KeyValueDB::IteratorBounds{head, tail});
-    it->lower_bound(head);
-    while (it->valid()) {
-      if (it->key() == head) {
-        dout(30) << __func__ << "  got header" << dendl;
-        *header = it->value();
-      } else if (it->key() >= tail) {
-        dout(30) << __func__ << "  reached tail" << dendl;
-        break;
-      } else {
-        string user_key;
-        o->decode_omap_key(it->key(), &user_key);
-        dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
-          << " -> " << user_key << dendl;
-        (*out)[user_key] = it->value();
-      }
-      it->next();
-    }
-  }
-out:
-  return r;
-}
-
 int BlueStore::omap_get_header(
   CollectionHandle &c_,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
@@ -18211,7 +18134,9 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   }
   const string& prefix = o->get_omap_prefix();
   string final_key;
+
   o->get_omap_key(string(), &final_key);
+
   size_t base_key_len = final_key.size();
   decode(num, p);
   auto num0 = num;
