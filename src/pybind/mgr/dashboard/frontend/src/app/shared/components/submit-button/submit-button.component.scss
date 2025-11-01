@@ -1,3 +1,9 @@
 cds-loading {
   margin-left: 0.5rem;
 }
+
+.submit-button {
+  &.submit-button-modal {
+    width: 100%;
+  }
+}
