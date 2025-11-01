@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Any, List, Optional, cast
 
 import logging
+from dataclasses import replace
 
 import orchestrator
 from ceph.deployment.service_spec import PlacementSpec, SMBSpec
@@ -385,6 +386,45 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             cluster_id=cluster_id, share_id=share_id
         )
         return self._apply_res([share]).one()
+
+    @cli.SMBCommand('share update cephfs qos', perm='rw')
+    def share_update_qos(
+        self,
+        cluster_id: str,
+        share_id: str,
+        read_iops_limit: Optional[int] = None,
+        write_iops_limit: Optional[int] = None,
+        read_bw_limit: Optional[int] = None,
+        write_bw_limit: Optional[int] = None,
+        read_delay_max: Optional[int] = 30,
+        write_delay_max: Optional[int] = 30,
+    ) -> results.Result:
+        """Update QoS settings for a CephFS share"""
+        try:
+            shares = self._handler.matching_resources(
+                [f'ceph.smb.share.{cluster_id}.{share_id}']
+            )
+            if not shares or not isinstance(shares[0], resources.Share):
+                raise ValueError(f"Share {cluster_id}/{share_id} not found")
+
+            share = shares[0]
+            if not share.cephfs:
+                raise ValueError("Share has no CephFS configuration")
+
+            updated_cephfs = share.cephfs.update_qos(
+                read_iops_limit=read_iops_limit,
+                write_iops_limit=write_iops_limit,
+                read_bw_limit=read_bw_limit,
+                write_bw_limit=write_bw_limit,
+                read_delay_max=read_delay_max,
+                write_delay_max=write_delay_max,
+            )
+
+            updated_share = replace(share, cephfs=updated_cephfs)
+            return self._apply_res([updated_share]).one()
+
+        except resources.InvalidResourceError as err:
+            return results.InvalidResourceResult(err.resource_data, str(err))
 
     @cli.SMBCommand("show", perm="r")
     def show(
