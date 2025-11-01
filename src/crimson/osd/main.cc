@@ -99,42 +99,28 @@ int main(int argc, const char* argv[])
 
   auto seastar_n_early_args = early_config.get_early_args();
   auto config_proxy_args = early_config.get_ceph_args();
+  auto &crimson_opts = early_config.crimson_options;
 
   seastar::app_template::config app_cfg;
   app_cfg.name = "Crimson";
   app_cfg.auto_handle_sigint_sigterm = false;
   seastar::app_template app(std::move(app_cfg));
-  app.add_options()
-    ("mkkey", "generate a new secret key. "
-              "This is normally used in combination with --mkfs")
-    ("mkfs", "create a [new] data directory")
-    ("debug", "enable debug output on all loggers")
-    ("trace", "enable trace output on all loggers")
-    ("osdspec-affinity", bpo::value<std::string>()->default_value(std::string{}),
-     "set affinity to an osdspec")
-    ("prometheus_port", bpo::value<uint16_t>()->default_value(0),
-     "Prometheus port. Set to zero to disable")
-    ("prometheus_address", bpo::value<std::string>()->default_value("0.0.0.0"),
-     "Prometheus listening address")
-    ("prometheus_prefix", bpo::value<std::string>()->default_value("osd"),
-     "Prometheus metrics prefix");
 
   try {
     return app.run(
       seastar_n_early_args.size(),
       const_cast<char**>(seastar_n_early_args.data()),
       [&] {
-      auto& config = app.configuration();
       return seastar::async([&] {
         try {
           FatalSignal fatal_signal;
           seastar_apps_lib::stop_signal should_stop;
-          if (config.count("debug")) {
+          if (crimson_opts.debug) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::debug
             );
           }
-          if (config.count("trace")) {
+          if (crimson_opts.trace) {
             seastar::global_logger_registry().set_all_loggers_level(
               seastar::log_level::trace
             );
@@ -167,19 +153,18 @@ int main(int argc, const char* argv[])
           // start prometheus API server
           seastar::httpd::http_server_control prom_server;
           std::any stop_prometheus;
-          if (uint16_t prom_port = config["prometheus_port"].as<uint16_t>();
-              prom_port != 0) {
+          if (crimson_opts.prometheus_port != 0) {
             prom_server.start("prometheus").get();
             stop_prometheus = seastar::make_shared(seastar::deferred_stop(prom_server));
 
             seastar::prometheus::config prom_config;
-            prom_config.prefix = config["prometheus_prefix"].as<std::string>();
+            prom_config.prefix = crimson_opts.prometheus_prefix;
             seastar::prometheus::start(prom_server, prom_config).get();
-            seastar::net::inet_address prom_addr(config["prometheus_address"].as<std::string>());
-            prom_server.listen(seastar::socket_address{prom_addr, prom_port})
+            seastar::net::inet_address prom_addr(crimson_opts.prometheus_address);
+            prom_server.listen(seastar::socket_address{prom_addr, crimson_opts.prometheus_port})
               .handle_exception([=] (auto ep) {
               std::cerr << seastar::format("Could not start Prometheus API server on {}:{}: {}\n",
-                                           prom_addr, prom_port, ep);
+                                           prom_addr, crimson_opts.prometheus_port, ep);
               return seastar::make_exception_future(ep);
             }).get();
           }
@@ -212,7 +197,7 @@ int main(int argc, const char* argv[])
             std::ref(*store), cluster_msgr, client_msgr,
 	    hb_front_msgr, hb_back_msgr);
 
-          if (config.count("mkkey")) {
+          if (crimson_opts.mkkey) {
             make_keyring().get();
           }
           if (local_conf()->no_mon_config) {
@@ -220,7 +205,7 @@ int main(int argc, const char* argv[])
           } else {
             crimson::osd::populate_config_from_mon().get();
           }
-          if (config.count("mkfs")) {
+          if (crimson_opts.mkfs) {
             auto osd_uuid = local_conf().get_val<uuid_d>("osd_uuid");
             if (osd_uuid.is_zero()) {
               // use a random osd uuid if not specified
@@ -231,9 +216,9 @@ int main(int argc, const char* argv[])
 	      whoami,
               osd_uuid,
               local_conf().get_val<uuid_d>("fsid"),
-              config["osdspec-affinity"].as<std::string>()).get();
+              crimson_opts.osdspec_affinity).get();
           }
-          if (config.count("mkkey") || config.count("mkfs")) {
+          if (crimson_opts.mkkey || crimson_opts.mkfs) {
             return EXIT_SUCCESS;
           } else {
             osd.start().get();
