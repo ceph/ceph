@@ -239,5 +239,18 @@ public:
     return active_modules->get_module_finisher(name);
   }
 
+  // Sends the "active" beacon right away if all mgr modules
+  // have finished startup. If some modules are still pending
+  // startup, the "active" beacon is scheduled to send later
+  // after all modules are ready.
+  // See "Mgr::background_init()".
+  void check_all_modules_started(Context *modules_start_complete);
+
+  // Return set of active modules where class instances are not yet created.
+  // Protected by const; we only want to view the contents- not modify anything.
+  const std::set<std::string, std::less<>>& get_pending_modules() const {
+    return active_modules->get_pending_modules();
+  }
+
   // <<< (end of ActivePyModules cheeky call-throughs)
 };
