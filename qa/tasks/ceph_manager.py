@@ -953,13 +953,13 @@ class OSDThrasher(Thrasher):
         with safe_while(sleep=5, tries=3, action="get_pg_stats") as proceed:
             while proceed():
                 pgs = self.ceph_manager.get_pg_stats()
+                if self.stopping:
+                    # pools are deleted at the end of the test
+                    return
                 if pgs:
                     break
                 # If pool has just been created it might not have PGs yet
                 self.log('No pgs; trying again')
-        if not pgs:
-            self.log('No pgs; doing nothing')
-            return
         if pool_id:
            pgs_in_pool = [pg for pg in pgs if int(pg['pgid'].split('.')[0]) == pool_id]
            pg = random.choice(pgs_in_pool)
@@ -1022,6 +1022,9 @@ class OSDThrasher(Thrasher):
             # changes as the cluster runs
             pools_json = self.ceph_manager.get_osd_dump_json()['pools']
             if len(pools_json) == 0:
+                if self.stopping:
+                    # pools are deleted at the end of the test
+                    return
                 self.log("No pools yet, waiting")
                 time.sleep(5)
                 continue
@@ -1043,8 +1046,11 @@ class OSDThrasher(Thrasher):
                 minup = max(min_size, k)
                 # Choose a random PG and kill OSDs until only min_size remain
                 most_killable = min(len(self.live_osds) - minup, m)
-                self.log("chose to kill {n} OSDs".format(n=most_killable))
+                self.log("choose to kill {n} OSDs".format(n=most_killable))
                 acting_set = self.get_rand_pg_acting_set(pool_id)
+                if self.stopping:
+                    # pools are deleted at the end of the test
+                    return
                 assert most_killable < len(acting_set)
                 for i in range(0, most_killable):
                     self.kill_osd(osd=acting_set[i], mark_out=True)
