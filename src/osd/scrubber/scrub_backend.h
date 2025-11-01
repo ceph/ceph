@@ -496,6 +496,8 @@ class ScrubBackend {
   auth_selection_t select_auth_object(const hobject_t& ho,
                                       std::stringstream& errstream);
 
+  void setup_ec_digest_map(auth_selection_t& auth_selection,
+                           const hobject_t& ho);
 
   enum class digest_fixing_t { no, if_aged, force };
 
@@ -558,7 +560,11 @@ class ScrubBackend {
   // accessing the PG backend for this translation service
   uint64_t logical_to_ondisk_size(uint64_t logical_size,
                                  shard_id_t shard_id) const;
-  uint32_t generate_zero_buffer_crc(shard_id_t shard_id, int length) const;
+  std::string extract_crcs_from_map(const shard_id_map<bufferlist>& map);
+  std::string extract_crc_from_bufferlist(const bufferlist& crc_buffer);
+  char retrieve_byte(uint32_t value, uint32_t index) {
+    return value >> (8 * index) & 0xFF;
+  }
 };
 
 namespace fmt {
