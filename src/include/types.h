@@ -541,8 +541,8 @@ struct errorcode32_t {
     return hostos_to_ceph_errno(code);
   }
 
-  inline void set_wire_to_host(code_t host_code) {
-    code = ceph_to_hostos_errno(host_code);
+  inline void set_wire_to_host(code_t wire_code) {
+    code = ceph_to_hostos_errno(wire_code);
   }
 
   void encode(ceph::buffer::list &bl) const {
