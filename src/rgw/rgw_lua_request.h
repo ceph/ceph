@@ -22,5 +22,13 @@ int execute(
     req_state *s, 
     RGWOp* op,
     const std::string& script);
+
+int execute(
+    RGWREST* rest,
+    OpsLogSink* olog,
+    req_state *s, 
+    RGWOp* op,
+    const std::string& script,
+    int& script_return_code );
 } // namespace rgw::lua::request
 
