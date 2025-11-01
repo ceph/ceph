@@ -288,7 +288,7 @@ Delete Default Zonegroup and Zone
 
    .. prompt:: bash #
 
-      radosgw-admin zonegroup delete --rgw-zonegroup=default --rgw-zone=default
+      radosgw-admin zonegroup remove --rgw-zonegroup=default --rgw-zone=default
       radosgw-admin period update --commit
       radosgw-admin zone delete --rgw-zone=default
       radosgw-admin period update --commit
