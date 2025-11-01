@@ -65,21 +65,22 @@ class MgmtGatewayService(CephadmService):
 
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
-                         spec: Optional[ServiceSpec] = None,
+                         spec: ServiceSpec,
                          daemon_type: Optional[str] = None) -> List[str]:
         # url_prefix for the following services depends on the presence of mgmt-gateway
-        deps = [
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        mgmt_gw_deps = [
             f'{d.name()}:{d.ports[0]}' if d.ports else d.name()
             for service in ['prometheus', 'alertmanager', 'grafana', 'oauth2-proxy']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
         # dashboard and service discovery urls depend on the mgr daemons
-        deps += [
+        mgmt_gw_deps += [
             f'{d.name()}'
             for service in ['mgr']
             for d in mgr.cache.get_daemons_by_service(service)
         ]
-        return deps
+        return parent_deps + mgmt_gw_deps
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
@@ -138,7 +139,7 @@ class MgmtGatewayService(CephadmService):
             daemon_config["files"]["nginx.crt"] = tls_pair.cert
             daemon_config["files"]["nginx.key"] = tls_pair.key
 
-        return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr))
+        return daemon_config, sorted(MgmtGatewayService.get_dependencies(self.mgr, svc_spec))
 
     def post_remove(self, daemon: DaemonDescription, is_failed_deploy: bool) -> None:
         """
