@@ -4185,20 +4185,41 @@ int POSIXMultipartWriter::complete(
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
       if (!part_file->exists()) {
+        return -ENOENT;
+      }
+    } else {
+      Attrs attrs;
+      bufferlist bl;
+      if (part_file->read_attrs(rctx.dpp, rctx.y, attrs) && get_attr(attrs, RGW_ATTR_ETAG, bl)) {
+        std::string if_match_str = rgw_string_unquote(if_match);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXMultipartWriter::complete if_match: " << if_match_str << ", etag: " << etag << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "POSIXMultipartWriter::complete if_match object has no etag" << dendl;
+        return (!part_file->exists())? -ENOENT: -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
+  if (if_nomatch) {
+    if (strcmp(if_nomatch, "*") == 0) {
+      // test the object is existing
+      if (part_file->exists()) {
         return -ERR_PRECONDITION_FAILED;
       }
     } else {
       Attrs attrs;
       bufferlist bl;
-      ret = part_file->read_attrs(rctx.dpp, rctx.y, attrs);
-      if (ret < 0) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (!get_attr(attrs, RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (part_file->read_attrs(rctx.dpp, rctx.y, attrs) && get_attr(attrs, RGW_ATTR_ETAG, bl)) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXMultipartWriter::complete if_nomatch: " << if_nomatch_str << ", etag: " << etag << dendl;
+        if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }
@@ -4266,15 +4287,20 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     if (strcmp(if_match, "*") == 0) {
       // test the object is existing
       if (!obj->check_exists(dpp)) {
-	return -ERR_PRECONDITION_FAILED;
+	      return -ENOENT;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_match, bl.c_str(), bl.length()) != 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        std::string if_match_str = rgw_string_unquote(if_match);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_match: " << if_match_str << ", etag: " << etag << dendl;
+        if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
+      } else {
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_match object has no etag" << dendl;
+        return (!obj->check_exists(dpp))? -ENOENT: -ERR_PRECONDITION_FAILED;
       }
     }
   }
@@ -4282,15 +4308,17 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
       if (obj->check_exists(dpp)) {
-	return -ERR_PRECONDITION_FAILED;
+	      return -ERR_PRECONDITION_FAILED;
       }
     } else {
       bufferlist bl;
-      if (!get_attr(obj->get_attrs(), RGW_ATTR_ETAG, bl)) {
-        return -ERR_PRECONDITION_FAILED;
-      }
-      if (strncmp(if_nomatch, bl.c_str(), bl.length()) == 0) {
-        return -ERR_PRECONDITION_FAILED;
+      if (obj->get_attr(RGW_ATTR_ETAG, bl)) {
+        std::string if_nomatch_str = rgw_string_unquote(if_nomatch);
+        std::string etag = std::string(bl.c_str(), bl.length());
+        ldpp_dout(dpp, 10) << "POSIXAtomicWriter::complete if_match: " << if_nomatch_str << ", etag: " << etag << dendl;
+        if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
+          return -ERR_PRECONDITION_FAILED;
+        }
       }
     }
   }
