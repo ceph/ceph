@@ -1,4 +1,5 @@
 @use './src/styles/vendor/variables' as vv;
+@use './src/styles/ceph-custom/grid'  as *;
 
 hr {
   margin-bottom: 2px;
@@ -29,4 +30,23 @@ ul {
 
 .border-left {
   border-left: 1px solid vv.$chart-color-border;
+}
+
+.rgw-overview-card-popover {
+  max-height: 600px;
+  max-width: 400px;
+  word-break: break-all;
+
+  .popover-body {
+    font-size: 1rem;
+    max-height: 600px;
+    max-width: 400px;
+    overflow: auto;
+
+    li {
+      span {
+        font-size: 1.1em;
+      }
+    }
+  }
 }
