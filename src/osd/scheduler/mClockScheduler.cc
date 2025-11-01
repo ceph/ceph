@@ -99,17 +99,23 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
     mclock_conf.get_mclock_counter(id);
   }
 
- dout(20) << __func__ << " client_count: " << scheduler.client_count()
-          << " queue_sizes: [ "
-	  << " high_priority_queue: " << high_priority.size()
-          << " sched: " << scheduler.request_count() << " ]"
-          << dendl;
- dout(30) << __func__ << " mClockClients: "
-          << scheduler
-          << dendl;
- dout(30) << __func__ << " mClockQueues: { "
-          << display_queues() << " }"
-          << dendl;
+  dout(20) << __func__ << ": sched client_count: " << scheduler.client_count()
+           << " sched queue size: " << scheduler.request_count()
+           << dendl;
+
+  for (auto it = high_priority.begin();
+       it != high_priority.end(); ++it) {
+    dout(20) << __func__ << " high_priority[" << it->first
+             << "]: " << it->second.size()
+             << dendl;
+  }
+
+  dout(30) << __func__ << " mClockClients: "
+           << scheduler
+           << dendl;
+  dout(30) << __func__ << " mClockQueues: { "
+           << display_queues() << " }"
+           << dendl;
 }
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
