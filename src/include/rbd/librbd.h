@@ -1280,6 +1280,14 @@ CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
 CEPH_RBD_API int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
                                 const char *buf, rbd_completion_t c,
                                 int op_flags);
+
+/*
+ * @param precomputed_crc32c: CRC32C checksum that was precomputed (e.g., by SPDK NVMf)
+ */
+CEPH_RBD_API int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
+                                           size_t len, const char *buf,
+                                           uint32_t precomputed_crc32c,
+                                           rbd_completion_t c, int op_flags);
 CEPH_RBD_API int rbd_aio_writev(rbd_image_t image, const struct iovec *iov,
                                 int iovcnt, uint64_t off, rbd_completion_t c);
 CEPH_RBD_API int rbd_aio_read(rbd_image_t image, uint64_t off, size_t len,
