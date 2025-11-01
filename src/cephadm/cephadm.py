@@ -990,10 +990,15 @@ def deploy_daemon(
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
     if deployment_type == DeploymentType.RECONFIG and daemon_type not in ceph_daemons():
-        # ceph daemons do not need a restart; others (presumably) do to pick
-        # up the new config
-        call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
-        call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        if not ctx.skip_restart_for_reconfig:
+            # ceph daemons do not need a restart; others (presumably) do to pick
+            # up the new config
+            call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
+            call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
+        elif ctx.send_signal_to_daemon:
+            ctx.signal_name = ctx.send_signal_to_daemon
+            ctx.signal_number = None
+            command_signal(ctx)
 
 
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
@@ -4546,6 +4551,18 @@ def _add_deploy_parser_args(
         type=int,
         default=None,
         help='Time in seconds to wait for graceful service shutdown before forcefully killing it'
+    )
+    parser_deploy.add_argument(
+        '--skip-restart-for-reconfig',
+        action='store_true',
+        default=False,
+        help='skip restart for non ceph daemons and perform default action'
+    )
+    parser_deploy.add_argument(
+        '--send-signal-to-daemon',
+        action='store_true',
+        default=False,
+        help='Send signal to daemon'
     )
 
 
