@@ -4,7 +4,7 @@
 #include <lua.hpp>
 #include "services/svc_zone.h"
 #include "rgw_lua_utils.h"
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_LUA_PACKAGES
 #include <filesystem>

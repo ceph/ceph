@@ -1,9 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include "rgw_sync.h"
 #include "rgw_sal.h"
+#include "common/errno.h"
 #include "rgw_sal_config.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_zone.h"
+#ifdef WITH_RADOSGW_RADOS
+#include "driver/rados/rgw_sync.h"
+#endif
 
 using namespace std;
 using namespace rgw_zone_defaults;

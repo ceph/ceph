@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 
 #include "include/types.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 
 // until everything is moved from rgw_common
 #include "rgw_common.h"

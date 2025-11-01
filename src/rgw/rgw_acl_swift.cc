@@ -11,7 +11,7 @@
 #include "common/ceph_json.h"
 #include "common/split.h"
 #include "rgw_common.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_acl_swift.h"
 #include "rgw_sal.h"
 

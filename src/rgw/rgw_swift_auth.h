@@ -4,7 +4,7 @@
 #pragma once
 
 #include "rgw_common.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_op.h"
 #include "rgw_rest.h"
 #include "rgw_auth.h"

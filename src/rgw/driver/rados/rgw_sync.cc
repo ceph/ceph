@@ -239,6 +239,17 @@ public:
   bool spawn_next() override;
 };
 
+RGWRemoteMetaLog::~RGWRemoteMetaLog()
+{
+  delete error_logger;
+}
+
+void RGWRemoteMetaLog::finish()
+{
+  going_down = true;
+  stop();
+}
+
 int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
@@ -296,6 +307,18 @@ int RGWRemoteMetaLog::init()
   tn = sync_env.sync_tracer->add_node(sync_env.sync_tracer->root_node, "meta");
 
   return 0;
+}
+
+RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
+
+std::ostream&  RGWMetaSyncStatusManager::gen_prefix(std::ostream& out) const
+{
+  return out << "meta sync: ";
+}
+
+unsigned RGWMetaSyncStatusManager::get_subsys() const
+{
+  return dout_subsys;
 }
 
 #define CLONE_MAX_ENTRIES 100

@@ -28,7 +28,7 @@
 #include "common/cohort_lru.h"
 #include "common/ceph_timer.h"
 #include "rgw_common.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_lib.h"
 #include "rgw_ldap.h"
 #include "rgw_token.h"
