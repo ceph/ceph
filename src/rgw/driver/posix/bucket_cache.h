@@ -276,6 +276,45 @@ public:
       }
     }
 
+  ~BucketCache() {
+    /* Clean up all cached BucketCacheEntry objects properly
+     * We need to remove them from both the TreeX cache and the LRU
+     * to satisfy boost::intrusive's safe_link requirements
+     */
+
+    /* First drain from the cache tree and collect entries */
+    std::vector<BucketCacheEntry<D, B>*> entries_to_delete;
+    cache.drain([&entries_to_delete](BucketCacheEntry<D, B>* entry) {
+      entries_to_delete.push_back(entry);
+    }, BucketCacheEntry<D, B>::bucket_avl_cache::FLAG_LOCK);
+
+    /* Now drain the LRU queues to unlink all objects */
+    lru.clear_all_objects();
+
+    /* Finally, clean up each entry */
+    for (auto* entry : entries_to_delete) {
+      /* Clean up LMDB resources if the entry has them */
+      if (entry->env && entry->dbi) {
+	try {
+	  auto txn = entry->env->getRWTransaction();
+	  mdb_drop(*txn, entry->dbi, 0);
+	  txn->commit();
+	  mdb_dbi_close(*(entry->env), entry->dbi);
+	} catch (...) {
+	  /* Ignore errors during cleanup */
+	}
+      }
+
+      /* Remove inotify watch if active */
+      if (un) {
+	un->remove_watch(entry->name);
+      }
+
+      /* Now it's safe to delete the entry - it's been removed from both structures */
+      delete entry;
+    }
+  }
+
   static constexpr uint32_t FLAG_NONE     = 0x0000;
   static constexpr uint32_t FLAG_CREATE   = 0x0001;
   static constexpr uint32_t FLAG_LOCK     = 0x0002;
