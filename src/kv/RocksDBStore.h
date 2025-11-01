@@ -168,7 +168,9 @@ private:
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& existing_cfs_shard,
 		      std::vector<rocksdb::ColumnFamilyDescriptor>& missing_cfs,
 		      std::vector<std::pair<size_t, RocksDBStore::ColumnFamily> >& missing_cfs_shard);
-  std::shared_ptr<rocksdb::Cache> create_block_cache(const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
+  std::shared_ptr<rocksdb::Cache> create_block_cache(
+    const std::string& name,
+    const std::string& cache_type, size_t cache_size, double cache_prio_high = 0.0);
   int split_column_family_options(const std::string& opts_str,
 				  std::unordered_map<std::string, std::string>* column_opts_map,
 				  std::string* block_cache_opt);
