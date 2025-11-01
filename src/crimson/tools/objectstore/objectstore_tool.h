@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <expected>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -9,7 +10,6 @@
 #include "common/hobject.h"
 #include "crimson/os/alienstore/alien_store.h"
 #include "crimson/os/futurized_store.h"
-#include "include/expected.hpp"
 #include "osd/osd_types.h"
 #include "seastar/core/future.hh"
 
@@ -67,10 +67,10 @@ public:
     const std::string& data);
   
   // Object attribute operations
-  seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>> get_attrs(
+  seastar::future<std::expected<FuturizedStore::Shard::attrs_t, std::string>> get_attrs(
     const coll_t& cid,
     const ghobject_t& oid);
-  seastar::future<tl::expected<std::string, std::string>> get_attr(
+  seastar::future<std::expected<std::string, std::string>> get_attr(
     const coll_t& cid,
     const ghobject_t& oid,
     const std::string& key);
