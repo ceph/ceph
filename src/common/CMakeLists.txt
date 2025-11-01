@@ -254,6 +254,8 @@ elseif(HAVE_S390X)
     crc32c_s390x.c
     crc32c_s390x_le-vx.S
   )
+elseif(HAVE_RISCV)
+  list(APPEND crc32_srcs crc32c_riscv.c)
 endif(HAVE_INTEL)
 
 add_library(crc32 OBJECT ${crc32_srcs})
