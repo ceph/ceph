@@ -53,9 +53,8 @@ int destroy_rule_pp(Rados &cluster,
                        const std::string &rule,
                        std::ostream &oss)
 {
-  bufferlist inbl;
   int ret = cluster.mon_command("{\"prefix\": \"osd crush rule rm\", \"name\":\"" +
-                                rule + "\"}", inbl, NULL, NULL);
+                                rule + "\"}", {}, NULL, NULL);
   if (ret)
     oss << "mon_command: osd crush rule rm " + rule + " failed with error " << ret << std::endl;
   return ret;
@@ -64,9 +63,8 @@ int destroy_rule_pp(Rados &cluster,
 int destroy_ec_profile_pp(Rados &cluster, const std::string& pool_name,
 			  std::ostream &oss)
 {
-  bufferlist inbl;
   int ret = cluster.mon_command("{\"prefix\": \"osd erasure-code-profile rm\", \"name\": \"testprofile-" + pool_name + "\"}",
-                                inbl, NULL, NULL);
+                                {}, NULL, NULL);
   if (ret)
     oss << "mon_command: osd erasure-code-profile rm testprofile-" << pool_name << " failed with error " << ret << std::endl;
   return ret;
@@ -96,10 +94,9 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     return oss.str();
   }
 
-  bufferlist inbl;
   ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
-    inbl, NULL, NULL);
+    {}, NULL, NULL);
   if (ret) {
     cluster.shutdown();
     oss << "mon_command erasure-code-profile set name:testprofile-" << pool_name << " failed with error " << ret;
@@ -108,9 +105,8 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
     
   ret = cluster.mon_command(
     "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":8, \"pgp_num\":8, \"erasure_code_profile\":\"testprofile-" + pool_name + "\"}",
-    inbl, NULL, NULL);
+    {}, NULL, NULL);
   if (ret) {
-    bufferlist inbl;
     destroy_ec_profile_pp(cluster, pool_name, oss);
     cluster.shutdown();
     oss << "mon_command osd pool create pool:" << pool_name << " pool_type:erasure failed with error " << ret;
@@ -124,10 +120,9 @@ std::string create_one_ec_pool_pp(const std::string &pool_name, Rados &cluster)
 std::string set_allow_ec_overwrites_pp(const std::string &pool_name, Rados &cluster, bool allow)
 {
   std::ostringstream oss;
-  bufferlist inbl;
   int ret = cluster.mon_command(
     "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name + "\", \"var\": \"allow_ec_overwrites\", \"val\": \"" + (allow ? "true" : "false") + "\"}",
-    inbl, NULL, NULL);
+    {}, NULL, NULL);
   if (ret) {
     cluster.shutdown();
     oss << "mon_command osd pool set pool:" << pool_name << " pool_type:erasure allow_ec_overwrites true failed with error " << ret;
