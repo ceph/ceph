@@ -571,6 +571,26 @@ struct optmetadata_singleton {
     return u64kind < other.u64kind;
   }
 
+  bool operator == (const optmetadata_singleton& other) const {
+    if (this->get_kind() != other.get_kind()) {
+      return false;
+    }
+
+    return std::visit(
+      [](auto& this_optmetadata, auto& other_optmetadata)
+      {
+	// FIXME: optmetadata's can be an instance of unknown_md_t or
+	// charmap_md_t. former should memcmp() since there's no other way but
+	// latter should not. See https://tracker.ceph.com/issues/73382.
+	return memcmp(&this_optmetadata, &other_optmetadata, sizeof(this_optmetadata)) == 0;
+      },
+      optmetadata, other.optmetadata);
+  }
+
+  bool operator != (const optmetadata_singleton& other) const {
+    return !(*this == other);
+  }
+
 private:
   uint64_t u64kind = 0;
   optmetadata_t optmetadata;
@@ -645,6 +665,30 @@ struct optmetadata_multiton {
     return opts.size();
   }
 
+  bool operator == (const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>, Allocator>& other) const
+  {
+    if (size() != other.size())
+      return false;
+
+    auto it_this = opts.begin();
+    auto it_other = other.opts.begin();
+    while (it_this != opts.end() && it_other != opts.end()) {
+      if (*it_this != *it_other) {
+        return false;
+      }
+
+      ++it_this;
+      ++it_other;
+    }
+
+    return true;
+  }
+
+  bool operator != (const optmetadata_multiton<optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>, Allocator>& other) const
+  {
+    return !(*this == other);
+  }
+
 private:
   optvec_t opts;
 };
@@ -677,11 +721,13 @@ static inline void decode(optmetadata_multiton<Singleton,Allocator>& o, ::ceph::
 
 template<template<typename> class Allocator = std::allocator>
 struct inode_t {
+
   /**
    * ***************
-   * Do not forget to add any new fields to the compare() function.
+   * XXX Do not forget to add any new fields to the compare() function.
    * ***************
    */
+
   using optmetadata_singleton_server_t = optmetadata_singleton<optmetadata_server_t<Allocator>,Allocator>;
   using client_range_map = std::map<client_t,client_writeable_range_t,std::less<client_t>,Allocator<std::pair<const client_t,client_writeable_range_t>>>;
 
@@ -935,6 +981,18 @@ private:
   bool older_is_consistent(const inode_t &other) const;
 };
 
+template<template<typename> class Allocator>
+inline bool operator==(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return l.size() == r.size() && memcmp(l.data(), r.data(), l.size()) == 0;
+}
+
+template<template<typename> class Allocator>
+inline bool operator!=(std::vector<uint8_t,Allocator<uint8_t>> l,
+	          std::vector<uint8_t,Allocator<uint8_t>> r) {
+  return l.size() != r.size() || memcmp(l.data(), r.data(), l.size()) != 0;
+}
+
 // These methods may be moved back to mdstypes.cc when we have pmr
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
@@ -1147,7 +1205,6 @@ auto inode_t<Allocator>::generate_test_instances() -> std::list<inode_t>
 template<template<typename> class Allocator>
 int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
 {
-  // TODO: fscrypt / optmetadata: https://tracker.ceph.com/issues/70188
   ceph_assert(ino == other.ino);
   *divergent = false;
   if (version == other.version) {
@@ -1167,18 +1224,22 @@ int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent
         truncate_size != other.truncate_size ||
         truncate_from != other.truncate_from ||
         truncate_pending != other.truncate_pending ||
-	change_attr != other.change_attr ||
         mtime != other.mtime ||
         atime != other.atime ||
         time_warp_seq != other.time_warp_seq ||
         inline_data != other.inline_data ||
+	change_attr != other.change_attr ||
         client_ranges != other.client_ranges ||
-        !(dirstat == other.dirstat) ||
-        !(rstat == other.rstat) ||
-        !(accounted_rstat == other.accounted_rstat) ||
+        dirstat != other.dirstat ||
+        rstat != other.rstat ||
+        accounted_rstat != other.accounted_rstat ||
         file_data_version != other.file_data_version ||
         xattr_version != other.xattr_version ||
         backtrace_version != other.backtrace_version ||
+	fscrypt_auth != other.fscrypt_auth ||
+	fscrypt_file != other.fscrypt_file ||
+	fscrypt_last_block != other.fscrypt_last_block ||
+	optmetadata != other.optmetadata ||
 	remote_ino != other.remote_ino ||
 	referent_inodes != other.referent_inodes) {
       *divergent = true;
