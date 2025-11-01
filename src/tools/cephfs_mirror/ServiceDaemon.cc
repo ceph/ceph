@@ -44,8 +44,10 @@ struct AttributeDumpVisitor {
 ServiceDaemon::ServiceDaemon(CephContext *cct, RadosRef rados)
   : m_cct(cct),
     m_rados(rados),
-    m_timer(new SafeTimer(cct, m_timer_lock, true)) {
+    m_timer(new SafeTimer(cct, m_timer_lock, true)),
+    h_timer(new SafeTimer(cct, h_timer_lock, true)) {
   m_timer->init();
+  h_timer->init();
 }
 
 ServiceDaemon::~ServiceDaemon() {
@@ -56,10 +58,16 @@ ServiceDaemon::~ServiceDaemon() {
       dout(5) << ": canceling timer task=" << m_timer_ctx << dendl;
       m_timer->cancel_event(m_timer_ctx);
     }
+    std::scoped_lock h_lock(h_timer_lock);
+    if (h_timer_ctx != nullptr) {
+      dout(5) << ": canceling health timer task=" << h_timer_ctx << dendl;
+      h_timer->cancel_event(h_timer_ctx);
+    }
     m_timer->shutdown();
+    h_timer->shutdown();
   }
-
   delete m_timer;
+  delete h_timer;
 }
 
 int ServiceDaemon::init() {
@@ -78,6 +86,9 @@ int ServiceDaemon::init() {
   if (r < 0) {
     return r;
   }
+
+  std::scoped_lock h_lock(h_timer_lock);
+  schedule_health_tick();
   return 0;
 }
 
@@ -221,6 +232,75 @@ void ServiceDaemon::update_status() {
     derr << ": failed to update service daemon status: " << cpp_strerror(r)
          << dendl;
   }
+}
+
+void ServiceDaemon::update_mirror_health(std::vector<DaemonHealthMetric>& health_metrics) {
+  dout(20) << dendl;
+  int r = m_rados->service_daemon_update_health(std::move(health_metrics));
+  if (r < 0) {
+    derr << ": failed to update mirror daemon health: " << cpp_strerror(r)
+         << dendl;
+  }
+}
+
+std::vector<DaemonHealthMetric> ServiceDaemon::get_health_metrics() {
+  std::vector<DaemonHealthMetric> health_metrics;
+  {
+    std::scoped_lock locker(m_lock);
+    for (auto &[fscid, filesystem] : m_filesystems) {
+      for (auto &[attr_name, attr_value] : filesystem.fs_attributes) {
+        if (attr_name == SERVICE_DAEMON_MIRROR_ENABLE_FAILED_KEY) {
+          bool failed = std::get<bool>(attr_value);
+          if (failed) {
+            health_metrics.emplace_back(daemon_metric::CEPHFS_MIRROR_FAILURE,
+                                        failed, ceph_clock_now());
+          }
+        }
+      }
+      for (auto &[peer, attributes] : filesystem.peer_attributes) {
+        uint64_t failed_dir_count = 0;
+        uint64_t recovered_dir_count = 0;
+        for (auto &[attr_name, attr_value] : attributes) {
+          if (attr_name == SERVICE_DAEMON_FAILED_DIR_COUNT_KEY) {
+            failed_dir_count = std::get<uint64_t>(attr_value);
+          } else if (attr_name == SERVICE_DAEMON_RECOVERED_DIR_COUNT_KEY) {
+            recovered_dir_count = std::get<uint64_t>(attr_value);
+          }
+        }
+        uint64_t count = failed_dir_count - recovered_dir_count;
+        if (count > 0) {
+          health_metrics.emplace_back(daemon_metric::CEPHFS_MIRROR_SNAP_SYNC_FAILURE,
+                                      count, ceph_clock_now());
+        }
+      }
+    }
+  }
+  return health_metrics;
+}
+
+void ServiceDaemon::schedule_health_tick()
+{
+  if (h_timer_ctx != nullptr) {
+    return;
+  }
+  h_timer_ctx = new LambdaContext([this](int) {
+    h_timer_ctx = nullptr;
+    health_tick();
+  });
+  h_timer->add_event_after(m_cct->_conf.get_val<std::chrono::seconds>("cephfs_mirror_health_tick_interval"),
+			   h_timer_ctx);
+}
+
+void ServiceDaemon::health_tick()
+{
+  dout(20) << dendl;
+  int r = m_rados->service_daemon_update_health(get_health_metrics());
+  if (r < 0) {
+    derr << ": failed to update mirror daemon health: " << cpp_strerror(r)
+         << dendl;
+  }
+
+  schedule_health_tick();
 }
 
 } // namespace mirror
