@@ -1172,6 +1172,23 @@ options:
   see_also:
   - rgw_enable_ops_log
   with_legacy: true
+- name: rgw_trusted_proxy_count
+  type: uint
+  level: advanced
+  desc: Lookup index for X-Forwarded-For header.
+  long_desc: The configuration specifies the count of reverse proxies between the internet and the server.
+    The X-Forwarded-For IP list is then searched from the rightmost position based on that count.
+    If the count is greater than zero, the value of rgw_remote_addr_param is disregarded, and the X-Forwarded-For header is used.
+    A count of zero implies selecting the entire header and considering the value of rgw_remote_addr_param.
+    For other non-zero values, the nth IP from the right is chosen (e.g., 1 denotes the rightmost IP).
+    It is recommended to refer to https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For to avoid any confusion.
+  default: 0
+  services:
+  - rgw
+  see_also:
+  - rgw_remote_addr_param
+  - rgw_trust_forwarded_https
+  with_legacy: true
 - name: rgw_op_thread_timeout
   type: int
   level: dev

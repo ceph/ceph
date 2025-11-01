@@ -14,9 +14,9 @@
 
 using namespace std;
 
-void RGWEnv::init(CephContext *cct)
+void RGWEnv::init(CephContext *_cct)
 {
-  conf.init(cct);
+  cct = _cct;
 }
 
 void RGWEnv::set(std::string name, std::string val)
@@ -142,17 +142,4 @@ void RGWEnv::remove(const char *name)
   map<string, string, ltstr_nocase>::iterator iter = env_map.find(name);
   if (iter != env_map.end())
     env_map.erase(iter);
-}
-
-void RGWConf::init(CephContext *cct)
-{
-  enable_ops_log = cct->_conf->rgw_enable_ops_log;
-  enable_usage_log = cct->_conf->rgw_enable_usage_log;
-
-  defer_to_bucket_acls = 0;  // default
-  if (cct->_conf->rgw_defer_to_bucket_acls == "recurse") {
-    defer_to_bucket_acls = RGW_DEFER_TO_BUCKET_ACLS_RECURSE;
-  } else if (cct->_conf->rgw_defer_to_bucket_acls == "full_control") {
-    defer_to_bucket_acls = RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL;
-  }
 }
