@@ -464,7 +464,7 @@ public:
                               bool resync_requested, int r) {
     EXPECT_CALL(mock_image_meta, load(_))
       .WillOnce(Invoke([this, &mock_image_meta, resync_requested, r](Context* ctx) {
-          mock_image_meta.resync_requested = resync_requested;
+          mock_image_meta.set_resync_requested(resync_requested);
           m_threads->work_queue->queue(ctx, r);
         }));
   }
