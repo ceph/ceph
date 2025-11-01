@@ -17661,8 +17661,7 @@ int BlueStore::_do_write_v2(
         uint32_t this_segment_end = this_segment_begin + segment_size;
         uint32_t write_length = std::min(this_segment_end, end) - write_offset;
         bufferlist chunk;
-        chunk.substr_of(bl, 0, write_length);
-        bl.splice(0, write_length);
+        bl.splice(0, write_length, &chunk);
         _do_write_v2_compressed(txc, c, o, wctx, write_offset, write_length, chunk,
                                 this_segment_begin, this_segment_end);
         write_offset += write_length;
