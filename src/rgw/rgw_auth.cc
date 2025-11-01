@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <array>
+#include <expected>
 #include <string>
 #include <variant>
 
@@ -330,7 +331,7 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
                             sal::Driver* driver,
                             sal::User* user,
                             std::vector<IAM::Policy>* policies_)
-  -> tl::expected<std::unique_ptr<Identity>, int>
+  -> std::expected<std::unique_ptr<Identity>, int>
 {
   const RGWUserInfo& info = user->get_info();
   const sal::Attrs& attrs = user->get_attrs();
@@ -341,7 +342,7 @@ auto transform_old_authinfo(const DoutPrefixProvider* dpp,
   int r = load_account_and_policies(dpp, y, driver, info, attrs,
                                     account, policies);
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
 
   if (policies_) { // return policies to caller if requested

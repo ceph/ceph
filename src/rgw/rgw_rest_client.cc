@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <expected>
+
 #include "rgw_common.h"
 #include "rgw_rest_client.h"
 #include "rgw_acl_s3.h"
@@ -371,7 +373,7 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
 }
 
 auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
-  -> tl::expected<int, int>
+  -> std::expected<int, int>
 {
 
   string date_str;
@@ -417,7 +419,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
-    return tl::unexpected(ret);
+    return std::unexpected(ret);
   }
 
   if (s == "iam") {
@@ -463,7 +465,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
 
   if (http_status == 0) {
     // no http status, generally means the service is not available
-    return tl::unexpected(-ERR_SERVICE_UNAVAILABLE);
+    return std::unexpected(-ERR_SERVICE_UNAVAILABLE);
   }
 
   response.append((char)0); /* NULL terminate response */
