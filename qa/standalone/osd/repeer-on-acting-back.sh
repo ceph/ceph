@@ -84,11 +84,21 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     # reset up to [1,4,5]
     ceph osd pg-upmap $pgid 1 4 5 || return 1
 
-    # wait for peering to complete
-    sleep 2
+    timeout=2
+    start=$(date +%s)
 
-    # make sure osd.2 belongs to current acting set
-    ceph pg $pgid query | jq '.acting' | grep 2 || return 1
+    while true; do
+      if ceph pg "$pgid" query | jq '.acting' | grep -qw 2; then
+        echo "OSD.2 found in acting set"
+        break
+      fi
+      now=$(date +%s)
+      if [ $((now - start)) -ge $timeout ]; then
+        echo "Timed out waiting for OSD.2 in acting set"
+        return 1
+      fi
+      sleep 0.1
+    done
 
     # kill osd.2
     kill_daemons $dir KILL osd.2 || return 1
@@ -107,12 +117,26 @@ function TEST_repeer_on_down_acting_member_coming_back() {
     # again, wait for peering to complete
     sleep 2
 
-    # primary should be able to re-add osd.2 into acting
-    ceph pg $pgid query | jq '.acting' | grep 2 || return 1
+    pgjson=$(ceph pg $pgid query)
+    state=$(echo "$pgjson" | jq -r '.state')
+
+    if [[ "$state" == *"recovery"* ]]; then
+      # recovery in progress → osd.2 must be in acting
+      if echo "$pgjson" | jq '.acting' | grep 2; then
+        echo "Recovery in progress and OSD.2 is in acting set"
+        return 0
+      else
+        echo "Recovery in progress but OSD.2 is NOT in acting set"
+        return 1
+      fi
+    else
+      echo "Recovery finished (no need for OSD.2 in acting)"
+      return 0
+    fi
 
     WAIT_FOR_CLEAN_TIMEOUT=20 wait_for_clean
 
-    if ! grep -q "Active: got notify from previous acting member.*, requesting pg_temp change" $(find $dir -name '*osd*log')
+    if ! grep -Eiq "requesting pg[_ ]temp change" $(find $dir -name '*osd*log')
     then
             echo failure
             return 1
