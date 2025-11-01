@@ -47,6 +47,10 @@
 #include "MetaSession.h"
 #include "UserPerm.h"
 
+#if defined(__linux__)
+#include "FSCrypt.h"
+#endif
+
 #include <fstream>
 #include <locale>
 #include <map>
@@ -368,6 +372,8 @@ public:
   }
   void abort_conn();
 
+  int fscrypt_dummy_encryption();
+
   void set_uuid(const std::string& uuid);
   void set_session_timeout(unsigned timeout);
   int start_reclaim(const std::string& uuid, unsigned flags,
@@ -377,6 +383,18 @@ public:
   fs_cluster_id_t get_fs_cid() {
     return fscid;
   }
+
+  /* fscrypt */
+#if defined(__linux__)
+  int add_fscrypt_key(const char *key_data, int key_len, char* keyid, int user = 0);
+  int remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user = 0);
+  int get_fscrypt_key_status(fscrypt_get_key_status_arg* arg);
+
+  int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
+  int get_fscrypt_policy_v2(int fd, struct fscrypt_policy_v2* policy);
+  int is_encrypted(int fd, UserPerm& perms, char* enctag);
+#endif
+  int fcopyfile(const char *sname, const char *dname, UserPerm& perms, mode_t mode);
 
   int mds_command(
     const std::string &mds_spec,
@@ -737,6 +755,11 @@ public:
   bool ll_handle_umask() {
     return acl_type != NO_ACL;
   }
+#if defined(__linux__)
+  int ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy);
+  int ll_get_fscrypt_policy_v2(Inode *in, struct fscrypt_policy_v2* policy);
+  int ll_is_encrypted(Inode *in, UserPerm& perms, char* enctag);
+#endif
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			file_layout_t* layout);
@@ -1000,6 +1023,10 @@ public:
     return fuse_default_permissions;
   }
 
+  bool get_fscrypt_as() const {
+    return fscrypt_as;
+  }
+
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
   SafeTimer timer;
@@ -1011,10 +1038,18 @@ public:
 
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
-
+#if defined(__linux__)
+  std::unique_ptr<FSCrypt> fscrypt;
+#endif
   bool _collect_and_send_global_metrics;
 
+
 protected:
+  struct FSCrypt_Options {
+    std::vector<uint8_t> fscrypt_auth;
+    std::vector<uint8_t> fscrypt_file;
+  };
+
   struct walk_dentry_result {
     DentryRef dn;
     InodeRef target;
@@ -1033,8 +1068,8 @@ protected:
 
   void check_caps(const InodeRef& in, unsigned flags);
 
-  bool _wrap_name(const Inode& diri, std::string& dname, std::string& alternate_name);
-  std::string _unwrap_name(const Inode& diri, const std::string& dname, const std::string& alternate_name);
+  bool _wrap_name(Inode& diri, std::string& dname, std::string& alternate_name);
+  std::string _unwrap_name(Inode& diri, const std::string& dname, const std::string& alternate_name);
 
   void set_cap_epoch_barrier(epoch_t e);
 
@@ -1095,13 +1130,14 @@ protected:
 
   int create_and_open(int dirfd, const char *relpath, int flags, const UserPerm& perms,
                       mode_t mode, int stripe_unit, int stripe_count, int object_size,
-                      const char *data_pool, std::string alternate_name);
+                      const char *data_pool, std::string alternate_name,
+                      FSCrypt_Options fscrypt_options={});
 
-  int do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name="");
+  int do_mkdirat(int dirfd, const char *relpath, mode_t mode, const UserPerm& perm, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
   int do_rename(const char *from, const char *to, const UserPerm& perm, std::string alternate_name="");
   int do_link(const char *existing, const char *newname, const UserPerm& perm, std::string alternate_name="");
-  int do_symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name="");
-  int do_openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool, std::string alternate_name="");
+  int do_symlinkat(const char *target, int dirfd, const char *linkpath, const UserPerm& perms, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
+  int do_openat(int dirfd, const char *path, int flags, const UserPerm& perms, mode_t mode, int stripe_unit, int stripe_count, int object_size, const char *data_pool, std::string alternate_name="", FSCrypt_Options fscrypt_options={});
 
   struct PathWalk_ExtraOptions {
     bool followsym = true;
@@ -1448,6 +1484,7 @@ private:
   // each step, with complete only releasing this object once all is finally
   // complete.
   public:
+    client_t const whoami;
     C_Read_Sync_NonBlocking(Client *clnt, Context *onfinish, Fh *f, Inode *in,
                             uint64_t fpos, uint64_t off, uint64_t len,
                             bufferlist *bl, Filer *filer, int have_caps)
@@ -1461,8 +1498,10 @@ private:
       fini = false;
     }
 
-    void retry();
-
+    void start();
+#if defined(__linux__)
+    FSCryptFDataDencRef fscrypt_denc;
+#endif
   private:
     Client *clnt;
     Context *onfinish;
@@ -1470,6 +1509,8 @@ private:
     Inode *in;
     uint64_t off;
     uint64_t len;
+    uint64_t read_start;
+    uint64_t read_len;
     int left;
     int wanted;
     bufferlist *bl;
@@ -1481,6 +1522,7 @@ private:
     uint64_t pos;
     bool fini;
 
+    void retry();
     void finish(int r) override;
 
     void complete(int r) override
@@ -1494,17 +1536,35 @@ private:
   class C_Read_Async_Finisher : public Context {
   public:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
-                          uint64_t fpos, uint64_t off, uint64_t len)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len), start_time(mono_clock_now()) {}
+                          bufferlist *bl,
+                          uint64_t fpos, uint64_t off, uint64_t len,
+#if defined(__linux__)
+                          FSCryptFDataDencRef denc,
+#endif
+     			  uint64_t read_start,
+                          uint64_t read_len)
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), bl(bl), off(off), len(len),
+        start_time(mono_clock_now()), 
+#if defined(__linux__)
+	denc(denc), 
+#endif
+	read_start(read_start), read_len(read_len) {}
 
   private:
     Client *clnt;
     Context *onfinish;
     Fh *f;
     Inode *in;
+    bufferlist *bl;
     uint64_t off;
     uint64_t len;
     utime_t start_time;
+
+#if defined(__linux__)
+    FSCryptFDataDencRef denc;
+#endif
+    uint64_t read_start;
+    uint64_t read_len;
 
     void finish(int r) override;
   };
@@ -1524,6 +1584,267 @@ private:
     void finish(int r) override;
   };
 
+  struct aio_collection {
+    ceph::mutex lock = ceph::make_mutex("Client::aio_collection");
+
+    aio_collection() {}
+
+    struct aio_status {
+      int r = 0;
+      bool complete{false};
+    };
+
+    int num_complete = 0;
+    int total = 0;
+
+    int retcode = 0;
+
+    std::vector<aio_status> status;
+
+    int add_io() {
+      std::unique_lock l{lock};
+      int old_total = total++;
+      status.resize(total);
+
+      return old_total;
+    }
+
+    bool is_complete() {
+      std::unique_lock l{lock};
+      return num_complete == total;
+    }
+
+    int finish_io(int id, int r) {
+      std::unique_lock l{lock};
+      status[id].r = r;
+      status[id].complete = true;
+
+      ++num_complete;
+
+      if (r < 0 && retcode == 0) {
+        retcode = r;
+      }
+
+      return r;
+    }
+
+    int get_retcode() {
+      std::unique_lock l{lock};
+      return retcode;
+    }
+  };
+
+  template<typename T>
+  struct iofinish_method_ctx {
+    struct _Ctx : Context {
+      iofinish_method_ctx *ioc;
+
+      _Ctx(iofinish_method_ctx *_ioc) : ioc(_ioc) {}
+
+      void finish(int r) override {
+        ioc->finish(r);
+      }
+    };
+
+    std::unique_ptr<_Ctx> _ctx;
+
+    T& t;
+    void (T::*call)(int);
+    ceph::mutex lock = ceph::make_mutex("Client::iofinish_method_ctx");
+    ceph::condition_variable cond;
+    bool done{false};
+    bool canceled{false};
+
+    aio_collection *aioc;
+    int io_id;
+
+    iofinish_method_ctx(T& _t, void (T::*_call)(int), aio_collection *_aioc)
+      : t(_t),
+        call(_call),
+        aioc(_aioc) {
+      _ctx.reset(new _Ctx(this));
+
+      if (aioc) {
+        io_id = aioc->add_io();
+      }
+    }
+
+    Context *ctx() { return _ctx.get(); }
+
+    void wait() {
+      std::unique_lock l{lock};
+      while (!done) {
+        cond.wait(l);
+      }
+    }
+
+    Context *release() {
+      auto ctx = _ctx.release();
+      _ctx.reset();
+      return ctx;
+    }
+
+    void cancel(int r) {
+      std::unique_lock l{lock};
+      canceled = true;
+      done = true;
+      if (aioc) {
+        aioc->finish_io(io_id, r);
+      }
+    }
+
+    void finish(int r) {
+      std::unique_lock l{lock};
+      if (!canceled) {
+        /* avoid any callback when canceled, calling object might have been destroyed */
+        if (aioc) {
+          aioc->finish_io(io_id, r);
+        }
+        (t.*(call))(r);
+      }
+      done = true;
+      cond.notify_all();
+    }
+  };
+
+  struct CWF_iofinish;
+
+  class WriteEncMgr : public RefCountedObject {
+  protected:
+    Client *clnt;
+    client_t const whoami;
+
+    CephContext *cct;
+#if defined(__linux__)
+    FSCrypt *fscrypt;
+#endif
+    ceph::mutex lock = ceph::make_mutex("Client::WriteEncMgr");
+
+    Fh *f;
+    Inode *in;
+
+    Context *iofinish{nullptr};
+
+    int64_t offset;
+    uint64_t size;
+
+    bufferlist bl;
+    bufferlist encbl;
+    bufferlist *pbl;
+
+    bool async;
+
+#if defined(__linux__)
+    FSCryptFDataDencRef denc;
+#endif
+    uint64_t start_block;
+    uint64_t start_block_ofs;
+    uint64_t ofs_in_start_block;
+    uint64_t end_block;
+    uint64_t end_block_ofs;
+    uint64_t ofs_in_end_block;
+
+    uint64_t endoff;
+
+    bool need_read_start{false};
+    bool need_read_end{false};
+
+    int read_start_size;
+
+    bufferlist startbl;
+    bufferlist endbl;
+
+    aio_collection aioc;
+
+    bool is_ready_to_finish{false};
+    bool is_finished{false};
+
+    std::unique_ptr<iofinish_method_ctx<WriteEncMgr> > finish_read_start_ctx;
+    std::unique_ptr<iofinish_method_ctx<WriteEncMgr> > finish_read_end_ctx;
+
+    bool try_finish(int r) {
+      if (is_finished) {
+        return true;
+      }
+
+      if (!is_ready_to_finish) {
+        return false;
+      }
+
+      is_finished = do_try_finish(r);
+
+      return is_finished;
+    }
+
+    int read(uint64_t off, uint64_t len, bufferlist *bl, iofinish_method_ctx<WriteEncMgr> *ioctx);
+
+  protected:
+    virtual int do_write() = 0;
+    virtual void update_write_params() = 0;
+
+  public:
+    WriteEncMgr(Client *clnt,
+                Fh *f, int64_t offset, uint64_t size,
+                bufferlist& bl,
+                bool async);
+    virtual ~WriteEncMgr();
+
+    int init();
+
+    void get_write_params(int64_t *poffset, uint64_t *psize, bufferlist **ppbl) const {
+      *poffset = offset;
+      *psize = size;
+      *ppbl = pbl;
+    }
+
+    bool encrypted() const {
+#if defined(__linux__)
+      return !!denc;
+#else
+      return 0;
+#endif
+    }
+
+    int read_modify_write(Context *iofinish);
+
+    void finish_read_start_cb(int r) {
+      finish_read_start(r);
+      put();
+    }
+    void finish_read_end_cb(int r) {
+      finish_read_end(r);
+      put();
+    }
+    void finish_read_start(int r);
+    void finish_read_end(int r);
+    bool do_try_finish(int r);
+
+    int64_t get_ofs() { return offset; }
+    uint64_t get_size() { return size; }
+  };
+
+  class WriteEncMgr_Buffered : public WriteEncMgr {
+  public:
+    WriteEncMgr_Buffered(Client *clnt,
+                         Fh *f, int64_t offset, uint64_t size,
+                         bufferlist& bl,
+                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+
+    void update_write_params() override;
+    int do_write() override;
+  };
+
+  class WriteEncMgr_NotBuffered : public WriteEncMgr {
+  public:
+    WriteEncMgr_NotBuffered(Client *clnt,
+                         Fh *f, int64_t offset, uint64_t size,
+                         bufferlist& bl,
+                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+
+    void update_write_params() override {}
+    int do_write() override;
+  };
+
   class C_Write_Finisher : public Context {
   public:
     void finish_io(int r);
@@ -1532,11 +1853,15 @@ private:
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
                      bool is_file_write, Fh *f, Inode *in,
-                     uint64_t fpos, int64_t offset, uint64_t size,
-                     bool do_fsync, bool syncdataonly)
+                     uint64_t fpos, int64_t req_ofs, uint64_t req_size,
+                     int64_t offset, uint64_t size,
+                     bool do_fsync, bool syncdataonly,
+                     bool encrypted)
       : clnt(clnt), onfinish(onfinish),
         is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
-        offset(offset), size(size), syncdataonly(syncdataonly) {
+        req_ofs(req_ofs), req_size(req_size),
+        offset(offset), size(size), syncdataonly(syncdataonly),
+        encrypted(encrypted) {
       iofinished_r = 0;
       onuninlinefinished_r = 0;
       fsync_r = 0;
@@ -1549,6 +1874,11 @@ private:
       // We need to override finish, but have nothing to do.
     }
 
+    void update_write_params(int64_t _ofs, uint64_t _size) {
+      offset = _ofs;
+      size = _size;
+    }
+
   private:
     Client *clnt;
     Context *onfinish;
@@ -1557,9 +1887,12 @@ private:
     Fh *f;
     Inode *in;
     uint64_t fpos;
+    int64_t req_ofs;
+    uint64_t req_size;
     int64_t offset;
     uint64_t size;
     bool syncdataonly;
+    bool encrypted;
     int64_t iofinished_r;
     int64_t onuninlinefinished_r;
     int64_t fsync_r;
@@ -1755,13 +2088,17 @@ private:
 
   int _link(Inode *diri_from, const char* path_from, Inode* diri_to, const char* path_to, const UserPerm& perm, std::string alternate_name);
   int _unlink(Inode *dir, const char *name, const UserPerm& perm);
+#if defined(__linux__)
+  int get_keyhandler(FSCryptContextRef fscrypt_ctx, FSCryptKeyHandlerRef& kh);
+  bool is_inode_locked(const InodeRef& to_check);
+#endif
   int _rename(Inode *olddir, const char *oname, Inode *ndir, const char *nname, const UserPerm& perm, std::string alternate_name);
   int _mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& perm,
 	     InodeRef *inp = 0, const std::map<std::string, std::string> &metadata={},
-             std::string alternate_name="");
+             std::string alternate_name="", FSCrypt_Options={});
   int _rmdir(Inode *dir, const char *name, const UserPerm& perms, bool check_perms=true);
   int _symlink(Inode *dir, const char *name, const char *target,
-	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0);
+	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0, FSCrypt_Options fscrypt_options = {});
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
   bool make_absolute_path_string(const InodeRef& in, std::string& path);
@@ -1799,14 +2136,16 @@ private:
   int _create(const walk_dentry_result& wdr, int flags, mode_t mode, InodeRef *inp,
 	      Fh **fhp, int stripe_unit, int stripe_count, int object_size,
 	      const char *data_pool, bool *created, const UserPerm &perms,
-              std::string alternate_name);
+              std::string alternate_name, FSCrypt_Options fscrypt_options={});
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
-  		Context *onfinish = nullptr);
+  		Context *onfinish = nullptr, bool read_for_write = false);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
-          int64_t offset, uint64_t size, Inode *in);
+                         int64_t request_offset, uint64_t request_size,
+                         int64_t offset, uint64_t size, Inode *in,
+                         bool encrypted);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, bufferlist bl,
           Context *onfinish = nullptr, bool do_fsync = false,
           bool syncdataonly = false);
@@ -1832,6 +2171,8 @@ private:
   int _lazyio(Fh *fh, int enable);
 
   Dentry *get_or_create(Inode *dir, const std::string& name);
+
+  int _is_empty_directory(Inode *in, const UserPerm& perms);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
@@ -2012,6 +2353,8 @@ private:
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
+
+  bool fscrypt_as;
 
   ceph::condition_variable mount_cond, sync_cond;
 

@@ -132,6 +132,11 @@ struct ceph_ll_io_info {
   bool syncdataonly;
 };
 
+struct ceph_fscrypt_key_identifier;
+struct fscrypt_get_key_status_arg;
+struct fscrypt_policy_v2;
+struct fscrypt_remove_key_arg;
+
 /* setattr mask bits (up to an int in size) */
 #ifndef CEPH_SETATTR_MODE
 #define CEPH_SETATTR_MODE		(1 << 0)
@@ -1997,6 +2002,75 @@ int ceph_debug_get_fd_caps(struct ceph_mount_info *cmount, int fd);
  */
 int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
 
+/**
+ * Add fscrypt encryption key to the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param key_data key data
+ * @param key_len key data length
+ * @param out_keyid to hold the hashed key identifier, FSCRYPT_KEY_IDENTIFIER_SIZE bytes in length
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+                         const char *key_data, int key_len,
+                         char* out_keyid, int user);
+
+/**
+ * Remove fscrypt encryption key from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param kid pointer to the key identifier
+ * @param user user id
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+                            struct fscrypt_remove_key_arg *kid,
+			    int user);
+
+/**
+ * Get fscrypt encryption key status from the in-memory key manager
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param arg pointer to the key status for specified key
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_fscrypt_key_status(struct ceph_mount_info *cmount,
+                                struct fscrypt_get_key_status_arg *arg);
+
+/**
+ * Set encryption policy on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param policy pointer to to the fscrypt v2 policy
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               int fd, const struct fscrypt_policy_v2 *policy);
+
+/**
+ * Checks to see if encryption is set on a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param enctag, if set on dir, will return non-nullptr
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_is_encrypted(struct ceph_mount_info *cmount,
+                      int fd, char* enctag);
+
+/**
+ * Get encryption policy of a directory.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param fd open directory file descriptor
+ * @param policy pointer to to the fscrypt v2 policy
+ * @returns zero on success, other returns a negative error code.
+ */
+int ceph_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               int fd, struct fscrypt_policy_v2 *policy);
+
 /* Low Level */
 struct Inode *ceph_ll_get_inode(struct ceph_mount_info *cmount,
 				vinodeno_t vino);
@@ -2149,6 +2223,14 @@ int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
 
 int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
+
+int ceph_ll_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, const struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                               Inode *in, struct fscrypt_policy_v2 *policy);
+
+int ceph_ll_is_encrypted(struct ceph_mount_info *cmount, Inode *in, char* enctag);
 
 /*
  * Delegation support
@@ -2332,6 +2414,7 @@ void ceph_free_snap_info_buffer(struct snap_info *snap_info);
  */
 int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump);
 
+int ceph_fcopyfile(struct ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode);
 #ifdef __cplusplus
 }
 #endif

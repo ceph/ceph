@@ -1987,6 +1987,29 @@ cdef class LibCephFS(object):
 
         return self.listxattr(path, size=size, follow_symlink=False)
 
+    def fcopyfile(self, spath, dpath, mode=0):
+        """
+        Copy a file to another file.
+
+       :param spath: the path to the source file.
+       :param dpath: the path to the destination file.
+       :param mode: the permissions the file should have once created.
+       """
+        self.require_state("mounted")
+
+        spath = cstr(spath, 'spath')
+        dpath = cstr(dpath, 'dpath')
+
+        cdef:
+            char *_spath = spath
+            char *_dpath = dpath
+            mode_t _mode = mode
+
+            ret = ceph_fcopyfile(self.cluster, _spath, _dpath, _mode)
+
+        if ret < 0:
+            raise make_ex(ret, "error in fcopyfile")
+
     def stat(self, path, follow_symlink=True):
         """
         Get a file's extended statistics and attributes.
