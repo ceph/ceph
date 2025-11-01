@@ -661,6 +661,7 @@ void RGWZoneGroupPlacementTierS3::decode_json(JSONObj *obj)
   } else {
     host_style = VirtualStyle;
   }
+  JSONDecoder::decode_json("location_constraint", location_constraint, obj);
   JSONDecoder::decode_json("target_storage_class", target_storage_class, obj);
   JSONDecoder::decode_json("target_path", target_path, obj);
   JSONDecoder::decode_json("acl_mappings", acl_mappings, obj);
@@ -718,6 +719,7 @@ void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
   encode_json("region", region, f);
   string s = (host_style == PathStyle ? "path" : "virtual");
   encode_json("host_style", s, f);
+  encode_json("location_constraint", location_constraint, f);
   encode_json("target_storage_class", target_storage_class, f);
   encode_json("target_path", target_path, f);
   encode_json("acl_mappings", acl_mappings, f);
@@ -1971,6 +1973,9 @@ int RGWZoneGroupPlacementTierS3::update_params(const JSONFormattable& config)
       host_style = VirtualStyle;
     }
   }
+  if (config.exists("location_constraint")) {
+    location_constraint = config["location_constraint"];
+  }
   if (config.exists("target_storage_class")) {
     target_storage_class = config["target_storage_class"];
   }
@@ -2032,6 +2037,9 @@ int RGWZoneGroupPlacementTierS3::clear_params(const JSONFormattable& config)
   }
   if (config.exists("target_storage_class")) {
     target_storage_class.clear();
+  }
+  if (config.exists("location_constraint")) {
+    location_constraint.clear();
   }
   if (config.exists("access_key")) {
     key.id.clear();

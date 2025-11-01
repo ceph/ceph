@@ -39,6 +39,7 @@ objects as well::
       "acls": [ { "type": <id | email | uri>,
                   "source_id": <source_id>,
                   "dest_id": <dest_id> } ... ],
+      "location_constraint": <location-constraint>,
       "target_path": <target_path>,
       "target_storage_class": <target-storage-class>,
       "multipart_sync_threshold": {object_size},

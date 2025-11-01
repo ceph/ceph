@@ -706,7 +706,7 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
   if (host_style == VirtualStyle) {
     resource_str = obj.get_oid();
 
-    new_url = bucket_name + "."  + new_url;
+    new_url = protocol + "://" + bucket_name + "." + host;
     new_host = bucket_name + "." + new_host;
   } else {
     resource_str = bucket_name + "/" + obj.get_oid();
@@ -717,6 +717,8 @@ void RGWRESTStreamS3PutObj::send_init(const rgw_obj& obj)
 
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
+
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << dendl;
 
   method = "PUT";
   headers_gen.init(method, new_host, resource_prefix, new_url, resource, params, api_name);
@@ -843,6 +845,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
   string new_resource;
   string bucket_name;
   string old_resource = resource;
+  string new_host = host;
 
   if (resource[0] == '/') {
     new_resource = resource.substr(1);
@@ -865,11 +868,17 @@ int RGWRESTStreamRWRequest::do_send_prepare(const DoutPrefixProvider *dpp, RGWAc
     } else {
       new_resource = new_resource.substr(pos+1);
     }
+    new_host = bucket_name + "." + host;
   }
+
+  if (new_url[new_url.size() - 1] != '/')
+    new_url.append("/");
 
   headers_gen.emplace(cct, &new_env, &new_info);
 
-  headers_gen->init(method, host, resource_prefix, new_url, new_resource, params, api_name);
+  ldpp_dout(this, 20) << __func__ << "(): host = " << host << " , resource = " << resource << " , new_host = " << new_host << " , new_url = " << new_url  << " , new_resource = " << new_resource << dendl;
+
+  headers_gen->init(method, new_host, resource_prefix, new_url, new_resource, params, api_name);
 
   headers_gen->set_http_attrs(extra_headers);
 
