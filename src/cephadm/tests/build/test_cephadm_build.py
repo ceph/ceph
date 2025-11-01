@@ -47,6 +47,16 @@ CONTAINERS = {
         'base_image': 'docker.io/library/ubuntu:24.04',
         'script': 'apt update && apt install -y python3-venv',
     },
+    'ubuntu-22.04-plusdeps': {
+        'name': 'cephadm-build-test:ubuntu-22-04-py3-deps',
+        'base_image': 'docker.io/library/ubuntu:22.04',
+        'script': 'apt update && apt install -y python3-jinja2 python3-yaml python3-markupsafe',
+    },
+    'ubuntu-24.04-plusdeps': {
+        'name': 'cephadm-build-test:ubuntu-24-04-py3-deps',
+        'base_image': 'docker.io/library/ubuntu:24.04',
+        'script': 'apt update && apt install -y python3-jinja2 python3-yaml python3-markupsafe',
+    },
 }
 
 BUILD_PY = 'src/cephadm/build.py'
@@ -178,6 +188,57 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
     assert isinstance(data, dict)
     assert 'bundled_packages' in data
     assert all(v['package_source'] == 'rpm' for v in data['bundled_packages'])
+    assert all(
+        v['name'] in ('Jinja2', 'MarkupSafe', 'PyYAML')
+        for v in data['bundled_packages']
+    )
+    assert all('requirements_entry' in v for v in data['bundled_packages'])
+    assert 'zip_root_entries' in data
+    zre = data['zip_root_entries']
+    assert any(_dist_info(e, 'Jinja2') for e in zre)
+    assert any(_dist_info(e, 'MarkupSafe') for e in zre)
+    assert any(e.startswith('jinja2') for e in zre)
+    assert any(e.startswith('markupsafe') for e in zre)
+    assert any(e.startswith('cephadmlib') for e in zre)
+    assert any(e.startswith('_cephadmmeta') for e in zre)
+
+
+@pytest.mark.parametrize(
+    'env',
+    [
+        'ubuntu-22.04-plusdeps',
+        'ubuntu-24.04-plusdeps',
+        'ubuntu-22.04',
+    ],
+)
+def test_cephadm_build_from_debs(env, source_dir, tmp_path):
+    res = build_in(
+        env,
+        source_dir,
+        tmp_path,
+        ['-Bdeb', '-SCEPH_GIT_VER=0', '-SCEPH_GIT_NICE_VER=foobar'],
+    )
+    if 'plusdeps' not in env:
+        assert res.returncode != 0
+        return
+    binary = tmp_path / 'cephadm'
+    assert binary.is_file()
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version'],
+        stdout=subprocess.PIPE,
+    )
+    out = res.stdout.decode('utf8')
+    assert 'version' in out
+    assert 'foobar' in out
+    assert res.returncode == 0
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version', '--verbose'],
+        stdout=subprocess.PIPE,
+    )
+    data = json.loads(res.stdout)
+    assert isinstance(data, dict)
+    assert 'bundled_packages' in data
+    assert all(v['package_source'] == 'deb' for v in data['bundled_packages'])
     assert all(
         v['name'] in ('Jinja2', 'MarkupSafe', 'PyYAML')
         for v in data['bundled_packages']
