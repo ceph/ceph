@@ -1146,8 +1146,9 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
-	"name=yes_i_really_mean_it,type=CephBool,req=false"
-	"name=crimson,type=CephBool,req=false",
+	"name=migrate_from,type=CephPoolname,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false "
+	"name=crimson,type=CephBool,req=false ",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "

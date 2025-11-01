@@ -9,6 +9,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
+#include "messages/MOSDPGMigratedPool.h"
 
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
@@ -305,6 +306,16 @@ void OSDSingletonState::prune_pg_created()
       ++i;
     }
   }
+}
+
+seastar::future<> OSDSingletonState::send_pg_migrated_pool(int64_t migration_target, pg_t pgid)
+{
+  LOG_PREFIX(OSDSingletonState::send_pg_to_migrated_pool);
+  DEBUG("{}", pgid);
+  return monc.send_message(
+    crimson::make_message<MOSDPGMigratedPool>(osdmap->get_epoch(),
+					      migration_target,
+					      pgid));
 }
 
 seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
