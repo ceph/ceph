@@ -1,13 +1,18 @@
 import os
 import uuid
 import logging
+import errno
+from time import monotonic
 from contextlib import contextmanager
 from collections import deque
 
 import cephfs
 
+from .volume import open_volume_lockless
 from .template import GroupTemplate
+from .clone_index import PATH_MAX
 from ..exception import VolumeException
+from ..fs_util import listdir
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +57,7 @@ class Trash(GroupTemplate):
         """
         return self._get_single_dir_entry(exclude_list)
 
-    def purge(self, trashpath, should_cancel):
+    def purge(self, trashpath, should_cancel, purge_queue):
         """
         Purge a trash entry with non-recursive depth-first approach.
         Non-recursive aspect prevents hitting Python's recursion limit and
@@ -69,8 +74,13 @@ class Trash(GroupTemplate):
         """
         log.debug(f'purge(): trashpath = {trashpath}')
 
+        # mpr = measure purge rate. It is an instance of class MeasurePurgeRate
+        # (see below) for counting number of calls to unlink() and rmdir() and
+        # then compute number of these calls made per second.
+        mpr = MeasurePurgeRate(0.001)
+
         try:
-            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True)
+            self.fs.rmtree(trashpath, should_cancel, suppress_errors=True, mpr)
         except cephfs.ObjectNotFound:
             return
         except cephfs.Error as e:
@@ -102,6 +112,86 @@ class Trash(GroupTemplate):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
+    def get_stats(self):
+        subvol_count = 0
+        file_count = 0
+        trash_size = 0
+
+        dir_found = False
+        symlink_count = 0
+
+        subvol_count = int(self.fs.getxattr(self.path, 'ceph.dir.subdirs'))
+        num_of_entries = int(self.fs.getxattr(self.path, 'ceph.dir.entries'))
+        # if all entries are subdirs it implies that there are no symlinks and
+        # that implies all subvols are either v1 or v2 but without retained
+        # snapshots. in this case, subvols were moved to trash dir and therefore
+        # we can fetch all stats on trash dir directly; no need to traverse the
+        # file hierarchy under trash dir.
+        if subvol_count == num_of_entries:
+            file_count = int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
+            size = int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+            return subvol_count, file_count, size
+
+        with self.fs.opendir(self.path) as dir_handle:
+            de = self.fs.readdir(dir_handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    de = self.fs.readdir(dir_handle)
+                    continue
+
+                try:
+                    if de.is_dir():
+                        # NOTE: Fetching xattr "rfiles" once on self.path and
+                        # then adjusting it is better than running it for every
+                        # dir in trash dir. This reduces calls to getxattr to a
+                        # great amount, reducing load we place on MGR/MDS. For
+                        # this reason value of xattr "rfiles" is not being
+                        # collected here and instead it will be collected at a
+                        # later point.
+                        dir_found = True
+                        subvol_count += 1
+                    elif de.is_symbol_file():
+                        symlink_count += 1
+
+                        subvol_count += 1
+                        # every subvolume has a .meta file, and that is not
+                        # included in value of xattr rfiles in case where trash
+                        # entry is a symlink or, IOW, when subvolume has
+                        # retained snapshots. therefore included it now by
+                        # incrementing file_count by 1.
+                        file_count += 1
+
+                        de_path = os.path.join(self.path, de.d_name)
+                        sv_path = self.fs.readlink(de_path, PATH_MAX)
+                        file_count += int(self.fs.getxattr(sv_path, 'ceph.dir.rfiles'))
+                        trash_size += int(self.fs.getxattr(sv_path, 'ceph.dir.rbytes'))
+                    else:
+                        log.debug('Trash entry was neither directory nor '
+                                  'symlink, this was unexpected. Details: '
+                                  f'entry path = {de_path.decode("utf-8")}')
+                except cephfs.ObjectNotFound:
+                    # we are scanning trash entries while purge threads are
+                    # actively deleting them. thus if we get ObjectNotFound it
+                    # probably means that it was deleted
+                    pass
+
+                de = self.fs.readdir(dir_handle)
+
+        # instead of geting value for xattr for every dir, simply get the value
+        # of xattr on trash dir & adjust it. this prevents multiple calls to
+        # getxattr().
+        if dir_found:
+            file_count += int(self.fs.getxattr(self.path, 'ceph.dir.rfiles'))
+            # rfiles xattr value counts both regular files as well as symlinks.
+            # symlinks shouldn't be included in the count since they represent
+            # the subvol dir and subvol_count was incremented to account for it.
+            file_count -= symlink_count
+
+            trash_size += int(self.fs.getxattr(self.path, 'ceph.dir.rbytes'))
+
+        return subvol_count, file_count, trash_size
+
+
 def create_trashcan(fs, vol_spec):
     """
     create a trash can.
@@ -131,3 +221,28 @@ def open_trashcan(fs, vol_spec):
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
     yield trashcan
+
+
+def get_trash_path(volspec):
+    return os.path.join(volspec.base_dir, Trash.GROUP_NAME).encode('utf-8')
+
+
+def get_trashcan_stats(volclient, volname):
+    with open_volume_lockless(volclient, volname) as fs_handle:
+        with open_trashcan(fs_handle, volclient.volspec) as trashcan:
+            return trashcan.get_stats()
+
+
+def get_pending_subvol_deletions_count(fs, volspec):
+    """
+    Get the number of pending subvolumes deletions.
+    """
+    trashdir = get_trash_path(volspec)
+    try:
+        num_pending_subvol_del = len(listdir(fs, trashdir, filter_entries=None,
+                                             filter_files=False))
+    except VolumeException as ve:
+        if ve.errno == -errno.ENOENT:
+            num_pending_subvol_del = 0
+
+    return {'pending_subvolume_deletions': num_pending_subvol_del}
