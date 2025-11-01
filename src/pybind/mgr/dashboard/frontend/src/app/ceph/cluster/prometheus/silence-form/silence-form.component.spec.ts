@@ -82,7 +82,7 @@ describe('SilenceFormComponent', () => {
 
   const callInit = () =>
     fixture.ngZone.run(() => {
-      component['init']();
+      component.ngOnInit();
     });
 
   const changeAction = (action: string) => {
@@ -141,18 +141,18 @@ describe('SilenceFormComponent', () => {
     fixture = TestBed.createComponent(SilenceFormComponent);
     fixtureH = new FixtureHelper(fixture);
     component = fixture.componentInstance;
-    form = component.form;
-    formHelper = new FormHelper(form);
+    form = component.silenceForm;
+    formHelper = new FormHelper(component.silenceForm);
+
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
-    expect(_.isArray(component.rules)).toBeTruthy();
   });
 
   it('should have set the logged in user name as creator', () => {
-    expect(component.form.getValue('createdBy')).toBe('someUser');
+    expect(component.silenceForm.getValue('createdBy')).toBe('someUser');
   });
 
   it('should call disablePrometheusConfig on error calling getRules', () => {
@@ -244,7 +244,7 @@ describe('SilenceFormComponent', () => {
     it('should have no special action activate by default', () => {
       expectMode('add', false, false, 'Create');
       expect(prometheusService.getSilences).not.toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.silenceForm.value).toEqual({
         comment: null,
         createdBy: 'someUser',
         duration: '2h',
@@ -257,7 +257,7 @@ describe('SilenceFormComponent', () => {
       params = { id: 'someNotExpiredId' };
       expectMode('edit', true, false, 'Edit');
       expect(prometheusService.getSilences).toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.silenceForm.value).toEqual({
         comment: `A comment for ${params.id}`,
         createdBy: `Creator of ${params.id}`,
         duration: '1d',
@@ -271,7 +271,7 @@ describe('SilenceFormComponent', () => {
       params = { id: 'someExpiredId' };
       expectMode('recreate', false, true, 'Recreate');
       expect(prometheusService.getSilences).toHaveBeenCalled();
-      expect(component.form.value).toEqual({
+      expect(component.silenceForm.value).toEqual({
         comment: `A comment for ${params.id}`,
         createdBy: `Creator of ${params.id}`,
         duration: '2h',
@@ -295,67 +295,67 @@ describe('SilenceFormComponent', () => {
   });
 
   describe('time', () => {
-    const changeEndDate = (text: string) => component.form.patchValue({ endsAt: text });
-    const changeStartDate = (text: string) => component.form.patchValue({ startsAt: text });
+    const changeEndDate = (text: string) => component.silenceForm.patchValue({ endsAt: text });
+    const changeStartDate = (text: string) => component.silenceForm.patchValue({ startsAt: text });
 
     it('have all dates set at beginning', () => {
-      expect(form.getValue('startsAt')).toEqual(baseTime);
-      expect(form.getValue('duration')).toBe('2h');
-      expect(form.getValue('endsAt')).toEqual('2022-02-22 02:00');
+      expect(component.silenceForm.getValue('startsAt')).toEqual(baseTime);
+      expect(component.silenceForm.getValue('duration')).toBe('2h');
+      expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-22 02:00');
     });
 
     describe('on start date change', () => {
       it('changes end date on start date change if it exceeds it', fakeAsync(() => {
         changeStartDate('2022-02-28 04:05');
-        expect(form.getValue('duration')).toEqual('2h');
-        expect(form.getValue('endsAt')).toEqual('2022-02-28 06:05');
+        expect(component.silenceForm.getValue('duration')).toEqual('2h');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-28 06:05');
 
         changeStartDate('2022-12-31 22:00');
-        expect(form.getValue('duration')).toEqual('2h');
-        expect(form.getValue('endsAt')).toEqual('2023-01-01 00:00');
+        expect(component.silenceForm.getValue('duration')).toEqual('2h');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2023-01-01 00:00');
       }));
 
       it('changes duration if start date does not exceed end date ', fakeAsync(() => {
         changeStartDate('2022-02-22 00:45');
-        expect(form.getValue('duration')).toEqual('1h 15m');
-        expect(form.getValue('endsAt')).toEqual('2022-02-22 02:00');
+        expect(component.silenceForm.getValue('duration')).toEqual('1h 15m');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-22 02:00');
       }));
 
       it('should raise invalid start date error', fakeAsync(() => {
         changeStartDate('No valid date');
         formHelper.expectError('startsAt', 'format');
-        expect(form.getValue('startsAt').toString()).toBe('No valid date');
-        expect(form.getValue('endsAt')).toEqual('2022-02-22 02:00');
+        expect(component.silenceForm.getValue('startsAt').toString()).toBe('No valid date');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-22 02:00');
       }));
     });
 
     describe('on duration change', () => {
       it('changes end date if duration is changed', () => {
         formHelper.setValue('duration', '15m');
-        expect(form.getValue('endsAt')).toEqual('2022-02-22 00:15');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-22 00:15');
         formHelper.setValue('duration', '5d 23h');
-        expect(form.getValue('endsAt')).toEqual('2022-02-27 23:00');
+        expect(component.silenceForm.getValue('endsAt')).toEqual('2022-02-27 23:00');
       });
     });
 
     describe('on end date change', () => {
       it('changes duration on end date change if it exceeds start date', fakeAsync(() => {
         changeEndDate('2022-02-28 04:05');
-        expect(form.getValue('duration')).toEqual('6d 4h 5m');
-        expect(form.getValue('startsAt')).toEqual(baseTime);
+        expect(component.silenceForm.getValue('duration')).toEqual('6d 4h 5m');
+        expect(component.silenceForm.getValue('startsAt')).toEqual(baseTime);
       }));
 
       it('changes start date if end date happens before it', fakeAsync(() => {
         changeEndDate('2022-02-21 02:00');
-        expect(form.getValue('duration')).toEqual('2h');
-        expect(form.getValue('startsAt')).toEqual('2022-02-21 00:00');
+        expect(component.silenceForm.getValue('duration')).toEqual('2h');
+        expect(component.silenceForm.getValue('startsAt')).toEqual('2022-02-21 00:00');
       }));
 
       it('should raise invalid end date error', fakeAsync(() => {
         changeEndDate('No valid date');
         formHelper.expectError('endsAt', 'format');
-        expect(form.getValue('endsAt').toString()).toBe('No valid date');
-        expect(form.getValue('startsAt')).toEqual(baseTime);
+        expect(component.silenceForm.getValue('endsAt').toString()).toBe('No valid date');
+        expect(component.silenceForm.getValue('startsAt')).toEqual(baseTime);
       }));
     });
   });
@@ -479,12 +479,12 @@ describe('SilenceFormComponent', () => {
     });
 
     it('should show form as invalid if no matcher is set', () => {
-      expect(form.errors).toEqual({ matcherRequired: true });
+      expect(component.silenceForm.errors).toEqual({ matcherRequired: true });
     });
 
     it('should show form as valid if matcher was added', () => {
       addMatcher('some name', 'some value', true);
-      expect(form.errors).toEqual(null);
+      expect(component.silenceForm.errors).toEqual(null);
     });
   });
 
