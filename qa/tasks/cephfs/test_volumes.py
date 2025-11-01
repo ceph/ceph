@@ -5560,7 +5560,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         tests the 'fs subvolume snapshot info' command
         """
 
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot, snap_missing = self._gen_subvol_snap_name(2)
@@ -5586,6 +5586,90 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
             self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on snapshot info of non-existent snapshot")
         else:
             self.fail("expected snapshot info of non-existent snapshot to fail")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_bytes_quota_absence_with_retained_snapshots(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove with snapshot retention
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--retain-snapshots")
+
+        # fetch info
+        subvol_info = json.loads(self._fs_cmd("subvolume", "info", self.volname, subvolume))
+        self.assertEqual(subvol_info["state"], "snapshot-retained",
+                         msg="expected state to be 'snapshot-retained', found '{0}".format(subvol_info["state"]))
+
+        # snapshot info
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        # check bytes_quota value with retained snapshot
+        self.assertNotIn("bytes_quota", snap_info, "bytes_quota key should not be present in metadata of snapshot")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # verify list subvolumes returns an empty list
+        subvolumels = json.loads(self._fs_cmd('subvolume', 'ls', self.volname))
+        self.assertEqual(len(subvolumels), 0)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_bytes_quota_with_quota_value_set(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*100
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "--size", str(osize))
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertEqual(snap_info["bytes_quota"], osize)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_bytes_quota_with_no_quota_value_set(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertEqual(snap_info["bytes_quota"], "infinite")
 
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
@@ -5887,7 +5971,7 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         """
         ensure a retained subvolume can be recreated and further snapshotted
         """
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot1, snapshot2 = self._gen_subvol_snap_name(2)
@@ -10343,7 +10427,7 @@ class TestMisc(TestVolumesHelper):
         subvol_md = ["atime", "bytes_pcent", "bytes_quota", "bytes_used", "created_at", "ctime",
                      "data_pool", "gid", "mode", "mon_addrs", "mtime", "path", "pool_namespace",
                      "type", "uid", "features", "state"]
-        snap_md = ["created_at", "data_pool", "has_pending_clones"]
+        snap_md = ["bytes_quota", "created_at", "data_pool", "has_pending_clones"]
 
         subvolume = self._gen_subvol_name()
         snapshot = self._gen_subvol_snap_name()
