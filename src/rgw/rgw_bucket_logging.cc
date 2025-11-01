@@ -342,7 +342,7 @@ int commit_logging_object(const configuration& conf,
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
   }
-  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf.target_prefix, last_committed); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf.target_prefix, last_committed, false); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to commit logging object '" << obj_name << "' of logging bucket '" <<
       target_bucket->get_key() << "'. ret = " << ret << dendl;
     return ret;
@@ -359,6 +359,7 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
+    bool async,
     std::string* last_committed,
     std::string* err_message) {
   std::string target_bucket_name;
@@ -401,7 +402,7 @@ int rollover_logging_object(const configuration& conf,
       return ret;
     }
   }
-  if (const int ret = target_bucket->commit_logging_object(*old_obj, y, dpp, conf.target_prefix, last_committed); ret < 0) {
+  if (const int ret = target_bucket->commit_logging_object(*old_obj, y, dpp, conf.target_prefix, last_committed, async); ret < 0) {
     if (must_commit) {
       if (err_message) {
         *err_message = fmt::format("Failed to commit logging object of logging bucket '{}'", target_bucket->get_name());
@@ -518,7 +519,7 @@ int log_record(rgw::sal::Driver* driver,
     if (ceph::coarse_real_time::clock::now() > time_to_commit) {
       ldpp_dout(dpp, 20) << "INFO: logging object '" << obj_name << "' exceeded its time, will be committed to logging bucket '" <<
         target_bucket_id << "'" << dendl;
-      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+      if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, false, &objv_tracker, true, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
         set_journal_err(err_message);
         return ret;
       }
@@ -669,7 +670,7 @@ int log_record(rgw::sal::Driver* driver,
   if (ret == -EFBIG) {
     ldpp_dout(dpp, 5) << "WARNING: logging object '" << obj_name << "' is full, will be committed to logging bucket '" <<
       target_bucket->get_key() << "'" << dendl;
-    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
+    if (ret = rollover_logging_object(conf, target_bucket, obj_name, dpp, region, s->bucket, y, true, &objv_tracker, true, nullptr, &err_message); ret < 0 && ret != -ECANCELED) {
       set_journal_err(err_message);
       return ret;
     }
@@ -754,7 +755,7 @@ int get_bucket_id(const std::string& bucket_name, const std::string& tenant_name
   return 0;
 }
 
-int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw_bucket& target_bucket_id, const rgw_bucket& src_bucket_id, bool add, optional_yield y) {
+int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw_bucket& target_bucket_id, const rgw_bucket& src_bucket_id, const std::string& target_prefix, bool add, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> target_bucket;
   const int ret = driver->load_bucket(dpp, target_bucket_id, &target_bucket, y);
   if (ret < 0) {
@@ -762,11 +763,11 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Drive
       "' in order to update logging sources. ret = " << ret << dendl;
     return ret;
   }
-  return update_bucket_logging_sources(dpp, target_bucket, src_bucket_id, add, y);
+  return update_bucket_logging_sources(dpp, target_bucket, src_bucket_id, target_prefix, add, y);
 }
 
-int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr<rgw::sal::Bucket>& bucket, const rgw_bucket& src_bucket_id, bool add, optional_yield y) {
-  return retry_raced_bucket_write(dpp, bucket.get(), [dpp, &bucket, &src_bucket_id, add, y] {
+int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr<rgw::sal::Bucket>& bucket, const rgw_bucket& src_bucket_id, const std::string& target_prefix, bool add, optional_yield y) {
+  auto ret = retry_raced_bucket_write(dpp, bucket.get(), [dpp, &bucket, &src_bucket_id, add, y] {
     auto& attrs = bucket->get_attrs();
     auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES);
     if (iter == attrs.end()) {
@@ -799,6 +800,15 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
       (add ? "added to" : "removed from") << " bucket '" << bucket->get_key() << "'" << dendl;
     return 0;
   }, y);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = bucket->set_bucket_logging_source(target_prefix, dpp, y);
+  if (ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: failed to update logging sources information"
+                        << " for bucket '" << bucket->get_key() << dendl;
+  }
+  return ret;
 }
 
 
@@ -847,6 +857,11 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
             }
             ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name from deleted logging bucket '" <<
               bucket->get_key() << "'" << dendl;
+	    if (const int ret = bucket->remove_bucket_logging_source(conf.target_prefix, dpp, y)){
+              ldpp_dout(dpp, 5) << "WARNING: failed to delete commit object list logging bucket '" <<
+                bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+              continue;
+	    }
           } catch (buffer::error& err) {
             ldpp_dout(dpp, 5) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
               << "' of bucket '" << src_bucket->get_key() << "' during cleanup. error: " << err.what() << dendl;
@@ -870,6 +885,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string* last_committed) {
   std::optional<configuration> conf;
+  std::string target_prefix;
   if (const int ret = retry_raced_bucket_write(dpp, bucket, [dpp, bucket, &conf, remove_attr, y] {
     auto& attrs = bucket->get_attrs();
     if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
@@ -902,6 +918,8 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
     // no logging attribute found
     return 0;
   }
+  target_prefix = conf->target_prefix;
+
   const auto& info = bucket->get_info();
   if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y, last_committed); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
@@ -915,11 +933,23 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
       conf->target_bucket << "' during cleanup. ret = " << ret << dendl;
     return 0;
   }
-  if (const int ret = update_bucket_logging_sources(dpp, driver, target_bucket_id, bucket->get_key(), false, y); ret < 0) {
+  if (const int ret = update_bucket_logging_sources(dpp, driver, target_bucket_id, bucket->get_key(), target_prefix, false, y); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
       bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
     return 0;
   }
+  std::unique_ptr<rgw::sal::Bucket> target_bucket;
+  if (const int ret = driver->load_bucket(dpp, target_bucket_id, &target_bucket, y); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to load logging bucket '" <<
+      conf->target_bucket << "' during source bucket cleanup. ret = " << ret << dendl;
+    return 0;
+  }
+  if (const int ret = target_bucket->remove_bucket_logging_source(conf->target_prefix, dpp, y); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to cleanup source bucket info '" <<
+      bucket->get_key() << "' during source bucket cleanup. ret = " << ret << dendl;
+    return 0;
+  }
+
   ldpp_dout(dpp, 20) << "INFO: successfully updated bucket logging source '" <<
     bucket->get_key() << "' during cleanup"<< dendl;
   return 0;

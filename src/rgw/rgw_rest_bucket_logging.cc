@@ -303,7 +303,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     if (!old_conf) {
       ldpp_dout(this, 20) << "INFO: new logging configuration added to bucket '" << src_bucket_id << "'. configuration: " <<
         configuration.to_json_str() << dendl;
-      if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
+      if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, configuration.target_prefix, true, y); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of logging bucket '" <<
           target_bucket_id << "', ret = " << ret << dendl;
       }
@@ -327,6 +327,7 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
             y,
             false, // rollover should happen even if commit failed
             &objv_tracker,
+	    false,
             &old_obj); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: failed to flush pending logging object '" << obj_name << "'"
             << " to target bucket '" << target_bucket_id << "'. "
@@ -342,11 +343,12 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
           ldpp_dout(this, 1) << "ERROR: failed to parse logging bucket '" << old_conf->target_bucket << "', ret = " << ret << dendl;
           return;
         }
-        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, driver, old_target_bucket_id, src_bucket_id, false, y); ret < 0) {
+	auto target_prefix = configuration.target_prefix;
+        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, driver, old_target_bucket_id, src_bucket_id, target_prefix, false, y); ret < 0) {
           ldpp_dout(this, 1) << "WARNING: failed to remove source bucket '" << src_bucket_id << "' from logging sources of original logging bucket '" <<
             old_target_bucket_id << "', ret = " << ret << dendl;
         }
-        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, true, y); ret < 0) {
+        if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, src_bucket_id, target_prefix, true, y); ret < 0) {
           ldpp_dout(this, 1) << "WARNING: failed to add source bucket '" << src_bucket_id << "' to logging sources of logging bucket '" <<
             target_bucket_id << "', ret = " << ret << dendl;
         }
@@ -430,7 +432,7 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 5) << "INFO: no pending logging object in logging bucket '" << target_bucket_id << "'. new object should be created" << dendl;
     }
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, &old_obj);
+    op_ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, this, region, source_bucket, y, true, &objv_tracker, false, &old_obj);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to flush pending logging object '" << obj_name << "'"
           << " to logging bucket '" << target_bucket_id << "'. "

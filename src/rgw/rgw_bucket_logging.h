@@ -183,6 +183,7 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
+    bool async,
     std::string* last_committed,
     std::string* err_message = nullptr);
 
@@ -234,12 +235,12 @@ int get_bucket_id(const std::string& bucket_name, const std::string& tenant_name
 // update (add or remove) a source bucket from the list of source buckets in the target bucket
 // use this function when the target bucket is already loaded
 int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr<rgw::sal::Bucket>& bucket, 
-    const rgw_bucket& src_bucket, bool add, optional_yield y);
+    const rgw_bucket& src_bucket, const std::string& target_prefix, bool add, optional_yield y);
 
 // update (add or remove) a source bucket from the list of source buckets in the target bucket
 // use this function when the target bucket is not known and needs to be loaded
 int update_bucket_logging_sources(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, const rgw_bucket& target_bucket_id, 
-    const rgw_bucket& src_bucket_id, bool add, optional_yield y);
+    const rgw_bucket& src_bucket_id, const std::string& target_prefix, bool add, optional_yield y);
 
 // when source bucket is deleted, all pending log objects should be comitted to the log bucket
 // when the target bucket is deleted, all pending log objects should be deleted, as well as the object holding the pending log object name
