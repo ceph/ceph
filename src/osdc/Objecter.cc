@@ -658,9 +658,10 @@ class CB_DoWatchError {
   boost::intrusive_ptr<Objecter::LingerOp> info;
   bs::error_code ec;
 public:
-  CB_DoWatchError(Objecter *o, Objecter::LingerOp *i,
+  CB_DoWatchError(Objecter *o,
+		  boost::intrusive_ptr<Objecter::LingerOp> i,
 		  bs::error_code ec)
-    : objecter(o), info(i), ec(ec) {
+    : objecter(o), info(std::move(i)), ec(ec) {
     info->_queued_async();
   }
   void operator()() {
@@ -813,7 +814,22 @@ void Objecter::_linger_cancel(LingerOp *info)
   }
 }
 
+auto Objecter::linger_by_cookie(uint64_t cookie)
+  -> boost::intrusive_ptr<LingerOp>
+{
+  auto lock = std::shared_lock{rwlock};
+  return _linger_by_cookie(cookie);
+}
 
+auto Objecter::_linger_by_cookie(uint64_t cookie)
+  -> boost::intrusive_ptr<LingerOp>
+{
+  auto info = reinterpret_cast<LingerOp*>(cookie);
+  if (!linger_ops_set.contains(info)) {
+    return nullptr; // invalid or canceled op
+  }
+  return info;
+}
 
 Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
 					      const object_locator_t& oloc,
@@ -920,8 +936,10 @@ struct CB_DoWatchNotify {
   Objecter *objecter;
   boost::intrusive_ptr<Objecter::LingerOp> info;
   boost::intrusive_ptr<MWatchNotify> msg;
-  CB_DoWatchNotify(Objecter *o, Objecter::LingerOp *i, MWatchNotify *m)
-    : objecter(o), info(i), msg(m) {
+  CB_DoWatchNotify(Objecter *o,
+                   boost::intrusive_ptr<Objecter::LingerOp> i,
+                   MWatchNotify *m)
+    : objecter(o), info(std::move(i)), msg(m) {
     info->_queued_async();
   }
   void operator()() {
@@ -936,8 +954,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     return;
   }
 
-  LingerOp *info = reinterpret_cast<LingerOp*>(m->cookie);
-  if (linger_ops_set.count(info) == 0) {
+  boost::intrusive_ptr info = _linger_by_cookie(m->cookie);
+  if (!info) {
     ldout(cct, 7) << __func__ << " cookie " << m->cookie << " dne" << dendl;
     return;
   }
@@ -946,8 +964,8 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
     if (!info->last_error) {
       info->last_error = bs::error_code(ENOTCONN, osd_category());
       if (info->handle) {
-	asio::defer(finish_strand, CB_DoWatchError(this, info,
-							  info->last_error));
+	boost::system::error_code ec = info->last_error;
+	asio::defer(finish_strand, CB_DoWatchError(this, std::move(info), ec));
       }
     }
   } else if (!info->is_watch) {
@@ -968,7 +986,7 @@ void Objecter::handle_watch_notify(MWatchNotify *m)
       info->on_notify_finish = nullptr;
     }
   } else {
-    asio::defer(finish_strand, CB_DoWatchNotify(this, info, m));
+    asio::defer(finish_strand, CB_DoWatchNotify(this, std::move(info), m));
   }
 }
 
