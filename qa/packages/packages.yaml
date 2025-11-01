@@ -5,6 +5,8 @@ ceph:
   - cephadm
   - ceph-mds
   - ceph-mgr
+  - ceph-osd
+  - ceph-osd-classic
   - ceph-common
   - ceph-fuse
   - ceph-test
@@ -25,6 +27,7 @@ ceph:
   - ceph-mgr-dbg
   - ceph-mon-dbg
   - ceph-osd-dbg
+  - ceph-osd-classic-dbg
   - ceph-test-dbg
   - libcephfs2-dbg
   - librados2-dbg
@@ -47,6 +50,8 @@ ceph:
   - ceph-mgr-diskprediction-local
   - ceph-mgr-rook
   - ceph-mgr-cephadm
+  - ceph-osd
+  - ceph-osd-classic
   - ceph-fuse
   - ceph-volume
   - librados-devel
@@ -71,6 +76,7 @@ ceph:
   - ceph-mds-debuginfo
   - ceph-mon-debuginfo
   - ceph-osd-debuginfo
+  - ceph-osd-classic-debuginfo
   - ceph-fuse-debuginfo
   - librados-devel-debuginfo
   - libcephfs2-debuginfo
