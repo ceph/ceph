@@ -31,6 +31,7 @@
 #include "os/ObjectStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 #include "os/bluestore/BlueFS.h"
 #endif
 #include "include/Context.h"
