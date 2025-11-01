@@ -9,21 +9,21 @@
 
 struct cls_refcount_get_op {
   std::string tag;
-  bool implicit_ref;
+  std::string src_tag;
 
-  cls_refcount_get_op() : implicit_ref(false) {}
+  cls_refcount_get_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
-    encode(implicit_ref, bl);
+    encode(src_tag, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
-    decode(implicit_ref, bl);
+    decode(src_tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -33,22 +33,18 @@ WRITE_CLASS_ENCODER(cls_refcount_get_op)
 
 struct cls_refcount_put_op {
   std::string tag;
-  bool implicit_ref; // assume wildcard reference for
-                          // objects without a std::set ref
 
-  cls_refcount_put_op() : implicit_ref(false) {}
+  cls_refcount_put_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
     encode(tag, bl);
-    encode(implicit_ref, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
-    decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
 
@@ -80,20 +76,15 @@ struct cls_refcount_set_op {
 WRITE_CLASS_ENCODER(cls_refcount_set_op)
 
 struct cls_refcount_read_op {
-  bool implicit_ref; // assume wildcard reference for
-                          // objects without a std::set ref
-
-  cls_refcount_read_op() : implicit_ref(false) {}
+  cls_refcount_read_op() {}
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(implicit_ref, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
 
