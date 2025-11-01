@@ -531,6 +531,13 @@ public:
     return devices_by_id[addr.get_device_id()]->read(addr, len, out);
   }
 
+  read_ertr::future<> readv(
+    paddr_t addr,
+    std::vector<bufferptr> ptrs) {
+    assert(devices_by_id[addr.get_device_id()] != nullptr);
+    return devices_by_id[addr.get_device_id()]->readv(addr, std::move(ptrs));
+  }
+
   void mark_space_used(paddr_t addr, extent_len_t len) {
     background_process.mark_space_used(addr, len);
   }
