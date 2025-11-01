@@ -42,7 +42,8 @@ def mgr_cmd_wrap(f):
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     COMMANDS = [
         {
-            'cmd': 'fs volume ls',
+            'cmd': 'fs volume ls '
+                   'name=vol_filter,type=CephString,req=false',
             'desc': "List volumes",
             'perm': 'r'
         },
@@ -79,7 +80,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         },
         {
             'cmd': 'fs subvolumegroup ls '
-            'name=vol_name,type=CephString ',
+            'name=vol_name,type=CephString '
+            'name=group_filter,type=CephString,req=false',
             'desc': "List subvolumegroups",
             'perm': 'r'
         },
@@ -131,7 +133,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolume ls '
                    'name=vol_name,type=CephString '
-                   'name=group_name,type=CephString,req=false ',
+                   'name=group_name,type=CephString,req=false '
+                   'name=subvol_filter,type=CephString,req=false',
             'desc': "List subvolumes",
             'perm': 'r'
         },
@@ -365,7 +368,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         {
             'cmd': 'fs subvolumegroup snapshot ls '
                    'name=vol_name,type=CephString '
-                   'name=group_name,type=CephString ',
+                   'name=group_name,type=CephString '
+                   'name=snap_filter,type=CephString,req=false',
             'desc': "List subvolumegroup snapshots",
             'perm': 'r'
         },
@@ -390,7 +394,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'cmd': 'fs subvolume snapshot ls '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
-                   'name=group_name,type=CephString,req=false ',
+                   'name=group_name,type=CephString,req=false '
+                   'name=snap_filter,type=CephString,req=false',
             'desc': "List subvolume snapshots",
             'perm': 'r'
         },
@@ -725,7 +730,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_ls(self, inbuf, cmd):
-        return self.vc.list_fs_volumes()
+        vol_filter = cmd.get('vol_filter', None)
+        return self.vc.list_fs_volumes(vol_filter)
 
     @mgr_cmd_wrap
     def _cmd_fs_volume_rename(self, inbuf, cmd):
@@ -773,7 +779,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_ls(self, inbuf, cmd):
-        return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'])
+        return self.vc.list_subvolume_groups(vol_name=cmd['vol_name'],
+                                             group_filter=cmd.get('group_filter', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_exist(self, inbuf, cmd):
@@ -853,7 +860,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_ls(self, inbuf, cmd):
         return self.vc.list_subvolumes(vol_name=cmd['vol_name'],
-                                       group_name=cmd.get('group_name', None))
+                                       group_name=cmd.get('group_name', None),
+                                       subvol_filter=cmd.get('subvol_filter', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_getpath(self, inbuf, cmd):
@@ -968,7 +976,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_group_snapshots(vol_name=cmd['vol_name'],
-                                                      group_name=cmd['group_name'])
+                                                      group_name=cmd['group_name'],
+                                                      snap_filter=cmd.get('snap_filter', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
@@ -1029,7 +1038,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_subvolume_snapshot_ls(self, inbuf, cmd):
         return self.vc.list_subvolume_snapshots(vol_name=cmd['vol_name'],
                                                 sub_name=cmd['sub_name'],
-                                                group_name=cmd.get('group_name', None))
+                                                group_name=cmd.get('group_name', None),
+                                                snap_filter=cmd.get('snap_filter', None))
 
     @mgr_cmd_wrap
     def _cmd_fs_subvolume_snapshot_getpath(self, inbuf, cmd):
