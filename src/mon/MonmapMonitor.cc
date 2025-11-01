@@ -1156,8 +1156,8 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 	err = -EINVAL;
         goto reply_no_propose;
       }
-      string new_crush_rule;
-      if (!cmd_getval(cmdmap, "new_crush_rule", new_crush_rule)) {
+      string stretch_crush_rule;
+      if (!cmd_getval(cmdmap, "stretch_crush_rule", stretch_crush_rule)) {
 	ss << "must specify a new crush rule that spreads out copies over multiple sites";
 	err = -EINVAL;
         goto reply_no_propose;
@@ -1183,30 +1183,30 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       int errcode = 0;
 
       mon.osdmon()->try_enable_stretch_mode_pools(ss, &okay, &errcode,
-						   &pools, new_crush_rule);
+						   &pools, stretch_crush_rule);
       if (!okay) {
 	err = errcode;
         goto reply_no_propose;
       }
       try_enable_stretch_mode(ss, &okay, &errcode, false,
-			      tiebreaker_mon, dividing_bucket);
+			      tiebreaker_mon, dividing_bucket, stretch_crush_rule);
       if (!okay) {
 	err = errcode;
         goto reply_no_propose;
       }
       mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, false,
-					     dividing_bucket, 2, pools, new_crush_rule);
+					     dividing_bucket, 2, pools, stretch_crush_rule);
       if (!okay) {
 	err = errcode;
         goto reply_no_propose;
       }
       // everything looks good, actually commit the changes!
       try_enable_stretch_mode(ss, &okay, &errcode, true,
-			      tiebreaker_mon, dividing_bucket);
+			      tiebreaker_mon, dividing_bucket, stretch_crush_rule);
       mon.osdmon()->try_enable_stretch_mode(ss, &okay, &errcode, true,
 					     dividing_bucket,
 					     2, // right now we only support 2 sites
-					     pools, new_crush_rule);
+					     pools, stretch_crush_rule);
       ceph_assert(okay == true);
     }
     request_proposal(mon.osdmon());
@@ -1242,6 +1242,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
     pending_map.stretch_mode_enabled = false;
     pending_map.tiebreaker_mon = "";
+    pending_map.stretch_crush_rule = "";
     pending_map.disallowed_leaders.clear();
     pending_map.stretch_marked_down_mons.clear();
     pending_map.last_changed = ceph_clock_now();
@@ -1277,7 +1278,8 @@ reply_propose:
 void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					    int *errcode, bool commit,
 					    const string& tiebreaker_mon,
-					    const string& dividing_bucket)
+					    const string& dividing_bucket,
+              const string& stretch_crush_rule)
 {
   dout(20) << __func__ << dendl;
   *okay = false;
@@ -1346,6 +1348,7 @@ void MonmapMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     return;
   }
   if (commit) {
+    pending_map.stretch_crush_rule = stretch_crush_rule;
     pending_map.disallowed_leaders.insert(tiebreaker_mon);
     pending_map.tiebreaker_mon = tiebreaker_mon;
     pending_map.stretch_mode_enabled = true;
