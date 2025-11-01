@@ -161,10 +161,13 @@ def _run_tests(ctx, client, tests):
                 # hack: the git_url is always ceph-ci or ceph
                 git_url = teuth_config.get_ceph_git_url()
                 repo_name = 'ceph.git'
-                if git_url.count('ceph-ci'):
+                branch_name = config.get('branch', 'main')
+                # use ceph-ci.git only if branch is not 'main'
+                # instead use ceph.git main branch
+                if git_url.count('ceph-ci') and branch_name != 'main':
                     repo_name = 'ceph-ci.git'
                 url = config['test'].format(
-                    branch=config.get('branch', 'master'),
+                    branch=branch_name,
                     repo=repo_name,
                     )
                 test_path = os.path.join(tmp_dir, command)
