@@ -1,0 +1,3 @@
+overrides:
+  ganesha-client:
+      version: 4.2

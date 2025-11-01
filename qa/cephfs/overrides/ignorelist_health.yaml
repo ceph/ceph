@@ -28,3 +28,5 @@ overrides:
       - MGR_MODULE_ERROR
       - OSD_DOWN
       - osd.* is down
+      - OSD_HOST_DOWN
+      - OSD_ROOT_DOWN

@@ -360,6 +360,42 @@ class Client:
             'squash': self.squash
         }
 
+class CephBlock:
+    def __init__(self,
+                 is_async: bool,
+                 is_zerocopy: bool):
+        self.is_async = is_async
+        self.is_zerocopy = is_zerocopy
+
+    @classmethod
+    def from_ceph_block(cls, ceph_block: RawBlock) -> 'CephBlock':
+        return cls(ceph_block.values.get('async', False),
+                   ceph_block.values.get('zerocopy', False))
+
+    def to_ceph_block(self) -> RawBlock:
+        values = {
+            'async': self.is_async,
+            'zerocopy': self.is_zerocopy
+        }
+        result = RawBlock("CEPH", values=values)
+        return result
+
+    @classmethod
+    def from_dict(cls, ex_dict: Dict[str, Any]) -> 'Export':
+        return cls(ex_dict.get('async', False),
+                   ex_dict.get('zerocopy', False))
+
+    def to_dict(self) -> Dict[str, Any]:
+        values = {
+            'async': self.is_async,
+            'zerocopy': self.is_zerocopy
+        }
+        return values
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, CephBlock):
+            return False
+        return self.to_dict() == other.to_dict()
 
 class Export:
     def __init__(
@@ -375,7 +411,7 @@ class Export:
             transports: List[str],
             fsal: FSAL,
             clients: Optional[List[Client]] = None,
-            sectype: Optional[List[str]] = None) -> None:
+            sectype: Optional[List[str]] = None):
         self.export_id = export_id
         self.path = path
         self.fsal = fsal
