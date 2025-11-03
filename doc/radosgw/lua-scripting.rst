@@ -348,7 +348,7 @@ The script's return value determines how RGW proceeds with the request:
 
 Return Value Context
 ~~~~~~~~~~~~~~~~~~~~
-The return value from the Lua script is captured and interpreted by the
+The return value from the Lua script is handled only in `prerequest` context, and ignore in any other context.
 RGW request-processing context that executed it.
 
 Background Context
