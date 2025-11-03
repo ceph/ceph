@@ -27,8 +27,6 @@
 #include "mon/Monitor.h"
 #include "mon/HealthMonitor.h"
 #include "mon/OSDMonitor.h"
-#include "osd/OSDMap.h"
-
 
 #include "messages/MMonCommand.h"
 #include "messages/MMonHealthChecks.h"
@@ -751,9 +749,6 @@ bool HealthMonitor::check_leader_health()
   // STRETCH MODE
   check_mon_crush_loc_stretch_mode(&next);
 
-  //CHECK_ERASURE_CODE_PROFILE
-  check_erasure_code_profiles(&next);
-
   if (next != leader_checks) {
     changed = true;
     leader_checks = next;
@@ -1173,35 +1168,4 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     auto& d = checks->add("MON_NETSPLIT", HEALTH_WARN, ss.str(), details.size());
     d.detail.swap(details);
   }
-}
-
-void HealthMonitor::check_erasure_code_profiles(health_check_map_t *checks)
-{
-  list<string> details;
-  
-  //This is a loop that will go through all the erasure code profiles 
-  for (auto& erasure_code_profile : mon.osdmon()->osdmap.get_erasure_code_profiles()) {
-    dout(20) << "check_erasure_code_profiles" << "checking" << erasure_code_profile << dendl;
-
-    //This will look at the erasure code profiles technique is blaum_roth and will check that the w key exists 
-      if (erasure_code_profile.second.at("technique") == "blaum_roth" && 
-      erasure_code_profile.second.count("w") == 1) {
-        //Read the w value from the profile and convert it to an int 
-        int w = std::stoi(erasure_code_profile.second.at("w"));
-
-        if (!mon.is_prime(w + 1)) {
-          ostringstream ds;
-          ds << "w+1="<< w+1 << " for the EC profile " << erasure_code_profile.first 
-            << " is not prime and could lead to data corruption";
-          details.push_back(ds.str());
-      }
-    }
-  }
-  if (!details.empty()) {
-            ostringstream ss;
-            ss << "1 or more EC profiles have a w value such that w+1 is not prime."
-              << " This can result in data corruption";
-            auto &d = checks->add("BLAUM_ROTH_W_IS_NOT_PRIME", HEALTH_WARN, ss.str(), details.size());
-            d.detail.swap(details);
-        }
 }
