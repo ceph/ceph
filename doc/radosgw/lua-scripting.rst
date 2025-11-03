@@ -344,7 +344,7 @@ Request Blocking and Return Values
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 The script's return value determines how RGW proceeds with the request:
 - To block the request: The script must return the value ``RGW_ABORT_REQUEST``. RGW interprets this as ``-EPERM`` and will stop processing the request.
-- To continue the request: Any other return value will be treated as success.
+- To continue the request: No return value, or any other return value or type will be treated as success.
 
 Return Value Context
 ~~~~~~~~~~~~~~~~~~~~
