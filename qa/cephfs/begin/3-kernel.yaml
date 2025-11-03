@@ -2,6 +2,8 @@
 # all nodes (also, the kernel is "distro" when the --kernel option is not set).
 # We don't generally want to use a custom kernel for all tests, so unset it.
 # The k-testing.yaml will set it, if given, for only the client nodes.
+# When the --kernel option is "none" there is no "kernel" dictionary created
+# in the job base config and there is no need to unset anything.
 #
 # Allow overriding this by using a branch ending in "-all".
 
