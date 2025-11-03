@@ -829,11 +829,11 @@ int execute(
       ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
       rc = -1;
     }
-    if (lua_isnumber(L, -1)) {
+    if (lua_isinteger(L, -1)) {
       script_return_code = static_cast<int>(lua_tointeger(L, -1));
       ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
     } else {
-      ldpp_dout(s, 20) << "Lua script executed, but did not return a number. Ignoring return code." << dendl;
+      ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
     }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
