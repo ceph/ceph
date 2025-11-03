@@ -38,6 +38,8 @@ Client Config Reference
 .. confval:: client_caps_release_delay
 .. confval:: client_debug_force_sync_read
 .. confval:: client_dirsize_rbytes
+.. confval:: client_fscrypt_as
+.. confval:: client_fscrypt_dummy_encryption
 .. confval:: client_max_inline_size
 .. confval:: client_metadata
 .. confval:: client_mount_gid
