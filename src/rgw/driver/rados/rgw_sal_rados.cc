@@ -3079,6 +3079,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                           	  CephContext* cct,
                                   std::optional<uint64_t> days,
 				  bool& in_progress,
+				  uint64_t& size,
                                   const DoutPrefixProvider* dpp, 
                                   optional_yield y)
 {
@@ -3154,7 +3155,7 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
    * avoid any races */
   ret = store->getRados()->restore_obj_from_cloud(tier_ctx, *rados_ctx,
                                 bucket->get_info(), get_obj(),
-                                tier_config, days, in_progress, dpp, y);
+                                tier_config, days, in_progress, size, dpp, y);
 
   if (ret < 0) { //failed to restore
     ldpp_dout(dpp, 0) << "Restoring object(" << get_key() << ") from the cloud endpoint(" << endpoint << ") failed, ret=" << ret << dendl;

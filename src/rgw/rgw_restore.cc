@@ -514,9 +514,9 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
     goto done;
   }
 
+  uint64_t size;
   // now go ahead with restoring object
-  // XXX: first check if its already restored?
-  ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress,
+  ret = obj->restore_obj_from_cloud(bucket.get(), tier.get(), cct, days, in_progress, size, 
 		  		      this, y);
   if (ret < 0) {
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of object(" << obj->get_key() << ") failed" << ret << dendl;	  
@@ -540,7 +540,6 @@ int Restore::process_restore_entry(RestoreEntry& entry, optional_yield y)
       etag = rgw_bl_str(attr_iter->second);
     }
 
-    uint64_t size = ret;
     // send notification in case the restore is successfully completed
     send_notification(this, driver, obj.get(), bucket.get(), etag, size,
                       obj->get_key().instance,
