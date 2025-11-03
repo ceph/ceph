@@ -620,9 +620,9 @@ found above and elsewhere within this documentation.
 
 
 
-.. _Ceph blog: https://ceph.com/community/blog/
-.. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
-.. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
+.. _Ceph blog: https://ceph.io/en/news/blog/
+.. _Ceph Write Throughput 1: https://ceph.io/en/news/blog/2013/ceph-performance-part-1-disk-controller-write-throughput/
+.. _Ceph Write Throughput 2: https://ceph.io/en/news/blog/2013/ceph-performance-part-2-write-throughput-without-ssd-journals/
 .. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations
 .. _Storage Networking Industry Association's Total Cost of Ownership calculator: https://www.snia.org/forums/cmsi/programs/TCOcalc
