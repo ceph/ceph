@@ -1155,7 +1155,7 @@ void AsioFrontend::on_accept(Listener& l, tcp::socket stream)
 #ifdef __cpp_lib_atomic_shared_ptr
     const auto ssl_ctx = ssl_context.load(std::memory_order_acquire);
 #else
-    const auto ssl_ctx = std::atomic_load_excplicit(&ssl_context, std::memory_order_acquire);
+    const auto ssl_ctx = std::atomic_load_explicit(&ssl_context, std::memory_order_acquire);
 #endif
     boost::asio::spawn(make_strand(context), std::allocator_arg, make_stack_allocator(),
       [this, s=std::move(stream), ssl_ctx] (boost::asio::yield_context yield) mutable {
