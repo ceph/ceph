@@ -348,9 +348,10 @@ The script's return value determines how RGW proceeds with the request:
 
 Return Value Context
 ~~~~~~~~~~~~~~~~~~~~
-The return value from the Lua script is handled only in `prerequest` context, and ignore in any other context.
+The return value from the Lua script is handled only in ``prerequest`` context, and ignore in any other context.
 RGW request-processing context that executed it.
-
+The HTTP return code is 403 (Forbidden) by default when a request is blocked by Lua. But this value can be changed using ``Request.Response.HTTPStatusCode`` and ``Request.Response.HTTPStatus``.
+If a request is aborted this way, the ``data`` and ``postrequest`` context will also be aborted.
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.
