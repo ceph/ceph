@@ -948,6 +948,14 @@ int ObjectDirectory::zrank(const DoutPrefixProvider* dpp, CacheObj* object, cons
 
 D4NTransaction::CloneStatus D4NTransaction::clone_key_for_transaction(std::string key_source, std::string key_destination, std::shared_ptr<connection> conn, optional_yield y)
 {
+  // Defensive check: Only clone keys if transaction is properly started
+  if(trxState != TrxState::STARTED) {
+    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__
+                              << "() ERROR: Transaction not started (trxState != STARTED). "
+                              << "Cannot clone key from " << key_source << " to " << key_destination << dendl;
+    return CloneStatus::SOURCE_NOT_EXIST;
+  }
+
   //running the loaded script
   int rc = 0;
   try {
@@ -1007,6 +1015,11 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 	  key = m_temp_key_read;
 	}
 	else if(op == redis_operation_type::WRITE_OP){
+	  // Log transaction start time on first write operation (debug)
+	  if(m_temp_write_keys.empty()) {
+	    log_transaction_start_time(dpp, conn, y);
+	  }
+
 	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_write << dendl;
 
 	  auto status = clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
@@ -1111,13 +1124,25 @@ int save_trx_info(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn
 
 void D4NTransaction::start_trx()
 {
-	
+
   if(trxState == TrxState::STARTED) {
     ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "(): Transaction state should not be active (STARTED)" << dendl;
     return;
   }
   // NOTE: check whether at this point its better to get the transaction id from the redis server or generate a unique id.
   trxState = TrxState::STARTED;
+}
+
+void D4NTransaction::cancel_transaction(const DoutPrefixProvider* dpp)
+{
+  if(trxState == TrxState::STARTED) {
+    if(dpp) {
+      ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__
+                        << "() Cancelling transaction (read-only operation)" << dendl;
+    }
+    trxState = TrxState::CANCELLED;
+    clear_temp_keys();
+  }
 }
 
 //the lua sript should check whether the destination key exists or not.
@@ -1306,6 +1331,23 @@ local function save_trx_info(key, value)
   redis.call('HSET', "trx_debug", key, value)
 end
 
+-- Log successful commit for test validation
+-- Stores: seq-id (for the purpose of logging only), baseKey, timestamp
+-- Uses sorted set with timestamp as score for chronological ordering, later its possible to idenify whether seq-id order is corrolated with time order.
+local function log_commit(baseKey)
+  -- Get independent sequence ID
+  local seq_id = redis.call('INCR', 'trx_commit_seq')
+
+  -- Get timestamp
+  local time = redis.call('TIME')
+  local timestamp = time[1] .. "." .. time[2]
+
+  -- Store in sorted set: score=timestamp, value=seq_id|baseKey|timestamp
+  local entry = seq_id .. "|" .. baseKey .. "|" .. timestamp
+  redis.call('ZADD', 'trx_commit_log', timestamp, entry)
+
+  log_message("Logged commit: seq=" .. seq_id .. " key=" .. baseKey .. " time=" .. timestamp)
+end
 
 -- delete keys from the input keys(set by D4N application), delete by suffix
 local function deleteKeysWithSuffix(suffix)
@@ -1318,6 +1360,8 @@ local function deleteKeysWithSuffix(suffix)
 end
 
 local function rename_all_write_keys()
+-- the rename of keys is actually committing the transaction changes.
+
     for _, key in ipairs(KEYS) do
       if key:match("_temp_write$") then
 	local baseKey = key:gsub("_%d%d%d%d%d_temp_write$", "")
@@ -1325,12 +1369,30 @@ local function rename_all_write_keys()
 	local tempWriteKey = baseKey .. trx_id .. "temp_write"
 	local testWriteKey = baseKey .. trx_id .. "temp_test_write"
 	if redis.call('EXISTS', tempWriteKey) ~= 0 then
+		-- Check if this was a new object creation (no test_write key exists)
+		local testWriteExists = redis.call('EXISTS', testWriteKey)
+		log_message("Checking rename for baseKey: " .. baseKey .. " testWriteKey exists: " .. testWriteExists)
+		if testWriteExists == 0 then
+			-- For new object creation, check if another transaction created baseKey first
+			local baseKeyExists = redis.call('EXISTS', baseKey)
+			log_message("New object creation detected for baseKey: " .. baseKey .. " baseKey exists: " .. baseKeyExists)
+			if baseKeyExists == 1 then
+				-- the LUA script execution is isolated, so no other transaction can create the baseKey during this check
+				-- so.. in case basekey exists, it means another transaction created it first(upon committing its changes)
+				log_message("Concurrent creation detected for baseKey: " .. baseKey .. " - another transaction created it first")
+				return false  -- Race condition detected, abort transaction
+			end
+		end
 		-- the clone key replaces the original key
+		log_message("Renaming " .. tempWriteKey .. " to " .. baseKey)
 	  redis.call('RENAME', tempWriteKey, baseKey)
+	  -- Log this commit for test validation
+	  log_commit(baseKey)
 	end
 	redis.call('DEL', testWriteKey)
       end
     end
+    return true  -- All renames successful
 end
 
 log_message("START: end transaction")
@@ -1348,28 +1410,35 @@ for _, key in ipairs(KEYS) do
 	local baseKey = key:gsub("_%d%d%d%d%d_temp_read$", "")
 
 	if redis.call('EXISTS', baseKey) == 0 then
-	  log_message("base key does not exist for <KEY>_temp_read")
+	  -- Read-after-delete conflict: we read a key that was later deleted
+	  log_message("Read-after-delete conflict: base key does not exist for <KEY>_temp_read - baseKey: " .. baseKey)
+	  allComparisonsSuccessful = false
 	  break
 	end
 
 -- cut the transaction id from the key
 	local trx_id = string.sub(key,string.find(key,"_%d%d%d%d%d_"))
+
+	-- Read validation: check if key was modified by another transaction
+	-- NOTE: We MUST always validate, even if this transaction is also writing to the same key.
+	-- The _temp_read and _temp_write are SEPARATE keys, so no actual read-your-own-write occurs.
+	-- Validation detects if ANOTHER transaction modified the baseKey between our snapshot and commit.
         local values1 = getKeyValues(key)
         local values2 = getKeyValues(baseKey)
 	log_message("read operation" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
 
-	log_message("compring 2 keys of baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
+	log_message("comparing 2 keys of baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
         if not compareTables(values1, values2) then
 -- in case the read key is not the same as the base key, it means the base key has been written to
 -- the transaction should be rolled back
-	      log_message("<KEY>_temp_read **NOT EQUAL** to " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
-	      allComparisonsSuccessful = false
-	      log_message("allComparisonsSuccessful is false, breaking the loop" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
+	    log_message("<KEY>_temp_read **NOT EQUAL** to " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
+	    allComparisonsSuccessful = false
+	    log_message("allComparisonsSuccessful is false, breaking the loop" .. " baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
         end
 
 	if allComparisonsSuccessful == true then
 	  log_message("<KEY>_temp_read is OK " .. "baseKey: " .. baseKey .. " key: " .. key .. " trx_id: " .. trx_id)
-	end	
+	end
 
     elseif key:match("_temp_test_write$") then
 	    -- skip the _temp_test_write keys, the _temp_write keys is the one that should be processed
@@ -1414,10 +1483,37 @@ if allComparisonsSuccessful == true then
 -- the rename of the write keys should be done only if all keys are consistent
 
 	log_message("allComparisonsSuccessful is true, deleting all temp-read keys")
-	deleteKeysWithSuffix("_temp_read") 
+	deleteKeysWithSuffix("_temp_read")
 
 	log_message("allComparisonsSuccessful is true, renaming all write keys")
-	rename_all_write_keys()
+	local rename_success = rename_all_write_keys()
+
+	if not rename_success then
+		-- Concurrent creation race detected during rename
+		log_message("Concurrent creation race detected - rolling back transaction")
+		deleteKeysWithSuffix("_temp_write")
+		deleteKeysWithSuffix("_temp_test_write")
+		return "false"
+	end
+
+	-- Log transaction commit time (debug)
+	-- Extract trx_id from first key that matches pattern
+	local trx_id = nil
+	for _, key in ipairs(KEYS) do
+		local match = string.match(key, "_(%d%d%d%d%d)_temp")
+		if match then
+			trx_id = match
+			break
+		end
+	end
+
+	if trx_id then
+		local time = redis.call('TIME')
+		local commit_timestamp = time[1] .. "." .. time[2]
+		redis.call('HSET', 'trx_timing', 'trx_' .. trx_id .. '_commit', commit_timestamp)
+		log_message("Logged commit time for trx_" .. trx_id .. ": " .. commit_timestamp)
+	end
+
 --	return {true, "Processing complete - commit transaction"}
 	return "true"
 else
@@ -1425,7 +1521,7 @@ else
 	log_message("allComparisonsSuccessful is false")
 	deleteKeysWithSuffix("_temp_write")
 	deleteKeysWithSuffix("_temp_test_write")
-	deleteKeysWithSuffix("_temp_read") 
+	deleteKeysWithSuffix("_temp_read")
 --	return {false, "Processing failed - rolling back"}
 	return "false"
 end
@@ -1462,6 +1558,52 @@ std::string D4NTransaction::get_trx_id(const DoutPrefixProvider* dpp,std::shared
     }
 
 return m_trx_id;
+}
+
+void D4NTransaction::log_transaction_start_time(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
+{
+  //TODO : add debug flag to enable/disable this check.
+  // Debug function: it logs transaction start time to Valkey for timing analysis
+  // Stores in trx_timing hash: trx_<trx_id>_start -> timestamp
+
+  if(m_trx_id.empty()) {
+    ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__ << "() ERROR: trx_id is empty" << dendl;
+    return;
+  }
+
+  try {
+    boost::system::error_code ec;
+    response<std::vector<std::string>, ignore_t> resp;
+    request req;
+
+    // Get current timestamp from Redis
+    req.push("TIME");
+    // Store start timestamp
+    req.push("HSET", "trx_timing", "trx_" + m_trx_id + "_start", "PLACEHOLDER");
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << ec.what() << dendl;
+      return;
+    }
+
+    // Extract timestamp from TIME command response
+    auto time_result = std::get<0>(resp);
+    if(time_result.has_value() && time_result.value().size() >= 2) {
+      std::string timestamp = time_result.value()[0] + "." + time_result.value()[1];
+
+      // Now update with actual timestamp
+      request req2;
+      response<ignore_t> resp2;
+      req2.push("HSET", "trx_timing", "trx_" + m_trx_id + "_start", timestamp);
+      redis_exec(conn, ec, req2, resp2, y);
+
+      ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__ << "() logged start time for trx_" << m_trx_id << ": " << timestamp << dendl;
+    }
+  } catch (std::exception &e) {
+    ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
+  }
 }
 
 std::string D4NTransaction::get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y)
@@ -1636,9 +1778,9 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       std::string status = result.value();
       ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: LUA script returned status=" << status << dendl;
       if(status == "false") {//TODO consider returning a specific error code per type of failure. (i.e , read conflict, write conflict, etc)
-	//the transaction had failed, it was rolled back.
+	//the transaction had failed, it was rolled back due to concurrent modification conflict.
 	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << " status= " << status <<  dendl;
-	return -EINVAL;
+	return -ERR_PRECONDITION_FAILED;
       }
 
     } catch (std::exception &e) {
@@ -1715,9 +1857,14 @@ int BlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& block,
 
 int BlockDirectory::set(const DoutPrefixProvider* dpp, CacheBlock* block, optional_yield y, Pipeline* pipeline)
 {
-  /* For existing keys, call get method beforehand. 
+  /* For existing keys, call get method beforehand.
      Sets completely overwrite existing values. */
-  std::string key = build_index(block);
+
+  // Add transaction handling for write operations
+  RedisTransactionHandling trx_handler(this, dpp, conn, block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+  //the key may be temp key in case of transaction, it build of original key + trx_id + _temp_write
+  std::string key = trx_handler.get_redis_key();
+
   ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
   std::vector<std::string> redisValues;
@@ -1755,7 +1902,11 @@ int BlockDirectory::set(const DoutPrefixProvider* dpp, std::vector<CacheBlock>& 
 {
   request req;
   for (auto block : blocks) {
-    std::string key = build_index(&block);
+    // Add transaction handling for write operations
+    RedisTransactionHandling trx_handler(this, dpp, conn, &block, D4NTransaction::redis_operation_type::WRITE_OP, y);
+    //the key may be temp key in case of transaction
+    std::string key = trx_handler.get_redis_key();
+
     ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): index is: " << key << dendl;
 
     //std::string hosts;

@@ -167,7 +167,8 @@ public:
     enum class TrxState {
 			NONE,
 			STARTED,
-			ENDED
+			ENDED,
+			CANCELLED
 		} trxState{TrxState::NONE};
 
     std::string m_trx_id;
@@ -179,6 +180,10 @@ public:
     std::string get_end_trx_script(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
     std::string get_trx_id(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn, optional_yield y);
     bool is_transaction_active() const { return trxState == TrxState::STARTED;}
+    void cancel_transaction(const DoutPrefixProvider* dpp);
+
+    // Debug function: Log transaction start time to Valkey
+    void log_transaction_start_time(const DoutPrefixProvider* dpp, std::shared_ptr<connection> conn, optional_yield y);
 
     void create_rw_temp_keys(std::string key);
     std::string create_unique_temp_keys(std::string key);
