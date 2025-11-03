@@ -6543,7 +6543,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    // perform few checks with lightweight rdlock
+    // check if the visibility already exists with rdlock (a lightweight lock)
     if (!mdr->more()->rdonly_checks) {
       lov.add_rdlock(&cur->snaplock);
       if (!mds->locker->acquire_locks(mdr, lov)) {
@@ -6553,20 +6553,13 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       }
 
       const auto srnode = cur->get_projected_srnode();
-      if (!srnode) {
-        dout(10) << "no-op since no snaprealm node found for "
-                 << req->get_filepath() << dendl;
-        respond_to_request(mdr, 0);
-        return; 
-      }
-      // check if visibility already matches the desired value
-      if (val == srnode->is_snapdir_visible()) {
+      if (srnode && (val == srnode->is_snapdir_visible())) {
         dout(20) << "snapdir visibility for " << req->get_filepath()
                  << " is already set to " << std::boolalpha << val << dendl;
         respond_to_request(mdr, 0);
         return;
       }
-      
+
       mdr->more()->rdonly_checks = true;
       dout(20) << "dropping rdlock on " << *cur << dendl;
       mds->locker->drop_locks(mdr.get());
@@ -6576,28 +6569,18 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       return;
     }
 
-    /* Repeat rdlocks checks to see if anything changed b/w rdlock release and
-    *  xlock policylock acquisition
-    */ 
-    {
-      const auto srnode = cur->get_projected_srnode();
-      if (!srnode) {
-        dout(10) << "no-op since no snaprealm node found for "
-                 << req->get_filepath() << dendl;
-        respond_to_request(mdr, 0);
-        return; 
-      }
-
-      if (val == srnode->is_snapdir_visible()) {
-        dout(20) << "snapdir visibility for " << req->get_filepath()
-                 << " is already set to " << std::boolalpha << val << dendl;
-        respond_to_request(mdr, 0);
-        return;
-      }
+    const auto srnode = cur->get_projected_srnode();
+    if (srnode && (val == srnode->is_snapdir_visible())) {
+      dout(20) << "snapdir visibility for " << req->get_filepath()
+                << " is already set to " << std::boolalpha << val << dendl;
+      respond_to_request(mdr, 0);
+      return;
     }
 
-    adjust_realm = true;
-    auto pi = cur->project_inode(mdr, false, adjust_realm);
+    auto pi = cur->project_inode(mdr, false, true);
+    if (!srnode) {
+      pi.snapnode->created = pi.snapnode->seq = cur->find_snaprealm()->get_newest_seq();
+    }
     dout(20) << "setting snapdir visibility to " << std::boolalpha
                << val << " for " << req->get_filepath() << dendl;
     if (val) {
@@ -6610,6 +6593,7 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
 
     mdr->no_early_reply = true;
     pip = pi.inode.get();
+    adjust_realm = true;
   } else if (name == "ceph.dir.pin"sv) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
