@@ -93,6 +93,8 @@ cdef nogil:
         pass
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags):
         pass
+    int ceph_statxat(ceph_mount_info *cmount, int dirfd, const char *path, statx *stx, unsigned want, unsigned flags):
+        pass
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf):
         pass
 

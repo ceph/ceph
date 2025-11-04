@@ -2170,6 +2170,61 @@ cdef class LibCephFS(object):
 
         return dict_result
 
+    def statxat(self, fd, relpath, mask, flag):
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be a int')
+        if not isinstance(mask, int):
+            raise TypeError('mask must be a int')
+        if not isinstance(flag, int):
+            raise TypeError('flag must be a int')
+
+        relpath = cstr(relpath, 'relpath')
+
+        cdef:
+            int _fd = fd
+            char* _relpath = relpath
+            statx stx
+            int _mask = mask
+            int _flag = flag
+
+        with nogil:
+            ret = ceph_statxat(self.cluster, _fd, _relpath, &stx, _mask, _flag)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in statxat {relpath.decode('utf-8')}")
+
+        dict_result = dict()
+        if (_mask & CEPH_STATX_MODE):
+            dict_result["mode"] = stx.stx_mode
+        if (_mask & CEPH_STATX_NLINK):
+            dict_result["nlink"] = stx.stx_nlink
+        if (_mask & CEPH_STATX_UID):
+            dict_result["uid"] = stx.stx_uid
+        if (_mask & CEPH_STATX_GID):
+            dict_result["gid"] = stx.stx_gid
+        if (_mask & CEPH_STATX_RDEV):
+            dict_result["rdev"] = stx.stx_rdev
+        if (_mask & CEPH_STATX_ATIME):
+            dict_result["atime"] = datetime.fromtimestamp(stx.stx_atime.tv_sec)
+        if (_mask & CEPH_STATX_MTIME):
+            dict_result["mtime"] = datetime.fromtimestamp(stx.stx_mtime.tv_sec)
+        if (_mask & CEPH_STATX_CTIME):
+            dict_result["ctime"] = datetime.fromtimestamp(stx.stx_ctime.tv_sec)
+        if (_mask & CEPH_STATX_INO):
+            dict_result["ino"] = stx.stx_ino
+        if (_mask & CEPH_STATX_SIZE):
+            dict_result["size"] = stx.stx_size
+        if (_mask & CEPH_STATX_BLOCKS):
+            dict_result["blocks"] = stx.stx_blocks
+        if (_mask & CEPH_STATX_BTIME):
+            dict_result["btime"] = datetime.fromtimestamp(stx.stx_btime.tv_sec)
+        if (_mask & CEPH_STATX_VERSION):
+            dict_result["version"] = stx.stx_version
+
+        return dict_result
+
     def setattrx(self, path, dict_stx, mask, flags):
         """
         Set a file's attributes.
