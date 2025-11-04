@@ -74,6 +74,14 @@ public:
 
   virtual ~CryptoKeyHandler() {}
 
+  operator bool()const {
+    return secret.length() > 0;
+  }
+
+  bool operator==(const CryptoKeyHandler &rhs) const {
+    return 0 == secret.cmp(rhs.secret);
+  }
+
   virtual int encrypt(CephContext *cct,
                       const ceph::buffer::list& in,
 		      ceph::buffer::list& out, std::string *error) const {
@@ -163,7 +171,7 @@ class CryptoKey {
 protected:
   __u16 type;
   utime_t created;
-  ceph::buffer::ptr secret;   // must set this via set_secret()!
+//  ceph::buffer::ptr secret;   // must set this via set_secret()!
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
@@ -180,6 +188,13 @@ public:
   ~CryptoKey() {
   }
 
+  operator bool()const {
+    return ckh && *ckh;
+  }
+  bool operator==(const CryptoKey &rhs) const {
+    return !ckh ? !rhs.ckh
+                : rhs.ckh && *ckh == *rhs.ckh;
+  }
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -194,8 +209,8 @@ public:
   void print(std::ostream& out) const;
 
   int set_secret(int type, const ceph::buffer::ptr& s, utime_t created);
-  const ceph::buffer::ptr& get_secret() { return secret; }
-  const ceph::buffer::ptr& get_secret() const { return secret; }
+//  const ceph::buffer::ptr& get_secret() { return secret; }
+//  const ceph::buffer::ptr& get_secret() const { return secret; }
 
   bool empty() const { return ckh.get() == nullptr; }
 
@@ -269,6 +284,8 @@ public:
   }
 
   void to_str(std::string& s) const;
+private:
+  const ceph::bufferptr& get_secret() const;
 };
 WRITE_CLASS_ENCODER(CryptoKey)
 
