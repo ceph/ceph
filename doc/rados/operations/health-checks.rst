@@ -1900,21 +1900,3 @@ To disable the debug mode, run the following command:
 .. prompt:: bash $
 
    ceph dashboard debug disable
-
-BLAUM_ROTH_W_IS_NOT_PRIME
-_________________________
-
-An EC pool is using the ``blaum_roth`` technique and ``w + 1`` is not a prime number. 
-This can result in data corruption.
-
-To check the list of Erasure Code Profiles use the command:
-
-.. prompt:: bash $
-   
-   ceph osd erasure-code-profile ls
-
-Then to check the ``w`` value for a particular profile use the command:
-
-.. prompt:: bash $
-
-   ceph osd erasure-code-profile get <name of profile>

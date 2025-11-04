@@ -283,8 +283,6 @@ public:
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
 
-  bool is_prime(int value); // A utility funtion that returns true if value is prime 
-
   /**
    * This set of functions maintains the in-memory stretch state
    * and sets up transitions of the map states by calling in to

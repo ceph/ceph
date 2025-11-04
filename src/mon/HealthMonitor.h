@@ -73,7 +73,6 @@ private:
   void check_for_clock_skew(health_check_map_t *checks);
   void check_mon_crush_loc_stretch_mode(health_check_map_t *checks);
   void check_if_msgr2_enabled(health_check_map_t *checks);
-  void check_erasure_code_profiles(health_check_map_t *checks);
   void check_netsplit(health_check_map_t *checks, std::set<std::string> &mons_down);
   bool check_leader_health();
   bool check_member_health();
