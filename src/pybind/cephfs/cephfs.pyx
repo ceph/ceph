@@ -1156,6 +1156,25 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in mkdir {}".format(path.decode('utf-8')))
 
+    def mkdirat(self, dirfd, relpath, mode):
+        self.require_state("mounted")
+        if not isinstance(mode, int):
+            raise TypeError('"mode" must be an int')
+        if not isinstance(dirfd, int):
+            raise TypeError('"_dirfd" must be an int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            char* _relpath = relpath
+            int _mode = mode
+            int _dirfd = dirfd
+
+        with nogil:
+            ret = ceph_mkdirat(self.cluster, _dirfd, _relpath, _mode)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in mkdirat: {relpath.decode('utf-8')}")
+
     def mksnap(self, path, name, mode, metadata={}) -> int:
         """
         Create a snapshot.
