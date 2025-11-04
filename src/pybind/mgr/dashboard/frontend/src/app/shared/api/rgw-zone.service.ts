@@ -48,14 +48,16 @@ export class RgwZoneService {
     zoneName: string,
     deletePools: boolean,
     pools: Set<string>,
-    zonegroupName: string
+    zonegroupName: string,
+    realmName: string
   ): Observable<any> {
     let params = new HttpParams();
     params = params.appendAll({
       zone_name: zoneName,
       delete_pools: deletePools,
       pools: Array.from(pools.values()),
-      zonegroup_name: zonegroupName
+      zonegroup_name: zonegroupName,
+      realm_name: realmName
     });
     return this.http.delete(`${this.url}/${zoneName}`, { params: params });
   }
