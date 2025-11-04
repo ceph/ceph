@@ -64,7 +64,7 @@ class MonitorThrasher(Thrasher):
                         task to run with as many as just one single monitor.
                         (default: True)
     freeze_mon_probability: how often to freeze the mon instead of killing it,
-                        in % (default: 0)
+                        in % (default: 10)
     freeze_mon_duration: how many seconds to freeze the mon (default: 15)
     scrub               Scrub after each iteration (default: True)
     check_mds_failover  Check if mds failover happened (default: False)
@@ -128,6 +128,15 @@ class MonitorThrasher(Thrasher):
         self.scrub = self.config.get('scrub', True)
 
         self.freeze_mon_probability = float(self.config.get('freeze_mon_probability', 10))
+        # In some cases where many monitors froze at once and revived
+        # after a long time might cause the connection to take more time to establish.
+        # Therefore, we increase the netsplit grace period to 30 seconds.
+        # This is to avoid false positives in the netsplit test, while still keeping
+        # the integrity of the test.
+        if self.freeze_mon_probability > 0:
+            self.manager.raw_cluster_cmd(
+                'config', 'set', 'mon', 'mon_netsplit_grace_period', '30')
+
         self.freeze_mon_duration = float(self.config.get('freeze_mon_duration', 15.0))
 
         assert self.max_killable() > 0, \
@@ -354,11 +363,13 @@ class MonitorThrasher(Thrasher):
 
             if mons_to_freeze:
                 for mon in mons_to_freeze:
+                    self.log('freezing mon.{m}'.format(m=mon))
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
                 time.sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
+                    self.log('unfreezing mon.{m}'.format(m=mon))
                     self.unfreeze_mon(mon)
 
             if self.maintain_quorum:
@@ -382,15 +393,18 @@ class MonitorThrasher(Thrasher):
             self.switch_task()
 
             for mon in mons_to_kill:
+                self.log('reviving mon.{m}'.format(m=mon))
                 self.revive_mon(mon)
             # do more freezes
             if mons_to_freeze:
                 for mon in mons_to_freeze:
+                    self.log('freezing mon.{m}'.format(m=mon))
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
                 time.sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
+                    self.log('unfreezing mon.{m}'.format(m=mon))
                     self.unfreeze_mon(mon)
 
             self.manager.wait_for_mon_quorum_size(len(mons))

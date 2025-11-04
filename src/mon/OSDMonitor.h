@@ -914,6 +914,47 @@ public:
    * @return the crush rule ID, or a negative errno
    */
   int get_replicated_stretch_crush_rule();
+  /**
+   * Run heuristics on the largest cliques found in the stretch
+   * cluster graph to try to resolve netsplit.
+   * @param largest_cliques The largest cliques found in the graph
+   * @param vertices The set of all vertices in the graph
+   */
+  std::set<std::string> run_heuristics_on_largest_cliques(
+    const std::vector<std::set<std::string>>& largest_cliques,
+    const std::set<std::string>& vertices);
+  /**
+   * From a vector of maximal cliques, obtain the largest ones.
+   * @param maximal_cliques The input vector of maximal cliques
+   * @return A vector of the largest maximal cliques
+   */
+  std::vector<std::set<std::string>> get_largest_cliques(
+    const std::vector<std::set<std::string>>& maximal_cliques);
+  /**
+   * Bron-Kerbose algorithm to find maximal cliques in an undirected graph.
+   * Used to find maximal clique when trying to resolve netsplit.
+   * @param current_clique The current clique being built
+   * @param candidates_set The candidate vertices that can be added to the clique
+   * @param excluded_set The vertices that have already been processed
+   * @param adj_list The adjacency list representing the graph
+   * @param maximal_cliques The output vector of maximal cliques found
+   */
+  void bronKerbose(std::set<std::string> current_clique,
+    std::set<std::string> candidates_set,
+    std::set<std::string> excluded_set,
+    std::map<std::string, std::set<std::string>> adj_list,
+    std::vector<std::set<std::string>> &maximal_cliques);
+  /**
+   * Automatically resolve netsplit for stretch clusters, excluding stretch mode.
+   */
+  void resolve_netsplit_stretch_cluster(
+    std::set<std::string> vertices,
+    std::set<std::pair<std::string, std::string>> cut_off_edges);
+  /**
+   * Get the failure domain used for stretch pools.
+   * @return the failure domain string
+   */
+  std::string get_stretch_pool_failure_domain();
 private:
   utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };
