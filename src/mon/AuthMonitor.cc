@@ -1185,7 +1185,7 @@ int AuthMonitor::exists_and_matches_entity(
   if (mon.get_auth(name, existing_auth)) {
     // key match?
     if (has_secret) {
-      if (existing_auth.key.get_secret().cmp(auth.key.get_secret())) {
+      if (!(existing_auth.key == auth.key)) {
         ss << "entity " << name << " exists but key does not match";
         return -EEXIST;
       }

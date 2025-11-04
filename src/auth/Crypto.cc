@@ -1069,10 +1069,10 @@ CryptoKeyHandler *CryptoAES256KRB5::get_key_handler_ext(const bufferptr& secret,
 
 // ---------------------------------------------------
 
-
 void CryptoKey::encode(bufferlist& bl) const
 {
   using ceph::encode;
+  const bufferptr &secret = get_secret();
   encode(type, bl);
   encode(created, bl);
   __u16 len = secret.length();
@@ -1124,7 +1124,7 @@ int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
 int CryptoKey::_set_secret(int t, const bufferptr& s)
 {
   if (s.length() == 0) {
-    secret = s;
+//    secret = s;
     ckh.reset();
     return 0;
   }
@@ -1146,7 +1146,7 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
       return -EOPNOTSUPP;
   }
   type = t;
-  secret = s;
+//  secret = s;
   return 0;
 }
 
@@ -1178,6 +1178,7 @@ void CryptoKey::print(std::ostream &out) const
 
 void CryptoKey::to_str(std::string& s) const
 {
+  const bufferptr &secret = get_secret();
   int len = secret.length() * 4;
   char buf[len];
   hex2str(secret.c_str(), secret.length(), buf, len);
@@ -1195,6 +1196,14 @@ void CryptoKey::encode_formatted(string label, Formatter *f, bufferlist &bl)
 void CryptoKey::encode_plaintext(bufferlist &bl)
 {
   bl.append(encode_base64());
+}
+
+static bufferptr z;
+
+const bufferptr& CryptoKey::get_secret() const
+{
+  const bufferptr &secret = ckh ? ckh->secret : z;
+  return secret;
 }
 
 
