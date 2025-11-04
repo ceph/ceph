@@ -5,7 +5,7 @@ parameters:
  netmask: 255.255.255.0
  numcpus: 1
  memory: 2048
- image: fedora40
+ image: fedora42
  notify: false
  admin_password: password
  disks:
