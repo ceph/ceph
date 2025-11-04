@@ -120,6 +120,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_openat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode)
 
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_mkdirat(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode)
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata)
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_get_snap_info(ceph_mount_info *cmount, const char *path, snap_info *snap_info)

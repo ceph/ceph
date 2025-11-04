@@ -169,6 +169,8 @@ cdef nogil:
 
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
+    int ceph_mkdir(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode):
+        pass
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata):
         pass
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name):
