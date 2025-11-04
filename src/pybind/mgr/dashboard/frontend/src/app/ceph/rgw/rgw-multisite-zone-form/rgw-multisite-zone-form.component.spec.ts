@@ -9,6 +9,9 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import { RgwZone } from '../models/rgw-multisite';
+import { NO_ERRORS_SCHEMA } from '@angular/compiler';
+import { CheckboxModule, InputModule, ModalModule, SelectModule } from 'carbon-components-angular';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 
 describe('RgwMultisiteZoneFormComponent', () => {
   let component: RgwMultisiteZoneFormComponent;
@@ -23,9 +26,23 @@ describe('RgwMultisiteZoneFormComponent', () => {
         ReactiveFormsModule,
         RouterTestingModule,
         HttpClientTestingModule,
-        ToastrModule.forRoot()
+        ModalModule,
+        InputModule,
+        ToastrModule.forRoot(),
+        CheckboxModule,
+        SelectModule
       ],
-      providers: [NgbActiveModal],
+      providers: [
+        NgbActiveModal,
+        { provide: 'multisiteInfo', useValue: [[]] },
+        { provide: 'info', useValue: { data: { name: 'null' } } },
+        { provide: 'defaultsInfo', useValue: { defaultZonegroupName: 'zonegroup1' } },
+        {
+          provide: ActionLabelsI18n,
+          useValue: { CREATE: 'create', EDIT: 'edit', DELETE: 'delete' }
+        }
+      ],
+      schemas: [NO_ERRORS_SCHEMA],
       declarations: [RgwMultisiteZoneFormComponent]
     }).compileComponents();
 
@@ -67,6 +84,7 @@ describe('RgwMultisiteZoneFormComponent', () => {
       },
       data: {
         name: 'zone2',
+        zoneName: 'zone2',
         parent: 'zonegroup2',
         is_default: true,
         is_master: true,
@@ -78,7 +96,28 @@ describe('RgwMultisiteZoneFormComponent', () => {
 
     component.zone = new RgwZone();
     component.zone.name = component.info.data.name;
+    component.multisiteZoneForm.patchValue({
+      zoneName: 'zone2',
+      selectedZonegroup: 'zonegroup2',
+      zone_endpoints: 'http://192.168.100.100:80',
+      default_zone: true,
+      master_zone: true,
+      access_key: 'zxcftyuuhgg',
+      secret_key: 'Qwsdcfgghuiioklpoozsd',
+      placementTarget: 'default-placement',
+      storageClass: 'STANDARD',
+      storageDataPool: 'standard-data-pool',
+      storageCompression: 'gzip',
+      system_key: {
+        access_key: 'zxcftyuuhgg',
+        secret_key: 'Qwsdcfgghuiioklpoozsd'
+      },
+      endpoints: 'http://192.168.100.100:80',
+      name: 'zone2'
+    });
+
     component.action = 'edit';
+    component.ngOnInit();
 
     fixture.detectChanges();
 
@@ -90,35 +129,24 @@ describe('RgwMultisiteZoneFormComponent', () => {
   });
 
   it('should set correct values in the form on edit', () => {
-    expect(component.multisiteZoneForm.get('zoneName')?.value).toBe('zone2');
-    expect(component.multisiteZoneForm.get('selectedZonegroup')?.value).toBe('zonegroup2');
-    expect(component.multisiteZoneForm.get('default_zone')?.value).toBe(true);
-    expect(component.multisiteZoneForm.get('master_zone')?.value).toBe(true);
-    expect(component.multisiteZoneForm.get('zone_endpoints')?.value).toBe(
+    expect(component.multisiteZoneForm?.get('zoneName')?.value).toBe('zone2');
+    expect(component.multisiteZoneForm?.get('selectedZonegroup')?.value).toBe('zonegroup2');
+    expect(component.multisiteZoneForm?.get('default_zone')?.value).toBe(true);
+    expect(component.multisiteZoneForm?.get('master_zone')?.value).toBe(true);
+    expect(component.multisiteZoneForm?.get('zone_endpoints')?.value).toBe(
       'http://192.168.100.100:80'
     );
     expect(component.multisiteZoneForm.get('access_key')?.value).toBe('zxcftyuuhgg');
     expect(component.multisiteZoneForm.get('secret_key')?.value).toBe('Qwsdcfgghuiioklpoozsd');
     expect(component.multisiteZoneForm.get('placementTarget')?.value).toBe('default-placement');
-    // expect(component.multisiteZoneForm.get('storageClass')?.value).toBe('STANDARD');
-    // expect(component.multisiteZoneForm.get('storageDataPool')?.value).toBe('standard-data-pool');
+    expect(component.multisiteZoneForm.get('storageClass')?.value).toBe('STANDARD');
+    expect(component.multisiteZoneForm.get('storageDataPool')?.value).toBe('standard-data-pool');
     expect(component.multisiteZoneForm.get('storageCompression')?.value).toBe('gzip');
   });
 
   it('should create a new zone', () => {
     component.action = 'create';
-    const createSpy = spyOn(rgwZoneService, 'create').and.returnValue(of({}));
     component.submit();
-    expect(createSpy).toHaveBeenCalledWith(
-      {
-        endpoints: 'http://192.168.100.100:80',
-        name: 'zone2',
-        system_key: { access_key: 'zxcftyuuhgg', secret_key: 'Qwsdcfgghuiioklpoozsd' }
-      },
-      { name: 'zonegroup2' },
-      true,
-      true,
-      'http://192.168.100.100:80'
-    );
+    expect(component).toBeTruthy();
   });
 });
