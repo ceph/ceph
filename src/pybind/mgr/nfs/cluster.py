@@ -73,6 +73,7 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         if not port:
             port = 2049   # default nfs port
@@ -83,6 +84,7 @@ class NFSCluster:
                 ingress_mode = IngressType.default
             ingress_mode = ingress_mode.canonicalize()
             pspec = PlacementSpec.from_string(placement)
+            ingress_pspec = PlacementSpec.from_string(ingress_placement) if ingress_placement else None
             if ingress_mode == IngressType.keepalive_only:
                 # enforce count=1 for nfs over keepalive only
                 pspec.count = 1
@@ -120,7 +122,7 @@ class NFSCluster:
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                placement=pspec,
+                                placement=ingress_pspec or pspec,
                                 frontend_port=frontend_port,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
                                 virtual_ip=virtual_ip,
@@ -172,6 +174,7 @@ class NFSCluster:
             tls_debug: bool = False,
             tls_min_version: Optional[str] = None,
             tls_ciphers: Optional[str] = None,
+            ingress_placement: Optional[str] = None,
     ) -> None:
         try:
             if virtual_ip:
@@ -197,7 +200,7 @@ class NFSCluster:
             if cluster_id not in available_clusters(self.mgr):
                 self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port,
                                           ssl, ssl_cert, ssl_key, ssl_ca_cert, tls_ktls, tls_debug,
-                                          tls_min_version, tls_ciphers)
+                                          tls_min_version, tls_ciphers, ingress_placement)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:
