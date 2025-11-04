@@ -73,7 +73,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     }
 
     // is the key OK?
-    if (!secret.get_secret().length()) {
+    if (!secret) {
       ldout(cct, 20) << "secret for entity " << cct->_conf->name << " is invalid" << dendl;
       return -EINVAL;
     }
