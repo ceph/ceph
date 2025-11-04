@@ -95,7 +95,8 @@ private:
   void try_enable_stretch_mode(std::stringstream& ss, bool *okay,
 			       int *errcode, bool commit,
 			       const std::string& tiebreaker_mon,
-			       const std::string& dividing_bucket);
+			       const std::string& dividing_bucket,
+             const std::string& stretch_crush_rule);
 
 public:
   /**

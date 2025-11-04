@@ -553,7 +553,7 @@ COMMAND("mon set_location " \
 	"mon", "rw")
 COMMAND("mon enable_stretch_mode " \
 	"name=tiebreaker_mon,type=CephString, "
-	"name=new_crush_rule,type=CephString, "
+	"name=stretch_crush_rule,type=CephString, "
 	"name=dividing_bucket,type=CephString, ",
 	"enable stretch mode, changing the peering rules and "
 	"failure handling on all pools with <tiebreaker_mon> "

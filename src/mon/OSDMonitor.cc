@@ -7866,43 +7866,6 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
   return err;
 }
 
-int OSDMonitor::get_replicated_stretch_crush_rule()
-{
-  /* we don't write down the stretch rule anywhere, so
-   * we have to guess it. How? Look at all the pools
-   * and count up how many times a given rule is used
-   * on stretch pools and then return the one with
-   * the most users!
-   */
-  map<int,int> rule_counts;
-  for (const auto& pooli : osdmap.pools) {
-    const pg_pool_t& p = pooli.second;
-    if (p.is_replicated() && p.is_stretch_pool()) {
-      if (!rule_counts.count(p.crush_rule)) {
-	rule_counts[p.crush_rule] = 1;
-      } else {
-	++rule_counts[p.crush_rule];
-      }
-    }
-  }
-
-  if (rule_counts.empty()) {
-    return -ENOENT;
-  }
-
-  int most_used_count = 0;
-  int most_used_rule = -1;
-  for (auto i : rule_counts) {
-    if (i.second > most_used_count) {
-      most_used_rule = i.first;
-      most_used_count = i.second;
-    }
-  }
-  ceph_assert(most_used_count > 0);
-  ceph_assert(most_used_rule >= 0);
-  return most_used_rule;
-}
-
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					const string &erasure_code_profile,
 					const string &rule_name,
@@ -7916,7 +7879,8 @@ int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
       {
 	if (rule_name == "") {
 	  if (osdmap.stretch_mode_enabled) {
-	    *crush_rule = get_replicated_stretch_crush_rule();
+      string stretch_crush_rule_name = mon.monmap->stretch_crush_rule;
+	    return get_crush_rule(stretch_crush_rule_name, crush_rule, ss);
 	  } else {
 	    // Use default rule
 	    *crush_rule = osdmap.crush->get_osd_pool_default_crush_replicated_rule(cct);
@@ -15433,17 +15397,17 @@ void OSDMonitor::try_disable_stretch_mode(stringstream& ss,
 void OSDMonitor::try_enable_stretch_mode_pools(stringstream& ss, bool *okay,
 					       int *errcode,
 					       set<pg_pool_t*>* pools,
-					       const string& new_crush_rule)
+					       const string& stretch_crush_rule)
 {
   dout(20) << __func__ << dendl;
   *okay = false;
-  int new_crush_rule_result = osdmap.crush->get_rule_id(new_crush_rule);
-  if (new_crush_rule_result < 0) {
-    ss << "unrecognized crush rule " << new_crush_rule_result;
-    *errcode = new_crush_rule_result;
+  int stretch_crush_rule_result = osdmap.crush->get_rule_id(stretch_crush_rule);
+  if (stretch_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << stretch_crush_rule_result;
+    *errcode = stretch_crush_rule_result;
     return;
   }
-  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  __u8 new_rule = static_cast<__u8>(stretch_crush_rule_result);
   for (const auto& pooli : osdmap.pools) {
     int64_t poolid = pooli.first;
     const pg_pool_t *p = &pooli.second;
@@ -15476,7 +15440,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
 					 const string& dividing_bucket,
 					 uint32_t bucket_count,
 					 const set<pg_pool_t*>& pools,
-					 const string& new_crush_rule)
+					 const string& stretch_crush_rule)
 {
   dout(20) << __func__ << dendl;
   *okay = false;
@@ -15501,14 +15465,14 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     return;
   }
 
-  int new_crush_rule_result = crush.get_rule_id(new_crush_rule);
-  if (new_crush_rule_result < 0) {
-    ss << "unrecognized crush rule " << new_crush_rule;
-    *errcode = new_crush_rule_result;
-    ceph_assert(!commit || (new_crush_rule_result > 0));
+  int stretch_crush_rule_result = crush.get_rule_id(stretch_crush_rule);
+  if (stretch_crush_rule_result < 0) {
+    ss << "unrecognized crush rule " << stretch_crush_rule;
+    *errcode = stretch_crush_rule_result;
+    ceph_assert(!commit || (stretch_crush_rule_result > 0));
     return;
   }
-  __u8 new_rule = static_cast<__u8>(new_crush_rule_result);
+  __u8 new_rule = static_cast<__u8>(stretch_crush_rule_result);
 
   int weight1 = crush.get_item_weight(subtrees[0]);
   int weight2 = crush.get_item_weight(subtrees[1]);

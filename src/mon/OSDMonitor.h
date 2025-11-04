@@ -907,13 +907,6 @@ public:
    * Sets the osdmap and pg_pool_t values back to healthy stretch mode status.
    */
   void trigger_healthy_stretch_mode();
-  /**
-   * Obtain the crush rule being used for stretch pools.
-   * Note that right now this is heuristic and simply selects the
-   * most-used rule on replicated stretch pools.
-   * @return the crush rule ID, or a negative errno
-   */
-  int get_replicated_stretch_crush_rule();
 private:
   utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };

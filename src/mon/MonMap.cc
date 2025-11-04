@@ -240,7 +240,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(9, 6, blist);
+  ENCODE_START(10, 6, blist);
   ceph::encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -257,6 +257,7 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+  encode(stretch_crush_rule, blist); // Added encoding for stretch_crush_rule
   ENCODE_FINISH(blist);
 }
 
@@ -320,6 +321,11 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
     stretch_mode_enabled = false;
     tiebreaker_mon = "";
     stretch_marked_down_mons.clear();
+  }
+  if (struct_v >= 10) {
+    decode(stretch_crush_rule, p);
+  } else {
+    stretch_crush_rule = "";
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -414,6 +420,7 @@ void MonMap::print(ostream& out) const
   if (stretch_mode_enabled) {
     out << "stretch_mode_enabled " << stretch_mode_enabled << "\n";
     out << "tiebreaker_mon " << tiebreaker_mon << "\n";
+    out << "stretch_crush_rule " << stretch_crush_rule << "\n";
   }
   if (stretch_mode_enabled ||
       !disallowed_leaders.empty()) {
@@ -444,6 +451,7 @@ void MonMap::dump(Formatter *f) const
   f->dump_bool("stretch_mode", stretch_mode_enabled);
   f->dump_string("tiebreaker_mon", tiebreaker_mon);
   f->dump_stream("removed_ranks") << removed_ranks;
+  f->dump_string("stretch_crush_rule", stretch_crush_rule);
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");
