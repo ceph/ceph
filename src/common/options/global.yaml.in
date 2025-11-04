@@ -3559,7 +3559,7 @@ options:
     decreases the likelihood of false positives at the expense of additional disk
     space and memory consumption when the filter is loaded into RAM.  The current
     default value of 20 was found to provide significant performance gains when getattr
-    calls are made (such as during new object creation in bluestore) without significant
+    calls are made (such as during new object creation in BlueStore) without significant
     memory overhead or cache pollution when combined with rocksdb partitioned index
     filters.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
     for more information.'
@@ -5254,7 +5254,7 @@ options:
 - name: bluestore_rocksdb_cf
   type: bool
   level: advanced
-  desc: Enable use of RocksDB column families for bluestore metadata
+  desc: Enable use of RocksDB column families for BlueStore metadata
   fmt_desc: Enables sharding of BlueStore's RocksDB.
     When ``true``, ``bluestore_rocksdb_cfs`` is used.
     Only applied when OSD is doing ``--mkfs``.
