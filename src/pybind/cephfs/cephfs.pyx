@@ -36,6 +36,7 @@ AT_STATX_SYNC_TYPE  = 0x6000
 AT_STATX_SYNC_AS_STAT = 0x0000
 AT_STATX_FORCE_SYNC = 0x2000
 AT_STATX_DONT_SYNC = 0x4000
+AT_FDCWD = -100
 cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
 CEPH_STATX_BASIC_STATS = 0x7ff
 cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
@@ -3075,17 +3076,23 @@ cdef class LibCephFS(object):
         elif stat.S_ISREG(stx_b['mode']):
             mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
 
+            src_dir = os.path.dirname(src_path)
             src_file_name = os.path.basename(src_path)
-            dst_path = os.path.join(dst_path, src_file_name)
 
-            copy_reg_file(self, src_path, dst_path, mode)
+            src_fd = self.open(src_dir, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+            dst_fd = self.open(dst_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+            copy_reg_file(self, src_fd, dst_fd, src_file_name, mode)
         elif stat.S_ISLNK(stx_b['mode']):
             mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
 
-            src_slink_name = os.path.basename(src_path)
-            dst_path = os.path.join(dst_path, src_slink_name)
+            src_dir = os.path.dirname(src_path)
+            src_link_name = os.path.basename(src_path)
 
-            copy_sym_link(self, src_path, dst_path, mode)
+            src_fd = self.open(src_dir, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+            dst_fd = self.open(dst_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+            copy_sym_link(self, src_fd, dst_fd, src_link_name, mode)
         else:
             raise RuntimeError('expected a regfile or symlink but found '
                                f'something else. src = {self.src_path}')
@@ -3133,10 +3140,11 @@ class CptreeWorker:
         # ensure we are dealing with the dir at the top of the stack.
         assert self.curr_dir is self.stack[-1]
 
-        src_rel_path = os.path.join(self.curr_dir.src_rel_path, de_name)
-        dst_rel_path = os.path.join(self.curr_dir.dst_rel_path, de_name)
+        src_rel_path = de_name
+        dst_rel_path = de_name
         try:
-            self.stack.append(CptreeDir(self, src_rel_path, dst_rel_path))
+            self.stack.append(CptreeDir(self.fs, src_rel_path, dst_rel_path,
+                                        self.curr_dir))
             return True
         except Error as e:
             if self.suppress_errors:
@@ -3152,12 +3160,10 @@ class CptreeWorker:
 
     def start(self):
         try:
-            self.src_root_fd = self.fs.opendir(self.src_path)
-            self.dst_root_fd = self.fs.opendir(self.dst_path)
-
             src_rel_path = os.path.basename(self.src_path)
-            dst_rel_path = os.path.basename(self.src_path)
-            self.stack.append(CptreeDir(self, src_rel_path, dst_rel_path))
+            dst_rel_path = os.path.join(os.path.basename(self.dst_path), src_rel_path)
+            self.stack.append(CptreeDir(self.fs, src_rel_path, dst_rel_path,
+                                        None))
         except Exception as e:
             log.error('opening root dir of the file tree failed with exception '
                       f'"{e}", exiting.')
@@ -3174,7 +3180,7 @@ class CptreeWorker:
             finished_copying_curr_dir = True
 
             # subdir_de = directory entry for a subdir
-            de = self.curr_dir.read_dir()
+            de = self.curr_dir.read_src_dir()
             while de:
                 if self.should_cancel():
                     raise OpCanceled('cptree')
@@ -3191,7 +3197,7 @@ class CptreeWorker:
                 else:
                     self.curr_dir.copy_reg_file(de.d_name)
 
-                de = self.curr_dir.read_dir()
+                de = self.curr_dir.read_src_dir()
 
             if finished_copying_curr_dir:
                 if self.curr_dir.has_any_fs_op_failed():
@@ -3210,20 +3216,24 @@ class CptreeDir:
         - a list of dir entries for which unlink()/rmdir() failed.
     '''
 
-    def __init__(self, cptree_worker_obj, src_rel_path, dst_rel_path):
-        # source and destination path passed by the user.
-        self.src_path = cptree_worker_obj.src_path
-        self.dst_path = cptree_worker_obj.dst_path
+    def __init__(self, fs, src_rel_path, dst_rel_path, parent_dir=None):
+        self.fs = fs
 
-        self.fs = cptree_worker_obj.fs
-
-        # path relative to self.src_path and self.dst_path where copying is
-        # being done right now.
         self.src_rel_path = src_rel_path
         self.dst_rel_path = dst_rel_path
-        self.fs.mkdir(os.path.join(self.dst_path, self.dst_rel_path), 0o755)
 
-        self.handle = self.fs.opendir(self.src_rel_path)
+        self.parent_dir_src_fd = parent_dir.src_fd if parent_dir else AT_FDCWD
+        self.parent_dir_dst_fd = parent_dir.dst_fd if parent_dir else AT_FDCWD
+
+        self.fs.mkdirat(self.parent_dir_dst_fd, self.dst_rel_path, 0o755)
+
+        self.src_fd = self.fs.openat(self.parent_dir_src_fd, self.src_rel_path,
+                                     os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        self.dst_fd = self.fs.openat(self.parent_dir_dst_fd, self.dst_rel_path,
+                                     os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        self.src_handle = self.fs.fdopendir(self.src_fd)
 
         # Is this directory empty? This will be set by self.read_dir().
         self.is_empty = None
@@ -3236,7 +3246,7 @@ class CptreeDir:
         self.has_readdir_failed = False
 
     def __str__(self):
-        return f'{self.src_path}, {self.dst_path}'
+        return f'{self.src_rel_path}, {self.dst_rel_path}'
 
     def add_to_de_ignore_list(self, de_name):
         self.de_ignore_list.append(de_name)
@@ -3250,7 +3260,7 @@ class CptreeDir:
     def has_any_fs_op_failed(self):
         return self.has_readdir_failed or len(self.de_ignore_list) > 0
 
-    def read_dir(self):
+    def read_src_dir(self):
         '''
         Get sub-directory of current directory.
         '''
@@ -3259,7 +3269,7 @@ class CptreeDir:
         self.is_empty = True
 
         try:
-            de = self.fs.readdir(self.handle)
+            de = self.fs.readdir(self.src_handle)
             while de:
                 if de.d_name in (b'.', b'..'):
                     pass
@@ -3273,7 +3283,7 @@ class CptreeDir:
                     self.is_empty = False
                     return de
 
-                de = self.fs.readdir(self.handle)
+                de = self.fs.readdir(self.src_handle)
         except Error as e:
             # This is the tricky one: it's an error on this
             # directory, not on a entry in this directory
@@ -3281,26 +3291,22 @@ class CptreeDir:
             self.set_readdir_error()
 
     def copy_reg_file(self, de_name):
-        src_file_path = os.path.join(self.src_rel_path, de_name)
-        dst_file_path = os.path.join(self.dst_path, self.dst_rel_path, de_name)
-
-        copy_reg_file(self.fs, src_file_path, dst_file_path)
+        copy_reg_file(self.fs, self.src_fd, self.dst_fd, de_name)
 
     def copy_symlink(self, de_name):
-        src_file_path = os.path.join(self.src_rel_path, de_name)
-        dst_file_path = os.path.join(self.dst_rel_path, de_name)
+        copy_sym_link(self.fs, self.src_fd, self.dst_fd, de_name)
 
-        copy_sym_link(self.fs, src_file_path, dst_file_path)
 
-def copy_reg_file(fs, src_file_path, dst_file_path, mode=None):
+def copy_reg_file(fs, src_fd, dst_fd, file_name, mode=None):
     if not mode:
-        stx_b = fs.statx(src_file_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        mode = 0o755
+        stx_b = fs.statxat(src_fd, file_name, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
         mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
 
     src_file_fd = dst_file_fd = None
     try:
-        src_file_fd = fs.open(src_file_path, os.O_RDONLY)
-        dst_file_fd = fs.open(dst_file_path, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
+        src_file_fd = fs.openat(src_fd, file_name, os.O_RDONLY, mode)
+        dst_file_fd = fs.openat(dst_fd, file_name, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
     except Exception:
         if src_file_fd:
             fs.close(src_file_fd)
@@ -3311,6 +3317,7 @@ def copy_reg_file(fs, src_file_path, dst_file_path, mode=None):
     while True:
         data = fs.read(src_file_fd, -1, 1 * 1024 * 1024)
         if not len(data):
+            fs.write(dst_file_fd, b'111', -1)
             break
 
         written = 0
@@ -3322,35 +3329,35 @@ def copy_reg_file(fs, src_file_path, dst_file_path, mode=None):
     fs.close(dst_file_fd)
 
 
-def copy_sym_link(fs, src_file_path, dst_file_path, mode=None):
+def copy_sym_link(fs, src_fd, dst_fd, de_name, mode=None):
     if not mode:
-        stx_b = fs.statx(src_file_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        mode = 0o755
+        stx_b = fs.statxat(src_fd, de_name, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
         mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
 
     try:
-        target = fs.readlink(src_file_path, 4096)
+        target = fs.readlinkat(src_fd, de_name, 4096)
     except Exception as e:
         log.info('Following exception occurred while reading '
                  f'symlink: {e}')
         raise
 
     try:
-        fs.symlink(target, dst_file_path)
+        fs.symlinkat(target, dst_fd, de_name)
     except Exception as e:
         log.info('Following exception occurred while creating '
                  f'symlink: {e}')
         raise
 
-    # new_target is path that should exist for the link to NOT be broken.
-    new_target = os.path.join(os.path.dirname(dst_file_path), target)
     try:
-        fs.statx(new_target, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        fs.statxat(dst_fd, target, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
     except ObjectNotFound:
         # if this exception was raised, link is broken and therefore chmod
         # can't be run on it. ignore it.
         return
     else:
-        fs.chmod(dst_file_path, mode)
+        fs.chmodat(dst_fd, de_name, mode, 0)
+
 
 class NonRecursiveRmtree:
     '''
