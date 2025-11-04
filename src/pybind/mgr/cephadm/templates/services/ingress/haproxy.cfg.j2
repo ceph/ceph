@@ -114,6 +114,6 @@ backend backend
     {% endfor %}
 {% else %}
     {% for server in servers %}
-    server {{ server.name }} {{ server.ip }}:{{ server.port }} check
+    server {{ server.name }} {{ server.ip }}:{{ server.port }} check inter {{ health_check_interval }}
     {% endfor %}
 {% endif %}

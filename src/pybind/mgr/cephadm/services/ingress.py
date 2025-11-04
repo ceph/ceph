@@ -271,7 +271,7 @@ class IngressService(CephService):
                 'frontend_port': frontend_port,
                 'monitor_port': spec.monitor_port,
                 'default_server_opts': server_opts,
-                'health_check_interval': spec.health_check_interval or '2s',
+                'health_check_interval': spec.health_check_interval or ('30s' if backend_spec.service_type == 'nfs' else '2s'),
                 'v4v6_flag': v4v6_flag,
                 'monitor_ssl_file': monitor_ssl_file,
                 'peer_hosts': peer_hosts,
