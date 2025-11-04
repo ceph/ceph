@@ -100,29 +100,61 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   write1.omap_set(omap_map);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
 
+  int err = 0;
   bufferlist bl_read;
   ObjectReadOperation read;
+
   
   read.read(0, bl_write.length(), &bl_read, nullptr);
-
-  int err = 0;
   std::map<std::string,bufferlist> vals{ {"_", {}}, {omap_key_1, {}}};
   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-
   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-
   ASSERT_EQ(0, err);
-  
   ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
-
   ASSERT_EQ(3U, vals.size());
   ASSERT_NE(vals.find(omap_key_1), vals.end());
-  
   bufferlist retrieved_val_bl = vals[omap_key_1];
   std::string retrieved_value;
   decode(retrieved_value, retrieved_val_bl);
-  
   ASSERT_EQ(omap_value, retrieved_value);
+
+  bufferlist omap_header_read_bl;
+  std::set<std::string> keys;
+  read.omap_get_keys2("", LONG_MAX, &keys, nullptr, &err);
+  read.omap_get_header(&omap_header_read_bl, &err);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  std::string omap_header_read;
+  decode(omap_header_read, omap_header_read_bl);
+  ASSERT_EQ(omap_header, omap_header_read);
+  ASSERT_EQ(3U, keys.size());
+  
+  std::map<std::string,bufferlist> vals_by_keys{ {"_", {}} };
+  std::set<std::string> key_filter = {omap_key_1, omap_key_2};
+  read.omap_get_vals_by_keys(key_filter, &vals_by_keys, &err);
+  std::map<std::string, std::pair<bufferlist, int> > assertions;
+  assertions[omap_key_3] = make_pair(omap_val_bl, CEPH_OSD_CMPXATTR_OP_EQ);
+  read.omap_cmp(assertions, &err);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(2U, vals_by_keys.size());
+
+  std::set<std::string> keys_to_remove = {omap_key_2};
+  write1.omap_rm_keys(keys_to_remove);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
+  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(2U, vals.size());
+
+  write1.omap_clear();
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
+  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(0U, vals.size());
+
+  // omap_rmkeyrange has not been tested
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
