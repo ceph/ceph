@@ -723,6 +723,16 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
   ictx->read_only_mask &= ~IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
   ictx->image_lock.unlock();
 
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id,
+                                   &mirror_image);
+  if (r == -ENOENT) {
+    // mirroring is not enabled for this image
+    ldout(cct, 20) << "ignoring promote command: mirroring is not enabled for "
+                   << "this image" << dendl;
+    return;
+  }
+
   auto on_promote = new LambdaContext([ictx, on_finish](int r) {
       ictx->image_lock.lock();
       ictx->read_only_mask |= IMAGE_READ_ONLY_FLAG_NON_PRIMARY;
@@ -743,6 +753,35 @@ void Mirror<I>::image_promote(I *ictx, bool force, Context *on_finish) {
       req->send();
     });
   ictx->state->refresh(on_refresh);
+
+  // if resync key is set then disabling it
+  if (mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT) {
+    std::string mirror_uuid;
+    r = uuid_get(ictx->md_ctx, &mirror_uuid);
+    if (r < 0) {
+      lderr(cct) << "get uuid failed" << dendl;
+      return;
+    }
+
+    mirror::snapshot::ImageMeta image_meta(ictx, mirror_uuid);
+
+    C_SaferCond load_meta_ctx;
+    image_meta.load(&load_meta_ctx);
+    r = load_meta_ctx.wait();
+    if (r < 0 && r != -ENOENT) {
+      lderr(cct) << "failed to load mirror image-meta: " << cpp_strerror(r)
+                 << dendl;
+      return;
+    }
+    image_meta.resync_requested = false;
+    C_SaferCond save_meta_ctx;
+    image_meta.save(&save_meta_ctx);
+    r = save_meta_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to update resync key: " << cpp_strerror(r) << dendl;
+      return;
+    }
+  }
 }
 
 template <typename I>
