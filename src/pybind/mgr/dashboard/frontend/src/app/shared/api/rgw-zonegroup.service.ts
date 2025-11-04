@@ -59,12 +59,18 @@ export class RgwZonegroupService {
     return this.http.get(`${this.url}/get_all_zonegroups_info`);
   }
 
-  delete(zonegroupName: string, deletePools: boolean, pools: Set<string>): Observable<any> {
+  delete(
+    zonegroupName: string,
+    deletePools: boolean,
+    pools: Set<string>,
+    realmName: string
+  ): Observable<any> {
     let params = new HttpParams();
     params = params.appendAll({
       zonegroup_name: zonegroupName,
       delete_pools: deletePools,
-      pools: Array.from(pools.values())
+      pools: Array.from(pools.values()),
+      realm_name: realmName
     });
     return this.http.delete(`${this.url}/${zonegroupName}`, { params: params });
   }

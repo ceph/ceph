@@ -15338,6 +15338,11 @@ paths:
         name: zonegroup_name
         schema:
           type: string
+      - allowEmptyValue: true
+        in: query
+        name: realm_name
+        schema:
+          type: string
       responses:
         '202':
           content:
@@ -15716,6 +15721,11 @@ paths:
       - allowEmptyValue: true
         in: query
         name: pools
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: realm_name
         schema:
           type: string
       responses:
