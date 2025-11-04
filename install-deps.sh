@@ -536,6 +536,7 @@ else
                     $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
                     $SUDO dnf -y module enable javapackages-tools
                 elif { [ "$ID" = centos ] || [ "$ID" = rocky ]; } && [ "$MAJOR_VERSION" -ge 9 ]; then
+                    dts_ver=13
                     $SUDO dnf config-manager --set-enabled crb
                     if [ "$MAJOR_VERSION" -eq 10 ]; then
                         setup_lab_extras_repo
