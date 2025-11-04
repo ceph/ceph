@@ -122,13 +122,21 @@ class TestStretchMode(MgrTestCase):
         """
         Bring back the mon.
         """
+        log.debug("_bring_back_mon %s", mon)
+        # If the mon is already up, do nothing
+        quorum_names = self.mgr_cluster.mon_manager.get_mon_quorum_names()
+        if mon in quorum_names:
+            log.debug("mon.%s is already up", mon)
+            return
+        # If the mon is not up, try to bring it back
+        log.debug("Bringing back mon.%s", mon)
         try:
             self.ctx.daemons.get_daemon('mon', mon, self.CLUSTER).restart()
         except Exception:
             log.error("Failed to bring back mon.{}".format(str(mon)))
             pass
 
-    def _get_host(self, osd):
+    def _get_osd_host(self, osd):
         """
         Get the host of the osd.
         """
@@ -142,7 +150,7 @@ class TestStretchMode(MgrTestCase):
         """
         Move the osd back to the host.
         """
-        host = self._get_host(osd)
+        host = self._get_osd_host(osd)
         assert host is not None, "The host of osd {} is not found.".format(osd)
         log.debug("Moving osd.%d back to %s", osd, host)
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
@@ -155,6 +163,7 @@ class TestStretchMode(MgrTestCase):
         Clean up the cluster after the test.
         """
         # Remove the pool
+        log.debug("Tear down the test")
         if self.POOL in self.mgr_cluster.mon_manager.pools:
             self.mgr_cluster.mon_manager.remove_pool(self.POOL)
 
@@ -168,7 +177,14 @@ class TestStretchMode(MgrTestCase):
             if osd['up'] == 0:
                 self.mgr_cluster.mon_manager.revive_osd(osd['osd'])
                 self._move_osd_back_to_host(osd['osd'])
-        
+
+        # Set the mon_netsplit_grace_period to 30 seconds.
+        # Sometimes when many mons restart at the same time
+        # it can take longer for the monitors to establish
+        # a connection.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            'config', 'set', 'mon', 'mon_netsplit_grace_period', '30'
+        )
         # Bring back all the mons
         mons = self._get_all_mons_from_all_dc()
         for mon in mons:
@@ -359,6 +375,7 @@ class TestStretchMode(MgrTestCase):
             self.TIEBREAKER_MON_NAME,
             monmap['tiebreaker_mon']
         )
+        log.debug("Stretch mode is enabled correctly.")
 
     def _stretch_mode_disabled_correctly(self):
         """
@@ -445,6 +462,7 @@ class TestStretchMode(MgrTestCase):
             "",
             monmap['tiebreaker_mon']
         )
+        log.debug("Stretch mode is disabled correctly.")
 
     def test_disable_stretch_mode(self):
         """

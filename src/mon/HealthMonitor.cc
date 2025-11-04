@@ -943,14 +943,26 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   * when reporting location-level netsplits, to give operators the most useful information
   * for troubleshooting network issues.
   *
+  * Grace Period: Detected netsplits are not immediately reported. Instead, they are
+  * tracked in pending maps and only reported as health warnings after persisting for
+  * at least mon_netsplit_grace_period seconds. This prevents transient network issues
+  * from generating false alarms.
+  *
   * Time Complexity: O(m^2)
   * Space Complexity: O(m^2)
   * where m is the number of monitors in the monmap.
   */
   dout(20) << __func__ << dendl;
-  if (mon.monmap->size() < 3 || mon.monmap->strategy != MonMap::CONNECTIVITY) {
+  if (mon.monmap->size() < 3) {
+    dout(10) << "Insufficient monitors for netsplit detection" << dendl;
     return;
   }
+  
+  if (mon.monmap->strategy != MonMap::CONNECTIVITY) {
+    dout(10) << "Monitor strategy is not CONNECTIVITY, skipping netsplit check" << dendl;
+    return;
+  }
+
   std::set<unsigned> mons_down_ranks;
   for (const auto& mon_name : mons_down) {
     mons_down_ranks.insert(mon.monmap->get_rank(mon_name));
@@ -959,6 +971,13 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
   // O(m^2)
   std::set<std::pair<unsigned, unsigned>> nsp_pairs = mon.elector.get_netsplit_peer_tracker(mons_down_ranks);
   if (nsp_pairs.empty()) {
+    pending_mon_netsplits.clear();
+    pending_location_netsplits.clear();
+    current_mon_netsplits.clear();
+    current_location_netsplits.clear();
+    dout(30) << "No netsplit pairs found, clearing"
+      << " pending_mon_netsplits, pending_location_netsplits"
+      << " current_mon_netsplits, current_location_netsplits" << dendl;
     return;
   }
   // Pre-populate mon_loc_map & location_to_mons for each monitor, discarding monitors that are down,
@@ -1082,69 +1101,22 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     location_disconnects[{first_mon_highest_loc, second_mon_highest_loc}]++;
     mon_disconnects.insert({first_mon, second_mon});
   }
-  
-  // For debugging purposes:
-  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
-    dout(30) << "mon_disconnects: {";
-    bool first = true;
-    for (const auto& mon_pair : mon_disconnects) {
-      if (!first) *_dout << ", ";
-      *_dout << "(" << mon_pair.first << ", "
-        << mon_pair.second << ") ";
-    }
-    *_dout << "}" << dendl;
 
-    dout(30) << "location_disconnects: {";
-    bool first = true;
-    for (const auto& loc_pair : location_disconnects) {
-      if (!first) *_dout << ", ";
-      *_dout << "(" << loc_pair.first.first << ", "
-        << loc_pair.first.second << "): "
-        << loc_pair.second;
-    }
-    *_dout << "}" << dendl;
-
-    dout(30) << "mon_loc_map: " << dendl;
-    for (const auto& mon_pair : mon_loc_map) {
-      dout(30) << mon_pair.first << ": {";
-      bool first = true;
-      for (const auto& loc_pair : mon_pair.second) {
-        if (!first) *_dout << ", ";
-        first = false;
-        *_dout << loc_pair.first << ": " << loc_pair.second;
-      }
-      *_dout << "}" << dendl;
-    }
-
-    dout(30) << "location_to_mons: " << dendl;
-    for (const auto& loc_pair : location_to_mons) {
-      dout(30) << loc_pair.first << ": {";
-      bool first = true;
-      for (const auto& monitor : loc_pair.second) {
-        if (!first) *_dout << ", ";
-        first = false;
-        *_dout << monitor;
-      }
-      *_dout << "}" << dendl;
-    }
-  }
-
+  std::set<std::pair<std::string, std::string>> detected_location_netsplits;
+  std::set<std::pair<std::string, std::string>> detected_mon_netsplits;
   // Check for location-level netsplits and remove individual-level netsplits
-  list<string> details;
   for (auto& kv : location_disconnects) {
-    auto& loc_pair = kv.first;
-    int disconnect_count = kv.second;
-    
+    auto& loc_pair = kv.first; // {dc1,dc2}
+    int disconnect_count = kv.second; // Number of disconnects between dc1 and dc2
+
     // The expected number of disconnects between two locations
     // is the product of the number of monitors in each location
-    int expected_disconnects = location_to_mons[loc_pair.first].size() * 
+    int expected_disconnects = location_to_mons[loc_pair.first].size() *
                                 location_to_mons[loc_pair.second].size();
+
     // Report location-level netsplits
     if (disconnect_count == expected_disconnects) {
-      ostringstream ds;
-      ds << "Netsplit detected between " << loc_pair.first << " and " << loc_pair.second;
-      details.push_back(ds.str());
-      
+      detected_location_netsplits.insert(loc_pair);
       // Remove individual monitor disconnects between these locations
       for (const auto& mon1 : location_to_mons[loc_pair.first]) {
         for (const auto& mon2 : location_to_mons[loc_pair.second]) {
@@ -1153,19 +1125,192 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
         }
       }
     }
+
   }
   // Report individual-level netsplits
   for (auto& mon_pair : mon_disconnects) {
-    ostringstream ds;
-    ds << "Netsplit detected between mon." << mon_pair.first << " and mon." << mon_pair.second;
-    details.push_back(ds.str());
+    detected_mon_netsplits.insert(mon_pair);
   }
   
+  // update/add/erase to pending_mon_netsplits and pending_location_netsplits
+  auto now = ceph::coarse_mono_clock::now();
+  auto mon_netsplit_grace_period = g_conf().get_val<std::chrono::seconds>("mon_netsplit_grace_period");
+  auto pending_location_netsplits_end = pending_location_netsplits.end();
+  auto pending_mon_netsplits_end = pending_mon_netsplits.end();
+  list<string> details;
+
+  // Process location-level netsplits
+  for (const auto& nsp : detected_location_netsplits) {
+    auto loc_it = pending_location_netsplits.find(nsp);
+    if (loc_it != pending_location_netsplits_end) {
+      auto elapsed = now - loc_it->second;
+      if (elapsed >= mon_netsplit_grace_period) {
+        // Add MON_NETSPLIT detail, erase the netsplit
+        // from pending_location_netsplits and move to current_location_netsplits
+        dout(20) << "Netsplit detected between " << loc_it->first.first
+            << " and " << loc_it->first.second
+            << ", elapsed time: " << elapsed
+            << " > mon_netsplit_grace_period: " << mon_netsplit_grace_period << dendl;
+        ostringstream ds;
+        ds << "Netsplit detected between " << loc_it->first.first
+           << " and " << loc_it->first.second;
+        details.push_back(ds.str());
+        pending_location_netsplits.erase(loc_it);
+        current_location_netsplits[nsp] = now;
+      }
+    } else if (current_location_netsplits.count(nsp)) {
+      // Can't find in pending_location_netsplits, but found in current_location_netsplits
+      // This means the netsplit is still ongoing, so we continue reporting it
+      dout(20) << "Ongoing netsplit between " << nsp.first
+          << " and " << nsp.second << " duration: "
+          << (now - current_location_netsplits[nsp]) << dendl;
+      ostringstream ds;
+      ds << "Netsplit detected between " << nsp.first
+        << " and " << nsp.second;
+      details.push_back(ds.str());
+    } else {
+      // First time seeing the location-level netsplit
+      dout(20) << "First time seeing netsplit between " << nsp.first
+          << " and " << nsp.second << dendl;
+      // Add to pending_location_netsplits
+      pending_location_netsplits[nsp] = now;
+    }
+  }
+
+  // Process monitor-level netsplits
+  for (const auto& mon_pair : detected_mon_netsplits) {
+    auto mon_it = pending_mon_netsplits.find(mon_pair);
+    if (mon_it != pending_mon_netsplits_end) {
+      auto elapsed = now - mon_it->second;
+      if (elapsed >= mon_netsplit_grace_period) {
+        // Add MON_NETSPLIT detail, erase the netsplit
+        // from pending_mon_netsplits and move to current_mon_netsplits
+        dout(20) << "Netsplit detected between mon." << mon_it->first.first
+            << " and mon." << mon_it->first.second
+            << ", elapsed time: " << elapsed
+            << " >  mon_netsplit_grace_period: " << mon_netsplit_grace_period << dendl;
+        ostringstream ds;
+        ds << "Netsplit detected between mon." << mon_it->first.first
+          << " and mon." << mon_it->first.second;
+        details.push_back(ds.str());
+        pending_mon_netsplits.erase(mon_it);
+        current_mon_netsplits[mon_pair] = now;
+      }
+    } else if (current_mon_netsplits.count(mon_pair)) {
+      // Can't find in pending_mon_netsplits, but found in current_mon_netsplits
+      // This means the netsplit is still ongoing, so we continue reporting it
+      dout(20) << "Ongoing netsplit between mon." << mon_pair.first
+               << " and mon." << mon_pair.second
+               << " duration: " << (now - current_mon_netsplits[mon_pair]) << dendl;
+      ostringstream ds;
+      ds << "Netsplit detected between mon." << mon_pair.first
+         << " and mon." << mon_pair.second;
+      details.push_back(ds.str());
+    } else {
+      // First time seeing the monitor-level netsplit
+      dout(20) << "First time seeing netsplit between mon." << mon_pair.first
+               << " and mon." << mon_pair.second << dendl;
+      pending_mon_netsplits[mon_pair] = now;
+    }
+  }
+
   // Report health check if any details
   if (!details.empty()) {
     ostringstream ss;
     ss << details.size() << " network partition" << (details.size() > 1 ? "s" : "") << " detected";
     auto& d = checks->add("MON_NETSPLIT", HEALTH_WARN, ss.str(), details.size());
     d.detail.swap(details);
+  }
+
+  if (mon.cct->_conf->subsys.should_gather(ceph_subsys_mon, 30)) {
+    dout(30) << "mon_disconnects: {";
+    bool first = true;
+    for (const auto& mon_pair : mon_disconnects) {
+      if (!first) *_dout << ", ";
+      first = false;
+      *_dout << "(" << mon_pair.first << ", " << mon_pair.second << ")";
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "location_disconnects: {";
+    bool first = true;
+    for (const auto& loc_pair : location_disconnects) {
+      if (!first) *_dout << ", ";
+      first = false;
+      *_dout << "(" << loc_pair.first.first << ", " << loc_pair.first.second << "): "
+             << loc_pair.second;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "mon_loc_map: { ";
+    bool outer_first = true;
+    for (const auto& mon_pair : mon_loc_map) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << mon_pair.first << ": {";
+      bool inner_first = true;
+      for (const auto& loc_pair : mon_pair.second) {
+        if (!inner_first) *_dout << ", ";
+        inner_first = false;
+        *_dout << loc_pair.first << ": " << loc_pair.second;
+      }
+      *_dout << "}";
+    }
+    *_dout << " }" << dendl;
+
+
+    dout(30) << "location_to_mons: {";
+    bool outer_first = true;
+    for (const auto& loc_pair : location_to_mons) {
+      if (!outer_first) *_dout << ", ";
+      outer_first = false;
+      *_dout << loc_pair.first << ": {";
+      bool inner_first = true;
+      for (const auto& monitor : loc_pair.second) {
+        if (!inner_first) *_dout << ", ";
+        inner_first = false;
+        *_dout << monitor;
+      }
+      *_dout << "}";
+    }
+    *_dout << " }" << dendl;
+
+    dout(30) << "detected_location_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : detected_location_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first << ", " << netsplit.second << ")";
+      first = false;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "detected_mon_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : detected_mon_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first << ", " << netsplit.second << ")";
+      first = false;
+    }
+    *_dout << "}" << dendl;
+  
+    dout(30) << "pending_location_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : pending_location_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first.first << ", " << netsplit.first.second
+             << "): " << netsplit.second;
+      first = false;
+    }
+    *_dout << "}" << dendl;
+
+    dout(30) << "pending_mon_netsplits: {";
+    bool first = true;
+    for (const auto& netsplit : pending_mon_netsplits) {
+      if (!first) *_dout << ", ";
+      *_dout << "(" << netsplit.first.first << ", " << netsplit.first.second
+             << "): " << netsplit.second;
+      first = false;
+    }
+    *_dout << "}" << dendl;
   }
 }

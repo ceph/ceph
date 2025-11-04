@@ -1424,6 +1424,13 @@ options:
     should trigger a panic if it does not receive the initial map from the monitor
   default: 30
   services:
+- name: mon_netsplit_grace_period
+  type: secs
+  level: advanced
+  desc: Time (in seconds) to wait before emitting a MON_NETSPLIT
+    health warning.
+  default: 9
+  services :
   - mon
 - name: pool_availability_update_interval
   type: float

@@ -7,3 +7,4 @@ overrides:
     log-ignorelist:
       - \(OSD_SLOW_PING_TIME
       - \(MON_DOWN\)
+      - \(MON_NETSPLIT\)
