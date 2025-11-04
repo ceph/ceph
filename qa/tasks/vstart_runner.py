@@ -1070,6 +1070,7 @@ class LocalContext(object):
         cluster_namespace = Namespace()
         cluster_namespace.fsid = FSID
         cluster_namespace.thrashers = []
+        cluster_namespace.watched_processes = []
         self.ceph = {cluster_name: cluster_namespace}
         self.teuthology_config = teuth_config
         self.cluster = LocalCluster()
