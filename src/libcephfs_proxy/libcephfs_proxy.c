@@ -89,7 +89,7 @@ static int32_t proxy_global_connect(void)
 		proxy_link_negotiate_init(&global_cmount.neg, 0, PROXY_FEAT_ALL,
 					  0,
 					  PROXY_FEAT_EMBEDDED_PERMS,
-					  PROXY_LINK_PROTOCOL_VERSION);
+					  PROXY_LINK_PROTOCOL_VERSION, 0, 0);
 
 		err = proxy_link_handshake_client(&global_cmount.link, err,
 						  &global_cmount.neg,
@@ -245,7 +245,9 @@ __public int ceph_create(struct ceph_mount_info **cmount, const char *const id)
 	proxy_link_negotiate_init(&ceph_mount->neg, 0, PROXY_FEAT_ALL, 0,
 				  PROXY_FEAT_ASYNC_IO |
 				  PROXY_FEAT_EMBEDDED_PERMS,
-				  PROXY_LINK_PROTOCOL_VERSION);
+				  PROXY_LINK_PROTOCOL_VERSION, 0,
+				  LIBCEPHFSD_CBK_TOTAL_OPS);
+
 
 	err = proxy_link_handshake_client(&ceph_mount->link, sd,
 					  &ceph_mount->neg,

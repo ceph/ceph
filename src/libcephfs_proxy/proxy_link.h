@@ -4,6 +4,7 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
+#include <endian.h>
 
 #include "proxy.h"
 
@@ -22,6 +23,12 @@
 /* The maximum supported protocol version. */
 #define PROXY_LINK_PROTOCOL_VERSION PROXY_PROTOCOL_V1
 
+/* Flags for the proxy_link_negotiate_v0_t structure. */
+enum {
+	/* If set, the v0 structure is using the new layout. */
+	PROXY_NEG_V0_OPS = 1
+};
+
 /* Version 0 structure will be used to handle legacy clients that don't support
  * negotiation. */
 typedef struct _proxy_link_negotiate_v0 {
@@ -29,14 +36,38 @@ typedef struct _proxy_link_negotiate_v0 {
 	 * NEG_VERSION_SIZE() to avoid alignement issues. */
 	uint16_t size;
 
-	/* Version of the negotiation structure. */
-	uint16_t version;
+	/* We keep the previous structure definition as 'legacy' for backward
+	 * compatibility. It will be used in the initial negotiation request
+	 * sent by the client. The flag PROXY_NEG_V0_OPS indicates if the
+	 * new layout is supported. More details in proxy_link_negotiate_*
+	 * functions. */
+	union {
+		struct {
+			/* Version of the negotiation structure. */
+			uint16_t version;
 
-	/* Minimum version that the peer needs to support to proceed. */
-	uint16_t min_version;
+			/* Minimum version that the peer needs to support to
+			 * proceed. */
+			uint16_t min_version;
+		} legacy;
+		struct {
+			/* Version of the negotiation structure. */
+			uint8_t version;
 
-	/* Reserved. Must be 0. */
-	uint16_t flags;
+			/* Minimum version that the peer needs to support to
+			 * proceed. */
+			uint8_t min_version;
+
+			/* Total number of operations supported. */
+			uint16_t num_ops;
+		};
+	};
+
+	/* Total number of callbacks supported. */
+	uint8_t num_cbks;
+
+	/* Flags of the v0 structure. */
+	uint8_t flags;
 } proxy_link_negotiate_v0_t;
 
 typedef struct _proxy_link_negotiate_v1 {
@@ -84,13 +115,18 @@ typedef struct _proxy_link_ans {
 	 sizeof(proxy_link_negotiate_v##_ver##_t))
 #define NEG_VERSION_SIZE(_ver) NEG_VERSION_SIZE_1(_ver)
 
-#define proxy_link_negotiate_init_v0(_neg, _ver, _min) \
+#define proxy_link_negotiate_init_v0(_neg, _ver, _min, _ops, _cbks) \
 	do { \
 		(_neg)->v0.size = NEG_VERSION_SIZE(_ver); \
 		(_neg)->v0.version = (_ver); \
 		(_neg)->v0.min_version = (_min); \
-		(_neg)->v0.flags = 0; \
+		(_neg)->v0.num_ops = (_ops); \
+		(_neg)->v0.num_cbks = (_cbks); \
+		(_neg)->v0.flags = PROXY_NEG_V0_OPS; \
 	} while (0)
+
+#define proxy_op_supported(_neg, _op) ((_neg)->v0.num_ops > (_op))
+#define proxy_cbk_supported(_neg, _cbk) ((_neg)->v0.num_cbks > (_cbk))
 
 /* NEG_VERSION: Add new arguments and initialize the link->neg.vX with them. */
 static inline void proxy_link_negotiate_init(proxy_link_negotiate_t *neg,
@@ -98,10 +134,12 @@ static inline void proxy_link_negotiate_init(proxy_link_negotiate_t *neg,
 					     uint32_t supported,
 					     uint32_t required,
 					     uint32_t enabled,
-					     uint32_t protocol)
+					     uint32_t protocol,
+					     uint32_t num_ops,
+					     uint32_t num_cbks)
 {
 	proxy_link_negotiate_init_v0(neg, PROXY_LINK_NEGOTIATE_VERSION,
-				     min_version);
+				     min_version, num_ops, num_cbks);
 
 	neg->v1.supported = supported;
 	neg->v1.required = required;
