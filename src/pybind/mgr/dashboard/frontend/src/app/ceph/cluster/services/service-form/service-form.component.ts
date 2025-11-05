@@ -1314,7 +1314,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           serviceSpec['https_address'] = values['https_address']?.trim();
           serviceSpec['redirect_url'] = values['redirect_url']?.trim();
           serviceSpec['allowlist_domains'] = values['allowlist_domains']
-            .split(',')
+            ?.split(',')
             .map((domain: string) => {
               return domain.trim();
             });
