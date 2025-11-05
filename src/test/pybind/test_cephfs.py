@@ -304,6 +304,27 @@ def test_symlink(testdir):
     cephfs.close(fd)
     cephfs.unlink(b'file-2')
 
+def test_symlinkat(testdir):
+    cephfs.mkdir(b'dir1', 0o755)
+
+    fd = cephfs.open(b'dir1/file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+
+    fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+    cephfs.symlinkat('file1', fd, 'slink1')
+    cephfs.close(fd)
+
+    fd = cephfs.open('dir1/file1', 'r+', 0o755)
+    data = cephfs.read(fd, 0, 4)
+    assert_equal(data, b'abcd')
+
+    cephfs.write(fd, b'efgh', 4)
+    data = cephfs.read(fd, 0, 8)
+    assert_equal(data, b'abcdefgh')
+
+    cephfs.close(fd)
+
 def test_readlink(testdir):
     fd = cephfs.open(b'/file-1', 'w', 0o755)
     cephfs.write(fd, b"1111", 0)
