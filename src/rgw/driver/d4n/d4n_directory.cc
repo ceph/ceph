@@ -962,7 +962,8 @@ D4NTransaction::CloneStatus D4NTransaction::clone_key_for_transaction(std::strin
 	boost::system::error_code ec;
 	response<int> resp;
 	request req;
-	req.push("EVALSHA", m_evalsha_clone_key, "2", key_source, key_destination);
+	req.push("EVALSHA", m_evalsha_clone_key, "2", key_source, key_destination,
+	         std::to_string(D4N_TRANSACTION_TEMP_KEY_TTL));
 
 	redis_exec(conn, ec, req, resp, y);
 
@@ -1149,7 +1150,7 @@ void D4NTransaction::cancel_transaction(const DoutPrefixProvider* dpp)
 //in case the destination key exists, the script should return -1.
 //in case the destination key does not exists, it should clone the source key into the destination key.
 std::string lua_script_clone_keys = R"(
-local function clone_key(key_source, key_destination)
+local function clone_key(key_source, key_destination, ttl_seconds)
 		local keyType_source = redis.call('TYPE', key_source).ok
 		if keyType_source == 'none' then
 				redis.log(redis.LOG_NOTICE,"key source does not exists: " .. key_source .. " cannot clone to: " .. key_destination)
@@ -1157,8 +1158,12 @@ local function clone_key(key_source, key_destination)
 		end
 		local keyType = redis.call('TYPE', key_destination).ok
 		if keyType == 'none' then
-				redis.log(redis.LOG_NOTICE,"key does not exists: " .. key_destination .. " cloning key: " .. key_source)
+				redis.log(redis.LOG_NOTICE,"cloning key: " .. key_source .. " to: " .. key_destination .. " with TTL: " .. ttl_seconds)
 				redis.call('COPY', key_source, key_destination)
+
+				-- Set TTL on temporary key to auto-expire orphaned keys
+				redis.call('EXPIRE', key_destination, ttl_seconds)
+
 				local exist_status = redis.call('EXISTS', key_destination)
 				redis.log(redis.LOG_NOTICE,"key exists: " .. key_destination .. " status: " .. exist_status)
 				return 0
@@ -1168,7 +1173,8 @@ local function clone_key(key_source, key_destination)
 		end
 end
 
-return clone_key(KEYS[1], KEYS[2])
+-- ARGV[1] contains the TTL value passed from C++ code
+return clone_key(KEYS[1], KEYS[2], tonumber(ARGV[1]))
 )";
 
 int D4NTransaction::get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
@@ -1386,6 +1392,11 @@ local function rename_all_write_keys()
 		-- the clone key replaces the original key
 		log_message("Renaming " .. tempWriteKey .. " to " .. baseKey)
 	  redis.call('RENAME', tempWriteKey, baseKey)
+
+	  -- Remove TTL from committed key to make it permanent
+	  redis.call('PERSIST', baseKey)
+	  log_message("Persisted key (removed TTL): " .. baseKey)
+
 	  -- Log this commit for test validation
 	  log_commit(baseKey)
 	end

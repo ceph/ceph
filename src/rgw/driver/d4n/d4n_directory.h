@@ -13,6 +13,11 @@
 
 namespace rgw { namespace d4n {
 
+// TTL for temporary transaction keys (seconds)
+// Temporary keys auto-expire after this duration to prevent orphaned keys
+// from consuming Redis memory in case of process crashes or failures
+constexpr int D4N_TRANSACTION_TEMP_KEY_TTL = 300;  // 5 minutes
+
 template<typename T>
   concept SeqContainer = requires(T& t, typename T::value_type v) {
       t.push_back(v);
