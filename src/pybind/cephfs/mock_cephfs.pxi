@@ -225,12 +225,17 @@ cdef nogil:
         pass
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length):
         pass
+
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode):
         pass
+    int ceph_chmodat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     mode_t mode, int flags)
+        pass
+
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid):
         pass
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid):
