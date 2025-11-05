@@ -92,6 +92,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
     int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
