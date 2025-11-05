@@ -8,6 +8,8 @@
 #include "proxy_requests.h"
 #include "proxy_async.h"
 
+#define PROXY_READDIR_BUFFER 65536
+
 /* We override the definition of UserPerm structure to contain internal user
  * credentials. This is already a black box for libcephfs users, so this won't
  * be noticed. */
@@ -27,6 +29,18 @@ struct ceph_mount_info {
 	proxy_async_t async;
 	char *cwd_path;
 	uint64_t cmount;
+};
+
+/* We override the definition of the ceph_dir_result structure to support
+ * batched reads. This is already a black box for libcephfs users, so this
+ * won't be noticed.*/
+struct ceph_dir_result {
+	struct dirent *current;
+	uint64_t dirp;
+	uint32_t size;
+	uint32_t count;
+	bool eod;
+	struct dirent entries[];
 };
 
 /* The global_cmount is used to stablish an initial connection to serve requests
@@ -599,7 +613,20 @@ __public int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
 			     const UserPerm *perms)
 {
 	CEPH_REQ(ceph_ll_opendir, req, 1, ans, 0);
+	struct ceph_dir_result *dirp;
+	uint32_t size;
 	int32_t err;
+
+	size = sizeof(struct ceph_dir_result) + PROXY_READDIR_BUFFER;
+	dirp = proxy_malloc(size);
+	if (dirp == NULL) {
+		return -ENOMEM;
+	}
+
+	dirp->current = NULL;
+	dirp->size = PROXY_READDIR_BUFFER;
+	dirp->count = 0;
+	dirp->eod = false;
 
 	PROTO_VERSION(&cmount->neg, req, PROXY_PROTOCOL_V1);
 
@@ -609,7 +636,10 @@ __public int ceph_ll_opendir(struct ceph_mount_info *cmount, struct Inode *in,
 
 	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_OPENDIR, req, ans);
 	if (err >= 0) {
-		*dirpp = value_ptr(ans.dir);
+		dirp->dirp = ans.dir;
+		*dirpp = dirp;
+	} else {
+		proxy_free(dirp);
 	}
 
 	return err;
@@ -659,10 +689,16 @@ __public int ceph_ll_releasedir(struct ceph_mount_info *cmount,
 				struct ceph_dir_result *dir)
 {
 	CEPH_REQ(ceph_ll_releasedir, req, 0, ans, 0);
+	int32_t err;
 
-	req.dir = ptr_value(dir);
+	req.dir = dir->dirp;
 
-	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_RELEASEDIR, req, ans);
+	err = CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_RELEASEDIR, req, ans);
+	if (err >= 0) {
+		proxy_free(dir);
+	}
+
+	return err;
 }
 
 __public int ceph_ll_removexattr(struct ceph_mount_info *cmount,
@@ -705,7 +741,7 @@ __public void ceph_rewinddir(struct ceph_mount_info *cmount,
 {
 	CEPH_REQ(ceph_rewinddir, req, 0, ans, 0);
 
-	req.dir = ptr_value(dirp);
+	req.dir = dirp->dirp;
 
 	CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REWINDDIR, req, ans);
 }
@@ -880,7 +916,7 @@ __public int ceph_readdir_r(struct ceph_mount_info *cmount,
 
 	CEPH_REQ(ceph_readdir, req, 0, ans, 1);
 
-	req.dir = ptr_value(dirp);
+	req.dir = dirp->dirp;
 
 	CEPH_BUFF_ADD(ans, de, sizeof(struct dirent));
 
