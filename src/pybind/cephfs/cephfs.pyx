@@ -2338,7 +2338,26 @@ cdef class LibCephFS(object):
             ret = ceph_symlink(self.cluster, _existing, _newname)
         if ret < 0:
             raise make_ex(ret, "error in symlink")
-    
+
+    def symlinkat(self, existing, fd, newname):
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('"fd" must be of type int')
+
+        existing = cstr(existing, 'existing')
+        newname = cstr(newname, 'newname')
+        cdef:
+            int _fd = fd
+            char* _existing = existing
+            char* _newname = newname
+
+        with nogil:
+            ret = ceph_symlinkat(self.cluster, _existing, _fd, _newname)
+
+        if ret < 0:
+            raise make_ex(ret, "error in symlinkat")
+
     def link(self, existing, newname):
         """
         Create a link.
