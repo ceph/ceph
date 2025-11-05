@@ -4290,6 +4290,24 @@ options:
     that this recommendation may change in the future however.
   default: true
   with_legacy: true
+- name: bluefs_enable_cache
+  type: bool
+  level: advanced
+  desc: Enables caching for bluefs reads to improve performance by reducing disk reads
+  default: false
+  with_legacy: true
+- name: bluefs_cache_size
+  type: size
+  level: advanced
+  desc: Cache size for bluefs reads, considered only when bluefs_enable_cache is set to true
+  default: 16_M
+  with_legacy: true
+- name: bluefs_cache_evict_size
+  type: size
+  level: advanced
+  desc: Cache evict size for bluefs reads, when the cache is exceeding configured bluefs_cache_size
+  default: 4_M
+  with_legacy: true
 - name: bluefs_sync_write
   type: bool
   level: advanced

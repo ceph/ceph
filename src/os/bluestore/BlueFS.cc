@@ -4,6 +4,14 @@
 #include <asm-generic/errno-base.h>
 #include <chrono>
 #include <fmt/compile.h>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include "common/ceph_context.h"
+#include "common/dout.h"
+#include "include/buffer_fwd.h"
+#include "libkmip/kmip.h"
+#include <memory>
 #include "boost/algorithm/string.hpp" 
 #include "bluestore_common.h"
 #include "BlueFS.h"
@@ -204,12 +212,16 @@ private:
 };
 
 BlueFS::BlueFS(CephContext* cct)
+  : BlueFS(cct, nullptr) {}
+
+BlueFS::BlueFS(CephContext* cct, std::shared_ptr<LRUCache> bluefscache)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    locked_alloc(MAX_BDEV)
+    locked_alloc(MAX_BDEV),
+    bluefscache(bluefscache)
 {
   dirty.pending_release.resize(MAX_BDEV);
   discard_cb[BDEV_WAL] = wal_discard_cb;
@@ -234,6 +246,7 @@ BlueFS::~BlueFS()
   for (auto p : ioc) {
     delete p;
   }
+  bluefscache = nullptr;
 }
 
 void BlueFS::_init_logger()
@@ -363,6 +376,22 @@ void BlueFS::_init_logger()
 		    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluefs_read_random_buffer_bytes, "read_random_buffer_bytes",
 		    "Bytes read from prefetch buffer in random read mode",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_read_random_cache_count, "read_random_cache_count",
+		    "random reads requests going to cache",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluefs_read_random_cache_bytes, "read_random_cache_bytes",
+		    "Bytes read from cache in random read mode",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_read_cache_count, "read_cache_count",
+		    "random reads requests going to cache",
+		    NULL,
+		    PerfCountersBuilder::PRIO_USEFUL);
+  b.add_u64_counter(l_bluefs_read_cache_bytes, "read_cache_bytes",
+		    "Bytes read from cache in random read mode",
 		    NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   b.add_time_avg   (l_bluefs_read_lat, "read_lat",
@@ -1091,8 +1120,15 @@ int BlueFS::mount()
 {
   dout(1) << __func__ << dendl;
 
+  int r;
+
+  if (cct->_conf->bluefs_enable_cache && cct->_conf->bluefs_buffered_io) {
+    derr << __func__ << " init failed, when bluefs_enable_cache is configured true, bluefs_buffered_io must be set to false" << dendl;
+    goto out;
+  }
+
   _init_logger();
-  int r = _open_super();
+  r = _open_super();
   if (r < 0) {
     derr << __func__ << " failed to open super: " << cpp_strerror(r) << dendl;
     goto out;
@@ -2388,6 +2424,103 @@ void BlueFS::_drop_link_DF(FileRef file)
   }
 }
 
+int64_t BlueFS::_read_from_cache(
+    uint64_t ino,     ///< [in] read from here
+    uint64_t off,      ///< [in] offset
+    size_t len,        ///< [in] this many bytes
+    bufferlist *outbl, ///< [out] optional: reference the result here
+    char *out)         ///< [out] optional: or copy it here)
+{
+  dout(10) << __func__ << " file ino " << ino << " 0x" << std::hex << off << "~" << len << std::dec << dendl;
+
+  if (bluefscache->is_empty()) {
+      dout(10) << __func__ << " file ino " << ino << " cache is empty" << dendl;
+      return 0;
+  }
+
+  uint64_t bufferoffset = 0;
+  // return only bl
+  auto start = std::chrono::high_resolution_clock::now();
+  auto bl = bluefscache->get_nearest_offset(ino, off, &bufferoffset);
+  auto end = std::chrono::high_resolution_clock::now();
+  dout(10) << __func__ << " cache get for inode " << ino << " and offset 0x" << std::hex << off << "~" << len << std::dec << dendl;
+  dout(10) << __func__ << " cache get duration: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() << " ns" << dendl;
+
+  if (!bl) {
+    dout(10) << __func__ << " offset doesn't exist in cache, file ino " << ino << " 0x" << std::hex << off << "~" << len << std::dec << dendl;
+    return 0;
+  }
+
+  int readlength = std::min(len, bl->length() - bufferoffset);
+
+  dout(10) << __func__ << " reading for file ino " << ino << " from bl, at bufferoffset 0x" << std::hex << bufferoffset << " read length 0x" << readlength << std::dec << dendl;
+
+  if (outbl) {
+    dout(10) << __func__ << " file ino " << ino << " reading into bufferlist" << dendl;
+    outbl->append(*bl);
+  }
+
+  if (out) {
+    dout(10) << __func__ << " file ino " << ino << " reading into character string" << dendl;
+    auto p = bl->begin();
+    p.seek(bufferoffset);
+    p.copy(readlength, out);
+    out += readlength;
+  }
+
+  bufferlist print;
+  print.substr_of(*bl, bufferoffset, readlength);
+  dout(30) << __func__ << " read result chunk (0x"
+           << std::hex << readlength << std::dec << " bytes):\n";
+  print.hexdump(*_dout);
+  *_dout << dendl;
+
+  dout(10) << __func__ << " read from cache, ino " << ino << " 0x" << std::hex << off << "~" << readlength << std::dec << dendl;
+  return readlength;
+}
+
+void BlueFS::_update_cache(uint64_t ino, uint64_t offset, uint64_t length,
+                              bufferlist *outbl, char *out) {
+  dout(10) << __func__ << " file ino " << ino << " 0x" << std::hex << offset << "~"
+           << length << std::dec << dendl;
+
+  if (!outbl && !out) {
+    derr << __func__ << " file ino " << ino << "bufferlist data unpopulated at offset 0x"
+         << std::hex << offset << "~" << length << std::dec
+         << " failed to update cache" << dendl;
+  }
+
+  cache_bufferlist bl = bluefscache->create_bufferlist();
+  if (!outbl) {
+    bl->append(out, length);
+    dout(10) << __func__ << " file ino " << ino << " reading from character string" << dendl;
+  } else {
+    bl->substr_of(*outbl, 0, length);
+    dout(10) << __func__ << " file ino " << ino << " reading from bufferlist" << dendl;
+  }
+
+  bufferlist t;
+  t.substr_of(*bl, 0, length);
+  dout(30) << __func__ << " result chunk (0x" << std::hex << length << std::dec
+           << " bytes):\n";
+  t.hexdump(*_dout);
+  *_dout << dendl;
+
+  auto start = std::chrono::high_resolution_clock::now();
+  int r = bluefscache->put(ino, offset, bl);
+  auto end = std::chrono::high_resolution_clock::now();
+  dout(10) << __func__ << " cache update for inode " << ino << " and offset 0x" << std::hex << offset << "~" << length << std::dec << dendl;
+  dout(10) << __func__ << " cache update duration: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() << " ns" << dendl;
+
+  if (r < 0) {
+    dout(10) << __func__ << " file ino " << ino << " bufferlist size greater than max capacity 0x"
+           << std::hex << offset << "~" << length << std::dec << dendl;
+    return;
+  }
+  dout(10) << __func__ << " file ino " << ino << " cache updated 0x"
+           << std::hex << offset << "~" << length << std::dec << dendl;
+}
+
 int64_t BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
@@ -2398,6 +2531,9 @@ int64_t BlueFS::_read_random(
   auto* buf = &h->buf;
 
   int64_t ret = 0;
+  int64_t rcache = 0;
+  char* cache = out;
+  uint64_t givenoffset = off;
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << lock_fnode_print(h->file) << dendl;
@@ -2419,6 +2555,32 @@ int64_t BlueFS::_read_random(
   std::shared_lock s_lock(h->lock);
   buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   while (len > 0) {
+    if (cct->_conf->bluefs_enable_cache) {
+      int64_t r;
+      r = _read_from_cache(h->file->fnode.ino, off, len, NULL, out);
+      
+      if (r == static_cast<int64_t>(len)) {
+        // if the returned number of bytes is equal to the len, it exits the loop in next iteration, 
+        // hence unlocking in the shared lock
+        s_lock.unlock();
+      }
+
+      if (r > 0) {
+        dout(20) << __func__ << " fetched from cache 0x" << std::hex << off
+                 << "~" << r << std::dec << dendl;
+        logger->inc(l_bluefs_read_random_cache_bytes, r);
+        logger->inc(l_bluefs_read_random_cache_count, 1);
+        len -= r;
+        off += r;
+        rcache += r;
+        ret += r;
+        buf->pos += r;
+        out += r;
+        // continue reading from cache
+        continue;
+      }
+      // if the returned number of bytes is equal to zero, continues reading from disk
+    }
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
       uint64_t x_off = 0;
@@ -2476,6 +2638,11 @@ int64_t BlueFS::_read_random(
       buf->pos += r;
     }
   }
+
+  if (cct->_conf->bluefs_enable_cache && rcache < ret) {
+    _update_cache(h->file->fnode.ino, givenoffset, ret, NULL, cache);
+  }
+
   dout(20) << __func__ << std::hex
            << " got 0x" << ret
            << std::dec  << dendl;
@@ -2708,9 +2875,35 @@ int64_t BlueFS::_read(
     outbl->clear();
 
   int64_t ret = 0;
+  int64_t rcache = 0;
+  uint64_t givenoffset = off;
+  char* cache = out;
   std::shared_lock s_lock(h->lock);
   while (len > 0) {
     size_t left;
+    if (cct->_conf->bluefs_enable_cache && h->file->fnode.ino != 1) {
+      int64_t r;
+      r = _read_from_cache(h->file->fnode.ino, off, len, outbl, out);
+      
+      if (r == static_cast<int64_t>(len)) {
+        s_lock.unlock();
+      }
+
+      if (r > 0) {
+        dout(20) << __func__ << " fetched from cache 0x" << std::hex << off
+                 << "~" << r << std::dec << dendl;
+        logger->inc(l_bluefs_read_cache_bytes, r);
+        logger->inc(l_bluefs_read_cache_count, 1);
+
+        rcache += r;
+        ret += r;
+        buf->pos += r;
+        out += r;
+        len -= r;
+        off += r;
+        continue;
+      }
+    }
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
       std::unique_lock u_lock(h->lock);
@@ -2793,6 +2986,10 @@ int64_t BlueFS::_read(
     buf->pos += r;
   }
 
+  if (cct->_conf->bluefs_enable_cache && h->file->fnode.ino != 1 && rcache < ret) {
+    _update_cache(h->file->fnode.ino, givenoffset, ret, outbl, cache);
+  }
+
   dout(20) << __func__ << std::hex
            << " got 0x" << ret
            << std::dec  << dendl;
@@ -2808,6 +3005,8 @@ void BlueFS::invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
   dout(10) << __func__ << " file " << f->fnode
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
            << dendl;
+  dout(10) << __func__ << " updating cache " << dendl;
+  bluefscache->remove({f->fnode.ino, offset});
   if (offset & ~super.block_mask()) {
     offset &= super.block_mask();
     length = round_up_to(length, super.block_size);

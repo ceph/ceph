@@ -5758,6 +5758,9 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  if (cct->_conf->bluefs_enable_cache) {
+    bluefscache = std::make_shared<LRUCache>(cct->_conf->bluefs_cache_size, cct->_conf->bluefs_cache_evict_size, cct);
+  }
   bluestore_bdev_label_require_all = cct->_conf.get_val<bool>("bluestore_bdev_label_require_all");
   asok_hook = new SocketHook(*this);
 }
@@ -7628,8 +7631,12 @@ bool BlueStore::test_mount_in_use()
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  bluefs = new BlueFS(cct);
 
+  if (cct->_conf->bluefs_enable_cache) {
+    bluefs = new BlueFS(cct, bluefscache);
+  } else {
+    bluefs = new BlueFS(cct);
+  }
   string bfn;
   struct stat st;
 

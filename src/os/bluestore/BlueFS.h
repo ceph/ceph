@@ -8,6 +8,7 @@
 #include <mutex>
 #include <limits>
 #include <uuid/uuid.h>
+#include <memory>
 
 #include "bluefs_types.h"
 #include "blk/BlockDevice.h"
@@ -18,6 +19,7 @@
 #include "include/byteorder.h"
 #include "include/ceph_hash.h"
 #include "include/common_fwd.h"
+#include "BlueFSCache.h"
 
 #include "boost/intrusive/list.hpp"
 #include "boost/dynamic_bitset.hpp"
@@ -55,6 +57,10 @@ enum {
   l_bluefs_read_random_lat,
   l_bluefs_read_random_count,
   l_bluefs_read_random_bytes,
+  l_bluefs_read_random_cache_count,
+  l_bluefs_read_random_cache_bytes,
+  l_bluefs_read_cache_count,
+  l_bluefs_read_cache_bytes,
   l_bluefs_read_random_disk_count,
   l_bluefs_read_random_disk_bytes,
   l_bluefs_read_random_disk_bytes_wal,
@@ -546,6 +552,7 @@ public:
   };
 private:
   PerfCounters *logger = nullptr;
+  std::shared_ptr<LRUCache> bluefscache;
 
   uint64_t max_bytes[MAX_BDEV] = {0};
   uint64_t max_bytes_pcounters[MAX_BDEV] = {
@@ -747,6 +754,14 @@ private:
     uint64_t offset, ///< [in] offset
     uint64_t len,    ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
+  int64_t _read_from_cache(
+    uint64_t ino,     ///< [in] read from here
+    uint64_t off,      ///< [in] offset
+    size_t len,        ///< [in] this many bytes
+    bufferlist *outbl, ///< [out] optional: reference the result here
+    char *out);        ///< [out] optional: or copy it here)
+  void _update_cache(uint64_t ino, uint64_t offset, uint64_t length,
+                        bufferlist *outbl, char *out);
 
   int _open_super();
   int _write_super(int dev);
@@ -780,6 +795,7 @@ private:
 
 public:
   BlueFS(CephContext* cct);
+  BlueFS(CephContext* cct, std::shared_ptr<LRUCache> bluefscache);
   ~BlueFS();
 
   // the super is always stored on bdev 0
