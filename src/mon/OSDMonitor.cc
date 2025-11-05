@@ -4287,15 +4287,15 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   ceph_assert(p.migrating_pgs.contains(m->pgid));
   ceph_assert(p.migration_target == m->migration_target);
 
-  //TODO: Need better scheduling of next PG to migrate
-  //this code only copes with 1 PG migrating at a time
   pg_t pgid = m->pgid;
   p.migrating_pgs.erase(pgid);
-  if (pgid.ps() == 0) {
-    dout(0) << "Finished pool migration for pool " << pgid.pool() << dendl;
+  dout(0) << "finished a migration, lowest_migrated_pg is " << p.lowest_migrated_pg << dendl;
+  if (p.lowest_migrated_pg == 0) {
+    dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
-    dout(0) << "Starting migration of PG " << pg_t(pgid.ps() - 1, pgid.pool()) << dendl;
-    p.migrating_pgs = { pg_t(pgid.ps() - 1, pgid.pool()) };
+    dout(0) << "Starting migration of PG " << pg_t(p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
+    p.migrating_pgs.emplace(pg_t(p.lowest_migrated_pg - 1, pgid.pool()));
+    p.lowest_migrated_pg -= 1;
   }
   //TODO: Do we need to update this?
   p.last_change = pending_inc.epoch;
@@ -8443,9 +8443,27 @@ int OSDMonitor::prepare_new_pool(string& name,
 
     spi->migration_src.reset();
     spi->migration_target = pool;
-    spi->migrating_pgs = { pg_t(spi->get_pg_num() - 1, source_pool_id.value()) };
     pi->migration_src = source_pool_id.value();
     pi->migration_target.reset();
+
+    // Migrate 5% of PGs at a time. uint64_t to prevent overflow if PG num close to max uint32
+    uint64_t migrating_pgs_size = 0;
+    if (spi->get_pg_num() > pi->get_pg_num()) {
+      migrating_pgs_size = (static_cast<uint64_t>(pi->get_pg_num()) + 19) / 20;
+    } else {
+      migrating_pgs_size = (static_cast<uint64_t>(spi->get_pg_num()) + 19) / 20;
+    }
+
+    for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
+      dout(0) << "Inserting migrating_pgs " << i << dendl;
+      spi->migrating_pgs.emplace(pg_t(i, source_pool_id.value()));
+      spi->lowest_migrated_pg = i;
+      if (i == 0) {
+        break;
+      }
+    }
+    dout(0) << "spi->migrating_pgs contains" << spi->migrating_pgs << dendl;
+    dout(0) << "lowest_migrated_pg is " << spi->lowest_migrated_pg << dendl;
   }
 
   pending_inc.new_pool_names[pool] = name;

@@ -1656,6 +1656,7 @@ public:
   std::optional<int64_t> migration_src; ///< pool we are migrating from
   std::optional<int64_t> migration_target; ///< pool we are migrating to
   std::set<pg_t> migrating_pgs; ///< PGs currently migrating. Any higher value PGs have completed migration
+  uint32_t lowest_migrated_pg; ///< PG with the lowest ID that has completed migration
 
   void clear_migrating_pgs() { migrating_pgs.clear(); }
 

@@ -2128,6 +2128,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(migration_src, bl);
     encode(migration_target, bl);
     encode(migrating_pgs, bl);
+    encode(lowest_migrated_pg, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2334,6 +2335,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(migration_src, bl);
     decode(migration_target, bl);
     decode(migrating_pgs, bl);
+    decode(lowest_migrated_pg, bl);
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2442,6 +2444,7 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.migration_src = 4;
   a.migration_target = 5;
   a.migrating_pgs = { pg_t(1,2), pg_t(3,4) };
+  a.lowest_migrated_pg = 5;
 
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
   o.push_back(pg_pool_t(a));
