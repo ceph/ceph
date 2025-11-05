@@ -1214,21 +1214,29 @@ public:
       boost::statechart::custom_reaction< RequestRecoveryPrio >,
       boost::statechart::custom_reaction< RequestBackfillPrio >,
       boost::statechart::custom_reaction< RejectTooFullRemoteReservation >,
-      boost::statechart::transition< RemoteReservationRejectedTooFull, RepNotRecovering >,
-      boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
+      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemoteReservationCanceled >,
       boost::statechart::custom_reaction< RemoteRecoveryReserved >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
       boost::statechart::transition< RecoveryDone, RepNotRecovering >,  // for compat with pre-reservation peers
       boost::statechart::custom_reaction< RemotePoolMigrationRequest >,
-      boost::statechart::transition< RemotePoolMigrationReservationCanceled, RepNotRecovering >, // Raced with revoke or revoke_toofull
-      boost::statechart::transition< RemotePoolMigrationReserved, RepNotRecovering >, // Raced with release
-      boost::statechart::transition< RemotePoolMigrationRejectedTooFull, RepNotRecovering >, // Raced with release
-      boost::statechart::transition< RemotePoolMigrationRevokedTooFull, RepNotRecovering >, // Raced with release
-      boost::statechart::transition< RemotePoolMigrationRevoked, RepNotRecovering > // Raced with release
+      boost::statechart::custom_reaction< RemotePoolMigrationReservationCanceled >,
+      boost::statechart::custom_reaction< RemotePoolMigrationReserved >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >
       > reactions;
     explicit RepNotRecovering(my_context ctx);
     boost::statechart::result react(const RequestRecoveryPrio &evt);
     boost::statechart::result react(const RequestBackfillPrio &evt);
+    boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
+    boost::statechart::result react(const RemotePoolMigrationRequest &evt);
+    // Backfill/recovery/pool migration can be stopped either because of a
+    // local event or a message from the primary. If both sides simultaneously
+    // try to stop the process then the second 'stop' event happens from
+    // this state and is simply discarded. These could have been implemented
+    // as simply transitions to the same state but this causes clutter on the
+    // state diagram in the peering documentation
     boost::statechart::result react(const RemoteBackfillReserved &evt) {
       // my reservation completion raced with a RELEASE from primary
       return discard_event();
@@ -1237,8 +1245,34 @@ public:
       // my reservation completion raced with a RELEASE from primary
       return discard_event();
     }
-    boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
-    boost::statechart::result react(const RemotePoolMigrationRequest &evt);
+    boost::statechart::result react(const RemoteReservationRejectedTooFull &evt) {
+      // my too full completion raced with a RELEASE from primnary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemoteReservationCanceled &evt) {
+      // RELEASE from primary raced with my too full/revoke
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationReservationCanceled &evt) {
+      // RELEASE from primary raced with local revoke or revoke_toofull message.
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt) {
+      // my reserved completion raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull &evt) {
+      // my reject too full raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull &evt) {
+      // my revoke too full raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevoked &evt) {
+      // my revoke raced with a RELEASE from primary
+      return discard_event();
+    }
     void exit();
   };
 
