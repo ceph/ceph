@@ -216,12 +216,12 @@ BlueFS::BlueFS(CephContext* cct)
 
 BlueFS::BlueFS(CephContext* cct, std::shared_ptr<LRUCache> bluefscache)
   : cct(cct),
+    bluefscache(bluefscache),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     alloc(MAX_BDEV),
     alloc_size(MAX_BDEV, 0),
-    locked_alloc(MAX_BDEV),
-    bluefscache(bluefscache)
+    locked_alloc(MAX_BDEV)
 {
   dirty.pending_release.resize(MAX_BDEV);
   discard_cb[BDEV_WAL] = wal_discard_cb;

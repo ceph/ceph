@@ -152,7 +152,6 @@ void LRUCache::remove(std::pair<uint64_t, uint64_t> key) {
 void LRUCache::print_cache() {
   dout(30) << __func__ << "Cache Contents (Total Bytes: 0x" << std::hex << current_bytes << std::dec << ")" << dendl;
   for (auto key : access_order) {
-    auto &val = kv[key];
     dout(30) << __func__ << std::hex << " inode " << key.first << " and offset 0x" << key.second << std::dec << dendl;
   }
 }
