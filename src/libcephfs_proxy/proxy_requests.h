@@ -128,6 +128,7 @@ enum {
 	LIBCEPHFSD_OP_LL_RELEASEDIR,
 	LIBCEPHFSD_OP_MOUNT_PERMS,
 	LIBCEPHFSD_OP_LL_NONBLOCKING_RW,
+	LIBCEPHFSD_OP_BATCH_READDIR,
 
 	/* Add more operations above this comment. */
 
@@ -991,6 +992,21 @@ PROTO_CALL(ceph_ll_nonblocking_readv_writev,
 	)
 );
 
+PROTO_CALL(ceph_batch_readdir,
+	PROTO_REQ(
+		PROTO_VER(v0,
+			uint64_t cmount;
+			uint64_t dir;
+			uint32_t size;
+		)
+	),
+	PROTO_ANS(
+		PROTO_VER(v0,
+			bool eod;
+		)
+	)
+);
+
 typedef union _proxy_req {
 	proxy_link_req_t header;
 
@@ -1042,6 +1058,7 @@ typedef union _proxy_req {
 	proxy_ceph_ll_releasedir_req_t ll_releasedir;
 	proxy_ceph_mount_perms_req_t mount_perms;
 	proxy_ceph_ll_nonblocking_readv_writev_req_t ll_nonblocking_rw;
+	proxy_ceph_batch_readdir_req_t batch_readdir;
 } proxy_req_t;
 
 PROTO_NOTIFY(ceph_ll_nonblocking_readv_writev,
