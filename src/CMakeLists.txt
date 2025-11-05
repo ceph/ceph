@@ -238,7 +238,8 @@ if(HAVE_INTEL)
     check_nasm_support(${object_format}
       HAVE_NASM_X64
       HAVE_NASM_X64_AVX2
-      HAVE_NASM_X64_AVX512)
+      HAVE_NASM_X64_AVX512
+      HAVE_NASM_X64_AVX512_VPCLMUL)
   endif()
 endif()
 

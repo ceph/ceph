@@ -256,6 +256,9 @@
 /* nasm can also build the isa-l:avx512 */
 #cmakedefine HAVE_NASM_X64_AVX512
 
+/* nasm can also build the isa-l:avx512 & vpclmulqdq */
+#cmakedefine HAVE_NASM_X64_AVX512_VPCLMUL
+
 /* Define if the erasure code isa-l plugin is compiled */
 #cmakedefine WITH_EC_ISA_PLUGIN
 

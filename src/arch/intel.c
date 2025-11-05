@@ -16,6 +16,7 @@
 #include "arch/probe.h"
 
 /* flags we export */
+int ceph_arch_intel_avx512_vpclmul = 0;
 int ceph_arch_intel_pclmul = 0;
 int ceph_arch_intel_sse42 = 0;
 int ceph_arch_intel_sse41 = 0;
@@ -26,6 +27,7 @@ int ceph_arch_intel_aesni = 0;
 
 #ifdef __x86_64__
 #include <cpuid.h>
+#include <x86intrin.h>
 
 /* http://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits */
 
@@ -35,14 +37,33 @@ int ceph_arch_intel_aesni = 0;
 #define CPUID_SSSE3	(1 << 9)
 #define CPUID_SSE3	(1)
 #define CPUID_SSE2	(1 << 26)
-#define CPUID_AESNI (1 << 25)
+#define CPUID_AESNI 	(1 << 25)
+#define CPUID_OSXSAVE	(1 << 27)
 
+/* AVX512F:[16] DQ:[17] CD:[28] BW:[30] VL:[31] */
+#define CPUID7_AVX512_EBX	(0xD0030000UL)
+/* AVX512VBMI2:[6] GFNI:[8] VAES:[9] VPCLMULQDQ:[10] VNNI:[11] BITALG:[12] VPOPCNTDQ:[14] */
+#define CPUID7_AVX512_ECX	(0x00005F40UL)
+/* SSE:[1] AVX:[2] Opmask:[5] ZMM_HI256:[6] ZMM16-31:[7]*/
+#define XGETBV_AVX512		(0x000000E6ULL)
+
+__attribute__((__target__("avx")))	/* For _xgetbv() */
 int ceph_arch_intel_probe(void)
 {
 	/* i know how to check this on x86_64... */
 	unsigned int eax, ebx, ecx = 0, edx = 0;
-	if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+	unsigned int eax_7 = 0, ebx_7 = 0, ecx_7 = 0, edx_7 = 0;
+	if (!__get_cpuid(1, &eax, &ebx, &ecx, &edx) ||
+	    !__get_cpuid_count(7, 0, &eax_7, &ebx_7, &ecx_7, &edx_7)) {
 	  return 1;
+	}
+	if ((ecx & CPUID_OSXSAVE) != 0) {
+		unsigned long long xcr0 = _xgetbv(0);
+		if (((xcr0  & XGETBV_AVX512)     == XGETBV_AVX512) &&
+		    ((ebx_7 & CPUID7_AVX512_EBX) == CPUID7_AVX512_EBX) &&
+		    ((ecx_7 & CPUID7_AVX512_ECX) == CPUID7_AVX512_ECX)) {
+			ceph_arch_intel_avx512_vpclmul = 1;
+		}
 	}
 	if ((ecx & CPUID_PCLMUL) != 0) {
 		ceph_arch_intel_pclmul = 1;
