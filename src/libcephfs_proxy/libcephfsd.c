@@ -2026,7 +2026,9 @@ static void serve_connection(proxy_worker_t *worker)
 	client = container_of(worker, proxy_client_t, worker);
 
 	proxy_link_negotiate_init(&client->neg, 0, PROXY_FEAT_ALL, 0, 0,
-				  PROXY_LINK_PROTOCOL_VERSION);
+				  PROXY_LINK_PROTOCOL_VERSION,
+				  LIBCEPHFSD_OP_TOTAL_OPS,
+				  LIBCEPHFSD_CBK_TOTAL_OPS);
 
 	err = proxy_link_handshake_server(client->link, client->sd,
 					  &client->neg,

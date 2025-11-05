@@ -5,6 +5,7 @@
 
 #include "proxy_link.h"
 #include "proxy_manager.h"
+#include "proxy_requests.h"
 #include "proxy_helpers.h"
 #include "proxy_log.h"
 
@@ -236,8 +237,40 @@ int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 	return len;
 }
 
+static void proxy_link_negotiate_v0_prepare(proxy_link_negotiate_v0_t *v0,
+					    bool legacy)
+{
+	uint16_t version, min_version;
+
+	if (legacy) {
+		version = v0->legacy.version;
+		min_version = v0->legacy.min_version;
+		v0->version = version;
+		v0->min_version = min_version;
+
+		if ((v0->flags & PROXY_NEG_V0_OPS) != 0) {
+			v0->num_ops = LIBCEPHFSD_OP_TOTAL_OPS;
+		} else {
+			v0->num_cbks = LIBCEPHFSD_CBK_LL_NONBLOCKING_RW + 1;
+		}
+	} else if ((v0->flags & PROXY_NEG_V0_OPS) == 0) {
+		v0->num_ops = LIBCEPHFSD_OP_LL_NONBLOCKING_RW + 1;
+		v0->num_cbks = LIBCEPHFSD_CBK_LL_NONBLOCKING_RW + 1;
+	}
+}
+
+static void proxy_link_negotiate_v0_legacy(proxy_link_negotiate_t *src,
+					   proxy_link_negotiate_t *dst)
+{
+	memcpy(dst, src, sizeof(proxy_link_negotiate_t));
+
+	dst->v0.legacy.version = src->v0.version;
+	dst->v0.legacy.min_version = src->v0.min_version;
+}
+
 static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
-					 proxy_link_negotiate_t *neg)
+					 proxy_link_negotiate_t *neg,
+					 bool legacy)
 {
 	char buffer[128];
 	char *ptr;
@@ -252,6 +285,8 @@ static int32_t proxy_link_negotiate_read(proxy_link_t *link, int32_t sd,
 	if (err < 0) {
 		return err;
 	}
+
+	proxy_link_negotiate_v0_prepare(&neg->v0, legacy);
 
 	ptr += sizeof(neg->v0);
 	size = neg->v0.size;
@@ -332,6 +367,11 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 		 * with us, so everything is fine and the connection can be
 		 * completed successfully with all features disabled. */
 
+		/* This is the effective num_ops and num_cbks before these
+		 * fields were introduced */
+		local->v0.num_ops = LIBCEPHFSD_OP_LL_NONBLOCKING_RW + 1;
+		local->v0.num_cbks = LIBCEPHFSD_CBK_LL_NONBLOCKING_RW + 1;
+
 		local->v1.enabled = 0;
 		local->v2.protocol = 0;
 
@@ -341,6 +381,14 @@ static int32_t proxy_link_negotiate_check(proxy_link_negotiate_t *local,
 			  "Connected to legacy peer. No features enabled");
 
 		goto validate;
+	}
+
+	if (local->v0.num_ops > remote->v0.num_ops) {
+		local->v0.num_ops = remote->v0.num_ops;
+	}
+
+	if (local->v0.num_cbks > remote->v0.num_cbks) {
+		local->v0.num_cbks = remote->v0.num_cbks;
 	}
 
 	if (local->v2.protocol > remote->v2.protocol) {
@@ -390,15 +438,19 @@ static int32_t proxy_link_negotiate_client(proxy_link_t *link, int32_t sd,
 					   proxy_link_negotiate_t *neg,
 					   proxy_link_negotiate_cbk_t cbk)
 {
-	proxy_link_negotiate_t remote;
+	proxy_link_negotiate_t legacy, remote;
 	int32_t err;
 
-	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	/* Convert the negotiation structure to legacy for the first
+	 * nogotiation packet. */
+	proxy_link_negotiate_v0_legacy(neg, &legacy);
+
+	err = proxy_link_write(link, sd, &legacy, legacy.v0.size);
 	if (err < 0) {
 		return err;
 	}
 
-	err = proxy_link_negotiate_read(link, sd, &remote);
+	err = proxy_link_negotiate_read(link, sd, &remote, false);
 	if (err < 0) {
 		return err;
 	}
@@ -440,10 +492,10 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 					   proxy_link_negotiate_t *neg,
 					   proxy_link_negotiate_cbk_t cbk)
 {
-	proxy_link_negotiate_t remote;
+	proxy_link_negotiate_t remote, legacy;
 	int32_t err;
 
-	err = proxy_link_negotiate_read(link, sd, &remote);
+	err = proxy_link_negotiate_read(link, sd, &remote, true);
 	if (err < 0) {
 		return err;
 	}
@@ -453,10 +505,17 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 		return err;
 	}
 
-	err = proxy_link_write(link, sd, neg, neg->v0.size);
+	if ((remote.v0.flags & PROXY_NEG_V0_OPS) == 0) {
+		proxy_link_negotiate_v0_legacy(neg, &legacy);
+		err = proxy_link_write(link, sd, &legacy, legacy.v0.size);
+	} else {
+		err = proxy_link_write(link, sd, neg, neg->v0.size);
+	}
 	if (err < 0) {
 		return err;
 	}
+
+	neg->v0.num_cbks = remote.v0.num_cbks;
 
 	if (remote.v0.version > 0) {
 		/* Read finally enabled features from client. */
@@ -557,7 +616,9 @@ int32_t proxy_link_handshake_client(proxy_link_t *link, int32_t sd,
 
 	if (version.minor == LIBCEPHFSD_MINOR) {
 		/* The server doesn't support negotiation. */
-		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+		proxy_link_negotiate_init_v0(&legacy, 0, 0,
+			LIBCEPHFSD_OP_LL_NONBLOCKING_RW + 1,
+			LIBCEPHFSD_CBK_LL_NONBLOCKING_RW + 1);
 
 		return proxy_link_negotiate_check(neg, &legacy, cbk);
 	}
@@ -612,7 +673,9 @@ int32_t proxy_link_handshake_server(proxy_link_t *link, int32_t sd,
 	}
 
 	if (size == 0) {
-		proxy_link_negotiate_init_v0(&legacy, 0, 0);
+		proxy_link_negotiate_init_v0(&legacy, 0, 0,
+			LIBCEPHFSD_OP_LL_NONBLOCKING_RW + 1,
+			LIBCEPHFSD_CBK_LL_NONBLOCKING_RW + 1);
 
 		err = proxy_link_negotiate_check(neg, &legacy, cbk);
 		if (err < 0) {
