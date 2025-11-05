@@ -917,6 +917,52 @@ class TestOpenat:
         cephfs.close(fd2)
 
 
+class TestStatxat:
+
+    def test_statxat_on_file(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        fd = cephfs.open('dir1/file1', 'w', 0o755)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        statx_buf = cephfs.statxat(fd, b'file1', libcephfs.CEPH_STATX_MODE, 0)
+
+        mode = statx_buf['mode'] & ~stat.S_IFMT(statx_buf['mode'])
+        assert_equal(0o755, mode)
+        cephfs.close(fd)
+
+    def test_statxat_on_dir(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+
+        fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        statx_buf = cephfs.statxat(fd, b'dir2', libcephfs.CEPH_STATX_MODE, 0)
+
+        mode = statx_buf['mode'] & ~stat.S_IFMT(statx_buf['mode'])
+        assert_equal(0o755, mode)
+        cephfs.close(fd)
+
+    def _test_statxat_on_link(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        fd = cephfs.open('dir1/file1', 'w', 0o644)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+
+        cephfs.chdir('dir1')
+        cephfs.symlink('file1', 'slink1')
+        cephfs.chdir('..')
+
+        fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        # bug? libcephfs.AT_SYMLINK_NOFOLLOW has no effect.
+        statx_buf = cephfs.statxat(fd, b'file1', libcephfs.CEPH_STATX_MODE,
+                                   libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        mode = statx_buf['mode'] & ~stat.S_IFMT(statx_buf['mode'])
+        assert_equal(0o777, mode)
+        cephfs.close(fd)
+
+
 class TestWithRootUser:
 
     def setup_method(self):
