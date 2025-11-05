@@ -117,6 +117,8 @@ cdef nogil:
         pass
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname):
         pass
+    int ceph_symlinkat(ceph_mount_info *cmount, const char *existing, int fd, const char *newname):
+        pass
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size):
         pass
     int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size):
