@@ -314,6 +314,22 @@ def test_readlink(testdir):
     cephfs.unlink(b'/file-2')
     cephfs.unlink(b'/file-1')
 
+def test_readlinkat(testdir):
+    cephfs.mkdir(b'dir1', 0o755)
+
+    fd = cephfs.open(b'dir1/file1', 'w', 0o755)
+    cephfs.write(fd, b'abcd', 0)
+    cephfs.close(fd)
+
+    cephfs.chdir('dir1')
+    cephfs.symlink('file1', 'slink1')
+    cephfs.chdir('..')
+
+    fd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+    o = cephfs.readlinkat(fd, 'slink1', 100)
+    assert_equal(o, b'file1')
+    cephfs.close(fd)
+
 def test_delete_cwd(testdir):
     assert_equal(b"/", cephfs.getcwd())
 
