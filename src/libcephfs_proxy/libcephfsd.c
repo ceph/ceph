@@ -2087,6 +2087,94 @@ done:
 	return CEPH_COMPLETE(client, err, ans);
 }
 
+static int32_t libcephfsd_batch_readdir(proxy_client_t *client,
+					proxy_req_t *req, const void *data,
+					int32_t data_size)
+{
+	CEPH_DATA(ceph_batch_readdir, ans, 1);
+	struct dirent *de;
+	proxy_mount_t *mount;
+	struct ceph_dir_result *dirp;
+	char *buffer;
+	uint32_t size, len, space, count;
+	int32_t err;
+
+	buffer = client->buffer;
+
+	err = ptr_check(&client->random, req->batch_readdir.cmount,
+			(void **)&mount);
+	if (err < 0) {
+		goto done;
+	}
+
+	err = ptr_check(&client->random, req->batch_readdir.dir,
+			(void **)&dirp);
+	if (err < 0) {
+		goto done;
+	}
+
+	size = req->batch_readdir.size;
+
+	len = client->buffer_size;
+	if (size > len) {
+		buffer = proxy_malloc(size);
+		if (buffer == NULL) {
+			buffer = client->buffer;
+			err = -ENOMEM;
+			goto done;
+		}
+	}
+
+	space = 0;
+	count = 0;
+	de = (struct dirent *)buffer;
+	ans.eod = false;
+	while (size >= sizeof(struct dirent)) {
+		err = ceph_readdir_r(proxy_cmount(mount), dirp, de);
+		TRACE("ceph_readdir_r(%p, %p, %p) -> %d", mount, dirp, de, err);
+		if (err < 0) {
+			/* If we have read some entries already, return them
+			 * and ignore the error. The client will eventually
+			 * try to read the next entries and, if it fails again
+			 * without reading any, we'll return the error. */
+			if (count > 0) {
+				err = 0;
+			}
+			break;
+		}
+		if (err == 0) {
+			ans.eod = true;
+			break;
+		}
+
+		len = offset_of(struct dirent, d_name);
+		len += strlen(de->d_name) + 1;
+		len += __alignof__(struct dirent) - 1;
+		len &= ~(__alignof__(struct dirent) - 1);
+		de->d_reclen = len;
+
+		de = (struct dirent *)((uintptr_t)de + len);
+
+		count++;
+		space += len;
+		size -= len;
+	}
+
+	if (err >= 0) {
+		CEPH_BUFF_ADD(ans, buffer, space);
+		err = count;
+	}
+
+done:
+	err = CEPH_COMPLETE(client, err, ans);
+
+	if (buffer != client->buffer) {
+		proxy_free(buffer);
+	}
+
+	return err;
+}
+
 static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_VERSION] = libcephfsd_version,
 	[LIBCEPHFSD_OP_USERPERM_NEW] = libcephfsd_userperm_new,
@@ -2146,6 +2234,7 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 		libcephfsd_ll_get_fscrypt_policy_v2,
 	[LIBCEPHFSD_OP_LL_IS_ENCRYPTED] = libcephfsd_ll_is_encrypted,
 	[LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC] = libcephfsd_ll_nonblocking_fsync,
+	[LIBCEPHFSD_OP_BATCH_READDIR] = libcephfsd_batch_readdir,
 };
 
 static void serve_binary(proxy_client_t *client)
