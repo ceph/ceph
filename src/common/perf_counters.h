@@ -99,7 +99,7 @@ public:
   void add_u64_counter(int key, const char *name,
 		       const char *description=nullptr,
 		       const char *nick = nullptr,
-		       int prio=0, int unit=UNIT_NONE);
+		       int prio=PRIO_DEBUGONLY, int unit=UNIT_NONE);
   void add_u64_avg(int key, const char *name,
 		   const char *description=nullptr,
 		   const char *nick = nullptr,
@@ -111,7 +111,7 @@ public:
   void add_time_avg(int key, const char *name,
 		    const char *description=nullptr,
 		    const char *nick = nullptr,
-		    int prio=0);
+		    int prio=PRIO_DEBUGONLY);
   void add_u64_counter_histogram(
     int key, const char* name,
     PerfHistogramCommon::axis_config_d x_axis_config,
