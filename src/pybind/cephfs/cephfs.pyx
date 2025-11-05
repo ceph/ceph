@@ -2385,6 +2385,31 @@ cdef class LibCephFS(object):
         finally:
             free(buf)
 
+    def readlinkat(self, dirfd, relpath, size) -> bytes:
+        self.require_state("mounted")
+
+        if not isinstance(dirfd, int):
+            raise TypeError('"dirfd" must be of type int')
+        if not isinstance(size, int):
+            raise TypeError('"size" must be of type int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _dirfd = dirfd
+            char* _relpath = relpath
+            int64_t _size = size
+            char *buf = NULL
+
+        try:
+            buf = <char *>realloc_chk(buf, _size)
+            with nogil:
+                ret = ceph_readlinkat(self.cluster, _dirfd, _relpath, buf, _size)
+            if ret < 0:
+                raise make_ex(ret, f"error in readlinkat: {relpath.decode('utf-8')}")
+            return buf[:ret]
+        finally:
+            free(buf)
+
     def unlink(self, path):
         """
         Removes a file, link, or symbolic link.  If the file/link has multiple links to it, the

@@ -119,6 +119,8 @@ cdef nogil:
         pass
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size):
         pass
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size):
+        pass
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags):
         pass
