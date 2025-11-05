@@ -1287,6 +1287,29 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
+    def chmodat(self, dirfd, relpath, mode, flags) -> None:
+        self.require_state("mounted")
+
+        if not isinstance(dirfd, int):
+            raise TypeError('"dirfd "must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be an int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _dirfd = dirfd
+            char* _relpath = relpath
+            int _mode = mode
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_chmodat(self.cluster, _dirfd, _relpath, _mode, _flags)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in chmod {relpath.decode('utf-8')}")
+
     def lchmod(self, path, mode) -> None:
         """
         Change file mode. If the path is a symbolic link, it won't be dereferenced.
