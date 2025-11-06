@@ -1961,6 +1961,17 @@ extern "C" int ceph_localize_reads(struct ceph_mount_info *cmount, int val)
   return 0;
 }
 
+extern "C" int ceph_balance_reads(struct ceph_mount_info *cmount, int val)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  if (!val)
+    cmount->get_client()->clear_filer_flags(CEPH_OSD_FLAG_BALANCE_READS);
+  else
+    cmount->get_client()->set_filer_flags(CEPH_OSD_FLAG_BALANCE_READS);
+  return 0;
+}
+
 extern "C" CephContext *ceph_get_mount_context(struct ceph_mount_info *cmount)
 {
   return cmount->get_ceph_context();

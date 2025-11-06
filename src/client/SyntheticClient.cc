@@ -258,6 +258,9 @@ void parse_syn_options(vector<const char*>& args)
     else if (strcmp(args[i], "localize_reads") == 0) {
       cerr << "set CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       syn_filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (strcmp(args[i], "balance_reads") == 0) {
+      cerr << "set CEPH_OSD_FLAG_BALANCE_READS" << std::endl;
+      syn_filer_flags |= CEPH_OSD_FLAG_BALANCE_READS;
     }
     else {
       nargs.push_back(args[i]);
