@@ -3,6 +3,7 @@ import logging
 import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
+from enum import Enum
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -28,7 +29,8 @@ from .qos_conf import (
     QOSType,
     QOSBandwidthControl,
     QOSOpsControl,
-    QOSParams)
+    QOSParams,
+    validate_clust_qos_msg_interval)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -36,6 +38,11 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
+
+
+class ClusterQosAction(Enum):
+    enable = 'enable'
+    disable = 'disable'
 
 
 def resolve_ip(hostname: str) -> str:
@@ -73,6 +80,9 @@ def config_cluster_qos_from_dict(
     if not qos_type:
         raise NFSInvalidOperation('qos_type is not specified in qos dict')
     qos_type = QOSType[str(qos_type)]
+    enable_cluster_qos = qos_dict.get(QOSParams.enable_cluster_qos.value, True)
+    clust_qos_msg_interval = int(qos_dict.get(QOSParams.clust_qos_msg_interval.value, 0))
+    assert isinstance(enable_cluster_qos, (bool, type(None)))
     enable_bw_ctrl = qos_dict.get(QOSParams.enable_bw_ctrl.value)
     combined_bw_ctrl = qos_dict.get(QOSParams.combined_bw_ctrl.value)
     enable_iops_ctrl = qos_dict.get(QOSParams.enable_iops_ctrl.value)
@@ -102,6 +112,8 @@ def config_cluster_qos_from_dict(
         cluster_id=cluster_id,
         qos_obj=None,
         enable_qos=True,
+        enable_cluster_qos=enable_cluster_qos,
+        clust_qos_msg_interval=clust_qos_msg_interval,
         qos_type=qos_type,
         bw_obj=bw_obj,
         ops_obj=ops_obj,
@@ -114,6 +126,8 @@ def write_cluster_qos_obj(
     cluster_id: str,
     qos_obj: Optional[QOS],
     enable_qos: bool,
+    enable_cluster_qos: Optional[bool] = None,
+    clust_qos_msg_interval: int = 0,
     qos_type: Optional[QOSType] = None,
     bw_obj: Optional[QOSBandwidthControl] = None,
     ops_obj: Optional[QOSOpsControl] = None,
@@ -122,11 +136,13 @@ def write_cluster_qos_obj(
     qos_obj_exists = False
     if not qos_obj:
         log.debug(f"Creating new QoS block for cluster {cluster_id}")
-        qos_obj = QOS(True, enable_qos, qos_type, bw_obj, ops_obj)
+        qos_obj = QOS(True, enable_qos, enable_cluster_qos, clust_qos_msg_interval, qos_type, bw_obj, ops_obj)
     else:
         log.debug(f"Updating existing QoS block for cluster {cluster_id}")
         qos_obj_exists = True
         qos_obj.enable_qos = enable_qos
+        qos_obj.enable_cluster_qos = enable_cluster_qos
+        qos_obj.clust_qos_msg_interval = validate_clust_qos_msg_interval(clust_qos_msg_interval)
         qos_obj.qos_type = qos_type
         if bw_obj:
             qos_obj.bw_obj = bw_obj
@@ -472,6 +488,8 @@ class NFSCluster:
                                cluster_id: str,
                                qos_obj: Optional[QOS],
                                enable_qos: bool,
+                               enable_cluster_qos: Optional[bool] = None,
+                               clust_qos_msg_interval: int = 0,
                                qos_type: Optional[QOSType] = None,
                                bw_obj: Optional[QOSBandwidthControl] = None,
                                ops_obj: Optional[QOSOpsControl] = None) -> None:
@@ -481,6 +499,8 @@ class NFSCluster:
             cluster_id=cluster_id,
             qos_obj=qos_obj,
             enable_qos=enable_qos,
+            enable_cluster_qos=enable_cluster_qos,
+            clust_qos_msg_interval=clust_qos_msg_interval,
             qos_type=qos_type,
             bw_obj=bw_obj,
             ops_obj=ops_obj
@@ -490,12 +510,15 @@ class NFSCluster:
                            cluster_id: str,
                            qos_obj: Optional[QOS],
                            enable_qos: bool,
+                           enable_cluster_qos: Optional[bool] = None,
+                           clust_qos_msg_interval: int = 0,
                            qos_type: Optional[QOSType] = None,
                            bw_obj: Optional[QOSBandwidthControl] = None,
                            ops_obj: Optional[QOSOpsControl] = None) -> None:
         try:
             if cluster_id in available_clusters(self.mgr):
-                self.update_cluster_qos_obj(cluster_id, qos_obj, enable_qos, qos_type, bw_obj, ops_obj)
+                self.update_cluster_qos_obj(cluster_id, qos_obj, enable_qos, enable_cluster_qos,
+                                            clust_qos_msg_interval, qos_type, bw_obj, ops_obj)
                 restart_nfs_service(self.mgr, cluster_id)
                 return
             raise ClusterNotFound()
@@ -555,7 +578,14 @@ class NFSCluster:
             if qos_obj:
                 self.validate_qos_type(qos_obj, qos_type, bw_obj=bw_obj)
             bw_obj.qos_bandwidth_checks(qos_type)
-            self.update_cluster_qos(cluster_id, qos_obj, True, qos_type=qos_type, bw_obj=bw_obj)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                enable_cluster_qos=True,
+                qos_type=qos_type,
+                bw_obj=bw_obj
+            )
             log.info(f"QoS bandwidth control has been successfully enabled for cluster {cluster_id}. "
                      "If the qos_type is changed during this process, ensure that the bandwidth "
                      "values for all exports are updated accordingly.")
@@ -579,11 +609,17 @@ class NFSCluster:
             qos_obj = self.get_cluster_qos_config(cluster_id)
             status = False
             qos_type = None
+            enable_cluster_qos = None
+            clust_qos_msg_interval = 0
             if qos_obj:
                 status = qos_obj.get_enable_qos_val(disable_bw=True)
                 if status:
                     qos_type = qos_obj.qos_type
-            self.update_cluster_qos(cluster_id, qos_obj, status, qos_type, bw_obj=QOSBandwidthControl())
+                    enable_cluster_qos = qos_obj.enable_cluster_qos
+                    if qos_obj.clust_qos_msg_interval:
+                        clust_qos_msg_interval = qos_obj.clust_qos_msg_interval
+            self.update_cluster_qos(cluster_id, qos_obj, status, enable_cluster_qos,
+                                    clust_qos_msg_interval, qos_type=qos_type, bw_obj=QOSBandwidthControl())
             log.info("Cluster-level QoS bandwidth control has been successfully disabled for "
                      f"cluster {cluster_id}. As a result, export-level bandwidth control will "
                      "no longer have any effect, even if enabled.")
@@ -598,7 +634,14 @@ class NFSCluster:
             if qos_obj:
                 self.validate_qos_type(qos_obj, qos_type, ops_obj=ops_obj)
             ops_obj.qos_ops_checks(qos_type)
-            self.update_cluster_qos(cluster_id, qos_obj, True, qos_type=qos_type, ops_obj=ops_obj)
+            self.update_cluster_qos(
+                cluster_id,
+                qos_obj,
+                True,
+                enable_cluster_qos=True,
+                qos_type=qos_type,
+                ops_obj=ops_obj
+            )
             log.info(f"QOS IOPS control has been successfully enabled for cluster {cluster_id}. "
                      "If the qos_type is changed during this process, ensure that ops count "
                      "values for all exports are updated accordingly.")
@@ -612,15 +655,58 @@ class NFSCluster:
             qos_obj = self.get_cluster_qos_config(cluster_id)
             status = False
             qos_type = None
+            enable_cluster_qos = None
+            clust_qos_msg_interval = 0
             if qos_obj:
                 status = qos_obj.get_enable_qos_val(disable_ops=True)
                 if status:
                     qos_type = qos_obj.qos_type
-            self.update_cluster_qos(cluster_id, qos_obj, status, qos_type, ops_obj=QOSOpsControl())
+                    enable_cluster_qos = qos_obj.enable_cluster_qos
+                    if qos_obj.clust_qos_msg_interval:
+                        clust_qos_msg_interval = qos_obj.clust_qos_msg_interval
+            self.update_cluster_qos(cluster_id, qos_obj, status, enable_cluster_qos,
+                                    clust_qos_msg_interval, qos_type=qos_type, ops_obj=QOSOpsControl())
             log.info("Cluster-level QoS IOPS control has been successfully disabled for "
                      f"cluster {cluster_id}. As a result, export-level ops control will "
                      "no longer have any effect, even if enabled.")
             return
         except Exception as e:
             log.exception(f"Setting NFS-Ganesha QoS IOPS control config failed for {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def global_cluster_qos_action(
+        self,
+        cluster_id: str,
+        action: str,
+        msg_interval: int = 0
+    ) -> None:
+        try:
+            qos_obj = self.get_cluster_qos_config(cluster_id)
+            if not qos_obj:
+                err_msg = f'No existing QoS configuration found for cluster {cluster_id}. Can not {action} cluster-qos'
+                log.error(err_msg)
+                raise Exception(err_msg)
+
+            clust_qos_msg_interval = 0
+            if action == 'enable':
+                if (qos_obj.enable_cluster_qos or qos_obj.enable_cluster_qos is None) and not msg_interval:
+                    log.info('Cluster QoS is already enabled')
+                    return
+
+                enable_cluster_qos = True
+                clust_qos_msg_interval = msg_interval
+            else:  # disable
+                enable_cluster_qos = False
+            self.update_cluster_qos(
+                cluster_id=cluster_id,
+                qos_obj=qos_obj,
+                enable_qos=qos_obj.enable_qos,
+                enable_cluster_qos=enable_cluster_qos,
+                clust_qos_msg_interval=clust_qos_msg_interval,
+                qos_type=qos_obj.qos_type
+            )
+            action_past = "enabled" if action == "enable" else "disabled"
+            log.info(f"Cluster-level QoS has been successfully {action_past} for cluster {cluster_id}")
+        except Exception as e:
+            log.exception(f"Failed to {action} cluster-level QoS for cluster {cluster_id}")
             raise ErrorResponse.wrap(e)
