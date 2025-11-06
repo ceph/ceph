@@ -55,16 +55,6 @@ UsagePerfCounters::~UsagePerfCounters() {
 void UsagePerfCounters::create_global_counters() {
   PerfCountersBuilder b(cct, "rgw_usage", l_rgw_usage_first, l_rgw_usage_last);
   
-  // Placeholder counters for indices that aren't globally used
-  b.add_u64(l_rgw_user_used_bytes, "user_used_bytes", 
-           "User bytes placeholder", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_user_num_objects, "user_num_objects",
-           "User objects placeholder", nullptr, 0, unit_t(0));
-  b.add_u64(l_rgw_bucket_used_bytes, "bucket_used_bytes",
-           "Bucket bytes placeholder", nullptr, 0, unit_t(UNIT_BYTES));
-  b.add_u64(l_rgw_bucket_num_objects, "bucket_num_objects",
-           "Bucket objects placeholder", nullptr, 0, unit_t(0));
-  
   // Global cache metrics
   b.add_u64_counter(l_rgw_usage_cache_hit, "cache_hit", 
                    "Number of cache hits", nullptr, 0, unit_t(0));

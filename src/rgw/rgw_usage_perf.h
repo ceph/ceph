@@ -26,10 +26,6 @@ namespace rgw {
 // Performance counter indices
 enum {
   l_rgw_usage_first = 920000,
-  l_rgw_user_used_bytes,
-  l_rgw_user_num_objects,
-  l_rgw_bucket_used_bytes,
-  l_rgw_bucket_num_objects,
   l_rgw_usage_cache_hit,
   l_rgw_usage_cache_miss,
   l_rgw_usage_cache_update,
