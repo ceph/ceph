@@ -534,9 +534,6 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   process_init();
 
-  // omap not supported (except 0, handled above)
-  // ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
-
   if (op.alloc_hint) {
     all_shards_written();
     alloc_hint(op, transactions, pgid, oid, sinfo);
@@ -938,6 +935,121 @@ void ECTransaction::Generate::written_shards() {
                          << " shard_versions=" << oi.shard_versions << dendl;
     }
   }
+}
+
+void ECTransaction::Generate::omap_updates() {
+
+  if (op.omap_header) {
+    for (auto &&[shard, t]: transactions) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        // Primary shard - Update omap header
+        t.omap_setheader(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard),
+          *(op.omap_header));
+      } else if (entry->is_written_shard(shard)) {
+        // Do nothing
+      } // Else: Unwritten shard
+    }
+  }
+
+  for (auto &&up: op.omap_updates) {
+    using UpdateType = PGTransaction::ObjectOperation::OmapUpdateType;
+    switch (up.first) {
+      case UpdateType::Remove: {
+        for (auto &&[shard, t]: transactions) {
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t.omap_rmkeys(
+              coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
+              up.second);
+          }
+        }
+        break;
+      case UpdateType::Insert: {
+        for (auto &&[shard, t]: transactions) {
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            // Primary shard - Update omap
+            t.omap_setkeys(
+              coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
+              up.second);
+          } else if (entry->is_written_shard(shard)) {
+            // Do nothing
+          } // Else: Unwritten shard
+        }
+          break;
+        case UpdateType::RemoveRange: {
+          for (auto &&[shard, t]: transactions) {
+            if (!sinfo.is_nonprimary_shard(shard)) {
+              t.omap_rmkeyrange(
+                coll_t(spg_t(pgid, shard)),
+                ghobject_t(oid, ghobject_t::NO_GEN, shard),
+                up.second);
+            }
+          }
+          break;
+        }
+      }
+      }
+    }
+  }
+
+  // std::map<std::string, ceph::buffer::list> to_set;
+  // for (auto &&[update_type, update_bl]: op.omap_updates) {
+  //   std::map<std::string, bufferlist> update_map;
+  //   decode(update_map, update_bl);
+  //   if (update_type == PGTransaction::ObjectOperation::OmapUpdateType::Remove) {
+  //     std::set<std::string> key_set;
+  //     for (const auto& pair : update_map) {
+  //       key_set.insert(pair.first);
+  //     }
+  //     for (auto &&[shard, t]: transactions) {
+  //       if (!sinfo.is_nonprimary_shard(shard)) {
+  //         t.omap_rmkeys(
+  //           coll_t(spg_t(pgid, shard)),
+  //           ghobject_t(oid, ghobject_t::NO_GEN, shard),
+  //           update_bl);
+  //       }
+  //     }
+  //   } else if (update_type == PGTransaction::ObjectOperation::OmapUpdateType::Insert) {
+  //     for (const auto& pair : update_map) { 
+	// to_set[pair.first] = pair.second; 
+  //     }
+  //   } else if (update_type == PGTransaction::ObjectOperation::OmapUpdateType::RemoveRange) {
+  //     std::vector<std::string> key_list;
+  //     for (const auto& pair : update_map) {
+  //       key_list.push_back(pair.first);
+  //     }
+  //     std::sort(key_list.begin(), key_list.end());
+  //     if (!key_list.empty()) {
+  //       const std::string& first_key = key_list.front();
+  //       const std::string& last_key = key_list.back();
+  //       for (auto &&[shard, t]: transactions) {
+  //       if (!sinfo.is_nonprimary_shard(shard)) {
+  //         t.omap_rmkeyrange(
+  //           coll_t(spg_t(pgid, shard)),
+  //           ghobject_t(oid, ghobject_t::NO_GEN, shard),
+  //           first_key, last_key);
+  //         }
+  //       }
+  //     }
+  //   } else {
+  //     // throw unhandled update type exception
+  //   }
+  // }
+  // for (auto &&[shard, t]: transactions) {
+  //   if (!sinfo.is_nonprimary_shard(shard)) {
+  //     // Primary shard - Update omap
+  //     t.omap_setkeys(
+  //       coll_t(spg_t(pgid, shard)),
+  //       ghobject_t(oid, ghobject_t::NO_GEN, shard),
+  //       to_set);
+  //   } else if (entry->is_written_shard(shard)) {
+  //     // Do nothing
+  //   } // Else: Unwritten shard
+  // }
+  // // Need to handle rollbacks
 }
 
 void ECTransaction::Generate::attr_updates() {
