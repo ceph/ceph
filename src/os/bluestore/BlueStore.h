@@ -57,6 +57,7 @@
 
 #include "bluestore_types.h"
 #include "bluestore_common.h"
+#include "BlueFSCache.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"

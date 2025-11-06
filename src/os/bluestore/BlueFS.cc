@@ -15,6 +15,7 @@
 #include "boost/algorithm/string.hpp" 
 #include "bluestore_common.h"
 #include "BlueFS.h"
+#include "BlueFSCache.h"
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"
@@ -214,7 +215,7 @@ private:
 BlueFS::BlueFS(CephContext* cct)
   : BlueFS(cct, nullptr) {}
 
-BlueFS::BlueFS(CephContext* cct, std::shared_ptr<LRUCache> bluefscache)
+BlueFS::BlueFS(CephContext* cct, std::shared_ptr<BlueFSLRUCache> bluefscache)
   : cct(cct),
     bluefscache(bluefscache),
     bdev(MAX_BDEV),
@@ -1122,8 +1123,8 @@ int BlueFS::mount()
 
   int r;
 
-  if (cct->_conf->bluefs_enable_cache && cct->_conf->bluefs_buffered_io) {
-    derr << __func__ << " init failed, when bluefs_enable_cache is configured true, bluefs_buffered_io must be set to false" << dendl;
+  if (cct->_conf->bluefs_cache_enable && cct->_conf->bluefs_buffered_io) {
+    derr << __func__ << " init failed, when bluefs_cache_enable is configured true, bluefs_buffered_io must be set to false" << dendl;
     goto out;
   }
 
@@ -2555,7 +2556,7 @@ int64_t BlueFS::_read_random(
   std::shared_lock s_lock(h->lock);
   buf->bl.reassign_to_mempool(mempool::mempool_bluefs_file_reader);
   while (len > 0) {
-    if (cct->_conf->bluefs_enable_cache) {
+    if (cct->_conf->bluefs_cache_enable) {
       int64_t r;
       r = _read_from_cache(h->file->fnode.ino, off, len, NULL, out);
       
@@ -2639,7 +2640,7 @@ int64_t BlueFS::_read_random(
     }
   }
 
-  if (cct->_conf->bluefs_enable_cache && rcache < ret) {
+  if (cct->_conf->bluefs_cache_enable && rcache < ret) {
     _update_cache(h->file->fnode.ino, givenoffset, ret, NULL, cache);
   }
 
@@ -2881,7 +2882,7 @@ int64_t BlueFS::_read(
   std::shared_lock s_lock(h->lock);
   while (len > 0) {
     size_t left;
-    if (cct->_conf->bluefs_enable_cache && h->file->fnode.ino != 1) {
+    if (cct->_conf->bluefs_cache_enable && h->file->fnode.ino != 1) {
       int64_t r;
       r = _read_from_cache(h->file->fnode.ino, off, len, outbl, out);
       
@@ -2986,7 +2987,7 @@ int64_t BlueFS::_read(
     buf->pos += r;
   }
 
-  if (cct->_conf->bluefs_enable_cache && h->file->fnode.ino != 1 && rcache < ret) {
+  if (cct->_conf->bluefs_cache_enable && h->file->fnode.ino != 1 && rcache < ret) {
     _update_cache(h->file->fnode.ino, givenoffset, ret, outbl, cache);
   }
 

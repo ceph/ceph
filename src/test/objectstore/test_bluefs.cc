@@ -319,7 +319,6 @@ TEST(BlueFS, very_large_write2) {
 }
 
 TEST(BlueFS, cache_test) {
-  SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 6ull;
   TempBdev bdev{size};
@@ -327,8 +326,8 @@ TEST(BlueFS, cache_test) {
 
   bool old = g_ceph_context->_conf.get_val<bool>("bluefs_buffered_io");
   g_ceph_context->_conf.set_val("bluefs_buffered_io", "false");
-  bool old_cache_enabled = g_ceph_context->_conf.get_val<bool>("bluefs_enable_cache");
-  g_ceph_context->_conf.set_val("bluefs_enable_cache", "true");
+  bool old_cache_enabled = g_ceph_context->_conf.get_val<bool>("bluefs_cache_enable");
+  g_ceph_context->_conf.set_val("bluefs_cache_enable", "true");
   uint64_t total_written = 0;
 
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
@@ -393,11 +392,10 @@ TEST(BlueFS, cache_test) {
   fs.umount();
 
   g_ceph_context->_conf.set_val("bluefs_buffered_io", stringify((int)old));
-  g_ceph_context->_conf.set_val("bluefs_enable_cache", stringify((int)old_cache_enabled));
+  g_ceph_context->_conf.set_val("bluefs_cache_enable", stringify((int)old_cache_enabled));
 }
 
 TEST(BlueFS, cache_test2) {
-  SKIP_JENKINS();
   // we'll write a ~5G file, so allocate more than that for the whole fs
   uint64_t size_full = 1048576 * 1024 * 6ull;
   uint64_t size = 1048576 * 1024 * 5ull;
@@ -406,8 +404,8 @@ TEST(BlueFS, cache_test2) {
 
   bool old = g_ceph_context->_conf.get_val<bool>("bluefs_buffered_io");
   g_ceph_context->_conf.set_val("bluefs_buffered_io", "false");
-  bool old_cache_enabled = g_ceph_context->_conf.get_val<bool>("bluefs_enable_cache");
-  g_ceph_context->_conf.set_val("bluefs_enable_cache", "true");
+  bool old_cache_enabled = g_ceph_context->_conf.get_val<bool>("bluefs_cache_enable");
+  g_ceph_context->_conf.set_val("bluefs_cache_enable", "true");
   uint64_t total_written = 0;
 
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
@@ -450,7 +448,7 @@ TEST(BlueFS, cache_test2) {
   fs.umount();
 
   g_ceph_context->_conf.set_val("bluefs_buffered_io", stringify((int)old));
-  g_ceph_context->_conf.set_val("bluefs_enable_cache", stringify((int)old_cache_enabled));
+  g_ceph_context->_conf.set_val("bluefs_cache_enable", stringify((int)old_cache_enabled));
 }
 
 #define ALLOC_SIZE 4096

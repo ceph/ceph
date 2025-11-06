@@ -15,7 +15,6 @@
 #include "include/buffer_fwd.h"
 #include "common/ceph_context.h"
 #include "include/denc.h"
-#include "tools/cephfs/EventOutput.h"
 
 
 #define dout_context cct
@@ -23,10 +22,10 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bluefs "
 
-LRUCache::LRUCache(size_t cache_capacity, size_t evict_bytes, CephContext* cct)
+BlueFSLRUCache::BlueFSLRUCache(size_t cache_capacity, size_t evict_bytes, CephContext* cct)
         : cache_capacity(cache_capacity), evict_bytes(evict_bytes), current_bytes(0), cct(cct) {}
 
-cache_bufferlist LRUCache::get_nearest_offset(uint64_t inode, uint64_t offset,
+cache_bufferlist BlueFSLRUCache::get_nearest_offset(uint64_t inode, uint64_t offset,
                                               uint64_t *buffer_offset) {
 
   dout(20) << __func__ << " inode " << inode << std::hex << " offset 0x" << offset << std::dec << dendl;
@@ -55,7 +54,7 @@ cache_bufferlist LRUCache::get_nearest_offset(uint64_t inode, uint64_t offset,
   return NULL;
 }
 
-int LRUCache::put(uint64_t inode, uint64_t offset, cache_bufferlist value) {
+int BlueFSLRUCache::put(uint64_t inode, uint64_t offset, cache_bufferlist value) {
   size_t new_size = value->length();
 
   std::unique_lock lock(mutex);
@@ -124,7 +123,7 @@ int LRUCache::put(uint64_t inode, uint64_t offset, cache_bufferlist value) {
   return 0;
 }
 
-void LRUCache::remove(std::pair<uint64_t, uint64_t> key) {
+void BlueFSLRUCache::remove(std::pair<uint64_t, uint64_t> key) {
   // Move key to front (most recently used)
 
   dout(20) << __func__ << " removing key from cache for inode " << key.first << std::hex << " 0x" << key.second << std::dec << dendl;
@@ -149,14 +148,14 @@ void LRUCache::remove(std::pair<uint64_t, uint64_t> key) {
   }
 }
 
-void LRUCache::print_cache() {
+void BlueFSLRUCache::print_cache() {
   dout(30) << __func__ << "Cache Contents (Total Bytes: 0x" << std::hex << current_bytes << std::dec << ")" << dendl;
   for (auto key : access_order) {
     dout(30) << __func__ << std::hex << " inode " << key.first << " and offset 0x" << key.second << std::dec << dendl;
   }
 }
 
-void LRUCache::update_recency(std::pair<uint64_t, uint64_t> key) {
+void BlueFSLRUCache::update_recency(std::pair<uint64_t, uint64_t> key) {
   // Move key to front (most recently used)
 
   dout(20) << __func__ << " updating recency for inode " << key.first << " and offset 0x" << std::hex << key.second << std::dec << dendl;
@@ -169,7 +168,7 @@ void LRUCache::update_recency(std::pair<uint64_t, uint64_t> key) {
   key_iter[key] = access_order.begin();
 }
 
-void LRUCache::evict(size_t target_free_bytes) {
+void BlueFSLRUCache::evict(size_t target_free_bytes) {
   dout(20) << __func__ << " evicting to free the cache 0x" << std::hex << target_free_bytes << std::dec << " bytes" << dendl;
   size_t freed = 0;
   std::unique_lock lockIter(mutex_iter);
@@ -192,11 +191,11 @@ void LRUCache::evict(size_t target_free_bytes) {
   dout(20) << __func__ << " Evicted to free the cache 0x" << std::hex << freed << std::dec << " bytes" << dendl;
 }
 
-bool LRUCache::is_empty() {
+bool BlueFSLRUCache::is_empty() {
   std::shared_lock lock(mutex);
   return kv.empty();
 }
 
-cache_bufferlist LRUCache::create_bufferlist() {
+cache_bufferlist BlueFSLRUCache::create_bufferlist() {
   return std::make_shared<bufferlist>();
 }

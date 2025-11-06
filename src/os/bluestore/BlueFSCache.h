@@ -23,10 +23,10 @@ namespace std {
     };
 }
 
-class LRUCache
+class BlueFSLRUCache
 {
 public:
-    LRUCache(size_t cache_capacity, size_t evict_bytes, CephContext* cct);
+    BlueFSLRUCache(size_t cache_capacity, size_t evict_bytes, CephContext* cct);
 
     /*
     bufferlist* get(uint64_t inode, uint64_t offset)

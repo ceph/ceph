@@ -552,7 +552,7 @@ public:
   };
 private:
   PerfCounters *logger = nullptr;
-  std::shared_ptr<LRUCache> bluefscache;
+  std::shared_ptr<BlueFSLRUCache> bluefscache;
 
   uint64_t max_bytes[MAX_BDEV] = {0};
   uint64_t max_bytes_pcounters[MAX_BDEV] = {
@@ -795,7 +795,7 @@ private:
 
 public:
   BlueFS(CephContext* cct);
-  BlueFS(CephContext* cct, std::shared_ptr<LRUCache> bluefscache);
+  BlueFS(CephContext* cct, std::shared_ptr<BlueFSLRUCache> bluefscache);
   ~BlueFS();
 
   // the super is always stored on bdev 0
