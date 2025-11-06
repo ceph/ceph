@@ -789,6 +789,7 @@ do_rgw_conf() {
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
         debug rgw_flight = 20
         debug rgw_notification = 20
+        # debug rgw_bucket_logging = 20
 EOF
         current_port=$((current_port + 1))
         unset flight_conf

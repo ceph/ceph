@@ -189,6 +189,7 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_log_backing.cc
           driver/rados/rgw_metadata.cc
           driver/rados/rgw_notify.cc
+          driver/rados/rgw_bucketlogging.cc
           driver/rados/rgw_obj_manifest.cc
           driver/rados/rgw_object_expirer_core.cc
           driver/rados/rgw_otp.cc
