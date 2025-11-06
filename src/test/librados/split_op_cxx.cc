@@ -301,7 +301,7 @@ TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
 //   // omap_rmkeyrange has not been tested
 // }
 
-TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
+TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
   const std::string omap_key_1 = "key_a";
@@ -317,15 +317,16 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   };
   bl_write.append("ceph");
   
+
   // 1a. Write data to omap
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
   write1.omap_set(omap_map);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_inject", &write1));
+  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &write1));
 
   // 1b. Write data to xattrs
   write1.setxattr(xattr_key.c_str(), xattr_val_bl);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_inject", &write1));
+  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &write1));
 
 
   // 2. Set osd_debug_reject_backfill_probability to 1.0
@@ -334,11 +335,25 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   cct->_conf->osd_debug_reject_backfill_probability = 1.0;
 
 
-  // 3. Find primary osd for relevant pg
+  // 3. Read from xattr before taking primary osd out
+  int err = 0;
+  ObjectReadOperation read;
+  bufferlist attr_read_bl;
+  read.getxattr(xattr_key.c_str(), &attr_read_bl, &err);
+  std::map<string, bufferlist> pattrs{ {"_", {}}, {xattr_key, {}}};
+  read.getxattrs(&pattrs, &err);
+  read.cmpxattr(xattr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, xattr_val_bl);
+  int ret = ioctx.operate("error_inject_oid", &read, nullptr);
+  EXPECT_TRUE(ret == 1);
+  EXPECT_EQ(0, err);
+  EXPECT_EQ(1U, pattrs.size());
+
+
+  // 4. Find primary osd for relevant pg
   int primary_osd = -1;
   bufferlist map_inbl, map_outbl;
   auto map_formatter = std::make_unique<JSONFormatter>(false);
-  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "omap_oid_inject", ""};
+  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "error_inject_oid", ""};
   encode_json("OSDMapRequest", osdMapRequest, map_formatter.get());
 
   std::ostringstream map_oss;
@@ -354,7 +369,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   primary_osd = reply.acting_primary;
 
 
-  // 4. Take primary osd out
+  // 5. Take primary osd out
   bufferlist out_inbl, out_outbl;
   std::ostringstream out_oss;
   out_oss << "{\"prefix\": \"osd out\", \"ids\": [\"" << primary_osd << "\"]}";
@@ -362,17 +377,15 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   EXPECT_TRUE(rc == 0);
   
 
-  // 5a. Read from omap
-  ObjectReadOperation read;
-  int err = 0;
-
+  // 6a. Read from omap
   bufferlist bl_read;
   read.read(0, bl_write.length(), &bl_read, nullptr);
-  EXPECT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_inject", &read, nullptr));
+  ret = ioctx.operate("error_inject_oid", &read, nullptr);
+  EXPECT_TRUE(ret == 0);
 
   std::map<std::string,bufferlist> vals{ {"_", {}} };
   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_inject", &read, nullptr));
+  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &read, nullptr));
   EXPECT_EQ(0, err);
   EXPECT_EQ(2U, vals.size());
   EXPECT_NE(vals.find(omap_key_1), vals.end());
@@ -381,22 +394,23 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   decode(retrieved_value, retrieved_val_bl);
   EXPECT_EQ(omap_value, retrieved_value);
 
-  // 5b. Read from xattr
-  bufferlist attr_read_bl;
-  read.getxattr(xattr_key.c_str(), &attr_read_bl, &err);
-  std::map<string, bufferlist> pattrs{ {"_", {}}, {xattr_key, {}}};
-  read.getxattrs(&pattrs, &err);
+  // 6b. Read from xattr after taking primary osd out
+  bufferlist attr_read_bl_after;
+  read.getxattr(xattr_key.c_str(), &attr_read_bl_after, &err);
+  std::map<string, bufferlist> pattrs_after{ {"_", {}}, {xattr_key, {}}};
+  read.getxattrs(&pattrs_after, &err);
   read.cmpxattr(xattr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, xattr_val_bl);
-  EXPECT_TRUE(AssertOperateWithSplitOp(1, "omap_oid_inject", &read, nullptr));
+  ret = ioctx.operate("error_inject_oid", &read, nullptr);
+  EXPECT_TRUE(ret == 1);
   EXPECT_EQ(0, err);
-  EXPECT_EQ(1U, pattrs.size());
+  EXPECT_EQ(1U, pattrs_after.size());
 
 
-  // 6. Set osd_debug_reject_backfill_probability to 0.0
+  // 7. Set osd_debug_reject_backfill_probability to 0.0
   cct->_conf->osd_debug_reject_backfill_probability = 0.0;
 
 
-  // 7. Take all osds out
+  // 8. Take all osds out
   std::vector<int> osds = reply.up;
   bufferlist out_all_inbl, out_all_outbl;
   std::ostringstream out_all_oss;
@@ -412,7 +426,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   EXPECT_TRUE(rc == 0);
 
 
-  // 8. Put all osds back in
+  // 9. Put all osds back in
   bufferlist in_all_inbl, in_all_outbl;
   std::ostringstream in_all_oss;
   in_all_oss << "{\"prefix\": \"osd in\", \"ids\": [";
@@ -427,7 +441,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPErrorInject) {
   EXPECT_TRUE(rc == 0);
 
 
-  // 9. Set osd_debug_reject_backfill_probability back to previous value
+  // 10. Set osd_debug_reject_backfill_probability back to previous value
   cct->_conf->osd_debug_reject_backfill_probability = prev_value;
 }
 
