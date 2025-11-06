@@ -1364,15 +1364,14 @@ NFS_CORE_PARAM {
         qos = QOS.from_dict(self.qos_export_dict)
         assert qos.to_dict() == self.qos_export_dict
 
-    @pytest.mark.parametrize("qos_block, qos_dict, qos_dict_bw_in_bytes", [
-        (qos_cluster_block, qos_cluster_dict, qos_cluster_dict_bw_in_bytes),
-        (qos_export_block, qos_export_dict, qos_export_dict_bw_in_bytes)
+    @pytest.mark.parametrize("qos_block, qos_dict, qos_dict_bw_in_bytes, clust_op", [
+        (qos_cluster_block, qos_cluster_dict, qos_cluster_dict_bw_in_bytes, True),
+        (qos_export_block, qos_export_dict, qos_export_dict_bw_in_bytes, False)
         ])
-    def test_qos_from_block(self, qos_block, qos_dict, qos_dict_bw_in_bytes):
+    def test_qos_from_block(self, qos_block, qos_dict, qos_dict_bw_in_bytes, clust_op):
         blocks = GaneshaConfParser(qos_block).parse()
         assert isinstance(blocks, list)
-        assert len(blocks) == 1
-        qos = QOS.from_qos_block(blocks[0], True)
+        qos = QOS.from_qos_block(blocks[0], clust_op)
         assert qos.to_dict() == qos_dict
         assert qos.to_dict(ret_bw_in_bytes=True) == qos_dict_bw_in_bytes
 
@@ -1392,6 +1391,13 @@ NFS_CORE_PARAM {
         for key in params:
             expected_out[QOSParams[key].value] = bytes_to_human(with_units_to_int(params[key]), mode='binary')
         assert out == expected_out
+        cluster.global_cluster_qos_action(self.cluster_id, 'enable', 200)
+        expected_out.update({'enable_cluster_qos': True, 'cqos_msg_interval': 200})
+        assert cluster.get_cluster_qos(self.cluster_id) == expected_out
+        cluster.global_cluster_qos_action(self.cluster_id, 'disable')
+        expected_out.update({'enable_cluster_qos': False})
+        del expected_out['cqos_msg_interval']
+        assert cluster.get_cluster_qos(self.cluster_id) == expected_out
         cluster.disable_cluster_qos_bw(self.cluster_id)
         out = cluster.get_cluster_qos(self.cluster_id)
         assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}
@@ -1493,6 +1499,12 @@ NFS_CORE_PARAM {
         for key in params:
             expected_out[QOSParams[key].value] = params[key]
         assert out == expected_out
+        cluster.global_cluster_qos_action(self.cluster_id, 'enable', 200)
+        expected_out.update({'enable_cluster_qos': True, 'cqos_msg_interval': 200})
+        assert cluster.get_cluster_qos(self.cluster_id) == expected_out
+        cluster.global_cluster_qos_action(self.cluster_id, 'disable')
+        expected_out.update({'enable_cluster_qos': False})
+        del expected_out['cqos_msg_interval']
         cluster.disable_cluster_qos_ops(self.cluster_id)
         out = cluster.get_cluster_qos(self.cluster_id)
         assert out == {"enable_bw_control": False, "enable_qos": False, "combined_rw_bw_control": False, "enable_iops_control": False}

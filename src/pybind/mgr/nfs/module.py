@@ -327,6 +327,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """Disable QOS bandwidth control for NFS cluster"""
         return self.nfs.disable_cluster_qos_bw(cluster_id)
 
+    @CLICommand('nfs cluster cluster_qos', perm='rw')
+    @object_format.EmptyResponder()
+    def _cmd_nfs_cluster_qos_ops(self,
+                                 cluster_id: str,
+                                 action: str,
+                                 msg_interval: int = 0) -> None:
+        """Enable or disable cluster-level QoS for a given NFS cluster"""
+        return self.nfs.global_cluster_qos_action(cluster_id, action, msg_interval)
+
     @CLICommand('nfs cluster qos get', perm='r')
     @object_format.Responder()
     def _cmd_cluster_qos_get(self, cluster_id: str) -> Dict[str, Any]:

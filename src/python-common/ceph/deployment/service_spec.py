@@ -1414,18 +1414,24 @@ class NFSServiceSpec(ServiceSpec):
             qos_type = self.cluster_qos_config.get('qos_type')
             valid_qos_types = ['PerShare', 'PerClient', 'PerShare_PerClient']
             if not qos_type:
-                raise SpecValidationError('Invalid NFS spec: to set cluster-level QoS, "qos_type" must be provided.')
+                raise SpecValidationError(
+                    'Invalid NFS spec: to set cluster-level QoS, "qos_type" must be provided.'
+                )
             if qos_type not in valid_qos_types:
                 raise SpecValidationError(
-                    f'Invalid NFS spec: "{qos_type}" is not a valid qos_type. Valid types are: {"|".join(valid_qos_types)}.'
+                    f'Invalid NFS spec: "{qos_type}" is not a valid qos_type. '
+                    f'Valid types are: {"|".join(valid_qos_types)}.'
                 )
 
             # Verify bandwidth and IOPS types
             for key, value in self.cluster_qos_config.items():
                 if key.endswith('bw') and not isinstance(value, str):
-                    raise SpecValidationError(f"Invalid NFS spec: bandwidth '{key}' should be a string")
+                    raise SpecValidationError(
+                        f"Invalid NFS spec: bandwidth '{key}' should be a string"
+                    )
                 if key.endswith('iops') and not isinstance(value, int):
-                    raise SpecValidationError(f"Invalid NFS spec: IOPS '{key}' should be an integer")
+                    raise SpecValidationError(
+                        f"Invalid NFS spec: IOPS '{key}' should be an integer")
 
         # TLS certificate validation
         if self.ssl and not self.certificate_source:
