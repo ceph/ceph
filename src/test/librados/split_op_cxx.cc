@@ -194,112 +194,112 @@ TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   std::string attr_key = "my_key";
   std::string attr_value = "my_attr";
 
-//   bl.append("ceph");
-//   ObjectWriteOperation write1;
-//   write1.write(0, bl);
-//   encode(attr_value, attr_bl);
-//   write1.setxattr(attr_key.c_str(), attr_bl);
-//   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+  bl.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  encode(attr_value, attr_bl);
+  write1.setxattr(attr_key.c_str(), attr_bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
-//   ObjectReadOperation read;
-//   read.read(0, bl.length(), NULL, NULL);
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
 
-//   uint64_t size;
-//   timespec time;
-//   time.tv_nsec = 0;
-//   time.tv_sec = 0;
-//   int stat_rval;
-//   read.stat2(&size, &time, &stat_rval);
+  uint64_t size;
+  timespec time;
+  time.tv_nsec = 0;
+  time.tv_sec = 0;
+  int stat_rval;
+  read.stat2(&size, &time, &stat_rval);
 
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl));
-//   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
-//   ASSERT_EQ(0, stat_rval);
-//   ASSERT_EQ(4, size);
-//   ASSERT_NE(0, time.tv_nsec);
-//   ASSERT_NE(0, time.tv_sec);
-// }
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+  ASSERT_EQ(0, stat_rval);
+  ASSERT_EQ(4, size);
+  ASSERT_NE(0, time.tv_nsec);
+  ASSERT_NE(0, time.tv_sec);
+}
 
-// TEST_P(LibRadosSplitOpECPP, OMAPReads) {
-//   SKIP_IF_CRIMSON();
-//   bufferlist bl_write, omap_val_bl, omap_header_bl;
-//   const std::string omap_key_1 = "omap_key_1_elephant";
-//   const std::string omap_key_2 = "omap_key_2_fox";
-//   const std::string omap_key_3 = "omap_key_3_squirrel";
-//   const std::string omap_value = "omap_value_1_giraffe";
-//   const std::string omap_header = "this is the omap header";
+TEST_P(LibRadosSplitOpECPP, OMAPReads) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl_write, omap_val_bl, omap_header_bl;
+  const std::string omap_key_1 = "omap_key_1_elephant";
+  const std::string omap_key_2 = "omap_key_2_fox";
+  const std::string omap_key_3 = "omap_key_3_squirrel";
+  const std::string omap_value = "omap_value_1_giraffe";
+  const std::string omap_header = "this is the omap header";
   
-//   encode(omap_value, omap_val_bl);
-//   encode(omap_header, omap_header_bl);
+  encode(omap_value, omap_val_bl);
+  encode(omap_header, omap_header_bl);
   
-//   std::map<std::string, bufferlist> omap_map = {
-//     {omap_key_1, omap_val_bl},
-//     {omap_key_2, omap_val_bl},
-//     {omap_key_3, omap_val_bl}
-//   };
+  std::map<std::string, bufferlist> omap_map = {
+    {omap_key_1, omap_val_bl},
+    {omap_key_2, omap_val_bl},
+    {omap_key_3, omap_val_bl}
+  };
 
-//   bl_write.append("ceph");
-//   ObjectWriteOperation write1;
-//   write1.write(0, bl_write);
-//   write1.omap_set_header(omap_header_bl);
-//   write1.omap_set(omap_map);
-//   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
+  bl_write.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl_write);
+  write1.omap_set_header(omap_header_bl);
+  write1.omap_set(omap_map);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
 
-//   int err = 0;
-//   bufferlist bl_read;
-//   ObjectReadOperation read;
+  int err = 0;
+  bufferlist bl_read;
+  ObjectReadOperation read;
 
   
-//   read.read(0, bl_write.length(), &bl_read, nullptr);
-//   std::map<std::string,bufferlist> vals{ {"_", {}}, {omap_key_1, {}}};
-//   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-//   ASSERT_EQ(0, err);
-//   ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
-//   ASSERT_EQ(3U, vals.size());
-//   ASSERT_NE(vals.find(omap_key_1), vals.end());
-//   bufferlist retrieved_val_bl = vals[omap_key_1];
-//   std::string retrieved_value;
-//   decode(retrieved_value, retrieved_val_bl);
-//   ASSERT_EQ(omap_value, retrieved_value);
+  read.read(0, bl_write.length(), &bl_read, nullptr);
+  std::map<std::string,bufferlist> vals{ {"_", {}}, {omap_key_1, {}}};
+  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
+  ASSERT_EQ(3U, vals.size());
+  ASSERT_NE(vals.find(omap_key_1), vals.end());
+  bufferlist retrieved_val_bl = vals[omap_key_1];
+  std::string retrieved_value;
+  decode(retrieved_value, retrieved_val_bl);
+  ASSERT_EQ(omap_value, retrieved_value);
 
-//   bufferlist omap_header_read_bl;
-//   std::set<std::string> keys;
-//   read.omap_get_keys2("", LONG_MAX, &keys, nullptr, &err);
-//   read.omap_get_header(&omap_header_read_bl, &err);
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-//   ASSERT_EQ(0, err);
-//   std::string omap_header_read;
-//   decode(omap_header_read, omap_header_read_bl);
-//   ASSERT_EQ(omap_header, omap_header_read);
-//   ASSERT_EQ(3U, keys.size());
+  bufferlist omap_header_read_bl;
+  std::set<std::string> keys;
+  read.omap_get_keys2("", LONG_MAX, &keys, nullptr, &err);
+  read.omap_get_header(&omap_header_read_bl, &err);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  std::string omap_header_read;
+  decode(omap_header_read, omap_header_read_bl);
+  ASSERT_EQ(omap_header, omap_header_read);
+  ASSERT_EQ(3U, keys.size());
   
-//   std::map<std::string,bufferlist> vals_by_keys{ {"_", {}} };
-//   std::set<std::string> key_filter = {omap_key_1, omap_key_2};
-//   read.omap_get_vals_by_keys(key_filter, &vals_by_keys, &err);
-//   std::map<std::string, std::pair<bufferlist, int> > assertions;
-//   assertions[omap_key_3] = make_pair(omap_val_bl, CEPH_OSD_CMPXATTR_OP_EQ);
-//   read.omap_cmp(assertions, &err);
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-//   ASSERT_EQ(0, err);
-//   ASSERT_EQ(2U, vals_by_keys.size());
+  std::map<std::string,bufferlist> vals_by_keys{ {"_", {}} };
+  std::set<std::string> key_filter = {omap_key_1, omap_key_2};
+  read.omap_get_vals_by_keys(key_filter, &vals_by_keys, &err);
+  std::map<std::string, std::pair<bufferlist, int> > assertions;
+  assertions[omap_key_3] = make_pair(omap_val_bl, CEPH_OSD_CMPXATTR_OP_EQ);
+  read.omap_cmp(assertions, &err);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(2U, vals_by_keys.size());
 
-//   std::set<std::string> keys_to_remove = {omap_key_2};
-//   write1.omap_rm_keys(keys_to_remove);
-//   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
-//   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-//   ASSERT_EQ(0, err);
-//   ASSERT_EQ(2U, vals.size());
+  std::set<std::string> keys_to_remove = {omap_key_2};
+  write1.omap_rm_keys(keys_to_remove);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
+  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(2U, vals.size());
 
-//   write1.omap_clear();
-//   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
-//   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-//   ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-//   ASSERT_EQ(0, err);
-//   ASSERT_EQ(0U, vals.size());
+  write1.omap_clear();
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
+  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
+  ASSERT_EQ(0, err);
+  ASSERT_EQ(0U, vals.size());
 
-//   // omap_rmkeyrange has not been tested
-// }
+  // omap_rmkeyrange has not been tested
+}
 
 TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   SKIP_IF_CRIMSON();

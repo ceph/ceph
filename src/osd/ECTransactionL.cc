@@ -314,9 +314,9 @@ void ECTransactionL::generate_transactions(
 	});
 
       // omap not supported (except 0, handled above)
-       ceph_assert(!(op.clear_omap));
-       ceph_assert(!(op.omap_header));
-       ceph_assert(op.omap_updates.empty());
+      ceph_assert(!(op.clear_omap));
+      ceph_assert(!(op.omap_header));
+      ceph_assert(op.omap_updates.empty());
 
       if (!op.attr_updates.empty()) {
 	map<string, bufferlist, less<>> to_set;
