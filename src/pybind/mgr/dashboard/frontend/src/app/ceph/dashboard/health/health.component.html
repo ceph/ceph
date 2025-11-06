@@ -18,7 +18,7 @@
                   *ngIf="healthData.health?.status">
       <ng-container *ngIf="healthData.health?.checks?.length > 0">
         <ng-template #healthChecks>
-          <cd-health-checks [healthData]="healthData"></cd-health-checks>
+          <cd-health-checks [healthData]="healthData?.health?.checks"></cd-health-checks>
         </ng-template>
         <div class="info-card-content-clickable"
              [ngStyle]="healthData.health.status | healthColor"
