@@ -5890,6 +5890,26 @@ void PeeringState::WaitLocalBackfillReserved::exit()
   pl->get_peering_perf().tinc(rs_waitlocalbackfillreserved_latency, dur);
 }
 
+/*----NotMigrating------*/
+PeeringState::NotMigrating::NotMigrating(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/NotMigrating")
+{
+  context< PeeringMachine >().log_enter(state_name);
+  DECLARE_LOCALS;
+  pl->publish_stats_to_osd();
+}
+
+void PeeringState::NotMigrating::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+
+  DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_RECOVERY_UNFOUND);
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_notmigrating_latency, dur);
+}
+
 /*----NotBackfilling------*/
 PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   : my_base(ctx),
@@ -5960,22 +5980,201 @@ void PeeringState::NotRecovering::exit()
   pl->get_peering_perf().tinc(rs_notrecovering_latency, dur);
 }
 
+/*----MigratingSource----*/
+PeeringState::MigratingSource::MigratingSource(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/MigratingSource")
+{
+  context< PeeringMachine >().log_enter(state_name);
+
+  DECLARE_LOCALS;
+  //BILL:FIXME:  ps->backfill_reserved = true;
+  //Do we need the equivalent of this variable?
+  ps->state_clear(PG_STATE_MIGRATION_TOOFULL);
+  ps->state_clear(PG_STATE_MIGRATION_WAIT);
+  ps->state_set(PG_STATE_MIGRATING);
+  pl->on_pool_migration_reserved();
+  pl->publish_stats_to_osd();
+}
+
+void PeeringState::MigratingSource::migration_release_reservations()
+{
+  DECLARE_LOCALS;
+  pl->cancel_local_background_io_reservation();
+  for (auto i : context< Active >().remote_shards_to_reserve_migration) {
+    if (i == ps->pg_whoami) {
+      //BILL:FIXME: Can only do this on the target pool - can't enable yet
+#if 0
+      pl->unreserve_recovery_space();
+      pl->cancel_remote_recovery_reservation();
+#endif
+    } else {
+      pl->send_cluster_message(
+	i.osd,
+	TOPNSPC::make_message<MPoolMigrationReserve>(
+	  MPoolMigrationReserve::RELEASE,
+	  spg_t(ps->info.pgid.pgid, i.shard),
+	  ps->get_osdmap_epoch()),
+	ps->get_osdmap_epoch());
+    }
+  }
+}
+
+void PeeringState::MigratingSource::suspend_migration()
+{
+  DECLARE_LOCALS;
+  migration_release_reservations();
+  pl->on_pool_migration_suspended();
+}
+
+boost::statechart::result
+PeeringState::MigratingSource::react(const PoolMigrationDone &c)
+{
+  DECLARE_LOCALS;
+  migration_release_reservations();
+  // Notify monitor that PG has completed migration
+  pl->send_pg_migrated_pool();
+  return transit<Recovered>();
+}
+
+boost::statechart::result
+PeeringState::MigratingSource::react(const DeferPoolMigration &c)
+{
+  DECLARE_LOCALS;
+  psdout(10) << "defer pool migration, retry delay " << c.delay << dendl;
+  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  suspend_migration();
+
+  pl->schedule_event_after(
+    std::make_shared<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      DoPoolMigration()),
+    c.delay);
+  return transit<NotMigrating>();
+}
+
+boost::statechart::result
+PeeringState::MigratingSource::react(const RemotePoolMigrationRejectedTooFull &)
+{
+  DECLARE_LOCALS;
+  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
+  suspend_migration();
+
+  pl->schedule_event_after(
+    std::make_shared<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      DoPoolMigration()),
+    ps->cct->_conf->osd_pool_migration_retry_interval);
+  return transit<NotMigrating>();
+}
+
+boost::statechart::result
+PeeringState::MigratingSource::react(const RemotePoolMigrationRevokedTooFull &)
+{
+  DECLARE_LOCALS;
+  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
+  suspend_migration();
+
+  pl->schedule_event_after(
+    std::make_shared<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      DoPoolMigration()),
+    ps->cct->_conf->osd_pool_migration_retry_interval);
+  return transit<NotMigrating>();
+}
+
+boost::statechart::result
+PeeringState::MigratingSource::react(const RemotePoolMigrationRevoked &)
+{
+  DECLARE_LOCALS;
+  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  suspend_migration();
+  return transit<WaitLocalPoolMigrationReserved>();
+}
+
+void PeeringState::MigratingSource::exit()
+{
+  context< PeeringMachine >().log_exit(state_name, enter_time);
+  DECLARE_LOCALS;
+  //BILL:FIXME: ps->backfill_reserved = false;
+  //Do we need the equivalent of this variable?
+  ps->state_clear(PG_STATE_MIGRATING);
+  utime_t dur = ceph_clock_now() - enter_time;
+  pl->get_peering_perf().tinc(rs_migratingsource_latency, dur);
+}
+
 /*--WaitRemotePoolMigrationReserved--*/
 PeeringState::WaitRemotePoolMigrationReserved::WaitRemotePoolMigrationReserved(my_context ctx)
   : my_base(ctx),
-    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitRemotePoolMigrationReserved")
+    NamedState(context< PeeringMachine >().state_history, "Started/Primary/Active/WaitRemotePoolMigrationReserved"),
+    migration_osd_it(context< Active >().remote_shards_to_reserve_migration.begin())
 {
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
 
-  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  // If first attempt at acquiring reservation set WAIT,
+  // if retrying then retain either TOOFULL or WAIT from
+  // previous attempt
+  if (!ps->state_test(PG_STATE_MIGRATION_TOOFULL)) {
+    ps->state_set(PG_STATE_MIGRATION_WAIT);
+  }
   pl->publish_stats_to_osd();
+  post_event(RemotePoolMigrationReserved());
+}
 
-  // FIXME: Stub - release local reservations and send migration done message
-  pl->cancel_local_background_io_reservation();
-  pl->send_pg_migrated_pool();
-  ps->state_clear(PG_STATE_MIGRATION_WAIT);
-  post_event(AllPoolMigrationsReserved());
+boost::statechart::result
+PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationReserved &evt)
+{
+  DECLARE_LOCALS;
+  //BILL:FIXME num_object and num_bytes need to be sent from source PG to
+  //the target PG, as we are running this code on the source at the moment
+  //we'll just take the values from the source info.stats
+  int64_t num_objects = ps->info.stats.stats.sum.num_objects;
+  int64_t num_bytes = ps->info.stats.stats.sum.num_bytes;
+  psdout(10) << __func__ << " num_bytes " << num_bytes << dendl;
+  if (migration_osd_it !=
+      context< Active >().remote_shards_to_reserve_migration.end()) {
+    if (*migration_osd_it == ps->pg_whoami) {
+      //BILL:FIXME: Can only do this on the target pool - can't enable yet
+#if 0
+      if (!pl->try_reserve_recovery_space(
+	     num_bytes, 0, num_objects)) {
+	post_event(RemotePoolMigrationRejectedTooFull());
+      } else {
+	pl->request_remote_recovery_reservation(
+	  ps->get_pool_migration_priority(),
+	  std::make_unique<PGPeeringEvent>(
+	    pl->get_osdmap_epoch(),
+	    pl->get_osdmap_epoch(),
+	    RemotePoolMigrationReserved()),
+          std::make_unique<PGPeeringEvent>(
+	    pl->get_osdmap_epoch(),
+	    pl->get_osdmap_epoch(),
+	    RemotePoolMigrationRevoked()));
+      }
+#else
+      post_event(RemotePoolMigrationReserved());
+#endif
+    } else {
+      pl->send_cluster_message(
+	migration_osd_it->osd,
+	TOPNSPC::make_message<MPoolMigrationReserve>(
+	  MPoolMigrationReserve::REQUEST,
+	  spg_t(context< PeeringMachine >().spgid.pgid,migration_osd_it->shard),
+	  ps->get_osdmap_epoch(),
+	  ps->get_pool_migration_priority(),
+	  num_bytes,
+	  num_objects),
+	ps->get_osdmap_epoch());
+    }
+    ++migration_osd_it;
+  } else {
+    post_event(AllPoolMigrationsReserved());
+  }
+  return discard_event();
 }
 
 void PeeringState::WaitRemotePoolMigrationReserved::exit()
@@ -5987,6 +6186,72 @@ void PeeringState::WaitRemotePoolMigrationReserved::exit()
   pl->get_peering_perf().tinc(rs_waitremotepoolmigrationreserved_latency, dur);
 }
 
+void PeeringState::WaitRemotePoolMigrationReserved::retry()
+{
+  DECLARE_LOCALS;
+  pl->cancel_local_background_io_reservation();
+
+  // Send CANCEL to all previously acquired reservations
+  set<pg_shard_t>::const_iterator it, begin, end;
+  begin = context< Active >().remote_shards_to_reserve_migration.begin();
+  end = context< Active >().remote_shards_to_reserve_migration.end();
+  ceph_assert(begin != end);
+  for (it = begin; it != migration_osd_it; ++it) {
+    if (*it == ps->pg_whoami) {
+      //BILL:FIXME: Can only do this on the target pool - can't enable yet
+#if 0
+      pl->unreserve_recovery_space();
+      pl->cancel_remote_recovery_reservation();
+#endif
+    } else {
+      pl->send_cluster_message(
+        it->osd,
+	TOPNSPC::make_message<MPoolMigrationReserve>(
+	  MPoolMigrationReserve::RELEASE,
+	  spg_t(context< PeeringMachine >().spgid.pgid, it->shard),
+	  ps->get_osdmap_epoch()),
+	ps->get_osdmap_epoch());
+    }
+  }
+
+  pl->publish_stats_to_osd();
+
+  pl->schedule_event_after(
+    std::make_shared<PGPeeringEvent>(
+      ps->get_osdmap_epoch(),
+      ps->get_osdmap_epoch(),
+      DoPoolMigration()),
+    ps->cct->_conf->osd_pool_migration_retry_interval);
+}
+
+boost::statechart::result
+PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRejectedTooFull &evt)
+{
+  DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_MIGRATION_WAIT);
+  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
+  retry();
+  return transit<NotMigrating>();
+}
+
+boost::statechart::result
+PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRevoked &evt)
+{
+  //Keep PG_STATE_MIGRATION_WAIT set
+  retry();
+  return transit<NotMigrating>();
+}
+
+ boost::statechart::result
+PeeringState::WaitRemotePoolMigrationReserved::react(const RemotePoolMigrationRevokedTooFull &evt)
+{
+  DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_MIGRATION_WAIT);
+  ps->state_set(PG_STATE_MIGRATION_TOOFULL);
+  retry();
+  return transit<NotMigrating>();
+}
+
 /*--WaitLocalPoolMigrationReserved--*/
 PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_context ctx)
   : my_base(ctx),
@@ -5995,7 +6260,12 @@ PeeringState::WaitLocalPoolMigrationReserved::WaitLocalPoolMigrationReserved(my_
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
 
-  ps->state_set(PG_STATE_MIGRATION_WAIT);
+  // If first attempt at acquiring reservation set WAIT,
+  // if retrying then retain either TOOFULL or WAIT from
+  // previous attempt
+  if (!ps->state_test(PG_STATE_MIGRATION_TOOFULL)) {
+    ps->state_set(PG_STATE_MIGRATION_WAIT);
+  }
   pl->request_local_background_io_reservation(
     ps->get_pool_migration_priority(),
     std::make_unique<PGPeeringEvent>(
@@ -6239,7 +6509,7 @@ void PeeringState::RepWaitPoolMigrationReserved::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   utime_t dur = ceph_clock_now() - enter_time;
-  pl->get_peering_perf().tinc(rs_repwaitbackfillreserved_latency, dur); // BILL:FIXME wrong stat
+  pl->get_peering_perf().tinc(rs_repwaitmigrationreserved_latency, dur);
 }
 
 boost::statechart::result
@@ -6750,6 +7020,10 @@ PeeringState::Active::Active(my_context ctx)
       unique_osd_shard_set(
 	context< PeeringMachine >().state->pg_whoami,
 	context< PeeringMachine >().state->backfill_targets)),
+    remote_shards_to_reserve_migration(
+      unique_osd_shard_set(
+        pg_shard_t(), // Don't skip the primary
+	context< PeeringMachine >().state->actingset)),
     all_replicas_activated(false)
 {
   context< PeeringMachine >().log_enter(state_name);
