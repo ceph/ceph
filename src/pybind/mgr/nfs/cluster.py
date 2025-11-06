@@ -3,6 +3,7 @@ import logging
 import re
 import socket
 from typing import cast, Dict, List, Any, Union, Optional, TYPE_CHECKING
+from enum import Enum
 
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressSpec
@@ -37,6 +38,11 @@ if TYPE_CHECKING:
 
 
 log = logging.getLogger(__name__)
+
+
+class ClusterQosAction(Enum):
+    enable = 'enable'
+    disable = 'disable'
 
 
 def resolve_ip(hostname: str) -> str:

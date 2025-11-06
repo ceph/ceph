@@ -12,7 +12,7 @@ from orchestrator.module import IngressType
 from mgr_util import CephFSEarmarkResolver
 
 from .export import ExportMgr, AppliedExportResults
-from .cluster import NFSCluster
+from .cluster import NFSCluster, ClusterQosAction
 from .utils import available_clusters
 from .qos_conf import QOSType, QOSBandwidthControl, UserQoSType, QOSOpsControl
 
