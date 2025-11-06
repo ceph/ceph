@@ -19,7 +19,9 @@
 #include <boost/container/small_vector.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <ostream>
 #include <string>
 #include <string_view>
@@ -131,11 +133,20 @@ public:
   using osptr = std::unique_ptr<sss>;
 
   CachedStackStringStream() {
-    if (cache.destructed || cache.c.empty()) {
+    auto* cache_ptr = get_cache();
+    // Quick check without lock first
+    if (!cache_ptr || !is_cache_valid(cache_ptr)) {
+      osp = std::make_unique<sss>();
+      return;
+    }
+    
+    // Lock and double-check before accessing vector
+    std::lock_guard<std::mutex> lock(cache_ptr->mutex);
+    if (!cache_ptr->valid.load(std::memory_order_relaxed) || cache_ptr->c.empty()) {
       osp = std::make_unique<sss>();
     } else {
-      osp = std::move(cache.c.back());
-      cache.c.pop_back();
+      osp = std::move(cache_ptr->c.back());
+      cache_ptr->c.pop_back();
       osp->reset();
     }
   }
@@ -144,9 +155,18 @@ public:
   CachedStackStringStream(CachedStackStringStream&&) = delete;
   CachedStackStringStream& operator=(CachedStackStringStream&&) = delete;
   ~CachedStackStringStream() {
-    if (!cache.destructed && cache.c.size() < max_elems) {
-      cache.c.emplace_back(std::move(osp));
+    auto* cache_ptr = get_cache();
+    // Quick check without lock first
+    if (!cache_ptr || !is_cache_valid(cache_ptr)) {
+      return; // osp will be automatically destroyed
     }
+    
+    // Lock and double-check before accessing vector
+    std::lock_guard<std::mutex> lock(cache_ptr->mutex);
+    if (cache_ptr->valid.load(std::memory_order_relaxed) && cache_ptr->c.size() < max_elems) {
+      cache_ptr->c.emplace_back(std::move(osp));
+    }
+    // If cache is invalid or full, osp will be automatically destroyed
   }
 
   sss& operator*() {
@@ -174,20 +194,44 @@ private:
 
   /* The thread_local cache may be destructed before other static structures.
    * If those destructors try to create a CachedStackStringStream (e.g. for
-   * logging) and access this cache, that access will be undefined. So note if
-   * the cache has been destructed and check before use.
+   * logging) and access this cache, that access will be undefined. We use
+   * a combination of atomic flag and mutex to safely handle concurrent access
+   * during cache destruction.
    */
   struct Cache {
     using container = std::vector<osptr>;
 
-    Cache() {}
-    ~Cache() { destructed = true; }
+    Cache() : valid(true) {}
+    ~Cache() {
+      // Lock to ensure no concurrent access during destruction
+      std::lock_guard<std::mutex> lock(mutex);
+      valid.store(false, std::memory_order_release);
+      // Clear the vector while holding the lock
+      c.clear();
+    }
+
+    // Non-copyable, non-movable
+    Cache(const Cache&) = delete;
+    Cache& operator=(const Cache&) = delete;
+    Cache(Cache&&) = delete;
+    Cache& operator=(Cache&&) = delete;
 
     container c;
-    bool destructed = false;
+    std::mutex mutex;
+    std::atomic<bool> valid;
   };
 
-  inline static thread_local Cache cache;
+  static Cache* get_cache() {
+    static thread_local Cache cache;
+    // Return pointer regardless - validity check happens separately
+    return &cache;
+  }
+
+  static bool is_cache_valid(Cache* cache_ptr) {
+    // Use acquire semantics to ensure we see all previous writes
+    return cache_ptr && cache_ptr->valid.load(std::memory_order_acquire);
+  }
+
   osptr osp;
 };
 
