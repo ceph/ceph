@@ -2101,6 +2101,7 @@ void Client::dump_mds_sessions(Formatter *f, bool cap_dump)
 
 void Client::dump_mds_requests(Formatter *f)
 {
+  f->open_array_section("requests");
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
@@ -2108,6 +2109,7 @@ void Client::dump_mds_requests(Formatter *f)
     p->second->dump(f);
     f->close_section();
   }
+  f->close_section();
 }
 
 int Client::verify_reply_trace(int r, MetaSession *session,
