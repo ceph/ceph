@@ -359,7 +359,7 @@ bool TokenCache::find_locked(const std::string& token_id, rgw::keystone::TokenEn
 
   if (entry.token.expired()) {
     tokens.erase(iter);
-    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_hit);
+    if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
     return false;
   }
   token = entry.token;
