@@ -1188,6 +1188,10 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// last pool migration operation started
+  hobject_t last_pool_migration_started;
+  bool new_pool_migration;
+
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
@@ -1370,6 +1374,14 @@ protected:
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
+
+  /**
+   * Schedule pool migration work
+   * @param work_started will be std::set to true if recover_migration got anywhere
+   * @returns the number of operations started
+   */
+  uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
+			          bool *work_started);
 
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
