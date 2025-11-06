@@ -1061,6 +1061,7 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_WAIT               (1ULL << 34) // PG is waiting for prior intervals' readable period to expire
 #define PG_STATE_MIGRATION_WAIT     (1ULL << 35) // PG is waiting to start migration to a new pool
 #define PG_STATE_MIGRATING          (1ULL << 36) // PG is migrating
+#define PG_STATE_MIGRATION_TOOFULL  (1ULL << 37) // PG migration can't proceed: too full
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);
