@@ -79,9 +79,6 @@ check_device_available() {
     if [ "$DEVICE" == "docker" ]; then
         [ -x "$(command -v docker)" ] || failed=true
     else
-        cd $DASH_DIR/frontend
-        npx cypress verify
-
         case "$DEVICE" in
             chrome)
                 [ -x "$(command -v chrome)" ] || [ -x "$(command -v google-chrome)" ] ||
@@ -124,19 +121,22 @@ DASH_DIR=`pwd`
 cd ../../../../${BUILD_DIR}
 FULL_PATH_BUILD_DIR=`pwd`
 
-[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/frontend/node-env/bin/activate
-
-: ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
-
-export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR CYPRESS_CEPH2_URL
-
 check_device_available
 
 if [ "$CYPRESS_BASE_URL" == "" ]; then
     start_ceph
 fi
 
+# node-env is used for all frontend related actions like npm, npx etc.
+[[ "$(command -v npm)" == '' ]] && . ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/frontend/node-env/bin/activate
+
+: ${CYPRESS_CACHE_FOLDER:="${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/cypress"}
+
+export CYPRESS_BASE_URL CYPRESS_CACHE_FOLDER CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD NO_COLOR CYPRESS_CEPH2_URL
+
+# Verify Cypress installation
 cd $DASH_DIR/frontend
+npx cypress verify
 
 # Remove existing XML results
 rm -f cypress/reports/results-*.xml || true
