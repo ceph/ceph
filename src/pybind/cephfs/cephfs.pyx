@@ -36,6 +36,7 @@ AT_STATX_SYNC_TYPE  = 0x6000
 AT_STATX_SYNC_AS_STAT = 0x0000
 AT_STATX_FORCE_SYNC = 0x2000
 AT_STATX_DONT_SYNC = 0x4000
+AT_FDCWD = -100
 cdef int AT_SYMLINK_NOFOLLOW_CDEF = AT_SYMLINK_NOFOLLOW
 CEPH_STATX_BASIC_STATS = 0x7ff
 cdef int CEPH_STATX_BASIC_STATS_CDEF = CEPH_STATX_BASIC_STATS
@@ -1034,6 +1035,23 @@ cdef class LibCephFS(object):
         d.handle = handle
         return d
 
+    def fdopendir(self, dirfd):
+        self.require_state("mounted")
+
+        cdef:
+            int dirfd_ = dirfd
+            ceph_dir_result* handle
+
+        with nogil:
+            ret = ceph_fdopendir(self.cluster, dirfd_, &handle)
+        if ret < 0:
+            raise make_ex(ret, f'error in fdopendir when it was called for fd "{dirfd_}"')
+
+        d = DirResult()
+        d.lib = self
+        d.handle = handle
+        return d
+
     def readdir(self, DirResult handle) -> Optional[DirEntry]:
         """
         Get the next entry in an open directory.
@@ -1138,6 +1156,25 @@ cdef class LibCephFS(object):
             ret = ceph_mkdir(self.cluster, _path, _mode)
         if ret < 0:
             raise make_ex(ret, "error in mkdir {}".format(path.decode('utf-8')))
+
+    def mkdirat(self, dirfd, relpath, mode):
+        self.require_state("mounted")
+        if not isinstance(mode, int):
+            raise TypeError('"mode" must be an int')
+        if not isinstance(dirfd, int):
+            raise TypeError('"_dirfd" must be an int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            char* _relpath = relpath
+            int _mode = mode
+            int _dirfd = dirfd
+
+        with nogil:
+            ret = ceph_mkdirat(self.cluster, _dirfd, _relpath, _mode)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in mkdirat: {relpath.decode('utf-8')}")
 
     def mksnap(self, path, name, mode, metadata={}) -> int:
         """
@@ -1250,6 +1287,29 @@ cdef class LibCephFS(object):
             ret = ceph_chmod(self.cluster, _path, _mode)
         if ret < 0:
             raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
+
+    def chmodat(self, dirfd, relpath, mode, flags) -> None:
+        self.require_state("mounted")
+
+        if not isinstance(dirfd, int):
+            raise TypeError('"dirfd "must be an int')
+        if not isinstance(mode, int):
+            raise TypeError('mode must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('flags must be an int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _dirfd = dirfd
+            char* _relpath = relpath
+            int _mode = mode
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_chmodat(self.cluster, _dirfd, _relpath, _mode, _flags)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in chmod {relpath.decode('utf-8')}")
 
     def lchmod(self, path, mode) -> None:
         """
@@ -1450,6 +1510,23 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in open {}".format(path.decode('utf-8')))
         return ret
+
+    def openat(self, dirfd, relpath, flags, mode):
+        self.require_state("mounted")
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int dirfd_ = dirfd
+            int flags_ = flags
+            char* relpath_ = relpath
+            int mode_ = mode
+
+        with nogil:
+            ret = ceph_openat(self.cluster, dirfd_, relpath_, flags_, mode_)
+        if ret < 0:
+            raise make_ex(ret, f'error in openat {relpath}')
+        return ret
+
 
     def close(self, fd):
         """
@@ -2117,6 +2194,61 @@ cdef class LibCephFS(object):
 
         return dict_result
 
+    def statxat(self, fd, relpath, mask, flag):
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('fd must be a int')
+        if not isinstance(mask, int):
+            raise TypeError('flag must be a int')
+        if not isinstance(flag, int):
+            raise TypeError('flag must be a int')
+
+        relpath = cstr(relpath, 'relpath')
+
+        cdef:
+            int _fd = fd
+            char* _relpath = relpath
+            statx stx
+            int _mask = mask
+            int _flag = flag
+
+        with nogil:
+            ret = ceph_statxat(self.cluster, _fd, _relpath, &stx, _mask, _flag)
+
+        if ret < 0:
+            raise make_ex(ret, f"error in statxat {relpath.decode('utf-8')}")
+
+        dict_result = dict()
+        if (_mask & CEPH_STATX_MODE):
+            dict_result["mode"] = stx.stx_mode
+        if (_mask & CEPH_STATX_NLINK):
+            dict_result["nlink"] = stx.stx_nlink
+        if (_mask & CEPH_STATX_UID):
+            dict_result["uid"] = stx.stx_uid
+        if (_mask & CEPH_STATX_GID):
+            dict_result["gid"] = stx.stx_gid
+        if (_mask & CEPH_STATX_RDEV):
+            dict_result["rdev"] = stx.stx_rdev
+        if (_mask & CEPH_STATX_ATIME):
+            dict_result["atime"] = datetime.fromtimestamp(stx.stx_atime.tv_sec)
+        if (_mask & CEPH_STATX_MTIME):
+            dict_result["mtime"] = datetime.fromtimestamp(stx.stx_mtime.tv_sec)
+        if (_mask & CEPH_STATX_CTIME):
+            dict_result["ctime"] = datetime.fromtimestamp(stx.stx_ctime.tv_sec)
+        if (_mask & CEPH_STATX_INO):
+            dict_result["ino"] = stx.stx_ino
+        if (_mask & CEPH_STATX_SIZE):
+            dict_result["size"] = stx.stx_size
+        if (_mask & CEPH_STATX_BLOCKS):
+            dict_result["blocks"] = stx.stx_blocks
+        if (_mask & CEPH_STATX_BTIME):
+            dict_result["btime"] = datetime.fromtimestamp(stx.stx_btime.tv_sec)
+        if (_mask & CEPH_STATX_VERSION):
+            dict_result["version"] = stx.stx_version
+
+        return dict_result
+
     def setattrx(self, path, dict_stx, mask, flags):
         """
         Set a file's attributes.
@@ -2230,7 +2362,26 @@ cdef class LibCephFS(object):
             ret = ceph_symlink(self.cluster, _existing, _newname)
         if ret < 0:
             raise make_ex(ret, "error in symlink")
-    
+
+    def symlinkat(self, existing, fd, newname):
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('"fd" must be of type int')
+
+        existing = cstr(existing, 'existing')
+        newname = cstr(newname, 'newname')
+        cdef:
+            int _fd = fd
+            char* _existing = existing
+            char* _newname = newname
+
+        with nogil:
+            ret = ceph_symlinkat(self.cluster, _existing, _fd, _newname)
+
+        if ret < 0:
+            raise make_ex(ret, "error in symlinkat")
+
     def link(self, existing, newname):
         """
         Create a link.
@@ -2273,6 +2424,31 @@ cdef class LibCephFS(object):
                 ret = ceph_readlink(self.cluster, _path, buf, _size)
             if ret < 0:
                 raise make_ex(ret, "error in readlink")
+            return buf[:ret]
+        finally:
+            free(buf)
+
+    def readlinkat(self, dirfd, relpath, size) -> bytes:
+        self.require_state("mounted")
+
+        if not isinstance(dirfd, int):
+            raise TypeError('"dirfd" must be of type int')
+        if not isinstance(size, int):
+            raise TypeError('"size" must be of type int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _dirfd = dirfd
+            char* _relpath = relpath
+            int64_t _size = size
+            char *buf = NULL
+
+        try:
+            buf = <char *>realloc_chk(buf, _size)
+            with nogil:
+                ret = ceph_readlinkat(self.cluster, _dirfd, _relpath, buf, _size)
+            if ret < 0:
+                raise make_ex(ret, f"error in readlinkat: {relpath.decode('utf-8')}")
             return buf[:ret]
         finally:
             free(buf)
@@ -2877,6 +3053,310 @@ cdef class LibCephFS(object):
                 log.info('Following exception occurred while unlinking '
                          f'file at path {trash_path}: {e}')
                 raise
+
+    def cptree(self, src_path, dst_path, should_cancel, suppress_errors=False):
+        '''
+        Copy entire file hierarchy under src using depth-first (to prevent
+        excessive memory consumption) and non-recursive (to prevent hitting
+        Python's max recursion limit error) approach
+
+        If src is regfile, symlink or something else, copy it to dst and return.
+        '''
+        if isinstance(src_path, str):
+            src_path = src_path.encode('utf-8')
+        if isinstance(dst_path, str):
+            dst_path = dst_path.encode('utf-8')
+
+        # stx_b = statx buffer
+        stx_b = self.statx(src_path, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        if stat.S_ISDIR(stx_b['mode']):
+            cptree_worker = CptreeWorker(self, src_path, dst_path,
+                                         should_cancel, suppress_errors)
+            cptree_worker.start()
+        elif stat.S_ISREG(stx_b['mode']):
+            mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
+
+            src_dir = os.path.dirname(src_path)
+            src_file_name = os.path.basename(src_path)
+
+            src_fd = self.open(src_dir, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+            dst_fd = self.open(dst_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+            copy_reg_file(self, src_fd, dst_fd, src_file_name, mode)
+        elif stat.S_ISLNK(stx_b['mode']):
+            mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
+
+            src_dir = os.path.dirname(src_path)
+            src_link_name = os.path.basename(src_path)
+
+            src_fd = self.open(src_dir, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+            dst_fd = self.open(dst_path, os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+            copy_sym_link(self, src_fd, dst_fd, src_link_name, mode)
+        else:
+            raise RuntimeError('expected a regfile or symlink but found '
+                               f'something else. src = {self.src_path}')
+
+
+# following code includes cptree() and related helper methods.
+
+class CptreeWorker:
+
+    def __init__(self, fs, src_path, dst_path, should_cancel, suppress_errors=False):
+        self.fs = fs
+
+        # source and destination path passed by the user.
+        self.src_path = src_path
+        self.dst_path = dst_path
+
+        self.should_cancel = should_cancel
+        self.suppress_errors = suppress_errors
+
+        self.stack = deque([])
+
+        self.curr_dir = None
+
+    def notify_parent_dir(self):
+        '''
+        Add current dir's name to parent dir's "de_ignore_list". This is
+        necessary since parent dir can't be deleted when current dir can't be
+        deleted.
+        '''
+        # ensure we are dealing with the dir at the top of the stack.
+        assert self.curr_dir is self.stack[-1]
+
+        if len(self.stack) < 2:
+            return
+
+        parent_dir = self.stack[-2]
+        parent_dir.add_to_de_ignore_list(self.curr_dir.name)
+
+    def add_dir_to_stack(self, de_name):
+        '''
+        Add new dir to stack and start traversing it. If it fails, add this
+        new dir to current dir's ignorelist since most likely we don't have
+        permissions for it.
+        '''
+        # ensure we are dealing with the dir at the top of the stack.
+        assert self.curr_dir is self.stack[-1]
+
+        src_rel_path = de_name
+        dst_rel_path = de_name
+        try:
+            self.stack.append(CptreeDir(self.fs, src_rel_path, dst_rel_path,
+                                        self.curr_dir))
+            return True
+        except Error as e:
+            if self.suppress_errors:
+                # add to ignore list, traversal should continue for current dir.
+                log.info(f'dir "{de_name}" couldn\'t be opened and therefore '
+                          'it can\'t be removed. perhaps permissions for it '
+                          'are not granted.')
+                self.curr_dir.add_to_de_ignore_list(de_name)
+
+                return False
+            else:
+                raise
+
+    def start(self):
+        try:
+            src_rel_path = os.path.basename(self.src_path)
+            dst_rel_path = os.path.join(os.path.basename(self.dst_path), src_rel_path)
+            self.stack.append(CptreeDir(self.fs, src_rel_path, dst_rel_path,
+                                        None))
+        except Exception as e:
+            log.error('opening root dir of the file tree failed with exception '
+                      f'"{e}", exiting.')
+            if self.suppress_errors:
+                return
+            else:
+                raise
+
+        while self.stack:
+            if self.should_cancel():
+                raise OpCanceled('cptree')
+
+            self.curr_dir = self.stack[-1]
+            finished_copying_curr_dir = True
+
+            # subdir_de = directory entry for a subdir
+            de = self.curr_dir.read_src_dir()
+            while de:
+                if self.should_cancel():
+                    raise OpCanceled('cptree')
+
+                if de.is_dir():
+                    if self.add_dir_to_stack(de.d_name):
+                        # since adding new dir to stack was successful, stop
+                        # traversing current dir and start traversing the new
+                        # dir that has been freshly added to the stack.
+                        finished_copying_curr_dir = False
+                        break
+                elif de.is_symbol_file():
+                    self.curr_dir.copy_symbol_file(de.d_name)
+                else:
+                    self.curr_dir.copy_reg_file(de.d_name)
+
+                de = self.curr_dir.read_src_dir()
+
+            if finished_copying_curr_dir:
+                if self.curr_dir.has_any_fs_op_failed():
+                    self.notify_parent_dir()
+                self.stack.pop()
+
+
+class CptreeDir:
+    '''
+    Holds the path and handle for the directory being traversed.
+
+    Besides, it holds -
+        - a boolean value to indicate whether this dir is empty and
+        - a boolean value to indicate whether an exception had occurred
+          while calling readdir() for this dir handle, and
+        - a list of dir entries for which unlink()/rmdir() failed.
+    '''
+
+    def __init__(self, fs, src_rel_path, dst_rel_path, parent_dir=None):
+        self.fs = fs
+
+        self.src_rel_path = src_rel_path
+        self.dst_rel_path = dst_rel_path
+
+        self.parent_dir_src_fd = parent_dir.src_fd if parent_dir else AT_FDCWD
+        self.parent_dir_dst_fd = parent_dir.dst_fd if parent_dir else AT_FDCWD
+
+        self.fs.mkdirat(self.parent_dir_dst_fd, self.dst_rel_path, 0o755)
+
+        self.src_fd = self.fs.openat(self.parent_dir_src_fd, self.src_rel_path,
+                                     os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        self.dst_fd = self.fs.openat(self.parent_dir_dst_fd, self.dst_rel_path,
+                                     os.O_RDONLY | os.O_DIRECTORY, 0o755)
+
+        self.src_handle = self.fs.fdopendir(self.src_fd)
+
+        # Is this directory empty? This will be set by self.read_dir().
+        self.is_empty = None
+
+        # List of dir entries to be ignored instead of calling rmdir()
+        # or unlink() for them.
+        self.de_ignore_list = []
+
+        # Indicates whether an error occured during call to readdir().
+        self.has_readdir_failed = False
+
+    def __str__(self):
+        return f'{self.src_rel_path}, {self.dst_rel_path}'
+
+    def add_to_de_ignore_list(self, de_name):
+        self.de_ignore_list.append(de_name)
+
+    def set_readdir_error(self):
+        self.has_readdir_failed = True
+
+    def should_skip_d_name(self, de_name):
+        return de_name in self.de_ignore_list
+
+    def has_any_fs_op_failed(self):
+        return self.has_readdir_failed or len(self.de_ignore_list) > 0
+
+    def read_src_dir(self):
+        '''
+        Get sub-directory of current directory.
+        '''
+        # Assuming True for now, if it's not empty it will be set to
+        # False by the following loop.
+        self.is_empty = True
+
+        try:
+            de = self.fs.readdir(self.src_handle)
+            while de:
+                if de.d_name in (b'.', b'..'):
+                    pass
+                elif de.d_name in self.de_ignore_list:
+                    self.is_empty = False
+                    log.debug(
+                        'readdir() has previously '
+                        f'failed for dir entry "{de.d_name}", avoiding '
+                        'running readdir() on it again.')
+                else:
+                    self.is_empty = False
+                    return de
+
+                de = self.fs.readdir(self.src_handle)
+        except Error as e:
+            # This is the tricky one: it's an error on this
+            # directory, not on a entry in this directory
+            log.error(f'Exception occured: "{e}"')
+            self.set_readdir_error()
+
+    def copy_reg_file(self, de_name):
+        copy_reg_file(self.fs, self.src_fd, self.dst_fd, de_name)
+
+    def copy_symlink(self, de_name):
+        copy_sym_link(self.fs, self.src_fd, self.dst_fd, de_name)
+
+
+def copy_reg_file(fs, src_fd, dst_fd, file_name, mode=None):
+    if not mode:
+        mode = 0o755
+        stx_b = fs.statxat(src_fd, file_name, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
+
+    src_file_fd = dst_file_fd = None
+    try:
+        src_file_fd = fs.openat(src_fd, file_name, os.O_RDONLY, mode)
+        dst_file_fd = fs.openat(dst_fd, file_name, os.O_CREAT | os.O_TRUNC | os.O_WRONLY, mode)
+    except Exception:
+        if src_file_fd:
+            fs.close(src_file_fd)
+        if dst_file_fd:
+            fs.close(dst_file_fd)
+        raise
+
+    while True:
+        data = fs.read(src_file_fd, -1, 1 * 1024 * 1024)
+        if not len(data):
+            fs.write(dst_file_fd, b'111', -1)
+            break
+
+        written = 0
+        while written < len(data):
+            written += fs.write(dst_file_fd, data[written:], -1)
+
+    fs.fsync(dst_file_fd, 0)
+    fs.close(src_file_fd)
+    fs.close(dst_file_fd)
+
+
+def copy_sym_link(fs, src_fd, dst_fd, de_name, mode=None):
+    if not mode:
+        mode = 0o755
+        stx_b = fs.statxat(src_fd, de_name, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+        mode = stx_b['mode'] & ~stat.S_IFMT(stx_b['mode'])
+
+    try:
+        target = fs.readlinkat(src_fd, de_name, 4096)
+    except Exception as e:
+        log.info('Following exception occurred while reading '
+                 f'symlink: {e}')
+        raise
+
+    try:
+        fs.symlinkat(target, dst_fd, de_name)
+    except Exception as e:
+        log.info('Following exception occurred while creating '
+                 f'symlink: {e}')
+        raise
+
+    try:
+        fs.statxat(dst_fd, target, CEPH_STATX_MODE, AT_SYMLINK_NOFOLLOW)
+    except ObjectNotFound:
+        # if this exception was raised, link is broken and therefore chmod
+        # can't be run on it. ignore it.
+        return
+    else:
+        fs.chmodat(dst_fd, de_name, mode, 0)
 
 
 class NonRecursiveRmtree:

@@ -74,6 +74,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     uint64_t ceph_get_instance_id(ceph_mount_info *cmount)
     int ceph_fstatx(ceph_mount_info *cmount, int fd, statx *stx, unsigned want, unsigned flags)
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags)
+    int ceph_statxat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     statx *stx, unsigned want, unsigned flags)
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf)
 
     int ceph_setattrx(ceph_mount_info *cmount, const char *relpath, statx *stx, int mask, int flags)
@@ -89,7 +91,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_link(ceph_mount_info *cmount, const char *existing, const char *newname)
     int ceph_unlink(ceph_mount_info *cmount, const char *path)
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname)
+    int ceph_symlinkat(ceph_mount_info *cmount, const char *existing, int fd, const char *newname)
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size)
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size)
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags)
     int ceph_fsetxattr(ceph_mount_info *cmount, int fd, const char *name,
@@ -114,9 +118,13 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_preadv(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_flock(ceph_mount_info *cmount, int fd, int operation, uint64_t owner)
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev)
+
     int ceph_close(ceph_mount_info *cmount, int fd)
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode)
+    int ceph_openat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode)
+
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode)
+    int ceph_mkdirat(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode)
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata)
     int ceph_rmsnap(ceph_mount_info *cmount, const char *path, const char *name)
     int ceph_get_snap_info(ceph_mount_info *cmount, const char *path, snap_info *snap_info)
@@ -124,6 +132,7 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_mkdirs(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp)
+    int ceph_fdopendir(ceph_mount_info *cmount, int dirfd, ceph_dir_result** dirpp)
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     int64_t ceph_telldir(ceph_mount_info *cmount, ceph_dir_result *dirp)
     void ceph_seekdir(ceph_mount_info *cmount, ceph_dir_result *dirp, int64_t offset)
@@ -145,9 +154,13 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_lazyio_propagate(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_lazyio_synchronize(ceph_mount_info *cmount, int fd, int64_t offset, size_t count)
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length)
+
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode)
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode)
+    int ceph_chmodat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     mode_t mode, int flags)
+
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)

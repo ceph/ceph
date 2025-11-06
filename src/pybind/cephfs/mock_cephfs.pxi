@@ -93,6 +93,8 @@ cdef nogil:
         pass
     int ceph_statx(ceph_mount_info *cmount, const char *path, statx *stx, unsigned want, unsigned flags):
         pass
+    int ceph_statxat(ceph_mount_info *cmount, int dirfd, const char *path, statx *stx, unsigned want, unsigned flags):
+        pass
     int ceph_statfs(ceph_mount_info *cmount, const char *path, statvfs *stbuf):
         pass
 
@@ -115,7 +117,11 @@ cdef nogil:
         pass
     int ceph_symlink(ceph_mount_info *cmount, const char *existing, const char *newname):
         pass
+    int ceph_symlinkat(ceph_mount_info *cmount, const char *existing, int fd, const char *newname):
+        pass
     int ceph_readlink(ceph_mount_info *cmount, const char *path, char *buf, int64_t size):
+        pass
+    int ceph_readlinkat(ceph_mount_info *cmount, const int dirfd, char *path, char *buf, int64_t size):
         pass
     int ceph_setxattr(ceph_mount_info *cmount, const char *path, const char *name,
                       const void *value, size_t size, int flags):
@@ -159,11 +165,17 @@ cdef nogil:
         pass
     int ceph_mknod(ceph_mount_info *cmount, const char *path, mode_t mode, dev_t rdev):
         pass
+
     int ceph_close(ceph_mount_info *cmount, int fd):
         pass
     int ceph_open(ceph_mount_info *cmount, const char *path, int flags, mode_t mode):
         pass
+    int ceph_openat(ceph_mount_info *cmount, int dirfd, const char *relpath, int flags, mode_t mode):
+        pass
+
     int ceph_mkdir(ceph_mount_info *cmount, const char *path, mode_t mode):
+        pass
+    int ceph_mkdir(ceph_mount_info *cmount, int dirfd, const char *relpath, mode_t mode):
         pass
     int ceph_mksnap(ceph_mount_info *cmount, const char *path, const char *name, mode_t mode, snap_metadata *snap_metadata, size_t nr_snap_metadata):
         pass
@@ -178,6 +190,8 @@ cdef nogil:
     int ceph_closedir(ceph_mount_info *cmount, ceph_dir_result *dirp):
         pass
     int ceph_opendir(ceph_mount_info *cmount, const char *name, ceph_dir_result **dirpp):
+        pass
+    int ceph_fdopendir(ceph_mount_info *cmount, int dirfd, ceph_dir_result** dirpp):
         pass
     void ceph_rewinddir(ceph_mount_info *cmount, ceph_dir_result *dirp):
         pass
@@ -211,12 +225,17 @@ cdef nogil:
         pass
     int ceph_fallocate(ceph_mount_info *cmount, int fd, int mode, int64_t offset, int64_t length):
         pass
+
     int ceph_chmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_lchmod(ceph_mount_info *cmount, const char *path, mode_t mode):
         pass
     int ceph_fchmod(ceph_mount_info *cmount, int fd, mode_t mode):
         pass
+    int ceph_chmodat(ceph_mount_info *cmount, int dirfd, const char *relpath,
+                     mode_t mode, int flags)
+        pass
+
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid):
         pass
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid):
