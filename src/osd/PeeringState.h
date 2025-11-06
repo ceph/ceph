@@ -2215,6 +2215,10 @@ public:
    */
   hobject_t earliest_backfill() const;
 
+  /**
+   * retrieve last_pool_migration
+   */
+  hobject_t earliest_pool_migration() const;
 
   /**
    * Updates local log/missing to reflect new oob log update from primary
