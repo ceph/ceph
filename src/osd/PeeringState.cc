@@ -246,6 +246,11 @@ hobject_t PeeringState::earliest_backfill() const
   return e;
 }
 
+hobject_t PeeringState::earliest_pool_migration() const
+{
+  return hobject_t(); //BILL:FIXME: need to track progress of pool migration
+}
+
 void PeeringState::purge_strays()
 {
   if (is_premerge()) {
@@ -5988,8 +5993,6 @@ PeeringState::MigratingSource::MigratingSource(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
-  //BILL:FIXME:  ps->backfill_reserved = true;
-  //Do we need the equivalent of this variable?
   ps->state_clear(PG_STATE_MIGRATION_TOOFULL);
   ps->state_clear(PG_STATE_MIGRATION_WAIT);
   ps->state_set(PG_STATE_MIGRATING);
@@ -6099,8 +6102,6 @@ void PeeringState::MigratingSource::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
-  //BILL:FIXME: ps->backfill_reserved = false;
-  //Do we need the equivalent of this variable?
   ps->state_clear(PG_STATE_MIGRATING);
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_migratingsource_latency, dur);

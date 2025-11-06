@@ -1585,20 +1585,12 @@ void PG::on_recovery_reserved()
 
 void PG::on_pool_migration_reserved()
 {
-  //BILL:FIXME: actual pool migration work not implemented yet
-  //queue_pool_migration();
-  //For now just queue a migration finished event
-  queue_peering_event(
-    PGPeeringEventRef(
-      std::make_shared<PGPeeringEvent>(
-        get_osdmap_epoch(),
-        get_osdmap_epoch(),
-        PeeringState::PoolMigrationDone())));
+  queue_recovery();
 }
 
 void PG::on_pool_migration_suspended()
 {
-  //BILL:FIXME: actual pool migration work not implemented yet
+  //BILL:FIXME: need to clean up async work here - see on_backfill_suspended for example
 }
 
 void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)

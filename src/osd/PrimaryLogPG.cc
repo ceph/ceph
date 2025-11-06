@@ -1780,6 +1780,7 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
       _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct, ec_extent_cache_lru)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   new_backfill(false),
+  new_pool_migration(false),
   temp_seq(0),
   snap_trimmer_machine(this)
 {
@@ -13125,6 +13126,11 @@ void PrimaryLogPG::on_activate_complete()
     }
   }
 
+  if (needs_pool_migration()) {
+    last_pool_migration_started = recovery_state.earliest_pool_migration();
+    new_pool_migration = true;
+  }
+
   hit_set_setup();
   agent_setup();
 }
@@ -13347,7 +13353,8 @@ bool PrimaryLogPG::start_recovery_ops(
   recovery_queued = false;
 
   if (!state_test(PG_STATE_RECOVERING) &&
-      !state_test(PG_STATE_BACKFILLING)) {
+      !state_test(PG_STATE_BACKFILLING) &&
+      !state_test(PG_STATE_MIGRATING)) {
     /* TODO: I think this case is broken and will make do_recovery()
      * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
@@ -13410,6 +13417,11 @@ bool PrimaryLogPG::start_recovery_ops(
     } else {
       started += recover_backfill(max - started, handle, &work_in_progress);
     }
+  }
+
+
+  if (state_test(PG_STATE_MIGRATING)) {
+      started += recover_pool_migration(max - started, handle, &work_in_progress);
   }
 
   dout(10) << " started " << started << dendl;
@@ -13478,7 +13490,7 @@ bool PrimaryLogPG::start_recovery_ops(
             get_osdmap_epoch(),
             PeeringState::AllReplicasRecovered())));
     }
-  } else { // backfilling
+  } else if (state_test(PG_STATE_BACKFILLING)) { // backfilling
     state_clear(PG_STATE_BACKFILLING);
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
@@ -13499,8 +13511,16 @@ bool PrimaryLogPG::start_recovery_ops(
             get_osdmap_epoch(),
             PeeringState::Backfilled())));
     }
+  } else { // migrating
+    state_clear(PG_STATE_MIGRATING);
+    dout(10) << "migration done" << dendl;
+    queue_peering_event(
+      PGPeeringEventRef(
+        std::make_shared<PGPeeringEvent>(
+          get_osdmap_epoch(),
+          get_osdmap_epoch(),
+          PeeringState::PoolMigrationDone())));
   }
-
   return false;
 }
 
@@ -14608,6 +14628,42 @@ void PrimaryLogPG::check_local()
   }
 }
 
+// ===========================
+// pool migration
+
+/**
+ * recover_pool_migration
+ *
+ * Schedule work for pool migration
+ */
+uint64_t PrimaryLogPG::recover_pool_migration(
+  uint64_t max,
+  ThreadPool::TPHandle &handle, bool *work_started)
+{
+  //BILL:FIXME: Stub function
+  dout(10) << __func__ << " (" << max << ")"
+	   << " last_pool_migration_started " << last_pool_migration_started
+	   << (new_pool_migration ? " new_pool_migration":"")
+	   << dendl;
+
+  // Initialize from prior migration state
+  if (new_pool_migration) {
+    // on_activate() was called prior to getting here
+    ceph_assert(last_pool_migration_started == recovery_state.earliest_pool_migration());
+    new_pool_migration = false;
+
+    // initialize PoolMigrationIntervals
+    //BILL:FIXME: Stub function
+    //pool_migration_info.reset(last_pool_migration_started);
+    //
+    //backfills_in_flight.clear();
+    //pending_backfill_updates.clear();
+  }
+
+  // Don't change work_started and return 0 indicating that no work was started,
+  // this implies the migration has completed.
+  return 0;
+}
 
 
 // ===========================
