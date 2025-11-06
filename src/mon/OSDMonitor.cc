@@ -8435,16 +8435,17 @@ int OSDMonitor::prepare_new_pool(string& name,
 
 
   if (source_pool_id) {
-    dout(0) << "Configuring pool migration for PG " << pg_t(pi->get_pg_num() - 1, pool) << dendl;
     const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
     pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
 
+    dout(0) << "Configuring pool migration for PG "
+            << pg_t(spi->get_pg_num() - 1, source_pool_id.value()) << dendl;
+
     spi->migration_src.reset();
     spi->migration_target = pool;
+    spi->migrating_pgs = { pg_t(spi->get_pg_num() - 1, source_pool_id.value()) };
     pi->migration_src = source_pool_id.value();
     pi->migration_target.reset();
-
-    pi->migrating_pgs = { pg_t(pi->get_pg_num() - 1, pool) };
   }
 
   pending_inc.new_pool_names[pool] = name;
