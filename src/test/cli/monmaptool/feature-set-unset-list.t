@@ -12,21 +12,21 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
   MONMAP FEATURES:
       persistent: [none]
       optional:   [none]
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
   monmap:persistent:[none]
   monmap:optional:[none]
   monmap:required:[none]
-  available:supported:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-  available:persistent:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+  available:supported:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+  available:persistent:[kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
 
   $ monmaptool --feature-set foo /tmp/test.monmap.1234
   unknown features name 'foo' or unable to parse value: Expected option value to be integer, got 'foo'
@@ -45,8 +45,8 @@
       required:   [kraken(1),octopus(32),unknown(4096)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
 
   $ monmaptool --feature-unset 32 --optional --feature-list /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
@@ -56,8 +56,8 @@
       required:   [kraken(1),octopus(32),unknown(4096)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset 32 --persistent --feature-unset 4096 --optional --feature-list /tmp/test.monmap.1234
@@ -68,8 +68,8 @@
       required:   [kraken(1)]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ monmaptool --feature-unset kraken --feature-list /tmp/test.monmap.1234
@@ -80,8 +80,8 @@
       required:   [none]
   
   AVAILABLE FEATURES:
-      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
-      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048)]
+      supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
+      persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16),octopus(32),pacific(64),elector-pinging(128),quincy(256),reef(512),squid(1024),tentacle(2048),nvmeof_beacon_diff(4294967296)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
   $ rm /tmp/test.monmap.1234
