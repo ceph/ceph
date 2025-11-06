@@ -343,6 +343,7 @@ struct Inode : RefCountedObject {
 
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
+  bool is_last_cap_ref(int c);
   bool is_any_caps();
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;

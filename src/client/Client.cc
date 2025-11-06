@@ -3882,7 +3882,9 @@ void Client::put_cap_ref(Inode *in, int cap)
 	  p.second.dirty_data = 0;
 	signal_context_list(in->waitfor_commit);
 	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
-	++put_nref;
+        if (!in->is_write_delegated()) {
+          ++put_nref;
+        }
 
 	if (!in->cap_snaps.empty()) {
 	  flush_snaps(in);
@@ -13306,13 +13308,9 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
     // FIXME: this can starve
-    int nr_refs = 0;
-    if (in->is_write_delegated()) {
-      ++nr_refs;
-    }
-    while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > nr_refs) {
+    while (!in->is_last_cap_ref(CEPH_CAP_FILE_BUFFER)) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
-		     << " uncommitted (nrefs: " << nr_refs << "), waiting" << dendl;
+		     << " uncommitted, waiting" << dendl;
       wait_on_context_list(in->waitfor_commit);
     }
   }
