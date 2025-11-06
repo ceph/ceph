@@ -1,4 +1,5 @@
 # the crimson's backfill doesn't need nor use seastar
+include_directories(${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 add_executable(unittest-crimson-backfill
   test_backfill.cc
   ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
