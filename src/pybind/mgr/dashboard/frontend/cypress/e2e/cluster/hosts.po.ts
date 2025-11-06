@@ -95,7 +95,7 @@ export class HostsPageHelper extends PageHelper {
     this.getTableCell(this.columnIndex.hostname, hostname, true).as('row').click();
     cy.get('@row')
       .parent()
-      .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) .tag`)
+      .find(`[cdstabledata]:nth-child(${this.columnIndex.labels}) cds-tag span`)
       .should(($ele) => {
         const newLabels = $ele.toArray().map((v) => v.innerText);
         for (const label of labels) {

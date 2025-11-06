@@ -316,7 +316,7 @@ export abstract class PageHelper {
       .find('[cdstabledata] [data-testid="table-action-btn"]')
       .click({ force: true });
     cy.wait(waitTime);
-    cy.get(`button.${action}`).click({ force: true });
+    cy.get(`button.${action}`).should('not.be.disabled').click({ force: true });
   }
 
   /**
