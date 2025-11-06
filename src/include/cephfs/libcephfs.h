@@ -1972,6 +1972,16 @@ int ceph_set_default_file_replication(struct ceph_mount_info *cmount, int replic
 int ceph_localize_reads(struct ceph_mount_info *cmount, int val);
 
 /**
+ * Read from local replicas when possible.
+ *
+ * @param cmount the ceph mount handle to use.
+ * @param val a boolean to set (1) or clear (0) the option to favor balance objects
+ *     for reads.
+ * @returns 0
+ */
+int ceph_balance_reads(struct ceph_mount_info *cmount, int val);
+
+/**
  * Get the osd id of the local osd (if any)
  *
  * @param cmount the ceph mount handle to use.
