@@ -143,6 +143,11 @@ add_executable(ceph_test_rados_api_snapshots_stats_pp
 target_link_libraries(ceph_test_rados_api_snapshots_stats_pp
   librados ${UNITTEST_LIBS} radostest-cxx)
 
+add_executable(ceph_test_rados_api_split_op_pp
+        split_op_cxx.cc)
+target_link_libraries(ceph_test_rados_api_split_op_pp
+        librados ${UNITTEST_LIBS} radostest-cxx json_structures)
+
 install(TARGETS
   ceph_test_rados_api_aio
   ceph_test_rados_api_aio_pp
