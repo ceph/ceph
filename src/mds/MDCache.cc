@@ -14879,6 +14879,7 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
   C_ListSnapsAggregator *on_finish = new C_ListSnapsAggregator(mds, in1, in2, block_diff, ctx);
   MDSGatherBuilder gather_ctx(g_ceph_context, on_finish);
 
+  mds->objecter->add_global_op_flags(mds->get_filer_flags());
   while (scans > 0) {
     ObjectOperation op;
     std::unique_ptr<SnapSetContext> ssc(new SnapSetContext());

@@ -284,6 +284,7 @@ void SessionMap::_load_finish(
     const std::string last_key = session_vals.rbegin()->first;
     dout(10) << __func__ << ": continue omap load from '"
              << last_key << "'" << dendl;
+    mds->objecter->add_global_op_flags(mds->get_filer_flags());
     object_t oid = get_object_name();
     object_locator_t oloc(mds->get_metadata_pool());
     C_IO_SM_Load *c = new C_IO_SM_Load(this, false);
@@ -323,7 +324,7 @@ void SessionMap::load(MDSContext *onload)
 
   if (onload)
     waiting_for_load.push_back(onload);
-  
+  mds->objecter->add_global_op_flags(mds->get_filer_flags());
   C_IO_SM_Load *c = new C_IO_SM_Load(this, true);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->get_metadata_pool());
@@ -360,7 +361,7 @@ public:
 void SessionMap::load_legacy()
 {
   dout(10) << __func__ << dendl;
-
+  mds->objecter->add_global_op_flags(mds->get_filer_flags());
   C_IO_SM_LoadLegacy *c = new C_IO_SM_LoadLegacy(this);
   object_t oid = get_object_name();
   object_locator_t oloc(mds->get_metadata_pool());

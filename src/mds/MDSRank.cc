@@ -4336,3 +4336,16 @@ void MDSRank::reset_event_flags() {
   beacon.missed_beacon_ack_dump = false;
   beacon.missed_internal_heartbeat_dump = false;
 }
+
+int MDSRank::get_filer_flags() {
+  std::string val = g_conf().get_val<std::string>("mds_read_from_replica");
+  int filer_flags = 0;
+  if (val == "no") {
+    filer_flags = 0;
+  } else if (val == "balance") {
+    filer_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  } else if (val == "localize") {
+    filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  }
+  return filer_flags;
+}
