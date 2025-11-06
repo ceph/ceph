@@ -36,6 +36,10 @@ RADOS_KV {
         namespace = "{{ namespace }}";
 }
 
+CEPH_NODES_LIST {
+        Ceph_Nodes = {{ ceph_nodes|join(", ") }};
+}
+
 RADOS_URLS {
         UserId = "{{ user }}";
         watch_url = "{{ url }}";
