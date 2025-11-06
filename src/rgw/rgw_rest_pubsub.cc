@@ -168,26 +168,26 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, account_root, op, arn,
-          {}, s->iam_identity_policies, s->session_policies);
+          policy, s->iam_identity_policies, s->session_policies, true);
       if (identity_res == Effect::Deny) {
         return false;
       }
       const auto resource_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {});
+          policy, {}, {}, false);
       return identity_res == Effect::Allow && resource_res == Effect::Allow;
     } else {
       // require an Allow from either identity- or resource-based policy
       return Effect::Allow == evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, account_root, op, arn,
-          policy, s->iam_identity_policies, s->session_policies);
+          policy, s->iam_identity_policies, s->session_policies, false);
     }
   }
 
   constexpr bool account_root = false;
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->auth.identity, account_root, op, arn,
-      policy, s->iam_identity_policies, s->session_policies);
+      policy, s->iam_identity_policies, s->session_policies, false);
   if (effect == Effect::Deny) {
     return false;
   }
