@@ -5568,6 +5568,8 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
       auto bl = req->get_data().cbegin();
       DECODE_START(1, bl);
       decode(header.change_attr, bl);
+      decode(header.file_offset, bl);
+      decode(header.block_size, bl);
       DECODE_FINISH(bl);
 
       dout(20) << __func__ << " mdr->retry:" << mdr->retry
@@ -5646,6 +5648,12 @@ void Server::handle_client_setattr(const MDRequestRef& mdr)
     }
   }
 
+  bool allow_all = mdr->session->auth_caps.allow_all();
+  if (mask & (CEPH_SETATTR_FSCRYPT_FILE|CEPH_SETATTR_FSCRYPT_AUTH) && !allow_all) {
+    respond_to_request(mdr, -EACCES);
+    return;
+  }
+
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH)
     pi.inode->fscrypt_auth.assign(req->fscrypt_auth.begin(), req->fscrypt_auth.end());
   if (mask & CEPH_SETATTR_FSCRYPT_FILE)
@@ -5696,6 +5704,10 @@ void Server::do_open_truncate(const MDRequestRef& mdr, int cmode)
 
   uint64_t old_size = std::max<uint64_t>(pi.inode->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
+    // data struct size will be uint64_t or greater if inode is
+    // fscrypt/encrypted; make sure to truncate logical size
+    if (pi.inode->fscrypt_file.size() >= sizeof(uint64_t))
+      *(ceph_le64 *)pi.inode->fscrypt_file.data() = 0;
     pi.inode->truncate(old_size, 0);
     le->metablob.add_truncate_start(in->ino());
   }

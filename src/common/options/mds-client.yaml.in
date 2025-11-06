@@ -618,3 +618,23 @@ options:
   services:
   - mds_client
   min: 0
+- name: client_fscrypt_as
+  type: bool
+  level: advanced
+  desc: Enable fscrypt access semantics
+  long_desc: Enable fscrypt access semantics for locked/unlocked states.
+  default: true
+  services:
+  - mds_client
+  flags:
+  - runtime
+- name: client_fscrypt_dummy_encryption
+  type: bool
+  level: dev
+  desc: Enable fscrypt dummy encryption
+  long_desc: Enable fscrypt dummy encryption
+  default: false
+  services:
+  - mds_client
+  flags:
+  - runtime

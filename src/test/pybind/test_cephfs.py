@@ -1624,3 +1624,119 @@ class TestRmtree:
         # occur.
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
+
+class TestFcopyfile:
+    '''
+    Tests for fcopyfile() method of CephFS Python bindings.
+    '''
+
+    PERMS = 0o755
+
+    def get_perm_bits_from_stat_mode(self, mode):
+        mode_oct = oct(mode)
+        # get only last three digits, rest is not relevant
+        perm_bits_str = mode_oct[-3:]
+        # convert from str to octal literal value
+        perms = int(perm_bits_str, 8)
+
+        return perms
+
+    def test_with_dir(self, testdir):
+        '''
+        Test that fcopyfile() create a new dir with expected mode.
+        '''
+        cephfs.mkdir('dir1', self.PERMS)
+
+        cephfs.fcopyfile('dir1', 'dir2', self.PERMS)
+
+        stat_result = cephfs.stat('dir2')
+        perms = self.get_perm_bits_from_stat_mode(stat_result.st_mode)
+        assert perms == self.PERMS
+
+    def test_with_symlink(self, testdir):
+        '''
+        Test that fcopyfile() creates a new symlink with same size, mode and
+        pointing to the same file.
+        '''
+        fd = cephfs.open(b'file1', 'w', self.PERMS)
+        SIZE = 1000
+        cephfs.write(fd, b'1' * SIZE, 0)
+        cephfs.close(fd)
+        cephfs.symlink('file1', 'slink1')
+
+        cephfs.fcopyfile('slink1', 'slink2', self.PERMS)
+        stat_result = cephfs.stat('slink2')
+        assert stat_result.st_size == SIZE
+
+        perms = self.get_perm_bits_from_stat_mode(stat_result.st_mode)
+        assert perms == self.PERMS
+
+        lstat_result1 = cephfs.stat('slink1')
+        lstat_result2 = cephfs.stat('slink2')
+        assert lstat_result1.st_size == lstat_result2.st_size
+
+        path1 = cephfs.readlink('slink1', 4096)
+        path2 = cephfs.readlink('slink2', 4096)
+        assert path1 == path2
+
+    def _write_file_and_test_fcopyfile(self, testdir, SIZE):
+        fd = cephfs.open(b'file1', 'w', self.PERMS)
+        cephfs.write(fd, b'1' * SIZE, 0)
+        cephfs.close(fd)
+
+        cephfs.fcopyfile('file1', 'file2', self.PERMS)
+
+        stat_result = cephfs.stat('file2')
+        assert stat_result.st_size == SIZE
+
+        perms = self.get_perm_bits_from_stat_mode(stat_result.st_mode)
+        assert perms == self.PERMS
+
+    def test_with_regfile_of_size_0_5MB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 0.5 MB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(0.5 * 1000 * 1000))
+
+    def test_with_regfile_of_size_2MB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 2 MB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(2 * 1000 * 1000))
+
+    def test_with_regfile_of_size_1MB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 1 MB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(1000 * 1000))
+
+    def test_with_regfile_of_size_2MiB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 2 MiB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(2 * 1024 * 1024))
+
+    def test_with_regfile_of_size_1_15MB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 1.15 MB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(1.15 * 1000 * 1000))
+
+    def test_with_regfile_of_size_1_5MB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 1.5 MB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(1.5 * 1000 * 1000))
+
+    def test_with_regfile_of_size_1GB(self, testdir):
+        '''
+        Test that fcopyfile() copies a 1 GB file and then verifies its size and
+        mode.
+        '''
+        self._write_file_and_test_fcopyfile(testdir, int(1 * 1000 * 1000 * 1000))

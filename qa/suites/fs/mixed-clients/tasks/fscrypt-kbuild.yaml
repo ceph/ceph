@@ -1,0 +1,24 @@
+tasks:
+- parallel:
+   - user-workload
+   - kclient-workload
+user-workload:
+  sequential:
+  - ceph-fuse: [client.0]
+  - workunit:
+      subdir: fscrypt-fuse
+      clients:
+        client.0:
+          - fs/fscrypt_cli_setup.sh
+          - fs/fscrypt_kclient_fuse.sh fuse
+      timeout: 4h
+kclient-workload:
+  sequential:
+  - kclient: [client.1]
+  - workunit:
+      subdir: fscrypt-kclient
+      clients:
+        client.1:
+          - fs/fscrypt_cli_setup.sh
+          - fs/fscrypt_kclient_fuse.sh kclient
+      timeout: 4h
