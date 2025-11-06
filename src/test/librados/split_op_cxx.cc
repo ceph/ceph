@@ -188,119 +188,6 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   std::cout << "--- OMap Clear testing passed ---" << std::endl;
 }
 
-TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
-  SKIP_IF_CRIMSON();
-  bufferlist bl, attr_bl, attr_read_bl;
-  std::string attr_key = "my_key";
-  std::string attr_value = "my_attr";
-
-  bl.append("ceph");
-  ObjectWriteOperation write1;
-  write1.write(0, bl);
-  encode(attr_value, attr_bl);
-  write1.setxattr(attr_key.c_str(), attr_bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-
-  ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-
-  uint64_t size;
-  timespec time;
-  time.tv_nsec = 0;
-  time.tv_sec = 0;
-  int stat_rval;
-  read.stat2(&size, &time, &stat_rval);
-
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl));
-  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
-  ASSERT_EQ(0, stat_rval);
-  ASSERT_EQ(4, size);
-  ASSERT_NE(0, time.tv_nsec);
-  ASSERT_NE(0, time.tv_sec);
-}
-
-TEST_P(LibRadosSplitOpECPP, OMAPReads) {
-  SKIP_IF_CRIMSON();
-  bufferlist bl_write, omap_val_bl, omap_header_bl;
-  const std::string omap_key_1 = "omap_key_1_elephant";
-  const std::string omap_key_2 = "omap_key_2_fox";
-  const std::string omap_key_3 = "omap_key_3_squirrel";
-  const std::string omap_value = "omap_value_1_giraffe";
-  const std::string omap_header = "this is the omap header";
-  
-  encode(omap_value, omap_val_bl);
-  encode(omap_header, omap_header_bl);
-  
-  std::map<std::string, bufferlist> omap_map = {
-    {omap_key_1, omap_val_bl},
-    {omap_key_2, omap_val_bl},
-    {omap_key_3, omap_val_bl}
-  };
-
-  bl_write.append("ceph");
-  ObjectWriteOperation write1;
-  write1.write(0, bl_write);
-  write1.omap_set_header(omap_header_bl);
-  write1.omap_set(omap_map);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
-
-  int err = 0;
-  bufferlist bl_read;
-  ObjectReadOperation read;
-
-  
-  read.read(0, bl_write.length(), &bl_read, nullptr);
-  std::map<std::string,bufferlist> vals{ {"_", {}}, {omap_key_1, {}}};
-  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-  ASSERT_EQ(0, err);
-  ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
-  ASSERT_EQ(3U, vals.size());
-  ASSERT_NE(vals.find(omap_key_1), vals.end());
-  bufferlist retrieved_val_bl = vals[omap_key_1];
-  std::string retrieved_value;
-  decode(retrieved_value, retrieved_val_bl);
-  ASSERT_EQ(omap_value, retrieved_value);
-
-  bufferlist omap_header_read_bl;
-  std::set<std::string> keys;
-  read.omap_get_keys2("", LONG_MAX, &keys, nullptr, &err);
-  read.omap_get_header(&omap_header_read_bl, &err);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-  ASSERT_EQ(0, err);
-  std::string omap_header_read;
-  decode(omap_header_read, omap_header_read_bl);
-  ASSERT_EQ(omap_header, omap_header_read);
-  ASSERT_EQ(3U, keys.size());
-  
-  std::map<std::string,bufferlist> vals_by_keys{ {"_", {}} };
-  std::set<std::string> key_filter = {omap_key_1, omap_key_2};
-  read.omap_get_vals_by_keys(key_filter, &vals_by_keys, &err);
-  std::map<std::string, std::pair<bufferlist, int> > assertions;
-  assertions[omap_key_3] = make_pair(omap_val_bl, CEPH_OSD_CMPXATTR_OP_EQ);
-  read.omap_cmp(assertions, &err);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-  ASSERT_EQ(0, err);
-  ASSERT_EQ(2U, vals_by_keys.size());
-
-  std::set<std::string> keys_to_remove = {omap_key_2};
-  write1.omap_rm_keys(keys_to_remove);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
-  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-  ASSERT_EQ(0, err);
-  ASSERT_EQ(2U, vals.size());
-
-  write1.omap_clear();
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &write1));
-  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "omap_oid_axolotl", &read, nullptr));
-  ASSERT_EQ(0, err);
-  ASSERT_EQ(0U, vals.size());
-
-  // omap_rmkeyrange has not been tested
-}
-
 TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
@@ -366,6 +253,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_TRUE(success);
   ceph::messaging::osd::OSDMapReply reply;
   reply.decode_json(&p);
+  std::vector<int> acting_osds_before = reply.acting;
   primary_osd = reply.acting_primary;
 
 
@@ -378,11 +266,6 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   
 
   // 6a. Read from omap
-  bufferlist bl_read;
-  read.read(0, bl_write.length(), &bl_read, nullptr);
-  ret = ioctx.operate("error_inject_oid", &read, nullptr);
-  EXPECT_TRUE(ret == 0);
-
   std::map<std::string,bufferlist> vals{ {"_", {}} };
   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
   EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &read, nullptr));
@@ -410,14 +293,33 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   cct->_conf->osd_debug_reject_backfill_probability = 0.0;
 
 
-  // 8. Take all osds out
-  std::vector<int> osds = reply.up;
+  // 8. Find acting osds after taking primary out
+  bufferlist after_inbl, after_outbl;
+  auto after_formatter = std::make_unique<JSONFormatter>(false);
+  encode_json("OSDMapRequest", osdMapRequest, after_formatter.get());
+
+  std::ostringstream after_oss;
+  after_formatter.get()->flush(after_oss);
+  int rc_after = cluster.mon_command(after_oss.str(), after_inbl, &after_outbl, nullptr);
+  EXPECT_TRUE(rc_after == 0);
+
+  JSONParser p_after;
+  bool success_after = p.parse(after_outbl.c_str(), after_outbl.length());
+  EXPECT_TRUE(success_after);
+  ceph::messaging::osd::OSDMapReply reply_after;
+  reply_after.decode_json(&p_after);
+  std::vector<int> acting_osds_after = reply_after.acting;
+  std::set<int> acting_osds(acting_osds_before.begin(), acting_osds_before.end());
+  acting_osds.insert(acting_osds_after.begin(), acting_osds_after.end());
+
+
+  // 9. Take all osds out
   bufferlist out_all_inbl, out_all_outbl;
   std::ostringstream out_all_oss;
   out_all_oss << "{\"prefix\": \"osd out\", \"ids\": [";
-  for (size_t i = 0; i < osds.size(); i++) {
-    out_all_oss << "\"" << osds[i] << "\"";
-    if (i != osds.size() - 1) {
+  for (auto it = acting_osds.begin(); it != acting_osds.end(); ++it) {
+    out_all_oss << "\"" << *it << "\"";
+    if (std::next(it) != acting_osds.end()) {
       out_all_oss << ", ";
     }
   }
@@ -426,13 +328,13 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_TRUE(rc == 0);
 
 
-  // 9. Put all osds back in
+  // 10. Put all osds back in
   bufferlist in_all_inbl, in_all_outbl;
   std::ostringstream in_all_oss;
   in_all_oss << "{\"prefix\": \"osd in\", \"ids\": [";
-  for (size_t i = 0; i < osds.size(); i++) {
-    in_all_oss << "\"" << osds[i] << "\"";
-    if (i != osds.size() - 1) {
+  for (auto it = acting_osds.begin(); it != acting_osds.end(); ++it) {
+    in_all_oss << "\"" << *it << "\"";
+    if (std::next(it) != acting_osds.end()) {
       in_all_oss << ", ";
     }
   }
