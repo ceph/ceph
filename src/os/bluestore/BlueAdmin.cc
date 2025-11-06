@@ -3,9 +3,13 @@
 
 #include "BlueAdmin.h"
 #include "Compression.h"
+#include "common/errno.h"
 #include "common/pretty_binary.h"
+#include "os/bluestore/BlueStore.h"
 #include "common/debug.h"
 #include <asm-generic/errno-base.h>
+#include <iostream>
+#include <sstream>
 #include <vector>
 #include <limits>
 
@@ -48,6 +52,11 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "print compression stats, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command("bluestore bluefs-bdev-expand",
+                                       this,
+                                       "Instruct BlueFS to check the size of its block devices"
+                                       " and, if they have expanded, make use of the additional space.");
     ceph_assert(r == 0);
   }
 }
@@ -177,6 +186,15 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     return 0;
+  } else if (command == "bluestore bluefs-bdev-expand"){
+    std::stringstream result;
+    int ret = store.expand_devices(result);
+    if (ret < 0) {
+      ss << "expand device failed: " << cpp_strerror(ret) << std::endl;
+    } else {
+      out.append(result.str());
+    }
+    return ret;
   } else {
     ss << "Invalid command" << std::endl;
     r = -ENOSYS;
