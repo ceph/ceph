@@ -82,6 +82,9 @@ if(WITH_MGR)
   endif()
 endif()
 
+# workaround for https://bugzilla.redhat.com/show_bug.cgi?id=2255688
+set(mgr_main_interpreter_modules "cephadm,rook,k8sevents")
+
 add_options(global)
 add_options(cephfs-mirror)
 add_options(crimson)

@@ -23,6 +23,7 @@
 #include "include/stringify.h"
 #include "common/BackTrace.h"
 #include "common/JSONFormatter.h"
+#include "common/split.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
@@ -335,8 +336,23 @@ int PyModule::load(PyThreadState *pMainThreadState)
 {
   ceph_assert(pMainThreadState != nullptr);
 
-  // Configure sub-interpreter
-  {
+  const auto main_interpreter_modules_opt = g_conf().get_val<std::string>(
+    "mgr_main_interpreter_modules"
+  );
+  auto main_interpreter_modules = ceph::split(main_interpreter_modules_opt);
+  use_main_interpreter = std::count(
+    main_interpreter_modules.begin(), main_interpreter_modules.end(), "*"
+  ) > 0 || std::count(
+    main_interpreter_modules.begin(), main_interpreter_modules.end(), module_name
+  ) > 0;
+
+  if (use_main_interpreter) {
+    // Use main interpreter
+    derr << "Loading module " << module_name << " in main interpreter" << dendl;
+    pMyThreadState.set(pMainThreadState);
+  } else {
+    // Configure sub-interpreter
+    derr << "Loading module " << module_name << " in sub-interpreter" << dendl;
     SafeThreadState sts(pMainThreadState);
     Gil gil(sts);
 
@@ -348,6 +364,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
     }
   }
+
   // Environment is all good, import the external module
   {
     Gil gil(pMyThreadState);
@@ -760,7 +777,9 @@ PyModule::~PyModule()
     Py_XDECREF(pClass);
     Py_XDECREF(pStandbyClass);
     Py_XDECREF(pPickleModule);
-    Py_EndInterpreter(pMyThreadState.ts);
+    if (use_main_interpreter) {
+      Py_EndInterpreter(pMyThreadState.ts);
+    }
     pMyThreadState.ts = nullptr;
   }
 }
