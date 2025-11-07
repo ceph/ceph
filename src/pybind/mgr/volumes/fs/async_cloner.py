@@ -113,61 +113,27 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
     and regular files are synced.
     """
     log.info("copying data from {0} to {1}".format(source_path, dst_path))
-    def cptree(src_root_path, dst_root_path):
-        log.debug("cptree: {0} -> {1}".format(src_root_path, dst_root_path))
-        try:
-            with fs_handle.opendir(src_root_path) as dir_handle:
-                d = fs_handle.readdir(dir_handle)
-                while d and not should_cancel():
-                    if d.d_name not in (b".", b".."):
-                        log.debug("d={0}".format(d))
-                        d_full_src = os.path.join(src_root_path, d.d_name)
-                        d_full_dst = os.path.join(dst_root_path, d.d_name)
-                        stx = fs_handle.statx(d_full_src, cephfs.CEPH_STATX_MODE  |
-                                                          cephfs.CEPH_STATX_UID   |
-                                                          cephfs.CEPH_STATX_GID   |
-                                                          cephfs.CEPH_STATX_ATIME |
-                                                          cephfs.CEPH_STATX_MTIME |
-                                                          cephfs.CEPH_STATX_SIZE,
-                                                          cephfs.AT_SYMLINK_NOFOLLOW)
-                        handled = True
-                        mo = stx["mode"] & ~stat.S_IFMT(stx["mode"])
-                        if stat.S_ISDIR(stx["mode"]):
-                            log.debug("cptree: (DIR) {0}".format(d_full_src))
-                            try:
-                                fs_handle.mkdir(d_full_dst, mo)
-                            except cephfs.Error as e:
-                                if not e.args[0] == errno.EEXIST:
-                                    raise
-                            cptree(d_full_src, d_full_dst)
-                        elif stat.S_ISLNK(stx["mode"]):
-                            log.debug("cptree: (SYMLINK) {0}".format(d_full_src))
-                            target = fs_handle.readlink(d_full_src, 4096)
-                            try:
-                                fs_handle.symlink(target[:stx["size"]], d_full_dst)
-                            except cephfs.Error as e:
-                                if not e.args[0] == errno.EEXIST:
-                                    raise
-                        elif stat.S_ISREG(stx["mode"]):
-                            log.debug("cptree: (REG) {0}".format(d_full_src))
-                            copy_file(fs_handle, d_full_src, d_full_dst, mo, cancel_check=should_cancel)
-                        else:
-                            handled = False
-                            log.warning("cptree: (IGNORE) {0}".format(d_full_src))
-                        if handled:
-                            sync_attrs(fs_handle, d_full_dst, stx)
-                    d = fs_handle.readdir(dir_handle)
-                stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
-                                                          cephfs.CEPH_STATX_MTIME,
-                                                          cephfs.AT_SYMLINK_NOFOLLOW)
-                fs_handle.lutimes(dst_root_path, (time.mktime(stx_root["atime"].timetuple()),
-                                                  time.mktime(stx_root["mtime"].timetuple())))
-        except cephfs.Error as e:
-            if not e.args[0] == errno.ENOENT:
-                raise VolumeException(-e.args[0], e.args[1])
-    cptree(source_path, dst_path)
-    if should_cancel():
+
+    # TODO: add code set utime on each file
+    try:
+        # src subvol's UUID must not be copied, only its contents should be.
+        # therefore cp_src_dir is set to False.
+        fs_handle.cptree(source_path, dst_path, should_sync_attrs=True,
+                         cp_src_dir=False, should_cancel=should_cancel,
+                         suppress_errors=False)
+
+        stx_root = fs_handle.statx(source_path, cephfs.CEPH_STATX_ATIME |
+                                                cephfs.CEPH_STATX_MTIME,
+                                                cephfs.AT_SYMLINK_NOFOLLOW)
+        fs_handle.lutimes(dst_path, (time.mktime(stx_root["atime"].timetuple()),
+                                     time.mktime(stx_root["mtime"].timetuple())))
+
+        log.info(f'successfully finished copying data from {source_path} to {dst_path}')
+    except cephfs.OpCanceled:
         raise VolumeException(-errno.EINTR, "user interrupted clone operation")
+    except cephfs.Error as e:
+        if e.args[0] != errno.ENOENT:
+            raise VolumeException(-e.args[0], e.args[1])
 
 def set_quota_on_clone(fs_handle, clone_volumes_pair):
     src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
