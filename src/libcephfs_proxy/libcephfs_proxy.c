@@ -3,8 +3,6 @@
 
 #include <linux/fscrypt.h>
 
-#include "include/cephfs/libcephfs.h"
-
 #include "proxy_log.h"
 #include "proxy_helpers.h"
 #include "proxy_requests.h"
