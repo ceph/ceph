@@ -2663,6 +2663,36 @@ Then run the following:
 
         return f'Rotated key for {daemon_spec.name()}'
 
+    def _mon_public_network_changed(self, daemon_spec: CephadmDaemonDeploySpec) -> bool:
+        if daemon_spec.daemon_type != 'mon':
+            return False
+
+        rc_get, out_get, err_get = self.mon_command({
+                    'prefix': 'config get',
+                    'who': f'{daemon_spec.service_name}.{daemon_spec.daemon_id}',
+                    'key': 'public_network'
+                })
+
+        if rc_get:
+            self.log.error(f'cmd: config get failed with: {err_get}, (errno:{rc_get})')
+            return False
+
+        rc_show, out_show, err_show = self.mon_command({
+                    'prefix': 'config show',
+                    'who': f'{daemon_spec.service_name}.{daemon_spec.daemon_id}',
+                    'key': 'public_network'
+                })
+
+        if rc_show:
+            self.log.error(f'cmd: config get failed with: {err_show}, (errno:{rc_show})')
+            return False
+
+        if out_get == out_show:
+            return False
+
+        self.log.debug(f'{daemon_spec.service_name}.{daemon_spec.daemon_id} public network changed, redeploy instead of restart')
+        return True
+
     def _daemon_action(self,
                        daemon_spec: CephadmDaemonDeploySpec,
                        action: str,
@@ -2678,7 +2708,7 @@ Then run the following:
         if action == 'rotate-key':
             return self._rotate_daemon_key(daemon_spec)
 
-        if action == 'redeploy' or action == 'reconfig':
+        if action == 'redeploy' or action == 'reconfig' or (action == 'restart' and self._mon_public_network_changed(daemon_spec)):
             if daemon_spec.daemon_type != 'osd':
                 daemon_spec = service_registry.get_service(daemon_type_to_service(
                     daemon_spec.daemon_type)).prepare_create(daemon_spec)
