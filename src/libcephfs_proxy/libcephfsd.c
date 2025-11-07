@@ -8,8 +8,6 @@
 #include <string.h>
 #include <stdarg.h>
 
-#include "include/cephfs/libcephfs.h"
-
 #include "proxy_manager.h"
 #include "proxy_link.h"
 #include "proxy_helpers.h"

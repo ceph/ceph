@@ -2,6 +2,8 @@
 #ifndef __LIBCEPHFSD_PROXY_REQUESTS_H__
 #define __LIBCEPHFSD_PROXY_REQUESTS_H__
 
+#include "include/cephfs/libcephfs.h"
+
 #include "proxy.h"
 #include "proxy_link.h"
 
