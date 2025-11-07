@@ -482,5 +482,5 @@
 <ng-template #redirectTpl
              let-value="data.value"
              let-column="data.column">
-  <a [routerLink]="column.customTemplateConfig?.redirectLink">{{value}}</a>
+  <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver:value">{{value}}</a>
 </ng-template>
