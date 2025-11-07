@@ -2462,7 +2462,9 @@ void Objecter::_send_op_account(Op *op)
 
     // OMAP read operations
     case CEPH_OSD_OP_OMAPGETVALS:
+    case CEPH_OSD_OP_OMAPGETVALSREV:
     case CEPH_OSD_OP_OMAPGETKEYS:
+    case CEPH_OSD_OP_OMAPGETKEYSREV:
     case CEPH_OSD_OP_OMAPGETHEADER:
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
     case CEPH_OSD_OP_OMAP_CMP: code = l_osdc_osdop_omap_rd; break;

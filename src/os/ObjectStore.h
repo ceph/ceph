@@ -744,13 +744,16 @@ public:
       // start with provided key (seek_position), if it exists
       LOWER_BOUND,
       // skip provided key (seek_position) even if it exists
-      UPPER_BOUND
+      UPPER_BOUND,
+      // skip to the very end and ignore seek_position
+      LAST
     } seek_type = LOWER_BOUND;
     static omap_iter_seek_t min_lower_bound() { return {}; }
   };
   enum class omap_iter_ret_t {
     STOP,
-    NEXT
+    NEXT,
+    PREV
   };
   /**
    * Iterate over object map with user-provided callable
