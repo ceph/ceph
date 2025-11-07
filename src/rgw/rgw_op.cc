@@ -6366,8 +6366,12 @@ void RGWPutACLs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
+  // only allow acl owner to change if the requester views them as equivalent.
+  // the requester may change between their user id and account id.
   if (!existing_owner.empty() &&
-      existing_owner.id != new_policy.get_owner().id) {
+      existing_owner.id != new_policy.get_owner().id &&
+      !(s->auth.identity->is_owner_of(existing_owner.id) &&
+        s->auth.identity->is_owner_of(new_policy.get_owner().id))) {
     s->err.message = "Cannot modify ACL Owner";
     op_ret = -EPERM;
     return;
