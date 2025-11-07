@@ -15,7 +15,10 @@
 
 #include <boost/asio/io_context.hpp>
 
+#include <algorithm>
 #include <climits>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 using namespace librados;
@@ -218,7 +221,6 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
 
   // 2. Set osd_debug_reject_backfill_probability to 1.0
   CephContext* cct = static_cast<CephContext*>(cluster.cct());
-  float prev_value = cct->_conf->osd_debug_reject_backfill_probability;
   cct->_conf->osd_debug_reject_backfill_probability = 1.0;
 
 
@@ -236,8 +238,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_EQ(1U, pattrs.size());
 
 
-  // 4. Find primary osd for relevant pg
-  int primary_osd = -1;
+  // 4. Find up osds
   bufferlist map_inbl, map_outbl;
   auto map_formatter = std::make_unique<JSONFormatter>(false);
   ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "error_inject_oid", ""};
@@ -253,19 +254,82 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_TRUE(success);
   ceph::messaging::osd::OSDMapReply reply;
   reply.decode_json(&p);
-  std::vector<int> acting_osds_before = reply.acting;
-  primary_osd = reply.acting_primary;
+  std::vector<int> prev_up_osds = reply.up;
+  std::string pgid = reply.pgid;
 
-
-  // 5. Take primary osd out
-  bufferlist out_inbl, out_outbl;
-  std::ostringstream out_oss;
-  out_oss << "{\"prefix\": \"osd out\", \"ids\": [\"" << primary_osd << "\"]}";
-  rc = cluster.mon_command(out_oss.str(), out_inbl, &out_outbl, nullptr);
-  EXPECT_TRUE(rc == 0);
+  std::stringstream prev_out_vec;
+  std::copy(prev_up_osds.begin(), prev_up_osds.end(), std::ostream_iterator<int>(prev_out_vec, " "));
+  std::cout << "Previous up osds: " << prev_out_vec.str().c_str() << std::endl;
   
 
-  // 6a. Read from omap
+  // 5. Switch primary osd
+  int prev_primary = prev_up_osds[0];
+  int new_primary = 0;
+  while (true) {
+    auto it = std::find(prev_up_osds.begin(), prev_up_osds.end(), new_primary);
+    if (it == prev_up_osds.end()) {
+      break;
+    }
+    new_primary++;
+  }
+  std::vector<int> new_up_osds = prev_up_osds;
+  new_up_osds[0] = new_primary;
+
+  std::cout << "Previous primary osd: " << prev_primary << std::endl;
+  std::cout << "New primary osd: " << new_primary << std::endl;
+  std::stringstream new_out_vec;
+  std::copy(new_up_osds.begin(), new_up_osds.end(), std::ostream_iterator<int>(new_out_vec, " "));
+  std::cout << "Desired up osds: " << new_out_vec.str().c_str() << std::endl;
+
+
+  // 6. Set new up map
+  bufferlist upmap_inbl, upmap_outbl;
+  std::ostringstream upmap_oss;
+  upmap_oss << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << pgid << "\", \"id\": [";
+  for (size_t i = 0; i < new_up_osds.size(); i++) {
+    upmap_oss << new_up_osds[i];
+    if (i != new_up_osds.size() - 1) {
+      upmap_oss << ", ";
+    }
+  }
+  upmap_oss << "]}";
+  rc = cluster.mon_command(upmap_oss.str(), upmap_inbl, &upmap_outbl, nullptr);
+  EXPECT_TRUE(rc == 0);
+
+
+  // 7. Wait for new upmap to show up
+  bool upmap_in_effect = false;
+  auto start_time = std::chrono::steady_clock::now();
+  auto timeout = std::chrono::seconds(30);
+  while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
+    bufferlist check_inbl, check_outbl;
+    auto check_formatter = std::make_unique<JSONFormatter>(false);
+    ceph::messaging::osd::OSDMapRequest checkRequest{pool_name, "error_inject_oid", ""};
+    encode_json("OSDMapRequest", checkRequest, check_formatter.get());
+    std::ostringstream check_oss;
+    check_formatter.get()->flush(check_oss);
+    int rc_check = cluster.mon_command(check_oss.str(), check_inbl, &check_outbl, nullptr);
+    EXPECT_TRUE(rc_check == 0);
+    
+    JSONParser p_check;
+    bool success_check = p_check.parse(check_outbl.c_str(), check_outbl.length());
+    EXPECT_TRUE(success_check);
+    ceph::messaging::osd::OSDMapReply reply_check;
+    reply_check.decode_json(&p_check);
+    std::vector<int> current_up_osds = reply_check.up;
+    if (!current_up_osds.empty() && current_up_osds[0] == new_primary) {
+      std::stringstream out_vec;
+      std::copy(current_up_osds.begin(), current_up_osds.end(), std::ostream_iterator<int>(out_vec, " "));
+      std::cout << "New up osds: " << out_vec.str().c_str() << std::endl;
+      upmap_in_effect = true;
+    } else {
+      std::this_thread::sleep_for(1s);
+    }
+  }
+  EXPECT_TRUE(upmap_in_effect);
+  
+
+  // 8a. Read from omap
   std::map<std::string,bufferlist> vals{ {"_", {}} };
   read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
   EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &read, nullptr));
@@ -277,7 +341,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   decode(retrieved_value, retrieved_val_bl);
   EXPECT_EQ(omap_value, retrieved_value);
 
-  // 6b. Read from xattr after taking primary osd out
+  // 8b. Read from xattr after taking primary osd out
   bufferlist attr_read_bl_after;
   read.getxattr(xattr_key.c_str(), &attr_read_bl_after, &err);
   std::map<string, bufferlist> pattrs_after{ {"_", {}}, {xattr_key, {}}};
@@ -289,62 +353,54 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_EQ(1U, pattrs_after.size());
 
 
-  // 7. Set osd_debug_reject_backfill_probability to 0.0
+  // 9. Set osd_debug_reject_backfill_probability to 0.0
   cct->_conf->osd_debug_reject_backfill_probability = 0.0;
 
 
-  // 8. Find acting osds after taking primary out
-  bufferlist after_inbl, after_outbl;
-  auto after_formatter = std::make_unique<JSONFormatter>(false);
-  encode_json("OSDMapRequest", osdMapRequest, after_formatter.get());
-
-  std::ostringstream after_oss;
-  after_formatter.get()->flush(after_oss);
-  int rc_after = cluster.mon_command(after_oss.str(), after_inbl, &after_outbl, nullptr);
-  EXPECT_TRUE(rc_after == 0);
-
-  JSONParser p_after;
-  bool success_after = p.parse(after_outbl.c_str(), after_outbl.length());
-  EXPECT_TRUE(success_after);
-  ceph::messaging::osd::OSDMapReply reply_after;
-  reply_after.decode_json(&p_after);
-  std::vector<int> acting_osds_after = reply_after.acting;
-  std::set<int> acting_osds(acting_osds_before.begin(), acting_osds_before.end());
-  acting_osds.insert(acting_osds_after.begin(), acting_osds_after.end());
-
-
-  // 9. Take all osds out
-  bufferlist out_all_inbl, out_all_outbl;
-  std::ostringstream out_all_oss;
-  out_all_oss << "{\"prefix\": \"osd out\", \"ids\": [";
-  for (auto it = acting_osds.begin(); it != acting_osds.end(); ++it) {
-    out_all_oss << "\"" << *it << "\"";
-    if (std::next(it) != acting_osds.end()) {
-      out_all_oss << ", ";
+  // 10. Reset up map to previous values
+  bufferlist resetmap_inbl, resetmap_outbl;
+  std::ostringstream resetmap_oss;
+  resetmap_oss << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << pgid << "\", \"id\": [";
+  for (size_t i = 0; i < prev_up_osds.size(); i++) {
+    resetmap_oss << prev_up_osds[i];
+    if (i != prev_up_osds.size() - 1) {
+      resetmap_oss << ", ";
     }
   }
-  out_all_oss << "]}";
-  rc = cluster.mon_command(out_all_oss.str(), out_all_inbl, &out_all_outbl, nullptr);
+  resetmap_oss << "]}";
+  rc = cluster.mon_command(resetmap_oss.str(), resetmap_inbl, &resetmap_outbl, nullptr);
   EXPECT_TRUE(rc == 0);
 
 
-  // 10. Put all osds back in
-  bufferlist in_all_inbl, in_all_outbl;
-  std::ostringstream in_all_oss;
-  in_all_oss << "{\"prefix\": \"osd in\", \"ids\": [";
-  for (auto it = acting_osds.begin(); it != acting_osds.end(); ++it) {
-    in_all_oss << "\"" << *it << "\"";
-    if (std::next(it) != acting_osds.end()) {
-      in_all_oss << ", ";
+  // 11. Wait for prev upmap to show up
+  bool reset_in_effect = false;
+  start_time = std::chrono::steady_clock::now();
+  while (!reset_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
+    bufferlist check_reset_inbl, check_reset_outbl;
+    std::ostringstream check_reset_oss;
+    auto check_reset_formatter = std::make_unique<JSONFormatter>(false);
+    ceph::messaging::osd::OSDMapRequest checkResetRequest{pool_name, "error_inject_oid", ""};
+    encode_json("OSDMapRequest", checkResetRequest, check_reset_formatter.get());
+    check_reset_formatter.get()->flush(check_reset_oss);
+    int rc_reset = cluster.mon_command(check_reset_oss.str(), check_reset_inbl, &check_reset_outbl, nullptr);
+    EXPECT_TRUE(rc_reset == 0);
+    
+    JSONParser p_check_reset;
+    bool success_check_reset = p_check_reset.parse(check_reset_outbl.c_str(), check_reset_outbl.length());
+    EXPECT_TRUE(success_check_reset);
+    ceph::messaging::osd::OSDMapReply reply_check_reset;
+    reply_check_reset.decode_json(&p_check_reset);
+    std::vector<int> current_up_osds = reply_check_reset.up;
+    if (!current_up_osds.empty() && current_up_osds[0] == prev_primary) {
+      std::stringstream out_vec;
+      std::copy(current_up_osds.begin(), current_up_osds.end(), std::ostream_iterator<int>(out_vec, " "));
+      std::cout << "Final up osds after cleanup: " << out_vec.str().c_str() << std::endl;
+      reset_in_effect = true;
+    } else {
+      std::this_thread::sleep_for(1s);
     }
   }
-  in_all_oss << "]}";
-  rc = cluster.mon_command(in_all_oss.str(), in_all_inbl, &in_all_outbl, nullptr);
-  EXPECT_TRUE(rc == 0);
-
-
-  // 10. Set osd_debug_reject_backfill_probability back to previous value
-  cct->_conf->osd_debug_reject_backfill_probability = prev_value;
+  EXPECT_TRUE(reset_in_effect);
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
