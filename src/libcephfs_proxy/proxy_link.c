@@ -441,11 +441,11 @@ static int32_t proxy_link_negotiate_server(proxy_link_t *link, int32_t sd,
 					   proxy_link_negotiate_cbk_t cbk)
 {
 	proxy_link_negotiate_t remote;
-	int32_t err, version;
+	int32_t err;
 
-	version = proxy_link_negotiate_read(link, sd, &remote);
-	if (version < 0) {
-		return version;
+	err = proxy_link_negotiate_read(link, sd, &remote);
+	if (err < 0) {
+		return err;
 	}
 
 	err = proxy_link_negotiate_check(neg, &remote, cbk);
