@@ -104,6 +104,9 @@ public:
   PyObject *pStandbyClass = nullptr;
   PyObject *pPickleModule = nullptr;
 
+  // true unless module in mgr_subinterpreter_modules
+  bool use_main_interpreter = true;
+
   explicit PyModule(const std::string &module_name_)
     : module_name(module_name_)
   {
