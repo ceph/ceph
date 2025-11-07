@@ -52,9 +52,9 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
 
-  int err = 0;
-  bufferlist bl_read;
-  ObjectReadOperation read;
+//   int err = 0;
+//   bufferlist bl_read;
+//   ObjectReadOperation read;
 
   // OMAP GET VALS TESTING
 
@@ -224,7 +224,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   cct->_conf->osd_debug_reject_backfill_probability = 1.0;
 
 
-  // 3. Read from xattr before taking primary osd out
+  // 3. Read from xattr before switching primary osd
   int err = 0;
   ObjectReadOperation read;
   bufferlist attr_read_bl;
@@ -241,7 +241,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   // 4. Find up osds
   bufferlist map_inbl, map_outbl;
   auto map_formatter = std::make_unique<JSONFormatter>(false);
-  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "error_inject_oid", ""};
+  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "error_inject_oid", nspace};
   encode_json("OSDMapRequest", osdMapRequest, map_formatter.get());
 
   std::ostringstream map_oss;
@@ -304,7 +304,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
     bufferlist check_inbl, check_outbl;
     auto check_formatter = std::make_unique<JSONFormatter>(false);
-    ceph::messaging::osd::OSDMapRequest checkRequest{pool_name, "error_inject_oid", ""};
+    ceph::messaging::osd::OSDMapRequest checkRequest{pool_name, "error_inject_oid", nspace};
     encode_json("OSDMapRequest", checkRequest, check_formatter.get());
     std::ostringstream check_oss;
     check_formatter.get()->flush(check_oss);
@@ -379,7 +379,7 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
     bufferlist check_reset_inbl, check_reset_outbl;
     std::ostringstream check_reset_oss;
     auto check_reset_formatter = std::make_unique<JSONFormatter>(false);
-    ceph::messaging::osd::OSDMapRequest checkResetRequest{pool_name, "error_inject_oid", ""};
+    ceph::messaging::osd::OSDMapRequest checkResetRequest{pool_name, "error_inject_oid", nspace};
     encode_json("OSDMapRequest", checkResetRequest, check_reset_formatter.get());
     check_reset_formatter.get()->flush(check_reset_oss);
     int rc_reset = cluster.mon_command(check_reset_oss.str(), check_reset_inbl, &check_reset_outbl, nullptr);
