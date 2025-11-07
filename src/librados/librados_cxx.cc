@@ -3197,3 +3197,8 @@ int librados::IoCtx::application_metadata_list(const std::string& app_name,
 {
   return io_ctx_impl->application_metadata_list(app_name, values);
 }
+
+void librados::IoCtx::set_no_version_on_read(bool value)
+{
+  io_ctx_impl->set_no_version_on_read(value);
+}

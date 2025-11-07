@@ -1393,6 +1393,8 @@ inline namespace v14_2_0 {
     int application_metadata_list(const std::string& app_name,
                                   std::map<std::string, std::string> *values);
 
+    void set_no_version_on_read(bool b);
+
   private:
     /* You can only get IoCtx instances from Rados */
     IoCtx(IoCtxImpl *io_ctx_impl_);
