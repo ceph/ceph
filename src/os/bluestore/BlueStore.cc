@@ -9037,8 +9037,8 @@ int BlueStore::expand_devices(ostream& out)
   // from the out-of-space state at DB/shared volume(s)
   // Opening in R/W mode might cause extra space allocation
   // which is effectively a show stopper for volume expansion.
-  int r = _open_db_and_around(true);
-  ceph_assert(r == 0);
+  // int r = _open_db_and_around(true);
+  // ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
   // updating dedicated devices first
@@ -9047,6 +9047,15 @@ int BlueStore::expand_devices(ostream& out)
       continue;
     }
     auto my_bdev = bluefs->get_block_device(devid);
+
+    int res = my_bdev->refresh_size();
+    if (res < 0) {
+      out << devid << " : refresh_size failed: " << cpp_strerror(res) << std::endl;
+      derr << __func__ << " device " << devid << " refresh_size error: " 
+           << res << " (" << cpp_strerror(res) << ")" << dendl;
+      continue;
+    }
+
     uint64_t size = my_bdev ? my_bdev->get_size() : 0;
     if (size == 0) {
       // no bdev
@@ -9094,10 +9103,15 @@ int BlueStore::expand_devices(ostream& out)
     }
   }
   // now proceed with a shared device
+  int res = bdev->refresh_size();
+  if (res < 0) {
+    out << " refresh_size failed: " << cpp_strerror(res) << std::endl;
+  }
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
   auto devid = bluefs_layout.shared_bdev;
   auto aligned_size = p2align(size, min_alloc_size);
+  int r = 0;
   if (aligned_size == size0) {
     // no need to expand
     out << devid
@@ -9141,7 +9155,7 @@ int BlueStore::expand_devices(ostream& out)
           << " : size updated to 0x" << std::hex << size
           << std::dec << "(" << byte_u_t(size) << ")"
           << std::endl;
-      _close_db_and_around();
+      // _close_db_and_around();
 
        //
       // Mount in read/write to sync expansion changes
@@ -9152,7 +9166,7 @@ int BlueStore::expand_devices(ostream& out)
                                           // do some post-init stuff on opened
                                           // allocator.
 
-      r = _open_db_and_around(false);
+      // r = _open_db_and_around(false);
       ceph_assert(r == 0);
     }
   }
