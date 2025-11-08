@@ -488,6 +488,10 @@ private:
                                     const XattrOp &xattr_op);
   void mirror_info_removexattr_handler(CInode *cur, xattr_map_ptr xattrs,
                                        const XattrOp &xattr_op);
+  int bal_rank_mask_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                 XattrOp *xattr_op);
+  void bal_rank_mask_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                      const XattrOp &xattr_op);
 
   static bool is_ceph_vxattr(std::string_view xattr_name) {
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
@@ -545,7 +549,8 @@ private:
     }
 
     return xattr_name == "ceph.mirror.info" ||
-           xattr_name == "ceph.mirror.dirty_snap_id";
+           xattr_name == "ceph.mirror.dirty_snap_id" ||
+           xattr_name == "ceph.dir.bal.mask";
   }
 
   void reply_client_request(const MDRequestRef& mdr, const ref_t<MClientReply> &reply);

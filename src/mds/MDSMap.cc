@@ -1348,7 +1348,7 @@ void MDSMap::set_min_compat_client(ceph_release_t version)
   required_client_features = feature_bitset_t(bits);
 }
 
-const std::bitset<MAX_MDS>& MDSMap::get_bal_rank_mask_bitset() const {
+const max_mds_bitset_t& MDSMap::get_bal_rank_mask_bitset() const {
   return bal_rank_mask_bitset;
 }
 
@@ -1379,7 +1379,7 @@ void MDSMap::update_num_mdss_in_rank_mask_bitset()
 
     r = hex2bin(bal_rank_mask, bin_string, MAX_MDS, *css);
     if (r == 0) {
-      auto _mds_bal_mask_bitset = std::bitset<MAX_MDS>(bin_string);
+      auto _mds_bal_mask_bitset = max_mds_bitset_t(bin_string);
       bal_rank_mask_bitset = _mds_bal_mask_bitset;
       num_mdss_in_rank_mask_bitset = _mds_bal_mask_bitset.count();
     } else {
@@ -1388,14 +1388,16 @@ void MDSMap::update_num_mdss_in_rank_mask_bitset()
   }
 
   if (r == -EINVAL) {
+    bal_rank_mask_bitset.reset();
     if (check_special_bal_rank_mask(bal_rank_mask, BAL_RANK_MASK_TYPE_NONE)) {
       dout(10) << "Balancer is disabled with bal_rank_mask " << bal_rank_mask << dendl;
-      bal_rank_mask_bitset.reset();
       num_mdss_in_rank_mask_bitset = 0;
     } else {
       dout(10) << "Balancer distributes mds workloads to all ranks as bal_rank_mask is empty or invalid" << dendl;
-      bal_rank_mask_bitset.set();
-      num_mdss_in_rank_mask_bitset = get_max_mds();
+      for (mds_rank_t mds_rank = 0; mds_rank < get_max_mds(); mds_rank++) {
+        bal_rank_mask_bitset.set(mds_rank);
+      }
+      num_mdss_in_rank_mask_bitset = bal_rank_mask_bitset.count();
     }
   }
 

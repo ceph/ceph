@@ -520,6 +520,7 @@ public:
 
   // -- import/export --
   mds_rank_t get_export_pin(bool inherit=true) const;
+  std::string get_rank_mask(bool inherit=true) const;
   bool is_exportable(mds_rank_t dest) const;
 
   void encode_export(ceph::buffer::list& bl);

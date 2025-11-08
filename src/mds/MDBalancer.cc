@@ -36,6 +36,8 @@
 #include <vector>
 #include <map>
 
+#include <boost/tokenizer.hpp>
+
 using namespace std;
 
 #include "common/config.h"
@@ -142,7 +144,50 @@ void MDBalancer::handle_conf_change(const std::set<std::string>& changed, const 
 
 bool MDBalancer::test_rank_mask(mds_rank_t rank)
 {
-  return mds->mdsmap->get_bal_rank_mask_bitset().test(rank);
+  return bal_rank_mask_bitset.test(rank);
+}
+
+void MDBalancer::handle_rank_mask(void)
+{
+  dout(20) << " start " << dendl;
+  mds->mdsmap->update_num_mdss_in_rank_mask_bitset();
+  std::vector<CDir*> authsubs = mds->mdcache->get_auth_subtrees();
+  for (auto &cd : authsubs) {
+    if (cd->inode->is_system() || cd->inode->is_root()) {
+      continue;
+    }
+
+    mds_rank_t export_pin = cd->inode->get_export_pin(false);
+    dout(7) << "export_pin " << export_pin << " " << cd->get_path() << dendl;
+
+    if (export_pin != MDS_RANK_NONE && export_pin != MDS_RANK_MASK)
+      continue;
+
+    max_mds_bitset_t rank_mask_bitset;
+    int r = get_rank_mask_bitset(cd, rank_mask_bitset);
+    if (r != 0) {
+      continue;
+    }
+
+    dout(7) << "rank_mask_bitset " << bitmask_to_str(rank_mask_bitset) << " " << cd->get_path() << dendl;
+    ceph_assert(rank_mask_bitset.count());
+
+    mds_rank_t target = -1;
+    for (mds_rank_t mds_rank = 0; mds_rank < mds->mdsmap->get_max_mds(); mds_rank++) {
+      if (rank_mask_bitset.test(mds_rank)) {
+        target = mds_rank;
+        break;
+      }
+    }
+
+    if (rank_mask_bitset.test(cd->authority().first) == false && 
+        target != mds->get_nodeid() && 
+        target >= 0 && 
+        target < mds->mdsmap->get_max_mds()) { 
+      dout(7) << "try to export nicely " << cd->get_path() << " auth " << cd->authority().first << " to " << target << " mask " << bitmask_to_str(rank_mask_bitset) << dendl;
+      mds->mdcache->migrator->export_dir_nicely(cd, target);
+    } 
+  }
 }
 
 void MDBalancer::handle_export_pins(void)
@@ -159,6 +204,12 @@ void MDBalancer::handle_export_pins(void)
     ceph_assert(in->is_dir());
 
     mds_rank_t export_pin = in->get_export_pin(false);
+    if (export_pin == MDS_RANK_NONE) {
+      CInode *pin = in->get_rank_mask_inode(false);
+      std::string bal_rank_mask = pin->get_bal_rank_mask_from_xattrs();
+      if (bal_rank_mask.size())
+        export_pin = MDS_RANK_MASK;
+    }
     in->check_pin_policy(export_pin);
 
     if (export_pin >= max_mds) {
@@ -171,7 +222,6 @@ void MDBalancer::handle_export_pins(void)
       continue;
     }
 
-    dout(20) << " executing export_pin=" << export_pin << " on " << *in << dendl;
     unsigned min_frag_bits = 0;
     mds_rank_t target = MDS_RANK_NONE;
     if (export_pin >= 0)
@@ -180,6 +230,10 @@ void MDBalancer::handle_export_pins(void)
       target = mdcache->hash_into_rank_bucket(in->ino());
     else if (export_pin == MDS_RANK_EPHEMERAL_DIST)
       min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+    else if (export_pin == MDS_RANK_MASK)
+      target = MDS_RANK_MASK;
+
+    dout(20) << " executing export_pin=" << export_pin << " on " << *in << " target " << target << dendl;
 
     bool remove = true;
     for (auto&& dir : in->get_dirfrags()) {
@@ -209,7 +263,7 @@ void MDBalancer::handle_export_pins(void)
 	  dir->state_clear(CDir::STATE_AUXSUBTREE);
 	  mds->mdcache->try_subtree_merge(dir);
 	}
-      } else if (target == mds->get_nodeid()) {
+      } else if (target == mds->get_nodeid() || target == MDS_RANK_MASK) {
         if (dir->state_test(CDir::STATE_AUXSUBTREE)) {
           ceph_assert(dir->is_subtree_root());
         } else if (dir->state_test(CDir::STATE_CREATING) ||
@@ -260,6 +314,8 @@ void MDBalancer::handle_export_pins(void)
       export_pin = mdcache->hash_into_rank_bucket(cd->ino(), cd->get_frag());
     } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
       export_pin = mdcache->hash_into_rank_bucket(cd->ino());
+    } else if (export_pin == MDS_RANK_MASK) {
+      export_pin = MDS_RANK_MASK;
     }
 
     if (print_auth_subtrees)
@@ -279,6 +335,7 @@ void MDBalancer::tick()
 
   if (bal_export_pin) {
     handle_export_pins();
+    handle_rank_mask();
   }
 
   // sample?
@@ -511,6 +568,85 @@ void MDBalancer::send_heartbeat()
   }
 }
 
+int MDBalancer::rank_mask_list_str_to_bitset(CInode *cur, std::string& rank_mask_list_str, max_mds_bitset_t& rank_mask_bitset, std::ostream& ss)
+{
+  typedef boost::tokenizer<boost::char_separator<char>> tokenizer;
+  boost::char_separator<char> sep{","};
+  tokenizer tokens{rank_mask_list_str, sep};
+  bool rank0_involved = false;
+  max_mds_bitset_t temp_mask_bitset;
+
+  if (std::distance(tokens.begin(), tokens.end()) == 0) {
+      ss << "bad vxattr value, unable to parse string";
+      return -EINVAL;
+  }
+
+  for (const auto &token : tokens) {
+    try {
+      mds_rank_t rank = std::stoi(token);
+      if (cur->is_root() && rank == 0)
+        rank0_involved = true;
+
+      if (rank < 0 || rank >= MAX_MDS) {
+        ss << "bad vxattr value, unable to parse string";
+        return -EINVAL;
+      }
+      temp_mask_bitset.set(rank);
+    } catch (const std::invalid_argument& e) {
+      ss << "bad vxattr value, unable to parse string";
+      return -EINVAL;
+    }
+  }
+
+  if (cur->is_root() and rank0_involved == false) {
+    ss << "bad vxattr value, rank0 must be set for root dir";
+    return -EINVAL;
+  }
+
+  if (temp_mask_bitset.count() == 0) {
+      ss << "at least one rank must be set";
+      return -EINVAL;
+  }
+
+  rank_mask_bitset = temp_mask_bitset;
+  return 0;
+}
+
+int MDBalancer::get_rank_mask_bitset(CDir *dir, max_mds_bitset_t& rank_mask_bitset, bool inherit)
+{
+  CInode *in = dir->inode->get_rank_mask_inode(inherit);
+  std::string bal_rank_mask = in->get_bal_rank_mask_from_xattrs();
+  int r;
+
+  if (in->is_root() && bal_rank_mask.size() == 0) {
+    rank_mask_bitset = mds->mdsmap->get_bal_rank_mask_bitset();
+    dout(10) << " bal_rank_mask is obtained from mdsmap " << mds->mdsmap->get_num_mdss_in_rank_mask_bitset() << 
+      " " <<
+      mds->mdsmap->get_bal_rank_mask() << dendl;
+    if (rank_mask_bitset.count() == 0) {
+      dout(10) << "at least one rank must be set" << dendl;
+      r = -EINVAL;
+    } else {
+      r = 0;
+    }
+  } else {
+    dout(7) << dir->get_path() << " " << bal_rank_mask << dendl;
+    CachedStackStringStream css;
+    r = rank_mask_list_str_to_bitset(dir->get_inode(), bal_rank_mask, rank_mask_bitset, *css);
+    dout(10) << css->str() << dendl;
+  }
+  return r;
+}
+
+std::string MDBalancer::bitmask_to_str(max_mds_bitset_t& bitmask)
+{
+    std::string mask_str = bitmask.to_string();
+    std::reverse(mask_str.begin(), mask_str.end());
+    mask_str.resize(mds->mdsmap->get_max_mds());
+    std::reverse(mask_str.begin(), mask_str.end());
+    return mask_str;
+}
+
 void MDBalancer::handle_heartbeat(const cref_t<MHeartbeat> &m)
 {
   mds_rank_t who = mds_rank_t(m->get_source().num());
@@ -555,20 +691,49 @@ void MDBalancer::handle_heartbeat(const cref_t<MHeartbeat> &m)
     }
   }
 
-  {
-    auto em = mds_load.emplace(std::piecewise_construct, std::forward_as_tuple(who), std::forward_as_tuple(m->get_load()));
-    if (!em.second) {
-      em.first->second = m->get_load();
-    }
-  }
-  mds_import_map[who] = m->get_import_map();
-
   mds->mdsmap->update_num_mdss_in_rank_mask_bitset();
 
-  if (mds->mdsmap->get_num_mdss_in_rank_mask_bitset() > 0)
+  max_mds_bitset_t my_bal_rank_mask_bitset;
+  std::vector<CDir*> authsubs = mds->mdcache->get_auth_subtrees();
+  int overlap_count = 0;
+  for (auto &cd : authsubs) {
+    max_mds_bitset_t temp_bitset;
+    int r = get_rank_mask_bitset(cd, temp_bitset);
+    if (r != 0)
+      continue;
+
+    dout(10) << " authsubtree bitset mask "<< bitmask_to_str(temp_bitset) << " bit count " << temp_bitset.count() << " auth " << cd->authority().first << " " << cd->get_path() << dendl;
+
+    if (temp_bitset.test(mds->get_nodeid())) {
+      my_bal_rank_mask_bitset |= temp_bitset;
+      overlap_count++;
+      if (overlap_count > 1)
+        dout(10) << " rank_mask overlap subdir " << *cd << dendl;
+    }
+  }
+
+  if (overlap_count > 1) {
+    dout(10) << " bal_rank_mask of multiple subdirectories overlap with the value: " << overlap_count << dendl;
+  }
+
+  bal_rank_mask_bitset = my_bal_rank_mask_bitset;
+  num_mdss_in_rank_mask_bitset = bal_rank_mask_bitset.count();
+
+  if (bal_rank_mask_bitset.test(who)) {
+    {
+        auto em = mds_load.emplace(std::piecewise_construct, std::forward_as_tuple(who), std::forward_as_tuple(m->get_load()));
+        if (!em.second) {
+          em.first->second = m->get_load();
+        }
+    }
+    mds_import_map[who] = m->get_import_map();
+  }
+
+  if (num_mdss_in_rank_mask_bitset)
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
-    if (mds_load.size() == cluster_size) {
+    cluster_size = std::min(cluster_size, num_mdss_in_rank_mask_bitset);
+    if (mds_load.size() == cluster_size && cluster_size > 1) {
       // let's go!
       //export_empties();  // no!
 
@@ -582,6 +747,8 @@ void MDBalancer::handle_heartbeat(const cref_t<MHeartbeat> &m)
       }
       prep_rebalance(m->get_beat());
     }
+  } else {
+    dout(10) << "Nothing to do because rank mask bitset is cleared "<< bitmask_to_str(bal_rank_mask_bitset) << dendl;
   }
 }
 
@@ -797,6 +964,9 @@ void MDBalancer::prep_rebalance(int beat)
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
+      if (test_rank_mask(i) == false) {
+        continue;
+      }
       mds_load_t& load = mds_load.at(i);
 
       double l = load.mds_load(bal_mode) * load_fac;
@@ -815,7 +985,7 @@ void MDBalancer::prep_rebalance(int beat)
     }
 
     // target load
-    target_load = total_load / (double)mds->mdsmap->get_num_mdss_in_rank_mask_bitset();
+    target_load = total_load / (double)num_mdss_in_rank_mask_bitset;
     dout(7) << "my load " << my_load
 	    << "   target " << target_load
 	    << "   total " << total_load
@@ -854,7 +1024,7 @@ void MDBalancer::prep_rebalance(int beat)
     for (multimap<double,mds_rank_t>::iterator it = load_map.begin();
 	 it != load_map.end();
 	 ++it) {
-      if (it->first < target_load && test_rank_mask(it->second)) {
+      if (it->first < target_load) {
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
@@ -888,6 +1058,9 @@ void MDBalancer::prep_rebalance(int beat)
 	for (map<mds_rank_t, float>::iterator im = mds_import_map[ex->second].begin();
 	     im != mds_import_map[ex->second].end();
 	     ++im) {
+          if (!test_rank_mask(im->first)) {
+            continue;
+          }
 	  double maxim = get_maxim(state, im->first, target_load);
 	  if (maxim <= .001) continue;
 	  try_match(state, ex->second, maxex, im->first, maxim);
@@ -979,8 +1152,6 @@ int MDBalancer::mantle_prep_rebalance()
   return 0;
 }
 
-
-
 void MDBalancer::try_rebalance(balance_state_t& state)
 {
   if (g_conf()->mds_thrash_exports) {
@@ -997,10 +1168,20 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     CInode *diri = dir->get_inode();
     if (diri->is_mdsdir())
       continue;
-    if (diri->get_export_pin(false) != MDS_RANK_NONE)
+    mds_rank_t export_pin = diri->get_export_pin(false);
+    if (export_pin != MDS_RANK_NONE && export_pin != MDS_RANK_MASK)
       continue;
     if (dir->is_freezing() || dir->is_frozen())
       continue;  // export pbly already in progress
+
+    max_mds_bitset_t rank_mask_bitset;
+    int r = get_rank_mask_bitset(dir, rank_mask_bitset);
+    if (r != 0)
+      continue;
+
+    if (!rank_mask_bitset.test(mds->get_nodeid())) {
+      continue;
+    }
 
     mds_rank_t from = diri->authority().first;
     double pop = dir->pop_auth_subtree.meta_load();
