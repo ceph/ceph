@@ -252,6 +252,9 @@ int ActivePyModule::handle_command(
 
   Gil gil(py_module->pMyThreadState, true);
 
+  dout(10) << "ActivePyModule::handle_command dispatching command '"
+           << cmdmap << dendl;
+
   PyFormatter f;
   TOPNSPC::common::cmdmap_dump(cmdmap, &f);
   PyObject *py_cmd = f.get();
@@ -262,9 +265,13 @@ int ActivePyModule::handle_command(
   m_command_perms = module_command.perm;
   m_session = &session;
 
+  dout(10) << "ActivePyModule::handle_command calling into interpreter for '"
+           << cmdmap << dendl;
   auto pResult = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("_handle_command"), const_cast<char*>("s#O"),
       instr.c_str(), instr.length(), py_cmd);
+  dout(10) << "ActivePyModule::handle_command call into interpreter complete for '"
+           << cmdmap << dendl;
 
   m_command_perms.clear();
   m_session = nullptr;

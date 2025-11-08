@@ -2004,10 +2004,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         inbuf: str,
                         cmd: Dict[str, Any]) -> Union[HandleCommandResult,
                                                       Tuple[int, str, str]]:
+        self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd}")
         if cmd['prefix'] not in CLICommand.COMMANDS:
-            return self.handle_command(inbuf, cmd)
+            ret = self.handle_command(inbuf, cmd)
+            self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd} ret {ret}")
+            return ret
 
-        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        ret = CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd} ret {ret}")
+        return ret
 
     def handle_command(self,
                        inbuf: str,
