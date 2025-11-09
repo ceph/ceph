@@ -557,8 +557,6 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
   // print connection features for all incoming messages and update cluster features
   if (m->get_connection()) {
     //uint64_t features = m->get_connection()->get_features();
-    dout(4) << fmt::format("Monitor connection features: 0x{:x}", features) << dendl;
-    
     // Update cluster features with the union of all seen features
     // This ensures we track the highest level of features supported by the cluster
     cluster_features = monc.get_monmap_required_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF);

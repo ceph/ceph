@@ -26,7 +26,7 @@
 
 class MNVMeofGwBeacon final : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = BEACON_VERSION_ENHANCED;
+  static constexpr int ENHANCED_VERSION = BEACON_VERSION_ENHANCED;
   static constexpr int COMPAT_VERSION = BEACON_VERSION_LEGACY;
 
 protected:
@@ -41,7 +41,7 @@ protected:
 
 public:
   MNVMeofGwBeacon()
-    : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON, 0, HEAD_VERSION,
+    : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON, 0, ENHANCED_VERSION,
       COMPAT_VERSION}, sequence(0)
   {
     set_priority(CEPH_MSG_PRIO_HIGH);
@@ -58,8 +58,8 @@ public:
         bool enable_diff = false)  // default to legacy behavior for backward compatibility
     : PaxosServiceMessage{MSG_MNVMEOF_GW_BEACON,
                           0,
-                          enable_diff ? HEAD_VERSION : COMPAT_VERSION,
-                          enable_diff ? HEAD_VERSION : COMPAT_VERSION},
+                          enable_diff ? ENHANCED_VERSION : COMPAT_VERSION,
+                          enable_diff ? ENHANCED_VERSION : COMPAT_VERSION},
       gw_id(gw_id_), gw_pool(gw_pool_), gw_group(gw_group_), subsystems(subsystems_),
       availability(availability_), last_osd_epoch(last_osd_epoch_),
       last_gwmap_epoch(last_gwmap_epoch_), sequence(sequence_)
@@ -105,8 +105,8 @@ public:
     encode((uint32_t)availability, payload);
     encode(last_osd_epoch, payload);
     encode(last_gwmap_epoch, payload);
-    // Only encode sequence for enhanced beacons (version >= HEAD_VERSION)
-    if (get_header().version >= HEAD_VERSION) {
+    // Only encode sequence for enhanced beacons (version >= 2)
+    if (get_header().version >= 2) {
       encode(sequence, payload);
     }
   }
@@ -125,8 +125,8 @@ public:
     availability = static_cast<gw_availability_t>(tmp);
     decode(last_osd_epoch, p);
     decode(last_gwmap_epoch, p);
-    // Only decode sequence for enhanced beacons (version >= HEAD_VERSION)
-    if (get_header().version >= HEAD_VERSION && !p.end()) {
+    // Only decode sequence for enhanced beacons (version >= 2)
+    if (get_header().version >= 2 && !p.end()) {
       decode(sequence, p);
     } else {
       sequence = 0;  // Legacy beacons don't have sequence field
