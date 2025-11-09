@@ -121,10 +121,7 @@ namespace rgw {
 	auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
 	if (ux_key && ux_attrs) {
-	  DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-	  if (get<0>(dar) || get<1>(dar)) {
-	    update_fh(rgw_fh);
-          }
+	  [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
 	  rgw_fh->mtx.unlock();
@@ -213,13 +210,10 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
-		ux_key && ux_attrs) {
-              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-              if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
-              }
-	    }
+            if (ux_key && ux_attrs) {
+              /* restores unix attrs */
+              [[maybe_unused]] DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
+            }
 	  }
 	  goto done;
 	}
@@ -250,13 +244,11 @@ namespace rgw {
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
             rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
             rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
-	    if (!(flags & RGWFileHandle::FLAG_IN_CB) &&
-		ux_key && ux_attrs) {
-              DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
-              if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
-              }
-	    }
+            if (ux_key && ux_attrs) {
+              /* restores unix attrs */
+              [[maybe_unused]] DecodeAttrsResult dar =
+                rgw_fh->decode_attrs(ux_key, ux_attrs);
+            } /* ux_key && ux_attrs */
 	  }
 	  goto done;
 	}
@@ -1456,6 +1448,7 @@ namespace rgw {
     }
   } /* RGWFileHandle::encode_attrs */
 
+  /* called with rgw_fh->mtx held */
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
                                                 const ceph::buffer::list* ux_attrs1)
   {
@@ -1475,25 +1468,28 @@ namespace rgw {
     decode(tmp_fh, bl_iter_unix1);
 
     fh.fh_type = tmp_fh.fh.fh_type;
-    // for file handles that represent files and whose file_ondisk_version
-    // is newer, no updates are need, otherwise, go updating the current
-    // file handle
-    if (!((fh.fh_type == RGW_FS_TYPE_FILE ||
-	    fh.fh_type == RGW_FS_TYPE_SYMBOLIC_LINK) &&
-	  file_ondisk_version >= tmp_fh.file_ondisk_version)) {
-      // make sure the following "encode" always encode a greater version
-      file_ondisk_version = tmp_fh.file_ondisk_version + 1;
-      state.dev = tmp_fh.state.dev;
-      state.size = tmp_fh.state.size;
-      state.nlink = tmp_fh.state.nlink;
-      state.owner_uid = tmp_fh.state.owner_uid;
-      state.owner_gid = tmp_fh.state.owner_gid;
-      state.unix_mode = tmp_fh.state.unix_mode;
-      state.ctime = tmp_fh.state.ctime;
-      state.mtime = tmp_fh.state.mtime;
-      state.atime = tmp_fh.state.atime;
-      state.version = tmp_fh.state.version;
-    }
+    /* XXXX the merged logic for fh versions is not sound--we are decoding
+     * an on-disk handle, so the most basic scenario of restoring an object
+     * with saved attributes fails in the common case:  make object, setattr,
+     * restart nfs, consult attr:  now on lookup the protype filehandle has
+     * version 0, and on-disk version is also 0, and attributes are not
+     * restored.
+     *
+     * It seems likely that the reasoning here was influenced by former calls
+     * to update_fh(...) in stat paths--which in retrospect seems unwise.  The
+     * stat paths (incl. lookups) are reading in attrs, why should we immediately
+     * write them back?
+     */
+    state.dev = tmp_fh.state.dev;
+    state.size = tmp_fh.state.size;
+    state.nlink = tmp_fh.state.nlink;
+    state.owner_uid = tmp_fh.state.owner_uid;
+    state.owner_gid = tmp_fh.state.owner_gid;
+    state.unix_mode = tmp_fh.state.unix_mode;
+    state.ctime = tmp_fh.state.ctime;
+    state.mtime = tmp_fh.state.mtime;
+    state.atime = tmp_fh.state.atime;
+    state.version = tmp_fh.state.version;
 
     if (this->state.version < 2) {
       get<1>(dar) = true;
