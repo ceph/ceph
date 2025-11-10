@@ -243,8 +243,8 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_group_image_state_t state
 
     ctypedef enum rbd_group_snap_state_t:
-        _RBD_GROUP_SNAP_STATE_INCOMPLETE "RBD_GROUP_SNAP_STATE_INCOMPLETE"
-        _RBD_GROUP_SNAP_STATE_COMPLETE "RBD_GROUP_SNAP_STATE_COMPLETE"
+        _RBD_GROUP_SNAP_STATE_CREATING "RBD_GROUP_SNAP_STATE_CREATING"
+        _RBD_GROUP_SNAP_STATE_CREATED "RBD_GROUP_SNAP_STATE_CREATED"
 
     ctypedef enum rbd_group_snap_namespace_type_t:
         _RBD_GROUP_SNAP_NAMESPACE_TYPE_USER "RBD_GROUP_SNAP_NAMESPACE_TYPE_USER"
@@ -268,7 +268,7 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_snap_mirror_state_t state;
         size_t mirror_peer_uuids_count;
         char* mirror_peer_uuids;
-        bint complete
+        bint complete;
         char* primary_mirror_uuid;
         char* primary_snap_id;
 

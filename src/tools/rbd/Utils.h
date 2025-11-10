@@ -244,6 +244,8 @@ bool is_not_user_snap_namespace(librbd::Image* image,
 
 std::string image_id(librbd::Image& image);
 
+std::string get_group_snap_state_name(
+    librbd::group_snap_state_t state);
 std::string mirror_image_mode(
     librbd::mirror_image_mode_t mirror_image_mode);
 std::string mirror_image_state(
