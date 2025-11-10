@@ -14,6 +14,35 @@ using namespace librados;
 typedef RadosTestPP LibRadosSplitOpPP;
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
+TEST_P(LibRadosSplitOpECPP, XattrReads) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl, attr_bl, attr_read_bl;
+  std::string attr_key = "my_key";
+  std::string attr_value = "my_attr";
+
+  bl.append("ceph");
+  ObjectWriteOperation write1;
+  write1.write(0, bl);
+  encode(attr_value, attr_bl);
+  write1.setxattr(attr_key.c_str(), attr_bl);
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+
+  ObjectReadOperation read;
+  read.read(0, bl.length(), NULL, NULL);
+
+  int getxattr_rval, getxattrs_rval;
+  read.getxattr(attr_key.c_str(), &attr_read_bl, &getxattr_rval);
+  std::map<string, bufferlist> pattrs{ {"_", {}}, {attr_key, {}}};
+  read.getxattrs(&pattrs, &getxattrs_rval);
+  read.cmpxattr(attr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, attr_bl);
+
+  ASSERT_TRUE(AssertOperateWithSplitOp(1, "foo", &read, &bl));
+  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
+
+  ASSERT_EQ(0, getxattr_rval);
+  ASSERT_EQ(0, getxattrs_rval);
+}
+
 TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, omap_header_bl;
@@ -156,66 +185,6 @@ TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   ASSERT_EQ(returned_keys.size(), (unsigned)0);
 
   std::cout << "--- OMap Clear testing passed ---" << std::endl;
-}
-
-TEST_P(LibRadosSplitOpECPP, XattrReads) {
-  SKIP_IF_CRIMSON();
-  bufferlist bl, attr_bl, attr_read_bl;
-  std::string attr_key = "my_key";
-  std::string attr_value = "my_attr";
-
-  bl.append("ceph");
-  ObjectWriteOperation write1;
-  write1.write(0, bl);
-  encode(attr_value, attr_bl);
-  write1.setxattr(attr_key.c_str(), attr_bl);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-
-  ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-
-  int getxattr_rval, getxattrs_rval;
-  read.getxattr(attr_key.c_str(), &attr_read_bl, &getxattr_rval);
-  std::map<string, bufferlist> pattrs{ {"_", {}}, {attr_key, {}}};
-  read.getxattrs(&pattrs, &getxattrs_rval);
-  read.cmpxattr(attr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, attr_bl);
-
-  ASSERT_TRUE(AssertOperateWithSplitOp(1, "foo", &read, &bl));
-  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
-  ASSERT_EQ(0, getxattr_rval);
-  ASSERT_EQ(0, getxattrs_rval);
-}
-
-TEST_P(LibRadosSplitOpECPP, OMAPReads) {
-  SKIP_IF_CRIMSON();
-  bufferlist bl, omap_read_bl, omap_val_bl;
-  std::string omap_key = "my_key";
-  std::string omap_value = "my_value";
-  encode(omap_value, omap_val_bl);
-  std::map<std::string, bufferlist> omap_map = {
-    {omap_key, omap_val_bl}
-  };
-
-  bl.append("ceph");
-  ObjectWriteOperation write1;
-  write1.write(0, bl);
-  write1.omap_set(omap_map);
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
-
-  ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-
-  int err = 0;
-  std::set<std::string> keys;
-  read.omap_get_keys2("", LONG_MAX, &keys, nullptr, &err);
-  ASSERT_EQ(0, err);
-
-  std::map<std::string,bufferlist> vals;
-  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  ASSERT_EQ(0, err);
-
-  ASSERT_TRUE(AssertOperateWithSplitOp(1, "foo", &read, &bl));
-  ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
