@@ -402,7 +402,11 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + ['update-config', '--watch']
+        return super().args() + [
+            'update-config',
+            '--watch',
+            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
+        ]
 
 
 class SMBMetricsContainer(ContainerCommon):
