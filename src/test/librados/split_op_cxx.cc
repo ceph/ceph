@@ -58,9 +58,9 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
 
-//   int err = 0;
-//   bufferlist bl_read;
-//   ObjectReadOperation read;
+  int err = 0;
+  bufferlist bl_read;
+  ObjectReadOperation read;
 
   // OMAP GET VALS TESTING
 
