@@ -265,6 +265,10 @@ cdef nogil:
         pass
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2]):
         pass
+    int ceph_utimensat(ceph_mount_info* cmount, int fd, const char* relpath,
+                       timespec* times, int flags):
+        pass
+
     int ceph_get_file_replication(ceph_mount_info *cmount, int fh):
         pass
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path):
