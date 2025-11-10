@@ -44,7 +44,7 @@ NVMeofGwMonitorClient::NVMeofGwMonitorClient(int argc, const char **argv) :
   last_map_time(std::chrono::steady_clock::now()),
   reset_timestamp(std::chrono::steady_clock::now()),
   start_time(last_map_time),
-  cluster_features(0),
+  cluster_beacon_diff_included(0),
   poolctx(),
   monc{g_ceph_context, poolctx},
   client_messenger(Messenger::create(g_ceph_context, "async", entity_name_t::CLIENT(-1), "client", getpid())),
@@ -256,24 +256,21 @@ void NVMeofGwMonitorClient::send_beacon()
     " osdmap_epoch " << osdmap_epoch << " gwmap_epoch " << gwmap_epoch << dendl;
 
   // Check if NVMEOF_BEACON_DIFF feature is supported by the cluster
-  bool include_diff = HAVE_FEATURE(cluster_features, NVMEOF_BEACON_DIFF);
-
-  dout(10) << fmt::format("Cluster features: 0x{:x}, NVMEOF_BEACON_DIFF supported: {}",
-                          cluster_features, include_diff ? "yes" : "no") << dendl;
+  dout(10) << fmt::format("NVMEOF_BEACON_DIFF supported: {}",  cluster_beacon_diff_included ? "yes" : "no") << dendl;
 
   // Send beacon with appropriate version based on cluster features
   auto m = ceph::make_message<MNVMeofGwBeacon>(
       name,
       pool,
       group,
-      include_diff ? subs : current_subsystems,
+      cluster_beacon_diff_included ? subs : current_subsystems,
       gw_availability,
       osdmap_epoch,
       gwmap_epoch,
       beacon_sequence,
-      include_diff  // Pass the feature flag directly to constructor
+      cluster_beacon_diff_included  // Pass the feature flag directly to constructor
   );
-  dout(10) << "sending beacon with diff support: " << (include_diff ? "enabled" : "disabled") << dendl;
+  dout(10) << "sending beacon with diff support: " << (cluster_beacon_diff_included ? "enabled" : "disabled") << dendl;
   
   monc.send_mon_message(std::move(m));
   ++beacon_sequence;
@@ -556,11 +553,8 @@ Dispatcher::dispatch_result_t NVMeofGwMonitorClient::ms_dispatch2(const ref_t<Me
 
   // print connection features for all incoming messages and update cluster features
   if (m->get_connection()) {
-    //uint64_t features = m->get_connection()->get_features();
-    // Update cluster features with the union of all seen features
-    // This ensures we track the highest level of features supported by the cluster
-    cluster_features = monc.get_monmap_required_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF);
-    dout(10) << fmt::format("Updated cluster features: 0x{:x}", cluster_features) << dendl;
+    cluster_beacon_diff_included = monc.get_monmap_required_features().contains_all(ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF);
+    dout(10) << fmt::format("Updated cluster features: 0x{:x}", cluster_beacon_diff_included) << dendl;
   }
 
   if (m->get_type() == MSG_MNVMEOF_GW_MAP) {
