@@ -112,6 +112,7 @@ namespace file::listing {
 
     int wfd, efd;
     std::thread thrd;
+    std::mutex map_mutex;  // protects wd_callback_map and wd_remove_map
     wd_callback_map_t wd_callback_map;
     wd_remove_map_t wd_remove_map;
     bool shutdown{false};
@@ -166,18 +167,28 @@ namespace file::listing {
 	  for (char* ptr = buf; ptr < buf + len;
 	       ptr += sizeof(struct inotify_event) + event->len) {
 	    event = reinterpret_cast<struct inotify_event*>(ptr);
-	    const auto& it = wd_callback_map.find(event->wd);
-	    //std::cout << fmt::format("event! {}", event->name) << std::endl;
-	    if (it == wd_callback_map.end()) [[unlikely]] {
-	      /* non-destructive race, it happens */
-	      continue;
+
+	    // Copy watch record data while holding the lock to avoid use-after-free
+	    std::string watch_name;
+	    void* watch_opaque;
+	    {
+	      std::lock_guard lock(map_mutex);
+	      const auto& it = wd_callback_map.find(event->wd);
+	      //std::cout << fmt::format("event! {}", event->name) << std::endl;
+	      if (it == wd_callback_map.end()) [[unlikely]] {
+		/* non-destructive race, it happens */
+		continue;
+	      }
+	      const auto& wr = it->second;
+	      watch_name = wr.name;
+	      watch_opaque = wr.opaque;
 	    }
-	    const auto& wr = it->second;
+
 	    if (event->mask & IN_Q_OVERFLOW) [[unlikely]] {
 	      /* cache blown, invalidate */
 	      evec.clear();
 	      evec.emplace_back(Notifiable::Event(Notifiable::EventType::INVALIDATE, std::nullopt));
-	      n->notify(wr.name, wr.opaque, evec);
+	      n->notify(watch_name, watch_opaque, evec);
 	      goto restart;
 	    } else {
 	      if ((event->mask & IN_CREATE) ||
@@ -191,7 +202,7 @@ namespace file::listing {
 	      }
 	    } /* !overflow */
 	    if (evec.size() > 0) {
-	      n->notify(wr.name, wr.opaque, evec);
+	      n->notify(watch_name, watch_opaque, evec);
 	    }
 	  } /* events */
 	} /* n > 0 */
@@ -223,6 +234,7 @@ namespace file::listing {
       if (wd == -1) {
 	std::cerr << fmt::format("{} inotify_add_watch {} failed with {}", __func__, dname, wd) << std::endl;
       } else {
+	std::lock_guard lock(map_mutex);
 	wd_callback_map.insert(wd_callback_map_t::value_type(wd, WatchRecord(wd, dname, opaque)));
 	wd_remove_map.insert(wd_remove_map_t::value_type(dname, wd));
       }
@@ -231,6 +243,7 @@ namespace file::listing {
 
     virtual int remove_watch(const std::string& dname) override {
       int r{0};
+      std::lock_guard lock(map_mutex);
       const auto& elt = wd_remove_map.find(dname);
       if (elt != wd_remove_map.end()) {
 	auto& wd = elt->second;
