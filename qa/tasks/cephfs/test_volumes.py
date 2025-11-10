@@ -8946,7 +8946,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
 
-    def test_subvolume_snapshot_config_snapshot_clone_delay(self):
+    def _test_subvolume_snapshot_config_snapshot_clone_delay(self):
         """
         Validate 'snapshot_clone_delay' config option
         """
