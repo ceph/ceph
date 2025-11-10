@@ -51,6 +51,7 @@ _SCC = '/usr/bin/samba-container'
 _NODES_SUBCMD = [_SCC, 'ctdb-list-nodes']
 _MUTEX_SUBCMD = [_SCC, 'ctdb-rados-mutex']  # requires rados uri
 _ETC_SAMBA_TLS = '/etc/samba/tls'
+_WANT_SIGNAL_DIR = '/run/want_update_signal'
 
 
 class Features(enum.Enum):
@@ -456,6 +457,7 @@ class KeyBridgeContainer(SambaContainerCommon):
     def args(self) -> List[str]:
         args = super().args()
         assert self.cfg.keybridge, 'keybridge is not configured'
+        args.append(f'--pidfile={_WANT_SIGNAL_DIR}/keybridge.pid')
         args.append('keybridge')
         if self.cfg.keybridge.tls_files:
             cert_path = self.cfg.keybridge.tls_files.cert_interior_path
