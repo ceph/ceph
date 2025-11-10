@@ -1387,12 +1387,13 @@ def ceph_clients(ctx, config):
 
 @contextlib.contextmanager
 def watchdog_setup(ctx, config):
-    if 'watchdog_setup' in config: 
-        ctx.ceph[config['cluster']].thrashers = []
-        ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
+    ctx.ceph[config['cluster']].thrashers = []
+    ctx.ceph[config['cluster']].watched_processes = []
+    if 'watchdog_setup' in config:
+        ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config)
         ctx.ceph[config['cluster']].watchdog.start()
     else:
-        ctx.ceph[config['cluster']].watchdog = None 
+        ctx.ceph[config['cluster']].watchdog = None
     yield
 
 @contextlib.contextmanager
