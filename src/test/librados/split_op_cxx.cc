@@ -316,11 +316,11 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
     EXPECT_TRUE(success_check);
     ceph::messaging::osd::OSDMapReply reply_check;
     reply_check.decode_json(&p_check);
-    std::vector<int> current_up_osds = reply_check.up;
-    if (!current_up_osds.empty() && current_up_osds[0] == new_primary) {
+    std::vector<int> current_acting_osds = reply_check.acting;
+    if (!current_acting_osds.empty() && current_acting_osds[0] == new_primary) {
       std::stringstream out_vec;
-      std::copy(current_up_osds.begin(), current_up_osds.end(), std::ostream_iterator<int>(out_vec, " "));
-      std::cout << "New up osds: " << out_vec.str().c_str() << std::endl;
+      std::copy(current_acting_osds.begin(), current_acting_osds.end(), std::ostream_iterator<int>(out_vec, " "));
+      std::cout << "New acting osds: " << out_vec.str().c_str() << std::endl;
       upmap_in_effect = true;
     } else {
       std::this_thread::sleep_for(1s);
@@ -390,11 +390,11 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
     EXPECT_TRUE(success_check_reset);
     ceph::messaging::osd::OSDMapReply reply_check_reset;
     reply_check_reset.decode_json(&p_check_reset);
-    std::vector<int> current_up_osds = reply_check_reset.up;
-    if (!current_up_osds.empty() && current_up_osds[0] == prev_primary) {
+    std::vector<int> current_acting_osds = reply_check_reset.acting;
+    if (!current_acting_osds.empty() && current_acting_osds[0] == prev_primary) {
       std::stringstream out_vec;
-      std::copy(current_up_osds.begin(), current_up_osds.end(), std::ostream_iterator<int>(out_vec, " "));
-      std::cout << "Final up osds after cleanup: " << out_vec.str().c_str() << std::endl;
+      std::copy(current_acting_osds.begin(), current_acting_osds.end(), std::ostream_iterator<int>(out_vec, " "));
+      std::cout << "Final acting osds after cleanup: " << out_vec.str().c_str() << std::endl;
       reset_in_effect = true;
     } else {
       std::this_thread::sleep_for(1s);
