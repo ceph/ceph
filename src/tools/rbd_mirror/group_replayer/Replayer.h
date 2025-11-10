@@ -62,7 +62,6 @@ public:
   }
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
-  void finish_shut_down();
 
   bool is_replaying() const {
     std::unique_lock locker{m_lock};
@@ -121,7 +120,6 @@ private:
   int m_error_code = 0;
   std::string m_error_description;
 
-  bool m_stop_requested = false;
   bool m_retry_validate_snap = false;
 
   utime_t m_snapshot_start;
@@ -235,6 +233,8 @@ private:
   void set_image_replayer_limits(const std::string &image_id,
                                  const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
+  void wait_for_in_flight_ops();
+  void handle_wait_for_in_flight_ops(int r);
 };
 
 } // namespace group_replayer
