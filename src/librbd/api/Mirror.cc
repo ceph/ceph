@@ -2878,6 +2878,24 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return -EINVAL;
   }
 
+  // removing pending resync request
+  std::string group_header_oid = librbd::util::group_header_name(group_id);
+  std::string value;
+  r = librbd::cls_client::metadata_get(&group_ioctx, group_header_oid,
+                                       RBD_GROUP_RESYNC, &value);
+  if (r < 0) {
+    ldout(cct, 20) << "failed reading metadata: " << RBD_GROUP_RESYNC << dendl;
+  } else if (r == 0) {
+    ldout(cct, 20) << "found resync group request, clearing it"
+                  << dendl;
+    r = cls_client::metadata_remove(&group_ioctx, group_header_oid,
+                                    RBD_GROUP_RESYNC);
+    if (r < 0) {
+      lderr(cct) << "failed removing metadata: " << RBD_GROUP_RESYNC << " : "
+                 << cpp_strerror(r) << dendl;
+    }
+  }
+
   std::vector<I *> image_ctxs;
   r = open_group_images(group_ioctx, group_id, &image_ctxs);
   if (r < 0) {
@@ -2932,7 +2950,6 @@ int Mirror<I>::group_disable(IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  std::string group_header_oid = librbd::util::group_header_name(group_id);
   for (auto &snap : snaps) {
     auto ns = std::get_if<cls::rbd::GroupSnapshotNamespaceMirror>(
         &snap.snapshot_namespace);
