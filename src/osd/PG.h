@@ -1228,7 +1228,15 @@ protected:
   [[nodiscard]] bool ops_blocked_by_scrub() const;
   [[nodiscard]] Scrub::scrub_prio_t is_scrub_blocking_ops() const;
 
-  void _scan_rollback_obs(const std::vector<ghobject_t> &rollback_obs);
+
+  /**
+   * Scan the given list of rollback objects for obsolete entries.
+   * If found - the obsolete entries are removed.
+   *
+   * @return 'true' if a transaction was issued.
+   */
+  bool _scan_rollback_obs(const std::vector<ghobject_t> &rollback_obs);
+
   /**
    * returns true if [begin, end) is good to scrub at this time
    * a false return value obliges the implementer to requeue scrub when the

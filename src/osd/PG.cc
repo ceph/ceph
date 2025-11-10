@@ -1743,7 +1743,7 @@ void PG::unreserve_recovery_space() {
   local_num_bytes.store(0);
 }
 
-void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
+bool PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
 {
   ObjectStore::Transaction t;
   eversion_t trimmed_to = recovery_state.get_last_rollback_info_trimmed_to_applied();
@@ -1764,7 +1764,9 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
     derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
 	 << dendl;
     osd->store->queue_transaction(ch, std::move(t), NULL);
+    return true; // a transaction was queued
   }
+  return false;
 }
 
 
