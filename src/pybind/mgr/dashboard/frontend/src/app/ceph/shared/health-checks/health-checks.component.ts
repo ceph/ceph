@@ -12,6 +12,9 @@ export class HealthChecksComponent {
   @Input()
   healthData: any;
 
+  @Input()
+  legacyHealthChecks = false;
+
   icons = Icons;
 
   permissions: Permissions;
