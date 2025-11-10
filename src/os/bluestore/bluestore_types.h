@@ -1015,6 +1015,8 @@ struct bluestore_onode_t {
   struct shard_info {
     uint32_t offset = 0;  ///< logical offset for start of shard
     uint32_t bytes = 0;   ///< encoded bytes
+    shard_info() {}
+    shard_info(uint32_t o, uint32_t b) : offset(o), bytes(b) {}
     DENC(shard_info, v, p) {
       denc_varint(v.offset, p);
       denc_varint(v.bytes, p);
