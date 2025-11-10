@@ -7,6 +7,8 @@
 #include "include/rados/librados.hpp"
 #include "common/json/OSDStructures.h"
 
+using namespace std::literals::string_view_literals;
+
 class RadosTestPPNS : public ::testing::Test {
 public:
   RadosTestPPNS(bool c=false) : cluster(s_cluster), cleanup(c) {}
@@ -161,7 +163,6 @@ protected:
     int expected_err
   );
   void print_osd_map(std::string message, std::vector<int> osd_vec);
-  static librados::Rados s_cluster;
   static std::string pool_name_default;
   static std::string pool_name_fast;
 

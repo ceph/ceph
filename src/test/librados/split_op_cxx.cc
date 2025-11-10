@@ -197,17 +197,16 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   const std::string omap_key_1 = "key_a";
   const std::string omap_key_2 = "key_b";
   const std::string omap_value = "val_c";
-  const std::string xattr_key = "xattr_key_1";
-  const std::string xattr_value = "xattr_value_2";
   encode(omap_value, omap_val_bl);
-  encode(xattr_value, xattr_val_bl);
   std::map<std::string, bufferlist> omap_map = {
     {omap_key_1, omap_val_bl},
     {omap_key_2, omap_val_bl}
   };
+  const std::string xattr_key = "xattr_key_1";
+  const std::string xattr_value = "xattr_value_2";
+  encode(xattr_value, xattr_val_bl);
   bl_write.append("ceph");
   
-
   // 1a. Write data to omap
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
@@ -218,51 +217,22 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   write1.setxattr(xattr_key.c_str(), xattr_val_bl);
   EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &write1));
 
-
   // 2. Set osd_debug_reject_backfill_probability to 1.0
   CephContext* cct = static_cast<CephContext*>(cluster.cct());
   cct->_conf->osd_debug_reject_backfill_probability = 1.0;
 
-
-  // 3. Read from xattr before switching primary osd
-  int err = 0;
-  ObjectReadOperation read;
-  bufferlist attr_read_bl;
-  read.getxattr(xattr_key.c_str(), &attr_read_bl, &err);
-  std::map<string, bufferlist> pattrs{ {"_", {}}, {xattr_key, {}}};
-  read.getxattrs(&pattrs, &err);
-  read.cmpxattr(xattr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, xattr_val_bl);
-  int ret = ioctx.operate("error_inject_oid", &read, nullptr);
-  EXPECT_TRUE(ret == 1);
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(1U, pattrs.size());
-
+  // 3. Read xattrs before switching primary osd
+  read_xattrs("error_inject_oid", xattr_key, xattr_value, 1, 1, 0);
 
   // 4. Find up osds
-  bufferlist map_inbl, map_outbl;
-  auto map_formatter = std::make_unique<JSONFormatter>(false);
-  ceph::messaging::osd::OSDMapRequest osdMapRequest{pool_name, "error_inject_oid", nspace};
-  encode_json("OSDMapRequest", osdMapRequest, map_formatter.get());
-
-  std::ostringstream map_oss;
-  map_formatter.get()->flush(map_oss);
-  int rc = cluster.mon_command(map_oss.str(), map_inbl, &map_outbl, nullptr);
-  EXPECT_TRUE(rc == 0);
-
-  JSONParser p;
-  bool success = p.parse(map_outbl.c_str(), map_outbl.length());
-  EXPECT_TRUE(success);
   ceph::messaging::osd::OSDMapReply reply;
-  reply.decode_json(&p);
+  int res = request_osd_map(pool_name, "error_inject_oid", nspace, &reply);
+  EXPECT_TRUE(res == 0);
   std::vector<int> prev_up_osds = reply.up;
   std::string pgid = reply.pgid;
-
-  std::stringstream prev_out_vec;
-  std::copy(prev_up_osds.begin(), prev_up_osds.end(), std::ostream_iterator<int>(prev_out_vec, " "));
-  std::cout << "Previous up osds: " << prev_out_vec.str().c_str() << std::endl;
+  print_osd_map("Previous up osds: ", prev_up_osds);
   
-
-  // 5. Switch primary osd
+  // 5. Find unused osd to be new primary
   int prev_primary = prev_up_osds[0];
   int new_primary = 0;
   while (true) {
@@ -274,133 +244,34 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   }
   std::vector<int> new_up_osds = prev_up_osds;
   new_up_osds[0] = new_primary;
-
   std::cout << "Previous primary osd: " << prev_primary << std::endl;
   std::cout << "New primary osd: " << new_primary << std::endl;
-  std::stringstream new_out_vec;
-  std::copy(new_up_osds.begin(), new_up_osds.end(), std::ostream_iterator<int>(new_out_vec, " "));
-  std::cout << "Desired up osds: " << new_out_vec.str().c_str() << std::endl;
-
+  print_osd_map("Desired up osds: ", new_up_osds);
 
   // 6. Set new up map
-  bufferlist upmap_inbl, upmap_outbl;
-  std::ostringstream upmap_oss;
-  upmap_oss << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << pgid << "\", \"id\": [";
-  for (size_t i = 0; i < new_up_osds.size(); i++) {
-    upmap_oss << new_up_osds[i];
-    if (i != new_up_osds.size() - 1) {
-      upmap_oss << ", ";
-    }
-  }
-  upmap_oss << "]}";
-  rc = cluster.mon_command(upmap_oss.str(), upmap_inbl, &upmap_outbl, nullptr);
+  int rc = set_osd_upmap(pgid, new_up_osds);
   EXPECT_TRUE(rc == 0);
 
-
-  // 7. Wait for new upmap to show up
-  bool upmap_in_effect = false;
-  auto start_time = std::chrono::steady_clock::now();
-  auto timeout = std::chrono::seconds(30);
-  while (!upmap_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
-    bufferlist check_inbl, check_outbl;
-    auto check_formatter = std::make_unique<JSONFormatter>(false);
-    ceph::messaging::osd::OSDMapRequest checkRequest{pool_name, "error_inject_oid", nspace};
-    encode_json("OSDMapRequest", checkRequest, check_formatter.get());
-    std::ostringstream check_oss;
-    check_formatter.get()->flush(check_oss);
-    int rc_check = cluster.mon_command(check_oss.str(), check_inbl, &check_outbl, nullptr);
-    EXPECT_TRUE(rc_check == 0);
-    
-    JSONParser p_check;
-    bool success_check = p_check.parse(check_outbl.c_str(), check_outbl.length());
-    EXPECT_TRUE(success_check);
-    ceph::messaging::osd::OSDMapReply reply_check;
-    reply_check.decode_json(&p_check);
-    std::vector<int> current_acting_osds = reply_check.acting;
-    if (!current_acting_osds.empty() && current_acting_osds[0] == new_primary) {
-      std::stringstream out_vec;
-      std::copy(current_acting_osds.begin(), current_acting_osds.end(), std::ostream_iterator<int>(out_vec, " "));
-      std::cout << "New acting osds: " << out_vec.str().c_str() << std::endl;
-      upmap_in_effect = true;
-    } else {
-      std::this_thread::sleep_for(1s);
-    }
-  }
-  EXPECT_TRUE(upmap_in_effect);
+  // 7. Wait for new upmap to appear as acting set of osds
+  int res2 = wait_for_upmap(pool_name, "error_inject_oid", nspace, new_primary, 30s);
+  EXPECT_TRUE(res2 == 0);
   
+  // 8a. Read omap
+  read_omap("error_inject_oid", omap_key_1, omap_value, 2, 0);
 
-  // 8a. Read from omap
-  std::map<std::string,bufferlist> vals{ {"_", {}} };
-  read.omap_get_vals2("", LONG_MAX, &vals, nullptr, &err);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &read, nullptr));
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(2U, vals.size());
-  EXPECT_NE(vals.find(omap_key_1), vals.end());
-  bufferlist retrieved_val_bl = vals[omap_key_1];
-  std::string retrieved_value;
-  decode(retrieved_value, retrieved_val_bl);
-  EXPECT_EQ(omap_value, retrieved_value);
-
-  // 8b. Read from xattr after taking primary osd out
-  bufferlist attr_read_bl_after;
-  read.getxattr(xattr_key.c_str(), &attr_read_bl_after, &err);
-  std::map<string, bufferlist> pattrs_after{ {"_", {}}, {xattr_key, {}}};
-  read.getxattrs(&pattrs_after, &err);
-  read.cmpxattr(xattr_key.c_str(), CEPH_OSD_CMPXATTR_OP_EQ, xattr_val_bl);
-  ret = ioctx.operate("error_inject_oid", &read, nullptr);
-  EXPECT_TRUE(ret == 1);
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(1U, pattrs_after.size());
-
+  // 8b. Read xattrs after switching primary osd
+  read_xattrs("error_inject_oid", xattr_key, xattr_value, 1, 1, 0);
 
   // 9. Set osd_debug_reject_backfill_probability to 0.0
   cct->_conf->osd_debug_reject_backfill_probability = 0.0;
 
-
   // 10. Reset up map to previous values
-  bufferlist resetmap_inbl, resetmap_outbl;
-  std::ostringstream resetmap_oss;
-  resetmap_oss << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << pgid << "\", \"id\": [";
-  for (size_t i = 0; i < prev_up_osds.size(); i++) {
-    resetmap_oss << prev_up_osds[i];
-    if (i != prev_up_osds.size() - 1) {
-      resetmap_oss << ", ";
-    }
-  }
-  resetmap_oss << "]}";
-  rc = cluster.mon_command(resetmap_oss.str(), resetmap_inbl, &resetmap_outbl, nullptr);
-  EXPECT_TRUE(rc == 0);
+  int rc2 = set_osd_upmap(pgid, prev_up_osds);
+  EXPECT_TRUE(rc2 == 0);
 
-
-  // 11. Wait for prev upmap to show up
-  bool reset_in_effect = false;
-  start_time = std::chrono::steady_clock::now();
-  while (!reset_in_effect && (std::chrono::steady_clock::now() - start_time < timeout)) {
-    bufferlist check_reset_inbl, check_reset_outbl;
-    std::ostringstream check_reset_oss;
-    auto check_reset_formatter = std::make_unique<JSONFormatter>(false);
-    ceph::messaging::osd::OSDMapRequest checkResetRequest{pool_name, "error_inject_oid", nspace};
-    encode_json("OSDMapRequest", checkResetRequest, check_reset_formatter.get());
-    check_reset_formatter.get()->flush(check_reset_oss);
-    int rc_reset = cluster.mon_command(check_reset_oss.str(), check_reset_inbl, &check_reset_outbl, nullptr);
-    EXPECT_TRUE(rc_reset == 0);
-    
-    JSONParser p_check_reset;
-    bool success_check_reset = p_check_reset.parse(check_reset_outbl.c_str(), check_reset_outbl.length());
-    EXPECT_TRUE(success_check_reset);
-    ceph::messaging::osd::OSDMapReply reply_check_reset;
-    reply_check_reset.decode_json(&p_check_reset);
-    std::vector<int> current_acting_osds = reply_check_reset.acting;
-    if (!current_acting_osds.empty() && current_acting_osds[0] == prev_primary) {
-      std::stringstream out_vec;
-      std::copy(current_acting_osds.begin(), current_acting_osds.end(), std::ostream_iterator<int>(out_vec, " "));
-      std::cout << "Final acting osds after cleanup: " << out_vec.str().c_str() << std::endl;
-      reset_in_effect = true;
-    } else {
-      std::this_thread::sleep_for(1s);
-    }
-  }
-  EXPECT_TRUE(reset_in_effect);
+  // 11. Wait for prev upmap to appear as acting set of osds
+  int res3 = wait_for_upmap(pool_name, "error_inject_oid", nspace, prev_primary, 30s);
+  EXPECT_TRUE(res3 == 0);
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
