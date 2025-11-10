@@ -19,7 +19,8 @@ add_library(radostest-cxx STATIC
   $<TARGET_OBJECTS:radostest_shared>)
 target_link_libraries(radostest-cxx PUBLIC
   GTest::GTest
-  ceph-common)
+  ceph-common
+  json_structures)
 
 add_executable(ceph_test_rados_api_cmd
   cmd.cc)

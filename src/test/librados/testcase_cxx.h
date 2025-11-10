@@ -5,6 +5,7 @@
 
 #include "gtest/gtest.h"
 #include "include/rados/librados.hpp"
+#include "common/json/OSDStructures.h"
 
 class RadosTestPPNS : public ::testing::Test {
 public:
@@ -127,6 +128,39 @@ protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
   void set_allow_ec_overwrites();
+  int request_osd_map(
+    std::string pool_name, 
+    std::string oid, 
+    std::string nspace, 
+    ceph::messaging::osd::OSDMapReply* reply
+  );
+  int set_osd_upmap(
+    std::string pgid,
+    std::vector<int> up_osds
+  );
+  int wait_for_upmap(
+    std::string pool_name,
+    std::string oid,
+    std::string nspace,
+    int desired_primary,
+    std::chrono::seconds timeout
+  );
+  void read_xattrs(
+    std::string oid,
+    std::string xattr_key,
+    std::string xattr_value,
+    int expected_size,
+    int expected_ret,
+    int expected_err
+  );
+  void read_omap(
+    std::string oid,
+    std::string omap_key,
+    std::string omap_value,
+    int expected_size,
+    int expected_err
+  );
+  void print_osd_map(std::string message, std::vector<int> osd_vec);
   static librados::Rados s_cluster;
   static std::string pool_name_default;
   static std::string pool_name_fast;
