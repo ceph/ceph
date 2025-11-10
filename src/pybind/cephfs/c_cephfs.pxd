@@ -170,12 +170,16 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)
+
     int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf)
     int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf)
     int ceph_utimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_lutimes(ceph_mount_info *cmount, const char *path, timeval times[2])
     int ceph_futimes(ceph_mount_info *cmount, int fd, timeval times[2])
     int ceph_futimens(ceph_mount_info *cmount, int fd, timespec times[2])
+    int ceph_utimensat(ceph_mount_info* cmount, int fd, const char* relpath,
+                       timespec* times, int flags)
+
     int ceph_get_file_replication(ceph_mount_info *cmount, int fh)
     int ceph_get_path_replication(ceph_mount_info *cmount, const char *path)
     int ceph_get_pool_id(ceph_mount_info *cmount, const char *pool_name)

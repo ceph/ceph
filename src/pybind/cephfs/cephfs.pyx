@@ -2814,6 +2814,43 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in futimens")
 
+    def utimensat(self, fd, relpath, times, flags):
+        """
+        Set access and modification time for a file pointer by descriptor
+
+        :param fd: file descriptor of the open file
+        :param times: if times is not None, it must be a tuple (atime, mtime)
+        """
+        self.require_state("mounted")
+
+        if not isinstance(fd, int):
+            raise TypeError('"fd" must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('"flags" must be an int')
+
+        if not isinstance(times, tuple):
+            raise TypeError('times must be a tuple')
+        if not isinstance(times[0], (int, float)):
+            raise TypeError('atime must be an int or a float')
+        if not isinstance(times[1], (int, float)):
+            raise TypeError('mtime must be an int or a float')
+
+        ac_time = float(times[0])
+        mod_time = float(times[1])
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _fd = fd
+            char* _relpath = relpath
+            timespec* _times = [to_timespec(ac_time), to_timespec(mod_time)]
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_utimensat(self.cluster, _fd, _relpath, _times, _flags)
+
+        if ret < 0:
+            raise make_ex(ret, "error in utimensat")
+
     def get_file_replication(self, fd):
         """
         Get the file replication information from an open file descriptor.
