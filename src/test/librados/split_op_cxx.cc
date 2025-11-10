@@ -30,8 +30,11 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, omap_header_bl;
   const std::string omap_key_1 = "omap_key_1_palomino";
-  const std::string omap_key_2 = "omap_key_2_chesnut";
+  const std::string omap_key_2 = "omap_key_2_chestnut";
   const std::string omap_key_3 = "omap_key_3_bay";
+  const std::string omap_key_4 = "omap_key_4_dun";
+  const std::string omap_key_5 = "omap_key_5_black";
+  const std::string omap_key_6 = "omap_key_6_grey";
   const std::string omap_value = "omap_value_1_horse";
   const std::string omap_header = "my_omap_header";
 
@@ -41,7 +44,10 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   std::map<std::string, bufferlist> omap_map = {
     {omap_key_1.c_str(), omap_val_bl},
     {omap_key_2.c_str(), omap_val_bl},
-    {omap_key_3.c_str(), omap_val_bl}
+    {omap_key_3.c_str(), omap_val_bl},
+    {omap_key_4.c_str(), omap_val_bl},
+    {omap_key_5.c_str(), omap_val_bl},
+    {omap_key_6.c_str(), omap_val_bl}
   };
 
   bl_write.append("ceph");
@@ -64,14 +70,14 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   std::map<std::string, bufferlist> returned_vals_2;
 
   read.omap_get_vals2(omap_key_1, 1, &returned_vals_1, nullptr, &err);
-  read.omap_get_vals2("omap", 3, &returned_vals_2, nullptr, &err);
+  read.omap_get_vals2("omap", 4, &returned_vals_2, nullptr, &err);
 
   ASSERT_TRUE(AssertOperateWithSplitOp(0, "my_object", &read, nullptr));
 
   ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_vals_1.size(), (unsigned)1);
-  ASSERT_EQ(returned_vals_2.size(), (unsigned)3);
+  ASSERT_EQ(returned_vals_2.size(), (unsigned)4);
 
   std::cout << "--- OMap Vals testing passed ---" << std::endl;
 
@@ -85,7 +91,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys.size(), (unsigned)3);
+  ASSERT_EQ(returned_keys.size(), (unsigned)6);
 
   std::cout << "--- OMap Keys testing passed ---" << std::endl;
 
@@ -141,7 +147,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   std::set<std::string> keys_to_remove;
   std::set<std::string> returned_keys_with_removed;
 
-  keys_to_remove.insert("omap_key_2_chesnut");
+  keys_to_remove.insert("omap_key_2_chestnut");
 
   write1.omap_rm_keys(keys_to_remove);
 
@@ -152,28 +158,9 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
 
   ASSERT_EQ(0, err);
-  ASSERT_EQ(returned_keys_with_removed.size(), (unsigned)2);
+  ASSERT_EQ(returned_keys_with_removed.size(), (unsigned)5);
 
   std::cout << "--- OMap Remove Keys testing passed ---" << std::endl;
-
-  // // OMAP REMOVE KEYS RANGE TESTING
-
-  // std::set<std::string> returned_keys_with_removed_range;
-  // std::string key_begin = "omap_key_1_palomino";
-  // std::string key_end = "omap_key_3_bay";
-
-  // write1.omap_rmkeyrange(key_begin, key_end);
-
-  // ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
-
-  // read.omap_get_keys2("", 10, &returned_keys_with_removed_range, nullptr, &err);
-
-  // ASSERT_TRUE(AssertOperateWithSplitOp(0, "my_object", &read, nullptr));
-  
-  // ASSERT_EQ(0, err);
-  // ASSERT_EQ(returned_keys_with_removed_range.size(), (unsigned)0);
-
-  // std::cout << "--- OMap Remove Key Range testing passed ---" << std::endl; 
 
   // OMAP CLEAR TESTING
 
