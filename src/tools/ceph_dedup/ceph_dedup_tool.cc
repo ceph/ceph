@@ -982,31 +982,30 @@ int make_dedup_object(const po::variables_map &opts)
       snap = true;
     }
 
-    bufferlist inbl;
     ret = rados.mon_command(
 	make_pool_str(pool_name, "fingerprint_algorithm", fp_algo),
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
     if (ret < 0) {
       std::cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
 	make_pool_str(pool_name, "dedup_tier", chunk_pool_name),
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
     if (ret < 0) {
       std::cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
 	make_pool_str(pool_name, "dedup_chunk_algorithm", "fastcdc"),
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
     if (ret < 0) {
       std::cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
 	make_pool_str(pool_name, "dedup_cdc_chunk_size", chunk_size),
-	inbl, NULL, NULL);
+	{}, NULL, NULL);
     if (ret < 0) {
       std::cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;

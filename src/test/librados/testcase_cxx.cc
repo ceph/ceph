@@ -87,19 +87,18 @@ void RadosTestParamPPNS::TearDownTestCase()
 {
   if (cache_pool_name.length()) {
     // tear down tiers
-    bufferlist inbl;
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
       "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
       "\", \"pool2\": \"" + cache_pool_name + "\", \"yes_i_really_really_mean_it\": true}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     cache_pool_name = "";
   }
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
@@ -111,24 +110,23 @@ void RadosTestParamPPNS::SetUp()
       cache_pool_name.empty()) {
     auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
     cache_pool_name = get_temp_pool_name();
-    bufferlist inbl;
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd pool create\", \"pool\": \"" + cache_pool_name +
       "\", \"pg_num\": 4}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name +
       "\", \"force_nonempty\": \"--force-nonempty\" }",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
       "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
       "\", \"mode\": \"writeback\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     cluster.wait_for_latest_osdmap();
   }
 
@@ -287,19 +285,18 @@ void RadosTestParamPP::TearDownTestCase()
 {
   if (cache_pool_name.length()) {
     // tear down tiers
-    bufferlist inbl;
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove-overlay\", \"pool\": \"" + pool_name +
       "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd tier remove\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name + "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, s_cluster.mon_command(
       "{\"prefix\": \"osd pool delete\", \"pool\": \"" + cache_pool_name +
       "\", \"pool2\": \"" + cache_pool_name + "\", \"yes_i_really_really_mean_it\": true}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     cache_pool_name = "";
   }
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, s_cluster));
@@ -311,24 +308,23 @@ void RadosTestParamPP::SetUp()
       cache_pool_name.empty()) {
     auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
     cache_pool_name = get_temp_pool_name();
-    bufferlist inbl;
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd pool create\", \"pool\": \"" + cache_pool_name +
       "\", \"pg_num\": 4}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier add\", \"pool\": \"" + pool_name +
       "\", \"tierpool\": \"" + cache_pool_name +
       "\", \"force_nonempty\": \"--force-nonempty\" }",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier set-overlay\", \"pool\": \"" + pool_name +
       "\", \"overlaypool\": \"" + cache_pool_name + "\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" + cache_pool_name +
       "\", \"mode\": \"writeback\"}",
-      inbl, NULL, NULL));
+      {}, NULL, NULL));
     cluster.wait_for_latest_osdmap();
   }
 

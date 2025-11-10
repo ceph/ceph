@@ -1579,7 +1579,7 @@ void ActivePyModules::set_device_wear_level(const std::string& devid,
     "}";
 
   Command set_cmd;
-  set_cmd.run(&monc, cmd, json);
+  set_cmd.run(&monc, std::move(cmd), std::move(json));
   set_cmd.wait();
 }
 

@@ -633,10 +633,10 @@ public:
     osd->send_message_osd_cluster(m, con);
   }
   void start_mon_command(
-    const std::vector<std::string>& cmd, const bufferlist& inbl,
+    std::vector<std::string>&& cmd, bufferlist&& inbl,
     bufferlist *outbl, std::string *outs,
     Context *onfinish) override {
-    osd->monc->start_mon_command(cmd, inbl, outbl, outs, onfinish);
+    osd->monc->start_mon_command(std::move(cmd), std::move(inbl), outbl, outs, onfinish);
   }
   ConnectionRef get_con_osd_cluster(int peer, epoch_t from_epoch) override;
   entity_name_t get_cluster_msgr_name() override {

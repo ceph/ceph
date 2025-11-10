@@ -626,11 +626,11 @@ void RADOS::execute_(Object o, IOContext ioc, WriteOp op,
   ceph_assert(r == 0);
 }
 
-void RADOS::mon_command_(std::vector<std::string> command,
-			 bufferlist bl,
+void RADOS::mon_command_(std::vector<std::string>&& command,
+			 bufferlist&& bl,
 			 std::string* outs, bufferlist* outbl,
 			 Op::Completion c) {
-  auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
+  auto r = impl->test_rados_client->mon_command(std::move(command), std::move(bl), outbl, outs);
   asio::post(get_executor(),
 	     asio::append(std::move(c),
 			  (r < 0 ? bs::error_code(-r, osd_category()) :

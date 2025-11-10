@@ -36,9 +36,9 @@ public:
         &outbl, &outs, &cond);
   }
 
-  void run(MonClient *monc, const std::string &command, const ceph::buffer::list &inbl)
+  void run(MonClient *monc, const std::string &command, ceph::buffer::list &&inbl)
   {
-    monc->start_mon_command({command}, inbl,
+    monc->start_mon_command({command}, std::move(inbl),
         &outbl, &outs, &cond);
   }
 

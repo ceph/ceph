@@ -1159,13 +1159,11 @@ int Rados::ioctx_create2(int64_t pool_id, IoCtx &io)
   return 0;
 }
 
-int Rados::mon_command(std::string cmd, const bufferlist& inbl,
+int Rados::mon_command(std::string&& cmd, bufferlist&& inbl,
                        bufferlist *outbl, std::string *outs) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
 
-  std::vector<std::string> cmds;
-  cmds.push_back(cmd);
-  return impl->mon_command(cmds, inbl, outbl, outs);
+  return impl->mon_command({std::move(cmd)}, std::move(inbl), outbl, outs);
 }
 
 int Rados::service_daemon_register(const std::string& service,

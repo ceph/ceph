@@ -4836,26 +4836,22 @@ int OSD::shutdown()
   return r;
 }
 
-int OSD::mon_cmd_maybe_osd_create(string &cmd)
+int OSD::mon_cmd_maybe_osd_create(string &&cmd)
 {
   bool created = false;
   while (true) {
     dout(10) << __func__ << " cmd: " << cmd << dendl;
-    vector<string> vcmd{cmd};
-    bufferlist inbl;
     C_SaferCond w;
     string outs;
-    monc->start_mon_command(vcmd, inbl, NULL, &outs, &w);
+    monc->start_mon_command({std::move(cmd)}, {}, NULL, &outs, &w);
     int r = w.wait();
     if (r < 0) {
       if (r == -ENOENT && !created) {
 	string newcmd = "{\"prefix\": \"osd create\", \"id\": " + stringify(whoami)
 	  + ", \"uuid\": \"" + stringify(superblock.osd_fsid) + "\"}";
-	vector<string> vnewcmd{newcmd};
-	bufferlist inbl;
 	C_SaferCond w;
 	string outs;
-	monc->start_mon_command(vnewcmd, inbl, NULL, &outs, &w);
+	monc->start_mon_command({std::move(newcmd)}, {}, NULL, &outs, &w);
 	int r = w.wait();
 	if (r < 0) {
 	  derr << __func__ << " fail: osd does not exist and created failed: "
@@ -4905,7 +4901,7 @@ int OSD::update_crush_location()
     string("\"id\": ") + stringify(whoami) + ", " +
     string("\"weight\":") + weight + ", " +
     string("\"args\": [") + stringify(cct->crush_location) + "]}";
-  return mon_cmd_maybe_osd_create(cmd);
+  return mon_cmd_maybe_osd_create(std::move(cmd));
 }
 
 int OSD::update_crush_device_class()
@@ -4931,7 +4927,7 @@ int OSD::update_crush_device_class()
     string("\"class\": \"") + device_class + string("\", ") +
     string("\"ids\": [\"") + stringify(whoami) + string("\"]}");
 
-  r = mon_cmd_maybe_osd_create(cmd);
+  r = mon_cmd_maybe_osd_create(std::move(cmd));
   if (r == -EBUSY) {
     // good, already bound to a device-class
     return 0;
@@ -10388,11 +10384,10 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
                 "\"who\": \"" + osd + "\", "
                 "\"name\": \"" + key + "\""
               "}";
-            vector<std::string> vcmd{cmd};
 
             dout(1) << __func__ << " Removing Key: " << key
                     << " for " << osd << " from Mon db" << dendl;
-            monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+            monc->start_mon_command({std::move(cmd)}, {}, nullptr, nullptr, nullptr);
           }
 
           // Raise a cluster warning indicating that the changes did not
@@ -10502,11 +10497,10 @@ void OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
       "\"name\": \"" + key + "\", "
       "\"value\": \"" + val + "\""
     "}";
-  vector<std::string> vcmd{cmd};
 
   auto on_finish = new MonCmdSetConfigOnFinish(this, cct, key, val);
   dout(10) << __func__ << " Set " << key << " = " << val << dendl;
-  monc->start_mon_command(vcmd, {}, nullptr, nullptr, on_finish);
+  monc->start_mon_command({std::move(cmd)}, {}, nullptr, nullptr, on_finish);
 }
 
 op_queue_type_t OSD::osd_op_queue_type() const

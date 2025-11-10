@@ -693,7 +693,7 @@ void MDSRank::set_mdsmap_multimds_snaps_allowed()
   dout(0) << __func__ << ": sending mon command: " << cmd[0] << dendl;
 
   C_MDS_MonCommand *fin = new C_MDS_MonCommand(this, cmd[0]);
-  monc->start_mon_command(cmd, {}, nullptr, &fin->outs, new C_IO_Wrapper(this, fin));
+  monc->start_mon_command(std::move(cmd), {}, nullptr, &fin->outs, new C_IO_Wrapper(this, fin));
 
   already_sent = true;
 }
@@ -3989,7 +3989,7 @@ bool MDSRank::evict_client(int64_t session_id,
     }
   };
 
-  auto apply_blocklist = [this, cmd](std::function<void ()> fn){
+  auto apply_blocklist = [this, &cmd](std::function<void ()> fn){
     ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
     Context *on_blocklist_done = new LambdaContext([this, fn](int r) {
@@ -4009,7 +4009,7 @@ bool MDSRank::evict_client(int64_t session_id,
     });
 
     dout(4) << "Sending mon blocklist command: " << cmd[0] << dendl;
-    monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blocklist_done);
+    monc->start_mon_command(std::move(cmd), {}, nullptr, nullptr, on_blocklist_done);
   };
 
   if (wait) {

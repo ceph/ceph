@@ -120,10 +120,9 @@ int query_iostats(librados::Rados& rados, const std::string& pool_spec,
       "format": "json"
     }")";
 
-  bufferlist in_bl;
   bufferlist out_bl;
   std::string outs;
-  int r = rados.mgr_command(cmd, in_bl, &out_bl, &outs);
+  int r = rados.mgr_command(std::move(cmd), {}, &out_bl, &outs);
   if (r == -EOPNOTSUPP) {
     err_os << "rbd: 'rbd_support' mgr module is not enabled."
            << std::endl << std::endl

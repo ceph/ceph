@@ -21,10 +21,10 @@ using std::string;
 TEST(LibRadosCmd, MonDescribePP) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string outs;
   ASSERT_EQ(0, cluster.mon_command("{\"prefix\": \"get_command_descriptions\"}",
-				   inbl, &outbl, &outs));
+				   {}, &outbl, &outs));
   ASSERT_LT(0u, outbl.length());
   ASSERT_LE(0u, outs.length());
   cluster.shutdown();
@@ -34,19 +34,19 @@ TEST(LibRadosCmd, OSDCmdPP) {
   Rados cluster;
   ASSERT_EQ("", connect_cluster_pp(cluster));
   int r;
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string outs;
   string cmd;
 
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
   cmd = "asdfasdf";
-  r = cluster.osd_command(0, cmd, inbl, &outbl, &outs);
+  r = cluster.osd_command(0, std::move(cmd), {}, &outbl, &outs);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd = "version";
-  r = cluster.osd_command(0, cmd, inbl, &outbl, &outs);
+  r = cluster.osd_command(0, std::move(cmd), {}, &outbl, &outs);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
   cmd = "{\"prefix\":\"version\"}";
-  r = cluster.osd_command(0, cmd, inbl, &outbl, &outs);
+  r = cluster.osd_command(0, std::move(cmd), {}, &outbl, &outs);
   ASSERT_TRUE((r == 0 && outbl.length() > 0) || (r == -ENXIO && outbl.length() == 0));
   cluster.shutdown();
 }
@@ -57,7 +57,7 @@ TEST(LibRadosCmd, PGCmdPP) {
   ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
 
   int r;
-  bufferlist inbl, outbl;
+  bufferlist outbl;
   string outs;
   string cmd;
 
@@ -68,7 +68,7 @@ TEST(LibRadosCmd, PGCmdPP) {
 
   cmd = "asdfasdf";
   // note: tolerate NXIO here in case the cluster is thrashing out underneath us.
-  r = cluster.pg_command(pgid.c_str(), cmd, inbl, &outbl, &outs);
+  r = cluster.pg_command(pgid.c_str(), std::move(cmd), {}, &outbl, &outs);
   ASSERT_TRUE(r == -22 || r == -ENXIO);
 
   // make sure the pg exists on the osd before we query it
@@ -82,7 +82,7 @@ TEST(LibRadosCmd, PGCmdPP) {
 
   cmd = "{\"prefix\":\"pg\", \"cmd\":\"query\", \"pgid\":\"" +  pgid + "\"}";
   // note: tolerate ENOENT/ENXIO here if hte osd is thrashing out underneath us
-  r = cluster.pg_command(pgid.c_str(), cmd, inbl, &outbl, &outs);
+  r = cluster.pg_command(pgid.c_str(), std::move(cmd), {}, &outbl, &outs);
   ASSERT_TRUE(r == 0 || r == -ENOENT || r == -ENXIO);
 
   ASSERT_LT(0u, outbl.length());

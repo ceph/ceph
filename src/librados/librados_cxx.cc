@@ -2618,33 +2618,27 @@ int librados::Rados::pool_reverse_lookup(int64_t id, std::string *name)
   return client->pool_get_name(id, name, true);
 }
 
-int librados::Rados::mon_command(string cmd, const bufferlist& inbl,
+int librados::Rados::mon_command(std::string&& cmd, bufferlist&& inbl,
 				 bufferlist *outbl, string *outs)
 {
-  vector<string> cmdvec;
-  cmdvec.push_back(cmd);
-  return client->mon_command(cmdvec, inbl, outbl, outs);
+  return client->mon_command({std::move(cmd)}, std::move(inbl), outbl, outs);
 }
 
-int librados::Rados::osd_command(int osdid, std::string cmd, const bufferlist& inbl,
+int librados::Rados::osd_command(int osdid, std::string&& cmd, bufferlist&& inbl,
                                  bufferlist *outbl, std::string *outs)
 {
-  vector<string> cmdvec;
-  cmdvec.push_back(cmd);
-  return client->osd_command(osdid, cmdvec, inbl, outbl, outs);
+  return client->osd_command(osdid, {std::move(cmd)}, std::move(inbl), outbl, outs);
 }
 
-int librados::Rados::mgr_command(std::string cmd, const bufferlist& inbl,
+int librados::Rados::mgr_command(std::string&& cmd, bufferlist&& inbl,
                                  bufferlist *outbl, std::string *outs)
 {
-  vector<string> cmdvec;
-  cmdvec.push_back(cmd);
-  return client->mgr_command(cmdvec, inbl, outbl, outs);
+  return client->mgr_command({std::move(cmd)}, std::move(inbl), outbl, outs);
 }
 
 
 
-int librados::Rados::pg_command(const char *pgstr, std::string cmd, const bufferlist& inbl,
+int librados::Rados::pg_command(const char *pgstr, std::string&& cmd, bufferlist&& inbl,
                                 bufferlist *outbl, std::string *outs)
 {
   vector<string> cmdvec;
@@ -2654,7 +2648,7 @@ int librados::Rados::pg_command(const char *pgstr, std::string cmd, const buffer
   if (!pgid.parse(pgstr))
     return -EINVAL;
 
-  return client->pg_command(pgid, cmdvec, inbl, outbl, outs);
+  return client->pg_command(pgid, std::move(cmdvec), std::move(inbl), outbl, outs);
 }
 
 int librados::Rados::ioctx_create(const char *name, IoCtx &io)
