@@ -195,5 +195,5 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
 
 def _dist_info(entry, name):
     return (
-        entry.startswith(entry) or entry.startswith(entry.lower())
+        entry.startswith(name) or entry.startswith(name.lower())
     ) and (entry.endswith('.dist-info') or entry.endswith('.egg-info'))
