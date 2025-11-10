@@ -164,6 +164,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_chown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_lchown(ceph_mount_info *cmount, const char *path, int uid, int gid)
     int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid)
+    int ceph_chownat(ceph_mount_info *cmount, int fd, const char *relpath,
+                     int uid, int gid, int flags)
+
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence)
     void ceph_buffer_free(char *buf)
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode)

@@ -1419,6 +1419,40 @@ cdef class LibCephFS(object):
         if ret < 0:
             raise make_ex(ret, "error in fchown")
 
+    def chownat(self, fd, relpath, uid, gid, flags):
+        """
+        Change directory ownership
+
+        :param path: the path of the directory to change.
+        :param uid: the uid to set
+        :param gid: the gid to set
+        :param follow_symlink: perform the operation on the target file if @path
+                               is a symbolic link (default)
+        """
+        self.require_state("mounted")
+
+        if not isinstance(uid, int):
+            raise TypeError('"uid" must be an int')
+        if not isinstance(gid, int):
+            raise TypeError('"gid" must be an int')
+        if not isinstance(flags, int):
+            raise TypeError('"flags" must be an int')
+
+        relpath = cstr(relpath, 'relpath')
+        cdef:
+            int _fd = fd
+            char* _relpath = relpath
+            # Avoid "OverflowError: can't convert negative value to uid_t."
+            uid_t _uid = uid if uid >= 0 else -1
+            # Avoid "OverflowError: can't convert negative value to gid_t."
+            gid_t _gid = gid if gid >= 0 else -1
+            int _flags = flags
+
+        with nogil:
+            ret = ceph_chownat(self.cluster, _fd, _relpath, _uid, _gid, _flags)
+        if ret < 0:
+            raise make_ex(ret, f"error in chownat {relpath.decode('utf-8')}")
+
     def mkdirs(self, path, mode):
         """
         Create multiple directories at once.

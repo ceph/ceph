@@ -242,12 +242,17 @@ cdef nogil:
         pass
     int ceph_fchown(ceph_mount_info *cmount, int fd, int uid, int gid):
         pass
+    int ceph_chownat(ceph_mount_info *cmount, int fd, const char *relpath,
+                     int uid, int gid, int flags)
+        pass
+
     int64_t ceph_lseek(ceph_mount_info *cmount, int fd, int64_t offset, int whence):
         pass
     void ceph_buffer_free(char *buf):
         pass
     mode_t ceph_umask(ceph_mount_info *cmount, mode_t mode):
         pass
+
     int ceph_utime(ceph_mount_info *cmount, const char *path, utimbuf *buf):
         pass
     int ceph_futime(ceph_mount_info *cmount, int fd, utimbuf *buf):
