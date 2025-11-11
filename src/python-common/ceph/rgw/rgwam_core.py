@@ -303,9 +303,9 @@ class ZoneOp:
 
         return RGWAdminJSONCmd(ze).run(params)
 
-    def modify(self, zone: EntityKey, zg: EntityKey, is_master=None,
+    def modify(self, realm: EntityKey, zone: EntityKey, zg: EntityKey, is_master=None,
                access_key=None, secret=None, endpoints=None):
-        ze = ZoneEnv(self.env, zone=zone, zg=zg)
+        ze = ZoneEnv(self.env, realm=realm, zone=zone, zg=zg)
 
         params = ['zone',
                   'modify']
@@ -589,7 +589,7 @@ class RGWAM:
         rgw_acces_key = sys_user.get_key(0)
         access_key = rgw_acces_key.access_key if rgw_acces_key else ''
         secret = rgw_acces_key.secret_key if rgw_acces_key else ''
-        self.zone_op().modify(zone, zonegroup, None,
+        self.zone_op().modify(realm, zone, zonegroup, None,
                               access_key, secret, endpoints=rgw_spec.zone_endpoints)
         self.update_period(realm, zonegroup, zone)
 
@@ -752,7 +752,7 @@ class RGWAM:
         success_message = f'Modified zone {realm_name} {zonegroup_name} {zone_name}'
         logging.info(success_message)
         try:
-            self.zone_op().modify(zone, zg, access_key=access_key,
+            self.zone_op().modify(realm, zone, zg, access_key=access_key,
                                   secret=secret, endpoints=','.join(endpoints))
             # we only update the zonegroup endpoints if the zone being
             # modified is a master zone
@@ -1027,7 +1027,7 @@ class RGWAM:
                 zg = zones_map[realm][zone]
 
                 try:
-                    self.zone_op().modify(EntityName(zone), EntityName(zg),
+                    self.zone_op().modify(EntityName(realm), EntityName(zone), EntityName(zg),
                                           endpoints=','.join(diff[realm][zone]))
                 except RGWAMException as e:
                     raise RGWAMException('failed to modify zone', e)
