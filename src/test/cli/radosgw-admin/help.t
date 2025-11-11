@@ -220,6 +220,9 @@
     notification list                list bucket notifications configuration
     notification get                 get a bucket notifications configuration
     notification rm                  remove a bucket notifications configuration
+    restore status                   shows restoration status of object in a bucket
+    restore list                     list restore status of each object in the bucket
+                                     can be filtered with help of --restore-status which shows objects with specified status
   options:
      --tenant=<tenant>                 tenant name
      --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)
@@ -420,6 +423,7 @@
   Bucket list objects options:
      --max-entries                 max number of entries listed (default 1000)
      --marker                      the marker used to specify on which entry the listing begins, default none (i.e., very first entry)
+     --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command
   
     --conf/-c FILE    read configuration from the given configuration file
     --id ID           set ID portion of my name
