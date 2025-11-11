@@ -26,6 +26,11 @@
   scan_extents, scan_inodes, and other state-changing operations.
   Related Tracker: https://tracker.ceph.com/issues/63191
 
+* OSD: A health warning is reported when BlueFS usage exceeds the
+  configured ratio of the main OSD data device size. This warning is
+  informational and can be muted with:
+  ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
+
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
