@@ -23,10 +23,10 @@
 using namespace std;
 using namespace librados;
 
-typedef RadosTestPP LibRadosSplitOpPP;
-typedef RadosTestECPP LibRadosSplitOpECPP;
+typedef RadosTestPP LibRadosOmapPP;
+typedef RadosTestECPP LibRadosOmapECPP;
 
-TEST_P(LibRadosSplitOpECPP, OMAPReads) {
+TEST_P(LibRadosOmapECPP, OmapReads) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, omap_header_bl;
   const std::string omap_key_1 = "omap_key_1_palomino";
@@ -188,7 +188,7 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   std::cout << "--- OMap Clear testing passed ---" << std::endl;
 }
 
-TEST_P(LibRadosSplitOpECPP, ErrorInject) {
+TEST_P(LibRadosOmapECPP, ErrorInject) {
   SKIP_IF_CRIMSON();
   bufferlist bl_write, omap_val_bl, xattr_val_bl;
   const std::string omap_key_1 = "key_a";
@@ -273,4 +273,4 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   EXPECT_TRUE(res3 == 0);
 }
 
-INSTANTIATE_TEST_SUITE_P_EC(LibRadosSplitOpECPP);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosOmapECPP);
