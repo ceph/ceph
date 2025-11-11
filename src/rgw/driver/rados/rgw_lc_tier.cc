@@ -1456,6 +1456,23 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   bufferlist out_bl;
   int ret = 0;
   pair<string, string> key(tier_ctx.storage_class, tier_ctx.target_bucket_name);
+  stringstream ss;
+  XMLFormatter formatter;
+  bufferlist bl;
+  std::string lconstraint;
+
+  struct CreateBucketReq {
+	  std::optional<std::string>  lconstraint;
+
+    explicit CreateBucketReq(std::optional<std::string> _lconstraint) : lconstraint(_lconstraint) {}
+
+    void dump_xml(Formatter *f) const {
+      if (lconstraint) {
+        encode_xml("LocationConstraint", lconstraint, f);
+      };
+    }
+  } req_enc(lconstraint);
+
   struct CreateBucketResult {
     std::string code;
 
@@ -1465,8 +1482,15 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   } result;
 
   ldpp_dout(tier_ctx.dpp, 30) << "Cloud_tier_ctx: creating bucket:" << tier_ctx.target_bucket_name << dendl;
-  bufferlist bl;
   string resource = tier_ctx.target_bucket_name;
+
+  if (!tier_ctx.location_constraint.empty()) {
+    req_enc.lconstraint = tier_ctx.location_constraint;
+    encode_xml("CreateBucketConfiguration", req_enc, &formatter);
+
+    formatter.flush(ss);
+    bl.append(ss.str());
+  }
 
   ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "PUT", resource, nullptr, nullptr,
                                     out_bl, &bl, nullptr, null_yield);
