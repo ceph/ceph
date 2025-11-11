@@ -2,7 +2,6 @@ import json
 import random
 import re
 import string
-import sys
 import time
 import logging
 import errno
