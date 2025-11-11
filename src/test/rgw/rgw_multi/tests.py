@@ -1,7 +1,6 @@
 import json
 import random
 import string
-import sys
 import time
 import logging
 import errno
