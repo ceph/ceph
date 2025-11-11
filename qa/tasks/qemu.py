@@ -502,7 +502,7 @@ def run_qemu(ctx, config):
 
         nfs_service_name = 'nfs'
         if (
-            remote.os.name in ['rhel', 'centos'] and
+            remote.os.name in ['rhel', 'centos', 'rocky'] and
             Version(remote.os.version.lower().removesuffix(".stream")) >= Version("8")
         ):
             nfs_service_name = 'nfs-server'
