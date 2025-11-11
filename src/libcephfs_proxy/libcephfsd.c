@@ -2012,8 +2012,11 @@ static void serve_binary(proxy_client_t *client)
 
 static int32_t server_negotiation_check(proxy_link_negotiate_t *neg)
 {
-	proxy_log(LOG_INFO, 0, "Features enabled: %08x, protocol: %u",
-		  neg->v1.enabled, neg->v2.protocol);
+	proxy_log(LOG_INFO, 0,
+		  "Version: %u, Size: %u, Features enabled: %08x, "
+		  "Protocol: %u, Num ops: %u, Num cbks: %u",
+		  neg->v0.version, neg->v0.size, neg->v1.enabled,
+		  neg->v2.protocol, neg->v0.num_ops, neg->v0.num_cbks);
 
 	return 0;
 }
