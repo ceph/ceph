@@ -19274,6 +19274,28 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
   } else if (!spillover_alert.empty()){
     spillover_alert.clear();
   }
+  // CHECK: shared DB/WAL ratio with main device size
+  if (bluefs) {
+    auto db = bluefs->get_block_device(BlueFS::BDEV_DB);
+    auto slow = bluefs->get_block_device(BlueFS::BDEV_SLOW);
+    const bool co_located = (db && slow && db == slow);
+    if (co_located) {
+      uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
+      uint64_t block_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
+
+      if (block_size > 0 && db_size >0) {
+        double ratio = static_cast<double>(db_size) / static_cast<double>(block_size);
+        if (ratio > 0.06) {
+          ostringstream ss;
+          ss << "BlueStore shared DB/WAL device (" << byte_u_t(db_size)
+             << ") exceeds 6% of main device (" << byte_u_t(block_size)
+             << ", " << std::fixed << std::setprecision(2)
+             << ratio * 100.0 << "%)";
+          alerts.emplace("BLUESTORE_SHARED_DB_RATIO", ss.str());
+        }
+      }
+    }
+  }
   if (cct->_conf->bluestore_slow_ops_warn_threshold) {
     size_t qsize = _trim_slow_op_event_queue(mono_clock::now());
     if (qsize >= cct->_conf->bluestore_slow_ops_warn_threshold) {

@@ -26,6 +26,14 @@
   scan_extents, scan_inodes, and other state-changing operations.
   Related Tracker: https://tracker.ceph.com/issues/63191
 
+* OSD: A health warning is reported when BlueStore DB/WAL sizes are large relative
+  to the main OSD data device.
+  This warning is informational and does not impact OSD functionality, but highlights
+  uneven OSD utilization and cause some OSDs to reach *full states sooner
+  than others. Administrators may review and take action if needed.
+  Users can temporarily mute it with:
+  ``ceph health mute BLUESTORE_SHARED_DB_RATIO``
+
 >=20.0.0
 
 * RADOS: The lead Monitor and stretch mode status are now displayed by `ceph status`.
