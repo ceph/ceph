@@ -9,6 +9,7 @@ from threading import Event
 from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union
 import json
 import smtplib
+import ssl
 
 
 class Alerts(MgrModule):
@@ -236,9 +237,10 @@ class Alerts(MgrModule):
 
         # send
         try:
+            context = ssl.create_default_context()
             if self.smtp_ssl:
                 server: Union[smtplib.SMTP_SSL, smtplib.SMTP] = \
-                    smtplib.SMTP_SSL(self.smtp_host, self.smtp_port)
+                    smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context)
             else:
                 server = smtplib.SMTP(self.smtp_host, self.smtp_port)
             if self.smtp_password:
