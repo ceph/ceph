@@ -13728,6 +13728,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool create") {
     std::string source_pool_name;
     std::optional<int64_t> source_pool_id;
+    
+    const pg_pool_t *source_pool = nullptr;
+    
     if (cmd_getval(cmdmap, "migrate_from", source_pool_name)) {
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
       if (source_pool_id < 0) {
@@ -13736,8 +13739,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         err = -EINVAL;
         goto reply_no_propose;
       }
+
+      source_pool = osdmap.get_pg_pool(source_pool_id.value_or(-1));
+      if (source_pool->is_migrating()) {
+        ss << "Cannot migrate from a pool which is part of an ongoing migration";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
     }
-    const pg_pool_t *source_pool = osdmap.get_pg_pool(source_pool_id.value_or(-1));
 
     int64_t default_pg_num = (source_pool) ? source_pool->get_pg_num() : 0;
     int64_t default_pg_num_min = (source_pool) ? source_pool->get_pg_num_min() : 0;
