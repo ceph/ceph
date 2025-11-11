@@ -93,8 +93,7 @@ public:
     omap_root_t &omap_root,
     Transaction &t,
     const std::string &first,
-    const std::string &last,
-    omap_list_config_t config) final;
+    const std::string &last) final;
 
   omap_iterate_ret omap_iterate(
     const omap_root_t &omap_root,

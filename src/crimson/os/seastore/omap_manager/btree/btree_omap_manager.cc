@@ -230,8 +230,7 @@ BtreeOMapManager::omap_rm_key_range(
   omap_root_t &omap_root,
   Transaction &t,
   const std::string &first,
-  const std::string &last,
-  omap_list_config_t config)
+  const std::string &last)
 {
   LOG_PREFIX(BtreeOMapManager::omap_rm_key_range);
   DEBUGT("{} ~ {}", t, first, last);
@@ -239,9 +238,9 @@ BtreeOMapManager::omap_rm_key_range(
   assert(last != "");
   return seastar::do_with(
     key_range_t{first, last, 0, false, false},
-    [this, &omap_root, &t, config, &first, &last](auto &key_range) {
+    [this, &omap_root, &t, &first, &last](auto &key_range) {
       return trans_intr::repeat(
-        [this,  &omap_root, &t, config, &key_range, &first, &last, first_enter = true]() mutable
+        [this,  &omap_root, &t, &key_range, &first, &last, first_enter = true]() mutable
       {
         if (first_enter) {
           key_range = key_range_t{first, last, 0, false, false};
