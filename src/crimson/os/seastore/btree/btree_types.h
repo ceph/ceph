@@ -281,7 +281,6 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t> {
   }
   extent_ref_count_t get_refcount() const {
     assert(!is_end());
-    assert(!is_indirect());
     return val->refcount;
   }
 
