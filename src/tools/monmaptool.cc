@@ -59,6 +59,10 @@ void helpful_exit()
   exit(1);
 }
 
+#define SET_SERVICE_CIPHER 1
+#define SET_ALLOWED_CIPHERS 2
+#define SET_PREFERRED_CIPHER 4
+
 struct feature_op_t {
   enum type_t {
     PERSISTENT,
@@ -219,6 +223,7 @@ int main(int argc, const char **argv)
   int auth_service_cipher = CEPH_CRYPTO_AES256KRB5;
   std::vector<int> auth_allowed_ciphers = {CEPH_CRYPTO_AES256KRB5};
   int auth_preferred_cipher = CEPH_CRYPTO_AES256KRB5;
+  int modified_ciphers = 0;
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -327,6 +332,7 @@ int main(int argc, const char **argv)
         helpful_exit();
       }
       auth_service_cipher = c;
+      modified_ciphers |= SET_SERVICE_CIPHER;
     } else if (ceph_argparse_witharg(args, i, &val, "--auth-allowed-ciphers", (char*)NULL)) {
       std::vector<std::string> v;
       std::vector<int> ciphers;
@@ -340,6 +346,7 @@ int main(int argc, const char **argv)
         ciphers.push_back(c);
       }
       auth_allowed_ciphers = std::move(ciphers);
+      modified_ciphers |= SET_ALLOWED_CIPHERS;
     } else if (ceph_argparse_witharg(args, i, &val, "--auth-preferred-cipher", (char*)NULL)) {
       int c = CryptoManager::get_key_type(val);
       if (c < 0) {
@@ -347,6 +354,7 @@ int main(int argc, const char **argv)
         helpful_exit();
       }
       auth_preferred_cipher = c;
+      modified_ciphers |= SET_PREFERRED_CIPHER;
     } else {
       ++i;
     }
@@ -503,6 +511,14 @@ int main(int argc, const char **argv)
     }
     monmap.remove(p);
   }
+  if (modified_ciphers & SET_SERVICE_CIPHER)
+    monmap.auth_service_cipher = auth_service_cipher;
+  if (modified_ciphers & SET_ALLOWED_CIPHERS)
+    monmap.auth_allowed_ciphers = auth_allowed_ciphers;
+  if (modified_ciphers & SET_PREFERRED_CIPHER)
+    monmap.auth_preferred_cipher = auth_preferred_cipher;
+  if (modified_ciphers)
+    modified = true;
 
   if (!print && !modified && !show_features) {
     cerr << "no action specified" << std::endl;
