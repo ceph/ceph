@@ -31,13 +31,11 @@ bool frag_t::parse(const char *s) {
 }
 
 void frag_t::encode(ceph::buffer::list& bl) const {
-  ceph::encode_raw(_enc, bl);
+  ceph::encode(_enc, bl);
 }
 
 void frag_t::decode(ceph::buffer::list::const_iterator& p) {
-  __u32 v;
-  ceph::decode_raw(v, p);
-  _enc = v;
+  ceph::decode(_enc, p);
 }
 
 void frag_t::dump(ceph::Formatter *f) const {
