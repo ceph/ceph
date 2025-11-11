@@ -459,3 +459,162 @@ TEST_F(LibRadosIoEC, XattrIter) {
   }
   rados_getxattrs_end(iter);
 }
+
+TEST_P(LibRadosIoEC, OmapRemoveKeyRange) {
+  char* omap_keys[] = {(char*)"omap_key_1_apple",
+                       (char*)"omap_key_2_banana",
+                       (char*)"omap_key_3_cherry",
+                       (char*)"omap_key_4_date",
+                       (char*)"omap_key_5_elderberry",
+                       (char*)"omap_key_6_fig",
+                       (char*)"omap_key_7_grape",
+                       (char*)"omap_key_8_honeydew",
+                       (char*)"omap_key_9_kiwi",
+                       (char*)"omap_key_10_lemon"};
+
+  char* omap_vals[] = {(char*)"omap_val_1",
+                       (char*)"omap_val_2",
+                       (char*)"omap_val_3",
+                       (char*)"omap_val_4",
+                       (char*)"omap_val_5",
+                       (char*)"omap_val_6",
+                       (char*)"omap_val_7",
+                       (char*)"omap_val_8",
+                       (char*)"omap_val_9",
+                       (char*)"omap_val_10"};
+
+  size_t omap_vals_lens[] = {strlen(omap_vals[0]),
+                             strlen(omap_vals[1]),
+                             strlen(omap_vals[2]),
+                             strlen(omap_vals[3]),
+                             strlen(omap_vals[4]),
+                             strlen(omap_vals[5]),
+                             strlen(omap_vals[6]),
+                             strlen(omap_vals[7]),
+                             strlen(omap_vals[8]),
+                             strlen(omap_vals[9])};
+
+  // FETCH FROM NON-EXISTENT OBJECT
+  rados_omap_iter_t iter_vals;
+  rados_read_op_t rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, NULL);
+  ASSERT_EQ(-ENOENT, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+
+  // WRITE ALL KEYS/VALLS
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_omap_set(op, omap_keys, omap_vals, omap_vals_lens, 10);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "my_object", NULL, 0));
+  rados_release_write_op(op);
+
+  // FETCH AND VERIFY ALL KEYS/VALLS
+  rados_omap_iter_t iter_keys;
+  int r_vals = -1, r_keys = -1;
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "", 10, &iter_keys, NULL, &r_keys);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(10u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(10u, rados_omap_iter_size(iter_keys));
+
+  // REMOVE KEYS BY RANGE
+  op = rados_create_write_op();
+  rados_write_op_omap_rm_range2(op, "omap_key_3_cherry", strlen(omap_keys[2]), "omap_key_7_grape", strlen(omap_keys[6]));
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "my_object", NULL, 0));
+  rados_release_write_op(op);
+
+  // FETCH AND VERIFY REMAINING KEYS/VALLS
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "", 10, &iter_keys, NULL, &r_keys);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_keys));
+}
+
+TEST_P(LibRadosIoEC, OmapRemoveKeyRange) {
+  char* omap_keys[] = {(char*)"omap_key_1_apple",
+                       (char*)"omap_key_2_banana",
+                       (char*)"omap_key_3_cherry",
+                       (char*)"omap_key_4_date",
+                       (char*)"omap_key_5_elderberry",
+                       (char*)"omap_key_6_fig",
+                       (char*)"omap_key_7_grape",
+                       (char*)"omap_key_8_honeydew",
+                       (char*)"omap_key_9_kiwi",
+                       (char*)"omap_key_10_lemon"};
+
+  char* omap_vals[] = {(char*)"omap_val_1",
+                       (char*)"omap_val_2",
+                       (char*)"omap_val_3",
+                       (char*)"omap_val_4",
+                       (char*)"omap_val_5",
+                       (char*)"omap_val_6",
+                       (char*)"omap_val_7",
+                       (char*)"omap_val_8",
+                       (char*)"omap_val_9",
+                       (char*)"omap_val_10"};
+
+  size_t omap_vals_lens[] = {strlen(omap_vals[0]),
+                             strlen(omap_vals[1]),
+                             strlen(omap_vals[2]),
+                             strlen(omap_vals[3]),
+                             strlen(omap_vals[4]),
+                             strlen(omap_vals[5]),
+                             strlen(omap_vals[6]),
+                             strlen(omap_vals[7]),
+                             strlen(omap_vals[8]),
+                             strlen(omap_vals[9])};
+
+  // FETCH FROM NON-EXISTENT OBJECT
+  rados_omap_iter_t iter_vals;
+  rados_read_op_t rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, NULL);
+  ASSERT_EQ(-ENOENT, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+
+  // WRITE ALL KEYS/VALLS
+  rados_write_op_t op = rados_create_write_op();
+  rados_write_op_omap_set(op, omap_keys, omap_vals, omap_vals_lens, 10);
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "my_object", NULL, 0));
+  rados_release_write_op(op);
+
+  // FETCH AND VERIFY ALL KEYS/VALLS
+  rados_omap_iter_t iter_keys;
+  int r_vals = -1, r_keys = -1;
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "", 10, &iter_keys, NULL, &r_keys);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(10u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(10u, rados_omap_iter_size(iter_keys));
+
+  // REMOVE KEYS BY RANGE
+  op = rados_create_write_op();
+  rados_write_op_omap_rm_range2(op, "omap_key_3_cherry", strlen(omap_keys[2]), "omap_key_7_grape", strlen(omap_keys[6]));
+  ASSERT_EQ(0, rados_write_op_operate(op, ioctx, "my_object", NULL, 0));
+  rados_release_write_op(op);
+
+  // FETCH AND VERIFY REMAINING KEYS/VALLS
+  rop = rados_create_read_op();
+  rados_read_op_omap_get_vals2(rop, "", "", 10, &iter_vals, NULL, &r_vals);
+  rados_read_op_omap_get_keys2(rop, "", 10, &iter_keys, NULL, &r_keys);
+  ASSERT_EQ(0, rados_read_op_operate(rop, ioctx, "my_object", 0));
+  rados_release_read_op(rop);
+  EXPECT_EQ(0, r_vals);
+  EXPECT_EQ(0, r_keys);
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_vals));
+  EXPECT_EQ(6u, rados_omap_iter_size(iter_keys));
+}
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosIo);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoEC);
