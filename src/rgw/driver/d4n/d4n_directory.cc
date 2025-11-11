@@ -950,7 +950,7 @@ D4NTransaction::CloneStatus D4NTransaction::clone_key_for_transaction(std::strin
 {
   // Defensive check: Only clone keys if transaction is properly started
   if(trxState != TrxState::STARTED) {
-    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__
+    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__
                               << "() ERROR: Transaction not started (trxState != STARTED). "
                               << "Cannot clone key from " << key_source << " to " << key_destination << dendl;
     return CloneStatus::SOURCE_NOT_EXIST;
@@ -963,19 +963,19 @@ D4NTransaction::CloneStatus D4NTransaction::clone_key_for_transaction(std::strin
 	response<int> resp;
 	request req;
 	req.push("EVALSHA", m_evalsha_clone_key, "2", key_source, key_destination,
-	         std::to_string(D4N_TRANSACTION_TEMP_KEY_TTL));
+	         std::to_string(D4N_TRANSACTION_TEMP_KEY_TTL), m_trx_id);
 
 	redis_exec(conn, ec, req, resp, y);
 
 	if (ec) {
-	    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << ec.value() << dendl;
+	    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__ << "() ERROR: " << ec.value() << dendl;
 	    return CloneStatus::SOURCE_NOT_EXIST;
 	}
 
 	rc = std::get<0>(resp).value();
 
 	} catch (std::exception &e) {
-		ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
+		ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__ << "() ERROR: " << e.what() << dendl;
 		return CloneStatus::SOURCE_NOT_EXIST;
 	}
 
@@ -1004,10 +1004,11 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 	create_clone_lua_script(dpp,conn,y);//load the script if not loaded yet.
 
 	if(op == redis_operation_type::READ_OP){
+	  ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key READ_OP for key: " << m_original_key << dendl;
 	  auto status = clone_key_for_transaction(m_original_key, m_temp_key_read, conn, y);
 	  if(status == CloneStatus::SOURCE_NOT_EXIST || status == CloneStatus::DEST_ALREADY_EXIST){
 	    //if the key does not exist, no need to clone it.
-	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key : no cloning for source key, status = " << static_cast<int>(status) << dendl;
+	    ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key : no cloning for source key, status = " << static_cast<int>(status) << dendl;
 	    return true;
 	  }
 
@@ -1021,12 +1022,12 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 	    log_transaction_start_time(dpp, conn, y);
 	  }
 
-	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_write << dendl;
+	  ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key WRITE_OP cloning " << m_original_key << " into " << m_temp_key_write << dendl;
 
 	  auto status = clone_key_for_transaction(m_original_key, m_temp_key_write, conn, y);
 	  if(status == CloneStatus::DEST_ALREADY_EXIST){
 	    //if the destination key already exists, no need to clone it.
-	    ldpp_dout(dpp, 0) << "Directory::set_transaction_key : destination key already exists" << dendl;
+	    ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key : destination key already exists" << dendl;
 	    key = m_temp_key_write;
 	    m_temp_write_keys.insert(m_temp_key_write);//upon end-transaction, the test-write key is compare with this m_temp_key_write
 	    return true;
@@ -1034,7 +1035,7 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 
 	  if(status == CloneStatus::SOURCE_NOT_EXIST){
 		//the source key does not exist.
-	    	ldpp_dout(dpp, 0) << "Directory::set_transaction_key : source key does not exist (new object)" << dendl;
+	    	ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key : source key does not exist (new object)" << dendl;
 	    	//in this case, the original key does not exist, because it is a new object.
 		//the temp-key (transaction write key) will store the data, and upon end-transaction, the temp-key will be renamed to the original key.
 		key = m_temp_key_write;
@@ -1046,17 +1047,17 @@ bool D4NTransaction::set_transaction_key(const DoutPrefixProvider* dpp,std::shar
 	  m_temp_write_keys.insert(m_temp_key_write);
 
 	  //upon end transaction, the m_temp_key_test_write should be compared to the originl key.
-	  ldpp_dout(dpp, 0) << "Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
+	  ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key cloning " << m_original_key << " into " << m_temp_key_test_write << dendl;
 	  status = clone_key_for_transaction(m_original_key, m_temp_key_test_write, conn, y);
 	  if(status != CloneStatus::SUCCESS){
 		  // at this point, m_original_key exists, so the clone operation should be successful.
-		  ldpp_dout(dpp, 0) << "Directory::set_transaction_key : failed to clone the original key into test write key, status = " << static_cast<int>(status) << dendl;
+		  ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] Directory::set_transaction_key : failed to clone the original key into test write key, status = " << static_cast<int>(status) << dendl;
 		  return false;
 	  }
 	  // the same as m_temp_write_keys, but for test write operations.
 	  m_temp_test_write_keys.insert(m_temp_key_test_write);
-	 
-	  //the key that is used for write operations. 
+
+	  //the key that is used for write operations.
 	  key = m_temp_key_write;
 	}
 	return true;
@@ -1127,18 +1128,19 @@ void D4NTransaction::start_trx()
 {
 
   if(trxState == TrxState::STARTED) {
-    ldout(g_ceph_context, 0) << "D4NTransaction::" << __func__ << "(): Transaction state should not be active (STARTED)" << dendl;
+    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__ << "(): Transaction state should not be active (STARTED)" << dendl;
     return;
   }
   // NOTE: check whether at this point its better to get the transaction id from the redis server or generate a unique id.
   trxState = TrxState::STARTED;
+  ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__ << "(): Transaction started" << dendl;
 }
 
 void D4NTransaction::cancel_transaction(const DoutPrefixProvider* dpp)
 {
   if(trxState == TrxState::STARTED) {
     if(dpp) {
-      ldpp_dout(dpp, 0) << "D4NTransaction::" << __func__
+      ldpp_dout(dpp, 0) << "[trx:" << m_trx_id << "] D4NTransaction::" << __func__
                         << "() Cancelling transaction (read-only operation)" << dendl;
     }
     trxState = TrxState::CANCELLED;
@@ -1150,31 +1152,32 @@ void D4NTransaction::cancel_transaction(const DoutPrefixProvider* dpp)
 //in case the destination key exists, the script should return -1.
 //in case the destination key does not exists, it should clone the source key into the destination key.
 std::string lua_script_clone_keys = R"(
-local function clone_key(key_source, key_destination, ttl_seconds)
+local function clone_key(key_source, key_destination, ttl_seconds, trx_id)
 		local keyType_source = redis.call('TYPE', key_source).ok
 		if keyType_source == 'none' then
-				redis.log(redis.LOG_NOTICE,"key source does not exists: " .. key_source .. " cannot clone to: " .. key_destination)
+				redis.log(redis.LOG_NOTICE,"[trx:" .. trx_id .. "] key source does not exists: " .. key_source .. " cannot clone to: " .. key_destination)
 				return -2
 		end
 		local keyType = redis.call('TYPE', key_destination).ok
 		if keyType == 'none' then
-				redis.log(redis.LOG_NOTICE,"cloning key: " .. key_source .. " to: " .. key_destination .. " with TTL: " .. ttl_seconds)
+				redis.log(redis.LOG_NOTICE,"[trx:" .. trx_id .. "] cloning key: " .. key_source .. " to: " .. key_destination .. " with TTL: " .. ttl_seconds)
 				redis.call('COPY', key_source, key_destination)
 
 				-- Set TTL on temporary key to auto-expire orphaned keys
 				redis.call('EXPIRE', key_destination, ttl_seconds)
 
 				local exist_status = redis.call('EXISTS', key_destination)
-				redis.log(redis.LOG_NOTICE,"key exists: " .. key_destination .. " status: " .. exist_status)
+				redis.log(redis.LOG_NOTICE,"[trx:" .. trx_id .. "] key exists: " .. key_destination .. " status: " .. exist_status)
 				return 0
 		else
-				redis.log(redis.LOG_NOTICE,"key already exists: " .. key_destination)
+				redis.log(redis.LOG_NOTICE,"[trx:" .. trx_id .. "] key already exists: " .. key_destination)
 				return -1
 		end
 end
 
 -- ARGV[1] contains the TTL value passed from C++ code
-return clone_key(KEYS[1], KEYS[2], tonumber(ARGV[1]))
+-- ARGV[2] contains the transaction ID
+return clone_key(KEYS[1], KEYS[2], tonumber(ARGV[1]), ARGV[2])
 )";
 
 int D4NTransaction::get_clone_script(const DoutPrefixProvider* dpp,std::shared_ptr<connection> conn,optional_yield y)
@@ -1277,9 +1280,12 @@ std::string lua_script_end_trx  = R"(
 
 local allComparisonsSuccessful = true
 
+-- Transaction ID will be passed as ARGV[1]
+local trx_id = ARGV[1] or "unknown"
+
 local function log_message(message)
 --- TODO use runtime configuration to enable/disable logging (the runtime configuration setting should retrieve once and stored in a global variable)
-	redis.log(redis.LOG_NOTICE,message)
+	redis.log(redis.LOG_NOTICE,"[trx:" .. trx_id .. "] " .. message)
 end
 
 local function compareTables(tbl1, tbl2)
@@ -1651,18 +1657,18 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 {
 	//TODO upon calling to a LUA script, it should be guaranteed that no other transaction is running at the same time with the same trx-id.
 	//or it should be guaranteed that the transaction is unique across multiple D4N transactions.
-	
+
   if(trxState != TrxState::STARTED) {
-    ldout(g_ceph_context, 0) << "Directory::end_trx trx is not started, skipping end_trx" << dendl;
+    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx trx is not started, skipping end_trx" << dendl;
     return 0;
     //TODO : it should not happen, to consider throwing an exception.
   }
   trxState = TrxState::ENDED;
 
-  
+
    //the end_trx is currently called from the destructor, and the dpp is not available.
-  if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx this = " << this << dendl;}
-  if(!dpp) {ldout(g_ceph_context, 0) << "Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
+  if(!dpp) {ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx this = " << this << dendl;}
+  if(!dpp) {ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx evalsha " << m_evalsha_end_trx << dendl;}
   //save_trx_info(dpp,conn, "test_debug_key", "test_debug_value", y);
 
     // load the lua script that implements the end of the transaction.
@@ -1710,19 +1716,21 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
     for (auto const& key : m_temp_test_write_keys) {
       debug_all_keys += key + " ";
       trx_keys.push_back(key);
-    }		
+    }
 
     if(num_keys == 0) {
 	    //TODO how it happens that no keys are set?
-      ldout(g_ceph_context, 0) << "Directory::end_trx no keys to compare, skipping end_trx script" << dendl;
+      ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx no keys to compare, skipping end_trx script" << dendl;
       return 0;
     }
 
-    ldout(g_ceph_context, 0) << "Directory::end_trx running evalsha script = " 
-	    << "evalsha " << m_evalsha_end_trx << " num of keys " << num_keys 
+    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx running evalsha script = "
+	    << "evalsha " << m_evalsha_end_trx << " num of keys " << num_keys
 	    << " with the following keys " << debug_all_keys << dendl;
 
     //the keys that are passed to the script are the keys that are related to the unique transaction.
+    //ARGV[1] = m_trx_id (for logging in Lua) - add to trx_keys BEFORE push_range
+    trx_keys.push_back(m_trx_id);
     req.push_range("EVALSHA",m_evalsha_end_trx, trx_keys);
     redis_exec(conn, ec, req, resp, y);
 
@@ -1733,43 +1741,43 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
 
 	//system level error
 	if (ec.category() == boost::system::system_category()) {
-        		ldout(g_ceph_context, 0) << err_msg.str() << " System error: " << ec.message()
-                  		<< " (errno=" << ec.value() << dendl; 
+        		ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] " << err_msg.str() << " System error: " << ec.message()
+                  		<< " (errno=" << ec.value() << dendl;
 	//boost redis error
     	} else if (ec.category().name() == std::string("boost.redis")) {
 			std::string error_msg = ec.message();
 			// LUA script compilation errors
     			if (error_msg.find("ERR Error compiling script") != std::string::npos) {
-        			ldout(g_ceph_context, 0) << "Directory::end_trx LUA script compilation error: "
+        			ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx LUA script compilation error: "
                                  << error_msg << dendl;
         			return -EINVAL; // the loaded script is corrupted
     			}
 
     			// LUA Script not found
     			if (error_msg.find("NOSCRIPT") != std::string::npos) {
-        			ldout(g_ceph_context, 0) << "Directory::end_trx LUA script not found, reloading..." << dendl;
+        			ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx LUA script not found, reloading..." << dendl;
         			m_evalsha_end_trx.clear(); // Force script reload
-        			return -EINVAL; // the SHA of the loaded script is not found, it should be reloaded. 
-    	   	 	}	
+        			return -EINVAL; // the SHA of the loaded script is not found, it should be reloaded.
+    	   	 	}
 
     			// Wrong data type operations
     			if (error_msg.find("WRONGTYPE") != std::string::npos) {
-        			ldout(g_ceph_context, 0) << "Directory::end_trx Redis key type mismatch: "
+        			ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx Redis key type mismatch: "
                                  << error_msg << dendl;
-        			return -EINVAL; // the input arguments to the script are not correct. 
-       	 	   	}	
+        			return -EINVAL; // the input arguments to the script are not correct.
+       	 	   	}
 
     			// Memory/timeout errors
     			if (error_msg.find("OOM") != std::string::npos ||
         			error_msg.find("BUSY") != std::string::npos) {
-        				ldout(g_ceph_context, 0) << "Directory::end_trx Redis resource error: "
+        				ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx Redis resource error: "
                                  	<< error_msg << dendl;
-        			return -EINVAL; // maybe temporary error, the transaction could be retried. 
-       	 		}		
+        			return -EINVAL; // maybe temporary error, the transaction could be retried.
+       	 		}
 
 
    	} else {//TODO what are the other error categories?
-        		ldout(g_ceph_context,0) << "Directory::end_trx " << err_msg.str() << " Other error: " << ec.message()
+        		ldout(g_ceph_context,0) << "[trx:" << m_trx_id << "] Directory::end_trx " << err_msg.str() << " Other error: " << ec.message()
                   		<< " (category=" << ec.category().name()
                   		<< ", value=" << ec.value() << dendl;
     	}
@@ -1780,26 +1788,26 @@ int D4NTransaction::end_trx(const DoutPrefixProvider* dpp, std::shared_ptr<conne
       // the response contains a boolean indicating whether the transaction was successful
       // Extract boolean value from boost::system::result with debugging
       auto result = std::get<0>(resp);
-      ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: result.has_value()=" << result.has_value()
+      ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx DEBUG: result.has_value()=" << result.has_value()
                                 << " result.has_error()=" << result.has_error() << dendl;
       if (result.has_error()) {
-        ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: Redis result has error, returning -EINVAL" << dendl;
+        ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx DEBUG: Redis result has error, returning -EINVAL" << dendl;
         return -EINVAL;
       }
       std::string status = result.value();
-      ldout(g_ceph_context, 0) << "Directory::end_trx DEBUG: LUA script returned status=" << status << dendl;
+      ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx DEBUG: LUA script returned status=" << status << dendl;
       if(status == "false") {//TODO consider returning a specific error code per type of failure. (i.e , read conflict, write conflict, etc)
 	//the transaction had failed, it was rolled back due to concurrent modification conflict.
-	ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had rolled back the transaction this = " << this << " status= " << status <<  dendl;
+	ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx the end-trx script had rolled back the transaction this = " << this << " status= " << status <<  dendl;
 	return -ERR_PRECONDITION_FAILED;
       }
 
     } catch (std::exception &e) {
-      ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had failed this = " << this << "with exception = " << e.what() << dendl;
+      ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx the end-trx script had failed this = " << this << "with exception = " << e.what() << dendl;
       return -EINVAL;
     }
 
-    ldout(g_ceph_context, 0) << "Directory::end_trx the end-trx script had finished successfully this = " << this << dendl;
+    ldout(g_ceph_context, 0) << "[trx:" << m_trx_id << "] Directory::end_trx the end-trx script had finished successfully this = " << this << dendl;
 
 return 0;
 }
