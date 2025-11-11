@@ -14,6 +14,10 @@ class Cluster:
         """ execute a radosgw-admin command """
         pass
 
+    def ceph_admin(self, args = None, **kwargs):
+        """ execute a ceph command """
+        pass
+
 class Gateway:
     """ interface to control a single radosgw instance """
     __metaclass__ = ABCMeta
