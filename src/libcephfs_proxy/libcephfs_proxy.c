@@ -58,8 +58,11 @@ static bool client_stop(proxy_link_t *link)
 
 static int32_t proxy_negotiation_check(proxy_link_negotiate_t *neg)
 {
-	proxy_log(LOG_INFO, 0, "Features enabled: %08x, protocol: %u",
-		  neg->v1.enabled, neg->v2.protocol);
+	proxy_log(LOG_INFO, 0,
+		  "Version: %u, Size: %u, Flags: %02x, Features enabled: %08x, "
+		  "Protocol: %u, Daemon ops: %u",
+		  neg->v0.version, neg->v0.size, neg->v0.flags, neg->v1.enabled,
+		  neg->v2.protocol, neg->v0.num_ops);
 
 	return 0;
 }
