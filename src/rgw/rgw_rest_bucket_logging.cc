@@ -417,6 +417,11 @@ class RGWPostBucketLoggingOp : public RGWDefaultResponseOp {
 
   void execute(optional_yield y) override {
     const auto& target_bucket_id = target_bucket->get_key();
+    // make sure that the logging source attribute is up-to-date
+    if (const auto ret = rgw::bucketlogging::update_bucket_logging_sources(this, target_bucket, source_bucket->get_key(), true, y); ret < 0) {
+      ldpp_dout(this, 5) << "WARNING: failed to update logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
+        << "' in logging target '" << target_bucket_id << "'. error: " << ret << dendl;
+    }
     std::string obj_name;
     RGWObjVersionTracker objv_tracker;
     op_ret = target_bucket->get_logging_object_name(obj_name, configuration.target_prefix, y, this, &objv_tracker);

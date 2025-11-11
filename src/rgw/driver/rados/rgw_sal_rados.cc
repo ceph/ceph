@@ -1140,6 +1140,8 @@ int set_committed_logging_object(RadosStore* store,
   bufferlist bl;
   bl.append(last_committed);
   librados::ObjectWriteOperation op;
+  // if object does not exist, we should not create the attribute
+  op.assert_exists();
   op.setxattr(RGW_ATTR_COMMITTED_LOGGING_OBJ, std::move(bl));
   return rgw_rados_operate(dpp, io_ctx, obj_name_oid, std::move(op), y);
 }
@@ -1173,6 +1175,10 @@ int RadosBucket::get_logging_object_name(std::string& obj_name,
       ldpp_dout(dpp, 20) << "INFO: logging object name does not exist at '" << obj_name_oid << "'" << dendl;
     }
     return ret;
+  }
+  if (bl.length() == 0) {
+    ldpp_dout(dpp, 1) << "ERROR: logging object name at '" << obj_name_oid << "' is empty" << dendl;
+    return -ENODATA;
   }
   obj_name = bl.to_str();
   return 0;

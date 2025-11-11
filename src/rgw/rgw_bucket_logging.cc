@@ -328,14 +328,6 @@ int commit_logging_object(const configuration& conf,
       << ret << dendl;
     return ret;
   }
-  return commit_logging_object(conf, target_bucket, dpp, y, last_committed);
-}
-
-int commit_logging_object(const configuration& conf,
-    const std::unique_ptr<rgw::sal::Bucket>& target_bucket,
-    const DoutPrefixProvider *dpp,
-    optional_yield y,
-    std::string* last_committed) {
   std::string obj_name;
   if (const int ret = target_bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, nullptr); ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get name of logging object of logging bucket '" <<
@@ -507,6 +499,12 @@ int log_record(rgw::sal::Driver* driver,
   if (ret = verify_target_bucket_attributes(dpp, target_bucket.get(), &err_message); ret < 0) {
     set_journal_err(err_message);
     return ret;
+  }
+
+  // make sure that the logging source attribute is up-to-date
+  if (ret = update_bucket_logging_sources(dpp, target_bucket, s->bucket->get_key(), true, y); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
+      s->bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during record logging. ret = " << ret << dendl;
   }
 
   const auto region = driver->get_zone()->get_zonegroup().get_api_name();
@@ -795,8 +793,7 @@ int update_bucket_logging_sources(const DoutPrefixProvider* dpp, std::unique_ptr
       ldpp_dout(dpp, 5) << "WARNING: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
         << "' for bucket '" << bucket->get_key() << "' when updating logging sources. error: " << err.what() << dendl;
     }
-    ldpp_dout(dpp, 20) << "INFO: logging source '" << src_bucket_id << "' already " <<
-      (add ? "added to" : "removed from") << " bucket '" << bucket->get_key() << "'" << dendl;
+    // no change
     return 0;
   }, y);
 }
@@ -810,53 +807,59 @@ int bucket_deletion_cleanup(const DoutPrefixProvider* dpp,
   // and also delete the object holding the pending object name
   auto& attrs = bucket->get_attrs();
   if (const auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING_SOURCES); iter != attrs.end()) {
+    source_buckets sources;
     try {
-      source_buckets sources;
       ceph::decode(sources, iter->second);
-      for (const auto& source : sources) {
-        std::unique_ptr<rgw::sal::Bucket> src_bucket;
-        if (const int ret = driver->load_bucket(dpp, source, &src_bucket, y); ret < 0) {
-          ldpp_dout(dpp, 5) << "WARNING: failed to get logging source bucket '" << source << "' for logging bucket '" <<
-            bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
-          continue;
-        }
-        auto& src_attrs = src_bucket->get_attrs();
-        if (const auto iter = src_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != src_attrs.end()) {
-          configuration conf;
-          try {
-            auto bl_iter = iter->second.cbegin();
-            decode(conf, bl_iter);
-            std::string obj_name;
-            RGWObjVersionTracker objv;
-            if (const int ret = bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv); ret < 0) {
-              ldpp_dout(dpp, 5) << "WARNING: failed to get logging object name for logging bucket '" << bucket->get_key() <<
-                "' during cleanup. ret = " << ret << dendl;
-              continue;
-            }
-            if (const int ret = bucket->remove_logging_object(obj_name, y, dpp); ret < 0) {
-              ldpp_dout(dpp, 5) << "WARNING: failed to delete pending logging object '" << obj_name << "' for logging bucket '" <<
-                bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
-              continue;
-            }
-            ldpp_dout(dpp, 20) << "INFO: successfully deleted pending logging object '" << obj_name << "' from deleted logging bucket '" <<
-                bucket->get_key() << "'" << dendl;
-            if (const int ret = bucket->remove_logging_object_name(conf.target_prefix, y, dpp, &objv); ret < 0) {
-              ldpp_dout(dpp, 5) << "WARNING: failed to delete object holding bucket logging object name for logging bucket '" <<
-                bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
-              continue;
-            }
-            ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name from deleted logging bucket '" <<
-              bucket->get_key() << "'" << dendl;
-          } catch (buffer::error& err) {
-            ldpp_dout(dpp, 5) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-              << "' of bucket '" << src_bucket->get_key() << "' during cleanup. error: " << err.what() << dendl;
-          }
-        }
-      }
     } catch (buffer::error& err) {
       ldpp_dout(dpp, 5) << "WARNING: failed to decode logging sources attribute '" << RGW_ATTR_BUCKET_LOGGING_SOURCES
         << "' for logging bucket '" << bucket->get_key() << "'. error: " << err.what() << dendl;
       return -EIO;
+    }
+    // since we removed the attribute, we should not return error code from now on
+    // any retry, would find no attribute and return success
+    for (const auto& source : sources) {
+      std::unique_ptr<rgw::sal::Bucket> src_bucket;
+      if (const int ret = driver->load_bucket(dpp, source, &src_bucket, y); ret < 0) {
+        ldpp_dout(dpp, 5) << "WARNING: failed to get logging source bucket '" << source << "' for logging bucket '" <<
+          bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+        continue;
+      }
+      auto& src_attrs = src_bucket->get_attrs();
+      if (const auto iter = src_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != src_attrs.end()) {
+        configuration conf;
+        try {
+          auto bl_iter = iter->second.cbegin();
+          decode(conf, bl_iter);
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 5) << "WARNING: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+            << "' of bucket '" << src_bucket->get_key() << "' during cleanup. error: " << err.what() << dendl;
+          continue;
+        }
+        std::string obj_name;
+        RGWObjVersionTracker objv;
+        if (const int ret = bucket->get_logging_object_name(obj_name, conf.target_prefix, y, dpp, &objv); ret < 0) {
+          ldpp_dout(dpp, 5) << "WARNING: failed to get logging object name for logging bucket '" << bucket->get_key() <<
+            "' during cleanup. ret = " << ret << dendl;
+          continue;
+        }
+        if (const int ret = bucket->remove_logging_object_name(conf.target_prefix, y, dpp, &objv); ret < 0) {
+          ldpp_dout(dpp, 5) << "WARNING: failed to delete object holding bucket logging object name for logging bucket '" <<
+            bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+          continue;
+        }
+        ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name from deleted logging bucket '" <<
+          bucket->get_key() << "'" << dendl;
+        if (const int ret = bucket->remove_logging_object(obj_name, y, dpp); ret < 0) {
+          ldpp_dout(dpp, 5) << "WARNING: failed to delete pending logging object '" << obj_name << "' for logging bucket '" <<
+            bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+          continue;
+        }
+        ldpp_dout(dpp, 20) << "INFO: successfully deleted pending logging object '" << obj_name << "' from deleted logging bucket '" <<
+            bucket->get_key() << "'" << dendl;
+      } else {
+        ldpp_dout(dpp, 5) << "WARNING: no logging attribute '" << RGW_ATTR_BUCKET_LOGGING
+          << "' found in logging source bucket '" << src_bucket->get_key() << "' during cleanup" << dendl;
+      }
     }
   }
 
@@ -881,7 +884,7 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
         conf = std::move(tmp_conf);
       } catch (buffer::error& err) {
         ldpp_dout(dpp, 5) << "WARNING: failed to decode existing logging attribute '" << RGW_ATTR_BUCKET_LOGGING
-          << "' of bucket '" << bucket->get_key() << "' during cleanup. error: " << err.what() << dendl;
+          << "' of bucket '" << bucket->get_key() << "' during source cleanup. error: " << err.what() << dendl;
         return -EIO;
       }
       if (remove_attr) {
@@ -894,34 +897,67 @@ int source_bucket_cleanup(const DoutPrefixProvider* dpp,
   }, y); ret < 0) {
     if (remove_attr) {
       ldpp_dout(dpp, 5) << "WARNING: failed to remove logging attribute '" << RGW_ATTR_BUCKET_LOGGING <<
-        "' from bucket '" << bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+        "' from bucket '" << bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;
     }
     return ret;
+  }
+  if (last_committed) {
+    last_committed->clear();
   }
   if (!conf) {
     // no logging attribute found
     return 0;
   }
-  const auto& info = bucket->get_info();
-  if (const int ret = commit_logging_object(*conf, dpp, driver, info.bucket.tenant, y, last_committed); ret < 0) {
-    ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
-      bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "INFO: successfully committed pending logging object of bucket '" << bucket->get_key() << "'" << dendl;
-  }
+  // since we removed the attribute, we should not return error code from now on
+  // any retry, would find no attribute and return success
   rgw_bucket target_bucket_id;
+  const auto& info = bucket->get_info();
   if (const int ret = get_bucket_id(conf->target_bucket, info.bucket.tenant, target_bucket_id); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: failed to parse logging bucket '" <<
-      conf->target_bucket << "' during cleanup. ret = " << ret << dendl;
+      conf->target_bucket << "' during source cleanup. ret = " << ret << dendl;
     return 0;
   }
-  if (const int ret = update_bucket_logging_sources(dpp, driver, target_bucket_id, bucket->get_key(), false, y); ret < 0) {
+  std::unique_ptr<rgw::sal::Bucket> target_bucket;
+  const int ret = driver->load_bucket(dpp, target_bucket_id, &target_bucket, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to get logging bucket '" << target_bucket_id  <<
+      "' when doing source cleanup. ret = " << ret << dendl;
+    return 0;
+  }
+  if (const int ret = update_bucket_logging_sources(dpp, target_bucket, bucket->get_key(), false, y); ret < 0) {
     ldpp_dout(dpp, 5) << "WARNING: could not update bucket logging source '" <<
-      bucket->get_key() << "' during cleanup. ret = " << ret << dendl;
+      bucket->get_key() << "' in logging bucket '" << target_bucket_id << "' attribute, during source cleanup. ret = " << ret << dendl;
+  }
+  std::string obj_name;
+  RGWObjVersionTracker objv;
+  if (const int ret = target_bucket->get_logging_object_name(obj_name, conf->target_prefix, y, dpp, &objv); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to get logging object name for logging bucket '" << bucket->get_key() <<
+      "' during source cleanup. ret = " << ret << dendl;
+    // if name cannot be fetched, we should not commit or remove the object holding the name
+    // it is better to leak an object than to cause a possible data loss
     return 0;
   }
-  ldpp_dout(dpp, 20) << "INFO: successfully updated bucket logging source '" <<
-    bucket->get_key() << "' during cleanup"<< dendl;
+  if (const int ret = target_bucket->remove_logging_object_name(conf->target_prefix, y, dpp, &objv); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to delete object holding bucket logging object name for bucket '" <<
+      bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;
+    // this could be because of a race someone else trying to commit the object
+    // (another bucket cleanup with shared prefix, rollover or an explicit commit)
+    // and since committing the object twice will cause data loss, we should not try to commit it here
+    return 0;
+  }
+  ldpp_dout(dpp, 20) << "INFO: successfully deleted object holding bucket logging object name for bucket '" <<
+      bucket->get_key() << "' during source cleanup" << dendl;
+  // since the object holding the name was deleted, we cannot fetch the last commited name from it
+  if (const int ret = target_bucket->commit_logging_object(obj_name, y, dpp, conf->target_prefix, nullptr); ret < 0) {
+    ldpp_dout(dpp, 5) << "WARNING: could not commit pending logging object of bucket '" <<
+      bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;
+    return 0;
+  }
+  ldpp_dout(dpp, 20) << "INFO: successfully committed pending logging object of bucket '" <<
+    bucket->get_key() << "' during source cleanup. ret = " << ret << dendl;
+  if (last_committed) {
+    *last_committed = obj_name;
+  }
   return 0;
 }
 
