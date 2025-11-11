@@ -1,6 +1,10 @@
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
+* OSD: A health warning is reported when BlueFS usage exceeds the
+  configured ratio of the main OSD data device size. This warning is
+  informational and can be muted with:
+  ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
 
 >=20.0.0
 
