@@ -4062,7 +4062,9 @@ public:
   RGWListRemoteBucketCR(RGWDataSyncCtx *_sc, const rgw_bucket_shard& bs,
                         rgw_obj_key& _marker_position, bucket_list_result *_result)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env), bs(bs),
-      marker_position(_marker_position), result(_result) {}
+      marker_position(_marker_position), result(_result) {
+        result->reset_entries();
+      }
 
   int operate(const DoutPrefixProvider *dpp) override {
     reenter(this) {
