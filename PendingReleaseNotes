@@ -63,6 +63,11 @@
   does not match rados_write_op_zero, and offset and length are swapped, which
   results in an unexpected response.
 
+* OSD: A health warning is reported when BlueFS usage exceeds the
+  configured ratio of the main OSD data device size. This warning is
+  informational and can be muted with:
+  ``ceph health mute BLUESTORE_BLUEFS_OVERSIZED``
+
 >=19.2.2
 
 * RGW: PutObjectLockConfiguration can now be used to enable S3 Object Lock on an
