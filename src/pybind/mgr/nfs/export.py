@@ -740,6 +740,7 @@ class ExportMgr:
                              access_type: str,
                              clients: list = [],
                              sectype: Optional[List[str]] = None,
+                             xprtsec: Optional[str] = None,
                              cmount_path: Optional[str] = "/",
                              earmark_resolver: Optional[CephFSEarmarkResolver] = None
                              ) -> Dict[str, Any]:
@@ -766,6 +767,7 @@ class ExportMgr:
                     },
                     "clients": clients,
                     "sectype": sectype,
+                    "XprtSec": xprtsec,
                 },
                 earmark_resolver
             )
@@ -791,7 +793,8 @@ class ExportMgr:
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
                           clients: list = [],
-                          sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+                          sectype: Optional[List[str]] = None,
+                          xprtsec: Optional[str] = None) -> Dict[str, Any]:
         pseudo_path = normalize_path(pseudo_path)
 
         if not bucket and not user_id:
@@ -812,6 +815,7 @@ class ExportMgr:
                     },
                     "clients": clients,
                     "sectype": sectype,
+                    "XprtSec": xprtsec,
                 }
             )
             log.debug("creating rgw export %s", export)
