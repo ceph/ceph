@@ -4500,12 +4500,14 @@ public:
         yield call(sync_env->error_logger->log_error_cr(dpp, sc->conn->get_remote_id(), "data", error_ss.str(), -retcode, string("failed to sync object") + cpp_strerror(-sync_status)));
       }
 done:
+      tn->log(20, SSTR("before marker tracker finish sync_status=" << sync_status << " retcode=" << retcode));
       if (sync_status == 0) {
         /* update marker */
         set_status() << "calling marker_tracker->finish(" << entry_marker << ")";
         yield call(marker_tracker->finish(entry_marker));
         sync_status = retcode;
       }
+      tn->log(20, SSTR("sync_status=" << sync_status << " retcode=" << retcode));
       if (sync_status < 0) {
         return set_cr_error(sync_status);
       }
@@ -4634,14 +4636,20 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
 
       yield call(new RGWListRemoteBucketCR(sc, bs, list_marker, &list_result));
       if (retcode < 0 && retcode != -ENOENT) {
+        tn->log(5, SSTR("failed bucket listing retcode=" << retcode));
         set_status("failed bucket listing, going down");
         drain_all();
         yield spawn(marker_tracker.flush(), true);
         return set_cr_error(retcode);
       }
+
+      tn->log(20, SSTR("listed bucket for full sync list_result.entries.size=" <<
+        list_result.entries.size() << " is_truncated=" << list_result.is_truncated)
+      );
       if (list_result.entries.size() > 0) {
         tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
       }
+
       entries_iter = list_result.entries.begin();
       for (; entries_iter != list_result.entries.end(); ++entries_iter) {
         if (lease_cr && !lease_cr->is_locked()) {
@@ -4687,6 +4695,8 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
       }
     } while (list_result.is_truncated && sync_result == 0);
     set_status("done iterating over all objects");
+    tn->log(20, SSTR("done iterating over all objects sync_result=" << sync_result <<
+      " list_result.is_truncated=" << list_result.is_truncated));
 
     /* wait for all operations to complete */
     drain_all_cb([&](uint64_t stack_id, int ret) {
