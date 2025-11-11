@@ -56,7 +56,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   write1.omap_set_header(omap_header_bl);
   write1.omap_set(omap_map);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
+  int ret = ioctx.operate("my_object", &write1);
+  EXPECT_EQ(ret, 0);
 
   int err = 0;
   bufferlist bl_read;
@@ -72,7 +73,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
   read.omap_get_vals2(omap_key_1, 1, &returned_vals_1, nullptr, &err);
   read.omap_get_vals2("omap", 4, &returned_vals_2, nullptr, &err);
 
-  ASSERT_TRUE(AssertOperateWithSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
   ASSERT_EQ(0, err);
@@ -88,7 +90,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   read.omap_get_keys2("", 10, &returned_keys, nullptr, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys.size(), (unsigned)6);
@@ -101,7 +104,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   read.omap_get_header(&returned_header_bl, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   std::string returned_header_str;
   decode(returned_header_str, returned_header_bl);
@@ -118,7 +122,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   read.omap_get_vals_by_keys(key_filter, &returned_vals_by_keys, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_vals_by_keys.size(), (unsigned)2);
@@ -136,7 +141,8 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   read.omap_cmp(cmp_results, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
 
@@ -151,11 +157,13 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   write1.omap_rm_keys(keys_to_remove);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
+  ret = ioctx.operate("my_object", &write1);
+  EXPECT_EQ(ret, 0);
 
   read.omap_get_keys2("", 10, &returned_keys_with_removed, nullptr, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys_with_removed.size(), (unsigned)5);
@@ -166,11 +174,13 @@ TEST_P(LibRadosSplitOpECPP, OMAPReads) {
 
   write1.omap_clear();
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &write1));
+  ret = ioctx.operate("my_object", &write1);
+  EXPECT_EQ(ret, 0);
 
   read.omap_get_keys2("", 10, &returned_keys, nullptr, &err);
 
-  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "my_object", &read, nullptr));
+  ret = ioctx.operate("my_object", &read, nullptr);
+  EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys.size(), (unsigned)0);
@@ -198,11 +208,13 @@ TEST_P(LibRadosSplitOpECPP, ErrorInject) {
   ObjectWriteOperation write1;
   write1.write(0, bl_write);
   write1.omap_set(omap_map);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &write1));
+  int ret = ioctx.operate("error_inject_oid", &write1);
+  EXPECT_EQ(ret, 0);
 
   // 1b. Write data to xattrs
   write1.setxattr(xattr_key.c_str(), xattr_val_bl);
-  EXPECT_TRUE(AssertOperateWithoutSplitOp(0, "error_inject_oid", &write1));
+  ret = ioctx.operate("error_inject_oid", &write1);
+  EXPECT_EQ(ret, 0);
 
   // 2. Set osd_debug_reject_backfill_probability to 1.0
   CephContext* cct = static_cast<CephContext*>(cluster.cct());

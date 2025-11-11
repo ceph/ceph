@@ -129,6 +129,7 @@ public:
 protected:
   static void SetUpTestCase();
   static void TearDownTestCase();
+  static librados::Rados s_cluster;
   void set_allow_ec_overwrites();
   int request_osd_map(
     std::string pool_name, 
