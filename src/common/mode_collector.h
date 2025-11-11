@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 smarttab
 #pragma once
 /**
@@ -25,10 +25,10 @@
  * appears most frequently) of the collected values.
  *
  * The template parameters are:
- * - OBJ_ID: The type of the object ID (e.g., replica ID).
+ * - ObjIdT: The type of the object ID (e.g., replica ID).
  * - K: The type of the value being collected.
- * - HSH: The hash function for K, to be used with the unordered_map.
- *   Note: if HSH is std::identity, then K must fit in size_t.
+ * - HshT: The hash function for K, to be used with the unordered_map.
+ *   Note: if HshT is std::identity, then K must fit in size_t.
  * - MAX_ELEM is used to calculate the estimated memory footprint of the
  *   unordered_map.
  *
@@ -42,9 +42,9 @@ struct ModeFinder {
 
   /// a 'non-templated' version of mode_status_t, to simplify usage.
   enum class mode_status_t {
-    no_mode_value,  ///< No clear victory for any value
-    mode_value,	 ///< we have a winner, but it appears in less than half
-                 ///< of the samples
+    no_mode_value,     ///< No clear victory for any value
+    mode_value,        ///< we have a winner, but it appears in less than half
+                       ///< of the samples
     authorative_value  ///< more than half of the samples are of the same value
   };
 };
@@ -54,44 +54,43 @@ struct ModeFinder {
 // of the unrdered map).
 
 template <
-    typename OBJ_ID, ///< how to identify the object that reported a value
-    typename K, ///< the type of the value being collected
-    typename HSH = std::identity, ///< the hash function for K
+    typename ObjIdT,  ///< how to identify the object that reported a value
+    typename K,       ///< the type of the value being collected
+    typename HshT = std::identity,  ///< the hash function for K
     int MAX_ELEM = 12>
   requires(
-      std::invocable<HSH, K> &&
-      sizeof(std::invoke_result_t<HSH, K>) <= sizeof(size_t))
+      std::invocable<HshT, K> &&
+      sizeof(std::invoke_result_t<HshT, K>) <= sizeof(size_t))
 class ModeCollector : public ModeFinder {
- private:
   struct node_type_t {
     size_t m_count{0};
-    OBJ_ID m_id;  ///< Stores the object ID associated with this value
+    ObjIdT m_id;  ///< Stores the object ID associated with this value
   };
 
   // estimated (upper limit) memory footprint of the unordered_map
   // vvvvvvvvvvvvvvvvvvvvvvvvvvvv
   // Bucket array: typically 2x num_elements for good load factor
-  static const size_t bucket_array_size = (MAX_ELEM * 2) * sizeof(void*);
+  static const size_t BUCKET_ARRAY_SIZE = (MAX_ELEM * 2) * sizeof(void*);
   // Node storage: each elem needs hash + next-ptr
-  static constexpr size_t node_overhead = sizeof(void*) + sizeof(size_t);
-  static constexpr size_t node_storage =
-      MAX_ELEM * (sizeof(K) + sizeof(node_type_t) + node_overhead);
+  static constexpr size_t NODE_OVERHEAD = sizeof(void*) + sizeof(size_t);
+  static constexpr size_t NODE_STORAGE =
+      MAX_ELEM * (sizeof(K) + sizeof(node_type_t) + NODE_OVERHEAD);
   // PMR allocator overhead (alignment, bookkeeping)
-  static constexpr size_t pmr_overhead_per_alloc = 16;	// typical
+  static constexpr size_t PMR_OVERHEAD_PER_ALLOC = 16;  // typical
   // bucket array + nodes
-  static constexpr size_t total_overhead = pmr_overhead_per_alloc * 2;
-  static constexpr size_t m_estimated_memory_footprint =
-      bucket_array_size + node_storage + total_overhead;
+  static constexpr size_t TOTAL_OVERHEAD = PMR_OVERHEAD_PER_ALLOC * 2;
+  static constexpr size_t ESTIMATED_MEMORY_FOOTPRINT =
+      BUCKET_ARRAY_SIZE + NODE_STORAGE + TOTAL_OVERHEAD;
   // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-  std::array<std::byte, m_estimated_memory_footprint> m_buffer;
+  std::array<std::byte, ESTIMATED_MEMORY_FOOTPRINT> m_buffer;
   std::pmr::monotonic_buffer_resource m_mbr{m_buffer.data(), m_buffer.size()};
 
   /// Map to store the occurrence count of each value
   std::pmr::unordered_map<
       K,
       node_type_t,
-      HSH,
+      HshT,
       std::equal_to<K> >
       m_frequency_map;
 
@@ -108,7 +107,7 @@ class ModeCollector : public ModeFinder {
     K key;
     /// an object ID, "arbitrary" selected from the set of objects that
     /// reported the mode value
-    OBJ_ID id;
+    ObjIdT id;
     /// the number of times the mode value was reported
     size_t count;
     auto operator<=>(const results_t& rhs) const = default;
@@ -120,7 +119,7 @@ class ModeCollector : public ModeFinder {
   }
 
   /// Add a value to the collector
-  void insert(const OBJ_ID& obj, const K& value) noexcept
+  void insert(const ObjIdT& obj, const K& value) noexcept
   {
     auto& node = m_frequency_map[value];
     node.m_count++;
@@ -141,14 +140,14 @@ class ModeCollector : public ModeFinder {
     assert(!m_frequency_map.empty());
 
     auto max_elem = std::ranges::max_element(
-	m_frequency_map, {},
-	[](const auto& pair) { return pair.second.m_count; });
+        m_frequency_map, {},
+        [](const auto& pair) { return pair.second.m_count; });
 
     // Check for clear victory
     if (max_elem->second.m_count > m_actual_count / 2) {
       return {
-	  mode_status_t::authorative_value, max_elem->first,
-	  max_elem->second.m_id, max_elem->second.m_count};
+          mode_status_t::authorative_value, max_elem->first,
+          max_elem->second.m_id, max_elem->second.m_count};
     }
 
     // Check for possible ties
@@ -156,19 +155,18 @@ class ModeCollector : public ModeFinder {
 
     max_elem->second.m_count = 0;  // Reset the count of the max element
     const auto second_best_elem = std::ranges::max_element(
-	m_frequency_map, {},
-	[](const auto& pair) { return pair.second.m_count; });
+        m_frequency_map, {},
+        [](const auto& pair) { return pair.second.m_count; });
     max_elem->second.m_count = max_elem_cnt;  // Restore the count
 
     if (second_best_elem->second.m_count == max_elem_cnt) {
       return {
-	  mode_status_t::no_mode_value, max_elem->first, max_elem->second.m_id,
-	  max_elem_cnt};
+          mode_status_t::no_mode_value, max_elem->first, max_elem->second.m_id,
+          max_elem_cnt};
     }
 
     return {
-	mode_status_t::mode_value, max_elem->first, max_elem->second.m_id,
-	max_elem_cnt};
+        mode_status_t::mode_value, max_elem->first, max_elem->second.m_id,
+        max_elem_cnt};
   }
 };
-
