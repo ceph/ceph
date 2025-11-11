@@ -1,0 +1,13 @@
+<cd-cephfs-mirroring-detail-list></cd-cephfs-mirroring-detail-list>
+<ng-container *ngIf="mirroringData$ | async as mirroringData">
+  <cd-table
+    [data]="mirroringData"
+    [columns]="columns"
+    [tableActions]="tableActions"
+    selectionType="single"
+    [hasDetails]="false"
+    (fetchData)="loadMirroringData($event)"
+    (updateSelection)="updateSelection($event)"
+  >
+  </cd-table>
+</ng-container>

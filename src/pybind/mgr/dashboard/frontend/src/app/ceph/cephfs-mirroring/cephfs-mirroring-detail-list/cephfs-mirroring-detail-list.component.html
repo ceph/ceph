@@ -1,0 +1,15 @@
+
+
+<ng-container *ngIf="mirroringData$ | async as mirroringData">
+  <cd-table
+    headerTitle="Mirroring links"
+    headerDescription="Current Mirroring links with sync status"
+    [data]="mirroringData"
+    [columns]="columns"
+    [tableActions]="tableActions"
+    selectionType="single"
+    [hasDetails]="false"
+    (fetchData)="loadMirroringData($event)"
+    (updateSelection)="updateSelection($event)">
+  </cd-table>
+</ng-container>
