@@ -104,6 +104,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
     return oss.str();
   }
 
+  bufferlist inbl;
   ret = cluster.mon_command(
     "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile-" + pool_name + "\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
     {}, NULL, NULL);
@@ -117,6 +118,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
     "{\"prefix\": \"osd pool create\", \"pool\": \"" + pool_name + "\", \"pool_type\":\"erasure\", \"pg_num\":8, \"pgp_num\":8, \"erasure_code_profile\":\"testprofile-" + pool_name + "\"}",
     {}, NULL, NULL);
   if (ret) {
+    bufferlist inbl;
     destroy_ec_profile_pp(cluster, pool_name, oss);
     oss << "mon_command osd pool create pool:" << pool_name << " pool_type:erasure failed with error " << ret;
     return oss.str();
@@ -126,7 +128,7 @@ std::string create_ec_pool_pp(const std::string &pool_name, Rados &cluster, bool
     ret = cluster.mon_command(
       "{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
       "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
-      inbl, NULL, NULL);
+      std::move(inbl), NULL, NULL);
     if (ret) {
       destroy_ec_pool_pp(pool_name, cluster);
       destroy_ec_profile_pp(cluster, pool_name, oss);
@@ -154,16 +156,12 @@ std::string set_pool_flags_pp(const std::string &pool_name, librados::Rados &clu
   cmd[1] = NULL;
 
   bufferlist inbl;
-  int ret = cluster.mon_command(cmdstr, inbl, NULL, NULL);
+  int ret = cluster.mon_command(std::move(cmdstr), std::move(inbl), NULL, NULL);
   if (ret) {
     oss << "rados_mon_command osd pool set set_pool_flags_pp failed with error " << ret;
   }
 
   return oss.str();
-}
-
-std::string set_split_ops_pp(const std::string &pool_name, librados::Rados &cluster, bool set_not_unset) {
-  return set_pool_flags_pp(pool_name, cluster, 1<<20, set_not_unset);
 }
 
 std::string set_allow_ec_overwrites_pp(const std::string &pool_name, Rados &cluster, bool allow)

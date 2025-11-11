@@ -479,22 +479,20 @@ protected:
     SKIP_IF_CRIMSON();
     pool_name_default = get_temp_pool_name();
     pool_name_fast = get_temp_pool_name();
-    pool_name_fast_split = get_temp_pool_name();
     src_pool_name = get_temp_pool_name();
     ASSERT_EQ("", connect_cluster_pp(s_cluster));
     ASSERT_EQ(0, s_cluster.pool_create(src_pool_name.c_str()));
 
-    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, src_pool_name}) {
       ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
       librados::IoCtx ioctx;
       ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
       ioctx.application_enable("rados", true);
     }
-    ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
   }
   static void TearDownTestCase() {
     SKIP_IF_CRIMSON();
-    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, src_pool_name}) {
       ASSERT_EQ(0, destroy_ec_pool_pp(pool_name, s_cluster));
     }
     s_cluster.shutdown();

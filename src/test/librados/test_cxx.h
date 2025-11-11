@@ -29,12 +29,14 @@ std::string set_split_ops_pp(const std::string &pool_name, librados::Rados &clus
 
 // The following are convenient macros for defining test combinations
 // with each of the gtest suites.
+
+// This test suite is planned to have a second boolean 
+// once split ops are implemented
 #define INSTANTIATE_TEST_SUITE_P_EC(CLASS) \
 INSTANTIATE_TEST_SUITE_P( CLASS ## ParamCombination, CLASS, \
-::testing::Combine( \
-::testing::Bool(),   /* fast_ec */ \
-::testing::Bool()))  /* split_ops */
+::testing::Bool())   /* fast_ec */
 
+// This test suite is planned to have a boolean 
+// once split ops are implemented
 #define INSTANTIATE_TEST_SUITE_P_REPLICA(CLASS) \
-INSTANTIATE_TEST_SUITE_P( CLASS ## ParamCombination, CLASS, \
-::testing::Bool()) /* split_ops */
+INSTANTIATE_TEST_SUITE_P( CLASS ## ParamCombination, CLASS)

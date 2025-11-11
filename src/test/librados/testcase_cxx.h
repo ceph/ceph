@@ -118,7 +118,7 @@ protected:
 };
 
 class RadosTestECPP : public RadosTestPPBase,
-                      public ::testing::TestWithParam<std::tuple<bool, bool>> {
+                      public ::testing::TestWithParam<bool> {
   bool ec_overwrites_set = false;
 public:
   RadosTestECPP(bool c=false) : cluster(s_cluster), cleanup(c) {}
@@ -130,7 +130,6 @@ protected:
   static librados::Rados s_cluster;
   static std::string pool_name_default;
   static std::string pool_name_fast;
-  static std::string pool_name_fast_split;
 
   std::string pool_name;
   void SetUp() override;
