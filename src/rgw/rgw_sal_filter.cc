@@ -1150,11 +1150,12 @@ int FilterObject::restore_obj_from_cloud(Bucket* bucket,
 		          CephContext* cct,
 		          std::optional<uint64_t> days,
 			  bool& in_progress,
+		          uint64_t& size,
 		          const DoutPrefixProvider* dpp,
 		          optional_yield y)
 {
   return next->restore_obj_from_cloud(nextBucket(bucket), nextPlacementTier(tier),
-           cct, days, in_progress, dpp, y);
+           cct, days, in_progress, size, dpp, y);
 }
 
 bool FilterObject::placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2)
