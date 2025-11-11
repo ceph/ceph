@@ -1,6 +1,5 @@
 from typing import (Any,
                     Dict,
-                    Union,
                     List,
                     Tuple,
                     Optional,
@@ -33,12 +32,41 @@ class TLSObjectStore():
         self.mgr: CephadmOrchestrator = mgr
         self.cephadm_signed_object_checker = cephadm_signed_obj_checker
         self.tlsobject_class = tlsobject_class
-        all_known_objects_names = [item for sublist in known_objects_names.values() for item in sublist]
-        self.objects_by_name: Dict[str, Any] = {key: {} for key in all_known_objects_names}
         self.service_scoped_objects = known_objects_names[TLSObjectScope.SERVICE]
         self.host_scoped_objects = known_objects_names[TLSObjectScope.HOST]
         self.global_scoped_objects = known_objects_names[TLSObjectScope.GLOBAL]
         self.store_prefix = f'{TLSOBJECT_STORE_PREFIX}{tlsobject_class.STORAGE_PREFIX}.'
+        # initialize objects by name for the different scopes
+        self.objects_by_name: Dict[str, Any] = {}
+        for n in self.service_scoped_objects + self.host_scoped_objects:
+            self.objects_by_name[n] = {}
+        for n in self.global_scoped_objects:
+            self.objects_by_name[n] = self.tlsobject_class()
+
+    def _kv_key(self, obj_name: str) -> str:
+        return self.store_prefix + obj_name
+
+    def _set_store(self, obj_name: str, payload: Any) -> None:
+        self.mgr.set_store(self._kv_key(obj_name), json.dumps(payload))
+
+    def ensure_tombstone(self, obj_name: str, scope: TLSObjectScope) -> None:
+        """
+        Idempotently ensure a tombstone (empty) KV entry for obj_name so the
+        name is rediscovered after manager restarts (see load method).
+
+        - SERVICE/HOST → `{}` (empty per-target map)
+        - GLOBAL       → minimal JSON for an empty TLS object
+        """
+
+        # Do nothing if the TLS object name already exists in the store
+        if self.mgr.get_store_prefix(self._kv_key(obj_name)):
+            return
+
+        if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
+            self._set_store(obj_name, {})
+        elif scope == TLSObjectScope.GLOBAL:
+            empty = self.tlsobject_class()  # falsy empty instance
+            self._set_store(obj_name, self.tlsobject_class.to_json(empty))
 
     def register_object_name(self, obj_name: str, scope: TLSObjectScope) -> None:
         """
@@ -50,8 +78,15 @@ class TLSObjectStore():
             ValueError: If an invalid scope is provided.
         """
         if obj_name not in self.objects_by_name:
-            # Initialize an empty dictionary to track TLS objects for this obj_name
-            self.objects_by_name[obj_name] = {}
+            # Initialize an empty dictionary/TLSobj to track TLS objects for this obj_name
+            if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
+                self.objects_by_name[obj_name] = {}
+            elif scope == TLSObjectScope.GLOBAL:
+                self.objects_by_name[obj_name] = self.tlsobject_class()
+            else:
+                raise ValueError(f"Invalid TLSObjectScope '{scope}' for obj_name '{obj_name}'")
+            # Initialize an empty tombstone for the TLS object(s) in the store
+            self.ensure_tombstone(obj_name, scope)
 
         # Add to the appropriate scope list
         if scope == TLSObjectScope.SERVICE and obj_name not in self.service_scoped_objects:
@@ -105,18 +140,16 @@ class TLSObjectStore():
         self._validate_tlsobject_name(obj_name, service_name, host)
         tlsobject = self.tlsobject_class(tlsobject, user_made, editable)
         scope, target = self.get_tlsobject_scope_and_target(obj_name, service_name, host)
-        j: Union[str, Dict[Any, Any], None] = None
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             self.objects_by_name[obj_name][target] = tlsobject
-            j = {
+            serialized_targets = {
                 key: self.tlsobject_class.to_json(self.objects_by_name[obj_name][key])
                 for key in self.objects_by_name[obj_name]
             }
-            self.mgr.set_store(self.store_prefix + obj_name, json.dumps(j))
+            self._set_store(obj_name, serialized_targets)
         elif scope == TLSObjectScope.GLOBAL:
             self.objects_by_name[obj_name] = tlsobject
-            j = self.tlsobject_class.to_json(tlsobject)
-            self.mgr.set_store(self.store_prefix + obj_name, json.dumps(j))
+            self._set_store(obj_name, self.tlsobject_class.to_json(tlsobject))
         else:
             logger.error(f'Trying to save TLS object name {obj_name} with a not-supported/unknown TLSObjectScope scope {scope.value}')
 
@@ -155,20 +188,19 @@ class TLSObjectStore():
         """
         self._validate_tlsobject_name(obj_name, service_name, host)
         scope, target = self.get_tlsobject_scope_and_target(obj_name, service_name, host)
-        j: Union[str, Dict[Any, Any], None] = None
         if scope in (TLSObjectScope.SERVICE, TLSObjectScope.HOST):
             if obj_name in self.objects_by_name and target in self.objects_by_name[obj_name]:
                 del self.objects_by_name[obj_name][target]
-                j = {
+                serialized_targets = {
                     key: self.tlsobject_class.to_json(self.objects_by_name[obj_name][key])
                     for key in self.objects_by_name[obj_name]
                 }
-                self.mgr.set_store(self.store_prefix + obj_name, json.dumps(j))
+                self._set_store(obj_name, serialized_targets)
                 return True
         elif scope == TLSObjectScope.GLOBAL:
             self.objects_by_name[obj_name] = self.tlsobject_class()
-            j = self.tlsobject_class.to_json(self.objects_by_name[obj_name])
-            self.mgr.set_store(self.store_prefix + obj_name, json.dumps(j))
+            serialized_obj = self.tlsobject_class.to_json(self.objects_by_name[obj_name])
+            self._set_store(obj_name, serialized_obj)
             return True
         else:
             raise TLSObjectException(f'Attempted to remove {self.tlsobject_class.__name__.lower()} for unknown obj_name {obj_name}')
@@ -176,7 +208,7 @@ class TLSObjectStore():
 
     def _validate_tlsobject_name(self, obj_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> None:
         cred_type = self.tlsobject_class.__name__.lower()
-        if obj_name not in self.objects_by_name.keys():
+        if obj_name not in self.objects_by_name:
             raise TLSObjectException(f'Attempted to access {cred_type} for unknown TLS object name {obj_name}')
         if obj_name in self.host_scoped_objects and not host:
             raise TLSObjectException(f'Need host to access {cred_type} for TLS object {obj_name}')
@@ -205,25 +237,42 @@ class TLSObjectStore():
         return tlsobjects
 
     def load(self) -> None:
+
+        def _kv_preview(key: str, raw: str, n: int = 20) -> Tuple[str, int, str]:
+            # Safe, short, escaped preview for logs
+            return key, (len(raw) if raw else 0), (raw[:n] if raw else "")
+
         for k, v in self.mgr.get_store_prefix(self.store_prefix).items():
             obj_name = k[len(self.store_prefix):]
             is_cephadm_signed_object = self.cephadm_signed_object_checker(obj_name)
             if not is_cephadm_signed_object and obj_name not in self.objects_by_name:
-                logger.warning(f"TLSObjectStore: Discarding unknown obj_name '{obj_name}'")
+                logger.warning("TLSObjectStore: Discarding unknown obj_name %r", obj_name)
                 continue
 
             try:
                 tls_object_targets = json.loads(v)
+                if not isinstance(tls_object_targets, dict):
+                    key_preview, vlen, vstart = _kv_preview(k, v)
+                    logger.error(
+                        "TLSObjectStore: Invalid data structure for object %r. "
+                        "Expected dict but got %s. key=%r, len=%d, startswith=%r",
+                        obj_name, type(tls_object_targets).__name__,
+                        key_preview, vlen, vstart,
+                    )
+                    continue
             except json.JSONDecodeError as e:
+                key_preview, vlen, vstart = _kv_preview(k, v)
                 logger.warning(
-                    f"TLSObjectStore: Cannot parse JSON for '{obj_name}': "
-                    f"key={k}, len={len(v) if v else 0}, startswith={v[:20]!r}, error={e}"
+                    "TLSObjectStore: Cannot parse JSON for %r: key=%r, len=%d, startswith=%r, error=%r",
+                    obj_name, key_preview, vlen, vstart, e,
                 )
                 continue
             except Exception as e:
+                key_preview, vlen, vstart = _kv_preview(k, v)
                 logger.error(
-                    f"TLSObjectStore: Unexpected error happened while trying to parse JSON for '{obj_name}': "
-                    f"key={k}, len={len(v) if v else 0}, startswith={v[:20]!r}, error={e}"
+                    "TLSObjectStore: Unexpected error while parsing %r: key=%r, len=%d, startswith=%r, error=%r",
+                    obj_name, key_preview, vlen, vstart, e,
+                    exc_info=True,  # include traceback for unexpected errors
                 )
                 continue
 
@@ -231,13 +280,29 @@ class TLSObjectStore():
                 if is_cephadm_signed_object and obj_name not in self.host_scoped_objects:
                     self.host_scoped_objects.append(obj_name)
                 self.objects_by_name[obj_name] = {}
-                for target in tls_object_targets:
-                    tlsobject = self.tlsobject_class.from_json(tls_object_targets[target])
-                    if tlsobject:
-                        self.objects_by_name[obj_name][target] = tlsobject
+                for target, payload in tls_object_targets.items():
+                    try:
+                        tlsobject = self.tlsobject_class.from_json(payload)
+                        if tlsobject:  # skip tombstones
+                            self.objects_by_name[obj_name][target] = tlsobject
+                        else:
+                            logger.debug("TLSObjectStore: Skipping tombstone for %r (target %r)", obj_name, target)
+                    except Exception as e:
+                        key_preview, vlen, vstart = _kv_preview(k, str(payload))
+                        logger.warning(
+                            "TLSObjectStore: Failed to decode scoped TLS object %r (target %r): %r. "
+                            "key=%r, len=%d, startswith=%r",
+                            obj_name, target, e, key_preview, vlen, vstart
+                        )
             elif obj_name in self.global_scoped_objects:
-                tlsobject = self.tlsobject_class.from_json(tls_object_targets)
-                if tlsobject:
-                    self.objects_by_name[obj_name] = tlsobject
+                try:
+                    self.objects_by_name[obj_name] = self.tlsobject_class.from_json(tls_object_targets)
+                except Exception as e:
+                    key_preview, vlen, vstart = _kv_preview(k, v)
+                    logger.warning(
+                        "TLSObjectStore: Failed to decode global TLS object %r: %r. "
+                        "key=%r, len=%d, startswith=%r",
+                        obj_name, e, key_preview, vlen, vstart
+                    )
             else:
-                logger.error(f"TLSObjectStore: Found a known TLS object name {obj_name} with unknown scope!")
+                logger.error("TLSObjectStore: Found a known TLS object name %r with unknown scope!", obj_name)

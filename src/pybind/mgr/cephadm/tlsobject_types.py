@@ -156,6 +156,6 @@ class PrivKey(TLSObjectProtocol):
             user_made = parse_bool(data.get('user_made', False))
             editable = parse_bool(data.get('editable', False))
         except ValueError as e:
-            raise TLSObjectException(f'Expected field in Cert object to be bool but got another type: {e}')
+            raise TLSObjectException(f'Expected field in PrivKey object to be bool but got another type: {e}')
 
         return cls(key=key, user_made=user_made, editable=editable)
