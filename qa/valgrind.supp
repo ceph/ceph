@@ -791,11 +791,10 @@
 {
   uninitialized value in gcm_cipher_internal
   Memcheck:Cond
+  obj:*libcrypto*
   ...
-  fun:gcm_cipher_internal
-  ...
-  fun:ossl_gcm_stream_final
   fun:EVP_DecryptFinal_ex
+  fun:*ceph*crypto*onwire*AES128GCM_OnWireRxHandler*authenticated_decrypt_update_final*
   ...
 }
 {
