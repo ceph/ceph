@@ -64,6 +64,13 @@ class Cluster(multisite.Cluster):
             cmd += ['--rgw-cache-enabled=false']
         return bash(cmd, **kwargs)
 
+    def ceph_admin(self, args = None, **kwargs):
+        """ ceph command """
+        cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', self.cluster_id]
+        if args:
+            cmd += args
+        return bash(cmd, **kwargs)
+
     def start(self):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
         env = None
