@@ -4034,6 +4034,11 @@ struct bucket_list_result {
 
   bucket_list_result() : max_keys(0), is_truncated(false) {}
 
+  void reset_entries() {
+    entries.clear();
+    is_truncated = false;
+  }
+
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("Name", name, obj);
     JSONDecoder::decode_json("Prefix", prefix, obj);
