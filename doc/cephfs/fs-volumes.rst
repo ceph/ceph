@@ -1070,13 +1070,13 @@ useful during cluster recovery scenarios:
 
 .. prompt:: bash #
 
-    ceph config set mgr/volumes/pause_purging true
+    ceph config set mgr mgr/volumes/pause_purging true
 
 To resume purging threads:
 
 .. prompt:: bash #
 
-    ceph config set mgr/volumes/pause_purging false
+    ceph config set mgr mgr/volumes/pause_purging false
 
 Pause the threads that asynchronously clone subvolume snapshots. This option is
 useful during cluster recovery scenarios:
