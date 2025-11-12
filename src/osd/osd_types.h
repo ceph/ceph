@@ -118,7 +118,7 @@
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
 
-enum class OmapUpdateType {Remove, Insert, RemoveRange};
+enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
 
 static std::map<int, int> max_prio_map = {
 	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},

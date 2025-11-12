@@ -377,6 +377,63 @@ struct Trimmer : public ObjectModDesc::Visitor {
       }
     }
   }
+
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
+
+    auto shard = pg->get_parent()->whoami_shard().shard;
+    spg_t spg = pg->get_parent()->whoami_spg_t();
+    auto sinfo = pg->ec_get_sinfo();
+
+    // We need shard and sinfo
+    // sinfo may not be needed if we have another way to check if shard is primary
+
+    if (omap_header) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        t->omap_setheader(
+          coll_t(spg),
+          ghobject_t(soid, ghobject_t::NO_GEN, shard),
+          *(omap_header));
+      }
+    }
+
+    if (clear_omap) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        t->omap_clear(
+          coll_t(spg),
+          ghobject_t(soid, ghobject_t::NO_GEN, shard));
+      }
+    }
+
+    for (auto &&up: omap_updates) {
+      switch (up.first) {
+        case OmapUpdateType::Remove:
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t->omap_rmkeys(
+              coll_t(spg),
+              ghobject_t(soid, ghobject_t::NO_GEN, shard),
+              up.second);
+          }
+          break;
+        case OmapUpdateType::Insert:
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t->omap_setkeys(
+              coll_t(spg),
+              ghobject_t(soid, ghobject_t::NO_GEN, shard),
+              up.second);
+          }
+          break;
+        case OmapUpdateType::RemoveRange:
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t->omap_rmkeyrange(
+              coll_t(spg),
+              ghobject_t(soid, ghobject_t::NO_GEN, shard),
+              up.second);
+          }
+          break;
+      }
+    }
+  }
 };
 
 void PGBackend::rollforward(

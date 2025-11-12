@@ -4748,6 +4748,16 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	visitor->rollback_extents(gen, extents, object_size, shards);
 	break;
       }
+      case EC_OMAP: {
+        bool clear_omap;
+        std::optional<ceph::buffer::list> omap_header;
+        std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates;
+        decode(clear_omap, bp);
+        decode(omap_header, bp);
+        decode(omap_updates, bp);
+        visitor->ec_omap(clear_omap, omap_header, omap_updates);
+        break;
+      }
       default:
 	ceph_abort_msg("Invalid rollback code");
       }
