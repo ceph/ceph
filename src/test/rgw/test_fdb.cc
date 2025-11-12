@@ -310,52 +310,57 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
  }
 }
 
-/* JFW: 
- * Unfortunately, tenants have a number of special rules and require some special keys and other support
- * before they're fully-baked-- for instance "\xff\xff/management/tenant/map/<tenant_name>" for deleting
- * tenants ("https://apple.github.io/foundationdb/tenants.html"); the C API documentation is frustratingly
- * sparse on this topic, I'm going to have to spend more time on it. Most of these tests current work
- * and pass, but we must consider tenant support experimental for now-- */
-TEST_CASE("fdb tenants", "[fdb][rgw][!shouldfail]") {
+/* JFW:
+TEST_CASE("cancel a transaction", "[fdb][rgw]") {
+given
+  write some data in a transaction
+then:
+  read it in the transaction should work
+when cancel the tranaction
+  should fail to read
+}
+
+template <typename SeqT=std::vector<std::pair<std::string, std::string>>>
+std::generator<SeqT> get(transaction_handle& txn, const selector, const stride)
+{
+JFW
+}
+
+TEST_CASE("multi-key \"infinite\" results", "[fdb][rgw]") {
  janitor j;
 
- auto dbh = lfdb::create_database();
+ // This really should be left at 1000 for the test to make sense:
+ constexpr int nkeys = 1000;
 
- SECTION("basic ops") {
-  auto t0 = lfdb::make_tenant(dbh, "foo_tenant");
+ auto kvs = make_monotonic_kvs(nkeys);
 
-  // ...make a transaction with some options:
-  auto txn = lfdb::make_transaction(t0, {});
+ lfdb::set(dbh, kvs);
+
+ // Note that while this will select all keys, FoundationDB system keys begin with 0xFF and cannot
+ // be modified without ACCESS_SYSTEM_KEYS being turned on for the transaction:
+ constexpr auto all_keys = lfdb::select { "", fmt::format("\xFF") };
+
+ // Make sure they were written:
+ REQUIRE(nkeys == lfdb::key_count(dbh, all_keys));
+
+
+FDBFuture *fdb_transaction_get_range(FDBTransaction *transaction, uint8_t const *begin_key_name, int begin_key_name_length, fdb_bool_t begin_or_equal, int begin_offset, uint8_t const *end_key_name, int end_key_name_length, fdb_bool_t end_or_equal, int end_offset, int limit, int target_bytes, FDBStreamingMode mode, int iteration, fdb_bool_t snapshot, fdb_bool_t reverse)
+
+check w/ generator
+ for(const auto stride : { 1, 10, 100, 1000 }) {
+  auto results = lfdb::get(dbh, all_keys, stride);
+
+  while(std::vector<std::string> rs = results) {
+    ; print n results
+  } 
  }
 
- SECTION("tenant writes are separate") {
-  auto t0 = lfdb::make_tenant(dbh, "tenant 0");
-  auto t1 = lfdb::make_tenant(dbh, "tenant 1");
- 
-  auto txn0 = lfdb::make_transaction(t0);
-  auto txn1 = lfdb::make_transaction(t1);
- 
-  CHECK_FALSE(lfdb::key_exists(txn0, "key"));
-  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
+generators have iterator hooks:
+ auto results = lfdb::get(dbh, all_keys, stride);
 
-  lfdb::set(txn0, "key", "value");
-
-// JFW: these will not all yet work as expected, see discussion of tenants above: 
-  // As we have not fiddled with read-your-writes, this is not visible: 
-  CHECK_FALSE(lfdb::key_exists(txn0, "key"));
-
-  // ...and it should also not be visible here:
-  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
-
-  CHECK(lfdb::commit(txn0));
-  CHECK(lfdb::key_exists(txn0, "key"));
-  CHECK_FALSE(lfdb::key_exists(txn1, "key"));
+ for(auto b = std::begin(results); std::end(results) != b; ++b) {
  }
-
- CHECK_FALSE(lfdb::key_exists(dbh, "key"));
- CHECK_FALSE(lfdb::key_exists(lfdb::make_tenant(dbh, "tenant 0"), "key"));
- CHECK_FALSE(lfdb::key_exists(lfdb::make_tenant(dbh, "tenant 1"), "key"));
-}
+}*/
 
 TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
@@ -597,6 +602,35 @@ SCENARIO("options", "[fdb]")
   lfdb::create_database("", {}, {});
   lfdb::create_database(lfdb::database_options {}, lfdb::network_options {});
  }
+}
+
+TEST_CASE("Gal demo", "[fdb]") {
+ janitor j;
+
+ using std::map;
+ using std::string;
+
+ map<string, string> bucket_entries = {
+    { "objName", "obj" },
+    { "bucketName", "bucket" },
+    { "creationTime", "2025-11-12T10:00:00" },
+    { "dirty", "0" },
+    { "hosts", "192.168.1.1:8000_192.168.1.2:8000" },
+    { "etag", "abc123def" },
+    { "objSize", "1048576" },
+    { "userId", "user123" },
+    { "displayName", "John Doe" }
+  };
+  
+ auto dbh = lfdb::create_database();
+
+ lfdb::set(dbh, "bucket_obj", bucket_entries);
+
+ map<string, string> out;
+ lfdb::get(dbh, "bucket_obj", out);
+
+ CAPTURE(out["userId"]);
+ REQUIRE(bucket_entries == out);
 }
 
 // Adapted from Catch2 documentation:
