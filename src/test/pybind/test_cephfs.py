@@ -1506,7 +1506,7 @@ class TestWithRootUser:
         assert_equal(st2.st_gid, new_gid)
 
         # reset to old uid & gid for sake of teardown.
-        cephfs.chownat(dirfd, b'slink1', old_uid, old_gid, 0)
+        cephfs.chownat(dirfd, b'slink1', old_uid, old_gid, libcephfs.AT_SYMLINK_NOFOLLOW)
         cephfs.close(dirfd)
 
     def test_setattrx(self, testdir):
