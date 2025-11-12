@@ -53,7 +53,7 @@ class Config:
     ceph: Any = UnloadedConfig()
     cluster: Optional[str] = None
     verbosity: Optional[int] = None
-    path: Optional[str] = None
+    path: str = ''
     log_path: str = ''
     dmcrypt_no_workqueue: bool = False
 
