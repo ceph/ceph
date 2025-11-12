@@ -1,10 +1,15 @@
 import os
 import logging
-from collections import namedtuple
+from dataclasses import dataclass
+from typing import Any, Optional
 
+@dataclass
+class SysInfo:
+    devices: dict[str, list]
 
-sys_info = namedtuple('sys_info', ['devices'])
+sys_info = SysInfo(devices={})
 sys_info.devices = dict()
+
 logger = logging.getLogger(__name__)
 BEING_REPLACED_HEADER: str = 'CEPH_DEVICE_BEING_REPLACED'
 
@@ -42,9 +47,17 @@ class UnloadedConfig(object):
 
 
 allow_loop_devices = AllowLoopDevices()
-conf = namedtuple('config', ['ceph', 'cluster', 'verbosity', 'path', 'log_path', 'dmcrypt_no_workqueue'])
-conf.ceph = UnloadedConfig()
-conf.dmcrypt_no_workqueue = None
+
+@dataclass
+class Config:
+    ceph: Any = UnloadedConfig()
+    cluster: Optional[str] = None
+    verbosity: Optional[int] = None
+    path: Optional[str] = None
+    log_path: str = ''
+    dmcrypt_no_workqueue: bool = False
+
+conf = Config()
 
 __version__ = "1.0.0"
 

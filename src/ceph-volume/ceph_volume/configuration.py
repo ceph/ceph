@@ -5,6 +5,7 @@ import re
 from ceph_volume import terminal, conf
 from ceph_volume import exceptions
 from sys import version_info as sys_version_info
+from typing import Optional
 
 if sys_version_info.major >= 3:
     import configparser
@@ -43,7 +44,7 @@ def load_ceph_conf_path(cluster_name='ceph'):
     conf.cluster = cluster_name
 
 
-def load(abspath=None):
+def load(abspath: Optional[str] = None):
     if abspath is None:
         abspath = conf.path
 
