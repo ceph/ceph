@@ -486,3 +486,12 @@ class RbdGroup(RESTController):
                     'num_images': len(list(rbd.Group(ioctx, group).list_images()))
                 })
             return result
+
+    @EndpointDoc("Create an RBD Group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'name': (str, 'Name of the group'),
+                 })
+    def create(self, pool_name, name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            return self.rbd_inst.group_create(ioctx, name)
