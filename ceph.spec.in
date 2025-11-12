@@ -1247,7 +1247,6 @@ It also contains utilities used for the cephadm orchestrator.
 %if 0%{with cephfs_shell}
 %package -n cephfs-shell
 Summary:    Interactive shell for Ceph file system
-Requires:   python%{python3_pkgversion}-cmd2
 Requires:   python%{python3_pkgversion}-colorama
 Requires:   python%{python3_pkgversion}-cephfs
 %description -n cephfs-shell
