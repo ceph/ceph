@@ -40,6 +40,11 @@ RBD_TRASH_SCHEMA = [{
     "pool_name": (str, 'pool name')
 }]
 
+RBD_GROUP_LIST_SCHEMA = [{
+    "group": (str, 'group name'),
+    "num_images": (int, '')
+}]
+
 
 # pylint: disable=not-callable
 def RbdTask(name, metadata, wait_for):  # noqa: N802
@@ -455,5 +460,29 @@ class RbdNamespace(RESTController):
                 result.append({
                     'namespace': namespace,
                     'num_images': len(images) if images else 0
+                })
+            return result
+
+
+@APIRouter('/block/pool/{pool_name}/group', Scope.RBD_IMAGE)
+@APIDoc("RBD Group Management API", "RbdGroup")
+class RbdGroup(RESTController):
+    def __init__(self):
+        super().__init__()
+        self.rbd_inst = rbd.RBD()
+
+    @EndpointDoc("Display RBD Groups by pool name",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                 },
+                 responses={200: RBD_GROUP_LIST_SCHEMA})
+    def list(self, pool_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            for group in groups:
+                result.append({
+                    'group': group,
+                    'num_images': len(list(rbd.Group(ioctx, group).list_images()))
                 })
             return result
