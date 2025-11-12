@@ -108,7 +108,8 @@ public:
   static const long HTTP_STATUS_NOSTATUS     = 0;
   static const long HTTP_STATUS_UNAUTHORIZED = 401;
   static const long HTTP_STATUS_NOTFOUND     = 404;
-
+  static const long HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+  
   static constexpr int HTTPCLIENT_IO_READ    = 0x1;
   static constexpr int HTTPCLIENT_IO_WRITE   = 0x2;
   static constexpr int HTTPCLIENT_IO_CONTROL = 0x4;

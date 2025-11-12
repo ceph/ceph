@@ -469,6 +469,9 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   } else if (validate.get_http_status() ==
           decltype(validate)::HTTP_STATUS_NOTFOUND) {
     return std::make_pair(boost::none, -ERR_INVALID_ACCESS_KEY);
+  } else if (validate.get_http_status() ==
+          decltype(validate)::HTTP_STATUS_TOO_MANY_REQUESTS) {
+    return std::make_pair(boost::none, -ERR_TOO_MANY_REQUESTS);
   }
   // throw any other http or connection errors
   if (ret < 0) {

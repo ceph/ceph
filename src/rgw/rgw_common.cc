@@ -91,6 +91,7 @@ rgw_http_errors rgw_http_s3_errors({
     { EPERM, {403, "AccessDenied" }},
     { ERR_AUTHORIZATION, {403, "AuthorizationError" }},
     { ERR_SIGNATURE_NO_MATCH, {403, "SignatureDoesNotMatch" }},
+    { ERR_TOO_MANY_REQUESTS, {429, "TooManyRequests" }},
     { ERR_INVALID_ACCESS_KEY, {403, "InvalidAccessKeyId" }},
     { ERR_USER_SUSPENDED, {403, "UserSuspended" }},
     { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
