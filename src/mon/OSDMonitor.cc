@@ -8446,12 +8446,12 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->migration_src = source_pool_id.value();
     pi->migration_target.reset();
 
-    // Migrate 5% of PGs at a time. uint64_t to prevent overflow if PG num close to max uint32
     uint64_t migrating_pgs_size = 0;
+    auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
     if (spi->get_pg_num() > pi->get_pg_num()) {
-      migrating_pgs_size = (static_cast<uint64_t>(pi->get_pg_num()) + 19) / 20;
+      migrating_pgs_size = (static_cast<uint64_t>(pi->get_pg_num() * migration_percent) + 99) / 100;
     } else {
-      migrating_pgs_size = (static_cast<uint64_t>(spi->get_pg_num()) + 19) / 20;
+      migrating_pgs_size = (static_cast<uint64_t>(spi->get_pg_num() * migration_percent) + 99) / 100;
     }
 
     for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
