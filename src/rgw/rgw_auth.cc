@@ -74,6 +74,22 @@ static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
       }), owner);
 }
 
+static bool match_owner(const rgw_owner& owner, const rgw_user& uid)
+{
+  return std::visit(fu2::overload(
+      [&uid] (const rgw_user& u) { return u == uid; },
+      [] (const rgw_account_id&) { return false; }), owner);
+}
+
+static bool match_owner(const rgw_owner& owner, const RGWAccountInfo& account)
+{
+  return std::visit(fu2::overload(
+      [] (const rgw_user&) { return false; },
+      [&account] (const rgw_account_id& a) {
+        return a == account.id;
+      }), owner);
+}
+
 static bool match_account_or_tenant(const std::optional<RGWAccountInfo>& account,
                                     std::string_view tenant,
                                     std::string_view expected)
@@ -595,7 +611,11 @@ ACLOwner rgw::auth::WebIdentityApplier::get_aclowner() const
 
 bool rgw::auth::WebIdentityApplier::is_owner_of(const rgw_owner& o) const
 {
-  return match_owner(o, rgw_user{role_tenant, sub, "oidc"}, account);
+  if (account) {
+    return match_owner(o, *account);
+  } else {
+    return match_owner(o, rgw_user{role_tenant, sub, "oidc"});
+  }
 }
 
 void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
@@ -1202,7 +1222,11 @@ ACLOwner rgw::auth::RoleApplier::get_aclowner() const
 
 bool rgw::auth::RoleApplier::is_owner_of(const rgw_owner& o) const
 {
-  return match_owner(o, token_attrs.user_id, role.account);
+  if (role.account) {
+    return match_owner(o, *role.account);
+  } else {
+    return match_owner(o, token_attrs.user_id);
+  }
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
