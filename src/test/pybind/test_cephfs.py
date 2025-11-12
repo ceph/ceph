@@ -1048,6 +1048,56 @@ class TestChmodat:
         cephfs.close(fd)
 
 
+class TestUtimensat:
+
+    def test_utimensat_for_regfile(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        fd = cephfs.open('dir1/file1', 'w')
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        st1 = cephfs.stat(b'dir1/file1')
+
+        dirfd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        time.sleep(2)
+        x = datetime.now()
+        timestamps = (time.mktime(x.timetuple()), time.mktime(x.timetuple()))
+        cephfs.utimensat(dirfd, 'file1', timestamps, 0)
+
+        st2 = cephfs.stat(b'dir1/file1')
+        assert_greater(st2.st_atime, st1.st_atime)
+
+    def test_utimensat_for_dir(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        cephfs.mkdir('dir1/dir2', 0o755)
+        st1 = cephfs.stat(b'dir1/dir2')
+
+        dirfd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        time.sleep(2)
+        x = datetime.now()
+        timestamps = (time.mktime(x.timetuple()), time.mktime(x.timetuple()))
+        cephfs.utimensat(dirfd, 'dir2', timestamps, 0)
+
+        st2 = cephfs.stat(b'dir1/dir2')
+        assert_greater(st2.st_atime, st1.st_atime)
+
+    def test_utimensat_for_symlink(self, testdir):
+        cephfs.mkdir('dir1', 0o755)
+        fd = cephfs.open('dir1/file1', 'w', 0o644)
+        cephfs.write(fd, b'abcd', 0)
+        cephfs.close(fd)
+        cephfs.symlink('file1', 'dir1/slink1')
+        st1 = cephfs.stat(b'dir1/slink1')
+
+        dirfd = cephfs.open('dir1', os.O_RDONLY | os.O_DIRECTORY, 0o755)
+        time.sleep(2)
+        x = datetime.now()
+        timestamps = (time.mktime(x.timetuple()), time.mktime(x.timetuple()))
+        cephfs.utimensat(dirfd, 'file1', timestamps, libcephfs.AT_SYMLINK_NOFOLLOW)
+
+        st2 = cephfs.stat(b'dir1/slink1')
+        assert_greater(st2.st_atime, st1.st_atime)
+
+
 class TestWithRootUser:
 
     def setup_method(self):
