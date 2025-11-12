@@ -85,12 +85,10 @@ concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
 namespace ceph::libfdb {
 
 struct database;
-struct tenant;
 struct transaction;
 struct future_value;
 
 using database_handle = std::shared_ptr<database>;
-using tenant_handle = std::shared_ptr<tenant>;
 using transaction_handle = std::shared_ptr<transaction>;
 
 // Should we commit after the (possibly) mutating operation?
@@ -339,7 +337,6 @@ class database_system final
 namespace ceph::libfdb {
 
 struct database;
-struct tenant;
 struct transaction;
 
 class database final
@@ -406,7 +403,6 @@ class database final
  FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
  private:
- friend tenant;
  friend transaction;
 
  private:
@@ -434,17 +430,6 @@ class transaction final
 
  transaction(database_handle dbh_, const transaction_options& opts) 
   : transaction(dbh_)
- {
-  detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
- }
-
- transaction(tenant_handle tnth)
-  : dbh(tnth->dbh),
-    txn_handle(tnth->create_transaction(), &fdb_transaction_destroy)
- {}
-
- transaction(tenant_handle& dbth_, const transaction_options& opts)
-  : transaction(dbth_)
  {
   detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
  }
@@ -602,7 +587,15 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
 
  if(fdb_error_t r = fdb_future_get_value(fv.raw_handle(), &key_was_found, &out_buffer, &out_len); 0 != r) {
 
-if(1025 == r) { throw libfdb_exception(r); } // JFW
+    // JFW: I'm absolutely unclear as to what needs or doesn't need to run in an actual loop here-- or when or
+    // when not to call fdb_transaction_on_error(), but this at least seems to be stable; similarly, the 
+    // documentation's mention that numeric codes be used create an utter headscratcher as to
+    // why in that case macros would be provided at all; but that's par for the course with some aspects
+    // of the FDB C API docs and examples-- it's probably all clear if you are pointed in the right direction:
+    if(not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) { 
+      // errors such as 1025 mean there's no point in retrying:
+      throw libfdb_exception(r); 
+    } 
 
     auto fv2 = future_value(fdb_transaction_on_error(raw_handle(), r));
 

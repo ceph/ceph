@@ -238,11 +238,6 @@ inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto
  return get(txn, key, out_value, commit_after_op::no_commit);
 }
 
-inline bool get(ceph::libfdb::tenant_handle tnth, std::string_view key, auto& out_value)
-{
- return get(ceph::libfdb::make_transaction(tnth), key, out_value, commit_after_op::commit);
-}
-
 inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto& out_value)
 {
  return get(ceph::libfdb::make_transaction(dbh), key, out_value, commit_after_op::commit);
@@ -260,11 +255,6 @@ inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto
 inline bool get(ceph::libfdb::transaction_handle txn, std::string_view key, auto&& fn)
 {
  return get(txn, key, fn, commit_after_op::no_commit);
-}
-
-inline bool get(ceph::libfdb::tenant_handle tnth, std::string_view key, auto&& fn)
-{
- return get(ceph::libfdb::make_transaction(tnth), key, fn, commit_after_op::commit);
 }
 
 inline bool get(ceph::libfdb::database_handle dbh, std::string_view key, auto&& fn)
@@ -287,11 +277,6 @@ inline bool key_exists(transaction_handle txn, std::string_view k, const commit_
 inline bool key_exists(transaction_handle txn, std::string_view k)
 {
  return key_exists(txn, k, commit_after_op::no_commit);
-}
-
-inline bool key_exists(tenant_handle tnth, std::string_view k)
-{
- return key_exists(ceph::libfdb::make_transaction(tnth), k, commit_after_op::commit);
 }
 
 inline bool key_exists(database_handle dbh, std::string_view k)
