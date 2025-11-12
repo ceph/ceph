@@ -1,0 +1,4 @@
+tasks:
+  - exec:
+      client.0:
+        - pip3 install cmd2
