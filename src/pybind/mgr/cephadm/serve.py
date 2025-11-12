@@ -1165,7 +1165,8 @@ class CephadmServe:
                         action = 'redeploy'
                     else:
                         skip_restart_for_reconfig = True
-                        send_signal_to_daemon = 'SIGHUP'
+                        if spec and not getattr(spec, 'skip_nfs_notify_on_kmip_update', False):
+                            send_signal_to_daemon = 'SIGHUP'
 
             elif dd.daemon_type == 'haproxy':
                 if spec and hasattr(spec, 'backend_service'):
