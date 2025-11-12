@@ -118,6 +118,8 @@
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
 
+enum class OmapUpdateType {Remove, Insert, RemoveRange};
+
 static std::map<int, int> max_prio_map = {
 	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
 	{OSD_BACKFILL_DEGRADED_PRIORITY_BASE, OSD_RECOVERY_PRIORITY_BASE - 1},
@@ -4083,6 +4085,8 @@ public:
   public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
+    virtual void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+      std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {}
     virtual void rmobject(version_t old_version) {}
     /**
      * Used to support the unfound_lost_delete log event: if the stashed
@@ -4111,7 +4115,8 @@ public:
     CREATE = 4,
     UPDATE_SNAPS = 5,
     TRY_DELETE = 6,
-    ROLLBACK_EXTENTS = 7
+    ROLLBACK_EXTENTS = 7,
+    EC_OMAP = 8
   };
   ObjectModDesc() : can_local_rollback(true), rollback_info_completed(false) {
     bl.reassign_to_mempool(mempool::mempool_osd_pglog);
@@ -4161,6 +4166,18 @@ public:
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
     encode(old_attrs, bl);
+    ENCODE_FINISH(bl);
+  }
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {
+    if (!can_local_rollback || rollback_info_completed) {
+      return;
+    }
+    ENCODE_START(1, 1, bl);
+    append_id(EC_OMAP);
+    encode(clear_omap, bl);
+    encode(omap_header, bl);
+    encode(omap_updates, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {

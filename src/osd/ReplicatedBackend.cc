@@ -444,7 +444,7 @@ void generate_transaction(
 	t->omap_setheader(coll, goid, *(op.omap_header));
 
       for (auto &&up: op.omap_updates) {
-	using UpdateType = PGTransaction::ObjectOperation::OmapUpdateType;
+	using UpdateType = OmapUpdateType;
 	switch (up.first) {
 	case UpdateType::Remove:
 	  t->omap_rmkeys(coll, goid, up.second);

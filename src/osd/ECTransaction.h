@@ -109,7 +109,6 @@ class Generate {
   void appends_and_clone_ranges();
   void written_shards();
   void attr_updates();
-  void omap_updates();
 
  public:
   Generate(PGTransaction &t,
