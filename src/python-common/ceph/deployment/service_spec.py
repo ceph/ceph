@@ -1429,6 +1429,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 skip_nfs_notify_on_kmip_update: bool = False,
                  ):
         assert service_type == 'nfs'
         super(NFSServiceSpec, self).__init__(
@@ -1475,8 +1476,10 @@ class NFSServiceSpec(ServiceSpec):
                 elif isinstance(host_obj, dict):
                     self.kmip_host_list.append(host_obj)
                 else:
-                    raise SpecValidationError(f'kmip_host_list contains an invalid element: {host_obj}.')
-
+                    raise SpecValidationError(
+                        f'kmip_host_list contains an invalid element: {host_obj}.'
+                    )
+        self.skip_nfs_notify_on_kmip_update = skip_nfs_notify_on_kmip_update
         # TLS fields
         self.tls_ciphers = tls_ciphers
         self.tls_ktls = tls_ktls
