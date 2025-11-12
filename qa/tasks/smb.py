@@ -3,8 +3,10 @@ Ceph teuthology task for managed smb features.
 """
 from io import StringIO
 import contextlib
-import logging
+import copy
 import json
+import logging
+import shlex
 import time
 
 from teuthology.exceptions import ConfigError, CommandFailedError
@@ -297,3 +299,123 @@ def deploy_samba_ad_dc(ctx, config):
         _reset_systemd_resolved(ctx, remote)
         setattr(ctx, 'samba_ad_dc_ip', None)
         setattr(ctx, 'samba_client_container_cmd', None)
+
+
+def _marks(marks_value):
+    if not marks_value:
+        return ''
+    if isinstance(marks_value, str):
+        return marks_value
+    if isinstance(marks_value, list):
+        return ' or '.join(marks_value)
+    raise ValueError(f'unexpected type: {marks_value!r}')
+
+
+def _workunit_commands(
+    key, values, *, default_script='smb/smb_tests.sh', default_target='tests'
+):
+    commands = []
+    if isinstance(values, str):
+        values = values.split()
+    for value in values:
+        script = default_script
+        target = default_target
+        custom_args = []
+        if isinstance(value, str):
+            # direct marks expression
+            marks = _marks(value)
+        elif isinstance(value, list):
+            # just a list of marks to include
+            marks = _marks(value)
+        elif isinstance(value, dict):
+            # full control
+            opts = value
+            script = opts.get('script', script)
+            target = opts.get('target', target)
+            marks = _marks(opts.get('marks', []))
+            custom_args = [str(v) for v in (opts.get('custom_args') or [])]
+
+        cmd = [script]
+        if marks:
+            cmd.append('-m')
+            cmd.append(marks)
+        cmd += custom_args
+        cmd.append(target)
+        commands.append(shlex.join(cmd))
+    return commands
+
+
+def workunit(ctx, config):
+    """Workunit wrapper with special behaviors for smb."""
+    from . import workunit
+
+    _config = copy.deepcopy(config)
+    clients = _config.get('clients') or {}
+    env = _config.get('env') or {}
+
+    clients = {k: _workunit_commands(k, v) for k, v in clients.items()}
+    mfile = _config.get('metadata_file_path', _DEFAULT_META_FILE)
+    env['SMB'] = 'yes'
+    env['SMB_TEST_META'] = mfile
+
+    _config['clients'] = clients
+    _config['env'] = env
+    log.info('Passing workunit config: %r', _config)
+    with write_metadata_file(ctx, _config):
+        return workunit.task(ctx, _config)
+
+
+@contextlib.contextmanager
+def write_metadata_file(ctx, config, *, roles=None):
+    obj = {
+        'samba_client_container_cmd': getattr(
+            ctx, 'samba_client_container_cmd', ''
+        ),
+        'samba_ad_dc_ip': getattr(ctx, 'samba_ad_dc_ip', ''),
+        'smb_users': config.get('smb_users') or [],
+        'smb_shares': config.get('smb_shares') or [],
+    }
+    if config.get('admin_node'):
+        role = config.get('admin_node')
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        n = obj['admin_node'] = remote.inventory_info
+        n['shortname'] = remote.shortname
+        n['ip_address'] = remote.ip_address
+    if config.get('smb_nodes'):
+        snodes = obj['smb_nodes'] = []
+        for node in config.get('smb_nodes'):
+            (remote,) = ctx.cluster.only(node).remotes.keys()
+            n = dict(remote.inventory_info)
+            n['shortname'] = remote.shortname
+            n['ip_address'] = remote.ip_address
+            snodes.append(n)
+    data = json.dumps(obj)
+    log.debug('smb metadata: %r', obj)
+
+    mfile = config.get('metadata_file_path', _DEFAULT_META_FILE)
+    if not roles:
+        roles = list(config.get('clients') or [])
+    remotes = []
+    for role in roles:
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        remotes.append(remote)
+        remote.write_file(
+            path=mfile,
+            data=data,
+            sudo=True,
+            mode='0644',
+        )
+    yield
+    for remote in remotes:
+        remote.run(
+            args=[
+                'sudo',
+                'rm',
+                '-rf',
+                '--',
+                mfile,
+            ],
+        )
+
+
+_DEFAULT_META_FILE = '/var/tmp/ceph-smb-test-meta.json'
