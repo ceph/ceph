@@ -1350,6 +1350,159 @@ def full_dedup_is_disabled():
     return full_dedup_state_disabled
 
 
+#==============================================================================
+#                            RGW Versioning Tests:
+#==============================================================================
+#-------------------------------------------------------------------------------
+def delete_all_versions(conn, bucket_name, dry_run=False):
+    log.info("delete_all_versions")
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator('list_object_versions')
+    to_delete = []
+
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # Collect versions
+        for v in page.get('Versions', []):
+            to_delete.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+
+        # Collect delete markers
+        for dm in page.get('DeleteMarkers', []):
+            to_delete.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+
+        # Delete in chunks
+        if dry_run:
+            log.info("DRY RUN would delete %d objects", len(to_delete))
+        else:
+            conn.delete_objects(Bucket=bucket_name, Delete={'Objects': to_delete})
+            to_delete.clear()
+
+
+#-------------------------------------------------------------------------------
+def list_all_versions(conn, bucket_name):
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator("list_object_versions")
+
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # normal object versions
+        for v in page.get("Versions", []):
+            key = v["Key"]
+            vid = v["VersionId"]
+            size = v.get("Size", 0)
+            is_latest = v.get("IsLatest", False)
+            #etag = v.get("ETag")
+            log.info("%s::ver=%s, size=%d, IsLatest=%d", key, vid, size, is_latest)
+
+        # delete markers (no Size)
+        for dm in page.get("DeleteMarkers", []):
+            key = dm["Key"]
+            vid = dm["VersionId"]
+            is_latest = dm.get("IsLatest", False)
+            log.info("DeleteMarker::%s::ver=%s, IsLatest=%d", key, vid, is_latest)
+
+
+#-------------------------------------------------------------------------------
+def gen_files_fixed_size_single_copy(files, count, size):
+    global num_files
+
+    for i in range(0, count):
+        num_files += 1
+        filename = "OBJ_" + str(num_files)
+        files.append((filename, size, 1))
+        write_file(filename, size)
+
+#-------------------------------------------------------------------------------
+def simple_upload(bucket_name, files, conn, config, op_log):
+    for f in files:
+        filename=f[0]
+        key=filename
+        size=f[1]
+
+        log.debug("upload_file %s/%s", bucket_name, filename)
+        conn.upload_file(OUT_DIR + filename, bucket_name, key, Config=config)
+        resp = conn.head_object(Bucket=bucket_name, Key=key)
+        version_id = resp.get("VersionId")
+        op_log.append((filename, size, version_id))
+
+#-------------------------------------------------------------------------------
+def verify_objects_with_version(bucket_name, op_log, conn, config):
+    tempfile = OUT_DIR + "temp"
+    for o in op_log:
+        filename=o[0]
+        key=filename
+        version_id=o[2]
+        log.debug("verify: %s/%s:: ver=%s", bucket_name, filename, version_id)
+        conn.download_file(Bucket=bucket_name, Key=key, Filename=tempfile,
+                           Config=config, ExtraArgs={'VersionId': version_id})
+        result = bash(['cmp', tempfile, OUT_DIR + filename])
+        assert result[1] == 0 ,"Files %s and %s differ!!" % (key, tempfile)
+        os.remove(tempfile)
+        conn.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+
+
+#-------------------------------------------------------------------------------
+# generate @num_files objects with @ver_count versions each of @obj_size
+# verify that we got the correct number of rados-objects
+# then dedup and verify that duplicate tail objects been removed
+# read-verify *all* objects in all versions deleting one version after another
+# while making sure the remaining versions are still good
+# finally make sure no rados-object was left behind after the last ver was removed
+@pytest.mark.basic_test
+def test_dedup_with_versions():
+    #return
+
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = "bucket1"
+    files=[]
+    op_log=[]
+    num_files=17
+    obj_size=MULTIPART_SIZE
+    success=False
+    try:
+        conn=get_single_connection()
+        conn.create_bucket(Bucket=bucket_name)
+        gen_files_fixed_size_single_copy(files, num_files, obj_size)
+        # enable versioning
+        conn.put_bucket_versioning(Bucket=bucket_name,
+                                   VersioningConfiguration={"Status": "Enabled"})
+        ver_count=11
+        for i in range(0, ver_count):
+            simple_upload(bucket_name, files, conn, default_config, op_log)
+
+        rados_objects_total=0
+        rados_objects_post_dedup = (num_files * ver_count)  + (num_files * 4)
+        for o in op_log:
+            rados_obj_count=calc_rados_obj_count(1, o[1], default_config)
+            rados_objects_total += rados_obj_count
+
+        # there is one extra ver-obj per unique-object-name
+        rados_objects_post_dedup += num_files
+        rados_objects_total += num_files
+        log.info("rados_objects_total=%d, rados_objects_post_dedup=%d",
+                 rados_objects_total, rados_objects_post_dedup)
+        assert rados_objects_total == count_object_parts_in_all_buckets()
+        exec_dedup_internal(Dedup_Stats(), dry_run=False, max_dedup_time=500)
+        assert rados_objects_post_dedup == count_object_parts_in_all_buckets()
+        verify_objects_with_version(bucket_name, op_log, conn, default_config)
+        success=True
+    finally:
+        # cleanup must be executed even after a failure
+        if success == False:
+            delete_all_versions(conn, bucket_name, dry_run=False)
+        # otherwise, objects been removed by verify_objects_with_version()
+        cleanup(bucket_name, conn)
+
+#==============================================================================
+#                            ETag Corruption Tests:
+#==============================================================================
 CORRUPTIONS = ("no corruption", "change_etag", "illegal_hex_value",
                "change_num_parts", "illegal_separator",
                "illegal_dec_val_num_parts", "illegal_num_parts_overflow")
