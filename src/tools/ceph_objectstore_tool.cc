@@ -3599,6 +3599,9 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> clear-data-digest" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> clear-snapset "
+            "[(corrupt|seq|snaps|clones|clone_size|clone_overlap|size)]"
+         << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
     cerr << "by --op list." << std::endl;
@@ -3609,6 +3612,19 @@ void usage(po::options_description &desc)
     cerr << std::endl;
     cerr << "The optional [file] argument will read stdin or write stdout" << std::endl;
     cerr << "if not specified or if '-' specified." << std::endl;
+    cerr << std::endl;
+    cerr << "clear-snapset options:" << std::endl;
+    cerr << "  clear-snapset               : by default, clear clones, "
+            "clone_size and clone_overlap"
+         << std::endl;
+    cerr << "  clear-snapset corrupt       : clear entire snapset" << std::endl;
+    cerr << "  clear-snapset seq           : clear snapset.seq" << std::endl;
+    cerr << "  clear-snapset clone_size    : clear clone_size" << std::endl;
+    cerr << "  clear-snapset clone_overlap : clear clone_overlap" << std::endl;
+    cerr << "  clear-snapset clones        : clear clones" << std::endl;
+    cerr << "  clear-snapset snaps         : clear clone_snaps" << std::endl;
+    cerr << "  clear-snapset size          : break all clone sizes by adding 1"
+         << std::endl;
 }
 
 bool ends_with(const string& check, const string& ending)
@@ -4691,9 +4707,22 @@ int main(int argc, char **argv)
         ret = clear_data_digest(fs.get(), coll, ghobj);
         goto out;
       } else if (objcmd == "clear-snapset") {
-        // UNDOCUMENTED: For testing zap SnapSet
-        // IGNORE extra args since not in usage anyway
-	if (!ghobj.hobj.has_snapset()) {
+        if (vm.count("arg1") == 0) {
+          usage(desc);
+          ret = 1;
+          goto out;
+        }
+
+        if (vm.count("arg2") != 0) {
+          if (arg2 != "corrupt" && arg2 != "seq" && arg2 != "snaps" &&
+              arg2 != "clones" && arg2 != "clone_size" &&
+              arg2 != "clone_overlap" && arg2 != "size") {
+            usage(desc);
+            ret = 1;
+            goto out;
+          }
+        }
+        if (!ghobj.hobj.has_snapset()) {
 	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
 	  ret = 1;
 	  goto out;
