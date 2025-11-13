@@ -18,6 +18,8 @@
 #include "common/debug.h"
 #include "common/Formatter.h"
 
+#include <fmt/format.h>
+
 #include <iostream>
 #include <sstream>
 
@@ -55,13 +57,12 @@ std::list<frag_t> frag_t::generate_test_instances() {
 std::ostream& operator<<(std::ostream& out, const frag_t& hb)
 {
   //out << std::hex << hb.value() << std::dec << "/" << hb.bits() << '=';
-  unsigned num = hb.bits();
-  if (num) {
-    unsigned val = hb.value();
-    for (unsigned bit = 23; num; num--, bit--) 
-      out << ((val & (1<<bit)) ? '1':'0');
+  if (auto b = hb.bits(); b > 0) {
+    auto v = hb.value() >> hb.mask_shift();
+    return out << fmt::format("{0:0{1}b}*", v, b);
+  } else {
+    return out << '*';
   }
-  return out << '*';
 }
 
 bool fragtree_t::force_to_leaf(CephContext *cct, frag_t x) {
