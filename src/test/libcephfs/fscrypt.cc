@@ -97,7 +97,7 @@ void generate_remove_key_arg(char *keyid, fscrypt_remove_key_arg* arg){
 }
 
 void populate_policy(char *keyid, struct fscrypt_policy_v2* policy) {
-  memset(policy, 0, sizeof(*policy));
+  memset(policy, 0, sizeof(struct fscrypt_policy_v2));
   policy->version = 2;
   policy->contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
   policy->filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
@@ -1113,6 +1113,63 @@ TEST(FSCrypt, SetPolicyAlreadyExistDifferentPolicyNotEmpty) {
   r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy2);
 
   ASSERT_EQ(-EEXIST, r);
+
+  ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
+
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(keyid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path.c_str()));
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, SetPolicyAlreadyExistIgnorePadding) {
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path.c_str(), 0777));
+
+  int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  populate_policy(keyid, &policy);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
+
+  ASSERT_EQ(0, r);
+
+  string file_path = "dir1/file1";
+  int fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd, fscrypt_key, sizeof(fscrypt_key), 0);
+  ceph_close(cmount, fd);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), keyid, 1299);
+
+  struct fscrypt_policy_v2 policy2;
+  populate_policy(keyid, &policy2);
+
+  // Depending on which kernel is used, __reserved len could be 4, 3 or removed.
+  // Currently, we do not implement any other features outside original __reserved
+  // size of 4. Let's below "initialize" where reserved is without referencing the
+  // field. This way in the future if it disappears completely we'll have working
+  // code.
+  unsigned char* policy2_ptr = (unsigned char*)&policy2;
+  *(policy2_ptr+4) = 3;
+  *(policy2_ptr+5) = 4;
+  *(policy2_ptr+6) = 5;
+  *(policy2_ptr+7) = 6;
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy2);
+  ASSERT_EQ(0, r);
 
   ASSERT_EQ(0, ceph_unlink(cmount, file_path.c_str()));
 
