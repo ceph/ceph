@@ -471,13 +471,16 @@ class RbdGroup(RESTController):
         super().__init__()
         self.rbd_inst = rbd.RBD()
 
+    @handle_rbd_error()
     @EndpointDoc("Display RBD Groups by pool name",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                  },
                  responses={200: RBD_GROUP_LIST_SCHEMA})
-    def list(self, pool_name):
+    def list(self, pool_name, namespace=None):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
             result = []
             groups = self.rbd_inst.group_list(ioctx)
             for group in groups:
@@ -487,11 +490,30 @@ class RbdGroup(RESTController):
                 })
             return result
 
+    @handle_rbd_error()
     @EndpointDoc("Create an RBD Group",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                      'name': (str, 'Name of the group'),
                  })
-    def create(self, pool_name, name):
+    def create(self, pool_name, name, namespace=None):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
             return self.rbd_inst.group_create(ioctx, name)
+
+    @RESTController.Collection('POST', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Add an image to an RBD Group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def add_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.add_image(ioctx, image_name)
