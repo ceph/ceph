@@ -49,36 +49,36 @@
                  id="default_zonegroup"
                  name="default_zonegroup"
                  formControlName="default_zonegroup"
-                 [attr.disabled]="action === 'edit' ? true : null"
+                 [attr.disabled]="action === actionLabels.EDIT ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="default_zonegroup"
                  i18n>Default</label>
-          <span *ngIf="disableDefault && action === 'create'">
+          <span *ngIf="disableDefault && action === actionLabels.CREATE">
             <cd-helper i18n>Zone group doesn't belong to the default realm.</cd-helper>
           </span>
-          <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
+          <cd-helper *ngIf="action === actionLabels.EDIT && !info.data.is_default">
             <span i18n>Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow the failover mechanism</span>
           </cd-helper>
-          <cd-helper *ngIf="action === 'edit' && info.data.is_default">
+          <cd-helper *ngIf="action === actionLabels.EDIT && info.data.is_default">
             <span i18n>You cannot unset the default flag.</span>
           </cd-helper><br>
           <input class="form-check-input"
                  id="master_zonegroup"
                  name="master_zonegroup"
                  formControlName="master_zonegroup"
-                 [attr.disabled]="action === 'edit' ? true : null"
+                 [attr.disabled]="action === actionLabels.EDIT ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="master_zonegroup"
                  i18n>Master</label>
-          <span *ngIf="disableMaster && action === 'create'">
+          <span *ngIf="disableMaster && action === actionLabels.CREATE">
             <cd-helper i18n>Multiple master zone groups can't be configured. If you want to create a new zone group and make it the master zone group, you must delete the default zone group.</cd-helper>
           </span>
-          <cd-helper *ngIf="action === 'edit' && !info.data.is_master">
+          <cd-helper *ngIf="action === actionLabels.EDIT && !info.data.is_master">
             <span i18n>Please consult the&nbsp;<cd-doc section="rgw-multisite"></cd-doc>&nbsp;to follow the failover mechanism</span>
           </cd-helper>
-          <cd-helper *ngIf="action === 'edit' && info.data.is_master">
+          <cd-helper *ngIf="action === actionLabels.EDIT && info.data.is_master">
             <span i18n>You cannot unset the master flag.</span>
           </cd-helper>
         </div>
@@ -104,7 +104,7 @@
         </div>
       </div>
       <div class="form-group row"
-           *ngIf="action === 'edit'">
+           *ngIf="action === actionLabels.EDIT">
         <label i18n
                for="zones"
                class="cd-col-form-label">Zones</label>
@@ -119,7 +119,7 @@
                 i18n>Cannot remove master zone.</span>
         </div>
       </div>
-      <div *ngIf="action === 'edit'">
+      <div *ngIf="action === actionLabels.EDIT">
         <legend>Placement targets</legend>
         <ng-container formArrayName="placementTargets">
           <div *ngFor="let item of placementTargets.controls; let index = index; trackBy: trackByFn">
