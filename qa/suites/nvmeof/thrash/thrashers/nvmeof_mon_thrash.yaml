@@ -5,6 +5,7 @@ overrides:
       - OSD_DOWN
       - OSD_HOST_DOWN
       - OSD_ROOT_DOWN
+      - osds down
       - PG_DEGRADED
       # mon thrashing
       - MON_DOWN
