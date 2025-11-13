@@ -111,6 +111,8 @@ export enum CellTemplate {
   //    }
   //    ...
   // }
+  // you can also use '::prop' in the redirectLink array to replace it with the cell value.
+  // e.g ['dashboard', '::prop', 'details']
   */
   redirect = 'redirect'
 }
