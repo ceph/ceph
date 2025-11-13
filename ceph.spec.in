@@ -91,7 +91,7 @@
 %bcond_with lua_packages
 %endif
 %endif
-%bcond_with crimson
+%bcond_without crimson
 %if 0%{?suse_version} || 0%{?openEuler}
 %bcond_with jaeger
 %else
