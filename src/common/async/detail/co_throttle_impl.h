@@ -194,7 +194,7 @@ class co_throttle_impl :
           to_cancel = std::move(outstanding);
         }
 
-        for (auto i = to_cancel.begin(); i != to_cancel.end(); ++i) {
+        for (auto i = to_cancel.begin(); i != to_cancel.end();) {
           child& c = *i;
           i = to_cancel.erase(i);
 
