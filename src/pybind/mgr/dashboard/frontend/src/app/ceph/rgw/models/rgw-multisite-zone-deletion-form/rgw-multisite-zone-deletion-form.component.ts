@@ -48,7 +48,13 @@ export class RgwMultisiteZoneDeletionFormComponent implements OnInit, AfterViewI
 
   submit() {
     this.rgwZoneService
-      .delete(this.zone.name, this.zoneForm.value.deletePools, this.includedPools, this.zone.parent)
+      .delete(
+        this.zone.name,
+        this.zoneForm.value.deletePools,
+        this.includedPools,
+        this.zone.parent,
+        this.zone.second_parent
+      )
       .subscribe(
         () => {
           this.notificationService.show(
