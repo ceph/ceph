@@ -488,7 +488,9 @@ TEST(neocls_log_bare, lambdata)
   std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
 
   bool completed = false;
-  neorados::RADOS::Builder{}.build(c, [&](error_code ec, neorados::RADOS r_) {
+  neorados::RADOS::Builder{}
+    .set_no_daemon_actions().build(c, [&](error_code ec,
+                                          neorados::RADOS r_) {
     ASSERT_FALSE(ec);
     rados = std::move(r_);
     create_pool(

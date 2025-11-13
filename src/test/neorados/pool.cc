@@ -92,6 +92,7 @@ public:
   /// \brief Create RADOS handle for the test
   boost::asio::awaitable<void> CoSetUp() override {
     rados_ = co_await neorados::RADOS::Builder{}
+      .set_no_daemon_actions()
       .build(asio_context, boost::asio::use_awaitable);
     dpp_ = std::make_unique<DoutPrefix>(rados().cct(), 0, "NeoRadosPoolTest");
     co_return;
@@ -136,6 +137,7 @@ CORO_TEST_F(NeoRadosPools, PoolLookup, NeoRadosPool) {
 
 CORO_TEST_F(NeoRadosPools, PoolLookupOtherInstance, NeoRadosPool) {
   auto rados2 = co_await neorados::RADOS::Builder{}
+    .set_no_daemon_actions()
     .build(asio_context, asio::use_awaitable);
   const auto pname = get_temp_pool_name();
   const auto refpid = co_await create_pool(pname);
