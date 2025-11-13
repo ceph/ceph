@@ -80,13 +80,13 @@ public:
 void cls_version_read(librados::ObjectReadOperation& op, obj_version *objv)
 {
   bufferlist inbl;
-  op.exec("version", "read", inbl, new VersionReadCtx(objv));
+  op.exec_readonly("version", "read", inbl, new VersionReadCtx(objv));
 }
 
 int cls_version_read(librados::IoCtx& io_ctx, std::string& oid, obj_version *ver)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, "version", "read", in, out);
+  int r = io_ctx.exec_readonly(oid, "version", "read", in, out);
   if (r < 0)
     return r;
 

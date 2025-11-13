@@ -356,18 +356,32 @@ public:
 	    const ceph::buffer::list& inbl,
 	    ceph::buffer::list* out,
 	    boost::system::error_code* ec = nullptr);
+  void exec_readonly(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            ceph::buffer::list* out,
+            boost::system::error_code* ec = nullptr);
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    fu2::unique_function<void(boost::system::error_code,
 				      const ceph::buffer::list&) &&> f);
+  void exec_readonly(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code,
+                                      const ceph::buffer::list&) &&> f);
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    fu2::unique_function<void(boost::system::error_code, int,
 				      const ceph::buffer::list&) &&> f);
+  void exec_readonly(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code, int,
+                                      const ceph::buffer::list&) &&> f);
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    boost::system::error_code* ec = nullptr);
-
+  void exec_readonly(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            boost::system::error_code* ec = nullptr);
 
   // Flags that apply to all ops in the operation vector
   void balance_reads();

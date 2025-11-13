@@ -773,6 +773,13 @@ inline namespace v14_2_0 {
      * updates.
      */
     void tier_evict();
+
+    /**
+     * exec variantswhich restricts the exec to read only operations.
+     */
+    void exec_readonly(const char *cls, const char *method, bufferlist& inbl);
+    void exec_readonly(const char *cls, const char *method, bufferlist& inbl, bufferlist *obl, int *prval);
+    void exec_readonly(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
   };
 
   /**
@@ -890,6 +897,8 @@ inline namespace v14_2_0 {
     int stat2(const std::string& oid, uint64_t *psize, struct timespec *pts);
     int exec(const std::string& oid, const char *cls, const char *method,
 	     bufferlist& inbl, bufferlist& outbl);
+    int exec_readonly(const std::string& oid, const char *cls, const char *method,
+             bufferlist& inbl, bufferlist& outbl);
     /**
      * modify object tmap based on encoded update sequence
      *

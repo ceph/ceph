@@ -22,6 +22,7 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "cls/version/cls_version_ops.h"
 
 #include "crimson_utils.h"
 
@@ -924,3 +925,25 @@ TEST_F(LibRadosMiscPP, Conf) {
   ASSERT_EQ(0, cluster.conf_get(option, actual));
   ASSERT_EQ(expected, actual);
 }
+
+TEST_F(LibRadosMiscPP, ExecReadonlyWithWrite) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl1, bl2;
+  bl1.append("ceph");
+  ObjectWriteOperation write;
+  write.write(0, bl1);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+
+  // This should fail.
+  ObjectReadOperation read1;
+  cls_version_inc_op call;
+  encode(call, bl2);
+  read1.exec_readonly("version", "inc", bl2);
+  EXPECT_EQ(-EIO, ioctx.operate("foo", &read1, nullptr));
+
+  // This should work, to prove the issue is the read.
+  ObjectWriteOperation write2;
+  write2.exec("version", "inc", bl2);
+  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+}
+

@@ -524,6 +524,10 @@ enum {
 	CEPH_OSD_COPY_FROM_FLAG_TRUNCATE_SEQ = 32, /* use provided truncate_{seq,size} (copy-from2 only) */
 };
 
+enum {
+        CEPH_OSD_CLS_FLAG_READ_ONLY = 1, /* only read operations permitted */
+};
+
 #define CEPH_OSD_COPY_FROM_FLAGS			\
 	(CEPH_OSD_COPY_FROM_FLAG_FLUSH |		\
 	 CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |	\
@@ -602,6 +606,7 @@ struct ceph_osd_op {
 			__u8 method_len;
 			__u8 argc;
 			__le32 indata_len;
+		        __u8 flags;
 		} __attribute__ ((packed)) cls;
 		struct {
 			__le64 count;

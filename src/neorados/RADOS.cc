@@ -499,12 +499,27 @@ void Op::exec(std::string_view cls, std::string_view method,
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out);
 }
 
+void Op::exec_readonly(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              cb::list* out,
+              bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call_readonly(cls, method, inbl, ec, out);
+}
+
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      fu2::unique_function<void(bs::error_code,
 					const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
+
+void Op::exec_readonly(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code,
+                                        const cb::list&) &&> f) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call_readonly(cls, method, inbl, std::move(f));
+}
+
 
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
@@ -513,9 +528,21 @@ void Op::exec(std::string_view cls, std::string_view method,
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
 }
 
+void Op::exec_readonly(std::string_view cls, std::string_view method,
+              const bufferlist& inbl,
+              fu2::unique_function<void(bs::error_code, int,
+                                        const cb::list&) &&> f) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call_readonly(cls, method, inbl, std::move(f));
+}
+
 void Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl, bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec);
+}
+
+void Op::exec_readonly(std::string_view cls, std::string_view method,
+              const bufferlist& inbl, bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.call_readonly(cls, method, inbl, ec);
 }
 
 void Op::balance_reads() {
