@@ -236,6 +236,7 @@ class RbdConfiguration(object):
         """
         Removes an option by name. Will not raise an error, if the option hasn't been found.
         :type option_name str
+
         """
         def _remove(ioctx):
             try:
@@ -267,7 +268,6 @@ class RbdConfiguration(object):
 
 class RbdService(object):
     _rbd_inst = rbd.RBD()
-
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "journaling"}
 
@@ -693,6 +693,15 @@ class RbdService(object):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         rbd_inst = cls._rbd_inst
         return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
+
+    @classmethod
+    def validate_namespace(cls, ioctx, namespace):
+        namespaces = cls._rbd_inst.namespace_list(ioctx)
+        if namespace and namespace not in namespaces:
+            raise DashboardException(
+                msg='Namespace not found',
+                code='namespace_not_found',
+                component='rbd')
 
 
 class RbdSnapshotService(object):
