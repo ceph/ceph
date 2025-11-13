@@ -39,7 +39,7 @@ class PosixWorker : public Worker {
 
 class PosixNetworkStack : public NetworkStack {
   std::vector<std::thread> threads;
-  bool try_smc = false;
+  bool try_smc;
 
   virtual Worker* create_worker(CephContext *c, unsigned worker_id) override {
     return new PosixWorker(c, worker_id, try_smc);
