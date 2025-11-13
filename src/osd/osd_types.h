@@ -4170,7 +4170,9 @@ public:
   }
   void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {
-    ceph_assert(can_local_rollback);
+    if(!can_local_rollback) {
+      return;
+    }
     ENCODE_START(1, 1, bl);
     append_id(EC_OMAP);
     encode(clear_omap, bl);
