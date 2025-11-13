@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-ignorelist:
+      - evicting unresponsive client
     conf:
       global:
         osd_pool_default_size: 1
