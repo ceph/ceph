@@ -519,7 +519,7 @@ options:
   level: advanced
   desc: Number of bytes to read from an object at a time during deep scrub
   fmt_desc: Read size when doing a deep scrub.
-  default: 512_K
+  default: 4_M
   with_legacy: true
 - name: osd_deep_scrub_keys
   type: int
