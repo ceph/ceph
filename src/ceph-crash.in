@@ -77,7 +77,8 @@ def scrape_path(path):
                 # or the daemon crashed before finishing it
                 time.sleep(1)
                 if not os.path.isfile(donepath):
-                    return
+                    log.warning('no `done` file present. Not processing crash path {}.'.format(crashpath))
+                    continue
             # ok, we can process this one
             rc = post_crash(crashpath)
             if rc == 0:
