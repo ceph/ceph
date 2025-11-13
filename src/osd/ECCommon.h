@@ -60,7 +60,7 @@ struct RecoveryMessages;
 struct ECCommon {
   std::list<ECOmapJournal> ec_omap_journals;
   virtual void add_ec_omap_journal(ECOmapJournal new_journal);
-  virtual void remove_ec_omap_journal();
+  virtual void remove_ec_omap_journal(ECOmapJournal to_remove);
 
   struct ec_extent_t {
     int err;

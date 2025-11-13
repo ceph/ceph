@@ -4749,13 +4749,15 @@ void ObjectModDesc::visit(Visitor *visitor) const
 	break;
       }
       case EC_OMAP: {
+        uint64_t id;
         bool clear_omap;
         std::optional<ceph::buffer::list> omap_header;
         std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates;
+        decode(id, bp);
         decode(clear_omap, bp);
         decode(omap_header, bp);
         decode(omap_updates, bp);
-        visitor->ec_omap(clear_omap, omap_header, omap_updates);
+        visitor->ec_omap(id, clear_omap, omap_header, omap_updates);
         break;
       }
       default:

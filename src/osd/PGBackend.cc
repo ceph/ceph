@@ -378,12 +378,13 @@ struct Trimmer : public ObjectModDesc::Visitor {
     }
   }
 
-  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+  void ec_omap(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
 
     auto shard = pg->get_parent()->whoami_shard().shard;
     spg_t spg = pg->get_parent()->whoami_spg_t();
     auto sinfo = pg->ec_get_sinfo();
+    ECBackend* ec_backend = static_cast<ECBackend*>(pg);
 
     // We need shard and sinfo
     // sinfo may not be needed if we have another way to check if shard is primary
@@ -433,6 +434,8 @@ struct Trimmer : public ObjectModDesc::Visitor {
           break;
       }
     }
+    ECOmapJournal new_journal{id, clear_omap, omap_header, omap_updates};
+    ec_backend->ec_common->remove_ec_omap_journal(id);
   }
 };
 

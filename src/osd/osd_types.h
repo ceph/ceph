@@ -56,6 +56,7 @@
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
 #include "ECTypes.h"
+#include "ECOmapJournal.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -117,8 +118,6 @@
 
 /// priority when more full
 #define OSD_DELETE_PRIORITY_FULL 255
-
-enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
 
 static std::map<int, int> max_prio_map = {
 	{OSD_BACKFILL_PRIORITY_BASE, OSD_BACKFILL_DEGRADED_PRIORITY_BASE - 1},
@@ -4085,7 +4084,7 @@ public:
   public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
-    virtual void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    virtual void ec_omap(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
       std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {}
     virtual void rmobject(version_t old_version) {}
     /**
@@ -4173,12 +4172,15 @@ public:
     if(!can_local_rollback) {
       return;
     }
+    ECOmapJournal new_journal{clear_omap, omap_header, omap_updates};
     ENCODE_START(1, 1, bl);
     append_id(EC_OMAP);
+    encode(new_journal.id, bl);
     encode(clear_omap, bl);
     encode(omap_header, bl);
     encode(omap_updates, bl);
     ENCODE_FINISH(bl);
+    add_ec_omap_journal(new_journal);
   }
   bool rmobject(version_t deletion_version) {
     if (!can_local_rollback || rollback_info_completed) {
