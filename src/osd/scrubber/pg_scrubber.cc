@@ -1020,7 +1020,8 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
     return false;
   }
 
-  get_labeled_counters()->inc(scrbcnt_write_blocked);
+  const auto& unlabeled_cntrs_idx = get_unlabeled_counters();
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_intersects);
   dout(20) << __func__ << " " << soid << " can preempt? "
 	   << preemption_data.is_preemptable() << " already preempted? "
 	   << preemption_data.was_preempted() << dendl;
@@ -1042,6 +1043,10 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
 
     return false;
   }
+
+  get_osd_perf_counters()->inc(unlabeled_cntrs_idx.write_blocked);
+  // to be removed in version 'Umbrella':
+  get_labeled_counters()->inc(scrbcnt_write_blocked);
   return true;
 }
 
