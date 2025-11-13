@@ -471,6 +471,7 @@ class RbdGroup(RESTController):
         super().__init__()
         self.rbd_inst = rbd.RBD()
 
+    @handle_rbd_error()
     @EndpointDoc("Display RBD Groups by pool name",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
@@ -487,6 +488,7 @@ class RbdGroup(RESTController):
                 })
             return result
 
+    @handle_rbd_error()
     @EndpointDoc("Create an RBD Group",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
@@ -495,3 +497,17 @@ class RbdGroup(RESTController):
     def create(self, pool_name, name):
         with mgr.rados.open_ioctx(pool_name) as ioctx:
             return self.rbd_inst.group_create(ioctx, name)
+
+    @RESTController.Collection('POST', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Add an image to an RBD Group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def add_image(self, pool_name, group_name, image_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            return group.add_image(ioctx, image_name)
