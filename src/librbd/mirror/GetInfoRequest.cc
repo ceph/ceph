@@ -274,8 +274,14 @@ void GetInfoRequest<I>::calc_promotion_state(
         *m_primary_mirror_uuid = mirror_ns->primary_mirror_uuid;
         break;
       case cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY_DEMOTED:
-      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
         *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        break;
+      case cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED:
+        if (mirror_ns->complete) {
+          *m_promotion_state = PROMOTION_STATE_ORPHAN;
+        } else {
+          *m_promotion_state = PROMOTION_STATE_NON_PRIMARY;
+        }
         break;
       }
       break;
