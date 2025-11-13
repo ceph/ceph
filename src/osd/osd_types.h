@@ -1660,7 +1660,6 @@ public:
 
   void clear_migrating_pgs() { migrating_pgs.clear(); }
 
-  //bool is_migrating() { return migration_src >= 0 || migration_target >= 0; }
   bool is_migrating() const { return migration_src.has_value() || migration_target.has_value(); }
   bool is_migration_src() { return migration_target.has_value(); }
   bool is_migration_target() { return migration_src.has_value(); }
