@@ -3757,6 +3757,10 @@ void PeeringState::split_into(
 {
   bool ec_optimizations_enabled = pool.info.allows_ecoptimizations();
 
+  // splits should be blocked to both the source and target pool
+  // while it is migrating
+  ceph_assert(!pool.info.is_migrating());
+
   child->update_osdmap_ref(get_osdmap());
   child->pool = pool;
 
@@ -3852,6 +3856,10 @@ void PeeringState::merge_from(
   unsigned split_bits,
   const pg_merge_meta_t& last_pg_merge_meta)
 {
+  // merges should be blocked to both the source and target pool
+  // while it is migrating
+  ceph_assert(!pool.info.is_migrating());
+
   bool incomplete = false;
   if (info.last_complete != info.last_update ||
       info.is_incomplete() ||
