@@ -344,7 +344,7 @@ function create_objects_2()
 #
 # Argument 2 might look like this:
 # (note: the dict contains all the elements required by standard_scrub_cluster,
-#  and the values controlling the test)
+#  and, additionally, the values controlling the test)
 #
 # Should contains:
 # - osds_num: number of OSDs in the cluster
@@ -352,13 +352,14 @@ function create_objects_2()
 # - pool_name: name of the pool
 # - pool_default_size: size of the pool
 # - objects_per_pg: average number of objects per PG
+# - object_size: size of each object in bytes
 # - modify_as_prim_cnt: number of objects to corrupt their Primary version
 # - modify_as_repl_cnt: number of objects to corrupt one of their replicas
 # - manipulations: a list of functions to perform on the objects
 #      Assuming N manipulator, a specific manipulator is called on each
 #      (k*N+<func-index>)'th object in the specific OSD.
 #
-#  declare -A test_conf=( 
+#  declare -A test_conf=(
 #    ['osds_num']="3"
 #    ['pgs_in_pool']="7"
 #    ['extras']="--extra1 --extra2"
@@ -366,6 +367,7 @@ function create_objects_2()
 #    ['pool_default_size']="3"
 #    ['msg']="Test message"
 #    ['objects_per_pg']="100"
+#    ['object_size']="256"
 #    ['modify_as_prim_cnt']="10" # elements to corrupt their Primary version
 #    ['modify_as_repl_cnt']="10" # elements to corrupt one of their replicas
 #    ['manipulations']="delete_oi rm_object" the list of manipulations to perform
@@ -378,6 +380,7 @@ function corrupt_and_measure()
   local OSDS=${alargs['osds_num']}
   local PGS=${alargs['pgs_in_pool']}
   local OBJS_PER_PG=${alargs['objects_per_pg']}
+  local OBJECT_SIZE=${alargs['object_size']:-256}
   local modify_as_prim_cnt=${alargs['modify_as_prim_cnt']}
   local modify_as_repl_cnt=${alargs['modify_as_repl_cnt']}
 
@@ -407,7 +410,7 @@ function corrupt_and_measure()
 
   # Create some objects
   #create_objects_2 "$dir" "$poolname" "$objects" 256 4 || return 1
-  create_objects "$dir" "$poolname" "$objects" 256 4 || return 1
+  create_objects "$dir" "$poolname" "$objects" "$OBJECT_SIZE" 4 || return 1
 
   echo "Pre-wait-forclean: $(date +%T.%N)"
   wait_for_clean || return 1
@@ -718,6 +721,40 @@ function TEST_time_measurements_basic_3()
   corrupt_and_measure "$1" cls_conf || return 1
 }
 
+function TEST_time_large_objects()
+{
+  local -A cls_conf=(
+    ['osds_num']="3"
+    ['pgs_in_pool']="8"
+    ['pool_name']="test"
+    ['pool_default_size']="3"
+    ['msg']="large_objs"
+    ['objects_per_pg']="16"
+    ['object_size']="1048576" # 1MB
+    ['modify_as_prim_cnt']="0"
+    ['modify_as_repl_cnt']="10"
+    ['manipulations']="rm_object"
+  )
+  corrupt_and_measure "$1" cls_conf || return 1
+}
+
+
+function TEST_time_large_objects_2()
+{
+  local -A cls_conf=(
+    ['osds_num']="3"
+    ['pgs_in_pool']="8"
+    ['pool_name']="test"
+    ['pool_default_size']="3"
+    ['msg']="large_objs"
+    ['objects_per_pg']="8"
+    ['object_size']="4194304" # 4MB
+    ['modify_as_prim_cnt']="20"
+    ['modify_as_repl_cnt']="20"
+    ['manipulations']="delete_oi"
+  )
+  corrupt_and_measure "$1" cls_conf || return 1
+}
 
 main osd-scrub-dump "$@"
 
