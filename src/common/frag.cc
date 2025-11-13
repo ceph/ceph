@@ -16,7 +16,9 @@
 #include "include/types.h" // for operator<<(std::set)
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/StackStringStream.h"
 
+#include <boost/endian/conversion.hpp>
 #include <fmt/format.h>
 
 #include <iostream>
@@ -38,6 +40,24 @@ void frag_t::encode(ceph::buffer::list& bl) const {
 
 void frag_t::decode(ceph::buffer::list::const_iterator& p) {
   ceph::decode(_enc, p);
+  if (!is_frag_valid()) {
+    /* Oops, did this get encoded as big-endian?
+     * See: https://tracker.ceph.com/issues/73792
+     */
+    auto nfg = frag_t(boost::endian::endian_reverse(_enc));
+    if (nfg.is_frag_valid()) {
+      std::cerr << "correcting byte swapped frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << _enc
+                << ") to frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << nfg._enc << ")"
+                << " aka " << nfg
+                << std::endl;
+      _enc = nfg._enc;
+    } else {
+      CachedStackStringStream css;
+      *css << "Invalid frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << _enc << ")";
+      throw ceph::buffer::malformed_input(css->str());
+    }
+  }
+
 }
 
 void frag_t::dump(ceph::Formatter *f) const {
