@@ -1313,23 +1313,8 @@ int RadosBucket::commit_logging_object(const std::string& obj_name,
         << ". error: " << ret << dendl;
       return ret;
     }
+    mtime = ceph::real_time::clock::now();
     ldpp_dout(dpp, 20) << "INFO: temporary logging object '" << temp_obj_name << "' does not exist. committing it empty" << dendl;
-    // creating an empty object
-    if (ret = rgw_put_system_obj(dpp, store->svc()->sysobj,
-                   data_pool,
-                   temp_obj_name,
-                   bl_data, // empty bufferlist
-                   true, // exclusive
-                   nullptr,
-                   ceph::real_time::clock::now(),
-                   y); ret < 0) {
-      if (ret == -EEXIST) {
-        ldpp_dout(dpp, 5) << "WARNING: race detected in committing an empty logging object '" << temp_obj_name << dendl;
-      } else {
-        ldpp_dout(dpp, 1) << "ERROR: failed to commit empty logging object '" << temp_obj_name << "'. error: " << ret << dendl;
-      }
-      return ret;
-    }
   }
 
   uint64_t size = bl_data.length();
