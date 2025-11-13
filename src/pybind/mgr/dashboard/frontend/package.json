@@ -107,7 +107,7 @@
     "@types/lodash": "4.14.161",
     "@types/node": "18.17.12",
     "@types/swagger-ui": "3.52.0",
-    "@types/validator": "13.12.2",
+    "@types/validator": "13.15.4",
     "@types/xml2js": "0.4.14",
     "@typescript-eslint/eslint-plugin": "8.14.0",
     "@typescript-eslint/parser": "8.14.0",
@@ -140,7 +140,7 @@
     "table": "6.8.0",
     "ts-node": "9.0.0",
     "typescript": "5.4.5",
-    "validator": "13.12.0"
+    "validator": "13.15.20"
   },
   "cypress-cucumber-preprocessor": {
     "stepDefinitions": "cypress/e2e/common"
