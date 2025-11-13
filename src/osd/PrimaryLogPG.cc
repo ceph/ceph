@@ -2194,6 +2194,27 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  // pool migration
+  if (pi->is_migration_src()) {
+    if (!op->has_features(CEPH_FEATUREMASK_POOL_MIGRATION)) {
+      // client doesn't support pool migration - meant to
+      // be blocked by min_compat_client
+      osd->reply_op_error(op, -EIO);
+      return;
+    }
+    if (m->get_hobj() < last_pool_migration_started) {
+      // object has been migrated to the target pool
+      dout(20) << __func__ << ": object has been migrated to pool "
+	       << *pi->migration_target << dendl;
+      //BILL:FIXME: Need to change client to handle EXDEV (retry request to
+      //the target pool) and find a way of returning
+      //last_pool_migration_started here so the client can update its cached
+      //copy of the watermark so it directs I/O to the correct pool
+      osd->reply_op_error(op, -EXDEV);
+      return;
+    }
+  }
+
   dout(10) << "do_op " << *m
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
@@ -2201,7 +2222,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
-
 
   // missing object?
   if (is_unreadable_object(head)) {
