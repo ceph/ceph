@@ -101,6 +101,18 @@ public:
 
   operator _frag_t() const { return _enc; }
 
+  bool is_frag_valid() const {
+    if (bits() > 24) {
+      /* bits must be in range [0,24] */
+      return false;
+    } else if ((value() & ~mask()) != 0) {
+      /* unused bits must be 0 */
+      return false;
+    } else {
+      return true;
+    }
+  }
+
   // tests
   bool contains(unsigned v) const { return ceph_frag_contains_value(_enc, v); }
   bool contains(frag_t sub) const { return ceph_frag_contains_frag(_enc, sub._enc); }
