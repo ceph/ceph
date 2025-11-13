@@ -2005,21 +2005,25 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   uint8_t v = 33;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
-  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
-    if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
-      // this was the first post-hammer thing we added; if it's missing, encode
-      // like hammer.
-      v = 21;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
-      v = 24;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
-      v = 26;
-    } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
-      v = 27;
-    } else if (!is_stretch_pool()) {
-      v = 29;
+  if (!HAVE_SIGNIFICANT_FEATURE(features, POOL_MIGRATION)) {
+    if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
+      if (!HAVE_SIGNIFICANT_FEATURE(features, NEW_OSDOP_ENCODING)) {
+	// this was the first post-hammer thing we added; if it's missing, encode
+	// like hammer.
+	v = 21;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_LUMINOUS)) {
+	v = 24;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_MIMIC)) {
+	v = 26;
+      } else if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_NAUTILUS)) {
+	v = 27;
+      } else if (!is_stretch_pool()) {
+	v = 29;
+      } else {
+	v = 30;
+      }
     } else {
-      v = 30;
+      v = 32;
     }
   }
 
