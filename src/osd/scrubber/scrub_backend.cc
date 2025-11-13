@@ -82,7 +82,8 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
   m_is_optimized_ec = m_pool.info.allows_ecoptimizations();
 
   // EC-related:
-  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()) {
+  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()
+      && m_depth == scrub_level_t::deep) {
     m_ec_digest_map_size = m_pg.get_ec_sinfo().get_k_plus_m();
   }
 
@@ -815,7 +816,8 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
   this_chunk->m_ec_digest_map.clear();
 
   if (auth_selection.auth_oi.version != eversion_t() &&
-      m_pg.get_ec_supports_crc_encode_decode()) {
+      !m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
+      m_depth == scrub_level_t::deep) {
     uint64_t auth_length = this_chunk->received_maps[auth_selection.auth_shard]
                                .objects.at(ho)
                                .size;
@@ -823,8 +825,7 @@ void ScrubBackend::setup_ec_digest_map(auth_selection_t& auth_selection,
     shard_id_set available_shards;
 
     for (const auto& [srd, smap] : this_chunk->received_maps) {
-      if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
-          smap.objects.contains(ho)) {
+      if (smap.objects.contains(ho)) {
         uint64_t shard_length = smap.objects.at(ho).size;
 
         available_shards.insert(srd.shard);
@@ -1231,7 +1232,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
   std::list<pg_shard_t> auth_list;     // out "param" to
   std::set<pg_shard_t> object_errors;  // be returned
   std::size_t digest_size = 0;
-  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()) {
+  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode() &&
+      m_depth == scrub_level_t::deep) {
     digest_size = m_pg.get_ec_sinfo().get_k_plus_m();
   }
   shard_id_map<bufferlist> digests{digest_size};
@@ -1263,7 +1265,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
                                                      ho.has_snapset(),
                                                      srd);
 
-      if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()) {
+      if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()
+          && m_depth == scrub_level_t::deep) {
         // Create map containing all data shards except current shard and all
         // parity shards Decode the current data shard Add to set<shard_id>
         // incorrectly_decoded_shards if the shard did not decode
@@ -1375,7 +1378,8 @@ ScrubBackend::auth_and_obj_errs_t ScrubBackend::match_in_shards(
              << dendl;
   }
 
-  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()) {
+  if (!m_is_replicated && m_pg.get_ec_supports_crc_encode_decode()
+      && m_depth == scrub_level_t::deep) {
     set<shard_id_t> incorrectly_decoded_shards;
 
     shard_id_set shards;
