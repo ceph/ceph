@@ -1350,6 +1350,230 @@ def full_dedup_is_disabled():
     return full_dedup_state_disabled
 
 
+#==============================================================================
+#                            RGW Versioning Tests:
+#==============================================================================
+#-------------------------------------------------------------------------------
+def delete_all_versions(conn, bucket_name, dry_run=False):
+    log.info("delete_all_versions")
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator('list_object_versions')
+    to_delete = []
+
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # Collect versions
+        for v in page.get('Versions', []):
+            to_delete.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+
+        # Collect delete markers
+        for dm in page.get('DeleteMarkers', []):
+            to_delete.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+
+        # Delete in chunks
+        if dry_run:
+            log.info("DRY RUN would delete %d objects", len(to_delete))
+        else:
+            conn.delete_objects(Bucket=bucket_name, Delete={'Objects': to_delete})
+            to_delete.clear()
+
+
+#-------------------------------------------------------------------------------
+def list_all_versions(conn, bucket_name, verbose=False):
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator("list_object_versions")
+    total_s3_versioned_objs=0
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # normal object versions
+        for v in page.get("Versions", []):
+            total_s3_versioned_objs += 1
+            key = v["Key"]
+            vid = v["VersionId"]
+            size = v.get("Size", 0)
+            is_latest = v.get("IsLatest", False)
+            #etag = v.get("ETag")
+            if verbose:
+                log.info("%s::ver=%s, size=%d, IsLatest=%d",
+                         key, vid, size, is_latest)
+
+        # delete markers (no Size)
+        for dm in page.get("DeleteMarkers", []):
+            key = dm["Key"]
+            vid = dm["VersionId"]
+            is_latest = dm.get("IsLatest", False)
+            if verbose:
+                log.info("DeleteMarker::%s::ver=%s, IsLatest=%d",
+                         key, vid, is_latest)
+
+    return total_s3_versioned_objs
+
+#-------------------------------------------------------------------------------
+def gen_files_in_range_single_copy(files, count, min_size, max_size):
+    assert(min_size <= max_size)
+    assert(min_size > 0)
+
+    idx=0
+    size_range = max_size - min_size
+    size=0
+    for i in range(0, count):
+        size = min_size + random.randint(0, size_range-1)
+        idx += 1
+        filename = "OBJ_" + str(idx)
+        files.append((filename, size, 1))
+        write_file(filename, size)
+
+    assert len(files) == count
+
+#-------------------------------------------------------------------------------
+def simple_upload(bucket_name, files, conn, config, op_log, first_time):
+    for f in files:
+        filename=f[0]
+        size=f[1]
+        if first_time:
+            key = filename
+        else:
+            idx=random.randint(0, len(files)-1)
+            key=files[idx][0]
+
+        log.debug("upload_file %s -> %s/%s (%d)", filename, bucket_name, key, size)
+        conn.upload_file(OUT_DIR + filename, bucket_name, key, Config=config)
+        resp = conn.head_object(Bucket=bucket_name, Key=key)
+        version_id = resp.get("VersionId")
+        op_log.append((filename, size, key, version_id))
+
+#-------------------------------------------------------------------------------
+def ver_calc_rados_obj_count(config, files, op_log):
+    size_dict  = {}
+    num_copies_dict = {}
+    unique_s3_objs = set()
+
+    for f in files:
+        filename=f[0]
+        size=f[1]
+        size_dict[filename] = size
+        num_copies_dict[filename] = 0
+
+    for o in op_log:
+        filename=o[0]
+        key=o[2]
+        num_copies_dict[filename] += 1
+        unique_s3_objs.add(key)
+
+    rados_obj_total  = 0
+    duplicated_tail_objs = 0
+    for key, value in size_dict.items():
+        size = value
+        num_copies = num_copies_dict[key]
+        assert num_copies > 0
+        rados_obj_count  = calc_rados_obj_count(num_copies, size, config)
+        rados_obj_total += (rados_obj_count * num_copies)
+        duplicated_tail_objs += ((num_copies-1) * (rados_obj_count-1))
+
+    # versioned buckets hold an extra rados-obj per versioned S3-Obj
+    unique_s3_objs_count = len(unique_s3_objs)
+    rados_obj_total += unique_s3_objs_count
+    rados_obj_count_post_dedup=(rados_obj_total-duplicated_tail_objs)
+    log.debug("calc::rados_obj_total=%d, rados_obj_count_post_dedup=%d",
+              rados_obj_total, rados_obj_count_post_dedup)
+    return(rados_obj_total, rados_obj_count_post_dedup, unique_s3_objs_count)
+
+#-------------------------------------------------------------------------------
+def verify_objects_with_version(bucket_name, op_log, conn, config):
+    tempfile = OUT_DIR + "temp"
+    pend_delete_set = set()
+    for o in op_log:
+        filename=o[0]
+        size=o[1]
+        key=o[2]
+        version_id=o[3]
+        log.debug("verify: %s/%s:: ver=%s", bucket_name, filename, version_id)
+
+        # call garbage collect for tail objects before reading the same filename
+        # this will help detect bad deletions
+        if filename in pend_delete_set:
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+
+        # only objects larger than RADOS_OBJ_SIZE got tail-objects
+        if size > RADOS_OBJ_SIZE:
+            pend_delete_set.add(filename)
+
+        conn.download_file(Bucket=bucket_name, Key=key, Filename=tempfile,
+                           Config=config, ExtraArgs={'VersionId': version_id})
+        result = bash(['cmp', tempfile, OUT_DIR + filename])
+        assert result[1] == 0 ,"Files %s and %s differ!!" % (key, tempfile)
+        os.remove(tempfile)
+        conn.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+
+
+#-------------------------------------------------------------------------------
+# generate @num_files objects with @ver_count versions each of @obj_size
+# verify that we got the correct number of rados-objects
+# then dedup and verify that duplicate tail objects been removed
+# read-verify *all* objects in all versions deleting one version after another
+# while making sure the remaining versions are still good
+# finally make sure no rados-object was left behind after the last ver was removed
+@pytest.mark.basic_test
+def test_dedup_with_versions():
+    #return
+
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = "bucket1"
+    files=[]
+    op_log=[]
+    num_files=43
+    min_size=1*KB
+    max_size=MULTIPART_SIZE*2
+    success=False
+    try:
+        conn=get_single_connection()
+        conn.create_bucket(Bucket=bucket_name)
+        gen_files_in_range_single_copy(files, num_files, min_size, max_size)
+        # enable versioning
+        conn.put_bucket_versioning(Bucket=bucket_name,
+                                   VersioningConfiguration={"Status": "Enabled"})
+        ver_count=7
+        first_time=True
+        for i in range(0, ver_count):
+            simple_upload(bucket_name, files, conn, default_config, op_log, first_time)
+            first_time=False
+
+        ret=ver_calc_rados_obj_count(default_config, files, op_log)
+        rados_objects_total=ret[0]
+        rados_objects_post_dedup=ret[1]
+        unique_s3_objs_count=ret[2]
+        assert unique_s3_objs_count == num_files
+        log.info("rados_objects_total=%d, rados_objects_post_dedup=%d",
+                 rados_objects_total, rados_objects_post_dedup)
+        log.info("unique_s3_objs_count=%d, total_s3_versioned_objs=%d",
+                 unique_s3_objs_count, len(op_log))
+        total_s3_versioned_objs=list_all_versions(conn, bucket_name)
+        assert total_s3_versioned_objs == (num_files * ver_count)
+        assert total_s3_versioned_objs == len(op_log)
+        assert rados_objects_total == count_object_parts_in_all_buckets()
+        exec_dedup_internal(Dedup_Stats(), dry_run=False, max_dedup_time=500)
+        assert rados_objects_post_dedup == count_object_parts_in_all_buckets()
+        verify_objects_with_version(bucket_name, op_log, conn, default_config)
+        success=True
+    finally:
+        # cleanup must be executed even after a failure
+        if success == False:
+            delete_all_versions(conn, bucket_name, dry_run=False)
+
+        # otherwise, objects been removed by verify_objects_with_version()
+        cleanup(bucket_name, conn)
+
+#==============================================================================
+#                            ETag Corruption Tests:
+#==============================================================================
 CORRUPTIONS = ("no corruption", "change_etag", "illegal_hex_value",
                "change_num_parts", "illegal_separator",
                "illegal_dec_val_num_parts", "illegal_num_parts_overflow")
