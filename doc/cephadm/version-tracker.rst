@@ -4,11 +4,11 @@
 Version Tracking for Ceph
 =========================
 
-Cephadm tracks all cluster version history and allows accessing 
-of this information for debugging purposes. Information is managed
-with two main CLI commands. This feature only tracks version history
-starting from when it was introduced. Version history before the 
-introduction of this feature is not tracked.
+Cephadm tracks the history of cluster versions and allows retrieval
+of this information. There are two CLI commands to manage this information.
+Daemon version information from before the introduction of this feature is
+not available, which means that tracking will begin with the Umbrella
+release, or possibly Tentacle update releases.
 
 Viewing Version History
 =======================
@@ -36,15 +36,14 @@ Removing Version History (Not Recommended)
     ceph cephadm remove-cluster-version-history --all --before <datetime> --after <datetime>
 
 This command will allow users to delete version history and requires
-at least one of the three provided options to be passed. If ``--all`` is 
-passed all version history is deleted, this option is incompatible 
-with ``--before`` and ``--after`` and returns an error if either are passed 
-with it. Option ``--before`` can be used to specify deletion of version 
-history before the <datetime> specified. Option ``--after`` can be used 
-to specify deletion of version history after the <datetime> 
-specified. Options ``--after`` and ``--before`` can be used together to 
-specify a range for version history deletion. The format of 
-<datetime> should be "YYYY-MM-DD HH:MM:SS".
+at least one of the three provided options to be passed. If ``--all`` is
+passed all version history is deleted, this option is incompatible
+with ``--before`` and ``--after`` and returns an error if either are passed
+with it. Supply ``--before`` to specify deletion of version history before
+the <datetime> specified. Supply ``--after`` to specify deletion of version
+history after the <datetime> specified. The parameters ``--after`` and
+``--before`` can be used together to specify a range for version history
+deletion. The format of <datetime> should be "YYYY-MM-DD HH:MM:SS".
 
 Option ``--all``:
 
