@@ -69,9 +69,9 @@ function(build_arrow)
     list(APPEND arrow_DEPENDS Boost)
   endif()
 
-  # since Arrow 15.0.0 needs xsimd>=8.1.0 and since Ubuntu Jammy
-  # Jellyfish only provides 7.6.0, we'll have arrow build it as source
-  list(APPEND arrow_CMAKE_ARGS -Dxsimd_SOURCE=BUNDLED)
+  # Arrow requires xsimd >= 9.0.1 (see arrow/cpp/thirdparty/versions.txt).
+  # Use AUTO to let Arrow detect system xsimd and fall back to bundled if needed.
+  list(APPEND arrow_CMAKE_ARGS -Dxsimd_SOURCE=AUTO)
 
   # cmake doesn't properly handle arguments containing ";", such as
   # CMAKE_PREFIX_PATH, for which reason we'll have to use some other separator.
