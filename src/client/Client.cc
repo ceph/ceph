@@ -18530,7 +18530,10 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
   if (in->is_fscrypt_enabled()) {
     struct fscrypt_policy_v2 policy2;
     in->fscrypt_ctx->convert_to(&policy2);
-    if (memcmp(&policy, &policy2, sizeof(policy))) {
+
+    struct fscrypt_policy_v2 policy_standardized;
+    in->fscrypt_ctx->standardize(policy, &policy_standardized);
+    if (memcmp(&policy_standardized, &policy2, sizeof(policy))) {
       return -EEXIST;
     }
     return 0;
