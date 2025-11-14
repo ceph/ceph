@@ -324,8 +324,13 @@ class CertMgr:
         return cert_obj is not None
 
     def is_cert_editable(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
-        cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
-        return cert_obj.editable if cert_obj else True
+        # By definition a certificate which doesn't not exist it's considered
+        # editable so user can populate its content by using a custom value.
+        if self.cert_store.tlsobject_exists(cert_name):
+            cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
+            return cert_obj.editable if cert_obj else True
+        else:
+            return True
 
     def get_cert(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> Optional[str]:
         cert_obj = cast(Cert, self.cert_store.get_tlsobject(cert_name, service_name, host))
@@ -364,6 +369,30 @@ class CertMgr:
     def rm_self_signed_cert_key_pair(self, service_name: str, host: str, label: Optional[str] = None) -> None:
         self.rm_cert(self.self_signed_cert(service_name, label), service_name, host)
         self.rm_key(self.self_signed_key(service_name, label), service_name, host)
+
+    def rm_cert_if_present(self, cert_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        try:
+            return self.rm_cert(cert_name, service_name, host)
+        except TLSObjectException:
+            logger.debug(
+                "TLS cert %s for service=%s host=%s not found; nothing to remove",
+                cert_name, service_name, host,
+            )
+            return False
+
+    def rm_key_if_present(self, key_name: str, service_name: Optional[str] = None, host: Optional[str] = None) -> bool:
+        try:
+            return self.rm_key(key_name, service_name, host)
+        except TLSObjectException:
+            logger.debug(
+                "TLS key %s for service=%s host=%s not found; nothing to remove",
+                key_name, service_name, host,
+            )
+            return False
+
+    def rm_self_signed_cert_key_pair_if_present(self, service_name: str, host: str, label: Optional[str] = None) -> None:
+        self.rm_cert_if_present(self.self_signed_cert(service_name, label), service_name, host)
+        self.rm_key_if_present(self.self_signed_key(service_name, label), service_name, host)
 
     def cert_ls(self, filter_by: str = '',
                 include_details: bool = False,
