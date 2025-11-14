@@ -417,3 +417,8 @@ __attribute__((destructor)) static void cputrace_fini() {
     free(g_profiler.anchors);
     g_profiler.anchors = nullptr;
 }
+
+HW_thread_ctx* HW_thread_ctx::get() {
+  thread_local HW_thread_ctx thread_ctx;
+  return &thread_ctx;
+}
