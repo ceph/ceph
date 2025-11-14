@@ -1555,6 +1555,9 @@ class TestNFS(MgrTestCase):
         self._cmd('fs', 'subvolume', 'create', self.fs_name, subvol)
         subvol_path = self._cmd('fs', 'subvolume', 'getpath', self.fs_name,
                                 subvol).strip()
+        # testing v1 path
+        import os
+        subvol_path = os.path.dirname(subvol_path)
         self._create_export(export_id='1', create_fs=False,
                             extra_cmd=['--pseudo-path', self.pseudo_path,
                                        '--path', subvol_path])
