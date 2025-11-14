@@ -1,3 +1,7 @@
+Project governance is defined in
+
+`Governance`_
+
 For the general process of submitting patches to Ceph, read the below
 
 `Submitting Patches`_
@@ -16,3 +20,4 @@ primarily because it can cause problems when rebasing and backporting.
 
 .. _Submitting Patches: SubmittingPatches.rst
 .. _Documenting Ceph:  doc/start/documenting-ceph.rst
+.. _Governance:  doc/governance.rst
