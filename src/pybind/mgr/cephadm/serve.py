@@ -120,6 +120,8 @@ class CephadmServe:
 
                     self._check_for_moved_osds()
 
+                    self._retry_failed_operations()
+
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
 
@@ -1868,6 +1870,28 @@ class CephadmServe:
         self.log.info(f"Deploying cephadm binary to {host}")
         await self.mgr.ssh._write_remote_file(host, self.mgr.cephadm_binary_path,
                                               self.mgr._cephadm, addr=addr)
+
+    def _retry_failed_operations(self) -> None:
+        self.log.debug('_retry_failed_operations')
+        # retry nfs fencing for failed specs
+        failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+        services = failed_services.split(',') if failed_services else []
+        to_remove = []
+        for service_name in services:
+            if service_name not in self.mgr.spec_store:
+                to_remove.append(service_name)
+                continue
+            spec = self.mgr.spec_store[service_name].spec
+            rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
+            daemons = self.mgr.cache.get_daemons_by_service(service_name)
+            svc = service_registry.get_service('nfs')
+            svc.fence_old_ranks(spec, rank_map, len(daemons))
+        if to_remove:
+            failed_services = self.mgr.get_store('nfs_fencing_failed_services')
+            services = failed_services.split(',') if failed_services else []
+            updated = [s for s in services if s not in to_remove]
+            val = ','.join(updated) if updated else None
+            self.mgr.set_store('nfs_fencing_failed_services', val)
 
 
 def _host_selector(svc: Any) -> Optional[HostSelector]:
