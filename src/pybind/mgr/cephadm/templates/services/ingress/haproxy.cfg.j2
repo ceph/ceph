@@ -66,6 +66,7 @@ frontend stats
 frontend frontend
 {% if spec.ssl or spec.ssl_cert %}
     bind {{ ip }}:{{ frontend_port }} ssl crt /var/lib/haproxy/haproxy.pem {{ v4v6_flag }}
+    http-request set-header X-Forwarded-Proto https
 {% else %}
     bind {{ ip }}:{{ frontend_port }} {{ v4v6_flag }}
 {% endif %}
