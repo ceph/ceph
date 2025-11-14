@@ -66,7 +66,7 @@
     "detect-browser": "5.3.0",
     "file-saver": "2.0.5",
     "fork-awesome": "1.2.0",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.1.1",
     "lodash": "4.17.21",
     "moment": "2.29.4",
     "ng-block-ui": "4.0.1",
