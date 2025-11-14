@@ -127,6 +127,9 @@ private:
         return ret;
       }
       queues.merge(queues_chunk);
+      if (more) {
+        start_after = *queues.rbegin();
+      }
     }
     return 0;
   }
