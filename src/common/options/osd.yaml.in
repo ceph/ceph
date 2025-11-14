@@ -395,8 +395,9 @@ options:
   type: int
   level: advanced
   desc: Minimum number of objects to deep-scrub in a single chunk
-  fmt_desc: The minimal number of object store chunks to scrub during single operation.
-    Ceph blocks writes to single chunk during scrub.
+  fmt_desc: The minimum number of objects to scrub during single operation. Also
+    serves as a minimal chunk size even after scrubbing is preempted by client
+    operations and the effective chunk size is halved.
   default: 5
   see_also:
   - osd_scrub_chunk_max
@@ -1491,7 +1492,7 @@ options:
   type: int
   level: advanced
   default: 512
-  fmt_desc: The maximum number of objects per backfill scan.p
+  fmt_desc: The maximum number of objects per backfill scan.
   with_legacy: true
 - name: osd_extblkdev_plugins
   type: str
