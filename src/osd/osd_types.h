@@ -1663,7 +1663,12 @@ public:
   bool is_migrating() const { return migration_src.has_value() || migration_target.has_value(); }
   bool is_migration_src() const { return migration_target.has_value(); }
   bool is_migration_target() const { return migration_src.has_value(); }
-
+  bool is_pg_migrating(pg_t pgid) const { return migrating_pgs.contains(pgid); }
+  bool has_pg_migrated(pg_t pgid) const {
+    return is_migration_src() &&
+      (pgid.ps() >= lowest_migrated_pg) &&
+      !is_pg_migrating(pgid);
+  }
   pool_opts_t opts; ///< options
 
   typedef enum {
