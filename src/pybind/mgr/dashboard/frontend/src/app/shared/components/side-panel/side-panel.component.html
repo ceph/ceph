@@ -10,17 +10,19 @@
     title="Close"
     (click)="close()">
     <svg
-      class="cds--btn__icon"
       cdsIcon="close"></svg>
   </cds-icon-button>
+  <div class="cds-h-100">
+    <div
+      class="panel-header spacing-04"
+      *ngIf="headerText">
+        {{ headerText }}
+    </div>
 
-  <div
-    class="panel-header spacing-03"
-    *ngIf="headerText">
-      {{ headerText }}
-  </div>
-
-  <div class="spacing-03">
-    <ng-content select=".panel-content"></ng-content>
+    <div class="cd-flex-space-between"
+         [ngClass]="{ 'with-footer': hasFooter }">
+      <ng-content select=".panel-content"></ng-content>
+      <ng-content select=".panel-footer"></ng-content>
+    </div>
   </div>
 </cds-panel>
