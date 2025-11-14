@@ -606,7 +606,9 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (!op.omap_updates.empty() || op.clear_omap || op.omap_header) {
+    ECOmapJournalEntry new_entry(op.clear_omap, op.omap_header, op.omap_updates);
     entry->mod_desc.ec_omap(
+      new_entry.id,
       op.clear_omap,
       op.omap_header,
       op.omap_updates);
@@ -1015,7 +1017,7 @@ void ECTransaction::generate_transactions(
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap,
-    std::list<ECOmapJournal> &ec_omap_journals) {
+    std::list<ECOmapJournalEntry> &ec_omap_journal) {
   ceph_assert(written_map);
   ceph_assert(transactions);
   ceph_assert(temp_added);

@@ -57,7 +57,7 @@ struct PGLog;
 struct RecoveryMessages;
 
 struct ECCommon {
-  std::list<ECOmapJournal> ec_omap_journals;
+  std::list<ECOmapJournalEntry> ec_omap_journal;
 
   struct ec_extent_t {
     int err;

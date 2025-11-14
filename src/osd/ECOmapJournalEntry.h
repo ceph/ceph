@@ -10,7 +10,7 @@
 
 enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
 
-class ECOmapJournal {
+class ECOmapJournalEntry {
  public:
   static uint64_t global_id_counter;
   uint64_t id;
@@ -18,13 +18,13 @@ class ECOmapJournal {
   std::optional<ceph::buffer::list> omap_header;
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates;
 
-  ECOmapJournal(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+  ECOmapJournalEntry(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates);
 
-  ECOmapJournal(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+  ECOmapJournalEntry(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates);
 
   static int get_new_id();
 
-  bool operator==(const ECOmapJournal& other) const;
+  bool operator==(const ECOmapJournalEntry& other) const;
 };

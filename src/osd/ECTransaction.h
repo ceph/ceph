@@ -138,6 +138,6 @@ void generate_transactions(
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap,
-    std::list<ECOmapJournal> &ec_omap_journals
+    std::list<ECOmapJournalEntry> &ec_omap_journal
   );
 }

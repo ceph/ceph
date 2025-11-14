@@ -913,7 +913,7 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       &temp_cleared,
       dpp,
       osdmap,
-      pipeline->ec_backend.ec_omap_journals);
+      pipeline->ec_backend.ec_omap_journal);
   }
 
   bool skip_transaction(
