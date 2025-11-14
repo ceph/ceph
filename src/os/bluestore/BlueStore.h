@@ -60,6 +60,7 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
+#include "common/cputrace.h"
 
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
@@ -71,7 +72,10 @@ class BlueStoreRepairer;
 class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
-
+#ifdef WITH_CPUTRACE
+//change to #define to enable
+#undef BLUESTORE_COMMON_CPUTRACE
+#endif
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
 #define CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
@@ -4141,6 +4145,20 @@ public:
                           const std::vector<std::string>& devs,
 			  std::vector<uint64_t>* valid_positions,
 			  bool force);
+#ifdef BLUESTORE_COMMON_CPUTRACE
+  struct {
+    ceph::mutex cpulock_tat = ceph::make_mutex("cputrace_tat");
+    ceph::mutex cpulock_twn = ceph::make_mutex("cputrace_twn");
+    ceph::mutex cpulock_tfk = ceph::make_mutex("cputrace_tfk");
+    ceph::mutex cpulock_tsp = ceph::make_mutex("cputrace_tsp");
+    ceph::mutex cpulock_gom = ceph::make_mutex("cputrace_gom");
+    measurement_t txc_add_transaction;
+    measurement_t txc_write_nodes;
+    measurement_t txc_finalize_kv;
+    measurement_t txc_state_proc;
+    measurement_t get_onode_miss;
+  } cputrace_stats;
+#endif
 };
 
 inline std::ostream& operator<<(std::ostream& out, const BlueStore::volatile_statfs& s) {

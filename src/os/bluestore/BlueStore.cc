@@ -677,6 +677,52 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::pool_fsck_stats_t& 
   return out;
 }
 
+#ifdef BLUESTORE_COMMON_CPUTRACE
+struct HW_thread_ctx {
+  HW_ctx ctx;
+  bool initialized = false;
+  // The idea for stats excluded is related to cases when
+  // second sample block is started when we still inside current block.
+  // stats_excluded allows to exlude inner block. Otherwise, we would be measuring
+  // some stats twice.
+  sample_t stats_excluded;
+  sample_t read() {
+    sample_t s;
+    HW_read(&ctx, &s);
+    return s;
+  };
+  sample_t read_rel() {
+    sample_t s;
+    HW_read(&ctx, &s);
+    s -= stats_excluded;
+    return s;
+  };
+  void exclude_stats(const sample_t& exclude) {
+    stats_excluded += exclude;
+  }
+  static void sample(
+    const sample_t& elapsed,
+    measurement_t& mmt,
+    ceph::mutex& lock
+  ) {
+    std::lock_guard _(lock);
+    mmt.sample(elapsed);
+  }
+};
+
+static HW_thread_ctx* get_cputrace() {
+  thread_local HW_thread_ctx local_ctx;
+  if (!local_ctx.initialized) {
+    HW_init(&local_ctx.ctx,
+      HW_PROFILE_SWI | HW_PROFILE_CYC |
+      HW_PROFILE_CMISS | HW_PROFILE_BMISS |
+      HW_PROFILE_INS);
+    local_ctx.initialized = true;
+  }
+  return &local_ctx;
+}
+#endif
+
 namespace {
 
 /*
@@ -5327,6 +5373,15 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o)
     return o;
 
+  #ifdef BLUESTORE_COMMON_CPUTRACE
+  HW_thread_ctx* cputrace = get_cputrace();
+  sample_t startx = cputrace->read_rel();
+  auto _ = make_scope_guard([&]() {
+    sample_t elapsedx = cputrace->read_rel() - startx;
+    cputrace->exclude_stats(elapsedx);
+    cputrace->sample(elapsedx, store->cputrace_stats.get_onode_miss, store->cputrace_stats.cpulock_gom);
+  });
+  #endif
   string key;
   get_object_key(store->cct, oid, &key);
 
@@ -14316,6 +14371,15 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
 
 void BlueStore::_txc_state_proc(TransContext *txc)
 {
+  #ifdef BLUESTORE_COMMON_CPUTRACE
+  HW_thread_ctx* cputrace = get_cputrace();
+  sample_t startx = cputrace->read_rel();
+  auto _ = make_scope_guard([&]() {
+    sample_t elapsedx = cputrace->read_rel() - startx;
+    cputrace->exclude_stats(elapsedx);
+    cputrace->sample(elapsedx, cputrace_stats.txc_state_proc, cputrace_stats.cpulock_tsp);
+  });
+  #endif
   while (true) {
     dout(10) << __func__ << " txc " << txc
 	     << " " << txc->get_state_name() << dendl;
@@ -14470,6 +14534,15 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 
 void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 {
+  #ifdef BLUESTORE_COMMON_CPUTRACE
+  HW_thread_ctx* cputrace = get_cputrace();
+  sample_t startx = cputrace->read_rel();
+  auto _ = make_scope_guard([&]() {
+    sample_t elapsedx = cputrace->read_rel() - startx;
+    cputrace->exclude_stats(elapsedx);
+    cputrace->sample(elapsedx, cputrace_stats.txc_write_nodes, cputrace_stats.cpulock_twn);
+  });
+  #endif
   dout(20) << __func__ << " txc " << txc
 	   << " onodes " << txc->onodes
 	   << " shared_blobs " << txc->shared_blobs
@@ -14533,6 +14606,15 @@ void BlueStore::BSPerfTracker::update_from_perfcounters(
 
 void BlueStore::_txc_finalize_kv(TransContext *txc, KeyValueDB::Transaction t)
 {
+  #ifdef BLUESTORE_COMMON_CPUTRACE
+  HW_thread_ctx* cputrace = get_cputrace();
+  sample_t startx = cputrace->read_rel();
+  auto _ = make_scope_guard([&]() {
+    sample_t elapsedx = cputrace->read_rel() - startx;
+    cputrace->exclude_stats(elapsedx);
+    cputrace->sample(elapsedx, cputrace_stats.txc_finalize_kv, cputrace_stats.cpulock_tfk);
+  });
+  #endif
   dout(20) << __func__ << " txc " << txc << std::hex
 	   << " allocated 0x" << txc->allocated
 	   << " released 0x" << txc->released
@@ -15774,8 +15856,18 @@ void BlueStore::_txc_aio_submit(TransContext *txc)
   bdev->aio_submit(&txc->ioc);
 }
 
+
 void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 {
+  #ifdef BLUESTORE_COMMON_CPUTRACE
+  HW_thread_ctx* cputrace = get_cputrace();
+  sample_t startx = cputrace->read_rel();
+  auto _ = make_scope_guard([&]() {
+    sample_t elapsedx = cputrace->read_rel() - startx;
+    cputrace->exclude_stats(elapsedx);
+    cputrace->sample(elapsedx, cputrace_stats.txc_add_transaction, cputrace_stats.cpulock_tat);
+  });
+  #endif
   Transaction::iterator i = t->begin();
 
   _dump_transaction<30>(cct, t);

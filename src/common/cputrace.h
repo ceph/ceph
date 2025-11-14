@@ -74,6 +74,23 @@ struct sample_t {
         result.ins = ins - other.ins;
         return result;
     }
+  sample_t& operator-=(const sample_t& other) {
+    swi   -= other.swi;
+    cyc   -= other.cyc;
+    cmiss -= other.cmiss;
+    bmiss -= other.bmiss;
+    ins   -= other.ins;
+    return *this;
+  }
+
+  sample_t& operator+=(const sample_t& other) {
+    swi   += other.swi;
+    cyc   += other.cyc;
+    cmiss += other.cmiss;
+    bmiss += other.bmiss;
+    ins   += other.ins;
+    return *this;
+  }
 };
 
 struct measurement_t {
@@ -107,7 +124,6 @@ struct measurement_t {
     }
 
     void dump(ceph::Formatter* f, cputrace_flags flags, const std::string& counter = "") const {
-        f->open_object_section("metrics");
         f->dump_unsigned("sample_count", sample_count);
         if (flags & HW_PROFILE_SWI) {
             f->open_object_section("context_switches");
@@ -140,8 +156,6 @@ struct measurement_t {
 
         if (flags & HW_PROFILE_INS && (counter.empty() || counter == "instructions"))
             dump_counter("instructions", sum_ins);
-
-        f->close_section();
     }
 
     void dump_to_stringstream(std::stringstream& ss, cputrace_flags flags) const {
