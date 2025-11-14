@@ -1,4 +1,6 @@
 @use './src/styles/vendor/variables' as vv;
+@use '@carbon/layout';
+@use '@carbon/styles/scss/theme';
 
 :host ::ng-deep cds-panel {
   &[panel-size='sm'] .cds--header-panel--expanded {
@@ -16,6 +18,24 @@
   .cds--header-panel--expanded {
     background-color: vv.$white;
     max-inline-size: 100%;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+
+  .panel-header {
+    padding: layout.$spacing-04 layout.$spacing-04 0 layout.$spacing-04;
+  }
+
+  .panel-content {
+    overflow: auto;
+    padding: 0 layout.$spacing-04 0 layout.$spacing-04;
+  }
+
+  .panel-footer {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid theme.$border-subtle-02;
   }
 }
 
