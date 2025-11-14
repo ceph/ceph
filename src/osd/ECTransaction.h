@@ -121,7 +121,8 @@ class Generate {
     const hobject_t &oid, PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry);
+    pg_log_entry_t *entry,
+    std::list<ECOmapJournalEntry> &ec_omap_journal);
 };
 
 void generate_transactions(

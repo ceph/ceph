@@ -470,7 +470,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     PGTransaction::ObjectOperation &op,
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
-    pg_log_entry_t *entry)
+    pg_log_entry_t *entry,
+    std::list<ECOmapJournalEntry> &ec_omap_journal)
   : t(t),
     ec_impl(ec_impl),
     pgid(pgid),
@@ -612,7 +613,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
       op.clear_omap,
       op.omap_header,
       op.omap_updates);
-    // Add ec omap journal entry here
+    ec_omap_journal.push_back(new_entry);
   }
 
   /* It is essential for rollback that every shard with a non-empty transaction
@@ -1050,7 +1051,7 @@ void ECTransaction::generate_transactions(
       ceph_assert(plan.hoid == oid);
 
       Generate generate(t, ec_impl, pgid, sinfo, partial_extents, written_map,
-        *transactions, osdmap, oid, op, plan, dpp, entry);
+        *transactions, osdmap, oid, op, plan, dpp, entry, ec_omap_journal);
 
       plans.plans.pop_front();
   });
