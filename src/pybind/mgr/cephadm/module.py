@@ -2668,29 +2668,29 @@ Then run the following:
             return False
 
         rc_get, out_get, err_get = self.mon_command({
-                    'prefix': 'config get',
-                    'who': f'{daemon_spec.service_name}.{daemon_spec.daemon_id}',
-                    'key': 'public_network'
-                })
+            'prefix': 'config get',
+            'who': f'mon.{daemon_spec.daemon_id}',
+            'key': 'public_network'
+        })
 
         if rc_get:
             self.log.error(f'cmd: config get failed with: {err_get}, (errno:{rc_get})')
             return False
 
         rc_show, out_show, err_show = self.mon_command({
-                    'prefix': 'config show',
-                    'who': f'{daemon_spec.service_name}.{daemon_spec.daemon_id}',
-                    'key': 'public_network'
-                })
+            'prefix': 'config show',
+            'who': f'mon.{daemon_spec.daemon_id}',
+            'key': 'public_network'
+        })
 
         if rc_show:
-            self.log.error(f'cmd: config get failed with: {err_show}, (errno:{rc_show})')
+            self.log.error(f'cmd: config show failed with: {err_show}, (errno:{rc_show})')
             return False
 
         if out_get == out_show:
             return False
 
-        self.log.debug(f'{daemon_spec.service_name}.{daemon_spec.daemon_id} public network changed, redeploy instead of restart')
+        self.log.debug(f'mon.{daemon_spec.daemon_id} public network changed, redeploy instead of restart')
         return True
 
     def _daemon_action(self,
