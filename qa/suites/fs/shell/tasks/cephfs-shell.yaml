@@ -1,3 +1,6 @@
+teuthology:
+  postmerge:
+    - if yaml.os_type == 'rocky' then reject() end
 tasks:
   - cephfs_test_runner:
       modules:

@@ -3,7 +3,6 @@ tasks:
       extra_packages:
         rpm:
         - python3-cephfs
-        - cephfs-shell
         - cephfs-top
         - cephfs-mirror
         deb:
