@@ -1,0 +1,40 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        lockdep: true
+    log-ignorelist:
+      - missing required features
+      - \(MDS_CACHE_OVERSIZED\)
+      - \(MDS_TRIM\)
+      - \(MDS_CLIENTS_BROKEN_ROOTSQUASH\)
+      - report clients with broken root_squash implementation
+      - evicting unresponsive client
+      - as file system flag refuse_client_session is set
+tasks:
+- exec:
+    mon.a:
+    - ceph fs subvolume create cephfs sv1
+    - ceph fs subvolume snapshot_visibility get cephfs sv1 >/dev/null 2>&1; rc=$?; [ "$rc" -eq 22 ] || { echo "expected the subvolume snapshot visibility get command to fail with EINVAL (22) in 19.2.3 but got $rc"; exit 1; }
+- print: "**** subvolume sv1 created"
+- print: "*** upgrading cluster"
+- install.upgrade:
+    mon.a:
+- print: "**** done install.upgrade"
+- ceph.restart:
+    daemons: [mon.*, mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- ceph.healthy:
+- ceph.restart:
+    daemons: [osd.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- ceph.stop: [mds.*]
+- ceph.restart:
+    daemons: [mds.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+    - val=$(ceph fs subvolume snapshot_visibility get cephfs sv1) && [ "$val" -eq 1 ] || { echo "expected default subvolume snapshot visibility to be 1 post upgrade but found ${val:-<none>}"; exit 1; }
