@@ -72,13 +72,6 @@ static ostream &_prefix(std::ostream *_dout,
                         struct ClientReadCompleter const *read_completer
   );
 
-void ECCommon::add_ec_omap_journal(ECOmapJournal new_journal) {
-  ec_omap_journals.push_back(new_journal);
-}
-void ECCommon::remove_ec_omap_journal(ECOmapJournal to_remove) {
-  ec_omap_journals.remove(to_remove);
-}
-
 void ECCommon::ReadOp::dump(Formatter *f) const {
   f->dump_unsigned("tid", tid);
 #ifndef WITH_CRIMSON

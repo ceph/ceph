@@ -48,7 +48,6 @@ typedef crimson::osd::ObjectContextRef ObjectContextRef;
 #include "ECExtentCache.h"
 #include "ECListener.h"
 #include "common/dout.h"
-#include "ECOmapJournal.h"
 
 //forward declaration
 struct ECBackend;
@@ -59,8 +58,6 @@ struct RecoveryMessages;
 
 struct ECCommon {
   std::list<ECOmapJournal> ec_omap_journals;
-  virtual void add_ec_omap_journal(ECOmapJournal new_journal);
-  virtual void remove_ec_omap_journal(ECOmapJournal to_remove);
 
   struct ec_extent_t {
     int err;

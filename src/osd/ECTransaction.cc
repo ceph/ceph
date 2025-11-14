@@ -610,6 +610,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
       op.clear_omap,
       op.omap_header,
       op.omap_updates);
+    // Add ec omap journal entry here
   }
 
   /* It is essential for rollback that every shard with a non-empty transaction
@@ -1013,7 +1014,8 @@ void ECTransaction::generate_transactions(
     set<hobject_t> *temp_added,
     set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
-    const OSDMapRef &osdmap) {
+    const OSDMapRef &osdmap,
+    std::list<ECOmapJournal> &ec_omap_journals) {
   ceph_assert(written_map);
   ceph_assert(transactions);
   ceph_assert(temp_added);

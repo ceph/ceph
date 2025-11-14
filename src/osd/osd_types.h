@@ -4180,7 +4180,6 @@ public:
     encode(omap_header, bl);
     encode(omap_updates, bl);
     ENCODE_FINISH(bl);
-    add_ec_omap_journal(new_journal);
   }
   bool rmobject(version_t deletion_version) {
     if (!can_local_rollback || rollback_info_completed) {

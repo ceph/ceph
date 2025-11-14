@@ -3,6 +3,8 @@
 
 #include "ECOmapJournal.h"
 
+uint64_t ECOmapJournal::global_id_counter = 0;
+
 ECOmapJournal::ECOmapJournal(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) : 
   clear_omap(clear_omap), omap_header(omap_header), omap_updates(omap_updates) {
@@ -13,8 +15,8 @@ ECOmapJournal::ECOmapJournal(uint64_t id, bool clear_omap, std::optional<ceph::b
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) : 
   id(id), clear_omap(clear_omap), omap_header(omap_header), omap_updates(omap_updates) {}
 
-static int ECOmapJournal::get_new_id() {
-  return global_id_counter++;
+int ECOmapJournal::get_new_id() {
+  return ++global_id_counter;
 }
 
 bool ECOmapJournal::operator==(const ECOmapJournal& other) const {
