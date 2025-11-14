@@ -1688,6 +1688,7 @@ def command_version(ctx):
     # type: (CephadmContext) -> int
     import importlib
     import zipimport
+    import zipfile
     import types
 
     vmod: Optional[types.ModuleType]
@@ -1744,10 +1745,17 @@ def command_version(ctx):
             out['bundled_packages'] = deps_info
         except OSError:
             pass
-        files = getattr(loader, '_files', {})
-        out['zip_root_entries'] = sorted(
-            {p.split('/')[0] for p in files.keys()}
-        )
+        # Use zipfile module to properly read the archive contents
+        # loader.archive contains the path to the zip file
+        try:
+            with zipfile.ZipFile(loader.archive, 'r') as zf:
+                files = zf.namelist()
+                out['zip_root_entries'] = sorted(
+                    {p.split('/')[0] for p in files if p}
+                )
+        except (OSError, zipfile.BadZipFile):
+            # Fallback to empty list if we can't read the zip
+            out['zip_root_entries'] = []
 
     json.dump(out, sys.stdout, indent=2)
     print()
