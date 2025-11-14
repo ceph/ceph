@@ -1139,13 +1139,9 @@ class Module(MgrModule):
                     break
             num_changes = plan.osdmap.balance_primaries(pool_id, inc)
             total_num_changes += num_changes
-        if total_num_changes < 0:
-            self.no_optimization_needed = True
-            self.log.debug('unable to balance reads.')
-            return -errno.EALREADY, msg
-        if total_num_changes != 0:
+        if total_num_changes > 0:
             self.log.info('prepared {} read changes'.format(total_num_changes))
-        if total_num_changes == 0:
+        else:
             self.log.debug('prepared {} read changes'.format(total_num_changes))
             self.no_optimization_needed = True
             return -errno.EALREADY, msg
@@ -1211,9 +1207,9 @@ class Module(MgrModule):
             left -= did
             if left <= 0:
                 break
-        if total_did != 0:
+        if total_did > 0:
             self.log.info('prepared %d/%d upmap changes' % (total_did, max_optimizations))
-        if total_did == 0:
+        else:
             self.log.debug('prepared %d/%d upmap changes' % (total_did, max_optimizations))
             self.no_optimization_needed = True
             return -errno.EALREADY, 'Unable to find further optimization, ' \
