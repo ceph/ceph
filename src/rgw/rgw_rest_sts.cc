@@ -313,9 +313,6 @@ WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, o
 
   RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
 
-  //Headers
-  openidc_req.append_header("Content-Type", "application/x-www-form-urlencoded");
-
   int res = openidc_req.process(dpp, y);
   if (res < 0) {
     ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
@@ -620,8 +617,6 @@ WebTokenEngine::validate_signature(const DoutPrefixProvider* dpp, const jwt::dec
     // Get certificate
     bufferlist cert_resp;
     RGWHTTPTransceiver cert_req(cct, "GET", cert_url, &cert_resp);
-    //Headers
-    cert_req.append_header("Content-Type", "application/x-www-form-urlencoded");
 
     int res = cert_req.process(dpp, y);
     if (res < 0) {
