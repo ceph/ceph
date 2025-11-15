@@ -1082,7 +1082,6 @@ segment_id_t SegmentCleaner::allocate_segment(
   ERROR("out of space with {} {} {} {}",
         type, segment_seq_printer_t{seq}, category,
         rewrite_gen_printer_t{generation});
-  ceph_abort_msg("seastore device size setting is too small");
   return NULL_SEG_ID;
 }
 
