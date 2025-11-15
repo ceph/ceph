@@ -126,19 +126,19 @@ public:
     return 0;
   }
 
-  virtual std::size_t encrypt(CephContext *cct,
+  std::size_t encrypt(CephContext *cct,
                               const in_slice_t& in,
 			      const out_slice_t& out) const {
     return encrypt_ext(cct, default_usage, in, nullptr, out);
   }
-  virtual std::size_t encrypt_ext(CephContext *cct,
+  std::size_t encrypt_ext(CephContext *cct,
                               uint32_t usage,
                               const in_slice_t& in,
 			      const out_slice_t& out) const {
     return encrypt_ext(cct, usage,
                        in, nullptr, out);
   }
-  virtual std::size_t encrypt_ext(CephContext *cct,
+  std::size_t encrypt_ext(CephContext *cct,
                               const in_slice_t& in,
                               const in_slice_t *confounder,
 			      const out_slice_t& out) const {
@@ -151,7 +151,7 @@ public:
                               const in_slice_t *confounder,
 			      const out_slice_t& out) const;
 
-  virtual std::size_t decrypt(CephContext *cct,
+  std::size_t decrypt(CephContext *cct,
                               const in_slice_t& in,
 			      const out_slice_t& out) const {
     return decrypt_ext(cct, default_usage, in, out);
@@ -254,6 +254,20 @@ public:
 	      std::string *error) const {
     ceph_assert(!empty()); // Bad key?
     return ckh->decrypt(cct, in, out, error);
+  }
+  int encrypt_ext(CephContext *cct, uint32_t usage,
+              const ceph::buffer::list& in,
+	      ceph::buffer::list& out,
+	      std::string *error) const {
+    ceph_assert(!empty()); // Bad key?
+    return ckh->encrypt_ext(cct, usage, in, out, error);
+  }
+  int decrypt_ext(CephContext *cct, uint32_t usage,
+              const ceph::buffer::list& in,
+	      ceph::buffer::list& out,
+	      std::string *error) const {
+    ceph_assert(!empty()); // Bad key?
+    return ckh->decrypt_ext(cct, usage, in, out, error);
   }
 
   using in_slice_t = CryptoKeyHandler::in_slice_t;
