@@ -2719,23 +2719,25 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(const rgw_obj_key& obj
           << bucket_acl.get_owner().id << " != " << ps->identity->get_aclowner().id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
-      return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {}, {},
-                                      info->user_policies, {}, op)
+      return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {},
+                                        bucket_policy, info->user_policies, {},
+                                        op, nullptr, true)
           && ::verify_bucket_permission(dpp, &(*ps), arn, false, info->user_acl,
-                                      bucket_acl, bucket_policy, {}, {}, op);
+                                        bucket_acl, bucket_policy, {}, {},
+                                        op, nullptr, false);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return ::verify_bucket_permission(dpp, &(*ps), arn, account_root, {}, {},
-                                      bucket_policy, info->user_policies,
-                                      {}, op);
+                                        bucket_policy, info->user_policies,
+                                        {}, op, nullptr, false);
     }
   }
   constexpr bool account_root = false;
   return ::verify_bucket_permission(dpp, &(*ps), arn, account_root,
                                   info->user_acl, bucket_acl,
                                   bucket_policy, info->user_policies,
-                                  {}, op);
+                                  {}, op, nullptr, false);
 }
 
 rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj_key& obj_key, const uint64_t op) const
@@ -2756,7 +2758,7 @@ rgw::IAM::Effect RGWUserPermHandler::Bucket::evaluate_iam_policies(const rgw_obj
                                  op, arn,
                                  bucket_policy,
                                  info->user_policies,
-                                 {});
+                                 {}, false);
 }
 
 int RGWUserPermHandler::policy_from_attrs(CephContext *cct,

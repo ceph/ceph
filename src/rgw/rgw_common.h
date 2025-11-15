@@ -1810,7 +1810,8 @@ rgw::IAM::Effect evaluate_iam_policies(
     bool account_root, uint64_t op, const rgw::ARN& arn,
     const boost::optional<rgw::IAM::Policy>& resource_policy,
     const std::vector<rgw::IAM::Policy>& identity_policies,
-    const std::vector<rgw::IAM::Policy>& session_policies);
+    const std::vector<rgw::IAM::Policy>& session_policies,
+    bool identity_policy_only);
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             req_state * const s,
@@ -1829,7 +1830,8 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<rgw::IAM::Policy>& bucket_policy,
                               const std::vector<rgw::IAM::Policy>& identity_policies,
                               const std::vector<rgw::IAM::Policy>& session_policies,
-                              const uint64_t op, bool *granted_by_acl = nullptr);
+                              const uint64_t op, bool *granted_by_acl,
+                              bool identity_policy_only);
 bool verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
