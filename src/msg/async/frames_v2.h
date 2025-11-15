@@ -4,7 +4,8 @@
 #include "include/buffer.h"
 #include "include/byteorder.h" // for ceph_le*
 #include "include/ceph_features.h" // for CEPH_FEATUREMASK_*
-#include "include/types.h"
+#include "include/intarith.h" // for p2roundup()
+#include "include/types.h" // for sha256_digest_t
 #include "common/Clock.h"
 #include "crypto_onwire.h"
 #include "compression_onwire.h"
