@@ -693,7 +693,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 	  ldpp_dout(this, 5) << "RGWGC::process removing " << obj.pool <<
 	    ":" << obj.key.name << dendl;
 	  ObjectWriteOperation op;
-	  cls_refcount_put(op, info.tag, true);
+	  cls_refcount_put(op, info.tag);
 
 	  ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
 	  if (ret < 0) {
