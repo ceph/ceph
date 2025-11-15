@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'hosts-overview.json':
     $.dashboardSchema(
-      'Host Overview',
+      'Ceph Hosts - Overview',
       '',
       'y0KGL0iZz',
       'now-1h',
@@ -304,7 +304,7 @@ local g = import 'grafonnet/grafana.libsonnet';
     ]),
   'host-details.json':
     $.dashboardSchema(
-      'Host Details',
+      'Ceph Host - Details',
       '',
       'rtOg0AiWz',
       'now-1h',

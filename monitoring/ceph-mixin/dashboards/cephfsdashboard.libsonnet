@@ -3,7 +3,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 (import 'utils.libsonnet') {
   'cephfsdashboard.json':
     $.dashboardSchema(
-      'Ceph - Filesystem Overview',
+      'Ceph Filesystem - Overview',
       'Ceph CephFS overview for official Ceph Prometheus plugin.',
       '718Bruins',
       'now-6h',

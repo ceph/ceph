@@ -362,7 +362,8 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "protocol"
    ],
    "templating": {
       "list": [
@@ -472,7 +473,7 @@
       ]
    },
    "timezone": "",
-   "title": "RBD Details",
+   "title": "Ceph Block - Details",
    "uid": "YhCYGcuZz",
    "version": 0
 }

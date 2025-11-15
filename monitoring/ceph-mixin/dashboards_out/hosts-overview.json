@@ -719,7 +719,8 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview"
    ],
    "templating": {
       "list": [
@@ -869,7 +870,7 @@
       ]
    },
    "timezone": "",
-   "title": "Host Overview",
+   "title": "Ceph Hosts - Overview",
    "uid": "y0KGL0iZz",
    "version": 0
 }
