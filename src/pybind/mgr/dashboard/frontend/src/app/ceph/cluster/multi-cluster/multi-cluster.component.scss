@@ -1,4 +1,6 @@
 @use '../../../../styles/vendor/variables' as vv;
+@use './src/styles/ceph-custom/grid'  as *;
+@use '@carbon/charts/styles.css' as *;
 
 .fa-wrench {
   color: vv.$info;
