@@ -1,0 +1,21 @@
+@for (value of values; track $index) {
+  <cds-text-label [helperText]="helperText && $index === values.length - 1 ? helperText : null"
+                  i18n-helperText
+                  i18n>
+    <div class="cds-input-group">
+      <input cdsText
+             type="text"
+             [placeholder]="placeholder"
+             [value]="value"
+             (input)="onInputChange($index, $event.target.value)" />
+      @if ($index > 0 ) {
+      <cds-icon-button kind="ghost"
+                       (click)="deleteInput($index)"
+                       size="md">
+        <cd-icon type="trash"></cd-icon>
+      </cds-icon-button>
+      }
+    </div>
+    {{$index === 0 ? label : ''}}
+  </cds-text-label>
+}
