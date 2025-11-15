@@ -23,12 +23,20 @@
 #include "mon/MonMap.h"
 
 class MMonMap final : public Message {
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 0;
 public:
   ceph::buffer::list monmapbl;
+  epoch_t monmap_epoch {0};
+  std::set<int> quorum;
 
-  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
-  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
+  MMonMap() :
+    Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} { }
+  explicit MMonMap(ceph::buffer::list &bl, epoch_t e, std::set<int> q) :
+    Message{CEPH_MSG_MON_MAP, HEAD_VERSION, COMPAT_VERSION} {
     monmapbl = std::move(bl);
+    monmap_epoch = e;
+    quorum = std::move(q);
   }
 private:
   ~MMonMap() final {}
@@ -37,6 +45,7 @@ public:
   std::string_view get_type_name() const override { return "mon_map"; }
 
   void encode_payload(uint64_t features) override { 
+    header.version = HEAD_VERSION;
     if (monmapbl.length() &&
 	((features & CEPH_FEATURE_MONENC) == 0 ||
 	 (features & CEPH_FEATURE_MSG_ADDR2) == 0)) {
@@ -49,11 +58,17 @@ public:
 
     using ceph::encode;
     encode(monmapbl, payload);
+    encode(monmap_epoch, payload);
+    encode(quorum, payload);
   }
   void decode_payload() override { 
     using ceph::decode;
     auto p = payload.cbegin();
     decode(monmapbl, p);
+    if(header.version >= 2) {
+      decode(monmap_epoch, p);
+      decode(quorum, p);
+    }
   }
 private:
   template<class T, typename... Args>

@@ -943,7 +943,6 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
     *_dout << dendl;
     m->clear_payload();
   }
-
   connect_to(type, addrs, false)->send_message(m);
   return 0;
 }

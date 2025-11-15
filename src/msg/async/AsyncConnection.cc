@@ -559,6 +559,22 @@ int AsyncConnection::send_message(Message *m)
     m->put();
     return 0;
   }
+  auto& conf = msgr->cct->_conf;
+  auto drop_mon_forward_msgs = conf.get_val<double>("ms_inject_drop_mon_forward_msgs");
+  if (drop_mon_forward_msgs != 0 &&
+      peer_type == CEPH_ENTITY_TYPE_MON) {
+    if (drop_mon_forward_msgs == 1.0) {
+      ldout(async_msgr->cct, 20) << __func__ << " dropping mon forward message " << *m << dendl;
+      m->put();
+      return 0;
+    }
+    if ((drop_mon_forward_msgs > 0.0) &&
+        (rand() % 10000 < 10000 * drop_mon_forward_msgs)) {
+      ldout(async_msgr->cct, 20) << __func__ << " dropping mon forward message " << *m << dendl;
+      m->put();
+      return 0;
+    }
+  }
 
   // optimistic think it's ok to encode(actually may broken now)
   if (!m->get_priority())
