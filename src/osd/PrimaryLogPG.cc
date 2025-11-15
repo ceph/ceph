@@ -13078,6 +13078,68 @@ void PrimaryLogPG::on_shutdown()
   }
 }
 
+hobject_t PrimaryLogPG::earliest_pool_migration()
+{
+  vector<hobject_t> sentries;
+  hobject_t current;
+  hobject_t next;
+  hobject_t _max = hobject_t::get_max();
+  auto missing_iter_end = recovery_state.get_pg_log().get_missing().get_items().end();
+
+  // Find the lowest object in the PG searching both the object store and the
+  // missing list
+  while (true) {
+    //BILL::FIXME: Listing one object at a time is expensive. We should cache a
+    //list of objects like update_range and scan_range_primary do
+    map<hobject_t, pg_missing_item>::const_iterator missing_iter =
+      recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
+
+    int r = pgbackend->objects_list_partial(
+	    current,
+	    1,
+	    1,
+	    &sentries,
+	    &next);
+    if (r != 0) {
+      // Object store should always be able to list objects for a valid colleciton
+      derr << __func__ << ": objects_list_partial failed " << r << dendl;
+      return hobject_t();
+    }
+
+    if (sentries.empty()) {
+      current = _max;
+    } else {
+      current = sentries.front();
+    }
+
+    while ((missing_iter != missing_iter_end) &&
+	   (missing_iter->first < current)) {
+      if (!recovery_state.get_missing_loc().is_deleted(missing_iter->first)) {
+	// Earliest object in the PG is on the missing list but not
+	// in the object store
+	return missing_iter->first;
+      }
+      // Missing list object has been deleted, find the next object
+      // on the missing list
+      ++missing_iter;
+    }
+    if ((missing_iter != missing_iter_end) &&
+	(missing_iter->first == current)) {
+      if (!recovery_state.get_missing_loc().is_deleted(missing_iter->first)) {
+	// Object in object store is out of date, but not pending a delete.
+	// Found the lowest object
+	break;
+      }
+      // Object is going to be deleted, find the next object
+      current = next;
+    } else {
+      // Found the lowest object
+      break;
+    }
+  }
+  return current;
+}
+
 void PrimaryLogPG::on_activate_complete()
 {
   check_local();
@@ -13146,11 +13208,14 @@ void PrimaryLogPG::on_activate_complete()
     }
   }
 
-  if (needs_pool_migration()) {
-    last_pool_migration_started = recovery_state.earliest_pool_migration();
+  if (pool.info.is_pg_migrating(info.pgid.pgid)) {
+    last_pool_migration_started = earliest_pool_migration();
     new_pool_migration = true;
+  } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
+    last_pool_migration_started = hobject_t::get_max();
+  } else {
+    last_pool_migration_started = hobject_t();
   }
-
   hit_set_setup();
   agent_setup();
 }
@@ -14668,8 +14733,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
 
   // Initialize from prior migration state
   if (new_pool_migration) {
-    // on_activate() was called prior to getting here
-    ceph_assert(last_pool_migration_started == recovery_state.earliest_pool_migration());
+    // on_activate_complete() was called prior to getting here
+    ceph_assert(last_pool_migration_started == earliest_pool_migration());
     new_pool_migration = false;
 
     // initialize PoolMigrationIntervals

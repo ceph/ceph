@@ -246,11 +246,6 @@ hobject_t PeeringState::earliest_backfill() const
   return e;
 }
 
-hobject_t PeeringState::earliest_pool_migration() const
-{
-  return hobject_t(); //BILL:FIXME: need to track progress of pool migration
-}
-
 void PeeringState::purge_strays()
 {
   if (is_premerge()) {
@@ -1573,7 +1568,7 @@ bool PeeringState::needs_pool_migration() const
 {
   ceph_assert(is_primary());
 
-  bool migrating = pool.info.migrating_pgs.contains(spgid.pgid);
+  bool migrating = pool.info.is_pg_migrating(spgid.pgid);
   if (migrating) {
     psdout(10) << "needs pool migration" << dendl;
   } else {
