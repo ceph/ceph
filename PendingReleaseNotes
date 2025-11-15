@@ -35,6 +35,12 @@
 * RGW: Add support for S3 GetObjectAttributes.
 * RGW: Add the Beast front end option 'so_reuseport', which facilitates running multiple
         RGW instances on the same host that share a single TCP port.
+* RGW: Added support for S3 GetObjectAttributes.
+* RGW: Added BEAST frontend option 'so_reuseport' which facilitates running multiple
+        RGW instances on the same host by sharing a single TCP port.
+* RGW: 'create_key' admin API's response only includes the latest key created instead
+        of all keys.
+
 * RBD: All Python APIs that produce timestamps now return "aware" `datetime`
   objects instead of "naive" ones (i.e. those including time zone information
   instead of those not including it).  All timestamps remain to be in UTC but
