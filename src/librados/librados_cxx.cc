@@ -191,6 +191,31 @@ void librados::ObjectOperation::exec(const char *cls, const char *method, buffer
   o->call(cls, method, inbl, ctx->outbl(), ctx, NULL);
 }
 
+void librados::ObjectReadOperation::exec_readonly(const char *cls, const char *method,
+                                     bufferlist& inbl)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->call_readonly(cls, method, inbl);
+}
+
+void librados::ObjectReadOperation::exec_readonly(const char *cls, const char *method, bufferlist& inbl, bufferlist *outbl, int *prval)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->call_readonly(cls, method, inbl, outbl, NULL, prval);
+}
+
+void librados::ObjectReadOperation::exec_readonly(const char *cls, const char *method, bufferlist& inbl, librados::ObjectOperationCompletion *completion)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+
+  ObjectOpCompletionCtx *ctx = new ObjectOpCompletionCtx(completion);
+
+  o->call_readonly(cls, method, inbl, ctx->outbl(), ctx, NULL);
+}
+
 void librados::ObjectReadOperation::stat(uint64_t *psize, time_t *pmtime, int *prval)
 {
   ceph_assert(impl);
@@ -1365,6 +1390,13 @@ int librados::IoCtx::stat2(const std::string& oid, uint64_t *psize, struct times
 
 int librados::IoCtx::exec(const std::string& oid, const char *cls, const char *method,
 			  bufferlist& inbl, bufferlist& outbl)
+{
+  object_t obj(oid);
+  return io_ctx_impl->exec(obj, cls, method, inbl, outbl);
+}
+
+int librados::IoCtx::exec_readonly(const std::string& oid, const char *cls, const char *method,
+                          bufferlist& inbl, bufferlist& outbl)
 {
   object_t obj(oid);
   return io_ctx_impl->exec(obj, cls, method, inbl, outbl);

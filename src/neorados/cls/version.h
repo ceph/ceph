@@ -140,7 +140,7 @@ namespace neorados::cls::version {
   using boost::system::error_code;
   return ClsReadOp{[objv](Op& op) {
     namespace sys = boost::system;
-    op.exec("version", "read", {},
+    op.exec_readonly("version", "read", {},
 	    [objv](error_code ec,
 		   const buffer::list& bl) {
 	      cls_version_read_ret ret;
@@ -184,7 +184,7 @@ inline auto read(RADOS& r, Object o, IOContext ioc,
 		 CompletionToken&& token)
 {
   using namespace std::literals;
-  return exec<cls_version_read_ret>(
+  return exec_readonly<cls_version_read_ret>(
     r, std::move(o), std::move(ioc),
     "version"s, "read"s, nullptr,
     [](cls_version_read_ret&& ret) {

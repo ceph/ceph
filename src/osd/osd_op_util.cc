@@ -198,6 +198,10 @@ int OpInfo::set_from_op(
 	is_write = flags & CLS_METHOD_WR;
         bool is_promote = flags & CLS_METHOD_PROMOTE;
 
+        if ((iter->op.cls.flags & CEPH_OSD_CLS_FLAG_READ_ONLY) != 0 && (is_write || is_promote)) {
+          return -EIO;
+        }
+
 	if (is_read)
 	  set_class_read();
 	if (is_write)

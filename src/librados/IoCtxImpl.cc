@@ -1320,6 +1320,16 @@ int librados::IoCtxImpl::exec(const object_t& oid,
   return operate_read(oid, &rd, &outbl, 0, objclass_flags_mask);
 }
 
+int librados::IoCtxImpl::exec_readonly(const object_t& oid,
+                              const char *cls, const char *method,
+                              bufferlist& inbl, bufferlist& outbl)
+{
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.call_readonly(cls, method, inbl);
+  return operate_read(oid, &rd, &outbl, 0, objclass_flags_mask);
+}
+
 int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
 				  bufferlist& inbl, bufferlist *outbl)

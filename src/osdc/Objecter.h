@@ -227,7 +227,7 @@ struct ObjectOperation {
   }
   void add_call(int op, std::string_view cname, std::string_view method,
 		const ceph::buffer::list &indata,
-		ceph::buffer::list *outbl, Context *ctx, int *prval) {
+		ceph::buffer::list *outbl, Context *ctx, int *prval, bool read_only) {
     OSDOp& osd_op = add_op(op);
 
     unsigned p = ops.size() - 1;
@@ -238,12 +238,13 @@ struct ObjectOperation {
     osd_op.op.cls.class_len = cname.size();
     osd_op.op.cls.method_len = method.size();
     osd_op.op.cls.indata_len = indata.length();
+    osd_op.op.cls.flags = read_only?CEPH_OSD_CLS_FLAG_READ_ONLY:0;
     osd_op.indata.append(cname.data(), osd_op.op.cls.class_len);
     osd_op.indata.append(method.data(), osd_op.op.cls.method_len);
     osd_op.indata.append(indata);
   }
   void add_call(int op, std::string_view cname, std::string_view method,
-		const ceph::buffer::list &indata,
+		const ceph::buffer::list &indata, bool read_only,
 		fu2::unique_function<void(boost::system::error_code,
 					  const ceph::buffer::list&) &&> f) {
     OSDOp& osd_op = add_op(op);
@@ -257,12 +258,13 @@ struct ObjectOperation {
     osd_op.op.cls.class_len = cname.size();
     osd_op.op.cls.method_len = method.size();
     osd_op.op.cls.indata_len = indata.length();
+    osd_op.op.cls.flags = read_only?CEPH_OSD_CLS_FLAG_READ_ONLY:0;
     osd_op.indata.append(cname.data(), osd_op.op.cls.class_len);
     osd_op.indata.append(method.data(), osd_op.op.cls.method_len);
     osd_op.indata.append(indata);
   }
   void add_call(int op, std::string_view cname, std::string_view method,
-		const ceph::buffer::list &indata,
+		const ceph::buffer::list &indata, bool read_only,
 		fu2::unique_function<void(boost::system::error_code, int,
 					  const ceph::buffer::list&) &&> f) {
     OSDOp& osd_op = add_op(op);
@@ -276,6 +278,7 @@ struct ObjectOperation {
     osd_op.op.cls.class_len = cname.size();
     osd_op.op.cls.method_len = method.size();
     osd_op.op.cls.indata_len = indata.length();
+    osd_op.op.cls.flags = read_only?CEPH_OSD_CLS_FLAG_READ_ONLY:0;
     osd_op.indata.append(cname.data(), osd_op.op.cls.class_len);
     osd_op.indata.append(method.data(), osd_op.op.cls.method_len);
     osd_op.indata.append(indata);
@@ -1403,36 +1406,73 @@ struct ObjectOperation {
 
   // object classes
   void call(const char *cname, const char *method, ceph::buffer::list &indata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL, false);
+  }
+
+  void call_readonly(const char *cname, const char *method, ceph::buffer::list &indata) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL, true);
   }
 
   void call(const char *cname, const char *method, ceph::buffer::list &indata,
 	    ceph::buffer::list *outdata, Context *ctx, int *prval) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval);
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval, false);
+  }
+
+  void call_readonly(const char *cname, const char *method, ceph::buffer::list &indata,
+          ceph::buffer::list *outdata, Context *ctx, int *prval) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, ctx, prval, true);
   }
 
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata, boost::system::error_code* ec) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL);
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL, false);
+    out_ec.back() = ec;
+  }
+
+  void call_readonly(std::string_view cname, std::string_view method,
+          const ceph::buffer::list& indata, boost::system::error_code* ec) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, NULL, NULL, NULL, true);
     out_ec.back() = ec;
   }
 
   void call(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
 	    boost::system::error_code* ec, ceph::buffer::list *outdata) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr);
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr, false);
     out_ec.back() = ec;
   }
+
+  void call_readonly(std::string_view cname, std::string_view method, const ceph::buffer::list& indata,
+          boost::system::error_code* ec, ceph::buffer::list *outdata) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, outdata, nullptr, nullptr, true);
+    out_ec.back() = ec;
+  }
+
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code,
 				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, false, std::move(f));
   }
+
+  void call_readonly(std::string_view cname, std::string_view method,
+          const ceph::buffer::list& indata,
+          fu2::unique_function<void (boost::system::error_code,
+                                     const ceph::buffer::list&) &&> f) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, true, std::move(f));
+  }
+
   void call(std::string_view cname, std::string_view method,
 	    const ceph::buffer::list& indata,
 	    fu2::unique_function<void (boost::system::error_code, int,
 				       const ceph::buffer::list&) &&> f) {
-    add_call(CEPH_OSD_OP_CALL, cname, method, indata, std::move(f));
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, false, std::move(f));
+  }
+
+  void call_readonly(std::string_view cname, std::string_view method,
+          const ceph::buffer::list& indata,
+          fu2::unique_function<void (boost::system::error_code, int,
+                                     const ceph::buffer::list&) &&> f) {
+    add_call(CEPH_OSD_OP_CALL, cname, method, indata, true, std::move(f));
   }
 
   // watch/notify

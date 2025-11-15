@@ -150,6 +150,7 @@ struct librados::IoCtxImpl {
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
 
   int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
+  int exec_readonly(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
   int getxattr(const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(const object_t& oid, const char *name, bufferlist& bl);
