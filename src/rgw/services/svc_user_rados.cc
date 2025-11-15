@@ -14,7 +14,7 @@
 #include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata_lister.h"
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_rados.h"
 

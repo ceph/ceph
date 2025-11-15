@@ -18,7 +18,6 @@
 #include "rgw_string.h"
 #include "rgw_http_errors.h"
 #include "rgw_arn.h"
-#include "rgw_data_sync.h"
 
 #include "global/global_init.h"
 #include "common/ceph_crypto.h"
@@ -33,8 +32,6 @@
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_policy.h"
-
-#include "services/svc_zone.h"
 
 #include <sstream>
 

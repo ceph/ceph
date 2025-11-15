@@ -21,7 +21,7 @@
 #include "rgw_rest_metadata.h"
 #include "rgw_client_io.h"
 #include "rgw_mdlog_types.h"
-#include "rgw_sal_rados.h"
+#include "driver/rados/rgw_sal_rados.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "rgw/rgw_b64.h"

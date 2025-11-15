@@ -20,7 +20,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_os_lib.h"
 #include "rgw_auth_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
 #include "rgw_file_int.h"

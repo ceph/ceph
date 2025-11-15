@@ -4,8 +4,8 @@
 #pragma once
 
 
-#include "rgw_tools.h"
-#include "rgw_service.h"
+#include "driver/rados/rgw_tools.h"
+#include "driver/rados/rgw_service.h"
 
 #include "svc_sys_obj_types.h"
 

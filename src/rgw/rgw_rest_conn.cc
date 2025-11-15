@@ -5,7 +5,6 @@
 #include "rgw_rest_conn.h"
 #include "rgw_http_errors.h"
 #include "rgw_sal.h"
-#include "rgw_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 

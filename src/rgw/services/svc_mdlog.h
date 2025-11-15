@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 #include "rgw_period_history.h"
 #include "rgw_period_puller.h"
 

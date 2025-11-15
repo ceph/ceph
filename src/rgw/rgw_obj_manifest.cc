@@ -1,9 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
-#include "rgw_obj_manifest.h"
+#include "driver/rados/rgw_obj_manifest.h"
 
-#include "rgw_rados.h" // RGW_OBJ_NS_SHADOW and RGW_OBJ_NS_MULTIPART
+#include "rgw_bucket.h" // RGW_OBJ_NS_SHADOW and RGW_OBJ_NS_MULTIPART
 
 using namespace std;
 

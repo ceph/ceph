@@ -5,7 +5,7 @@
 #include "svc_sys_obj.h"
 #include "svc_sync_modules.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_bucket_sync.h"

@@ -13,7 +13,6 @@
 #include "common/utf8.h"
 #include "include/str_list.h"
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_auth_s3.h"
 #include "rgw_formats.h"
@@ -27,7 +26,9 @@
 
 #include "rgw_client_io.h"
 #include "rgw_resolve.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #include "rgw_ratelimit.h"
 #include <numeric>

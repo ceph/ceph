@@ -39,7 +39,7 @@
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
@@ -56,9 +56,6 @@
 #include "rgw_public_access.h"
 #include "rgw_bucket_encryption.h"
 #include "rgw_tracer.h"
-
-#include "services/svc_sys_obj.h"
-#include "services/svc_tier_rados.h"
 
 #include "include/ceph_assert.h"
 

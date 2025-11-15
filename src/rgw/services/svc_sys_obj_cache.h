@@ -4,7 +4,7 @@
 #pragma once
 
 #include "common/RWLock.h"
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 #include "rgw_cache.h"
 
 #include "svc_sys_obj_core.h"

@@ -7,7 +7,7 @@
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 #include "rgw_mdlog.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"

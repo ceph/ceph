@@ -25,21 +25,6 @@ target_link_libraries(ceph_test_objectstore
 install(TARGETS ceph_test_objectstore
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-add_executable(ceph_test_bluestore_vselector
-  test_bluestore_vselector.cc)
-
-target_link_libraries(ceph_test_bluestore_vselector
-  os
-  ceph-common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-install(TARGETS ceph_test_bluestore_vselector
-  DESTINATION ${CMAKE_INSTALL_BINDIR})
-
 add_subdirectory(allocsim)
 
 add_executable(ceph_test_keyvaluedb
@@ -66,23 +51,38 @@ target_link_libraries(unittest_rocksdb_option
   global os ${BLKID_LIBRARIES}
   RocksDB::RocksDB)
 
-# ceph_test_bluefs (a clone of unittest_bluefs)
-add_executable(ceph_test_bluefs
-  test_bluefs.cc
-  )
-target_link_libraries(ceph_test_bluefs
-  os
-  global
-  ${UNITTEST_LIBS}
-  )
-install(TARGETS ceph_test_bluefs
-  DESTINATION ${CMAKE_INSTALL_BINDIR})
-
 if(WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
 endif()
 
 if(WITH_BLUESTORE)
+
+  # ceph_test_bluefs (a clone of unittest_bluefs)
+  add_executable(ceph_test_bluefs
+    test_bluefs.cc
+    )
+  target_link_libraries(ceph_test_bluefs
+    os
+    global
+    ${UNITTEST_LIBS}
+    )
+  install(TARGETS ceph_test_bluefs
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+  add_executable(ceph_test_bluestore_vselector
+    test_bluestore_vselector.cc)
+
+  target_link_libraries(ceph_test_bluestore_vselector
+    os
+    ceph-common
+    ${UNITTEST_LIBS}
+    global
+    ${EXTRALIBS}
+    ${BLKID_LIBRARIES}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_bluestore_vselector
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
 
   add_executable(unittest_alloc
     Allocator_test.cc
@@ -176,14 +176,14 @@ if(WITH_BLUESTORE)
   target_link_libraries(ceph_test_alloc_replay os global ${UNITTEST_LIBS})
   install(TARGETS ceph_test_alloc_replay
     DESTINATION bin)
+
+  # fragmentation simulator
+  add_executable(ceph_test_fragmentation_sim
+    Fragmentation_simulator.cc
+    ObjectStoreImitator.cc)
+  add_ceph_unittest(ceph_test_fragmentation_sim)
+  target_link_libraries(ceph_test_fragmentation_sim os global)
+
+  set_target_properties(ceph_test_fragmentation_sim PROPERTIES COMPILE_FLAGS
+  "${UNITTEST_CXX_FLAGS}")
 endif()
-
-# fragmentation simulator
-add_executable(ceph_test_fragmentation_sim
-  Fragmentation_simulator.cc
-  ObjectStoreImitator.cc)
-add_ceph_unittest(ceph_test_fragmentation_sim)
-target_link_libraries(ceph_test_fragmentation_sim os global)
-
-set_target_properties(ceph_test_fragmentation_sim PROPERTIES COMPILE_FLAGS
-"${UNITTEST_CXX_FLAGS}")

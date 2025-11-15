@@ -10,7 +10,7 @@
 #include "common/split.h"
 
 #include "rgw_acl_s3.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw

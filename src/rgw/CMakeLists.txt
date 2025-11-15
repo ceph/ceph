@@ -82,7 +82,6 @@ set(librgw_common_srcs
   rgw_period_puller.cc
   rgw_s3_filter.cc
   rgw_pubsub.cc
-  rgw_coroutine.cc
   rgw_cr_rest.cc
   rgw_op.cc
   rgw_policy_s3.cc
@@ -166,7 +165,6 @@ if(WITH_RADOSGW_RADOS)
           services/svc_sys_obj.cc
           services/svc_sys_obj_cache.cc
           services/svc_sys_obj_core.cc
-          services/svc_tier_rados.cc
           services/svc_user.cc
           services/svc_user_rados.cc
           services/svc_zone.cc
@@ -235,7 +233,9 @@ if(WITH_RADOSGW_RADOS)
           driver/rados/rgw_dedup_table.cc
           driver/rados/rgw_dedup_store.cc
           driver/rados/rgw_dedup_utils.cc
-          driver/rados/rgw_dedup_cluster.cc)
+          driver/rados/rgw_dedup_cluster.cc
+	  rgw_coroutine.cc
+	)
 endif()
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   list(APPEND librgw_common_srcs rgw_amqp.cc)
@@ -295,19 +295,7 @@ target_link_libraries(rgw_common
   PRIVATE
     legacy-option-headers
     global
-    cls_2pc_queue_client
-    cls_cmpomap_client
-    cls_lock_client
-    cls_log_client
-    cls_otp_client
-    cls_refcount_client
     cls_rgw_client
-    cls_rgw_gc_client
-    cls_timeindex_client
-    cls_user_client
-    cls_version_client
-    librados
-    libneorados
     rt
     ICU::uc
     OATH::OATH
@@ -367,6 +355,23 @@ if(WITH_JAEGER)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
 endif()
 
+if(WITH_RADOSGW_RADOS)
+  target_link_libraries(rgw_common PRIVATE
+	  cls_2pc_queue_client
+	  cls_cmpomap_client
+	  cls_lock_client
+	  cls_log_client
+	  cls_otp_client
+	  cls_refcount_client
+	  cls_rgw_gc_client
+	  cls_timeindex_client
+	  cls_user_client
+	  cls_version_client
+	  librados
+	  libneorados
+  )
+endif()
+
 if(WITH_RADOSGW_DBSTORE)
   target_link_libraries(rgw_common PRIVATE global dbstore)
 endif()
@@ -405,7 +410,6 @@ set(rgw_a_srcs
   rgw_lua_request.cc
   rgw_opa.cc
   rgw_os_lib.cc
-  rgw_period_pusher.cc
   rgw_process.cc
   rgw_realm_reloader.cc
   rgw_rest_config.cc
@@ -421,9 +425,12 @@ set(rgw_a_srcs
   rgw_sts.cc)
 
 if(WITH_RADOSGW_RADOS)
-  list(APPEND rgw_a_srcs driver/rados/rgw_rest_bucket.cc
+  list(APPEND rgw_a_srcs
+	  driver/rados/rgw_rest_bucket.cc
           driver/rados/rgw_rest_log.cc
-          driver/rados/rgw_rest_realm.cc)
+          driver/rados/rgw_rest_realm.cc
+	  rgw_period_pusher.cc
+  )
 endif()
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf

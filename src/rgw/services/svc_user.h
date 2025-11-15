@@ -18,7 +18,7 @@
 #pragma once
 
 #include <memory>
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 #include "rgw_sal_fwd.h"
 
 class RGWMetadataLister;

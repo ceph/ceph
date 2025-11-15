@@ -10,7 +10,6 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_sal_config.h"
 #include "rgw_string.h"
-#include "rgw_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -32,11 +31,6 @@ std::string RGW_DEFAULT_REALM_ROOT_POOL = "rgw.root";
 
 using namespace std;
 using namespace rgw_zone_defaults;
-
-RGWRemoteMetaLog::~RGWRemoteMetaLog()
-{
-  delete error_logger;
-}
 
 rgw_pool RGWRealm::get_pool(CephContext *cct) const
 {

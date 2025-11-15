@@ -13,7 +13,7 @@
 #include "rgw_client_io.h"
 #include "rgw_rest.h"
 #include "rgw_zone.h"
-#include "rgw_rados.h"
+#include "driver/rados/rgw_rados.h"
 
 #include "services/svc_zone.h"
 

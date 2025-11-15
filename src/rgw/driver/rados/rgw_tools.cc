@@ -14,6 +14,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_asio_thread.h"
 #include "rgw_compression.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 

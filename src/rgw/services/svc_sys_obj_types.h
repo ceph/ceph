@@ -5,7 +5,7 @@
 #pragma once
 
 
-#include "rgw_service.h"
+#include "driver/rados/rgw_service.h"
 
 
 struct RGWSI_SysObj_Obj_GetObjState {

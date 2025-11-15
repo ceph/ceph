@@ -9,7 +9,7 @@
 #include "common/Formatter.h"
 #include "common/dout.h"
 #include "rgw_formats.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_sal_fwd.h"
 
 

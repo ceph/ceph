@@ -8,15 +8,13 @@
 #include "rgw_zone.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
-#include "rgw_sync.h"
+#include "driver/rados/rgw_sync.h"
 
 #include "services/svc_zone.h"
 
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-RGWMetaSyncStatusManager::~RGWMetaSyncStatusManager(){}
 
 #define FIRST_EPOCH 1
 

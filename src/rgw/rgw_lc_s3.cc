@@ -8,7 +8,7 @@
 
 #include "include/types.h"
 
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_lc_s3.h"
 
 

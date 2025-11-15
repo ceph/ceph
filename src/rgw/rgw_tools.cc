@@ -6,7 +6,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h" // for safe_read()
 
-#include "rgw_tools.h"
+#include "driver/rados/rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context

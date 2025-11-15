@@ -6,10 +6,12 @@
 #include <string>
 #include <cstdint>
 #include "rgw_sal_fwd.h"
+#include "rgw_bucket_types.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "common/async/yield_context.h"
 #include "rgw_s3_filter.h"
+#include "rgw_arn.h"
 
 class XMLObj;
 namespace ceph { class Formatter; }

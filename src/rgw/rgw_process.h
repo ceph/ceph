@@ -5,7 +5,7 @@
 
 #include "rgw_common.h"
 #include "rgw_acl.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_rest.h"
 #include "include/ceph_assert.h"
 

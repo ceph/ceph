@@ -70,29 +70,6 @@ struct get_obj_data;
 #define PUT_OBJ_EXCL        0x02
 #define PUT_OBJ_CREATE_EXCL (PUT_OBJ_CREATE | PUT_OBJ_EXCL)
 
-static inline void prepend_bucket_marker(const rgw_bucket& bucket, const std::string& orig_oid, std::string& oid)
-{
-  if (bucket.marker.empty() || orig_oid.empty()) {
-    oid = orig_oid;
-  } else {
-    oid = bucket.marker;
-    oid.append("_");
-    oid.append(orig_oid);
-  }
-}
-
-static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, std::string& oid, std::string& locator)
-{
-  const rgw_bucket& bucket = obj.bucket;
-  prepend_bucket_marker(bucket, obj.get_oid(), oid);
-  const std::string& loc = obj.key.get_loc();
-  if (!loc.empty()) {
-    prepend_bucket_marker(bucket, loc, locator);
-  } else {
-    locator.clear();
-  }
-}
-
 struct RGWOLHInfo {
   rgw_obj target;
   bool removed;
