@@ -201,6 +201,16 @@ public:
     }
   }
 
+  void cancel_recovery_op(const hobject_t &soid) override
+  {
+    if (is_optimized_unchecked()) {
+      optimized.cancel_recovery_op(soid);
+    }
+    else {
+      legacy.cancel_recovery_op(soid);
+    }
+  }
+
   IsPGRecoverablePredicate *get_is_recoverable_predicate() const override
   {
     return new ECRecPred(this);

@@ -472,6 +472,11 @@ struct RecoveryReadCompleter : ECCommonL::ReadCompleter {
     list<ec_align_t>,
     set<int> wanted_to_read) override
   {
+    // The op may have been cancelled (e.g. by pool-migration cleanup) while its
+    // recovery read was in flight; both paths below assume the op still exists.
+    if (!backend.recovery_ops.count(hoid)) {
+      return;
+    }
     if (!(res.r == 0 && res.errors.empty())) {
       backend._failed_push(hoid, res);
       return;
@@ -972,6 +977,9 @@ void ECBackendL::handle_sub_write(
   if (!op.temp_added.empty()) {
     switcher->add_temp_objs(op.temp_added);
   }
+  if (op.migration_watermark) {
+    get_parent()->update_migration_watermark(*op.migration_watermark);
+  }
   if (op.backfill_or_async_recovery) {
     for (set<hobject_t>::iterator i = op.temp_removed.begin();
 	 i != op.temp_removed.end();
@@ -1422,6 +1430,11 @@ void ECBackendL::clear_recovery_state()
   recovery_backend.recovery_ops.clear();
 }
 
+void ECBackendL::cancel_recovery_op(const hobject_t &soid)
+{
+  recovery_backend.recovery_ops.erase(soid);
+}
+
 void ECBackendL::dump_recovery_info(Formatter *f) const
 {
   f->open_array_section("recovery_ops");
@@ -1471,6 +1484,16 @@ struct ECClassicalOp : ECCommonL::RMWPipeline::Op {
       &temp_cleared,
       dpp,
       require_osd_release);
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) final {
+    std::set<hobject_t> deleted;
+    for (auto &[hoid, op] : t.get()->op_map) {
+      if (op.is_delete()) {
+	deleted.insert(hoid);
+      }
+    }
+    return parent->consider_updating_migration_watermark(deleted);
   }
 
   template <typename F>
