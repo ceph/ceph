@@ -65,3 +65,7 @@ if(WITH_EVENTTRACE)
   install(TARGETS eventtrace_tp DESTINATION ${CMAKE_INSTALL_LIBDIR})
 endif()
 
+# eBPF tracing tools
+if(WITH_EBPF_TRACE)
+  add_subdirectory(CephBPF)
+endif()
