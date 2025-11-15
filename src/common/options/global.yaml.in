@@ -1888,6 +1888,17 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_config_history_size
+  type: size
+  level: advanced
+  desc: Defines the number of configuration history entries to retain for each central option, including manual changes and autotuner adjustments (e.g., to ‘osd_memory_target’) 
+  fmt_desc: The maximum number of config history entries to be kept for each
+            central option in the monitors’ store. A value of 0 means no configuration
+            history entries will be retained (the list will be trimmed aggressively).
+  default: 5
+  services:
+  - mon
+  with_legacy: true
 - name: mon_sync_timeout
   type: float
   level: advanced
