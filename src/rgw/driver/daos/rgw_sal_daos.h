@@ -32,6 +32,7 @@
 #include "rgw_rados.h"
 #include "rgw_role.h"
 #include "rgw_sal_store.h"
+#include "rgw_iam_managed_policy.h"
 
 inline bool IsDebuggerAttached() {
 #ifdef DEBUG
@@ -1054,6 +1055,17 @@ class DaosStore : public StoreDriver {
                          optional_yield y,
                          std::string_view tenant,
                          std::vector<RGWOIDCProviderInfo>& providers) override;
+int store_customer_managed_policy(const DoutPrefixProvider* dpp,
+      optional_yield y, const rgw::IAM::ManagedPolicyInfo& info, bool exclusive) override;
+int load_customer_managed_policy(const DoutPrefixProvider* dpp,
+                optional_yield y,
+                std::string_view account,
+                std::string_view name,
+                rgw::IAM::ManagedPolicyInfo& info) override;
+int delete_customer_managed_policy(const DoutPrefixProvider* dpp,
+                optional_yield y,
+                std::string_view account,
+                std::string_view name) override;
   virtual std::unique_ptr<Writer> get_append_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
       rgw::sal::Object* obj, const ACLOwner& owner,

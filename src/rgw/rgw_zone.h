@@ -32,6 +32,7 @@ struct RGWZoneParams {
   rgw_pool topics_pool;
   rgw_pool account_pool;
   rgw_pool group_pool;
+  rgw_pool policy_pool;
   rgw_pool dedup_pool;
 
   RGWAccessKey system_key;
@@ -100,6 +101,7 @@ struct RGWZoneParams {
     encode(group_pool, bl);
     encode(restore_pool, bl);
     encode(dedup_pool, bl);
+    encode(policy_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -198,6 +200,11 @@ struct RGWZoneParams {
       decode(dedup_pool, bl);
     } else {
       dedup_pool = name + ".rgw.dedup";
+    }
+    if (struct_v >= 16) {
+      decode(policy_pool, bl);
+    } else {
+      policy_pool = name + ".rgw.meta:policy";
     }
     DECODE_FINISH(bl);
   }
