@@ -70,7 +70,21 @@ class CephUserEndpoints:
         return f"Successfully created user '{user_entity}'"
 
     @staticmethod
-    def user_delete(_, user_entities: str):
+    def get_or_create(_, user_entity: str = '', capabilities: Optional[List[Cap]] = None):
+        """
+        Get or create a ceph user, with its defined capabilities.
+        """
+        assert user_entity
+        caps = []
+        for cap in capabilities:
+            caps.append(cap['entity'])
+            caps.append(cap['cap'])
+        logger.debug("Sending command 'auth get-or-create' of entity '%s' with caps '%s'",
+                     user_entity, str(caps))
+        return CephUserEndpoints._run_auth_command('auth get-or-create', entity=user_entity, caps=caps)
+
+    @staticmethod
+    def user_delete(_, user_entity: str):
         """
         Delete one or more ceph users and their defined capabilities.
         user_entities: comma-separated string of users to delete
@@ -171,6 +185,8 @@ edit_form = Form(path='/cluster/user/edit',
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
                     routerLink='/cluster/user/create'),
+        TableAction(name='Get or Create', permission='create', icon=Icon.ADD.value,
+                    routerLink='/cluster/user/get-or-create'),
         TableAction(name='Edit', permission='update', icon=Icon.EDIT.value,
                     click='edit', routerLink='/cluster/user/edit'),
         TableAction(name='Delete', permission='delete', icon=Icon.DESTROY.value,
@@ -197,6 +213,17 @@ edit_form = Form(path='/cluster/user/edit',
                                 "entity": (str, "Entity to add"),
                                 "cap": (str, "Capability to add; eg. allow *")
                             }], 'List of capabilities to add to user_entity')
+                        })
+    ),
+    get_or_create=CRUDCollectionMethod(
+        func=CephUserEndpoints.get_or_create,
+        doc=EndpointDoc("Get or Create Ceph User",
+                        parameters={
+                            "user_entity": Param(str, "Entity to get or create"),
+                            'capabilities': Param([{
+                                "entity": (str, "Entity to get or create"),
+                                "cap": (str, "Capability to get or create; eg. allow *")
+                            }], 'List of capabilities to get or create to user_entity')
                         })
     ),
     edit=CRUDCollectionMethod(
