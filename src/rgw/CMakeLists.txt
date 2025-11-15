@@ -102,6 +102,7 @@ set(librgw_common_srcs
   rgw_rest_iam_group.cc
   rgw_rest_iam_user.cc
   rgw_rest_s3.cc
+  rgw_rest_s3control.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
