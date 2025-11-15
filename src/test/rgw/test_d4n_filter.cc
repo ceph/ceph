@@ -469,6 +469,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+	     nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -580,6 +581,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
+	     nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -665,6 +667,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 	     nullptr,
 	     &tag, 
 	     &tag,
+	     nullptr,
 	     nullptr,
 	     nullptr,
 	     env->dpp,
@@ -955,6 +958,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1007,6 +1011,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,
@@ -1094,6 +1099,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1146,6 +1152,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,
@@ -1233,6 +1240,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1285,6 +1293,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,
@@ -1653,6 +1662,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+	     nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1774,6 +1784,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 	     &tag,
 	     nullptr,
 	     nullptr,
+	     nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -1893,6 +1904,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 	     nullptr,
 	     &tag, 
 	     &tag,
+	     nullptr,
 	     nullptr,
 	     nullptr,
 	     env->dpp,
@@ -2409,6 +2421,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2498,6 +2511,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,
@@ -2628,6 +2642,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2717,6 +2732,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,
@@ -2847,6 +2863,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       &tag,
 	       nullptr,
 	       nullptr,
+	       nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -2936,6 +2953,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 	       nullptr,
 	       &tag, 
 	       &tag,
+	       nullptr,
 	       nullptr,
 	       nullptr,
 	       env->dpp,

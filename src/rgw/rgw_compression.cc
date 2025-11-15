@@ -115,7 +115,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     return -EIO;
   }
   bufferlist out_bl, in_bl, temp_in_bl;
-  bl.begin(bl_ofs).copy(bl_len, temp_in_bl);
+  bl.begin().copy(bl_len, temp_in_bl);
   bl_ofs = 0;
   int r = 0;
   if (waiting.length() != 0) {
@@ -172,6 +172,17 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     if (r < 0) {
       lsubdout(cct, rgw, 0) << "handle_data failed with exit code " << r << dendl;
       return r;
+    }
+    // the next avoids an end_of_buffer exception that can be thrown
+    // if we try to read past the end of the compressed data,
+    // "which should never happen".  (The crash dump after this is
+    // useless for diagnostic purposes.)
+    if (out_bl.length() < q_ofs + ch_len) {
+      lsubdout(cct, rgw, 0) << "handle_data consumed data? out_bl.len=" <<
+        out_bl.length()
+        << " q_ofs=" << q_ofs << " ch_len=" << ch_len
+        << " q_len=" << q_len << dendl;
+      return -EIO;
     }
     out_bl.splice(0, q_ofs + ch_len);
     q_len -= ch_len;
