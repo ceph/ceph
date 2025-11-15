@@ -1408,6 +1408,15 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         except ArgumentError as e:
             return HandleCommandResult(-errno.EINVAL, "", (str(e)))
 
+    @_cli_read_command('orch list-images')
+    def _list_default_images(self) -> HandleCommandResult:
+        try:
+            completion = self.list_default_images()
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result, indent=2))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
     @_cli_write_command('orch prometheus set-credentials')
     def _set_prometheus_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
         try:
