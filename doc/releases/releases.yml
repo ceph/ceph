@@ -16,6 +16,12 @@
 #      in descending order.
 
 releases:
+  tentacle:
+    target_eol: 2027-10-20
+    releases:
+      - version: 20.2.0
+        released: 2025-10-20
+
   squid:
     target_eol: 2026-09-19
     releases:
