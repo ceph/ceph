@@ -26,18 +26,21 @@ struct rgw_pubsub_topic_filter;
         <FilterRule>
           <Name>suffix</Name>
           <Value>jpg</Value>
+          <Exclude></Exclude>
         </FilterRule>
       </S3Key>
       <S3Metadata>
         <FilterRule>
           <Name></Name>
           <Value></Value>
+          <Exclude></Exclude>
         </FilterRule>
       </S3Metadata>
       <S3Tags>
         <FilterRule>
           <Name></Name>
           <Value></Value>
+          <Exclude></Exclude>
         </FilterRule>
       </S3Tags>
     </Filter>

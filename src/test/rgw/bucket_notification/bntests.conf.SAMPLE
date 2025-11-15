@@ -2,6 +2,7 @@
 port = 8000
 host = localhost
 zonegroup = default
+zonename = default
 cluster = noname
 version = v2
 

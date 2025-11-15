@@ -8,6 +8,7 @@ import socket
 import time
 import os
 import io
+import re
 import string
 # XXX this should be converted to use boto3
 import boto
@@ -28,6 +29,7 @@ from . import(
     get_config_host,
     get_config_port,
     get_config_zonegroup,
+    get_config_zonename,
     get_config_cluster,
     get_access_key,
     get_secret_key
@@ -2564,6 +2566,372 @@ def test_metadata_filter_ampq():
     conn = connection()
     metadata_filter('amqp', conn)
 
+def metadata_negative_filter(endpoint_type, conn):
+    """ test notification of filtering metadata, negative test """
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    # create s3 topic
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification check meta data filter
+    notification_name = bucket_name + NOTIFICATION_SUFFIX + '_in'
+    meta_key_1= 'meta1'
+    meta_value_1 = 'This is my metadata value'
+    meta_key_2 = 'meta2'
+    meta_value_2 = 'kaboom'
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+        'Filter': {
+            'Metadata': {
+                'FilterRules': [{'Name': META_PREFIX+meta_key_1, 'Value': meta_value_1, 'Exclude': True }, {'Name': META_PREFIX+meta_key_2, 'Value': meta_value_2}]
+            }
+        }
+    }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    expected_keys = []
+    # create objects in the bucket
+    key_name = 'foo'
+    key = bucket.new_key(key_name)
+    key.set_metadata(meta_key_1, "abccdef")
+    key.set_metadata(meta_key_2, meta_value_2)
+    key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expected_keys.append(key_name)
+
+    # create objects in the bucket using COPY
+    key_name = 'copy_of_foo'
+    bucket.copy_key(key_name, bucket.name, key.name)
+    expected_keys.append(key_name)
+
+    # create another objects in the bucket using COPY
+    # but override the metadata value
+    key_name = 'another_copy_of_foo'
+    bucket.copy_key(key_name, bucket.name, key.name, metadata={meta_key_1: meta_value_1})
+    # this key is not in the expected keys due to the different meta value
+
+    # create objects in the bucket using multi-part upload
+    fp = tempfile.NamedTemporaryFile(mode='w+b')
+    chunk_size = 1024*1024*5 # 5MB
+    object_size = 10*chunk_size
+    content = bytearray(os.urandom(object_size))
+    fp.write(content)
+    fp.flush()
+    fp.seek(0)
+    key_name = 'multipart_foo'
+    uploader = bucket.initiate_multipart_upload(key_name,
+            metadata={meta_key_2: 'kaboom', meta_key_1: 'abcdef'})
+    for i in range(1,5):
+        uploader.upload_part_from_file(fp, i, size=chunk_size)
+        fp.seek(i*chunk_size)
+    uploader.complete_upload()
+    fp.close()
+    expected_keys.append(key_name)
+
+    print('wait for the messages...')
+    time.sleep(5)
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    # check amqp receiver
+    events = receiver.get_and_reset_events()
+    assert_equal(len(events), len(expected_keys))
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+    # delete objects
+    for key in bucket.list():
+        key.delete()
+    print('wait for the messages...')
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    # check endpoint receiver
+    events = receiver.get_and_reset_events()
+    assert_equal(len(events), len(expected_keys))
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+def key_negative_filter(endpoint_type, conn):
+    """ test notification of filtering metadata, negative test """
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    # create s3 topic
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'prefix', 'Value': 'hello', 'Exclude': True}]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'suffix', 'Value': 'log', 'Exclude': True }, {'Name': 'prefix', 'Value': 'world'}]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_3',
+                        'TopicArn': topic_arn,
+                        'Events': [],
+                        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)\\.txt', 'Exclude': True}]
+                         }
+                        }
+                       }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # get all notifications
+    result, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+    for conf in result['TopicConfigurations']:
+        filter_name = conf['Filter']['Key']['FilterRules'][0]['Name']
+        assert filter_name == 'prefix' or filter_name == 'suffix' or filter_name == 'regex', filter_name
+
+    sample_space = ['hello.kaboom', 'hello.txt', 'hello123.txt', 'hello', 'world1.log', 'world2log', 'world3.log', 'hello.txt', 'hell.txt', 'worldlog.txt', 'kaboom.log', 'foobar.log', 'log', 'he123ll.txt', 'wo', 'h', 'txt', 'world.log.txt']
+    expected_in1 = [key for key in sample_space if key.startswith('hello') is False]
+    expected_in2 = [key for key in sample_space if key.endswith('log') is False and key.startswith('world') is True]
+    expected_in3 = [key for key in sample_space if re.match(r'([a-z]+)\.txt', key) is None]
+
+    # create objects in bucket
+    for key_name in sample_space:
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    found_in1 = []
+    found_in2 = []
+    found_in3 = []
+
+    # check kafka or http receiver
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    events = receiver.get_and_reset_events()
+
+    for event in events:
+        notif_id = event['Records'][0]['s3']['configurationId']
+        key_name = event['Records'][0]['s3']['object']['key']
+        awsRegion = event['Records'][0]['awsRegion']
+        assert_equal(awsRegion, zonegroup)
+        bucket_arn = event['Records'][0]['s3']['bucket']['arn']
+        assert_equal(bucket_arn, "arn:aws:s3:"+awsRegion+"::"+bucket_name)
+        if notif_id == notification_name+'_1':
+            found_in1.append(key_name)
+        elif notif_id == notification_name+'_2':
+            found_in2.append(key_name)
+        elif notif_id == notification_name+'_3':
+            found_in3.append(key_name)
+        else:
+            assert False, 'invalid notification: ' + notif_id
+
+    assert_equal(set(found_in1), set(expected_in1))
+    assert_equal(set(found_in2), set(expected_in2))
+    assert_equal(set(found_in3), set(expected_in3))
+
+     # delete objects
+    for key in bucket.list():
+        key.delete()
+    
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+def test_zone_filter(endpoint_type, conn):
+    """ test notification of filtering zone, negative test """
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    zone = get_config_zonename()
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    # create s3 topic
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'S3Zones': {
+                            'FilterRules': [{'Name': zone }]
+                          }
+                        }
+                       },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+                        'Filter': {
+                          'S3Zones': {
+                            'FilterRules': [{'Name': zone, 'Exclude': True }]
+                          }
+                        }
+                       }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # get all notifications
+    result, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+
+    ##upload an object to the bucket
+    key_name = 'foo'
+    key = bucket.new_key(key_name)
+    key.set_contents_from_string('bar')
+
+    print('wait for 5sec for the messages...')
+    time.sleep(5)
+
+    # check kafka or http receiver
+    wait_for_queue_to_drain(topic_name, http_port=port)
+    events = receiver.get_and_reset_events()
+
+    ##only notif_1 should be triggered
+    assert(len(events) == 1)
+    ##check notification id matches expected event
+    notif_id = events[0]['Records'][0]['s3']['configurationId']
+    assert(notif_id == notification_name+'_1')
+
+     # delete objects
+    for key in bucket.list():
+        key.delete()
+    
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+@attr('kafka_test')
+def test_negative_metadata_filter_kafka():
+    """ test notification of negative filter for metadata, kafka endpoint """
+    conn = connection()
+    metadata_negative_filter('kafka', conn)
+
+@attr('kafka_test')
+def test_negative_key_filter_kafka():
+    """ test notification of negative filter for object key, kafka endpoint """
+    conn = connection()
+    key_negative_filter('kafka', conn)
+
+@attr('kafka_test')
+def test_zone_filter_kafka():
+    """ test notification of filtering zone, kafka endpoint """
+    conn = connection()
+    test_zone_filter('kafka', conn)
+
+@attr('http_test')
+def test_negative_metadata_filter_http():
+    """ test notification of negative filter for metadata, http endpoint """
+    conn = connection()
+    metadata_negative_filter('http', conn)
+
+@attr('http_test')
+def test_negative_key_filter_http():
+    """ test notification of negative filter for object key, http endpoint """
+    conn = connection()
+    key_negative_filter('http', conn)
+
+@attr('http_test')
+def test_zone_filter_http():
+    """ test notification of filtering zone, http endpoint """
+    conn = connection()
+    test_zone_filter('http', conn)
 
 @attr('amqp_test')
 def test_ps_s3_metadata_on_master():
