@@ -74,7 +74,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
     }
 
     void validate() const {
-      ceph_assert_always(shard_num == seastar::smp::count);
       for (unsigned int i = 0; i < seastar::smp::count; i++) {
         ceph_assert_always(shard_infos[i].size > 0);
         ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
@@ -121,22 +120,18 @@ namespace crimson::os::seastore::segment_manager::zbd {
   class ZBDSegmentManager final : public SegmentManager{
   // interfaces used by Device
   public:
-    seastar::future<> start() {
-      return shard_devices.start(device_path);
-    }
+    seastar::future<> start(int shard_nums) final;
 
-    seastar::future<> stop() {
-      return shard_devices.stop();
-    }
+    seastar::future<> stop() final;
 
-    Device& get_sharded_device() final {
-      return shard_devices.local();
-    }
+    Device& get_sharded_device(unsigned int store_index = 0) final;
 
     mount_ret mount() final;
     mkfs_ret mkfs(device_config_t meta) final;
 
-    ZBDSegmentManager(const std::string &path) : device_path(path) {}
+    ZBDSegmentManager(const std::string &path, unsigned int store_index = 0)
+    : device_path(path),
+      store_index(store_index) {}
 
     ~ZBDSegmentManager() final = default;
 
@@ -151,6 +146,8 @@ namespace crimson::os::seastore::segment_manager::zbd {
       paddr_t addr, 
       size_t len, 
       ceph::bufferptr &out) final;
+
+    read_ertr::future<unsigned int> get_shard_nums() final;
 
     device_type_t get_device_type() const final {
       return device_type_t::ZBD;
@@ -214,7 +211,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
       }
     } stats;
 
-    void register_metrics();
+    void register_metrics(unsigned int store_index);
     seastar::metrics::metric_group metrics;
 
     Segment::close_ertr::future<> segment_close(
@@ -234,7 +231,28 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     mount_ret shard_mount();
 
-    seastar::sharded<ZBDSegmentManager> shard_devices;
+    unsigned int device_shard_nums = 0;
+    unsigned int store_index = 0;
+    bool shard_status = true;
+    class MultiShardDevices {
+    public:
+      std::vector<std::unique_ptr<ZBDSegmentManager>> mshard_devices;
+
+    public:
+    MultiShardDevices(size_t count,
+                      const std::string path)
+    : mshard_devices() {
+      mshard_devices.reserve(count);
+      for (size_t store_index = 0; store_index < count; ++store_index) {
+        mshard_devices.emplace_back(std::make_unique<ZBDSegmentManager>(
+          path, store_index));
+      }
+    }
+    ~MultiShardDevices() {
+     mshard_devices.clear();
+    }
+  };
+  seastar::sharded<MultiShardDevices> shard_devices;
   };
 
 }
