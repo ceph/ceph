@@ -4271,6 +4271,16 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: rgw_d4n_localweight_processing_interval
+  type: int
+  level: advanced
+  desc: This is the interval in seconds for invoking local weight writer thread
+  default: 3600
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced
