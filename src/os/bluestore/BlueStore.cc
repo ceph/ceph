@@ -349,7 +349,7 @@ static void get_shared_blob_key(uint64_t sbid, string *key)
   _key_encode_u64(sbid, key);
 }
 
-static int get_key_shared_blob(const string& key, uint64_t *sbid)
+int get_key_shared_blob(const string& key, uint64_t *sbid)
 {
   const char *p = key.c_str();
   if (key.length() < sizeof(uint64_t))
@@ -435,7 +435,7 @@ static int _get_key_object(const char *p, ghobject_t *oid)
 }
 
 template<typename S>
-static int get_key_object(const S& key, ghobject_t *oid)
+int get_key_object(const S& key, ghobject_t *oid)
 {
   if (key.length() < ENCODED_KEY_PREFIX_LEN)
     return -1;
@@ -444,6 +444,8 @@ static int get_key_object(const S& key, ghobject_t *oid)
   const char *p = key.c_str();
   return _get_key_object(p, oid);
 }
+
+template int get_key_object(const string& key, ghobject_t *oid);
 
 template<typename S>
 static void _get_object_key(const ghobject_t& oid, S *key)
@@ -552,7 +554,7 @@ int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
   return 0;
 }
 
-static bool is_extent_shard_key(const string& key)
+bool is_extent_shard_key(const string& key)
 {
   return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
@@ -2941,36 +2943,6 @@ void BlueStore::Blob::maybe_prune_tail() {
   }
 }
 
-void BlueStore::Blob::decode(
-  bufferptr::const_iterator& p,
-  uint64_t struct_v,
-  uint64_t* sbid,
-  bool include_ref_map,
-  Collection *coll)
-{
-  denc(blob, p, struct_v);
-  if (blob.is_shared()) {
-    denc(*sbid, p);
-  }
-  if (include_ref_map) {
-    if (struct_v > 1) {
-      used_in_blob.decode(p);
-    } else {
-      used_in_blob.clear();
-      bluestore_extent_ref_map_t legacy_ref_map;
-      legacy_ref_map.decode(p);
-      if (coll) {
-        for (auto r : legacy_ref_map.ref_map) {
-          get_ref(
-            coll,
-            r.first,
-            r.second.refs * r.second.length);
-        }
-      }
-    }
-  }
-}
-
 // Extent
 
 void BlueStore::Extent::dump(Formatter* f) const
@@ -4146,9 +4118,8 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
       consume_blobid(le, false, blobid - 1);
     } else {
       // dummy onodes might not have collections, we need a check for it.
-      BlobRef b = c ? c->new_blob() : new Blob(nullptr);
       uint64_t sbid = 0;
-      b->decode(p, struct_v, &sbid, false, c);
+      BlobRef b = decode_create_blob(p, struct_v, &sbid, false, c);
       consume_blob(le, extent_pos, sbid, b);
     }
   }
@@ -4194,15 +4165,29 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlobRef b = c ? c->new_blob() : new Blob(nullptr);
-    denc_varint(b->id, p);
+    decltype(Blob::id) id;
+    denc_varint(id, p);
+
     uint64_t sbid = 0;
-    b->decode(p, struct_v, &sbid, true, c);
+    BlobRef b = decode_create_blob(p, struct_v, &sbid, true, c);
+    b->id = id;
     consume_spanning_blob(sbid, b);
   }
 }
 
 /////////////////// BlueStore::ExtentMap::DecoderExtentFull ///////////
+
+BlueStore::BlobRef BlueStore::ExtentMap::ExtentDecoderFull::decode_create_blob(
+  bptr_c_it_t& p,
+  __u8 struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection* c) {
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  return b;
+}
+
 void BlueStore::ExtentMap::ExtentDecoderFull::consume_blobid(
   BlueStore::Extent* le, bool spanning, uint64_t blobid) {
   ceph_assert(le);
@@ -20473,6 +20458,16 @@ void BlueStore::set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offs
   sbmap->set(offset >> min_alloc_size_order, length >> min_alloc_size_order);
 }
 
+BlueStore::BlobRef BlueStore::ExtentDecoderPartial::decode_create_blob(
+  bptr_c_it_t& p,
+  __u8 struct_v,
+  uint64_t* sbid,
+  bool include_ref_map,
+  Collection* c) {
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
+  b->decode<true>(p, struct_v, sbid, include_ref_map, c);
+  return b;
+}
 void BlueStore::ExtentDecoderPartial::_consume_new_blob(bool spanning,
                                                         uint64_t extent_no,
                                                         uint64_t sbid,
@@ -20683,6 +20678,28 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
       ++stats.shard_count;
     }
   }
+  return 0;
+}
+
+//---------------------------------------------------------
+int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
+{
+  // first set space used by superblock
+  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
+  set_allocation_in_simple_bmap(sbmap, 0, super_length);
+  stats.extent_count++;
+
+  // then set all space taken by Objects
+  int ret;
+  if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") == 0) {
+    ret = read_allocation_from_onodes(sbmap, stats);
+  } else {
+    ret = read_allocation_from_onodes_mt(sbmap, stats);
+  }
+  if (ret < 0) {
+    derr << "failed read_allocation_from_onodes()" << dendl;
+    return ret;
+  }
 
   std::lock_guard l(vstatfs_lock);
   store_statfs_t s;
@@ -20704,23 +20721,6 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
   vstatfs.publish(&s);
   dout(5) << __func__ << " recovered " << s
           << dendl;
-  return 0;
-}
-
-//---------------------------------------------------------
-int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
-{
-  // first set space used by superblock
-  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
-  set_allocation_in_simple_bmap(sbmap, 0, super_length);
-  stats.extent_count++;
-
-  // then set all space taken by Objects
-  int ret = read_allocation_from_onodes(sbmap, stats);
-  if (ret < 0) {
-    derr << "failed read_allocation_from_onodes()" << dendl;
-    return ret;
-  }
 
   return 0;
 }
@@ -20946,6 +20946,77 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
   }
 
   dout(1) << stats << dendl;
+  return ret;
+}
+
+int BlueStore::compare_allocation_recovery_for_bluestore_tool()
+{
+  dout(5) << __func__ << dendl;
+  int ret = 0;
+  ret = _open_db_and_around(true, false);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = _open_collections();
+  if (ret < 0) {
+    _close_db_and_around();
+    return ret;
+  }
+  auto shutdown_cache = make_scope_guard([&] {
+    _shutdown_cache();
+    _close_db_and_around();
+  });
+
+  SimpleBitmap old_bitmap(cct, (bdev->get_size()/ min_alloc_size));
+  SimpleBitmap mt_bitmap(cct, (bdev->get_size()/ min_alloc_size));
+  utime_t start;
+  utime_t duration;
+  read_alloc_stats_t old_stats = {};
+  read_alloc_stats_t mt_stats = {};
+
+  if (cct->_conf.get_val<uint64_t>("bluestore_allocation_recovery_threads") != 0) {
+    dout(0) << "New recovery start" << dendl;
+    start = ceph_clock_now();
+    ret = read_allocation_from_onodes_mt(&mt_bitmap, mt_stats);
+    duration = ceph_clock_now() - start;
+    dout(0) << "New recovery result=" << ret << " took " << duration << " seconds" << dendl;
+    dout(0) << "New recovery stats=" << std::endl << mt_stats << dendl;
+  }
+
+  dout(0) << "Legacy recovery start" << dendl;
+  start = ceph_clock_now();
+  ret = read_allocation_from_onodes(&old_bitmap, old_stats);
+  duration = ceph_clock_now() - start;
+  dout(0) << "Legacy recovery result=" << ret << " took " << duration << " seconds" << dendl;
+  dout(0) << "Legacy recovery stats=" << std::endl << old_stats << dendl;
+
+  if (old_stats.actual_pool_vstatfs == mt_stats.actual_pool_vstatfs)
+    dout(0) << "FSstats the same." << dendl;
+  else {
+    dout(0) << "FSTATS DIFFERENT !" << dendl;
+    ret = -1;
+  }
+
+  extent_t ext_a;
+  extent_t ext_b;
+  uint64_t offset = 0;
+  do {
+    ext_a = mt_bitmap.get_next_set_extent(offset);
+    ext_b = old_bitmap.get_next_set_extent(offset);
+    if (ext_a != ext_b) {
+      dout(0) << "ALLOCATOR DIFFERENT !, first:" << dendl;
+      dout(0) << ext_a.offset << "~" << ext_a.length << dendl;
+      dout(0) << ext_b.offset << "~" << ext_b.length << dendl;
+      offset = 1;
+      ret = -1;
+      break;
+    }
+    offset = ext_a.offset + ext_a.length;
+  } while (offset != 0);
+  if (offset == 0) {
+    dout(0) << "Allocators the same." << dendl;
+  }
   return ret;
 }
 
