@@ -535,15 +535,15 @@ public:
       projected_log.skip_can_rollback_to_to_head();
       projected_log.trim(cct, last->version, nullptr, nullptr, nullptr);
     }
-    if (!is_primary() && !is_ec_pg()) {
-      replica_clear_repop_obc(logv, t);
+    if (!is_primary()) {
+      clear_repop_obc(logv, t);
     }
     recovery_state.append_log(
       std::move(logv), trim_to, roll_forward_to, pg_committed_to,
       t, transaction_applied, async);
   }
 
-  void replica_clear_repop_obc(
+  void clear_repop_obc(
     const std::vector<pg_log_entry_t> &logv,
     ObjectStore::Transaction &t);
 
