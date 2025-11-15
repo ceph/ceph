@@ -199,6 +199,7 @@
                             [useRouter]="true"
                             title="NVMe/TCP"
                             i18n-title
+                            *ngIf="permissions.nvmeof.read && enabledFeature.nvmeof"
                             class="tc_submenuitem tc_submenuitem_block_nvme"><span i18n>NVMe/TCP</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Object Storage -->
