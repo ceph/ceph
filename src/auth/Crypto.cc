@@ -23,6 +23,7 @@
 #include "common/armor.h"
 #include "common/ceph_context.h"
 #include "common/ceph_crypto.h"
+#include "common/ceph_mutex.h"
 #include "common/debug.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
@@ -440,7 +441,8 @@ public:
     return AES_BLOCK_LEN + p2align<std::size_t>(in.length, AES_BLOCK_LEN);
   }
 
-  std::size_t encrypt(CephContext *cct, const in_slice_t& in,
+  std::size_t encrypt_ext(CephContext *cct, uint32_t usage, const in_slice_t& in,
+                      const in_slice_t *confounder,
 		      const out_slice_t& out) const override {
     if (out.buf == nullptr) {
       return enc_size(in, nullptr);
@@ -565,6 +567,7 @@ static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
 static constexpr const std::size_t AES256KRB5_BLOCK_LEN{16};
 static constexpr const std::size_t AES256KRB5_HASH_LEN{24};
 static constexpr const std::size_t SHA384_LEN{48};
+static constexpr const int MAX_USAGE{20};
 
 class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
   EVP_CIPHER *cipher{nullptr};
@@ -576,13 +579,11 @@ class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
     const unsigned char *ke_raw;
   };
 
-  usage_keys default_usage_keys;
+  mutable ceph::mutex lock = ceph::make_mutex("CryptoAES256KRB5KeyHandler");
 
-  using usage_keys_ref = std::shared_ptr<usage_keys>;
+  mutable usage_keys *keys[MAX_USAGE];
 
-  std::vector<usage_keys_ref> keys;
-
-  int do_init_usage_keys(uint32_t usage, usage_keys *uk, ostringstream& err) {
+  int do_init_usage_keys(uint32_t usage, usage_keys *uk, ostringstream& err) const {
     int r = calc_kx(secret, usage,
                     0x55 /* Ki type */,
                     AES256KRB5_HASH_LEN /* 192 bit */,
@@ -606,48 +607,36 @@ class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
     return 0;
   }
 
-  usage_keys *init_usage_keys(uint32_t usage) {
+  usage_keys *init_usage_keys(uint32_t usage) const {
     string err_str;
     ostringstream err(err_str);
 
-    if (usage == default_usage) {
-      int r = do_init_usage_keys(usage, &default_usage_keys, err);
-      if (r < 0) {
-        return nullptr;
-      }
-      return &default_usage_keys;
-    }
-
-    if (usage >= keys.size()) {
-      keys.resize(usage + 8); /* so that we don't resize every time */
-    }
-
-    auto& uk = keys[usage];
-    if (!uk) {
-      uk = std::make_shared<usage_keys>();
-    }
-
-    int r = do_init_usage_keys(usage, uk.get(), err);
-    if (r < 0) {
+    if (usage >= MAX_USAGE) {
       return nullptr;
     }
-    return uk.get();
+
+    auto *uk = new usage_keys;
+
+    int r = do_init_usage_keys(usage, uk, err);
+    if (r < 0) {
+      delete uk;
+      return nullptr;
+    }
+    return uk;
   }
 
   const usage_keys *get_usage_keys(uint32_t usage) const {
-    if (usage == default_usage) {
-      return &default_usage_keys;
-    }
-
-    if (keys.size() <= usage) {
+    if (usage >= MAX_USAGE) {
       return nullptr;
     }
-    auto& k_ref = keys[usage];
-    if (!k_ref) {
-      return nullptr;
+    if (!keys[usage]) {
+      std::unique_lock l(lock);
+      if (!keys[usage]) {
+	auto *uk = init_usage_keys(usage);
+	keys[usage] = uk;
+      }
     }
-
-    return k_ref.get();
+    return keys[usage];
   }
 
 static void dump_buf(CephContext *cct, string title, const unsigned char *buf, int len)
@@ -664,7 +653,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
   ldout(cct, 0) << ss.str() << dendl;
 }
     
-  int calc_hmac_sha384(const unsigned char *data, 
+  static int calc_hmac_sha384(const unsigned char *data, 
                        int data_len,
                        const unsigned char* hmac_key,
                        int key_size,
@@ -672,7 +661,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
                        int iv_size,
                        char *out,
                        int out_size,
-                       ostringstream& err) const {
+                       ostringstream& err) {
     unsigned int len = 0;
     char _out[SHA384_LEN];
     char *pout;
@@ -706,7 +695,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     return len;
   }
 
-  int calc_kx(const ceph::bufferptr& secret,
+  static int calc_kx(const ceph::bufferptr& secret,
               uint32_t usage,
               uint8_t type,
               int k,
@@ -848,6 +837,17 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
 
 public:
   CryptoAES256KRB5KeyHandler() : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
+    memset(keys, 0, sizeof keys);
+  }
+  ~CryptoAES256KRB5KeyHandler() {
+    uint32_t u;
+    for (u = 0; u < MAX_USAGE; ++u) {
+      auto *uk = keys[u];
+      if (uk) {
+        keys[u] = 0;
+        delete uk;
+      }
+    }
   }
 
   using CryptoKeyHandler::encrypt_ext;
@@ -866,6 +866,7 @@ public:
       if (!uk) {
         return -EIO;
       }
+      keys[usage] = uk;
     }
 
     return 0;
@@ -1013,12 +1014,6 @@ public:
     out.append(tmp_out.c_str() + AES256KRB5_BLOCK_LEN, data_len);
 
     return 0;
-  }
-
-  int encrypt(CephContext *cct, const ceph::bufferlist& in,
-	      ceph::bufferlist& out,
-              std::string* unused) const override {
-    return encrypt_ext(cct, default_usage, in, nullptr,  out, unused);
   }
 
   std::size_t enc_size(const in_slice_t& in,
