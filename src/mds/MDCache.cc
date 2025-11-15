@@ -13285,9 +13285,13 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f, double timeout)
   } else {
     char path[PATH_MAX] = "";
     if (fn.length()) {
-      snprintf(path, sizeof path, "%s", fn.data());
+      auto [out, size] = fmt::format_to_n(path, sizeof(path) - 1, "{}", fn);
+      *out = '\0';
     } else {
-      snprintf(path, sizeof path, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
+      auto [out, size] = fmt::format_to_n(
+          path, sizeof(path) - 1, "cachedump.{}.mds{}",
+          (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
+      *out = '\0';
     }
 
     dout(1) << "dump_cache to " << path << dendl;
@@ -14639,9 +14643,11 @@ MDRequestRef MDCache::lock_path(LockPathConfig config, std::function<void(MDRequ
       cb(mdr);
     });
   }
+  auto config_lifetime = config.lifetime;
   mdr->internal_op_private = new LockPathState{std::move(config)};
-  if (config.lifetime) {
-    mds->timer.add_event_after(*config.lifetime, new LambdaContext([this, mdr]() {
+  // config was just moved so is in an undefined state
+  if (config_lifetime) {
+    mds->timer.add_event_after(*config_lifetime, new LambdaContext([this, mdr]() {
       if (!mdr->result && !mdr->aborted && !mdr->killed && !mdr->dead) {
         mdr->result = -ECANCELED;
         request_kill(mdr);
