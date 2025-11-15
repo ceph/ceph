@@ -18437,14 +18437,16 @@ void Client::set_filer_flags(int flags)
 {
   std::scoped_lock l(client_lock);
   ceph_assert(flags == 0 ||
-	 flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+              flags == CEPH_OSD_FLAG_LOCALIZE_READS ||
+              flags == CEPH_OSD_FLAG_BALANCE_READS);
   objecter->add_global_op_flags(flags);
 }
 
 void Client::clear_filer_flags(int flags)
 {
   std::scoped_lock l(client_lock);
-  ceph_assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS);
+  ceph_assert(flags == CEPH_OSD_FLAG_LOCALIZE_READS ||
+              flags == CEPH_OSD_FLAG_BALANCE_READS);
   objecter->clear_global_op_flag(flags);
 }
 

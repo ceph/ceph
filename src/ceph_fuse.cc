@@ -115,12 +115,22 @@ int main(int argc, const char **argv, const char *envp[]) {
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
+  std::string val;
   for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
-      cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
-      filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (ceph_argparse_witharg(args, i, &val, "--read-from-replica", (char*)nullptr)) {
+      if (val == "no") {
+        cerr << "setting 0, disabling replica reads" << std::endl;
+        filer_flags = 0;
+      }
+      else if (val == "balance") {
+        cerr << "setting CEPH_OSD_FLAG_BALANCE_READS" << std::endl;
+        filer_flags |= CEPH_OSD_FLAG_BALANCE_READS;
+      } else if (val == "localize") {
+        cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
+        filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+      }
     } else if (ceph_argparse_flag(args, i, "-V", (char*)nullptr)) {
       const char* tmpargv[] = {
 	"ceph-fuse",
