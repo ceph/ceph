@@ -626,18 +626,20 @@ bool ActivePyModules::get_store(const std::string &module_name,
   }
 }
 
-PyObject *ActivePyModules::dispatch_remote(
+std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &other_module,
     const std::string &method,
-    PyObject *args,
-    PyObject *kwargs,
+    std::span<std::byte const> pickled_args,
+    std::span<std::byte const> pickled_kwargs,
     std::string *err)
 {
   auto mod_iter = modules.find(other_module);
   ceph_assert(mod_iter != modules.end());
 
-  return mod_iter->second->dispatch_remote(method, args, kwargs, err);
+  return mod_iter->second->dispatch_remote(
+    method, pickled_args, pickled_kwargs, err);
 }
+
 
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
