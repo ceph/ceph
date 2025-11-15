@@ -527,6 +527,17 @@ class PgAutoscaler(MgrModule):
         ))
         return final_ratio, pool_pg_target, final_pg_target
 
+    def get_dynamic_threshold(
+            self,
+            final_pg_num: int,
+            default_threshold: float,
+    ) -> float:
+        if final_pg_num in (512, 1024):
+            return 1.0
+        elif final_pg_num == 2048:
+            return 2.0
+        return default_threshold
+
     def _get_pool_pg_targets(
             self,
             osdmap: OSDMap,
@@ -615,12 +626,27 @@ class PgAutoscaler(MgrModule):
                 continue
 
             adjust = False
-            if (final_pg_target > p['pg_num_target'] * threshold or
-                    final_pg_target < p['pg_num_target'] / threshold) and \
-                    final_ratio >= 0.0 and \
-                    final_ratio <= 1.0 and \
-                    p['pg_autoscale_mode'] == 'on':
-                adjust = True
+
+            # Dynamic threshold only applies to scaling UP, otherwise use the default threshold.
+            if final_pg_target is not None and \
+               final_pg_target > p['pg_num_target']:
+                dynamic_threshold = self.get_dynamic_threshold(final_pg_target, threshold)
+                adjust = final_pg_target > p['pg_num_target'] * dynamic_threshold
+            else:
+                adjust = final_pg_target < p['pg_num_target'] / threshold
+
+            if adjust and \
+               final_ratio >= 0.0 and \
+               final_ratio <= 1.0 and \
+               p['pg_autoscale_mode'] == 'on':
+                    adjust = True
+            else:
+                if final_pg_target != p['pg_num_target']:
+                    self.log.warning("pool %s won't scale because recommended PG_NUM target"
+                                     " value varies from current PG_NUM value by"
+                                     " more than '%f' scaling threshold",
+                                     pool_name,
+                                     dynamic_threshold if final_pg_target > p['pg_num_target'] else threshold)
 
             assert pool_pg_target is not None
             ret.append({
