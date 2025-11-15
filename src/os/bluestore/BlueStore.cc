@@ -62,6 +62,7 @@
 #include "Writer.h"
 #include "Compression.h"
 #include "BlueAdmin.h"
+#include "BlueFSCache.h"
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
@@ -5758,6 +5759,9 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  if (cct->_conf->bluefs_cache_enable) {
+    bluefscache = std::make_shared<BlueFSLRUCache>(cct->_conf->bluefs_cache_size, cct->_conf->bluefs_cache_evict_size, cct);
+  }
   bluestore_bdev_label_require_all = cct->_conf.get_val<bool>("bluestore_bdev_label_require_all");
   asok_hook = new SocketHook(*this);
 }
@@ -7628,7 +7632,8 @@ bool BlueStore::test_mount_in_use()
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  bluefs = new BlueFS(cct);
+
+  bluefs = new BlueFS(cct, bluefscache);
 
   string bfn;
   struct stat st;
