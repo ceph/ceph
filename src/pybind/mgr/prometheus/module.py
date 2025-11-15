@@ -115,6 +115,8 @@ NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 SMB_METADATA = ('smb_version', 'volume',
                 'subvolume_group', 'subvolume', 'netbiosname', 'share')
 
+CEPHADM_COMPUTE_METADATA = ('daemon_type', 'daemon_name', 'hostname')
+
 CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
 
 alert_metric = namedtuple('alert_metric', 'name description')
@@ -812,6 +814,20 @@ class Module(MgrModule, OrchestratorClientMixin):
             CEPHADM_DAEMON_STATUS
         )
 
+        metrics['cephadm_container_cpu_percentage'] = Metric(
+            'gauge',
+            'cephadm_container_cpu_percentage',
+            'CPU percentage used by cephadm-managed containers',
+            CEPHADM_COMPUTE_METADATA
+        )
+
+        metrics['cephadm_container_memory_bytes'] = Metric(
+            'gauge',
+            'cephadm_container_memory_bytes',
+            'Memory usage in bytes by cephadm-managed containers',
+            CEPHADM_COMPUTE_METADATA
+        )
+
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -1002,16 +1018,29 @@ class Module(MgrModule, OrchestratorClientMixin):
                 )
 
     @profile_method()
-    def set_cephadm_daemon_status_metrics(self) -> None:
+    def set_cephadm_daemon_metrics(self) -> None:
+        #     """
+        #     Populate cephadm daemon status metrics.
+        #     Populate cephadm_container_cpu_percentage and cephadm_container_memory_bytes
+        #     from the orchestrator.
+        #     """
+        if not self.orch_is_available():
+            return
         try:
             daemons = raise_if_exception(self.list_daemons())
             for daemon in daemons:
                 service_type = getattr(daemon, 'daemon_type', '')
                 daemon_name = getattr(daemon, 'daemon_name', '')
                 hostname = str(getattr(daemon, 'hostname', ''))
-                status = getattr(daemon, 'status', '')
                 service_name_attr = getattr(daemon, 'service_name', '')
                 service_name = service_name_attr() if callable(service_name_attr) else str(service_name_attr)
+
+                # Status of each daemon
+                status = getattr(daemon, 'status', '')
+
+                # CPU and Memory consumption of each daemon
+                cpu = getattr(daemon, "cpu_percentage", None)
+                mem = getattr(daemon, "memory_usage", None)
 
                 self.metrics['cephadm_daemon_status'].set(
                     int(status),
@@ -1022,8 +1051,33 @@ class Module(MgrModule, OrchestratorClientMixin):
                         service_name,
                     )
                 )
+
+                cpu_val = None
+                if cpu is not None:
+                    try:
+                        cpu_val = float(str(cpu).strip().rstrip('%'))
+                        self.metrics['cephadm_container_cpu_percentage'].set(
+                            cpu_val,
+                            (
+                                service_type,
+                                daemon_name,
+                                hostname
+                            )
+                        )
+                    except Exception as e:
+                        self.log.error(f"Could not parse cpu_percentage '{cpu}': {e}")
+
+                if mem is not None:
+                    self.metrics['cephadm_container_memory_bytes'].set(
+                        mem,
+                        (
+                            service_type,
+                            daemon_name,
+                            hostname
+                        )
+                    )
         except Exception as e:
-            self.log.error(f"Failed to collect cephadm daemon status: {e}")
+            self.log.error(f"Failed to collect cephadm daemon data: {e}")
 
     @profile_method()
     def get_df(self) -> None:
@@ -1872,7 +1926,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
         self.get_smb_metadata()
-        self.set_cephadm_daemon_status_metrics()
+        self.set_cephadm_daemon_metrics()
 
         if not self.get_module_option('exclude_perf_counters'):
             self.get_perf_counters()
