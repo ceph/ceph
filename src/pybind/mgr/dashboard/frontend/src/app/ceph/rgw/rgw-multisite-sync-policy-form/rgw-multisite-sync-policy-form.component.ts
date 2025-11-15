@@ -33,6 +33,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
   resource: string;
   syncPolicyStatus = RgwMultisiteSyncPolicyStatus;
   pageURL: string;
+  open: boolean = false;
   bucketDataSource = (text$: Observable<string>) => {
     return text$.pipe(
       debounceTime(200),
@@ -53,13 +54,14 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     super();
     this.editing = this.router.url.includes('(modal:edit');
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = $localize`Sync Policy Group`;
+    this.resource = $localize`sync policy group`;
     this.createForm();
     this.loadingReady();
     this.pageURL = 'rgw/multisite/sync-policy';
   }
 
   ngOnInit(): void {
+    this.open = this.route.outlet === 'modal';
     if (this.editing) {
       this.route.paramMap.subscribe((params: any) => {
         const groupName = params.get('groupName');
@@ -71,7 +73,6 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
             .subscribe((syncPolicy: any) => {
               this.loadingReady();
               if (syncPolicy) {
-                this.syncPolicyForm.get('bucket_name').disable();
                 this.syncPolicyForm.patchValue({
                   group_id: syncPolicy.id,
                   status: syncPolicy.status,
@@ -145,7 +146,7 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
 
   bucketExistence(requiredExistenceResult: boolean): AsyncValidatorFn {
     return (control: AbstractControl): Observable<ValidationErrors | null> => {
-      if (control.dirty) {
+      if (control.dirty && control.value) {
         return observableTimer(500).pipe(
           switchMapTo(this.rgwBucketService.exists(control.value)),
           map((existenceResult: boolean) =>
@@ -170,5 +171,9 @@ export class RgwMultisiteSyncPolicyFormComponent extends CdForm implements OnIni
     } else {
       return of([]);
     }
+  }
+
+  closeModal(): void {
+    this.router.navigate([this.pageURL, { outlets: { modal: null } }]);
   }
 }
