@@ -8,11 +8,13 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { NfsModule } from './nfs/nfs.module';
 import { PerformanceCounterModule } from './performance-counter/performance-counter.module';
 import { SmbModule } from './smb/smb.module';
+import { CephfsMirroringModule } from './cephfs-mirroring/cephfs-mirroring.module';
 
 @NgModule({
   imports: [
     CommonModule,
     ClusterModule,
+    CephfsMirroringModule,
     DashboardModule,
     PerformanceCounterModule,
     CephfsModule,
