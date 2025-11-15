@@ -6,7 +6,7 @@ import pytest
 
 from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
-from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
+from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv4_bgp_route, _parse_ipv6_route
 from cephadmlib.net_utils import get_ipv6_address
 
 _cephadm = import_cephadm()
@@ -73,6 +73,71 @@ class TestCommandListNetworks:
     ])
     def test_parse_ipv4_route(self, test_input, expected):
         assert _parse_ipv4_route(test_input) == expected
+    
+    @pytest.mark.parametrize("test_input, expected", [
+        (
+            dedent("""
+            [
+            {
+                "dst": "10.0.0.12",
+                "prefsrc": "10.0.0.11",
+                "metric": 20,
+                "flags": [],
+                "nexthops": [
+                {
+                    "gateway": "169.254.0.1",
+                    "dev": "ens1f1np1",
+                    "weight": 1,
+                    "flags": [
+                    "onlink"
+                    ]
+                },
+                {
+                    "gateway": "169.254.0.1",
+                    "dev": "ens1f0np0",
+                    "weight": 1,
+                    "flags": [
+                    "onlink"
+                    ]
+                }
+                ]
+            },
+            {
+                "dst": "10.0.0.13",
+                "prefsrc": "10.0.0.11",
+                "metric": 20,
+                "flags": [],
+                "nexthops": [
+                {
+                    "gateway": "169.254.0.1",
+                    "dev": "ens1f1np1",
+                    "weight": 1,
+                    "flags": [
+                    "onlink"
+                    ]
+                },
+                {
+                    "gateway": "169.254.0.1",
+                    "dev": "ens1f0np0",
+                    "weight": 1,
+                    "flags": [
+                    "onlink"
+                    ]
+                }
+                ]
+            }
+            ]
+            """),
+            {
+                '10.0.0.11/32': {
+                    'ens1f1np1': {'10.0.0.11'},
+                    'ens1f0np0': {'10.0.0.11'}
+                }
+            }
+        ),
+    ])
+    def test_parse_ipv4_bgp_route(self, test_input, expected):
+        assert _parse_ipv4_bgp_route(test_input) == expected
 
     @pytest.mark.parametrize("test_routes, test_ips, expected", [
         (
@@ -243,10 +308,20 @@ fe80000000000000505400fffe04c154 03 40 20 80     eth1
     @mock.patch('cephadmlib.host_facts.call_throws')
     @mock.patch('cephadmlib.host_facts.find_executable')
     def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
-        _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
+        def call_throws_mock(ctx, command: list[str], **kwargs):
+            if "-j" in command:
+                return ('[{"dst":"10.0.0.12","prefsrc":"10.0.0.11","metric":20,"flags":[],\
+                "nexthops":[{"gateway":"169.254.0.1","dev":"ens1f1np1","weight":1,"flags":["onlink"]},\
+                {"gateway":"169.254.0.1","dev":"ens1f0np0","weight":1,"flags":["onlink"]}]}]', '', '')
+            return ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
+        _call_throws.side_effect = call_throws_mock
         _find_exe.return_value = 'ip'
         with with_cephadm_ctx([]) as ctx:
             _cephadm.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {
+                '10.0.0.11/32': {
+                    'ens1f1np1': ['10.0.0.11'],
+                    'ens1f0np0': ['10.0.0.11']
+                },
                 '10.4.0.1/32': {'tun0': ['10.4.0.2']}
             }
