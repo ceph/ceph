@@ -58,7 +58,7 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
         ]
       ],
       // root: CrushNode
-      root: null, // Replaced with first root
+      root: 'default', // Replaced with first root
       // failure_domain: string
       failure_domain: '', // Replaced with most common type
       // device_class: string
@@ -103,7 +103,7 @@ export class CrushRuleFormModalComponent extends CrushNodeSelectionClass impleme
           this.form.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.activeModal.close();
+          this.closeModal();
           this.submitAction.emit(rule);
         }
       });

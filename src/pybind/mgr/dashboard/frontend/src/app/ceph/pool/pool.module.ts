@@ -14,10 +14,42 @@ import { ErasureCodeProfileFormModalComponent } from './erasure-code-profile-for
 import { PoolDetailsComponent } from './pool-details/pool-details.component';
 import { PoolFormComponent } from './pool-form/pool-form.component';
 import { PoolListComponent } from './pool-list/pool-list.component';
-import { IconModule, IconService } from 'carbon-components-angular';
+import {
+  IconModule,
+  InputModule,
+  CheckboxModule,
+  RadioModule,
+  SelectModule,
+  NumberModule,
+  TabsModule,
+  AccordionModule,
+  TagModule,
+  TooltipModule,
+  ComboBoxModule,
+  ToggletipModule,
+  IconService,
+  LayoutModule,
+  SkeletonModule,
+  ModalModule,
+  ButtonModule,
+  GridModule,
+  DropdownModule
+} from 'carbon-components-angular';
 import HelpIcon from '@carbon/icons/es/help/16';
 import UnlockedIcon from '@carbon/icons/es/unlocked/16';
 import LockedIcon from '@carbon/icons/es/locked/16';
+import EditIcon from '@carbon/icons/es/edit/16';
+import ScalesIcon from '@carbon/icons/es/scales/20';
+import UserIcon from '@carbon/icons/es/user/16';
+import CubeIcon from '@carbon/icons/es/cube/20';
+import ShareIcon from '@carbon/icons/es/share/16';
+import ViewIcon from '@carbon/icons/es/view/16';
+import PasswordIcon from '@carbon/icons/es/password/16';
+import ArrowDownIcon from '@carbon/icons/es/arrow--down/16';
+import ProgressBarRoundIcon from '@carbon/icons/es/progress-bar--round/32';
+import ToolsIcon from '@carbon/icons/es/tools/32';
+import ParentChild from '@carbon/icons/es/parent-child/20';
+import UserAccessLocked from '@carbon/icons/es/user--access-locked/16';
 
 @NgModule({
   imports: [
@@ -29,7 +61,24 @@ import LockedIcon from '@carbon/icons/es/locked/16';
     ReactiveFormsModule,
     NgbTooltipModule,
     BlockModule,
-    IconModule
+    IconModule,
+    InputModule,
+    AccordionModule,
+    CheckboxModule,
+    NumberModule,
+    TabsModule,
+    TagModule,
+    TooltipModule,
+    ComboBoxModule,
+    ToggletipModule,
+    RadioModule,
+    SelectModule,
+    LayoutModule,
+    SkeletonModule,
+    ModalModule,
+    ButtonModule,
+    GridModule,
+    DropdownModule
   ],
   exports: [PoolListComponent, PoolFormComponent],
   declarations: [
@@ -42,7 +91,25 @@ import LockedIcon from '@carbon/icons/es/locked/16';
 })
 export class PoolModule {
   constructor(private iconService: IconService) {
-    this.iconService.registerAll([HelpIcon, UnlockedIcon, LockedIcon]);
+    this.iconService.registerAll([
+      HelpIcon,
+      UnlockedIcon,
+      LockedIcon,
+      EditIcon,
+      ScalesIcon,
+      CubeIcon,
+      UserIcon,
+      ShareIcon,
+      ViewIcon,
+      PasswordIcon,
+      ArrowDownIcon,
+      ProgressBarRoundIcon,
+      ToolsIcon,
+      ParentChild,
+      UserAccessLocked,
+      LockedIcon,
+      UnlockedIcon
+    ]);
   }
 }
 
