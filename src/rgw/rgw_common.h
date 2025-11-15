@@ -482,29 +482,13 @@ boost::optional<const std::string&> rgw_conf_get_optional(const std::map<std::st
 int rgw_conf_get_int(const std::map<std::string, std::string, ltstr_nocase>& conf_map, const char *name, int def_val);
 bool rgw_conf_get_bool(const std::map<std::string, std::string, ltstr_nocase>& conf_map, const char *name, bool def_val);
 
-class RGWEnv;
-
-class RGWConf {
-  friend class RGWEnv;
-  int enable_ops_log;
-  int enable_usage_log;
-  uint8_t defer_to_bucket_acls;
-  void init(CephContext *cct);
-public:
-  RGWConf()
-    : enable_ops_log(1),
-      enable_usage_log(1),
-      defer_to_bucket_acls(0) {
-  }
-};
-
 using env_map_t = std::map<std::string, std::string, ltstr_nocase>;
 
 class RGWEnv {
   env_map_t env_map;
-  RGWConf conf;
+  CephContext *cct;
 public:
-  void init(CephContext *cct);
+  void init(CephContext *_cct);
   void init(CephContext *cct, char **envp);
   void set(std::string name, std::string val);
   const char *get(const char *name, const char *def_val = nullptr) const;
@@ -517,16 +501,25 @@ public:
   bool exists_prefix(const char *prefix) const;
   void remove(const char *name);
   const std::map<std::string, std::string, ltstr_nocase>& get_map() const { return env_map; }
+  int set_remote_addr(const std::string& remote_endpoint_addr);
   int get_enable_ops_log() const {
-    return conf.enable_ops_log;
+    return cct->_conf->rgw_enable_ops_log;
   }
 
   int get_enable_usage_log() const {
-    return conf.enable_usage_log;
+    return cct->_conf->rgw_enable_usage_log;
   }
 
   int get_defer_to_bucket_acls() const {
-    return conf.defer_to_bucket_acls;
+    if (cct->_conf->rgw_defer_to_bucket_acls == "recurse") {
+        return RGW_DEFER_TO_BUCKET_ACLS_RECURSE;
+    }
+
+    if (cct->_conf->rgw_defer_to_bucket_acls == "full-control") {
+        return RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL;
+    }
+
+    return 0;
   }
 };
 
