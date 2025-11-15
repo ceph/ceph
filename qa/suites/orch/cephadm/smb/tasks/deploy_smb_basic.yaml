@@ -60,6 +60,7 @@ tasks:
             "disable spoolss" = "yes"
             "guest ok" = "no"
             "smbd profiling level" = "on"
+            "posix locking" = "no"
             [globals.domain.options]
             security = "USER"
             workgroup = "STANDALONE1"

@@ -721,6 +721,7 @@ def _generate_share(
             'kernel share modes': 'no',
             'x:ceph:id': f'{share.cluster_id}.{share.share_id}',
             'smbd profiling share': 'yes',
+            'posix locking': 'no',
         }
     }
     if share.comment is not None:
