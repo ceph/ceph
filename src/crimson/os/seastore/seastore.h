@@ -348,6 +348,10 @@ public:
       internal_context_t &ctx,
       Onode &onode,
       Onode &d_onode);
+    tm_ret _maybe_copy_on_write(
+      internal_context_t &ctx,
+      Onode &onode,
+      ObjectDataHandler &handler);
     tm_ret _rename(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -422,14 +426,6 @@ public:
     omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
       return onode.get_root(type).get(
         onode.get_metadata_hint(device->get_block_size()));
-    }
-
-    omap_root_t rename_omap_root(
-      omap_type_t type,
-      Onode& onode,
-      Onode& d_onode) const {
-      return onode.get_root(type).get(
-        d_onode.get_metadata_hint(device->get_block_size()));
     }
 
     omaptree_get_value_ret omaptree_get_value(
