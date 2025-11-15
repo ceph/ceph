@@ -17,47 +17,54 @@
 #include "rgw_dedup_utils.h"
 #include "rgw_dedup_store.h"
 #include <string>
+#include <cstring>
 
 namespace rgw::dedup {
-  static constexpr const char* WORKER_SHARD_PREFIX = "WRK.SHRD.TK.";
-  static constexpr const char* MD5_SHARD_PREFIX    = "MD5.SHRD.TK.";
   struct control_t;
   struct dedup_epoch_t;
+
+  static constexpr unsigned PREFIX_LEN = 12;
+  static constexpr const char* WORKER_SHARD_PREFIX = "WRK.SHRD.TK.";
+  static constexpr const char* MD5_SHARD_PREFIX    = "MD5.SHRD.TK.";
+  static_assert(strlen(WORKER_SHARD_PREFIX) == PREFIX_LEN);
+  static_assert(strlen(MD5_SHARD_PREFIX) == PREFIX_LEN);
 
   class cluster{
   public:
     //==================================================================================
     class shard_token_oid {
+      static constexpr int SHARD_LEN = 3;
     public:
       //---------------------------------------------------------------------------
       shard_token_oid(const char *prefix) {
-        this->prefix_len = snprintf(this->buff, BUFF_SIZE, "%s", prefix);
-        this->total_len = this->prefix_len;
+        memcpy(this->buff, prefix, PREFIX_LEN);
+        this->total_len = PREFIX_LEN;
       }
 
       //---------------------------------------------------------------------------
-      shard_token_oid(const char *prefix, uint16_t shard) {
-        this->prefix_len = snprintf(this->buff, BUFF_SIZE, "%s", prefix);
+      shard_token_oid(const char *prefix, uint16_t shard) : shard_token_oid(prefix) {
         set_shard(shard);
       }
 
       //---------------------------------------------------------------------------
       void set_shard(uint16_t shard) {
-        int n = snprintf(this->buff + this->prefix_len, BUFF_SIZE, "%03x", shard);
-        this->total_len = this->prefix_len + n;
+        int n = snprintf(this->buff + PREFIX_LEN, BUFF_SIZE - PREFIX_LEN, "%0*x", SHARD_LEN, shard);
+        this->total_len = PREFIX_LEN + n;
       }
 
       //---------------------------------------------------------------------------
       static bool legal_oid_name(const std::string& oid) {
-        return ((oid.length() <= BUFF_SIZE) &&
+        return ((oid.length() < BUFF_SIZE) &&
                 (oid.starts_with(WORKER_SHARD_PREFIX)||oid.starts_with(MD5_SHARD_PREFIX)));
       }
       inline const char* get_buff() { return this->buff; }
       inline unsigned get_buff_size() { return this->total_len; }
     private:
-      static const unsigned BUFF_SIZE = 15;
+      // TOKEN_OID is set to 15 Bytes to allow strings to be created without dyn-alloc
+      // TOKEN_OID is constructed from PREFIX + #SHARD + 1 extra byte for null termination
+      // There is no need to null termination in string, but snprintf gets suspicious ...
+      static const unsigned BUFF_SIZE = PREFIX_LEN + SHARD_LEN + 1;
       unsigned total_len  = 0;
-      unsigned prefix_len = 0;
       char buff[BUFF_SIZE];
     };
 
