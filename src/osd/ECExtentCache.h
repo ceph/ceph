@@ -245,7 +245,7 @@ private:
       current_size(size),
       projected_size(size),
       oid(oid) {
-      line_size = std::max(MIN_LINE_SIZE, pg.sinfo.get_chunk_size());
+      line_size = MIN_LINE_SIZE;
     }
 
     void insert(ECUtil::shard_extent_map_t const &buffers) const;

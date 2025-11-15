@@ -156,12 +156,14 @@ void ECUtil::stripe_info_t::trim_shard_extent_set_for_ro_offset(
   /* If the offset is within the first shard, then the remaining shards are
    * not written and we don't need to generated zeros for either */
   int ro_offset_shard = (ro_offset / chunk_size) % k;
+  uint64_t alignment = this->supports_partial_writes() ? EC_ALIGN_SIZE : this->get_chunk_size();
   if (ro_offset_shard == 0) {
     uint64_t shard_offset = ro_offset_to_shard_offset(
       ro_offset, raw_shard_id_t(0));
     for (auto &&iter = shard_extent_set.begin(); iter != shard_extent_set.end()
          ;) {
-      iter->second.erase_after(align_next(shard_offset));
+      iter->second.erase_after(
+        align_next(shard_offset, alignment));
       if (iter->second.empty()) iter = shard_extent_set.erase(iter);
       else ++iter;
     }
@@ -179,14 +181,21 @@ void ECUtil::stripe_info_t::ro_size_to_stripe_aligned_read_mask(
 void ECUtil::stripe_info_t::ro_size_to_read_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
-  ro_range_to_shard_extent_set_with_parity(0, align_next(ro_size),
+  if (this->supports_partial_writes()) {
+    ro_range_to_shard_extent_set_with_parity(0, align_next(ro_size),
                                            shard_extent_set);
+  } else {
+    ro_size_to_stripe_aligned_read_mask(ro_size, shard_extent_set);
+  }
 }
 
 void ECUtil::stripe_info_t::ro_size_to_zero_mask(
     uint64_t ro_size,
     shard_extent_set_t &shard_extent_set) const {
   // There should never be any zero padding on the parity.
+  if (!this->supports_partial_writes()) {
+    return;
+  }
   ro_range_to_shard_extent_set(align_next(ro_size),
                                ro_offset_to_next_stripe_ro_offset(ro_size) -
                                align_next(ro_size),
@@ -492,9 +501,16 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
   bool rebuild_req = false;
 
   for (auto iter = begin_slice_iterator(out_set, dpp, dedup_zeros); !iter.is_end(); ++iter) {
-    if (!iter.is_page_aligned()) {
-      rebuild_req = true;
-      break;
+    if (sinfo->supports_partial_writes()) {
+      if (!iter.is_page_aligned()) {
+        rebuild_req = true;
+        break;
+      }
+    } else {
+      if (iter.get_length() % sinfo->get_chunk_size() != 0) {
+        rebuild_req = true;
+        break;
+      }
     }
 
     shard_id_map<bufferptr> &in = iter.get_in_bufferptrs();
@@ -506,7 +522,11 @@ int shard_extent_map_t::encode(const ErasureCodeInterfaceRef &ec_impl,
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_ec_align();
+    if (sinfo->supports_partial_writes()) {
+      pad_and_rebuild_to_ec_align();
+    } else {
+      pad_and_rebuild_to_alignment(sinfo->get_chunk_size());
+    }
     return encode(ec_impl, dpp, dedup_zeros);
   }
 
@@ -577,18 +597,28 @@ void shard_extent_map_t::pad_on_shards(const shard_extent_set_t &pad_to,
 
 void shard_extent_map_t::pad_on_shard(const extent_set &pad_to,
                                        const shard_id_t shard) {
-
   if (pad_to.size() == 0) {
     return;
   }
 
-  for (auto &[off, length] : pad_to) {
-    bufferlist bl;
-    uint64_t start = align_prev(off);
-    uint64_t end = align_next(off + length);
+  if (sinfo->supports_partial_writes()) {
+    for (auto &[off, length] : pad_to) {
+      bufferlist bl;
+      uint64_t start = align_prev(off);
+      uint64_t end = align_next(off + length);
 
-    bl.push_back(buffer::create_aligned(end - start, EC_ALIGN_SIZE));
-    insert_in_shard(shard, start, bl);
+      bl.push_back(buffer::create_aligned(end - start, EC_ALIGN_SIZE));
+      insert_in_shard(shard, start, bl);
+    }
+  } else {
+    for (auto &[off, length] : pad_to) {
+      bufferlist bl;
+      uint64_t start = off;
+      uint64_t end = off + length;
+
+      bl.push_back(buffer::create_aligned(end - start, EC_ALIGN_SIZE));
+      insert_in_shard(shard, start, bl);
+    }
   }
 }
 
@@ -717,11 +747,17 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
                                 const shard_id_set &need_set,
                                 DoutPrefixProvider *dpp) {
   bool rebuild_req = false;
-
   for (auto iter = begin_slice_iterator(need_set, dpp); !iter.is_end(); ++iter) {
-    if (!iter.is_page_aligned()) {
-      rebuild_req = true;
-      break;
+    if (sinfo->supports_partial_writes()) {
+      if (!iter.is_page_aligned()) {
+        rebuild_req = true;
+        break;
+      }
+    } else {
+      if (iter.get_length() % sinfo->get_chunk_size() != 0) {
+        rebuild_req = true;
+        break;
+      }
     }
 
     shard_id_map<bufferptr> &in = iter.get_in_bufferptrs();
@@ -737,7 +773,11 @@ int shard_extent_map_t::_decode(const ErasureCodeInterfaceRef &ec_impl,
   }
 
   if (rebuild_req) {
-    pad_and_rebuild_to_ec_align();
+    if (sinfo->supports_partial_writes()) {
+      pad_and_rebuild_to_ec_align();
+    } else {
+      pad_and_rebuild_to_alignment(sinfo->get_chunk_size());
+    }
     return _decode(ec_impl, want_set, need_set, dpp);
   }
 
@@ -779,6 +819,55 @@ void shard_extent_map_t::pad_and_rebuild_to_ec_align() {
         // We are not permitted to modify the emap while iterating.
         aligned.insert(start, end - start, bl);
       }
+      if (resized_i) resized = true;
+    }
+    emap.insert(aligned);
+  }
+
+  if (resized) {
+    compute_ro_range();
+  }
+}
+
+const unsigned SIMD_ALIGN = 64;
+void shard_extent_map_t::pad_and_rebuild_to_alignment(uint64_t alignment) {
+  bool resized = false;
+  for (auto &&[shard, emap] : extent_maps) {
+    extent_map aligned;
+
+    // Inserting while iterating is not supported in extent maps, make the
+    // iterated-over emap const to help defend against mistakes.
+    const extent_map &cemap = emap;
+    for (auto i = cemap.begin(); i != cemap.end(); ++i) {
+      bool resized_i = false;
+      bufferlist bl = i.get_val();
+      uint64_t start = i.get_off();
+      uint64_t aligned_start = start / alignment * alignment;
+      uint64_t end = start + i.get_len();
+      uint64_t aligned_end = (end + alignment - 1) / alignment * alignment;
+
+      if (start != aligned_start) {
+        bl.prepend_zero(start - aligned_start);
+        start = aligned_start;
+        resized_i = true;
+      }
+      if (end != aligned_end) {
+        bl.append_zero(aligned_end - end);
+        end = aligned_end;
+        resized_i = true;
+      }
+      uint64_t new_len = bl.length();
+      if (bl.length() < alignment) {
+        new_len = alignment;
+      } else if (bl.length() % alignment != 0) {
+        new_len = (bl.length() + alignment - 1) / alignment * alignment;
+      }
+
+      if (bl.rebuild_aligned_size_and_memory(new_len, SIMD_ALIGN) ||
+        resized_i) {
+        // We are not permitted to modify the emap while iterating.
+        aligned.insert(start, end - start, bl);
+        }
       if (resized_i) resized = true;
     }
     emap.insert(aligned);
