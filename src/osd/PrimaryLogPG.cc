@@ -4258,7 +4258,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
         reqid.name._num, reqid.tid, reqid.inc);
   }
 
-
   int result = prepare_transaction(ctx);
 
   {
@@ -7747,7 +7746,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool truncated = false;
 	if (oi.is_omap()) {
           const auto result = osd->store->omap_iterate(
-            ch, ghobject_t(soid),
+            ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
             ObjectStore::omap_iter_seek_t{
               .seek_position = start_after,
               .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
@@ -7803,7 +7802,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
 	  const auto result = osd->store->omap_iterate(
-	    ch, ghobject_t(soid),
+	    ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
 	    // than just seek(n).
@@ -7847,7 +7846,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
+	osd->store->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
+                              &osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -7868,7 +7868,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (oi.is_omap()) {
-	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
+	  osd->store->omap_get_values(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard), keys_to_get, &out);
 	} // else return empty omap entries
 	encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
@@ -7903,7 +7903,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
-	  int r = osd->store->omap_get_values(ch, ghobject_t(soid),
+	  int r = osd->store->omap_get_values(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 					      to_get, &out);
 	  if (r < 0) {
 	    result = r;
@@ -9401,12 +9401,12 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
     if (left > 0 && !cursor.omap_complete) {
       ceph_assert(cursor.data_complete);
       if (cursor.omap_offset.empty()) {
-	osd->store->omap_get_header(ch, ghobject_t(oi.soid),
+	osd->store->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 				    &reply_obj.omap_header);
       }
       bufferlist omap_data;
       const auto result = osd->store->omap_iterate(
-        ch, ghobject_t(oi.soid),
+        ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
         ObjectStore::omap_iter_seek_t{
           .seek_position = cursor.omap_offset,
           .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND

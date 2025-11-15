@@ -17,6 +17,7 @@
 #include <vector>
 #include <sstream>
 
+#include "include/buffer.h"
 #include "ECTransaction.h"
 #include "ECUtil.h"
 #include "os/ObjectStore.h"
@@ -533,9 +534,6 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   process_init();
 
-  // omap not supported (except 0, handled above)
-  ceph_assert(!(op.clear_omap) && !(op.omap_header) && op.omap_updates.empty());
-
   if (op.alloc_hint) {
     all_shards_written();
     alloc_hint(op, transactions, pgid, oid, sinfo);
@@ -597,6 +595,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
 
   if (!op.attr_updates.empty()) {
     attr_updates();
+  }
+
+  if (!op.omap_updates.empty() || op.omap_header || op.clear_omap) {
+    omap_updates();
   }
 
   if (!entry) {
@@ -931,6 +933,75 @@ void ECTransaction::Generate::written_shards() {
                          << " version=" << entry->version
                          << " written=" << entry->written_shards
                          << " shard_versions=" << oi.shard_versions << dendl;
+    }
+  }
+}
+
+void ECTransaction::Generate::omap_updates() {
+
+  if (op.omap_header) {
+    for (auto &&[shard, t]: transactions) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        // Primary shard - Update omap header
+        t.omap_setheader(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard),
+          *(op.omap_header));
+      } else if (entry->is_written_shard(shard)) {
+        // Do nothing
+      } // Else: Unwritten shard
+    }
+  }
+
+  if (op.clear_omap) {
+    for (auto &&[shard, t]: transactions) {
+      if (!sinfo.is_nonprimary_shard(shard)) {
+        // Primary shard - Clear omap
+        t.omap_clear(
+          coll_t(spg_t(pgid, shard)),
+          ghobject_t(oid, ghobject_t::NO_GEN, shard));
+      } else if (entry->is_written_shard(shard)) {
+        // Do nothing
+      } // Else: Unwritten shard
+    }
+  }
+
+  for (auto &&up: op.omap_updates) {
+    using UpdateType = PGTransaction::ObjectOperation::OmapUpdateType;
+    switch (up.first) {
+    case UpdateType::Remove:
+      for (auto &&[shard, t]: transactions) {
+        if (!sinfo.is_nonprimary_shard(shard)) {
+          t.omap_rmkeys(
+            coll_t(spg_t(pgid, shard)),
+            ghobject_t(oid, ghobject_t::NO_GEN, shard),
+            up.second);
+        }
+      }
+      break;
+      case UpdateType::Insert:
+        for (auto &&[shard, t]: transactions) {
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            // Primary shard - Update omap
+            t.omap_setkeys(
+              coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
+              up.second);
+          } else if (entry->is_written_shard(shard)) {
+            // Do nothing
+        } // Else: Unwritten shard
+      }
+      break;
+      case UpdateType::RemoveRange:
+        for (auto &&[shard, t]: transactions) {
+          if (!sinfo.is_nonprimary_shard(shard)) {
+            t.omap_rmkeyrange(
+              coll_t(spg_t(pgid, shard)),
+              ghobject_t(oid, ghobject_t::NO_GEN, shard),
+              up.second);
+        }
+      }
+      break;
     }
   }
 }
