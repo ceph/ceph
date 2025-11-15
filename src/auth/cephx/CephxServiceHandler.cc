@@ -318,7 +318,7 @@ int CephxServiceHandler::handle_request(
 				       connection_secret_required_len);
 	    }
 	    std::string err;
-	    if (encode_encrypt(cct, *pconnection_secret, session_key, cbl,
+	    if (encode_encrypt(cct, *pconnection_secret, session_key, 3, cbl,
 			       err)) {
 	      lderr(cct) << __func__ << " failed to encrypt connection secret, "
 			 << err << dendl;

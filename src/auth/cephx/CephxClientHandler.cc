@@ -228,7 +228,7 @@ int CephxClientHandler::handle_response(
 	  if (cbl.length() && connection_secret) {
 	    auto p = cbl.cbegin();
 	    string err;
-	    if (decode_decrypt(cct, *connection_secret, *session_key, p,
+	    if (decode_decrypt(cct, *connection_secret, *session_key, 3, p,
 			       err)) {
 	      lderr(cct) << __func__ << " failed to decrypt connection_secret"
 			 << dendl;
@@ -284,7 +284,7 @@ int CephxClientHandler::handle_response(
           return -ENOENT;
         }
 	std::string error;
-	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
+	if (decode_decrypt(cct, secrets, secret_key, 16, indata, error)) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
 	    << error << dendl;
 	  return -EINVAL;
