@@ -305,6 +305,7 @@ public:
   ErasureCodeJerasureBlaumRoth() :
     ErasureCodeJerasureLiberation("blaum_roth")
   {
+    DEFAULT_W = "6"; //The recommended default value of w when using blaum-roth is 6, see Jerasure documentation for more details.
   }
 
   bool check_w(std::ostream *ss) const override;
