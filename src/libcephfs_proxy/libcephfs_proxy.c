@@ -1,6 +1,8 @@
 
 #include <stdlib.h>
 
+#include <linux/fscrypt.h>
+
 #include "include/cephfs/libcephfs.h"
 
 #include "proxy_log.h"
@@ -1086,4 +1088,92 @@ __public int64_t ceph_ll_nonblocking_readv_writev(
 	}
 
 	return ans.res;
+}
+
+__public int32_t ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+				      const char *key_data, int32_t key_len,
+				      char *kid, int32_t user)
+{
+	CEPH_REQ(ceph_add_fscrypt_key, req, 1, ans, 1);
+
+	req.user = user;
+	req.kid = FSCRYPT_KEY_IDENTIFIER_SIZE;
+
+	CEPH_BUFF_ADD(req, key_data, key_len);
+
+	CEPH_BUFF_ADD(ans, kid, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_ADD_FSCRYPT_KEY, req, ans);
+}
+
+__public int32_t ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+					 struct fscrypt_remove_key_arg *arg,
+					 int32_t user)
+{
+	CEPH_REQ(ceph_remove_fscrypt_key, req, 1, ans, 1);
+
+	req.user = user;
+	req.arg = sizeof(struct fscrypt_remove_key_arg);
+
+	CEPH_BUFF_ADD(req, arg, sizeof(struct fscrypt_remove_key_arg));
+
+	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_remove_key_arg));
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY, req, ans);
+}
+
+__public int32_t ceph_get_fscrypt_key_status(
+	struct ceph_mount_info *cmount, struct fscrypt_get_key_status_arg *arg)
+{
+	CEPH_REQ(ceph_get_fscrypt_key_status, req, 1, ans, 1);
+
+	req.arg = sizeof(struct fscrypt_get_key_status_arg);
+
+	CEPH_BUFF_ADD(req, arg, sizeof(struct fscrypt_get_key_status_arg));
+
+	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_get_key_status_arg));
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY, req, ans);
+}
+
+__public int32_t ceph_ll_set_fscrypt_policy_v2(
+	struct ceph_mount_info *cmount, Inode *in,
+	const struct fscrypt_policy_v2 *policy)
+{
+	CEPH_REQ(ceph_ll_set_fscrypt_policy_v2, req, 1, ans, 0);
+
+	req.inode = ptr_value(in);
+	req.policy = sizeof(struct fscrypt_policy_v2);
+
+	CEPH_BUFF_ADD(req, policy, sizeof(struct fscrypt_policy_v2));
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2, req,
+			    ans);
+}
+
+__public int32_t ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+					       Inode *in,
+					       struct fscrypt_policy_v2 *policy)
+{
+	CEPH_REQ(ceph_ll_get_fscrypt_policy_v2, req, 0, ans, 1);
+
+	req.inode = ptr_value(in);
+	req.policy = sizeof(struct fscrypt_policy_v2);
+
+	CEPH_BUFF_ADD(ans, policy, sizeof(struct fscrypt_policy_v2));
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2, req,
+			    ans);
+}
+
+__public int32_t ceph_ll_is_encrypted(struct ceph_mount_info *cmount,
+				      Inode *in, char *enctag)
+{
+	CEPH_REQ(ceph_ll_is_encrypted, req, 1, ans, 0);
+
+	req.inode = ptr_value(in);
+
+	CEPH_STR_ADD(req, tag, enctag);
+
+	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_IS_ENCRYPTED, req, ans);
 }
