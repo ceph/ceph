@@ -5,5 +5,6 @@ export class TaskException {
   code: number;
   component: string;
   detail: string;
+  title: string;
   task: Task;
 }

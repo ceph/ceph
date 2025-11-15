@@ -118,12 +118,21 @@ export class SmbClusterListComponent extends ListWithDetails implements OnInit {
       itemDescription: $localize`Cluster`,
       itemNames: [cluster_id],
       submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${CLUSTER_PATH}/${URLVerbs.DELETE}`, {
-            cluster_id: cluster_id
-          }),
-          call: this.smbService.removeCluster(cluster_id)
-        })
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask(`${CLUSTER_PATH}/${URLVerbs.DELETE}`, {
+              cluster_id: cluster_id
+            }),
+            call: this.smbService.removeCluster(cluster_id)
+          })
+          .subscribe({
+            error: () => {
+              this.modalService.dismissAll();
+            },
+            complete: () => {
+              this.modalService.dismissAll();
+            }
+          })
     });
   }
 }
