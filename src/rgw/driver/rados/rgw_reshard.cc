@@ -342,7 +342,7 @@ public:
         ret = r;
       }
       if (br != nullptr) {
-        r = br->renew_lock_if_needed(dpp);
+        r = br->renew_lock_if_needed(dpp, null_yield);
       }
       if (r < 0) {
         derr << "ERROR: br->renew_lock_if_needed() returned error: " << cpp_strerror(-r) << dendl;
@@ -916,7 +916,7 @@ int RGWBucketReshard::clear_resharding(rgw::sal::RadosStore* store,
 
 int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     return ret;
   }
@@ -929,7 +929,7 @@ int RGWBucketReshard::cancel(const DoutPrefixProvider* dpp, optional_yield y)
     ret = clear_resharding(store, bucket_info, bucket_attrs, dpp, y);
   }
 
-  reshard_lock.unlock();
+  std::ignore = reshard_lock.unlock(dpp, y);
   return ret;
 }
 
@@ -954,17 +954,18 @@ RGWBucketReshardLock::RGWBucketReshardLock(rgw::sal::RadosStore* _store,
   internal_lock.set_duration(duration);
 }
 
-int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
+int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp, optional_yield y) {
   internal_lock.set_must_renew(false);
 
-  int ret;
+  librados::ObjectWriteOperation op;
   if (ephemeral) {
-    ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
-						 lock_oid);
+    internal_lock.lock_exclusive_ephemeral(&op);
   } else {
-    ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
+    internal_lock.lock_exclusive(&op);
   }
 
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret == -EBUSY) {
     ldout(store->ctx(), 0) << "INFO: RGWReshardLock::" << __func__ <<
       " found lock on " << lock_oid <<
@@ -982,23 +983,31 @@ int RGWBucketReshardLock::lock(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-void RGWBucketReshardLock::unlock() {
-  int ret = internal_lock.unlock(&store->getRados()->reshard_pool_ctx, lock_oid);
+int RGWBucketReshardLock::unlock(const DoutPrefixProvider *dpp, optional_yield y) {
+  librados::ObjectWriteOperation op;
+  internal_lock.unlock(&op);
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "WARNING: RGWBucketReshardLock::" << __func__ <<
       " failed to drop lock on " << lock_oid << " ret=" << ret << dendl;
   }
+  return ret;
 }
 
-int RGWBucketReshardLock::renew(const Clock::time_point& now) {
+int RGWBucketReshardLock::renew(const DoutPrefixProvider *dpp, optional_yield y,
+                                const Clock::time_point& now)
+{
   internal_lock.set_must_renew(true);
-  int ret;
+
+  librados::ObjectWriteOperation op;
   if (ephemeral) {
-    ret = internal_lock.lock_exclusive_ephemeral(&store->getRados()->reshard_pool_ctx,
-						 lock_oid);
+    internal_lock.lock_exclusive_ephemeral(&op);
   } else {
-    ret = internal_lock.lock_exclusive(&store->getRados()->reshard_pool_ctx, lock_oid);
+    internal_lock.lock_exclusive(&op);
   }
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              lock_oid, std::move(op), y);
   if (ret < 0) { /* expired or already locked by another processor */
     std::stringstream error_s;
     if (-ENOENT == ret) {
@@ -1019,19 +1028,19 @@ int RGWBucketReshardLock::renew(const Clock::time_point& now) {
   return 0;
 }
 
-int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp) {
+int RGWBucketReshard::renew_lock_if_needed(const DoutPrefixProvider *dpp, optional_yield y) {
   int ret = 0;
   Clock::time_point now = Clock::now();
   if (reshard_lock.should_renew(now)) {
     // assume outer locks have timespans at least the size of ours, so
     // can call inside conditional
     if (outer_reshard_lock) {
-      ret = outer_reshard_lock->renew(now);
+      ret = outer_reshard_lock->renew(dpp, y, now);
       if (ret < 0) {
         return ret;
       }
     }
-    ret = reshard_lock.renew(now);
+    ret = reshard_lock.renew(dpp, y, now);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "Error renewing bucket lock: " << ret << dendl;
       return ret;
@@ -1158,7 +1167,7 @@ int RGWBucketReshard::reshard_process(const rgw::bucket_index_layout_generation&
           return ret;
         }
 
-        ret = renew_lock_if_needed(dpp);
+        ret = renew_lock_if_needed(dpp, y);
         if (ret < 0) {
           return ret;
         }
@@ -1269,15 +1278,17 @@ int RGWBucketReshard::execute(int num_shards,
                               RGWReshard* reshard_log)
 {
   // take a reshard lock on the bucket
-  int ret = reshard_lock.lock(dpp);
+  int ret = reshard_lock.lock(dpp, y);
   if (ret < 0) {
     return ret;
   }
   // TODO: release the lock when purging the old index shards or unsucessful new index shards
-  auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
+  auto unlock = make_scope_guard([this, dpp, y] {
+        std::ignore = reshard_lock.unlock(dpp, y);
+      });
 
   if (reshard_log) {
-    ret = reshard_log->update(dpp, bucket_info, initiator, y);
+    ret = reshard_log->update(dpp, y, bucket_info.bucket, initiator);
     if (ret < 0) {
       return ret;
     }
@@ -1396,21 +1407,19 @@ int RGWReshard::add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry,
   return 0;
 }
 
-int RGWReshard::update(const DoutPrefixProvider *dpp,
-		       const RGWBucketInfo& bucket_info,
-		       const cls_rgw_reshard_initiator initiator,
-		       optional_yield y)
+int RGWReshard::update(const DoutPrefixProvider* dpp,
+		       optional_yield y,
+		       const rgw_bucket& bucket,
+		       cls_rgw_reshard_initiator initiator)
 {
   cls_rgw_reshard_entry entry;
-  entry.bucket_name = bucket_info.bucket.name;
-  entry.bucket_id = bucket_info.bucket.bucket_id;
-  entry.tenant = bucket_info.bucket.tenant;
-  entry.initiator = initiator;
 
-  int ret = get(dpp, entry);
+  int ret = get(dpp, y, bucket, entry);
   if (ret < 0) {
     return ret;
   }
+
+  entry.initiator = initiator;
 
   ret = add(dpp, entry, y);
   if (ret < 0) {
@@ -1422,37 +1431,54 @@ int RGWReshard::update(const DoutPrefixProvider *dpp,
 }
 
 
-int RGWReshard::list(const DoutPrefixProvider *dpp, int logshard_num, string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated)
+int RGWReshard::list(const DoutPrefixProvider *dpp, optional_yield y,
+                     int logshard_num, string& marker, uint32_t max,
+                     std::list<cls_rgw_reshard_entry>& entries,
+                     bool *is_truncated)
 {
   string logshard_oid;
 
   get_logshard_oid(logshard_num, &logshard_oid);
 
-  int ret = cls_rgw_reshard_list(store->getRados()->reshard_pool_ctx, logshard_oid, marker, max, entries, is_truncated);
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  cls_rgw_reshard_list(op, marker, max, bl);
 
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              logshard_oid, std::move(op), nullptr, y);
   if (ret == -ENOENT) {
     // these shard objects aren't created until we actually write something to
     // them, so treat ENOENT as a successful empty listing
     *is_truncated = false;
-    ret = 0;
-  } else if (ret == -EACCES) {
+    return 0;
+  }
+  if (ret == -EACCES) {
     ldpp_dout(dpp, -1) << "ERROR: access denied to pool " << store->svc()->zone->get_zone_params().reshard_pool
                       << ". Fix the pool access permissions of your client" << dendl;
-  } else if (ret < 0) {
+    return ret;
+  }
+  if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: failed to list reshard log entries, oid="
         << logshard_oid << " marker=" << marker << " " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
-  return ret;
+  return cls_rgw_reshard_list_decode(bl, entries, is_truncated);
 }
 
-int RGWReshard::get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
+int RGWReshard::get(const DoutPrefixProvider *dpp, optional_yield y,
+                    const rgw_bucket& bucket, cls_rgw_reshard_entry& entry)
 {
   string logshard_oid;
 
   get_bucket_logshard_oid(entry.tenant, entry.bucket_name, &logshard_oid);
 
-  int ret = cls_rgw_reshard_get(store->getRados()->reshard_pool_ctx, logshard_oid, entry);
+  bufferlist bl;
+  librados::ObjectReadOperation op;
+  cls_rgw_reshard_get(op, bucket.tenant, bucket.name, bl);
+
+  int ret = rgw_rados_operate(dpp, store->getRados()->reshard_pool_ctx,
+                              logshard_oid, std::move(op), nullptr, y);
   if (ret < 0) {
     if (ret != -ENOENT) {
       ldpp_dout(dpp, -1) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
@@ -1461,7 +1487,7 @@ int RGWReshard::get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry)
     return ret;
   }
 
-  return 0;
+  return cls_rgw_reshard_get_decode(bl, entry);
 }
 
 int RGWReshard::remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y)
@@ -1720,7 +1746,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
   RGWBucketReshardLock logshard_lock(store, logshard_oid, false);
 
-  int ret = logshard_lock.lock(dpp);
+  int ret = logshard_lock.lock(dpp, y);
   if (ret < 0) { 
     ldpp_dout(dpp, 5) << __func__ << "(): failed to acquire lock on " <<
       logshard_oid << ", ret = " << ret <<dendl;
@@ -1729,7 +1755,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   
   do {
     std::list<cls_rgw_reshard_entry> entries;
-    ret = list(dpp, logshard_num, marker, max_op_entries, entries, &is_truncated);
+    ret = list(dpp, y, logshard_num, marker, max_op_entries, entries, &is_truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;
@@ -1741,7 +1767,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
-        ret = logshard_lock.renew(now);
+        ret = logshard_lock.renew(dpp, y, now);
         if (ret < 0) {
           return ret;
         }
@@ -1751,7 +1777,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     } // entry for loop
   } while (is_truncated);
 
-  logshard_lock.unlock();
+  std::ignore = logshard_lock.unlock(dpp, y);
   return 0;
 }
 

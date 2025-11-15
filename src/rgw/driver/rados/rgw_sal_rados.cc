@@ -4713,8 +4713,10 @@ RadosRestoreSerializer::RadosRestoreSerializer(RadosStore* store, const std::str
 
 int RadosRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
 {
+  librados::ObjectWriteOperation op;
   lock.set_duration(dur);
-  return lock.lock_exclusive((librados::IoCtx*)(&ioctx), oid);
+  lock.lock_exclusive(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
 }
 
 int RadosRestoreSerializer::unlock(const DoutPrefixProvider *dpp, optional_yield y)

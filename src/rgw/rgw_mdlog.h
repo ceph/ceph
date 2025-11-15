@@ -138,8 +138,6 @@ public:
   int trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time, const std::string& start_marker, const std::string& end_marker, optional_yield y);
   int get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info, optional_yield y);
   int get_info_async(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfoCompletion *completion);
-  int lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, std::string&zone_id, std::string& owner_id);
-  int unlock(const DoutPrefixProvider *dpp, int shard_id, std::string& zone_id, std::string& owner_id);
 
   int update_shards(std::list<int>& shards);
 

@@ -60,9 +60,10 @@ public:
     RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
   {}
 
-  int lock(const DoutPrefixProvider *dpp);
-  void unlock();
-  int renew(const Clock::time_point&);
+  int lock(const DoutPrefixProvider *dpp, optional_yield y);
+  int unlock(const DoutPrefixProvider *dpp, optional_yield y);
+  int renew(const DoutPrefixProvider *dpp, optional_yield y,
+            const Clock::time_point& now);
 
   bool should_renew(const Clock::time_point& now) const {
     return now >= renew_thresh;
@@ -120,7 +121,7 @@ public:
   int get_status(const DoutPrefixProvider *dpp, optional_yield y,
                  std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel(const DoutPrefixProvider* dpp, optional_yield y);
-  int renew_lock_if_needed(const DoutPrefixProvider *dpp);
+  int renew_lock_if_needed(const DoutPrefixProvider *dpp, optional_yield y);
 
   static int clear_resharding(rgw::sal::RadosStore* store,
 			      RGWBucketInfo& bucket_info,
@@ -235,10 +236,14 @@ protected:
 public:
   RGWReshard(rgw::sal::RadosStore* _store, bool _verbose = false, std::ostream *_out = nullptr, Formatter *_formatter = nullptr);
   int add(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry, optional_yield y);
-  int update(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_reshard_initiator initiator, optional_yield y);
-  int get(const DoutPrefixProvider *dpp, cls_rgw_reshard_entry& entry);
+  int update(const DoutPrefixProvider *dpp, optional_yield y,
+             const rgw_bucket& bucket, cls_rgw_reshard_initiator initiator);
+  int get(const DoutPrefixProvider *dpp, optional_yield y,
+          const rgw_bucket& bucket, cls_rgw_reshard_entry& entry);
   int remove(const DoutPrefixProvider *dpp, const cls_rgw_reshard_entry& entry, optional_yield y);
-  int list(const DoutPrefixProvider *dpp, int logshard_num, std::string& marker, uint32_t max, std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
+  int list(const DoutPrefixProvider *dpp, optional_yield y,
+           int logshard_num, std::string& marker, uint32_t max,
+           std::list<cls_rgw_reshard_entry>& entries, bool *is_truncated);
 
   /* reshard thread */
   int process_entry(const cls_rgw_reshard_entry& entry, int max_entries,

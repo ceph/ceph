@@ -504,24 +504,6 @@ namespace rgw::dedup {
 
   static constexpr uint64_t cost = 1; // 1 throttle unit per request
   static constexpr uint64_t id = 0; // ids unused
-  //---------------------------------------------------------------------------
-  [[maybe_unused]]static void show_ref_tags(const DoutPrefixProvider* dpp, std::string &oid, rgw_rados_ref &obj)
-  {
-    unsigned idx = 0;
-    std::list<std::string> refs;
-    std::string wildcard_tag;
-    int ret = cls_refcount_read(obj.ioctx, oid, &refs, true);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << __func__ << "::ERR: manifest::failed cls_refcount_read()"
-                        << " idx=" << idx << dendl;
-      return;
-    }
-
-    for (list<string>::iterator iter = refs.begin(); iter != refs.end(); ++iter) {
-      ldpp_dout(dpp, 20) << __func__ << "::manifest::" << oid << "::" << idx
-                         << "::TAG=" << *iter << dendl;
-    }
-  }
 
   //---------------------------------------------------------------------------
   int Background::free_tail_objs_by_manifest(const string   &ref_tag,
