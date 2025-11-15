@@ -1,3 +1,11 @@
 .pre-wrap {
   white-space: pre-wrap;
 }
+
+// Added max-width for alignment. Value isn’t used by Carbon table but needed.
+// To be reviewed later.
+.key-value-table ::ng-deep .cds--data-table td {
+  max-width: 1rem;
+  overflow-wrap: break-word;
+  text-overflow: ellipsis;
+}
