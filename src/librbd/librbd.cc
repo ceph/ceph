@@ -26,6 +26,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/TracepointProvider.h"
+#include "include/buffer_raw.h"
 #include "include/Context.h"
 
 #include "cls/rbd/cls_rbd_client.h"
@@ -6404,6 +6405,25 @@ extern "C" int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
   librbd::api::Io<>::aio_write(
     *ictx, aio_completion, off, len, std::move(bl), op_flags, true);
   tracepoint(librbd, aio_write_exit, 0);
+  return 0;
+}
+
+extern "C" int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
+                                         size_t len, const char *buf,
+                                         uint32_t precomputed_crc32c,
+                                         rbd_completion_t c, int op_flags)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  librbd::RBD::AioCompletion *comp = (librbd::RBD::AioCompletion *)c;
+
+  auto aio_completion = get_aio_completion(comp);
+  auto raw = create_write_raw(ictx, buf, len, aio_completion);
+  raw->set_crc(std::make_pair(0, len),
+               std::make_pair(0, precomputed_crc32c));
+  bufferlist bl;
+  bl.push_back(std::move(raw));
+  librbd::api::Io<>::aio_write(
+    *ictx, aio_completion, off, len, std::move(bl), op_flags, true);
   return 0;
 }
 
