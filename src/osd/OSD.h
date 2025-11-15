@@ -481,6 +481,9 @@ public:
   void clear_sent_ready_to_merge();
   void prune_sent_ready_to_merge(const OSDMapRef& osdmap);
 
+  // -- pg migrated pool --
+  void send_pg_migrated_pool(std::optional<int64_t> migration_target, pg_t pgid);
+
   // -- pg_temp --
 private:
   ceph::mutex pg_temp_lock = ceph::make_mutex("OSDService::pg_temp_lock");
@@ -2113,6 +2116,7 @@ private:
     case MSG_OSD_PG_REMOVE:
     case MSG_OSD_BACKFILL_RESERVE:
     case MSG_OSD_RECOVERY_RESERVE:
+    case MSG_OSD_POOLMIGRATION_RESERVE:
     case MSG_OSD_REPOP:
     case MSG_OSD_REPOPREPLY:
     case MSG_OSD_PG_PUSH:

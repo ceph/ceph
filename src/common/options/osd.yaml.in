@@ -75,6 +75,14 @@ options:
     work (e.g., replicating degraded objects).
   default: 0
   with_legacy: true
+- name: osd_pool_migration_retry_interval
+  type: float
+  level: advanced
+  desc: how frequently to retry pool migration reservations after being denied (e.g., due
+    to a full OSD)
+  fmt_desc: The number of seconds to wait before retrying pool migration requests.
+  default: 30
+  with_legacy: true
 - name: osd_backfill_retry_interval
   type: float
   level: advanced

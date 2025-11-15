@@ -36,6 +36,7 @@
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
+#include "messages/MPoolMigrationReserve.h"
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGPull.h"
@@ -1332,6 +1333,10 @@ void PG::clear_want_pg_temp() {
   osd->remove_want_pg_temp(get_pgid().pgid);
 }
 
+void PG::send_pg_migrated_pool() {
+  osd->send_pg_migrated_pool(pool.info.migration_target, get_pgid().pgid);
+}
+
 void PG::on_role_change() {
   requeue_ops(waiting_for_peered);
   plpg_on_role_change();
@@ -1579,6 +1584,16 @@ void PG::on_recovery_reserved()
   queue_recovery();
 }
 
+void PG::on_pool_migration_reserved()
+{
+  queue_recovery();
+}
+
+void PG::on_pool_migration_suspended()
+{
+  //BILL:FIXME: need to clean up async work here - see on_backfill_suspended for example
+}
+
 void PG::set_not_ready_to_merge_target(pg_t pgid, pg_t src)
 {
   osd->set_not_ready_to_merge_target(pgid, src);
@@ -1670,7 +1685,7 @@ static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t loca
 // However, setting above zero reserves space for backfill and requires
 // the OSDService::stat_lock which protects all OSD usage
 bool PG::try_reserve_recovery_space(
-  int64_t primary_bytes, int64_t local_bytes) {
+  int64_t primary_bytes, int64_t local_bytes, int64_t num_objects) {
   // Use tentative_bacfill_full() to make sure enough
   // space is available to handle target bytes from primary.
 
@@ -1687,15 +1702,20 @@ bool PG::try_reserve_recovery_space(
   // statfs using ps->primary_bytes.
   uint64_t pending_adjustment = 0;
   if (primary_bytes) {
+    if (!num_objects) {
+      // backfill uses number of objects from the stats, pool migration
+      // tells the target PG how many objects will be migrated
+      num_objects = info.stats.stats.sum.num_objects;
+    }
     // For erasure coded pool overestimate by a full stripe per object
     // because we don't know how each objected rounded to the nearest stripe
     if (pool.info.is_erasure()) {
       primary_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       primary_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	info.stats.stats.sum.num_objects;
+	num_objects;
       local_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
       local_bytes += get_pgbackend()->get_ec_stripe_chunk_size() *
-	info.stats.stats.sum.num_objects;
+	num_objects;
     }
     pending_adjustment = pending_backfill(
       cct,

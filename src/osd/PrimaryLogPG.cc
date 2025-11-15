@@ -1781,6 +1781,7 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
       _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct, ec_extent_cache_lru)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   new_backfill(false),
+  new_pool_migration(false),
   temp_seq(0),
   snap_trimmer_machine(this)
 {
@@ -2194,6 +2195,27 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
+  // pool migration
+  if (pi->is_migration_src()) {
+    if (!op->has_features(CEPH_FEATUREMASK_POOL_MIGRATION)) {
+      // client doesn't support pool migration - meant to
+      // be blocked by min_compat_client
+      osd->reply_op_error(op, -EIO);
+      return;
+    }
+    if (m->get_hobj() < last_pool_migration_started) {
+      // object has been migrated to the target pool
+      dout(20) << __func__ << ": object has been migrated to pool "
+	       << *pi->migration_target << dendl;
+      //BILL:FIXME: Need to change client to handle EXDEV (retry request to
+      //the target pool) and find a way of returning
+      //last_pool_migration_started here so the client can update its cached
+      //copy of the watermark so it directs I/O to the correct pool
+      osd->reply_op_error(op, -EXDEV);
+      return;
+    }
+  }
+
   dout(10) << "do_op " << *m
 	   << (op->may_write() ? " may_write" : "")
 	   << (op->may_read() ? " may_read" : "")
@@ -2201,7 +2223,6 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	   << " -> " << (write_ordered ? "write-ordered" : "read-ordered")
 	   << " flags " << ceph_osd_flag_string(m->get_flags())
 	   << dendl;
-
 
   // missing object?
   if (is_unreadable_object(head)) {
@@ -13058,6 +13079,68 @@ void PrimaryLogPG::on_shutdown()
   }
 }
 
+hobject_t PrimaryLogPG::earliest_pool_migration()
+{
+  vector<hobject_t> sentries;
+  hobject_t current;
+  hobject_t next;
+  hobject_t _max = hobject_t::get_max();
+  auto missing_iter_end = recovery_state.get_pg_log().get_missing().get_items().end();
+
+  // Find the lowest object in the PG searching both the object store and the
+  // missing list
+  while (true) {
+    //BILL::FIXME: Listing one object at a time is expensive. We should cache a
+    //list of objects like update_range and scan_range_primary do
+    map<hobject_t, pg_missing_item>::const_iterator missing_iter =
+      recovery_state.get_pg_log().get_missing().get_items().lower_bound(current);
+
+    int r = pgbackend->objects_list_partial(
+	    current,
+	    1,
+	    1,
+	    &sentries,
+	    &next);
+    if (r != 0) {
+      // Object store should always be able to list objects for a valid colleciton
+      derr << __func__ << ": objects_list_partial failed " << r << dendl;
+      return hobject_t();
+    }
+
+    if (sentries.empty()) {
+      current = _max;
+    } else {
+      current = sentries.front();
+    }
+
+    while ((missing_iter != missing_iter_end) &&
+	   (missing_iter->first < current)) {
+      if (!recovery_state.get_missing_loc().is_deleted(missing_iter->first)) {
+	// Earliest object in the PG is on the missing list but not
+	// in the object store
+	return missing_iter->first;
+      }
+      // Missing list object has been deleted, find the next object
+      // on the missing list
+      ++missing_iter;
+    }
+    if ((missing_iter != missing_iter_end) &&
+	(missing_iter->first == current)) {
+      if (!recovery_state.get_missing_loc().is_deleted(missing_iter->first)) {
+	// Object in object store is out of date, but not pending a delete.
+	// Found the lowest object
+	break;
+      }
+      // Object is going to be deleted, find the next object
+      current = next;
+    } else {
+      // Found the lowest object
+      break;
+    }
+  }
+  return current;
+}
+
 void PrimaryLogPG::on_activate_complete()
 {
   check_local();
@@ -13091,6 +13174,14 @@ void PrimaryLogPG::on_activate_complete()
 	  get_osdmap_epoch(),
 	  get_osdmap_epoch(),
 	  PeeringState::RequestBackfill())));
+  } else if (needs_pool_migration()) {
+    dout(10) << "activate queueing pool migration" << dendl;
+    queue_peering_event(
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  get_osdmap_epoch(),
+	  get_osdmap_epoch(),
+	  PeeringState::DoPoolMigration())));
   } else {
     dout(10) << "activate all replicas clean, no recovery" << dendl;
     queue_peering_event(
@@ -13118,6 +13209,14 @@ void PrimaryLogPG::on_activate_complete()
     }
   }
 
+  if (pool.info.is_pg_migrating(info.pgid.pgid)) {
+    last_pool_migration_started = earliest_pool_migration();
+    new_pool_migration = true;
+  } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
+    last_pool_migration_started = hobject_t::get_max();
+  } else {
+    last_pool_migration_started = hobject_t();
+  }
   hit_set_setup();
   agent_setup();
 }
@@ -13340,7 +13439,8 @@ bool PrimaryLogPG::start_recovery_ops(
   recovery_queued = false;
 
   if (!state_test(PG_STATE_RECOVERING) &&
-      !state_test(PG_STATE_BACKFILLING)) {
+      !state_test(PG_STATE_BACKFILLING) &&
+      !state_test(PG_STATE_MIGRATING)) {
     /* TODO: I think this case is broken and will make do_recovery()
      * unhappy since we're returning false */
     dout(10) << "recovery raced and were queued twice, ignoring!" << dendl;
@@ -13405,6 +13505,11 @@ bool PrimaryLogPG::start_recovery_ops(
     }
   }
 
+
+  if (state_test(PG_STATE_MIGRATING)) {
+      started += recover_pool_migration(max - started, handle, &work_in_progress);
+  }
+
   dout(10) << " started " << started << dendl;
   osd->logger->inc(l_osd_rop, started);
 
@@ -13453,6 +13558,14 @@ bool PrimaryLogPG::start_recovery_ops(
             get_osdmap_epoch(),
             get_osdmap_epoch(),
             PeeringState::RequestBackfill())));
+    } else if (needs_pool_migration()) {
+      dout(10) << "recovery done, queuing pool migration" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::DoPoolMigration())));
     } else {
       dout(10) << "recovery done, no backfill" << dendl;
       state_clear(PG_STATE_FORCED_BACKFILL);
@@ -13463,19 +13576,37 @@ bool PrimaryLogPG::start_recovery_ops(
             get_osdmap_epoch(),
             PeeringState::AllReplicasRecovered())));
     }
-  } else { // backfilling
+  } else if (state_test(PG_STATE_BACKFILLING)) { // backfilling
     state_clear(PG_STATE_BACKFILLING);
     state_clear(PG_STATE_FORCED_BACKFILL);
     state_clear(PG_STATE_FORCED_RECOVERY);
-    dout(10) << "recovery done, backfill done" << dendl;
+    if (needs_pool_migration()) {
+      dout(10) << "backfill done, queuing pool migration" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::DoPoolMigration())));
+    } else {
+      dout(10) << "recovery done, backfill done" << dendl;
+      queue_peering_event(
+        PGPeeringEventRef(
+          std::make_shared<PGPeeringEvent>(
+            get_osdmap_epoch(),
+            get_osdmap_epoch(),
+            PeeringState::Backfilled())));
+    }
+  } else { // migrating
+    state_clear(PG_STATE_MIGRATING);
+    dout(10) << "migration done" << dendl;
     queue_peering_event(
       PGPeeringEventRef(
         std::make_shared<PGPeeringEvent>(
           get_osdmap_epoch(),
           get_osdmap_epoch(),
-          PeeringState::Backfilled())));
+          PeeringState::PoolMigrationDone())));
   }
-
   return false;
 }
 
@@ -14583,6 +14714,42 @@ void PrimaryLogPG::check_local()
   }
 }
 
+// ===========================
+// pool migration
+
+/**
+ * recover_pool_migration
+ *
+ * Schedule work for pool migration
+ */
+uint64_t PrimaryLogPG::recover_pool_migration(
+  uint64_t max,
+  ThreadPool::TPHandle &handle, bool *work_started)
+{
+  //BILL:FIXME: Stub function
+  dout(10) << __func__ << " (" << max << ")"
+	   << " last_pool_migration_started " << last_pool_migration_started
+	   << (new_pool_migration ? " new_pool_migration":"")
+	   << dendl;
+
+  // Initialize from prior migration state
+  if (new_pool_migration) {
+    // on_activate_complete() was called prior to getting here
+    ceph_assert(last_pool_migration_started == earliest_pool_migration());
+    new_pool_migration = false;
+
+    // initialize PoolMigrationIntervals
+    //BILL:FIXME: Stub function
+    //pool_migration_info.reset(last_pool_migration_started);
+    //
+    //backfills_in_flight.clear();
+    //pending_backfill_updates.clear();
+  }
+
+  // Don't change work_started and return 0 indicating that no work was started,
+  // this implies the migration has completed.
+  return 0;
+}
 
 
 // ===========================

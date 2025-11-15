@@ -62,6 +62,13 @@ public:
     return request->get_connection()->has_feature(f);
 #endif
   }
+  bool has_features(uint64_t f) const {
+#ifdef WITH_CRIMSON
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
+    return request->get_connection()->has_features(f);
+#endif
+  }
 
 private:
   Message *request; /// the logical request we are tracking

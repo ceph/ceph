@@ -972,6 +972,8 @@ OSD::do_ms_dispatch(
     [[fallthrough]];
   case MSG_OSD_RECOVERY_RESERVE:
     [[fallthrough]];
+  case MSG_OSD_POOLMIGRATION_RESERVE:
+    [[fallthrough]];
   case MSG_OSD_PG_LOG:
     return handle_peering_op(conn, boost::static_pointer_cast<MOSDPeeringOp>(m));
   case MSG_OSD_PG_REMOVE:
