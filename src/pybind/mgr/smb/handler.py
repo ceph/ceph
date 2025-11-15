@@ -22,6 +22,7 @@ from . import config_store, external, resources
 from .enums import (
     AuthMode,
     CephFSStorageProvider,
+    HostAccess,
     JoinSourceType,
     LoginAccess,
     LoginCategory,
@@ -733,6 +734,7 @@ def _generate_share(
         cfg['options'][f'{ceph_vfs}:proxy'] = proxy_val
     # extend share with user+group login access lists
     _generate_share_login_control(share, cfg)
+    _generate_share_hosts_access(share, cfg)
     # extend share with custom options
     custom_opts = share.cleaned_custom_smb_share_options
     if custom_opts:
@@ -775,6 +777,30 @@ def _generate_share_login_control(
         cfg['options']['write list'] = ' '.join(write_list)
     if admin_users:
         cfg['options']['admin users'] = ' '.join(admin_users)
+
+
+def _generate_share_hosts_access(
+    share: resources.Share, cfg: Simplified
+) -> None:
+    if not share.hosts_access:
+        return
+    default_access = HostAccess.ALLOW
+    hosts_allow: List[str] = []
+    hosts_deny: List[str] = []
+    for entry in share.hosts_access:
+        if entry.access is HostAccess.DENY:
+            hosts_deny.append(entry.config_name)
+        elif entry.access is HostAccess.ALLOW:
+            hosts_allow.append(entry.config_name)
+            default_access = HostAccess.DENY
+        else:
+            raise ValueError('invalid access type: {entry.access!r}')
+    if default_access is HostAccess.DENY:
+        hosts_deny.append('ALL')
+    if hosts_allow:
+        cfg['options']['hosts allow'] = ', '.join(hosts_allow)
+    if hosts_deny:
+        cfg['options']['hosts deny'] = ', '.join(hosts_deny)
 
 
 def _generate_config(
