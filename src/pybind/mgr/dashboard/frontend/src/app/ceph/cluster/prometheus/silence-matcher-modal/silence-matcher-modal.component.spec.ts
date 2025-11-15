@@ -1,12 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
-
-import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
-import _ from 'lodash';
-import { of } from 'rxjs';
-
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 import {
   configureTestBed,
@@ -14,41 +11,56 @@ import {
   FormHelper,
   PrometheusHelper
 } from '~/testing/unit-test-helper';
+import {
+  CheckboxModule,
+  ComboBoxModule,
+  InputModule,
+  ModalModule,
+  SelectModule
+} from 'carbon-components-angular';
 import { SilenceMatcherModalComponent } from './silence-matcher-modal.component';
+import { CUSTOM_ELEMENTS_SCHEMA } from '@angular/core';
+import { of } from 'rxjs';
 
 describe('SilenceMatcherModalComponent', () => {
   let component: SilenceMatcherModalComponent;
   let fixture: ComponentFixture<SilenceMatcherModalComponent>;
-
-  let formH: FormHelper;
-  let fixtureH: FixtureHelper;
+  let fixtureHelper: FixtureHelper;
+  let formHelper: FormHelper;
   let prometheus: PrometheusHelper;
 
   configureTestBed({
-    declarations: [SilenceMatcherModalComponent],
     imports: [
-      HttpClientTestingModule,
       SharedModule,
-      NgbTypeaheadModule,
+      HttpClientTestingModule,
       RouterTestingModule,
-      ReactiveFormsModule
+      ReactiveFormsModule,
+      ToastrModule.forRoot(),
+      InputModule,
+      SelectModule,
+      ComboBoxModule,
+      ModalModule,
+      CheckboxModule
     ],
+    declarations: [SilenceMatcherModalComponent],
+    schemas: [CUSTOM_ELEMENTS_SCHEMA],
     providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(SilenceMatcherModalComponent);
     component = fixture.componentInstance;
-
-    fixtureH = new FixtureHelper(fixture);
-    formH = new FormHelper(component.form);
+    component.ngOnInit();
+    fixture.detectChanges();
+    fixtureHelper = new FixtureHelper(fixture);
+    formHelper = new FormHelper(component.form);
     prometheus = new PrometheusHelper();
 
     component.rules = [
       prometheus.createRule('alert0', 'someSeverity', [prometheus.createAlert('alert0')]),
       prometheus.createRule('alert1', 'someSeverity', [])
     ];
-    fixture.detectChanges();
+    component.possibleValues = ['alert0', 'alert1', 'someInstance', 'someJob', 'someSeverity'];
   });
 
   it('should create', () => {
@@ -56,8 +68,8 @@ describe('SilenceMatcherModalComponent', () => {
   });
 
   it('should have a name field', () => {
-    formH.expectError('name', 'required');
-    formH.expectValidChange('name', 'alertname');
+    formHelper.expectError('name', 'required');
+    formHelper.expectValidChange('name', 'alertname');
   });
 
   it('should only allow a specific set of name attributes', () => {
@@ -72,7 +84,7 @@ describe('SilenceMatcherModalComponent', () => {
       severity: ['someSeverity']
     };
     Object.keys(expectations).forEach((key) => {
-      formH.setValue('name', key);
+      formHelper.setValue('name', key);
       expect(component.possibleValues).toEqual(expectations[key]);
     });
   });
@@ -84,7 +96,10 @@ describe('SilenceMatcherModalComponent', () => {
         value: value,
         isRegex: false
       });
-      expect(fixtureH.getText('#match-state')).toBe(helpText);
+      fixture.detectChanges();
+
+      const matchState = fixture.nativeElement.querySelector('#match-state');
+      expect(matchState?.textContent?.trim()).toBe(helpText);
     };
 
     it('should match no rule and no alert', () => {
@@ -113,28 +128,33 @@ describe('SilenceMatcherModalComponent', () => {
     });
 
     it('should not show match-state if regex is checked', () => {
-      fixtureH.expectElementVisible('#match-state', false);
-      formH.setValue('name', 'severity');
-      formH.setValue('value', 'someSeverity');
-      fixtureH.expectElementVisible('#match-state', true);
-      formH.setValue('isRegex', true);
-      fixtureH.expectElementVisible('#match-state', false);
+      fixture.detectChanges();
+      fixtureHelper.expectElementVisible('#match-state', false);
+
+      formHelper.setValue('name', 'severity');
+      formHelper.setValue('value', 'someSeverity');
+      fixture.detectChanges();
+      fixtureHelper.expectElementVisible('#match-state', true);
+
+      formHelper.setValue('isRegex', true);
+      fixture.detectChanges();
+      fixtureHelper.expectElementVisible('#match-state', false);
     });
   });
 
   it('should only enable value field if name was set', () => {
     const value = component.form.get('value');
     expect(value.disabled).toBeTruthy();
-    formH.setValue('name', component.nameAttributes[0]);
+    formHelper.setValue('name', component.nameAttributes[0]);
     expect(value.enabled).toBeTruthy();
-    formH.setValue('name', null);
+    formHelper.setValue('name', null);
     expect(value.disabled).toBeTruthy();
   });
 
   it('should have a value field', () => {
-    formH.setValue('name', component.nameAttributes[0]);
-    formH.expectError('value', 'required');
-    formH.expectValidChange('value', 'alert0');
+    formHelper.setValue('name', component.nameAttributes[0]);
+    formHelper.expectError('value', 'required');
+    formHelper.expectValidChange('value', 'alert0');
   });
 
   it('should test preFillControls', () => {
@@ -161,49 +181,60 @@ describe('SilenceMatcherModalComponent', () => {
     component.onSubmit();
   });
 
-  describe('typeahead', () => {
-    let equality: { [key: string]: boolean };
-    let expectations: { [key: string]: string[] };
+  it('should emit submitAction on valid form submission', fakeAsync(() => {
+    jest.spyOn(component.submitAction, 'emit');
+    tick();
+    fixture.detectChanges();
 
-    const search = (s: string) => {
-      Object.keys(expectations).forEach((key) => {
-        formH.setValue('name', key);
-        component.search(of(s)).subscribe((result) => {
-          // Expect won't fail the test inside subscribe
-          equality[key] = _.isEqual(result, expectations[key]);
-        });
-        expect(equality[key]).toBeTruthy();
-      });
+    formHelper.setValue('name', 'test_name');
+    formHelper.setValue('value', 'test_value');
+    fixture.detectChanges();
+    tick();
+
+    component.onSubmit();
+    expect(component.submitAction.emit).toHaveBeenCalledWith({
+      name: 'test_name',
+      value: 'test_value',
+      isRegex: false
+    });
+  }));
+
+  describe('typeahead', () => {
+    const expectations = {
+      name: ['alert0', 'alert1'],
+      instance: ['someInstance']
     };
 
-    beforeEach(() => {
-      equality = {
-        alertname: false,
-        instance: false,
-        job: false,
-        severity: false
-      };
-      expectations = {
-        alertname: ['alert0', 'alert1'],
-        instance: ['someInstance'],
-        job: ['someJob'],
-        severity: ['someSeverity']
-      };
-    });
+    it('should show all values on empty input', fakeAsync(async () => {
+      for (const key of Object.keys(expectations) as Array<keyof typeof expectations>) {
+        component.possibleValues = expectations[key];
 
-    it('should show all values on name switch', () => {
-      search('');
-    });
+        let result: string[] = [];
+        component.search(of('')).subscribe((res) => (result = res));
 
-    it('should search for "some"', () => {
-      expectations['alertname'] = [];
-      search('some');
-    });
+        tick(200);
+        expect(result).toEqual(expectations[key]);
+      }
+    }));
 
-    it('should search for "er"', () => {
-      expectations['instance'] = [];
-      expectations['job'] = [];
-      search('er');
-    });
+    it('should search for "some"', fakeAsync(async () => {
+      component.possibleValues = expectations['instance'];
+
+      let result: string[] = [];
+      component.search(of('some')).subscribe((res) => (result = res));
+
+      tick(200);
+      expect(result).toEqual(['someInstance']);
+    }));
+
+    it('should search for "er"', fakeAsync(async () => {
+      component.possibleValues = expectations['name'];
+
+      let result: string[] = [];
+      component.search(of('er')).subscribe((res) => (result = res));
+
+      tick(200);
+      expect(result).toEqual(expectations['name'].filter((v) => v.toLowerCase().includes('er')));
+    }));
   });
 });
