@@ -1451,6 +1451,7 @@ private:
       partial_len = direct_length;
     }
     LOG_PREFIX(TransactionManager::pin_to_extent);
+    bool fill = direct_partial_off == 0 && partial_len == direct_length;
     SUBTRACET(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
               t, pin, direct_partial_off, partial_len);
     return cache->get_absent_extent<T>(
@@ -1473,8 +1474,19 @@ private:
 	maybe_init(extent);
 	extent.set_seen_by_users();
       }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
-      if (ref->is_fully_loaded()) {
+    ).si_then([FNAME, &t, pin=pin, fill, this](auto ref) mutable -> ret {
+      // NOTE: We should skip crc verification in this case.
+      // There is a data race that makes checksum verification unsafe.
+      // Consider a scenario where the current read request only requires a
+      // portion of data from the extent. After Cache::read_extent finishes
+      // but before this lambda is invoked, another transaction/continuation
+      // may start to fill the entire extent, making the extent fully loaded
+      // at that moment. When the previous partial read callback is invoked,
+      // the extent's bufferptr is fully loaded but the data may be incomplete.
+      // We should only verify the checksum when the current read request fills
+      // the entire extent here.
+      if (fill) {
+	assert(ref->is_fully_loaded());
         auto crc = ref->calc_crc32c();
         SUBTRACET(
 	  seastore_tm,
