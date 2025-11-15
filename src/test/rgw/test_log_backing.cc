@@ -228,6 +228,7 @@ CORO_TEST_F(LogBacking, GenerationWN, NeoRadosTest) {
   lg1->got_entries.clear();
 
   auto rados2 = co_await neorados::RADOS::Builder{}
+    .set_no_daemon_actions()
     .build(asio_context, boost::asio::use_awaitable);
 
   auto lg2 = co_await logback_generations::init<generations>(

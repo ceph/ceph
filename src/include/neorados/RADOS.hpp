@@ -1316,6 +1316,7 @@ public:
     std::vector<std::pair<std::string, std::string>> configs;
     bool no_default_conf = false;
     bool no_mon_conf = false;
+    bool no_daemon_actions = false;
 
   public:
     Builder() = default;
@@ -1334,6 +1335,10 @@ public:
     }
     Builder& set_no_mon_conf() {
       no_mon_conf = true;
+      return *this;
+    }
+    Builder& set_no_daemon_actions() {
+      no_daemon_actions = true;
       return *this;
     }
     Builder& set_conf_option(std::string_view opt, std::string_view val) {

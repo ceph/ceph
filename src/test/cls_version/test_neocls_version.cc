@@ -212,7 +212,8 @@ TEST(neocls_version_bare, lambdata)
 
   std::optional<neorados::RADOS> rados;
   neorados::IOContext pool;
-  neorados::RADOS::Builder{}.build(c, [&](error_code ec, neorados::RADOS r_) {
+  neorados::RADOS::Builder{}.set_no_daemon_actions()
+    .build(c, [&](error_code ec, neorados::RADOS r_) {
     ASSERT_FALSE(ec);
     rados = std::move(r_);
     create_pool(*rados, get_temp_pool_name(),

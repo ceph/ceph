@@ -626,7 +626,9 @@ TEST(neocls_fifo_bare, lambdata)
   static constexpr auto max_entries = 10u;
   std::array<entry, max_entries> list_entries;
   bool completed = false;
-  neorados::RADOS::Builder{}.build(
+  neorados::RADOS::Builder {}
+    .set_no_daemon_actions()
+    .build(
     c,
     [&](sys::error_code ec, neorados::RADOS r_) {
       ASSERT_FALSE(ec);

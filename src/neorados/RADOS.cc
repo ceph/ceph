@@ -839,6 +839,8 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
     flags |= CINIT_FLAG_NO_DEFAULT_CONFIG_FILE;
   if (no_mon_conf)
     flags |= CINIT_FLAG_NO_MON_CONFIG;
+  if (no_daemon_actions)
+    flags |= CINIT_FLAG_NO_DAEMON_ACTIONS;
 
   CephContext *cct = common_preinit(ci, env, flags);
   if (cluster)

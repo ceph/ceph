@@ -189,6 +189,7 @@ public:
   /// \brief Create RADOS handle and pool for the test
   boost::asio::awaitable<void> CoSetUp() override {
     rados_ = co_await neorados::RADOS::Builder{}
+      .set_no_daemon_actions()
       .build(asio_context, boost::asio::use_awaitable);
     dpp_ = std::make_unique<DoutPrefix>(rados().cct(), 0, prefix().data());
     pool_.set_pool(co_await create_pool());
