@@ -1192,6 +1192,8 @@ protected:
   hobject_t last_pool_migration_started;
   bool new_pool_migration;
 
+  hobject_t earliest_pool_migration();
+
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
