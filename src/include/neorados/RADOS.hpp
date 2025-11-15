@@ -19,6 +19,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <expected>
 #include <memory>
 #include <optional>
 #include <tuple>
@@ -41,10 +42,6 @@
 #include <boost/uuid/uuid.hpp>
 
 #include <boost/system/error_code.hpp>
-
-// Will be in C++20!
-
-#include "include/expected.hpp"
 
 // Had better be in C++20. Why is this not in Boost?
 
@@ -1689,7 +1686,7 @@ public:
       }, consigned);
   }
 
-  tl::expected<ceph::timespan, boost::system::error_code>
+  std::expected<ceph::timespan, boost::system::error_code>
   check_watch(uint64_t cookie);
 
   using NotifySig =
@@ -1857,7 +1854,7 @@ private:
 	      std::optional<std::chrono::seconds> timeout,
 	      std::uint32_t queue_size);
   void next_notification_(uint64_t cookie, NextNotificationComp c);
-  tl::expected<ceph::timespan, boost::system::error_code>
+  std::expected<ceph::timespan, boost::system::error_code>
   watch_check_(std::uint64_t cookie);
   void notify_ack_(Object o, IOContext _ioc,
 		   uint64_t notify_id,

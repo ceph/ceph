@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "include/rados.h"
 
+#include <expected>
 #include <map>
 
 namespace detail {
@@ -103,29 +104,29 @@ public:
 
 namespace crimson::common {
 
-using do_tmap_up_ret = tl::expected<bufferlist, int>;
+using do_tmap_up_ret = std::expected<bufferlist, int>;
 do_tmap_up_ret do_tmap_up(bufferlist::const_iterator in, bufferlist contents)
 {
   detail::TMapContents tmap;
   auto bliter = contents.cbegin();
   int r = tmap.decode(bliter);
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
   r = tmap.update(in);
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
   return tmap.encode();
 }
 
-using do_tmap_up_ret = tl::expected<bufferlist, int>;
+using do_tmap_up_ret = std::expected<bufferlist, int>;
 do_tmap_up_ret do_tmap_put(bufferlist::const_iterator in)
 {
   detail::TMapContents tmap;
   int r = tmap.decode(in);
   if (r < 0) {
-    return tl::unexpected(r);
+    return std::unexpected(r);
   }
   return tmap.encode();
 }

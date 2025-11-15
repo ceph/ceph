@@ -15,6 +15,7 @@
 
 #include <boost/asio/associated_executor.hpp>
 #include <boost/asio/error.hpp>
+#include <expected>
 #include <optional>
 #include <deque>
 #include <queue>
@@ -1610,13 +1611,13 @@ void RADOS::notify_ack_(Object o, IOContext _ioc,
 		       nullptr, ioc->extra_op_flags, std::move(c));
 }
 
-tl::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
+std::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
 {
   auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
   if (impl->objecter->is_valid_watch(linger_op)) {
     return impl->objecter->linger_check(linger_op);
   } else {
-    return tl::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
+    return std::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
   }
 }
 

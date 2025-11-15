@@ -2,13 +2,13 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <boost/smart_ptr/intrusive_ptr.hpp>
+#include <expected>
 #include <fmt/format.h>
 
 #include "common/hobject.h"
 #include "crimson/os/alienstore/alien_store.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
-#include "include/expected.hpp"
 #include "objectstore_tool.h"
 #include "seastar/core/future.hh"
 #include "seastar/core/smp.hh"
@@ -259,62 +259,62 @@ seastar::future<bool> StoreTool::set_bytes(
 }
 
 // Object attribute operations
-seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>> StoreTool::get_attrs(
+seastar::future<std::expected<FuturizedStore::Shard::attrs_t, std::string>> StoreTool::get_attrs(
   const coll_t& cid,
   const ghobject_t& oid)
 {
   return seastar::smp::submit_to(
     shard_id,
-    [this, cid, oid]() -> seastar::future<tl::expected<FuturizedStore::Shard::attrs_t, std::string>>
+    [this, cid, oid]() -> seastar::future<std::expected<FuturizedStore::Shard::attrs_t, std::string>>
   {
     auto coll = co_await store->get_sharded_store().open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
     if (!coll) {
-      co_return tl::make_unexpected(std::string("Failed to open collection: collection does not exist"));
+      co_return std::unexpected(std::string("Failed to open collection: collection does not exist"));
     }
     using attrs_t = FuturizedStore::Shard::attrs_t;
-    using ret_t = tl::expected<attrs_t, std::string>;
+    using ret_t = std::expected<attrs_t, std::string>;
 
     co_return co_await store->get_sharded_store()
       .get_attrs(coll, oid)   // ertr::future<attrs_t>
       .safe_then(
         [](attrs_t&& a) {
-          return ret_t{tl::in_place, std::move(a)};
+          return ret_t{std::in_place, std::move(a)};
         },
         FuturizedStore::Shard::get_attrs_ertr::all_same_way(
           [](const std::error_code& e) {
-            return ret_t{tl::unexpected<std::string>(e.message())};
+            return ret_t{std::unexpected<std::string>(e.message())};
           })
       );
   });
 }
 
-seastar::future<tl::expected<std::string, std::string>> StoreTool::get_attr(
+seastar::future<std::expected<std::string, std::string>> StoreTool::get_attr(
   const coll_t& cid,
   const ghobject_t& oid,
   const std::string& key)
 {
   return seastar::smp::submit_to(
     shard_id,
-    [this, cid, oid, key]() -> seastar::future<tl::expected<std::string, std::string>>
+    [this, cid, oid, key]() -> seastar::future<std::expected<std::string, std::string>>
   {
     auto coll = co_await store->get_sharded_store().open_collection(cid
     ).handle_exception([](std::exception_ptr) {
       return seastar::make_ready_future<FuturizedStore::Shard::CollectionRef>(nullptr);
     });
     if (!coll) {
-      co_return tl::make_unexpected(std::string("Failed to open collection: collection does not exist"));
+      co_return std::unexpected(std::string("Failed to open collection: collection does not exist"));
     }
-    using return_type = tl::expected<std::string, std::string>;
+    using return_type = std::expected<std::string, std::string>;
     co_return co_await store->get_sharded_store().get_attr(coll, oid, key).safe_then(
       [](auto&& bl) {
-        return return_type{tl::in_place, bl.to_str()};
+        return return_type{std::in_place, bl.to_str()};
       },
       FuturizedStore::Shard::get_attr_errorator::all_same_way(
         [](const std::error_code& e) {
-          return return_type{tl::unexpected<std::string>(e.message())};
+          return return_type{std::unexpected<std::string>(e.message())};
         }
       )
     );

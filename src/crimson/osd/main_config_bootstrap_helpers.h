@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <expected>
 #include <iostream>
 #include <fstream>
 #include <random>
@@ -13,7 +14,6 @@
 #include <seastar/core/future.hh>
 
 #include "common/ceph_argparse.h"
-#include "include/expected.hpp"
 #include "include/random.h"
 
 namespace crimson::osd {
@@ -85,7 +85,7 @@ struct early_config_t {
  * therefore be called very early in main().  (See implementation for an
  * explanation).
  */
-tl::expected<early_config_t, int>
+std::expected<early_config_t, int>
 get_early_config(int argc, const char *argv[]);
 
 }
