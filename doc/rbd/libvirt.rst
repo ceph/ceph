@@ -45,7 +45,7 @@ cloud solutions like OpenStack, OpenNebula or CloudStack. The cloud solution use
 ``libvirt`` to  interact with QEMU/KVM, and QEMU/KVM interacts with Ceph block
 devices via  ``librbd``. See `Block Devices and OpenStack`_,
 `Block Devices and OpenNebula`_ and `Block Devices and CloudStack`_ for details.
-See `Installation`_ for installation details.
+See :ref:`install-overview` for installation details.
 
 You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 ``libvirt`` API. See `libvirt Virtualization API`_ for details.
@@ -63,7 +63,7 @@ Configuring Ceph
 
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
-#. `Create a pool`_. The following example uses the
+#. :ref:`Create a pool <createpool>`. The following example uses the
    pool name ``libvirt-pool``.::
 
 	ceph osd pool create libvirt-pool
@@ -76,7 +76,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
         rbd pool init <pool-name>
 
-#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and
+#. :ref:`Create a Ceph User <rados_ops_adding_a_user>` (or use ``client.admin`` for version 0.9.7 and
    earlier). The following example uses the Ceph user name ``client.libvirt``
    and references ``libvirt-pool``. ::
 
@@ -87,7 +87,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	ceph auth ls
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``,
-   not the Ceph name ``client.libvirt``. See `User Management - User`_ and
+   not the Ceph name ``client.libvirt``. See :ref:`User Management - User <rados-ops-user>` and
    `User Management - CLI`_ for a detailed explanation of the difference
    between ID and name.
 
@@ -230,8 +230,8 @@ commands, refer to `Virsh Command Reference`_.
 
 #. Save the file.
 
-#. If your Ceph Storage Cluster has `Ceph Authentication`_ enabled (it does by
-   default), you must generate a secret. ::
+#. If your Ceph Storage Cluster has :ref:`rados-cephx-config-ref`
+   enabled (it does by default), you must generate a secret. ::
 
 	cat > secret.xml <<EOF
 	<secret ephemeral='no' private='no'>
@@ -307,19 +307,14 @@ If everything looks okay, you may begin using the Ceph block device
 within your VM.
 
 
-.. _Installation: ../../install
 .. _libvirt Virtualization API: http://www.libvirt.org
 .. _Block Devices and OpenStack: ../rbd-openstack
 .. _Block Devices and OpenNebula: https://docs.opennebula.io/stable/open_cluster_deployment/storage_setup/ceph_ds.html#datastore-internals
 .. _Block Devices and CloudStack: ../rbd-cloudstack
-.. _Create a pool: ../../rados/operations/pools#create-a-pool
-.. _Create a Ceph User: ../../rados/operations/user-management#add-a-user
 .. _create an image: ../qemu-rbd#creating-images-with-qemu
 .. _Virsh Command Reference: http://www.libvirt.org/virshcmdref.html
 .. _KVM/VirtManager: https://help.ubuntu.com/community/KVM/VirtManager
-.. _Ceph Authentication: ../../rados/configuration/auth-config-ref
 .. _Disks: http://www.libvirt.org/formatdomain.html#elementsDisks
 .. _rbd create: ../rados-rbd-cmds#creating-a-block-device-image
-.. _User Management - User: ../../rados/operations/user-management#user
 .. _User Management - CLI: ../../rados/operations/user-management#command-line-usage
 .. _Virtio: http://www.linux-kvm.org/page/Virtio
