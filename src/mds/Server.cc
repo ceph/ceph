@@ -27,6 +27,7 @@
 #include <boost/config/warning_disable.hpp>
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/range/adaptor/reversed.hpp>
+#include <boost/tokenizer.hpp>
 
 #include "MDSRank.h"
 #include "Locker.h"
@@ -6879,6 +6880,13 @@ const Server::XattrHandler Server::xattr_handlers[] = {
     setxattr: &Server::mirror_info_setxattr_handler,
     removexattr: &Server::mirror_info_removexattr_handler
   },
+  {
+    xattr_name: "ceph.dir.bal.mask",
+    description: "balancer mask xattr handler",
+    validate: &Server::bal_rank_mask_xattr_validate,
+    setxattr: &Server::bal_rank_mask_setxattr_handler,
+    removexattr: &Server::default_removexattr_handler
+  },
 };
 
 const Server::XattrHandler* Server::get_xattr_or_default_handler(std::string_view xattr_name) {
@@ -7045,6 +7053,39 @@ void Server::mirror_info_removexattr_handler(CInode *cur, InodeStoreBase::xattr_
                                              const XattrOp &xattr_op) {
   xattr_rm(xattrs, Server::MirrorXattrInfo::CLUSTER_ID);
   xattr_rm(xattrs, Server::MirrorXattrInfo::FS_ID);
+}
+
+int Server::bal_rank_mask_xattr_validate(CInode *cur, const InodeStoreBase::xattr_map_const_ptr xattrs,
+                                       XattrOp *xattr_op) {
+  int r = xattr_validate(cur, xattrs, xattr_op->xattr_name, xattr_op->op, xattr_op->flags);
+  if (r < 0)
+    return r;
+
+  if (xattr_op->op == CEPH_MDS_OP_RMXATTR) {
+    return 0;
+  }
+
+  std::string value = xattr_op->xattr_value.to_str();
+  if (value == "-1")
+    return 0;
+
+  CachedStackStringStream css;
+  max_mds_bitset_t rank_mask_bitset;
+  r = mds->balancer->rank_mask_list_str_to_bitset(cur, value, rank_mask_bitset, *css);
+  if (r != 0) {
+    dout(10) << __func__ << " invalid value " << css->str() << dendl;
+    return -CEPHFS_EINVAL;
+  }
+
+  return 0;
+}
+
+void Server::bal_rank_mask_setxattr_handler(CInode *cur, InodeStoreBase::xattr_map_ptr xattrs,
+                                      const XattrOp &xattr_op) {
+  if (xattr_op.xattr_value.to_str() != "-1")
+    xattr_set(xattrs, xattr_op.xattr_name, xattr_op.xattr_value);
+  else
+    xattr_rm(xattrs, xattr_op.xattr_name);
 }
 
 void Server::handle_client_setxattr(const MDRequestRef& mdr)
