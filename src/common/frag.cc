@@ -17,6 +17,10 @@
 #include "include/types.h" // for operator<<(std::set)
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "common/StackStringStream.h"
+
+#include <boost/endian/conversion.hpp>
+#include <fmt/format.h>
 
 #include <iostream>
 #include <sstream>
@@ -32,13 +36,29 @@ bool frag_t::parse(const char *s) {
 }
 
 void frag_t::encode(ceph::buffer::list& bl) const {
-  ceph::encode_raw(_enc, bl);
+  ceph::encode(_enc, bl);
 }
 
 void frag_t::decode(ceph::buffer::list::const_iterator& p) {
-  __u32 v;
-  ceph::decode_raw(v, p);
-  _enc = v;
+  ceph::decode(_enc, p);
+  if (!is_frag_valid()) {
+    /* Oops, did this get encoded as big-endian?
+     * See: https://tracker.ceph.com/issues/73792
+     */
+    auto nfg = frag_t(boost::endian::endian_reverse(_enc));
+    if (nfg.is_frag_valid()) {
+      std::cerr << "correcting byte swapped frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << _enc
+                << ") to frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << nfg._enc << ")"
+                << " aka " << nfg
+                << std::endl;
+      _enc = nfg._enc;
+    } else {
+      CachedStackStringStream css;
+      *css << "Invalid frag_t(0x" << std::hex << std::setfill('0') << std::setw(8) << _enc << ")";
+      throw ceph::buffer::malformed_input(css->str());
+    }
+  }
+
 }
 
 void frag_t::dump(ceph::Formatter *f) const {
@@ -57,13 +77,12 @@ std::list<frag_t> frag_t::generate_test_instances() {
 std::ostream& operator<<(std::ostream& out, const frag_t& hb)
 {
   //out << std::hex << hb.value() << std::dec << "/" << hb.bits() << '=';
-  unsigned num = hb.bits();
-  if (num) {
-    unsigned val = hb.value();
-    for (unsigned bit = 23; num; num--, bit--) 
-      out << ((val & (1<<bit)) ? '1':'0');
+  if (auto b = hb.bits(); b > 0) {
+    auto v = hb.value() >> hb.mask_shift();
+    return out << fmt::format("{0:0{1}b}*", v, b);
+  } else {
+    return out << '*';
   }
-  return out << '*';
 }
 
 bool fragtree_t::force_to_leaf(CephContext *cct, frag_t x) {
