@@ -927,7 +927,7 @@ options:
   level: advanced
   desc: Messenger implementation to use for network communication
   fmt_desc: Transport type used by Async Messenger. Can be ``async+posix``,
-    ``async+dpdk`` or ``async+rdma``. Posix uses standard TCP/IP networking and is
+    ``async+dpdk``, ``async+rdma``, or ``async+smc``. Posix uses standard TCP/IP networking and is
     default. Other transports may be experimental and support may be limited.
   default: async+posix
   flags:
