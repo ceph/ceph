@@ -117,8 +117,10 @@ private:
       : fs_mirror(fs_mirror) {
     }
 
-    void acquire_directory(std::string_view dir_path) override {
-      fs_mirror->handle_acquire_directory(dir_path);
+    void acquire_directory(std::string_view dir_path,
+                           bool sync_latest_snapshot = false,
+                           std::string_view sync_from_snapshot = "") override {
+      fs_mirror->handle_acquire_directory(dir_path, sync_latest_snapshot, sync_from_snapshot);
     }
 
     void release_directory(std::string_view dir_path) override {
@@ -192,7 +194,8 @@ private:
   void shutdown_instance_watcher();
   void handle_shutdown_instance_watcher(int r);
 
-  void handle_acquire_directory(std::string_view dir_path);
+  void handle_acquire_directory(std::string_view dir_path, bool sync_latest_snapshot,
+                                std::string_view sync_from_snapshot);
   void handle_release_directory(std::string_view dir_path);
 };
 
