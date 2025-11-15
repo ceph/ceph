@@ -1047,5 +1047,20 @@
         },
       ],
     },
+    {
+      name: 'certmgr',
+      rules: [
+        {
+          alert: 'CephCertMgrError',
+          'for': '5m',
+          expr: 'ceph_health_detail{name="CEPHADM_CERT_ERROR"} == 1',
+          labels: { severity: 'critical', type: 'ceph_default' },
+          annotations: {
+            summary: 'A cephadm service certificate has expired%(cluster)s' % $.MultiClusterSummary(),
+            description: "One or more cephadm-managed service certificates have expired. This may prevent services such as dashboards or external integrations (e.g., Grafana) from establishing secure connections.",
+          },
+        }
+      ],
+    },
   ],
 }

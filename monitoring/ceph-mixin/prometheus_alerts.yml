@@ -961,3 +961,16 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+  - name: "certmgr"
+    rules:
+      - alert: "CephCertMgrError"
+        annotations:
+          description: "One or more cephadm-managed service certificates have expired. This may prevent services such as dashboards or external integrations (e.g., Grafana) from establishing secure connections."
+          documentation: "https://docs.ceph.com/en/latest/rados/operations/health-checks#recent-mgr-module-crash"
+          summary: "A cephadm-managed service certificate is expired/expiring on cluster {{ $labels.cluster }}"
+        expr: "ceph_health_detail{name=\"CEPHADM_CERT_ERROR\"} == 1"
+        for: "5m"
+        labels:
+          severity: "critical"
+          type: "ceph_default"
+
