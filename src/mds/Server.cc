@@ -653,7 +653,11 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
     if (!session->client_opened) {
       session->client_opened = true;
     }
-    if (session->is_opening() ||
+    if (session->is_closing()) {
+      mdlog->wait_for_safe(
+        new MDSInternalContextWrapper(mds, new C_MDS_RetryMessage(mds, m)));
+      return;
+    } else if (session->is_opening() ||
 	session->is_open() ||
 	session->is_stale() ||
 	session->is_killing() ||
