@@ -2480,7 +2480,7 @@ int64_t BlueFS::_read_random(
            << " got 0x" << ret
            << std::dec  << dendl;
   --h->file->num_reading;
-  logger->tinc(l_bluefs_read_random_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_read_random_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -2798,7 +2798,7 @@ int64_t BlueFS::_read(
            << std::dec  << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
-  logger->tinc(l_bluefs_read_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_read_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -3223,7 +3223,7 @@ void BlueFS::_rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
       dirty.pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
-  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
 }
 
 /*
@@ -3370,7 +3370,7 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // now state is captured to compacted_meta_t,
   // current log can be used to write to,
   //ops in log will be continuation of captured state
-  logger->tinc(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_compaction_lock_lat, mono_clock::now() - t0);
   log.lock.unlock();
 
   // 2.2 Allocate the space required for the compacted meta transaction
@@ -3970,7 +3970,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
   }
   dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
   int res = _flush_data(h, offset, length, buffered);
-  logger->tinc(l_bluefs_flush_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_flush_lat, mono_clock::now() - t0);
   return res;
 }
 
@@ -4288,7 +4288,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
     }
     vselector->add_usage(h->file->vselector_hint, fnode);
   }
-  logger->tinc(l_bluefs_truncate_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_truncate_lat, mono_clock::now() - t0);
   return 0;
 }
 
@@ -4327,7 +4327,7 @@ int BlueFS::_fsync(FileWriter *h, bool force_dirty)/*_F_D_LD_LNF_NF*/
     _flush_and_sync_log_LD(old_dirty_seq);
   }
   _maybe_compact_log_LNF_NF_LD_D();
-  logger->tinc(l_bluefs_fsync_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_fsync_lat, mono_clock::now() - t0);
   return 0;
 }
 
@@ -4597,7 +4597,7 @@ void BlueFS::_maybe_compact_log_LNF_NF_LD_D()
     } else {
       _compact_log_async_LD_LNF_D();
     }
-    logger->tinc(l_bluefs_compaction_lat, mono_clock::now() - t0);
+    logger->tinc_with_max(l_bluefs_compaction_lat, mono_clock::now() - t0);
   }
 }
 
@@ -5048,7 +5048,7 @@ int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
   dir->file_map.erase(q);
   log.t.op_dir_unlink(dirname, filename);
   _drop_link_DF(file);
-  logger->tinc(l_bluefs_unlink_lat, mono_clock::now() - t0);
+  logger->tinc_with_max(l_bluefs_unlink_lat, mono_clock::now() - t0);
 
   return 0;
 }
