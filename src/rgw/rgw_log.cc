@@ -331,6 +331,11 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   }
   formatter->dump_bool("temp_url", entry.temp_url);
 
+  // Keystone scope information (if present)
+  if (entry.keystone_scope.has_value()) {
+    entry.keystone_scope->dump(formatter);
+  }
+
   if (entry.op == "multi_object_delete") {
     formatter->open_object_section("op_data");
     formatter->dump_int("num_ok", entry.delete_multi_obj_meta.num_ok);
@@ -734,5 +739,8 @@ void rgw_log_entry::dump(Formatter *f) const
   }
   if (!role_id.empty()) {
     f->dump_string("role_id", role_id);
+  }
+  if (keystone_scope.has_value()) {
+    keystone_scope->dump(f);
   }
 }
