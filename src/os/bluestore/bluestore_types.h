@@ -34,6 +34,10 @@ namespace ceph {
   class Formatter;
 }
 
+namespace bluestore {
+  struct Onode;
+}
+
 /// label for block device
 struct bluestore_bdev_label_t {
   uuid_d osd_uuid;     ///< osd uuid
@@ -268,14 +272,20 @@ struct bluestore_blob_use_tracker_t {
   uint32_t num_au;   // Amount of allocation units tracked
                      // == 0 if single unit or the whole blob is tracked
   uint32_t alloc_au; // Amount of allocation units allocated
+
+  bluestore::Onode* onode;
                        
   union {
     uint32_t* bytes_per_au;
     uint32_t total_bytes;
   };
+
+  bluestore_blob_use_tracker_t(bluestore::Onode* onode)
+    : au_size(0), num_au(0), alloc_au(0), onode(onode), bytes_per_au(nullptr) {
+  }
   
   bluestore_blob_use_tracker_t()
-    : au_size(0), num_au(0), alloc_au(0), bytes_per_au(nullptr) {
+    : au_size(0), num_au(0), alloc_au(0), onode(nullptr), bytes_per_au(nullptr) {
   }
   bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
   bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
