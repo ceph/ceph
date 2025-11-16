@@ -12,6 +12,7 @@ overrides:
         debug ms: 20
         seastore cachepin size pershard: 64M
         seastore max concurrent transactions: 8
+    crimson_compat: true
   workunit:
     env:
       CRIMSON_COMPAT: '1'
