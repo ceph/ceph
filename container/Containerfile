@@ -152,7 +152,7 @@ rbd-mirror" \
 
 # Optional crimson package(s)
 RUN if [[ "${OSD_FLAVOR}" == "crimson-debug" || "${OSD_FLAVOR}" == "crimson-release" ]]; then \
-    echo "ceph-crimson-osd" >> packages.txt ; \
+    echo "ceph-osd-crimson" >> packages.txt ; \
 fi
 
 # Ceph "Recommends"
