@@ -4,6 +4,7 @@
 #pragma once
 
 #include "include/ceph_features.h"
+#include <map>
 
 namespace ceph::net {
 

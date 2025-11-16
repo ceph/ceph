@@ -445,10 +445,11 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     // hmm?
     auto lister = rdir.experimental_list_directory();
     while (auto de = co_await lister()) {
-      DEBUG("found file: {}", de->name);
-      if (de->name.find("block.") == 0 && de->name.length() > 6 ) {
+      auto& entry = de->get();
+      DEBUG("found file: {}", entry.name);
+      if (entry.name.find("block.") == 0 && entry.name.length() > 6 ) {
       // 6 for "block."
-        std::string entry_name = de->name;
+        std::string entry_name = entry.name;
         auto dtype_end = entry_name.find_first_of('.', 6);
         device_type_t dtype =
           string_to_device_type(
