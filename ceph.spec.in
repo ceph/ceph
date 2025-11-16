@@ -912,7 +912,10 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-Requires:	(ceph-osd-classic = %{_epoch_prefix}%{version}-%{release} or ceph-osd-crimson = %{_epoch_prefix}%{version}-%{release})
+Requires:	ceph-osd-classic = %{_epoch_prefix}%{version}-%{release}
+%if 0%{with crimson}
+Requires: 	ceph-osd-crimson = %{_epoch_prefix}%{version}-%{release}
+%endif
 Requires:	sudo
 Requires:	libstoragemgmt
 %if 0%{?weak_deps}
