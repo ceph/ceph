@@ -150,11 +150,6 @@ libradosstriper1 \
 rbd-mirror" \
 >> packages.txt
 
-# Optional crimson package(s)
-RUN if [[ "${OSD_FLAVOR}" == "crimson-debug" || "${OSD_FLAVOR}" == "crimson-release" ]]; then \
-    echo "ceph-osd-crimson" >> packages.txt ; \
-fi
-
 # Ceph "Recommends"
 RUN echo "nvme-cli python3-saml smartmontools" >> packages.txt
 # NFS-Ganesha

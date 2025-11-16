@@ -416,7 +416,8 @@ Description: debugging symbols for ceph-mon
 
 Package: ceph-osd
 Architecture: linux-any
-Depends: ceph-osd-classic (= ${binary:Version}) | ceph-osd-crimson (= ${binary:Version}),
+Depends: ceph-osd-classic (= ${binary:Version}),
+         ceph-osd-crimson (= ${binary:Version}) <pkg.ceph.crimson>,
          sudo,
          ${python3:Depends},
          ${misc:Depends},
