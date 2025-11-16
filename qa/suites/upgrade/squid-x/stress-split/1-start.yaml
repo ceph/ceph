@@ -29,6 +29,7 @@ tasks:
 - install:
     branch: squid
     exclude_packages:
+      - ceph-osd-classic
       - ceph-volume
 
 - cephadm:

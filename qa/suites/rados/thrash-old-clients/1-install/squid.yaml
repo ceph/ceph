@@ -10,6 +10,7 @@ tasks:
       - ceph-mgr-diskprediction-local
       - ceph-mgr-rook
       - ceph-mgr-cephadm
+      - ceph-osd-classic
       - ceph-base-debuginfo
       - ceph-common-debuginfo
       - ceph-immutable-object-cache-debuginfo
