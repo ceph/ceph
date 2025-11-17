@@ -337,9 +337,8 @@ class SMBDContainer(SambaContainerCommon):
             # networking) and need to publish ports via podman/docker.
             # All published ports happen at the primary container.
             if self.cfg.smb_port:
-                cargs.extend(
-                    self._publish(self.cfg.smb_port, Ports.SMB.value)
-                )
+                smb_port = self.cfg.smb_port
+                cargs.extend(self._publish(smb_port, smb_port))
             if self.cfg.metrics_port:
                 metrics_port = self.cfg.metrics_port
                 cargs.extend(self._publish(metrics_port, metrics_port))
