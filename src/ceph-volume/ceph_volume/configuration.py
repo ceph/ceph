@@ -5,16 +5,8 @@ import re
 from ceph_volume import terminal, conf
 from ceph_volume import exceptions
 from sys import version_info as sys_version_info
-
-if sys_version_info.major >= 3:
-    import configparser
-    conf_parentclass = configparser.ConfigParser
-elif sys_version_info.major < 3:
-    import ConfigParser as configparser
-    conf_parentclass = configparser.SafeConfigParser
-else:
-    raise RuntimeError('Not expecting python version > 3 yet.')
-
+import configparser
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +35,7 @@ def load_ceph_conf_path(cluster_name='ceph'):
     conf.cluster = cluster_name
 
 
-def load(abspath=None):
+def load(abspath: Optional[str] = None):
     if abspath is None:
         abspath = conf.path
 
@@ -65,7 +57,7 @@ def load(abspath=None):
         raise RuntimeError('Unable to read configuration file: %s' % abspath)
 
 
-class Conf(conf_parentclass):
+class Conf(configparser.ConfigParser):
     """
     Subclasses from ConfigParser to give a few helpers for Ceph
     configuration.
@@ -81,10 +73,10 @@ class Conf(conf_parentclass):
         except (configparser.NoSectionError, configparser.NoOptionError):
             raise exceptions.ConfigurationKeyError('global', 'fsid')
 
-    def optionxform(self, s):
-        s = s.replace('_', ' ')
-        s = '_'.join(s.split())
-        return s
+    def optionxform(self, optionstr):
+        optionstr = optionstr.replace('_', ' ')
+        optionstr = '_'.join(optionstr.split())
+        return optionstr
 
     def get_safe(self, section, key, default=None, check_valid=True):
         """
