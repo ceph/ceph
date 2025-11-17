@@ -1,9 +1,16 @@
+<<<<<<< HEAD
 import { Component, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
 import { Router } from '@angular/router';
 import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
 import { catchError, map, switchMap } from 'rxjs/operators';
 import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { HostService } from '~/app/shared/api/host.service';
+=======
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { BehaviorSubject, forkJoin, Observable, of } from 'rxjs';
+import { catchError, map, switchMap } from 'rxjs/operators';
+import { GatewayGroup, NvmeofService } from '~/app/shared/api/nvmeof.service';
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
@@ -15,6 +22,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Icons, IconSize } from '~/app/shared/enum/icons.enum';
 import { NvmeofGatewayGroup } from '~/app/shared/models/nvmeof';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
+<<<<<<< HEAD
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -26,14 +34,20 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
 const BASE_URL = 'block/nvmeof/gateways';
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 
 @Component({
   selector: 'cd-nvmeof-gateway-group',
   templateUrl: './nvmeof-gateway-group.component.html',
+<<<<<<< HEAD
   styleUrls: ['./nvmeof-gateway-group.component.scss'],
   standalone: false,
   encapsulation: ViewEncapsulation.None,
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+=======
+  styleUrls: ['./nvmeof-gateway-group.component.scss']
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 })
 export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild(TableComponent, { static: true })
@@ -42,18 +56,24 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   @ViewChild('dateTpl', { static: true })
   dateTpl: TemplateRef<any>;
 
+<<<<<<< HEAD
   @ViewChild('customTableItemTemplate', { static: true })
   customTableItemTemplate: TemplateRef<any>;
 
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
   @ViewChild('gatewayStatusTpl', { static: true })
   gatewayStatusTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
+<<<<<<< HEAD
   nodesAvailable = false;
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
   columns: CdTableColumn[] = [];
   selection: CdTableSelection = new CdTableSelection();
   gatewayGroup$: Observable<CephServiceSpec[]>;
@@ -63,7 +83,10 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   subsystemCount: number;
   gatewayCount: number;
 
+<<<<<<< HEAD
   viewUrl = `/${BASE_URL}/view`;
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
   icons = Icons;
 
   iconSize = IconSize;
@@ -71,6 +94,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
+<<<<<<< HEAD
     private nvmeofService: NvmeofService,
     private hostService: HostService,
     public modalService: ModalCdsService,
@@ -79,6 +103,9 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     private notificationService: NotificationService,
     private urlBuilder: URLBuilderService,
     private router: Router
+=======
+    private nvmeofService: NvmeofService
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
   ) {}
 
   ngOnInit(): void {
@@ -87,8 +114,12 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     this.columns = [
       {
         name: $localize`Name`,
+<<<<<<< HEAD
         prop: 'name',
         cellTemplate: this.customTableItemTemplate
+=======
+        prop: 'name'
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
       },
       {
         name: $localize`Gateways`,
@@ -105,6 +136,7 @@ export class NvmeofGatewayGroupComponent implements OnInit {
         cellTemplate: this.dateTpl
       }
     ];
+<<<<<<< HEAD
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -131,12 +163,15 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     };
 
     this.tableActions = [createAction, viewAction, deleteAction];
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 
     this.gatewayGroup$ = this.subject.pipe(
       switchMap(() =>
         this.nvmeofService.listGatewayGroups().pipe(
           switchMap((gatewayGroups: GatewayGroup[][]) => {
             const groups = gatewayGroups?.[0] ?? [];
+<<<<<<< HEAD
             if (groups.length === 0) {
               return of([]);
             }
@@ -152,6 +187,12 @@ export class NvmeofGatewayGroupComponent implements OnInit {
                   : of([]);
 
                 return subsystemsObservable.pipe(
+=======
+            return forkJoin(
+              groups.map((group: NvmeofGatewayGroup) =>
+                this.nvmeofService.listSubsystems(group.spec.group).pipe(
+                  catchError(() => of([])),
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
                   map((subs) => ({
                     ...group,
                     name: group.spec?.group,
@@ -159,30 +200,51 @@ export class NvmeofGatewayGroupComponent implements OnInit {
                       running: group.status?.running ?? 0,
                       error: (group.status?.size ?? 0) - (group.status?.running ?? 0)
                     },
+<<<<<<< HEAD
+=======
+
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
                     subSystemCount: Array.isArray(subs) ? subs.length : 0,
                     gateWayNode: group.placement?.hosts?.length ?? 0,
                     created: group.status?.created ? new Date(group.status.created) : null
                   }))
+<<<<<<< HEAD
                 );
               })
             );
           }),
           catchError(() => {
+=======
+                )
+              )
+            );
+          }),
+          catchError((error) => {
+            this.context?.error?.(error);
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
             return of([]);
           })
         )
       )
     );
+<<<<<<< HEAD
     this.checkNodesAvailability();
   }
   fetchData(): void {
     this.subject.next([]);
     this.checkNodesAvailability();
+=======
+  }
+
+  fetchData(): void {
+    this.subject.next([]);
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
   }
 
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
   }
+<<<<<<< HEAD
 
   deleteGatewayGroupModal() {
     const selectedGroup = this.selection.first();
@@ -272,4 +334,6 @@ export class NvmeofGatewayGroupComponent implements OnInit {
     }
     this.router.navigate([this.viewUrl, groupName]);
   }
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 }

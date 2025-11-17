@@ -5,7 +5,10 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { of } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
+<<<<<<< HEAD
 import { provideAnimations } from '@angular/platform-browser/animations';
+=======
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
 
 describe('NvmeofGatewayGroupComponent', () => {
   let component: NvmeofGatewayGroupComponent;
@@ -21,7 +24,11 @@ describe('NvmeofGatewayGroupComponent', () => {
     await TestBed.configureTestingModule({
       imports: [HttpClientModule, SharedModule, TabsModule, GridModule],
       declarations: [NvmeofGatewayGroupComponent],
+<<<<<<< HEAD
       providers: [provideAnimations(), { provide: NvmeofService, useValue: nvmeofServiceSpy }]
+=======
+      providers: [{ provide: NvmeofService, useValue: nvmeofServiceSpy }]
+>>>>>>> 0755593b4c8 ('mgr/dashboard: Carbonize Block Module > NVme-Listing Gateway group)
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
