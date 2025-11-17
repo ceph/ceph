@@ -1077,6 +1077,16 @@ extern "C" int ceph_rmsnap(struct ceph_mount_info *cmount, const char *path, con
   return cmount->get_client()->rmsnap(path, name, cmount->default_perms, true);
 }
 
+extern "C" int ceph_do_snap_md_op(struct ceph_mount_info* cmount,
+  const char* path, const char* md_key, const char* md_val,  unsigned op_flag)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+
+  return cmount->get_client()->do_snap_md_op(path, md_key, md_val, op_flag,
+                                             cmount->default_perms);
+}
+
 extern "C" int ceph_mkdirs(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
