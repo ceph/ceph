@@ -23,6 +23,10 @@ export type PromqlGuageMetric = {
   result: PromethuesGaugeMetricResult[];
 };
 
+export type carbonChartData = { group: string; date: string; value: number; }[]
+
+export type prometheusData = [number,  string][]
+
 @Injectable({
   providedIn: 'root'
 })
@@ -172,7 +176,7 @@ export class PrometheusService {
     return isFinite(value) ? value : null;
   }
 
-  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean) {
+  getRangeQueriesData(selectedTime: any, queries: any, queriesResults: any, checkNan?: boolean, queriesNameMap?: Record<string, string>, queriesChartMap?: Record<string, string>) {
     this.ifPrometheusConfigured(() => {
       if (this.timerGetPrometheusDataSub) {
         this.timerGetPrometheusDataSub.unsubscribe();
@@ -201,7 +205,14 @@ export class PrometheusService {
         .subscribe((results: any) => {
           results.forEach(({ queryName, data }: any) => {
             if (data.result.length) {
-              queriesResults[queryName] = data.result[0].values;
+              if (queriesNameMap && queriesChartMap) {
+                const displayName = queriesNameMap[queryName];
+                const chartName = queriesChartMap[queryName];
+                const chartData =  this.transformPrometheusDataToCarbon(data?.result[0]?.values, displayName);
+                queriesResults.data[chartName][displayName] = chartData;
+              } else {
+                queriesResults[queryName] = data.result[0].values;
+              }
             } else {
               queriesResults[queryName] = [];
             }
@@ -217,6 +228,11 @@ export class PrometheusService {
               });
             }
           });
+          if (queriesNameMap && queriesChartMap) {
+            for (const query of Object.keys(queriesResults.data)) {
+              queriesResults.flatData[query as string] = Object.values(queriesResults.data[query as string]).flat();
+            }
+          }
         });
     });
     return queriesResults;
@@ -322,5 +338,13 @@ export class PrometheusService {
         });
       });
     });
+  }
+
+  transformPrometheusDataToCarbon(data: prometheusData, groupName: string): carbonChartData {
+    return data.map(([timestamp, value]) => ({
+      group: groupName,
+      date: new Date(timestamp * 1000).toISOString(),
+      value: Number(value)
+    }));
   }
 }

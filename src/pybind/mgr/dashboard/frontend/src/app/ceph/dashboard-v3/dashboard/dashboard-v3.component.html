@@ -244,38 +244,26 @@
           <div class="ms-4 me-4 mt-0">
             <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
             </cd-dashboard-time-selector>
-            <ng-container *ngIf="totalCapacity">
-              <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
-                                       [maxValue]="totalCapacity"
-                                       dataUnits="B"
-                                       [labelsArray]="['Used Capacity']"
-                                       [dataArray]="[queriesResults.USEDCAPACITY]">
-              </cd-dashboard-area-chart>
-            </ng-container>
-            <cd-dashboard-area-chart chartTitle="IOPS"
-                                     dataUnits=""
-                                     decimals="0"
-                                     [labelsArray]="['Reads', 'Writes']"
-                                     [dataArray]="[queriesResults.READIOPS, queriesResults.WRITEIOPS]">
-            </cd-dashboard-area-chart>
-            <cd-dashboard-area-chart chartTitle="OSD Latencies"
-                                     dataUnits="ms"
-                                     decimals="2"
-                                     [labelsArray]="['Apply', 'Commit']"
-                                     [dataArray]="[queriesResults.READLATENCY, queriesResults.WRITELATENCY]">
-            </cd-dashboard-area-chart>
-            <cd-dashboard-area-chart chartTitle="Client Throughput"
-                                     dataUnits="B/s"
-                                     decimals="2"
-                                     [labelsArray]="['Reads', 'Writes']"
-                                     [dataArray]="[queriesResults.READCLIENTTHROUGHPUT, queriesResults.WRITECLIENTTHROUGHPUT]">
-            </cd-dashboard-area-chart>
-            <cd-dashboard-area-chart chartTitle="Recovery Throughput"
-                                     dataUnits="B/s"
-                                     decimals="2"
-                                     [labelsArray]="['Recovery Throughput']"
-                                     [dataArray]="[queriesResults.RECOVERYBYTES]">
-            </cd-dashboard-area-chart>
+              <ibm-area-chart [data]="queriesResults.flatData.USEDCAPACITY"
+                              [options]="usedCapacityOptions">
+
+              </ibm-area-chart>
+              <ibm-area-chart [data]="queriesResults.flatData.IOPS"
+                              [options]="IOPSOptions">
+
+              </ibm-area-chart>
+              <ibm-area-chart [data]="queriesResults.flatData.LATENCY"
+                              [options]="osdLatenciesOptions">
+
+              </ibm-area-chart>
+              <ibm-area-chart [data]="queriesResults.flatData.CLIENTTHROUGHPUT"
+                              [options]="clientThroughputOptions">
+
+              </ibm-area-chart>
+              <ibm-area-chart [data]="queriesResults.flatData.RECOVERYBYTES"
+                              [options]="recoveryThroughputOptions">
+
+              </ibm-area-chart>
           </div>
         </cd-card>
       </div>

@@ -5,7 +5,7 @@ import { BehaviorSubject, EMPTY, Observable, Subject, Subscription, of } from 'r
 import { catchError, exhaustMap, switchMap, takeUntil } from 'rxjs/operators';
 
 import { HealthService } from '~/app/shared/api/health.service';
-import { PrometheusService, PromqlGuageMetric } from '~/app/shared/api/prometheus.service';
+import { carbonChartData, PrometheusService, PromqlGuageMetric } from '~/app/shared/api/prometheus.service';
 import {
   CapacityCardQueries,
   UtilizationCardQueries
@@ -39,6 +39,30 @@ import {
   IscsiMap,
   PgStateCount
 } from '~/app/shared/models/health.interface';
+import { usedCapacity, IOPS, osdLatencies, clientThroughput, recoveryThroughput  } from './chartOptions';
+
+
+const UTILIZATION_CARD_QUERIES_DISPLAY_NAMES: Record<string, string> = {
+  USEDCAPACITY: 'Bytes',
+  WRITEIOPS: 'Writes',
+  READIOPS: 'Reads',
+  READLATENCY: 'Applies',
+  WRITELATENCY: 'Commits',
+  READCLIENTTHROUGHPUT: 'Reads',
+  WRITECLIENTTHROUGHPUT: 'Writes',
+  RECOVERYBYTES: 'Bytes'
+};
+
+const UTILIZATION_CARD_QUERIES_CHART_MAP: Record<string, string> = {
+  USEDCAPACITY: 'USEDCAPACITY',
+  WRITEIOPS: 'IOPS',
+  READIOPS: 'IOPS',
+  READLATENCY: 'LATENCY',
+  WRITELATENCY: 'LATENCY',
+  READCLIENTTHROUGHPUT: 'CLIENTTHROUGHPUT',
+  WRITECLIENTTHROUGHPUT: 'CLIENTTHROUGHPUT',
+  RECOVERYBYTES: 'RECOVERYBYTES'
+};
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -71,18 +95,23 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   alertType: string;
   alertClass = AlertClass;
 
-  queriesResults: { [key: string]: [] } = {
-    USEDCAPACITY: [],
-    IPS: [],
-    OPS: [],
-    READLATENCY: [],
-    WRITELATENCY: [],
-    READCLIENTTHROUGHPUT: [],
-    WRITECLIENTTHROUGHPUT: [],
-    RECOVERYBYTES: [],
-    READIOPS: [],
-    WRITEIOPS: []
+  queriesResults: { data: Record<string, Record<string, carbonChartData>>, flatData: Record<string, Array<carbonChartData>>} = {
+    data: {
+      USEDCAPACITY: { Bytes: [] },
+      IOPS: { Reads: [], Writes: [] },
+      LATENCY: { Apply: [], Commit: [] },
+      CLIENTTHROUGHPUT: { Reads: [], Writes: [] },
+      RECOVERYBYTES: { Bytes: [] },
+    },
+    flatData: {
+      USEDCAPACITY: [],
+      IOPS: [],
+      LATENCY: [],
+      CLIENTTHROUGHPUT: [],
+      RECOVERYBYTES: []
+    }
   };
+
 
   telemetryEnabled: boolean;
   detailsCardData: DashboardDetails = {};
@@ -106,6 +135,12 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   mgrStatus: InventoryDetails = null;
   mdsStatus: InventoryDetails = null;
   iscsiMap: IscsiMap = null;
+
+  usedCapacityOptions = usedCapacity;
+  IOPSOptions = IOPS;
+  osdLatenciesOptions = osdLatencies;
+  clientThroughputOptions = clientThroughput;
+  recoveryThroughputOptions = recoveryThroughput;
 
   constructor(
     private summaryService: SummaryService,
@@ -186,7 +221,10 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.queriesResults = this.prometheusService.getRangeQueriesData(
       selectedTime,
       UtilizationCardQueries,
-      this.queriesResults
+      this.queriesResults,
+      false,
+      UTILIZATION_CARD_QUERIES_DISPLAY_NAMES,
+      UTILIZATION_CARD_QUERIES_CHART_MAP
     );
   }
 

@@ -15,6 +15,7 @@ import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashbo
 import { DashboardV3Component } from './dashboard/dashboard-v3.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
 import { InlineLoadingModule, ToggletipModule } from 'carbon-components-angular';
+import { ChartsModule } from '@carbon/charts-angular';
 
 @NgModule({
   imports: [
@@ -29,7 +30,8 @@ import { InlineLoadingModule, ToggletipModule } from 'carbon-components-angular'
     SimplebarAngularModule,
     BaseChartDirective,
     ToggletipModule,
-    InlineLoadingModule
+    InlineLoadingModule,
+    ChartsModule
   ],
   declarations: [
     DashboardV3Component,
