@@ -433,7 +433,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
           break;
       }
     }
-    // Remove ec omap journal entry here
+    pg->remove_ec_omap_journal_entry(id);
   }
 };
 

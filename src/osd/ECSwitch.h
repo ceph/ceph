@@ -418,4 +418,16 @@ public:
   bool get_is_ec_optimized() const final {
     return is_optimized();
   }
+  bool remove_ec_omap_journal_entry(const uint64_t id) override {
+    if (is_optimized()) {
+      for (const auto &journal_entry : optimized.ec_omap_journal) {
+        if (journal_entry.id == id) {
+          return optimized.ec_omap_journal.remove(journal_entry);
+        }
+      }
+      return false;
+    }
+    // Panic
+    return false;
+  }
 };
