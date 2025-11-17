@@ -580,28 +580,40 @@ def main():
         default_label = False
     else:
         argv = sys.argv[1:]
-    parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
-    parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
-    parser.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
-    parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
-    parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
-    parser.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
-    parser.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
-    parser.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
-    parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
-    parser.add_argument('--branch-name-append', dest='branch_append', action='store', help='append string to branch name')
-    parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
-    parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
-    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
-    parser.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
-    parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
-    parser.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
-    parser.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
-    parser.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
-    parser.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
-    parser.add_argument('--no-push-ci', dest='no_push_ci', action='store_true',
-                        help='don\'t push branch to ceph-ci repo')
-    parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
+
+    group = parser.add_argument_group('General Options')
+    group.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
+    group.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
+
+    group = parser.add_argument_group('GitHub PR Options')
+    group.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
+    group.add_argument('--pr-label', dest='pr_label', action='store', help='source PRs to merge via label')
+
+    group = parser.add_argument_group('Branch Control Options')
+    group.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
+    group.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    group.add_argument('--branch-name-append', dest='branch_append', action='store', help='append string to branch name')
+    group.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
+    group.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
+    group.add_argument('--no-credits', dest='credits', action='store_false', help='skip indication search (Reviewed-by, etc.)')
+    group.add_argument('--stop-at-built', dest='stop_at_built', action='store_true', help='stop execution when branch is built')
+
+    group = parser.add_argument_group('Build Control Options')
+    group.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
+    group.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
+    group.add_argument('--no-push-ci', dest='no_push_ci', action='store_true', help='don\'t push branch to ceph-ci repo')
+
+    group = parser.add_argument_group('QA Control Options')
+    group.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
+    group.add_argument('--qa-release', dest='qa_release', action='store', help='QA release for tracker')
+    group.add_argument('--qa-tags', dest='qa_tags', action='store', help='QA tags for tracker')
+    group.add_argument('--update-qa', dest='update_qa', action='store', help='update QA run ticket')
+
+    group = parser.add_argument_group('PRs to Merge')
+    group.add_argument('prs', metavar="PRs...", type=int, nargs='*', help='Pull Requests to Merge')
+
     args = parser.parse_args(argv)
 
     if args.create_qa and args.update_qa:
