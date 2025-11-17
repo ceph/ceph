@@ -484,8 +484,8 @@ int log_record(rgw::sal::Driver* driver,
   ret = driver->load_bucket(dpp, target_bucket_id,
                                &target_bucket, y);
   if (ret < 0) {
-    ldpp_dout(dpp, 1) << "ERROR: failed to load logging bucket '" << target_bucket_id << "'. ret = " << ret << dendl;
-    set_journal_err(fmt::format("Failed to load logging bucket '{}'", target_bucket_id.bucket_id));
+    ldpp_dout(dpp, 1) << "ERROR: failed to load logging bucket '" << target_bucket_name << "'. ret = " << ret << dendl;
+    set_journal_err(fmt::format("Failed to load logging bucket '{}'", target_bucket_name));
     return ret;
   }
 

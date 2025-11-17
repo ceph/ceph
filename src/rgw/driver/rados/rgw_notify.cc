@@ -1085,16 +1085,11 @@ static inline bool notification_match(reservation_t& res,
   return true;
 }
 
-
-static inline uint64_t get_target_shard(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& object_key, const uint64_t num_shards) {
-  std::hash<std::string> hash_fn;
-  std::string hash_key = fmt::format("{}:{}", bucket_name, object_key);
-  size_t hash = hash_fn(hash_key);
-  ldpp_dout(dpp, 20) << "INFO: Hash Value (hash) is:  " << hash << ". Hash Key: " << bucket_name << ":" << object_key << dendl;
-  return hash % num_shards;
+static inline uint64_t get_target_shard(const std::string& bucket_name, const std::string& object_key, uint64_t num_shards) {
+  return std::hash<std::string>()(fmt::format("{}:{}", bucket_name, object_key)) % num_shards;
 }
 
-static inline std::string get_shard_name(const std::string& topic_name, const uint64_t& shard_id) {
+static inline std::string get_shard_name(const std::string& topic_name, uint64_t shard_id) {
   return (shard_id == 0) ? topic_name : fmt::format("{}.{}", topic_name, shard_id);
 }
 
@@ -1170,10 +1165,9 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         const std::string bucket_name = res.bucket->get_name();
         const std::string object_key = res.object_name ? *res.object_name : res.object->get_name();
         const uint64_t num_shards = topic_cfg.dest.num_shards;
-        target_shard = get_target_shard(
-            dpp, bucket_name, object_key, num_shards);
+        target_shard = get_target_shard(bucket_name, object_key, num_shards);
         const auto shard_name = get_shard_name(topic_cfg.dest.persistent_queue, target_shard);
-        ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
+        ldpp_dout(res.dpp, 20) << "INFO: target shard of: " << bucket_name << ":" << object_key << " is: "  << shard_name << dendl;
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
             res.dpp, res.store->getRados()->get_notif_pool_ctx(), shard_name,
@@ -1230,9 +1224,9 @@ int publish_commit(rgw::sal::Object* obj,
       event_entry.retry_sleep_duration = topic.cfg.dest.retry_sleep_duration;
       bufferlist bl;
       encode(event_entry, bl);
-      uint64_t target_shard = topic.shard_id;
-      const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);
-      ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
+      const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, topic.shard_id);
+      ldpp_dout(res.dpp, 20) << "INFO: target shard of: " <<
+        res.bucket->get_name() << ":" << res.object_name << " is: " << shard_name << dendl;
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
         ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length()
@@ -1327,9 +1321,9 @@ int publish_abort(reservation_t& res) {
       // nothing to abort or already committed/aborted
       continue;
     }
-    uint64_t target_shard = topic.shard_id;
-    const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);
-    ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
+    const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, topic.shard_id);
+    ldpp_dout(res.dpp, 20) << "INFO: target shard of: " <<
+      res.bucket->get_name() << ":" << res.object_name << " is: " << shard_name << dendl;
     librados::ObjectWriteOperation op;
     cls_2pc_queue_abort(op, topic.res_id);
     const auto ret = rgw_rados_operate(

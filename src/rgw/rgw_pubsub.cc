@@ -528,8 +528,13 @@ int RGWPubSub::get_topic(const DoutPrefixProvider* dpp,
     // in case of v1 or during migration we use v1 topics
     int ret = driver->read_topic_v2(name, tenant, result, nullptr, y, dpp);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) << "failed to read topic info for name: " << name
-                        << " tenant: " << tenant << ", ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        ldpp_dout(dpp, 20) << "INFO: topic: '" << name << "' of tenant: '" << tenant <<
+          "' not found" << dendl;
+      } else {
+        ldpp_dout(dpp, 1) << "ERROR: failed to read topic: '" << name << "' of tenant: '" << tenant <<
+          "'. ret=" << ret << dendl;
+      }
       return ret;
     }
     if (subscribed_buckets) {
@@ -537,8 +542,8 @@ int RGWPubSub::get_topic(const DoutPrefixProvider* dpp,
           driver->get_bucket_topic_mapping(result, *subscribed_buckets, y, dpp);
       if (ret < 0) {
         ldpp_dout(dpp, 1)
-            << "failed to fetch bucket topic mapping info for topic: " << name
-            << " tenant: " << tenant << ", ret=" << ret << dendl;
+            << "ERROR: failed to fetch bucket topic mapping info for topic: '" << name
+            << "' of tenant: '" << tenant << "'. ret=" << ret << dendl;
       }
     }
     return ret;
