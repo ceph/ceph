@@ -787,8 +787,6 @@ do_rgw_conf() {
 [client.rgw.${current_port}]
         rgw frontends = $rgw_frontend port=${current_port}${flight_conf:+,arrow_flight}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
-        debug rgw_flight = 20
-        debug rgw_notification = 20
 EOF
         current_port=$((current_port + 1))
         unset flight_conf
@@ -1656,7 +1654,9 @@ else
         debug mgrc = 20
         debug ms = 1'
     CCLIENTDEBUG='
-        debug client = 20'
+        debug client = 20
+        debug rgw_flight = 20
+        debug rgw_notification = 20'
     CMDSDEBUG='
         debug mds = 20'
 fi
