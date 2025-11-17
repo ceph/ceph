@@ -9,6 +9,11 @@ v19.2.3 Squid
 This is the third backport release in the Squid series.
 We recommend that all users update to this release.
 
+Release Date
+------------
+
+July 28, 2025
+
 Notable Changes
 ---------------
 
@@ -505,6 +510,11 @@ We recommend that all users update to this release.
 
 .. warning: Upgrade to Squid v19.2.2. Do not upgrade to Squid v19.2.1.
 
+Release Date
+------------
+
+April 10, 2025
+
 Notable Changes
 ---------------
 
@@ -525,6 +535,11 @@ v19.2.1 Squid
 This is the first backport release in the Squid series.
 
 .. warning: Do not upgrade to Squid v19.2.1. Upgrade instead to Squid v19.2.2.
+
+Release Date
+------------
+
+February 6, 2025
 
 Notable Changes
 ---------------
@@ -908,6 +923,11 @@ v19.2.0 Squid
    expected. A fix has been implemented in 19.2.1, please read `Tracker Issue
    68657 <https://tracker.ceph.com/issues/68657>`_ before attempting an
    upgrade.
+
+Release Date
+------------
+
+September 26, 2024
 
 Highlights
 ----------
