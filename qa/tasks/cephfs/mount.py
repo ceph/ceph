@@ -5,11 +5,11 @@ import datetime
 import os
 import re
 import time
+import ipaddress
 
 from io import StringIO
 from contextlib import contextmanager
 from textwrap import dedent
-from IPy import IP
 
 from teuthology.contextutil import safe_while
 from teuthology.misc import get_file, write_file
@@ -273,9 +273,10 @@ class CephFSMountBase(object):
 
     def _setup_brx_and_nat(self):
         # The ip for ceph-brx should be
-        ip = IP(self.ceph_brx_net)[-2]
+        net = ipaddress.ip_network(self.ceph_brx_net)
+        ip = net.broadcast_address - 1
         mask = self.ceph_brx_net.split('/')[1]
-        brd = IP(self.ceph_brx_net).broadcast()
+        brd = net.broadcast_address
 
         brx = self.client_remote.run(args=['ip', 'addr'], stderr=StringIO(),
                                      stdout=StringIO(), timeout=(5*60))
@@ -350,12 +351,13 @@ class CephFSMountBase(object):
             return
 
         # Get one ip address for netns
-        ips = IP(self.ceph_brx_net)
-        for ip in ips:
+        net = ipaddress.ip_network(self.ceph_brx_net)
+        bridge_ip = net.broadcast_address - 1
+        for ip in net:
             found = False
-            if ip == ips[0]:
+            if ip == net.network_address:
                 continue
-            if ip == ips[-2]:
+            if ip == bridge_ip:
                 raise RuntimeError("we have ran out of the ip addresses")
 
             for ns in netns_list:
@@ -379,12 +381,12 @@ class CephFSMountBase(object):
                 break
 
         mask = self.ceph_brx_net.split('/')[1]
-        brd = IP(self.ceph_brx_net).broadcast()
+        brd = net.broadcast_address
 
         log.info("Setuping the netns '{0}' with {1}/{2}".format(self.netns_name, ip, mask))
 
         # Setup the veth interfaces
-        brxip = IP(self.ceph_brx_net)[-2]
+        brxip = bridge_ip
         self.run_shell_payload(f"""
             set -e
             sudo ip link add veth0 netns {self.netns_name} type veth peer name brx.{nsid}
@@ -439,8 +441,9 @@ class CephFSMountBase(object):
             sudo ip link delete ceph-brx
         """, timeout=(5*60), omit_sudo=False, cwd='/')
 
-        # Drop the iptables NAT rules
-        ip = IP(self.ceph_brx_net)[-2]
+        # Drop the nftables NAT rules
+        net = ipaddress.ip_network(self.ceph_brx_net)
+        ip = net.broadcast_address - 1
         mask = self.ceph_brx_net.split('/')[1]
 
         gw = self._default_gateway()
