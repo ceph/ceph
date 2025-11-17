@@ -315,6 +315,7 @@ const char *ceph_mds_op_name(int op)
 	case CEPH_MDS_OP_LSSNAP: return "lssnap";
 	case CEPH_MDS_OP_MKSNAP: return "mksnap";
 	case CEPH_MDS_OP_RMSNAP: return "rmsnap";
+	case CEPH_MDS_OP_SNAP_METADATA_UPDATE: return "snap_metadata_update";
 	case CEPH_MDS_OP_RENAMESNAP: return "renamesnap";
 	case CEPH_MDS_OP_READDIR_SNAPDIFF: return "readdir_snapdiff";
 	case CEPH_MDS_OP_SETFILELOCK: return "setfilelock";
