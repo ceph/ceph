@@ -322,8 +322,10 @@ def build_branch(args):
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
     if args.branch_release:
         branch = branch + "-" + args.branch_release
+    if args.branch_append:
+        branch += f"-{args.branch_append}"
     if args.debug_build:
-        branch = branch + "-debug"
+        branch += "-debug"
     label = args.label
     merge_branch_name = args.merge_branch_name
     if merge_branch_name is False:
@@ -556,6 +558,7 @@ def main():
     parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
+    parser.add_argument('--branch-name-append', dest='branch_append', action='store', help='append string to branch name')
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
