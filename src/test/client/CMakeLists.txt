@@ -8,6 +8,7 @@ if(${WITH_CEPHFS})
     commands.cc
     syncio.cc
     fscrypt_conf.cc
+    subs.cc
     )
   target_link_libraries(ceph_test_client
     client
