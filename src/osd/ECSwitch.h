@@ -24,6 +24,8 @@
 #include "ECBackendL.h"
 #include "ECBackend.h"
 
+#include <optional>
+
 class ECSwitch : public PGBackend
 {
   friend class ECRecPred;
@@ -419,15 +421,157 @@ public:
     return is_optimized();
   }
   bool remove_ec_omap_journal_entry(const uint64_t id) override {
-    if (is_optimized()) {
-      for (const auto &journal_entry : optimized.ec_omap_journal) {
-        if (journal_entry.id == id) {
-          return optimized.ec_omap_journal.remove(journal_entry);
+    ceph_assert(is_optimized());
+    for (const auto &journal_entry : optimized.ec_omap_journal) {
+      if (journal_entry.id == id) {
+        return optimized.ec_omap_journal.remove(journal_entry);
+      }
+    }
+    return false;
+  }
+
+  void update_keys_using_journal(std::set<std::string> &keys_to_update) override {
+    ceph_assert(is_optimized());
+    auto journal = optimized.ec_omap_journal;
+    for (const auto &entry : journal) {
+      if (entry.clear_omap) {
+        keys_to_update.clear();
+      }
+
+      for (auto &&update : entry.omap_updates) {
+        switch (update.first) {
+          case OmapUpdateType::Insert: {
+            ceph::buffer::list vals_bl = update.second;
+            std::map<std::string, ceph::buffer::list> vals;
+            decode(vals, vals_bl);
+            for (const auto &key : vals.keys()) {
+              keys_to_update.insert(key);
+            }
+            break;
+          }
+          case OmapUpdateType::Remove: {
+            ceph::buffer::list keys_bl = update.second;
+            std::set<std::string> keys;
+            decode(keys, keys_bl);
+            for (const auto &key : keys) {
+              keys_to_update.remove(key);
+            }
+            break;
+          }
+          case OmapUpdateType::RemoveRange: {
+            ceph::buffer::list range_bl = update.second;
+            std::string key_begin, key_end;
+            decode(key_begin, range_bl);
+            decode(key_end, range_bl);
+            // Remove all keys in range [key_begin, key_end)
+            // How can we do this?
+            break;
+          }
         }
       }
-      return false;
     }
-    // Panic
-    return false;
+    return;
+  }
+  void update_vals_using_journal(std::map<std::string, ceph::buffer::list> &vals_to_update) override {
+    ceph_assert(is_optimized());
+    auto journal = optimized.ec_omap_journal;
+    for (const auto &entry : journal) {
+      if (entry.clear_omap) {
+        vals_to_update.clear();
+      }
+
+      for (auto &&update : entry.omap_updates) {
+        switch (update.first) {
+          case OmapUpdateType::Insert: {
+            ceph::buffer::list vals_bl = update.second;
+            std::map<std::string, ceph::buffer::list> vals;
+            decode(vals, vals_bl);
+            for (auto it = vals.begin(); it != vals.end(); ++it) {
+              const auto &key = it->first;
+              const auto &val = it->second;
+              vals_to_update[key] = val;
+            }
+            break;
+          }
+          case OmapUpdateType::Remove: {
+            ceph::buffer::list keys_bl = update.second;
+            std::set<std::string> keys;
+            decode(keys, keys_bl);
+            for (const auto &key : keys) {
+              vals_to_update.erase(key);
+            }
+            break;
+          }
+          case OmapUpdateType::RemoveRange: {
+            ceph::buffer::list range_bl = update.second;
+            std::string key_begin, key_end;
+            decode(key_begin, range_bl);
+            decode(key_end, range_bl);
+            // Remove all keys in range [key_begin, key_end)
+            // How can we do this?
+            break;
+          }
+        }
+      }
+    }
+    return;
+  }
+  std::optional<ceph::buffer::list> get_header_from_journal() override {
+    ceph_assert(is_optimized());
+    std::optional<std::string> updated_header = std::nullopt;
+    auto journal = optimized.ec_omap_journal;
+    for (const auto &entry : journal) {
+      if (entry.omap_header) {
+        updated_header = entry.omap_header;
+      }
+    }
+    return updated_header;
+  }
+  std::map<std::string, ceph::buffer::list> get_keys_from_journal(std::set<std::string> &keys) override {
+    ceph_assert(is_optimized());
+    std::map<std::string, ceph::buffer::list> vals_from_keys;
+    auto journal = optimized.ec_omap_journal;
+    for (const auto &entry : journal) {
+      if (entry.clear_omap) {
+        vals_from_keys.clear();
+      }
+
+      for (auto &&update : entry.omap_updates) {
+        switch (update.first) {
+          case OmapUpdateType::Insert: {
+            ceph::buffer::list vals_bl = update.second;
+            std::map<std::string, ceph::buffer::list> vals;
+            decode(vals, vals_bl);
+            for (auto it = vals.begin(); it != vals.end(); ++it) {
+              if (keys.find(it->first) != keys.end()) {
+                vals_from_keys[it->first] = it->second;
+              }
+            }
+            break;
+          }
+          case OmapUpdateType::Remove: {
+            ceph::buffer::list keys_to_remove_bl = update.second;
+            std::set<std::string> keys_to_remove;
+            decode(keys_to_remove, keys_to_remove_bl);
+            for (const auto &key : keys_to_remove) {
+              if (keys.find(key) != keys.end()) {
+                vals_from_keys.erase(key);
+              }
+            }
+            break;
+          }
+          case OmapUpdateType::RemoveRange: {
+            ceph::buffer::list range_bl = update.second;
+            std::string key_begin, key_end;
+            decode(key_begin, range_bl);
+            decode(key_end, range_bl);
+            // Remove all keys in range [key_begin, key_end)
+            // How can we do this?
+            break;
+          }
+        }
+      }
+    }
+    return vals_from_keys;
   }
 };
