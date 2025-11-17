@@ -21,6 +21,7 @@
 #include "MDSRank.h"
 #include "SnapClient.h"
 #include "common/debug.h"
+#include "include/ceph_assert.h"
 
 #include <string_view>
 
@@ -301,6 +302,25 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
 }
 
 
+int SnapRealm::will_md_op_succeed(const snapid_t snap_id, const string& md_key,
+                                  const string& md_val,
+                                  const unsigned int op_flag) const
+{
+  for (auto& i : srnode.snaps) {
+    if (i.first == snap_id) {
+      return i.second.will_md_op_succeed(md_key, md_val, op_flag);
+    }
+  }
+
+  // reaching here implies snap is not present in srnode and presence of
+  // snapshot in srnode should've been checked for before calling this function.
+  ceph_assert(false);
+  // redundant due to ceph_assert() above but necessary to prevent the compiler
+  // from producing error.
+  return -1;
+}
+
+
 void SnapRealm::adjust_parent()
 {
   SnapRealm *newparent;
@@ -444,8 +464,6 @@ void SnapRealm::build_snap_trace() const
     info.my_snaps.reserve(cached_snaps.size());
     for (auto p = cached_snaps.rbegin(); p != cached_snaps.rend(); ++p)
       info.my_snaps.push_back(*p);
-
-    dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
     SnapRealmInfoNew ninfo(info, srnode.last_modified,
                            srnode.change_attr, srnode.flags);

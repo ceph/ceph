@@ -111,6 +111,7 @@ enum {
   l_mdss_req_snapdiff_latency,
   l_mdss_req_rmdir_latency,
   l_mdss_req_rmsnap_latency,
+  l_mdss_req_snap_md_op_latency,
   l_mdss_req_rmxattr_latency,
   l_mdss_req_setattr_latency,
   l_mdss_req_setdirlayout_latency,
@@ -346,6 +347,7 @@ public:
   void handle_client_rmsnap(const MDRequestRef& mdr);
   void _rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_renamesnap(const MDRequestRef& mdr);
+  void handle_client_snap_md_op(const MDRequestRef& mdr);
   void _snap_md_mutate_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
   void handle_client_file_blockdiff(const MDRequestRef& mdr);
