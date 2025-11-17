@@ -11,12 +11,15 @@ import { TableActionsComponent } from '~/app/shared/datatable/table-actions/tabl
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed, PermissionHelper } from '~/testing/unit-test-helper';
 import { RgwUserListComponent } from './rgw-user-list.component';
+import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
 
 describe('RgwUserListComponent', () => {
   let component: RgwUserListComponent;
   let fixture: ComponentFixture<RgwUserListComponent>;
   let rgwUserService: RgwUserService;
   let rgwUserServiceListSpy: jasmine.Spy;
+  let rgwUserAccountService: RgwUserAccountsService;
+  let rgwUserAccountServiceListSpy: jasmine.Spy;
 
   configureTestBed({
     declarations: [RgwUserListComponent],
@@ -26,8 +29,11 @@ describe('RgwUserListComponent', () => {
 
   beforeEach(() => {
     rgwUserService = TestBed.inject(RgwUserService);
+    rgwUserAccountService = TestBed.inject(RgwUserAccountsService);
     rgwUserServiceListSpy = spyOn(rgwUserService, 'list');
+    rgwUserAccountServiceListSpy = spyOn(rgwUserAccountService, 'list');
     rgwUserServiceListSpy.and.returnValue(of([]));
+    rgwUserAccountServiceListSpy.and.returnValue(of([]));
     fixture = TestBed.createComponent(RgwUserListComponent);
     component = fixture.componentInstance;
     spyOn(component, 'setTableRefreshTimeout').and.stub();
@@ -142,6 +148,7 @@ describe('RgwUserListComponent', () => {
     expect(rgwUserServiceListSpy).toHaveBeenCalledTimes(2);
     expect(component.users).toEqual([
       {
+        account: { name: '' },
         user_id: 'testid',
         stats: {
           size_actual: 6,
