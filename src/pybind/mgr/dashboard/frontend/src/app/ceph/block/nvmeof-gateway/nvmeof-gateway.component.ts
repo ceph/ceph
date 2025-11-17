@@ -1,35 +1,22 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 
-import { GroupsComboboxItem, NvmeofService } from '../../../shared/api/nvmeof.service';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
-import { CephServiceService } from '~/app/shared/api/ceph-service.service';
-import { Daemon } from '~/app/shared/models/daemon.interface';
-
-type Gateway = {
-  id: string;
-  hostname: string;
-  status: number;
-  status_desc: string;
-};
-
 enum TABS {
   'gateways',
-  'overview'
+  'subsystem',
+  'namespace'
 }
-
-const DEFAULT_PLACEHOLDER = $localize`Enter group name`;
 
 @Component({
   selector: 'cd-nvmeof-gateway',
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
-export class NvmeofGatewayComponent implements OnInit {
+export class NvmeofGatewayComponent {
   selectedTab: TABS;
 
   onSelected(tab: TABS) {
@@ -42,97 +29,7 @@ export class NvmeofGatewayComponent implements OnInit {
 
   @ViewChild('statusTpl', { static: true })
   statusTpl: TemplateRef<any>;
-
-  gateways: Gateway[] = [];
-  gatewayColumns: any;
   selection = new CdTableSelection();
-  gwGroups: GroupsComboboxItem[] = [];
-  groupService: string = null;
-  selectedGatewayGroup: string = null;
-  gwGroupsEmpty: boolean = false;
-  gwGroupPlaceholder: string = DEFAULT_PLACEHOLDER;
 
-  constructor(
-    private nvmeofService: NvmeofService,
-    private cephServiceService: CephServiceService,
-    public actionLabels: ActionLabelsI18n
-  ) {}
-
-  ngOnInit() {
-    this.setGatewayGroups();
-    this.gatewayColumns = [
-      {
-        name: $localize`Gateway ID`,
-        prop: 'id'
-      },
-      {
-        name: $localize`Hostname`,
-        prop: 'hostname'
-      },
-      {
-        name: $localize`Status`,
-        prop: 'status_desc',
-        cellTemplate: this.statusTpl
-      }
-    ];
-  }
-
-  // for Status column
-  getStatusClass(row: Gateway): string {
-    return _.get(
-      {
-        '-1': 'tag-danger',
-        '0': 'tag-warning',
-        '1': 'tag-success'
-      },
-      row.status,
-      'tag-dark'
-    );
-  }
-
-  // Gateways
-  getGateways() {
-    this.cephServiceService.getDaemons(this.groupService).subscribe((daemons: Daemon[]) => {
-      this.gateways = daemons.length
-        ? daemons.map((daemon: Daemon) => {
-            return {
-              id: `client.${daemon.daemon_name}`,
-              hostname: daemon.hostname,
-              status_desc: daemon.status_desc,
-              status: daemon.status
-            };
-          })
-        : [];
-    });
-  }
-
-  // Gateway groups
-  onGroupSelection(selected: GroupsComboboxItem) {
-    selected.selected = true;
-    this.groupService = selected.serviceName;
-    this.selectedGatewayGroup = selected.content;
-    this.getGateways();
-  }
-
-  onGroupClear() {
-    this.groupService = null;
-    this.getGateways();
-  }
-
-  setGatewayGroups() {
-    this.nvmeofService.listGatewayGroups().subscribe((response: CephServiceSpec[][]) => {
-      if (response?.[0]?.length) {
-        this.gwGroups = this.nvmeofService.formatGwGroupsList(response, true);
-      } else this.gwGroups = [];
-      // Select first group if no group is selected
-      if (!this.groupService && this.gwGroups.length) {
-        this.onGroupSelection(this.gwGroups[0]);
-        this.gwGroupsEmpty = false;
-        this.gwGroupPlaceholder = DEFAULT_PLACEHOLDER;
-      } else {
-        this.gwGroupsEmpty = true;
-        this.gwGroupPlaceholder = $localize`No groups available`;
-      }
-    });
-  }
+  constructor(public actionLabels: ActionLabelsI18n) {}
 }
