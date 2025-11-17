@@ -1,0 +1,17 @@
+.gateway-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-block {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-block .count {
+  display: inline-block;
+  width: 16px;
+  text-align: left;
+}

@@ -17,7 +17,12 @@ export interface CephServiceSpec {
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
 }
-
+export interface GatewaySpec extends CephServiceSpec {
+  name: string;
+  gateway: number;
+  gateWayCount: { running: number; error: number };
+  events: { created: string }[];
+}
 export interface CephServiceAdditionalSpec {
   backend_service: string;
   api_user: string;

@@ -9,7 +9,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems.component';
-import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { ComboBoxModule, GridModule } from 'carbon-components-angular';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
@@ -89,11 +88,7 @@ describe('NvmeofSubsystemsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [
-        NvmeofSubsystemsComponent,
-        NvmeofTabsComponent,
-        NvmeofSubsystemsDetailsComponent
-      ],
+      declarations: [NvmeofSubsystemsComponent, NvmeofSubsystemsDetailsComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule, ComboBoxModule, GridModule],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },
