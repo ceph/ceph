@@ -572,7 +572,7 @@ void LazyOmapStatsTest::wait_for_active_clean()
   string command = R"({"prefix": "pg dump"})";
   int num_not_clean;
   do {
-    string dump_output = get_output(std::move(command), true);
+    string dump_output = get_output(command, true);
     if (index == -1) {
       boost::regex ireg(
           "\n"
