@@ -3,6 +3,7 @@ import json
 import tempfile
 import random
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import socket
 import time
@@ -1754,6 +1755,109 @@ def test_notification_push_kafka_multiple_brokers_append():
     """ test pushing kafka s3 notification on master """
     conn = connection()
     notification_push('kafka', conn, kafka_brokers='localhost:19092')
+
+
+@attr('manual_test')
+def test_1K_topics():
+    """ test creation of moe than 1K topics """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+    base_bucket_name = gen_bucket_name()
+    host = get_ip()
+    endpoint_address = 'kafka://' + host
+    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    topic_count = 1200
+    thread_pool_size = 30
+    topics = []
+    notifications = []
+    buckets = []
+    log.info(f"creating {topic_count} topics, buckets and notifications")
+    print(f"creating {topic_count} topics, buckets and notifications")
+    # create topics buckets and notifications
+    def create_topic_bucket_notification(i):
+        bucket_name = base_bucket_name + str(i)
+        topic_name = bucket_name + TOPIC_SUFFIX
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+        bucket = conn.create_bucket(bucket_name)
+        notification_name = bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [{'Id': notification_name,
+                            'TopicArn': topic_arn,
+                            'Events': []
+                            }]
+        s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+        response, status = s3_notification_conf.set_config()
+        return topic_conf, bucket, s3_notification_conf
+
+    with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
+        futures = [executor.submit(create_topic_bucket_notification, i) for i in range(topic_count)]
+        for i, future in enumerate(futures):
+            try:
+                topic_conf, bucket, s3_notification_conf = future.result()
+                topics.append(topic_conf)
+                buckets.append(bucket)
+                notifications.append(s3_notification_conf)
+            except Exception as e:
+                log.error(f"error creating topic/bucket/notification {i}: {e}")
+
+    log.info("creating objects in buckets")
+    print("creating objects in buckets")
+    # create objects in the buckets
+    def create_object_in_bucket(bucket_idx):
+        bucket = buckets[bucket_idx]
+        content = str(os.urandom(32))
+        key = bucket.new_key(str(bucket_idx))
+        set_contents_from_string(key, content)
+
+    with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
+        futures = [executor.submit(create_object_in_bucket, i) for i in range(len(buckets))]
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                log.error(f"error creating object in bucket: {e}")
+
+    log.info("deleting objects from buckets")
+    print("deleting objects from buckets")
+    # delete objects in the buckets
+    def delete_object_in_bucket(bucket_idx):
+        bucket = buckets[bucket_idx]
+        key = bucket.new_key(str(bucket_idx))
+        key.delete()
+
+    with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
+        futures = [executor.submit(delete_object_in_bucket, i) for i in range(len(buckets))]
+        for future in futures:
+            try:
+                future.result()
+            except Exception as e:
+                log.error(f"error deleting object in bucket: {e}")
+
+    # cleanup
+    def cleanup_notification(notification):
+        notification.del_config()
+
+    def cleanup_topic(topic):
+        topic.del_config()
+
+    def cleanup_bucket(i):
+        bucket_name = base_bucket_name + str(i)
+        conn.delete_bucket(bucket_name)
+
+    with ThreadPoolExecutor(max_workers=thread_pool_size) as executor:
+        # cleanup notifications
+        notification_futures = [executor.submit(cleanup_notification, notification) for notification in notifications]
+        # cleanup topics
+        topic_futures = [executor.submit(cleanup_topic, topic) for topic in topics]
+        # cleanup buckets
+        bucket_futures = [executor.submit(cleanup_bucket, i) for i in range(topic_count)]
+        # wait for all cleanup operations to complete
+        all_futures = notification_futures + topic_futures + bucket_futures
+        for future in all_futures:
+            try:
+                future.result()
+            except Exception as e:
+                log.error(f"error during cleanup: {e}")
 
 
 @attr('http_test')
@@ -5794,7 +5898,340 @@ def test_connection_caching():
     topic_conf_2.del_config()
     # delete the bucket
     conn.delete_bucket(bucket_name)
-    if receiver_1 is not None:
-        stop_kafka_receiver(receiver_1, task_1)
-    if receiver_2 is not None:
-        stop_kafka_receiver(receiver_2, task_2)
+    receiver_1.close(task_1)
+    receiver_2.close(task_2)
+
+
+@attr("http_test")
+def test_topic_migration_to_an_account():
+    """test the topic migration procedure described at
+    https://docs.ceph.com/en/latest/radosgw/account/#migrate-an-existing-user-into-an-account
+    """
+    try:
+        # create an http server for notification delivery
+        host = get_ip()
+        port = random.randint(10000, 20000)
+        http_server = HTTPServerWithEvents((host, port))
+
+        # start with two non-account users
+        # create a new user for "user1" which is going to be migrated to an account
+        user1_conn, user1_arn = another_user()
+        user1_id = user1_arn.split("/")[1]
+        user2_conn = connection()
+        log.info(
+            f"two non-account users with acckeys user1 {user1_conn.access_key} and user2 {user2_conn.access_key}"
+        )
+
+        # create a bucket per user
+        user1_bucket_name = gen_bucket_name()
+        user2_bucket_name = gen_bucket_name()
+        user1_bucket = user1_conn.create_bucket(user1_bucket_name)
+        user2_bucket = user2_conn.create_bucket(user2_bucket_name)
+        log.info(
+            f"one bucket per user {user1_conn.access_key}: {user1_bucket_name} and {user2_conn.access_key}: {user2_bucket_name}"
+        )
+
+        # create an S3 topic owned by the first user
+        topic_name = user1_bucket_name + TOPIC_SUFFIX
+        zonegroup = get_config_zonegroup()
+        endpoint_address = "http://" + host + ":" + str(port)
+        endpoint_args = "push-endpoint=" + endpoint_address + "&persistent=true"
+        expected_topic_arn = "arn:aws:sns:" + zonegroup + "::" + topic_name
+        topic_conf = PSTopicS3(
+            user1_conn, topic_name, zonegroup, endpoint_args=endpoint_args
+        )
+        topic_arn = topic_conf.set_config()
+        assert_equal(topic_arn, expected_topic_arn)
+        log.info(
+            f"{user1_conn.access_key} created the topic {topic_arn} with args {endpoint_args}"
+        )
+
+        # both buckets subscribe to the same and only topic using the same notification id
+        notification_name = user1_bucket_name + NOTIFICATION_SUFFIX
+        topic_conf_list = [
+            {
+                "Id": notification_name,
+                "TopicArn": topic_arn,
+                "Events": ["s3:ObjectCreated:*"],
+            }
+        ]
+        s3_notification_conf1 = PSNotificationS3(
+            user1_conn, user1_bucket_name, topic_conf_list
+        )
+        s3_notification_conf2 = PSNotificationS3(
+            user2_conn, user2_bucket_name, topic_conf_list
+        )
+        _, status = s3_notification_conf1.set_config()
+        assert_equal(status / 100, 2)
+        _, status = s3_notification_conf2.set_config()
+        assert_equal(status / 100, 2)
+        # verify both buckets are subscribed to the topic
+        rgw_topic_entry = [
+            t for t in list_topics() if t["name"] == topic_name
+        ]
+        assert_equal(len(rgw_topic_entry), 1)
+        subscribed_buckets = rgw_topic_entry[0]["subscribed_buckets"]
+        assert_equal(len(subscribed_buckets), 2)
+        assert_in(user1_bucket_name, subscribed_buckets)
+        assert_in(user2_bucket_name, subscribed_buckets)
+        log.info(
+            "buckets {user1_bucket_name} and {user2_bucket_name} are subscribed to {topic_arn}"
+        )
+
+        # move user1 to an account
+        account_id = "RGW98765432101234567"
+        cmd = ["account", "create", "--account-id", account_id]
+        _, rc = admin(cmd, get_config_cluster())
+        assert rc == 0, f"failed to create {account_id}: {rc}"
+        cmd = [
+            "user",
+            "modify",
+            "--uid",
+            user1_id,
+            "--account-id",
+            account_id,
+            "--account-root",
+        ]
+        _, rc = admin(cmd, get_config_cluster())
+        assert rc == 0, f"failed to modify {user1_id}: {rc}"
+        log.info(
+            f"{user1_conn.access_key}/{user1_id} is migrated to account {account_id} as root user"
+        )
+
+        # verify the topic is functional
+        user1_bucket.new_key("user1obj1").set_contents_from_string("object content")
+        user2_bucket.new_key("user2obj1").set_contents_from_string("object content")
+        wait_for_queue_to_drain(topic_name, http_port=port)
+        http_server.verify_s3_events(
+            list(user1_bucket.list()) + list(user2_bucket.list()), exact_match=True
+        )
+
+        # create a new account topic with the same name as the existing topic
+        # note that the expected arn now contains the account ID
+        expected_topic_arn = (
+            "arn:aws:sns:" + zonegroup + ":" + account_id + ":" + topic_name
+        )
+        topic_conf = PSTopicS3(
+            user1_conn, topic_name, zonegroup, endpoint_args=endpoint_args
+        )
+        account_topic_arn = topic_conf.set_config()
+        assert_equal(account_topic_arn, expected_topic_arn)
+        log.info(
+            f"{user1_conn.access_key} created the account topic {account_topic_arn} with args {endpoint_args}"
+        )
+
+        # verify that the old topic is still functional
+        user1_bucket.new_key("user1obj1").set_contents_from_string("object content")
+        user2_bucket.new_key("user2obj1").set_contents_from_string("object content")
+        wait_for_queue_to_drain(topic_name, http_port=port)
+        # wait_for_queue_to_drain(topic_name, tenant=account_id, http_port=port)
+        http_server.verify_s3_events(
+            list(user1_bucket.list()) + list(user2_bucket.list()), exact_match=True
+        )
+
+        # change user1 bucket's subscription to the account topic - using the same notification ID but with the new account_topic_arn
+        topic_conf_list = [
+            {
+                "Id": notification_name,
+                "TopicArn": account_topic_arn,
+                "Events": ["s3:ObjectCreated:*"],
+            }
+        ]
+        s3_notification_conf1 = PSNotificationS3(
+            user1_conn, user1_bucket_name, topic_conf_list
+        )
+        _, status = s3_notification_conf1.set_config()
+        assert_equal(status / 100, 2)
+        # verify subscriptions to the account topic
+        rgw_topic_entry = [
+            t
+            for t in list_topics(tenant=account_id)
+            if t["name"] == topic_name
+        ]
+        assert_equal(len(rgw_topic_entry), 1)
+        subscribed_buckets = rgw_topic_entry[0]["subscribed_buckets"]
+        assert_equal(len(subscribed_buckets), 1)
+        assert_in(user1_bucket_name, subscribed_buckets)
+        assert_not_in(user2_bucket_name, subscribed_buckets)
+        # verify bucket notifications while 2 test buckets are in the mixed mode
+        notification_list = list_notifications(user1_bucket_name, assert_len=1)
+        assert_equal(notification_list["notifications"][0]["TopicArn"], account_topic_arn)
+        notification_list = list_notifications(user2_bucket_name, assert_len=1)
+        assert_equal(notification_list["notifications"][0]["TopicArn"], topic_arn)
+
+        # verify both topics are functional at the same time with no duplicate notifications
+        user1_bucket.new_key("user1obj1").set_contents_from_string("object content")
+        user2_bucket.new_key("user2obj1").set_contents_from_string("object content")
+        wait_for_queue_to_drain(topic_name, http_port=port)
+        wait_for_queue_to_drain(topic_name, tenant=account_id, http_port=port)
+        http_server.verify_s3_events(
+            list(user1_bucket.list()) + list(user2_bucket.list()), exact_match=True
+        )
+
+        # also change user2 bucket's subscription to the account topic
+        s3_notification_conf2 = PSNotificationS3(
+            user2_conn, user2_bucket_name, topic_conf_list
+        )
+        _, status = s3_notification_conf2.set_config()
+        assert_equal(status / 100, 2)
+        # remove old topic
+        # note that, although account topic has the same name, it has to be scoped by account/tenant id to be removed
+        # so below command will only remove the old topic
+        _, rc = admin(["topic", "rm", "--topic", topic_name], get_config_cluster())
+        assert_equal(rc, 0)
+
+        # now verify account topic serves both buckets
+        rgw_topic_entry = [
+            t
+            for t in list_topics(tenant=account_id)
+            if t["name"] == topic_name
+        ]
+        assert_equal(len(rgw_topic_entry), 1)
+        subscribed_buckets = rgw_topic_entry[0]["subscribed_buckets"]
+        assert_equal(len(subscribed_buckets), 2)
+        assert_in(user1_bucket_name, subscribed_buckets)
+        assert_in(user2_bucket_name, subscribed_buckets)
+        # verify bucket notifications after 2 test buckets are updated to use the account topic
+        notification_list = list_notifications(user1_bucket_name, assert_len=1)
+        assert_equal(notification_list["notifications"][0]["TopicArn"], account_topic_arn)
+        notification_list = list_notifications(user2_bucket_name, assert_len=1)
+        assert_equal(notification_list["notifications"][0]["TopicArn"], account_topic_arn)
+
+        # finally, make sure that notifications are going thru via the new account topic
+        user1_bucket.new_key("user1obj1").set_contents_from_string("object content")
+        user2_bucket.new_key("user2obj1").set_contents_from_string("object content")
+        wait_for_queue_to_drain(topic_name, tenant=account_id, http_port=port)
+        http_server.verify_s3_events(
+            list(user1_bucket.list()) + list(user2_bucket.list()), exact_match=True
+        )
+        log.info("topic migration test has completed successfully")
+    finally:
+        admin(["user", "rm", "--uid", user1_id, "--purge-data"], get_config_cluster())
+        admin(
+            ["bucket", "rm", "--bucket", user1_bucket_name, "--purge-data"],
+            get_config_cluster(),
+        )
+        admin(
+            ["bucket", "rm", "--bucket", user2_bucket_name, "--purge-data"],
+            get_config_cluster(),
+        )
+        admin(["account", "rm", "--account-id", account_id], get_config_cluster())
+
+def persistent_notification_shard_config_change(endpoint_type, conn, new_num_shards, old_num_shards=11): 
+    """ test persistent notification shard config change """
+    """ test to check if notifications work when config value for determining num_shards is changed..."""
+    
+    default_num_shards = 11
+    rgw_client = f'client.rgw.{get_config_port()}'
+    if (old_num_shards != default_num_shards):
+        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', old_num_shards)
+
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    #start receiver thread based on conn type
+    # start endpoint receiver
+    host = get_ip()
+    task = None
+    port = None
+    if endpoint_type == 'http':
+        # create random port for the http server
+        port = random.randint(10000, 20000)
+        # start an http server in a separate thread
+        receiver = HTTPServerWithEvents((host, port))
+        endpoint_address = 'http://'+host+':'+str(port)
+        endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    elif endpoint_type == 'kafka':
+        # start kafka receiver
+        task, receiver = create_kafka_receiver_thread(topic_name)
+        task.start()
+        endpoint_address = 'kafka://' + host
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&persistent=true'
+    else:
+        return SkipTest('Unknown endpoint type: ' + endpoint_type)
+
+    zonegroup = get_config_zonegroup()
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification
+    notif_1 = bucket_name +  '_notif_1'
+    topic_conf_list = [{'Id': notif_1, 'TopicArn': topic_arn,
+        'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*']
+    }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    ## create objects in the bucket (async)
+    expected_keys = []
+    create_object_and_verify_events(bucket, 'foo', topic_name, receiver, expected_keys, deletions=True)
+
+    ## change config value for num_shards to new_num_shards
+    set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', new_num_shards)
+    
+    ## create objects in the bucket (async)
+    expected_keys = []
+    create_object_and_verify_events(bucket, 'bar', topic_name, receiver, expected_keys, deletions=True)
+
+    # cleanup
+    receiver.close(task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
+    ##revert config value for num_shards to default
+    if (new_num_shards != default_num_shards):
+        set_rgw_config_option(rgw_client, 'rgw_bucket_persistent_notif_num_shards', default_num_shards)
+
+
+def create_object_and_verify_events(bucket, key_name, topic_name, receiver, expected_keys, deletions=False):
+    key = bucket.new_key(key_name)
+    key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    expected_keys.append(key_name)
+
+    print('wait for the messages...')
+    wait_for_queue_to_drain(topic_name)
+    events = receiver.get_and_reset_events()
+    assert_equal(len(events), len(expected_keys))
+    for event in events:
+        assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+    if deletions:
+        # delete objects
+        for key in bucket.list():
+            key.delete()
+        print('wait for the messages...')
+        wait_for_queue_to_drain(topic_name)
+        # check endpoint receiver
+        events = receiver.get_and_reset_events()
+        assert_equal(len(events), len(expected_keys))
+        for event in events:
+            assert(event['Records'][0]['s3']['object']['key'] in expected_keys)
+
+@attr('http_test')
+def test_backward_compatibility_persistent_sharded_topic_http(): 
+    conn = connection()
+    persistent_notification_shard_config_change('http', conn, new_num_shards=11, old_num_shards=1)
+
+@attr('kafka_test')
+def test_backward_compatibility_persistent_sharded_topic_kafka(): 
+    conn = connection()
+    persistent_notification_shard_config_change('kafka', conn, new_num_shards=11, old_num_shards=1)
+
+@attr('http_test')
+def test_persistent_sharded_topic_config_change_http():
+    conn = connection()
+    new_num_shards = random.randint(2, 10)
+    default_num_shards = 11
+    persistent_notification_shard_config_change('http', conn, new_num_shards, default_num_shards)
+
+@attr('kafka_test')
+def test_persistent_sharded_topic_config_change_kafka():
+    conn = connection()
+    new_num_shards = random.randint(2, 10)
+    default_num_shards = 11
+    persistent_notification_shard_config_change('kafka', conn, new_num_shards, default_num_shards)
