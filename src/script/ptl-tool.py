@@ -440,6 +440,16 @@ def build_branch(args):
                 sys.exit(1)
             log.info("Labeled PR #{pr} {label}".format(pr=pr, label=label))
 
+    if args.distros or args.archs:
+        message = "ceph-dev-pipeline: configure\n\n"
+        if args.distros:
+            message += f"DISTROS: {' '.join(args.distros)}\n"
+        if args.archs:
+            message += f"ARCHS: {' '.join(args.archs)}\n"
+        if args.flavors:
+            message += f"FLAVORS: {' '.join(args.flavors)}\n"
+        G.git.commit('--allow-empty', '-m', message)
+
     if args.stop_at_built:
         log.warning("Stopping execution (SIGSTOP) with built branch for further modification. Foreground when execution should resume (typically `fg`).")
         old_head = G.head.commit
@@ -540,6 +550,24 @@ def build_branch(args):
                 r = session.post(endpoint, auth=gitauth(), data=json.dumps({'body':body}))
                 log.debug(f"= {r}")
 
+class SplitCommaAppendAction(argparse.Action):
+    """
+    Custom action to split comma-separated values and append each
+    part to the destination list. Handles multiple uses of the argument.
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        # 1. Get the list that's already stored in the namespace.
+        #    'default=[]' in add_argument ensures this is always a list.
+        current_list = getattr(namespace, self.dest)
+
+        # 2. Split the new value(s) by comma
+        #    Use strip() to remove any whitespace around items
+        new_items = [item.strip() for item in values.split(',')]
+
+        # 3. Extend the existing list with the new items
+        current_list.extend(new_items)
+
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'main'
@@ -557,6 +585,9 @@ def main():
     parser.add_argument('--branch-release', dest='branch_release', action='store', help='release name to embed in branch (for shaman)')
     parser.add_argument('--create-qa', dest='create_qa', action='store_true', help='create QA run ticket')
     parser.add_argument('--debug', dest='debug', action='store_true', help='turn debugging on')
+    parser.add_argument('--distros', dest='distros', action=SplitCommaAppendAction, default=[], help='add distro(s) to build. Specify one or more times. Comma separated values are split.')
+    parser.add_argument('--archs', dest='archs', action=SplitCommaAppendAction, default=[], help='add arch(s) to build. Specify one or more times. Comma separated values are split.')
+    parser.add_argument('--flavors', dest='flavors', action=SplitCommaAppendAction, default=[], help='add flavors(s) to build. Specify one or more times. Comma separated values are split.')
     parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     parser.add_argument('--branch-name-append', dest='branch_append', action='store', help='append string to branch name')
     parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
