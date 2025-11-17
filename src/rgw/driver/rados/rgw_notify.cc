@@ -416,9 +416,9 @@ private:
         op.assert_exists();
         bufferlist obl;
         int rval;
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
+        rados::cls::lock::assert_locked(&op, queue_name+"_lock",
           ClsLockType::EXCLUSIVE,
-          lock_cookie, 
+          lock_cookie,
           "" /*no tag*/);
         cls_2pc_queue_list_entries(op, start_marker, max_elements, &obl, &rval);
         // check ownership and list entries in one batch
@@ -439,13 +439,13 @@ private:
           return;
         }
         if (ret < 0) {
-          ldpp_dout(this, 5) << "WARNING: failed to get list of entries in queue and/or lock queue: " 
+          ldpp_dout(this, 5) << "WARNING: failed to get list of entries in queue and/or lock queue: "
             << queue_name << ". error: " << ret << " (will retry)" << dendl;
           continue;
         }
         ret = cls_2pc_queue_list_entries_result(obl, entries, &truncated, end_marker);
         if (ret < 0) {
-          ldpp_dout(this, 5) << "WARNING: failed to parse list of entries in queue: " 
+          ldpp_dout(this, 5) << "WARNING: failed to parse list of entries in queue: "
             << queue_name << ". error: " << ret << " (will retry)" << dendl;
           continue;
         }
@@ -557,9 +557,9 @@ private:
         uint64_t entries_to_remove = index;
         librados::ObjectWriteOperation op;
         op.assert_exists();
-        rados::cls::lock::assert_locked(&op, queue_name+"_lock", 
+        rados::cls::lock::assert_locked(&op, queue_name+"_lock",
           ClsLockType::EXCLUSIVE,
-          lock_cookie, 
+          lock_cookie,
           "" /*no tag*/);
         cls_2pc_queue_remove_entries(op, end_marker, entries_to_remove);
         // check ownership and deleted entries in one batch
@@ -578,7 +578,7 @@ private:
           return;
         }
         if (ret < 0) {
-          ldpp_dout(this, 1) << "ERROR: failed to remove entries and/or lock queue up to: " << end_marker <<  " from queue: " 
+          ldpp_dout(this, 1) << "ERROR: failed to remove entries and/or lock queue up to: " << end_marker <<  " from queue: "
             << queue_name << ". error: " << ret << dendl;
           return;
         } else {
@@ -930,7 +930,7 @@ rgw::sal::Object* get_object_with_attributes(
     }
     const auto ret = src_obj->get_obj_attrs(res.yield, res.dpp);
     if (ret < 0) {
-      ldpp_dout(res.dpp, 20) << "failed to get attributes from object: " << 
+      ldpp_dout(res.dpp, 20) << "failed to get attributes from object: " <<
         src_obj->get_key() << ". ret = " << ret << dendl;
       return nullptr;
     }
@@ -991,9 +991,9 @@ static inline void tags_from_attributes(
 static inline void populate_event(reservation_t& res,
         rgw::sal::Object* obj,
         uint64_t size,
-        const ceph::real_time& mtime, 
-        const std::string& etag, 
-        const std::string& version, 
+        const ceph::real_time& mtime,
+        const std::string& etag,
+        const std::string& version,
         EventType event_type,
         rgw_pubsub_s3_event& event) {
   event.eventTime = mtime;
@@ -1006,7 +1006,7 @@ static inline void populate_event(reservation_t& res,
   event.bucket_ownerIdentity = to_string(res.bucket->get_owner());
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
-  bucket_arn.region = region; 
+  bucket_arn.region = region;
   event.bucket_arn = to_string(bucket_arn);
   event.object_key = res.object_name ? *res.object_name : obj->get_name();
   event.object_size = size;
@@ -1015,7 +1015,7 @@ static inline void populate_event(reservation_t& res,
   event.awsRegion = region;
   // use timestamp as per key sequence id (hex encoded)
   const utime_t ts(real_clock::now());
-  boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t), 
+  boost::algorithm::hex((const char*)&ts, (const char*)&ts + sizeof(utime_t),
           std::back_inserter(event.object_sequencer));
   set_event_id(event.id, etag, ts);
   event.bucket_id = res.bucket->get_bucket_id();
@@ -1040,11 +1040,11 @@ static inline bool notification_match(reservation_t& res,
 				      const rgw_pubsub_topic_filter& filter,
 				      EventType event,
 				      const RGWObjTags* req_tags) {
-  if (!match(filter.events, event)) { 
+  if (!match(filter.events, event)) {
     return false;
   }
   const auto obj = res.object;
-  if (!match(filter.s3_filter.key_filter, 
+  if (!match(filter.s3_filter.key_filter,
         res.object_name ? *res.object_name : obj->get_name())) {
     return false;
   }
@@ -1087,11 +1087,11 @@ static inline bool notification_match(reservation_t& res,
 
 
 static inline uint64_t get_target_shard(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& object_key, const uint64_t num_shards) {
-  std::hash<std::string> hash_fn; 
+  std::hash<std::string> hash_fn;
   std::string hash_key = fmt::format("{}:{}", bucket_name, object_key);
-  size_t hash = hash_fn(hash_key); 
-  ldpp_dout(dpp, 20) << "INFO: Hash Value (hash) is:  " << hash << ". Hash Key: " << bucket_name << ":" << object_key << dendl; 
-  return hash % num_shards; 
+  size_t hash = hash_fn(hash_key);
+  ldpp_dout(dpp, 20) << "INFO: Hash Value (hash) is:  " << hash << ". Hash Key: " << bucket_name << ":" << object_key << dendl;
+  return hash % num_shards;
 }
 
 static inline std::string get_shard_name(const std::string& topic_name, const uint64_t& shard_id) {
@@ -1159,7 +1159,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
       }
 
       cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
-      uint64_t target_shard = 0; 
+      uint64_t target_shard = 0;
       if (topic_cfg.dest.persistent) {
         // TODO: take default reservation size from conf
         constexpr auto DEFAULT_RESERVATION = 4 * 1024U;  // 4K
@@ -1167,13 +1167,13 @@ int publish_reserve(const DoutPrefixProvider* dpp,
         librados::ObjectWriteOperation op;
         bufferlist obl;
         int rval;
-        const std::string bucket_name = res.bucket->get_name(); 
+        const std::string bucket_name = res.bucket->get_name();
         const std::string object_key = res.object_name ? *res.object_name : res.object->get_name();
-        const uint64_t num_shards = topic_cfg.dest.num_shards; 
+        const uint64_t num_shards = topic_cfg.dest.num_shards;
         target_shard = get_target_shard(
-            dpp, bucket_name, object_key, num_shards); 
+            dpp, bucket_name, object_key, num_shards);
         const auto shard_name = get_shard_name(topic_cfg.dest.persistent_queue, target_shard);
-        ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;       
+        ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
         cls_2pc_queue_reserve(op, res.size, 1, &obl, &rval);
         auto ret = rgw_rados_operate(
             res.dpp, res.store->getRados()->get_notif_pool_ctx(), shard_name,
@@ -1219,7 +1219,7 @@ int publish_commit(rgw::sal::Object* obj,
                    event_entry.event);
     event_entry.event.configurationId = topic.configurationId;
     event_entry.event.opaque_data = topic.cfg.opaque_data;
-    if (topic.cfg.dest.persistent) { 
+    if (topic.cfg.dest.persistent) {
       event_entry.push_endpoint = std::move(topic.cfg.dest.push_endpoint);
       event_entry.push_endpoint_args =
 	std::move(topic.cfg.dest.push_endpoint_args);
@@ -1231,8 +1231,8 @@ int publish_commit(rgw::sal::Object* obj,
       bufferlist bl;
       encode(event_entry, bl);
       uint64_t target_shard = topic.shard_id;
-      const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);  
-      ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;   
+      const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);
+      ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
       if (bl.length() > res.size) {
         // try to make a larger reservation, fail only if this is not possible
         ldpp_dout(dpp, 5) << "WARNING: committed size: " << bl.length()
@@ -1249,7 +1249,7 @@ int publish_commit(rgw::sal::Object* obj,
 	  res.yield);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: failed to abort reservation: "
-			    << topic.res_id << 
+			    << topic.res_id <<
             " when trying to make a larger reservation on queue: " << shard_name
 			    << ". error: " << ret << dendl;
           return ret;
@@ -1327,8 +1327,8 @@ int publish_abort(reservation_t& res) {
       // nothing to abort or already committed/aborted
       continue;
     }
-    uint64_t target_shard = topic.shard_id;   
-    const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);   
+    uint64_t target_shard = topic.shard_id;
+    const auto shard_name = get_shard_name(topic.cfg.dest.persistent_queue, target_shard);
     ldpp_dout(res.dpp, 1) << "INFO: target_shard: " << shard_name << dendl;
     librados::ObjectWriteOperation op;
     cls_2pc_queue_abort(op, topic.res_id);
@@ -1351,12 +1351,12 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
 {
   // TODO: use optional_yield instead calling rados_ioctx.operate() synchronously
   cls_2pc_reservations reservations;
-  uint32_t shard_entries; 
+  uint32_t shard_entries;
   uint64_t shard_size;
 
-  stats.queue_reservations = 0; 
-  stats.queue_size = 0; 
-  stats.queue_entries = 0; 
+  stats.queue_reservations = 0;
+  stats.queue_size = 0;
+  stats.queue_entries = 0;
   for(const auto& shard_name: shards){
     auto ret = cls_2pc_queue_list_reservations(rados_ioctx, shard_name, reservations);
     if (ret < 0) {
@@ -1364,10 +1364,10 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
       return ret;
     }
     stats.queue_reservations += reservations.size();
-    shard_entries = 0; 
-    shard_size = 0; 
+    shard_entries = 0;
+    shard_size = 0;
     ret = cls_2pc_queue_get_topic_stats(rados_ioctx, shard_name, shard_entries, shard_size);
-    stats.queue_size += shard_size; 
+    stats.queue_size += shard_size;
     stats.queue_entries += shard_entries;
     if (ret < 0) {
       ldpp_dout(dpp, 1) << "ERROR: failed to get the size or number of entries for queue shard: " << shard_name << ret << dendl;
