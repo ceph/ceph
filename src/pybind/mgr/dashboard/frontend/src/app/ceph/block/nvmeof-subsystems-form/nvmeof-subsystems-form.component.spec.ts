@@ -11,7 +11,10 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form.component';
 import { FormHelper } from '~/testing/unit-test-helper';
-import { MAX_NAMESPACE, NvmeofService } from '~/app/shared/api/nvmeof.service';
+import {
+  DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
+  NvmeofService
+} from '~/app/shared/api/nvmeof.service';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
@@ -61,7 +64,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
       component.onSubmit();
       expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
         nqn: expectedNqn,
-        max_namespaces: MAX_NAMESPACE,
+        max_namespaces: DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
         enable_ha: true,
         gw_group: mockGroupName
       });
@@ -79,10 +82,16 @@ describe('NvmeofSubsystemsFormComponent', () => {
       formHelper.expectError('max_namespaces', 'pattern');
     });
 
-    it(`should give error on max_namespaces greater than ${MAX_NAMESPACE}`, () => {
-      formHelper.setValue('max_namespaces', 6000);
+    it(`should not give error on max_namespaces greater than ${DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM}`, () => {
+      const expectedNqn = 'nqn.2001-07.com.ceph:' + mockTimestamp;
+      formHelper.setValue('max_namespaces', 600);
       component.onSubmit();
-      formHelper.expectError('max_namespaces', 'max');
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: expectedNqn,
+        max_namespaces: DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM,
+        enable_ha: true,
+        gw_group: mockGroupName
+      });
     });
 
     it('should give error on max_namespaces lesser than 1', () => {
