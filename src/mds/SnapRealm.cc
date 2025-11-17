@@ -301,6 +301,19 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
 }
 
 
+int SnapRealm::will_metadata_op_succeed(snapid_t snap_id, string md_key,
+                                        string md_val, int op_flag) const
+{
+  for (auto& i : srnode.snaps) {
+    if (i.first == snap_id) {
+      return i.second.will_metadata_op_succeed(md_key, md_val, op_flag);
+    }
+  }
+
+  return -ENOENT;
+}
+
+
 void SnapRealm::adjust_parent()
 {
   SnapRealm *newparent;

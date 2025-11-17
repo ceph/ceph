@@ -42,6 +42,9 @@ public:
     return false;
   }
 
+  int will_metadata_op_succeed(snapid_t snap_id, std::string md_key,
+                               std::string md_val, int op_flag) const;
+
   void prune_past_parent_snaps();
   bool has_past_parent_snaps() const {
     return !srnode.past_parent_snaps.empty();

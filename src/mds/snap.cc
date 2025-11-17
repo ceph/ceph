@@ -19,6 +19,11 @@
 #include <ostream>
 #include <sstream>
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "mds.server "
+
 using namespace std;
 /*
  * SnapInfo
@@ -63,6 +68,59 @@ void SnapInfo::dump(Formatter *f) const
     f->dump_string(key, value);
   }
   f->close_section();
+}
+
+/* NOTE: Call this method before projecting the inode to check if this function
+ * will run successfully to avoid un-projecting inode and rolling back the
+ * transaction in case the snap metadata mutation fails.
+ *
+ * Return 0 for success,
+ *        1 for error due to unknown op,
+ *        2 for error, because update was attempted in create mode,
+ *        3 for error, because create was attempted in update mode, and
+ *        4 for error, because unexisting key was attempted to remove.
+ */
+int SnapInfo::will_metadata_op_succeed(string key, string val, int op_flag) const {
+  if (op_flag == CEPH_SNAP_MD_OP_CREATE) {
+    if (metadata.count(key) > 0) {
+      //dout(10) << "snapshot metadata op failed: create was attempted "
+      //         << "in update mode, retval = 3" << dendl;
+      return 2;
+    }
+  } else if (op_flag == CEPH_SNAP_MD_OP_UPDATE) {
+    if (metadata.count(key) == 0) {
+      //dout(10) << "snapshot metadata op failed: update was attempted "
+      //         << "in create mode, retval = 2" << dendl;
+      return 3;
+    }
+  } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+    if (metadata.count(key) == 0) {
+      //dout(10) << "snapshot metadata op failed: remove was attempted "
+      //         << "on a non-existing key, retval = 4" << dendl;
+      return 4;
+    }
+  // sanity check for op_flag
+  } else {
+    //dout(10) << "snapshot metadata op failed: unknown op was attempted "
+    //            "retval = 1" << dendl;
+    return 1;
+  }
+
+  return 0;
+}
+
+// NOTE: to avoid unprojecting the inode and rolling back the transaction for
+// snap metadata mutation call this method only when success is guaranteed.
+// whether success is guaranted or not, can be found out by calling
+// check_metadata_op_success().
+void SnapInfo::do_metadata_op(string key, string val, int op_flag) {
+  if (op_flag == CEPH_SNAP_MD_OP_CREATE) {
+    metadata.emplace(key, val);
+  } else if (op_flag == CEPH_SNAP_MD_OP_UPDATE) {
+    metadata.insert_or_assign(key, val);
+  } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+    metadata.erase(key);
+  }
 }
 
 std::list<SnapInfo> SnapInfo::generate_test_instances()
