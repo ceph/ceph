@@ -2755,7 +2755,11 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return dir->for_each(dpp, [](const char* name) {
     /* for_each filters out "." and "..", so reaching here is not empty */
-    return -ENOTEMPTY;
+    std::string_view check_name = name;
+    if (!check_name.starts_with(".multipart")) { // incomplete uploads can be deleted
+      return -ENOTEMPTY;
+    }
+    return 0;
   });
 }
 
