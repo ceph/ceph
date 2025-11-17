@@ -10071,6 +10071,10 @@ void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
 
 void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
+  if (!mdr) {
+    dout(0) << __func__ << ": received a null request!"  << dendl;
+    return;
+  }
   if (mdr->dead) {
     dout(20) << __func__ << ": dead " << *mdr << dendl;
     return;
@@ -10140,8 +10144,9 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
     auto new_batch_head = it->second->find_new_head();
     if (!new_batch_head) {
       mdr->batch_op_map->erase(it);
+    } else {
+      mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
     }
-    mds->finisher->queue(new C_MDS_RetryRequest(this, new_batch_head));
   }
 
   if (mdr->has_more()) {
@@ -13387,7 +13392,9 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f, double timeout)
 void C_MDS_RetryRequest::finish(int r)
 {
   mdr->retry++;
-  cache->dispatch_request(mdr);
+  if (mdr) {
+    cache->dispatch_request(mdr);
+  }
 }
 
 MDSContext *CF_MDS_RetryRequestFactory::build()
