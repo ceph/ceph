@@ -776,6 +776,7 @@ def cluster(ctx, config):
     ctx.ceph[cluster_name] = argparse.Namespace()
     ctx.ceph[cluster_name].conf = conf
     ctx.ceph[cluster_name].mons = mons
+    ctx.ceph[cluster_name].assert_trackers = []
 
     default_keyring = '/etc/ceph/{cluster}.keyring'.format(cluster=cluster_name)
     keyring_path = config.get('keyring_path', default_keyring)
@@ -1401,6 +1402,69 @@ def run_daemon(ctx, config, type_):
     :param config: Configuration
     :param type_: Role type
     """
+    class AssertTracker(StringIO):
+        MAX_BT_LINES = 100
+        DISPLAY_BT_LINES = 7
+
+        def __init__(self, cluster_name, type_, id_, logger):
+            super(AssertTracker, self).__init__()
+            self.role = cluster_name + '.' + type_
+            self.id_ = id_
+            self.bt_lines = []
+            self.assertion = None
+            self.backtrace = None
+            self.in_bt = False
+            self.logger = logger
+            self.failure_time = None
+
+        def write(self, line):
+            if "FAILED ceph_assert" in line or "__ceph_assert_fail" in line:
+                self.assertion = line.strip()
+            if line.startswith(" ceph version"):
+                # The start of a backtrace!
+                self.bt_lines = [line]
+                self.in_bt = True
+                self.failure_time = time.time()
+            elif line.startswith(" NOTE: a copy of the executable") or \
+                 line.strip().endswith("clone()") or \
+                 "clone()+0x" in line:
+                # The backtrace terminated
+                if len(self.bt_lines):
+                    if self.assertion != None:
+                        self.bt_lines.insert(0, self.assertion)
+                        self.assertion = None
+                    # Limit number of lines of backtrace in the failure reason
+                    self.backtrace = ("".join(self.bt_lines[:self.DISPLAY_BT_LINES])).strip()
+                else:
+                    self.logger.warning("Saw end of backtrace but not start")
+                self.in_bt = False
+            elif self.in_bt:
+                # We're in a backtrace, push the line onto the list
+                if len(self.bt_lines) > self.MAX_BT_LINES:
+                    self.logger.warning("Failed to capture backtrace")
+                    self.bt_lines = ["Failed to capture backtrace", self.assertion]
+                    self.in_bt = False
+                else:
+                    # Backtrace filtering - skip lines for libraries, but include
+                    # libraries with ceph or rados in their path or name
+                    if "ceph" in line or "rados" in line or not re.match(r" [0-9]+: /.*", line):
+                        # Truncate long lines
+                        line = re.sub(r"([0-9]+: .{80}).*(\+0x[0-9a-fA-F]*\) \[0x[0-9a-fA-F]*\])", r"\1 ... \2", line)
+                        self.bt_lines.append(line)
+
+        def get_exception(self):
+            if self.backtrace is not None:
+                return Exception(self.backtrace)
+            if self.assertion is not None:
+                return Exception(self.assertion)
+            return None
+
+        def get_failure_time(self):
+            return self.failure_time
+
+        def match_id(self, role, id_):
+            return self.role == role and self.id_ == id_
+
     cluster_name = config['cluster']
     log.info('Starting %s daemons in cluster %s...', type_, cluster_name)
     testdir = teuthology.get_testdir(ctx)
@@ -1501,13 +1565,17 @@ def run_daemon(ctx, config, type_):
                 maybe_redirect_stderr(config, type_, run_cmd, log_path)
             if create_log_cmd:
                 remote.sh(create_log_cmd)
+
             # always register mgr; don't necessarily start
+            asserttracker = AssertTracker(cluster_name, type_, id_, log.getChild(role))
+            ctx.ceph[cluster_name].assert_trackers.append(asserttracker)
             ctx.daemons.register_daemon(
                 remote, type_, id_,
                 cluster=cluster_name,
                 args=run_cmd,
                 logger=log.getChild(role),
                 stdin=run.PIPE,
+                stderr=asserttracker,
                 wait=False
             )
             if type_ != 'mgr' or not config.get('skip_mgr_daemons', False):
