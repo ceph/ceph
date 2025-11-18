@@ -11,7 +11,7 @@
 #include "rgw_asio_thread.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
-#include "rgw_datalog.h"
+#include "driver/rados/rgw_datalog.h"
 
 #include "driver/rados/shard_io.h"
 #include "cls/rgw/cls_rgw_client.h"

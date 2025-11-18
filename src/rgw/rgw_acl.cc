@@ -13,7 +13,7 @@
 
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
-#include "rgw_user.h"
+#include "rgw_auth.h"
 
 #define dout_subsys ceph_subsys_rgw
 

@@ -21,13 +21,14 @@
 #include "rgw_account.h"
 #include "rgw_b64.h"
 #include "rgw_common.h"
-#include "rgw_tools.h"
 #include "rgw_role.h"
-#include "rgw_user.h"
+#include "driver/rados/rgw_user.h"
 #include "rgw_iam_policy.h"
 #include "rgw_sts.h"
 #include "rgw_sal.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 

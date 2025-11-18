@@ -64,6 +64,7 @@
 #include "rgw_tracer.h"
 #include "rgw_zone.h"
 #include "rgw_restore.h"
+#include "rgw_multipart_meta_filter.h"
 
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"

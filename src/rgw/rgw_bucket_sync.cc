@@ -3,7 +3,6 @@
 
 #include "rgw_common.h"
 #include "rgw_bucket_sync.h"
-#include "rgw_data_sync.h"
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
