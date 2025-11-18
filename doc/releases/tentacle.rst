@@ -100,6 +100,31 @@ RGW
     * S3 API support for cross-tenant names such as `Bucket='tenant:bucketname'`
     * STS Lite and `sts:GetSessionToken`.
 
+Cephadm
+-------
+
+* A new cephadm-managed ``mgmt-gateway`` service provides a single, TLS-terminated
+  entry point for Ceph management endpoints such as the Dashboard and the monitoring
+  stack. The gateway is implemented as an nginx-based reverse proxy that fronts Prometheus,
+  Grafana, and Alertmanager, so users no longer need to connect to those daemons directly or
+  know which hosts they run on. When combined with the new ``oauth2-proxy`` service, which
+  integrates with external identity providers using the OpenID Connect (OIDC) / OAuth 2.0
+  protocols, the gateway can enforce centralized authentication and single sign-on (SSO) for
+  both the Ceph Dashboard and the rest of the monitoring stack.
+* High availability for the Ceph Dashboard and the Prometheus-based monitoring stack is now
+  provided via the cephadm-managed ``mgmt-gateway``. nginx high-availability mechanisms allow
+  the mgmt-gateway to detect healthy instances of the Dashboard, Prometheus, Grafana, and Alertmanager,
+  route traffic accordingly, and handle manager failover transparently. When deployed with a virtual
+  IP and multiple ``mgmt-gateway`` instances, this architecture keeps management access available
+  even during daemon or host failures.
+* A new ``certmgr`` cephadm subsystem centralizes certificate lifecycle management for cephadm-managed
+  services. certmgr acts as a cluster-internal root CA for cephadm-signed certificates, it can also
+  consume user-provided certificates, and tracks how each certificate was provisioned. It standardizes
+  HTTPS configuration for services such as RGW and the mgmt-gateway, automates renewal and rotation of
+  cephadm-signed certificates, and raises health warnings when certificates are invalid, expiring or misconfigured.
+  With certmgr, cephadm-signed certificates are available across all cephadm-managed services, providing
+  secure defaults out of the box.
+    
 CephFS
 ------
 
