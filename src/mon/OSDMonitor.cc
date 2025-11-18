@@ -8206,6 +8206,13 @@ void OSDMonitor::resolve_netsplit_stretch_cluster(
   // Don't change our decision immediately. Enforce a decision-min-duration
 }
 
+void OSDMonitor::lift_fencing() {
+  // Clear any existing fenced buckets
+  dout(10) << __func__ << " lifting fencing; clearing fenced_buckets" << dendl;
+  pending_inc.change_fenced_buckets = true;
+  pending_inc.new_fenced_buckets.clear();
+}
+
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					const string &erasure_code_profile,

@@ -975,10 +975,30 @@ void HealthMonitor::check_netsplit(health_check_map_t *checks, std::set<std::str
     pending_location_netsplits.clear();
     current_mon_netsplits.clear();
     current_location_netsplits.clear();
+    auto now = ceph::coarse_mono_clock::now();
+    if (no_netsplit_since == ceph::coarse_mono_clock::time_point()) {
+      no_netsplit_since = now;
+    } else {
+      auto elapsed = now - no_netsplit_since;
+      auto lift_fencing_threshold =
+        g_conf().get_val<std::chrono::seconds>("lift_fencing_threshold");
+      if (elapsed >= lift_fencing_threshold) {
+        dout(10) << __func__ << " no netsplit for " << elapsed
+                 << " >= lift_fencing_threshold " << lift_fencing_threshold
+                 << ", requesting fencing lift" << dendl;
+        mon.osdmon()->lift_fencing();
+        // prevent repeated triggers until a netsplit happens again
+        no_netsplit_since = ceph::coarse_mono_clock::time_point();
+      }
+    }
     dout(30) << "No netsplit pairs found, clearing"
       << " pending_mon_netsplits, pending_location_netsplits"
       << " current_mon_netsplits, current_location_netsplits" << dendl;
+    
     return;
+  } else {
+    // Reset no_netsplit_since since we have detected a netsplit
+    no_netsplit_since = ceph::coarse_mono_clock::time_point();
   }
   // Pre-populate mon_loc_map & location_to_mons for each monitor, discarding monitors that are down,
   // and sort the crush location highest to lowest by type id in the cluster topology.

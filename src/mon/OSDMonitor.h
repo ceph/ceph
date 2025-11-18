@@ -955,6 +955,10 @@ public:
    * @return the failure domain string
    */
   std::string get_stretch_pool_failure_domain();
+  /**
+   * Lift fencing, returning to normal operation.
+   */
+  void lift_fencing();
 private:
   utime_t stretch_recovery_triggered; // what time we committed a switch to recovery mode
 };

@@ -36,6 +36,8 @@ class HealthMonitor : public PaxosService
   // currently active monitor netsplits with their elapsed time
   std::map<std::pair<std::string, std::string>, ceph::coarse_mono_clock::time_point> current_mon_netsplits;
   std::map<std::string,health_mute_t> pending_mutes;
+  // elapsed time since no netsplit detected
+  ceph::coarse_mono_clock::time_point no_netsplit_since;
 
 public:
   HealthMonitor(Monitor &m, Paxos &p, const std::string& service_name);
