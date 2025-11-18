@@ -11,6 +11,7 @@ tasks:
       - ceph-mgr-rook
       - ceph-mgr-cephadm
       - ceph-osd-classic
+      - ceph-osd-crimson
       - ceph-base-debuginfo
       - ceph-common-debuginfo
       - ceph-immutable-object-cache-debuginfo
