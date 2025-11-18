@@ -112,6 +112,20 @@ WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
 std::ostream& operator<<(std::ostream& out, const osd_xinfo_t& xi);
 
+// struct NetsplitFence {
+//   std::set<std::string> fenced_buckets;
+//   std::set<std::string> active_buckets;
+//   std::set<std::string> last_active_buckets;
+//   utime_t last_fence_decision_ts; // when we last made a fencing decision
+//   utime_t last_lift_attempt_ts; // when we last attempted to lift fencing
+//   void dump(ceph::Formatter *f) const;
+//   void encode(ceph::buffer::list& bl) const;
+//   void decode(ceph::buffer::list::const_iterator& bl);
+//   static std::list<NetsplitFence> generate_test_instances();
+// };
+// WRITE_CLASS_ENCODER_FEATURES(NetsplitFence)
+
+// std::ostream& operator<<(std::ostream& out, const NetsplitFence& f);
 
 struct PGTempMap {
 #if 1
@@ -390,6 +404,9 @@ public:
       // Monitor won't allow CLEAR to be set currently, but we may allow it later
       CLEAR = 2
     } mutate_allow_crimson = mutate_allow_crimson_t::NONE;
+
+    bool change_fenced_buckets{false};
+    std::set<std::string> new_fenced_buckets;
 
     // full (rare)
     ceph::buffer::list fullmap;  // in lieu of below.
@@ -679,6 +696,7 @@ private:
   uint32_t recovering_stretch_mode; // 0 if not recovering; else 1
   int32_t stretch_mode_bucket; // the bucket type we're stretched across
   bool allow_crimson{false};
+  std::set<std::string> fenced_buckets;
 private:
   uint32_t crush_version = 1;
 
@@ -1104,6 +1122,11 @@ public:
     }
     return -1;
   }
+
+  /**
+   * check if an osd is in a fenced bucket
+   */
+  bool is_osd_in_fenced_bucket(int osd, CephContext *cct = nullptr) const;
 
   /**
    * get total effective osd weight for a given bucket

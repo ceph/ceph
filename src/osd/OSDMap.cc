@@ -666,7 +666,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of allow_crimson 12
+    uint8_t target_v = 9; // if bumping this, be aware of fenced_bucket 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -681,6 +681,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (mutate_allow_crimson != mutate_allow_crimson_t::NONE) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (change_fenced_buckets) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -737,6 +740,11 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 12) {
       encode(mutate_allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      // NEW: encode fenced_buckets change marker + full set
+      encode(change_fenced_buckets, bl);
+      encode(new_fenced_buckets, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -951,7 +959,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -1022,6 +1030,13 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(mutate_allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(change_fenced_buckets, bl);
+      decode(new_fenced_buckets, bl);
+    } else {
+      change_fenced_buckets = false;
+      new_fenced_buckets.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1389,6 +1404,11 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_int("new_stretch_mode_bucket", new_stretch_mode_bucket);
   }
   f->close_section();
+  f->dump_bool("change_fenced_buckets", change_fenced_buckets);
+  f->open_array_section("new_fenced_buckets");
+  for (const auto &bucket : new_fenced_buckets) {
+    f->dump_string("bucket", bucket);
+  }
   f->close_section();
 }
 
@@ -2628,6 +2648,10 @@ int OSDMap::apply_incremental(const Incremental &inc)
     break;
   }
 
+  if (inc.change_fenced_buckets) {
+    fenced_buckets = inc.new_fenced_buckets;
+  }
+
   calc_num_osds();
   _calc_up_osd_features();
   return 0;
@@ -3458,6 +3482,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     if (allow_crimson) {
       target_v = std::max((uint8_t)12, target_v);
     }
+    if (!fenced_buckets.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
+    }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
       encode_addrvec_pvec_as_addr(osd_addrs->hb_back_addrs, bl, features);
@@ -3518,6 +3545,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 12) {
       ::encode(allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(fenced_buckets, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3784,7 +3814,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);
@@ -3872,6 +3902,11 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(fenced_buckets, bl);
+    } else {
+      fenced_buckets.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -4264,8 +4299,12 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
     f->dump_int("stretch_mode_bucket", stretch_mode_bucket);
   }
   f->close_section();
+  f->open_array_section("fenced_buckets");
+  for (auto& bucket : fenced_buckets) {
+    f->dump_string("bucket", bucket);
+  }
+  f->close_section();
 }
-
 list<OSDMap> OSDMap::generate_test_instances()
 {
   list<OSDMap> o;
@@ -4444,6 +4483,13 @@ void OSDMap::print(CephContext *cct, ostream& out) const
     out << "cluster_snapshot " << get_cluster_snapshot() << "\n";
   if (allow_crimson) {
     out << "allow_crimson=true\n";
+  }
+  if (!fenced_buckets.empty()) {
+    out << "fenced_buckets ";
+    for (const auto& bucket : fenced_buckets) {
+      out << bucket << " ";
+    }
+    out << "\n";
   }
   out << "\n";
 
@@ -6882,6 +6928,27 @@ int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
 int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
 {
   return crush->get_leaves(name, osds);
+}
+
+bool OSDMap::is_osd_in_fenced_bucket(int osd, CephContext *cct) const
+{
+  set<int> osds;
+  for (const auto &bucket_name : fenced_buckets) {
+    if (get_osds_by_bucket_name(bucket_name, &osds) < 0) {
+      if (cct) {
+        ldout(cct, 5) << __func__ << " get_osds_by_bucket_name("
+          << bucket_name << ") failed" << dendl;
+      }
+      continue;
+    }
+    if (osds.count(osd) > 0) {
+      if (cct) {
+        ldout(cct, 30) << __func__ << " osd " << osd << " is in fenced bucket " << bucket_name << dendl;
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 float OSDMap::get_total_effective_osd_weight_by_bucket_name(CephContext *cct,

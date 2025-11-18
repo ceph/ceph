@@ -1680,7 +1680,12 @@ map<pg_shard_t, pg_info_t>::const_iterator PeeringState::find_best_info(
   // if there are multiples, prefer
   //  - a longer tail, if it brings another peer into log contiguity
   //  - the current primary
+  const OSDMapRef osdmap = get_osdmap();
   for (auto p = infos.begin(); p != infos.end(); ++p) {
+    if (osdmap && osdmap->is_osd_in_fenced_bucket(p->first.osd, cct)) {
+      psdout(10) << "find_best_info: skipping fenced osd." << p->first.osd << dendl;
+      continue;
+    }
     if (restrict_to_up_acting && !is_up(p->first) &&
 	!is_acting(p->first))
       continue;
@@ -1763,6 +1768,7 @@ void PeeringState::calc_ec_acting(
   vector<int> *_want,
   set<pg_shard_t> *backfill,
   set<pg_shard_t> *acting_backfill,
+  const OSDMapRef osdmap,
   ostream &ss)
 {
   vector<int> want(size, CRUSH_ITEM_NONE);
@@ -1774,6 +1780,10 @@ void PeeringState::calc_ec_acting(
   }
   for (uint8_t i = 0; i < want.size(); ++i) {
     ss << "For position " << (unsigned)i << ": ";
+    if (osdmap->is_osd_in_fenced_bucket(up[i], nullptr)) {
+          ss << " skipping fenced up[" << (unsigned)i << "] osd." << up[i] << std::endl;
+          continue;
+    }
     if (up.size() > (unsigned)i && up[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(up[i], shard_id_t(i)))->second.last_update >=
@@ -1787,7 +1797,10 @@ void PeeringState::calc_ec_acting(
 	 << " and ";
       backfill->insert(pg_shard_t(up[i], shard_id_t(i)));
     }
-
+    if (osdmap->is_osd_in_fenced_bucket(acting[i], nullptr)) {
+      ss << " skipping fenced acting[" << (unsigned)i << "] osd." << acting[i] << std::endl;
+      continue;
+    }
     if (acting.size() > (unsigned)i && acting[i] != CRUSH_ITEM_NONE &&
 	!all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.is_incomplete() &&
 	all_info.find(pg_shard_t(acting[i], shard_id_t(i)))->second.last_update >=
@@ -1798,6 +1811,9 @@ void PeeringState::calc_ec_acting(
       for (auto j = all_info_by_shard[shard_id_t(i)].begin();
 	   j != all_info_by_shard[shard_id_t(i)].end();
 	   ++j) {
+      if (osdmap->is_osd_in_fenced_bucket(j->osd, nullptr)) {
+          continue;
+      }
 	ceph_assert(static_cast<int>(j->shard) == i);
 	if (!all_info.find(*j)->second.is_incomplete() &&
 	    all_info.find(*j)->second.last_update >=
@@ -1912,9 +1928,13 @@ void PeeringState::calc_replicated_acting(
 {
   ss << __func__ << (restrict_to_up_acting ? " restrict_to_up_acting" : "")
      << std::endl;
-
-  want->push_back(primary->first.osd);
-  acting_backfill->insert(primary->first);
+  // select primary
+  if (osdmap->is_osd_in_fenced_bucket(primary->first.osd, nullptr)) {
+      ss << " osd." << primary->first.osd << " (primary) is fenced, skipping" << std::endl;
+  } else {
+    want->push_back(primary->first.osd);
+    acting_backfill->insert(primary->first);
+  }
 
   // select replicas that have log contiguity with primary.
   // prefer up, then acting, then any peer_info osds
@@ -1922,6 +1942,10 @@ void PeeringState::calc_replicated_acting(
     pg_shard_t up_cand = pg_shard_t(i, shard_id_t::NO_SHARD);
     if (up_cand == primary->first)
       continue;
+    if (osdmap->is_osd_in_fenced_bucket(i, nullptr)) {
+      ss << " osd." << i << " (up) is fenced, skipping" << std::endl;
+      continue;
+    }
     const pg_info_t &cur_info = all_info.find(up_cand)->second;
     if (cur_info.is_incomplete() ||
         cur_info.last_update < oldest_auth_log_entry) {
@@ -1943,6 +1967,10 @@ void PeeringState::calc_replicated_acting(
   candidate_by_last_update.reserve(acting.size());
   // This no longer has backfill OSDs, but they are covered above.
   for (auto i : acting) {
+    if (osdmap->is_osd_in_fenced_bucket(i, nullptr)) {
+      ss << " osd." << i << " (acting) is fenced, skipping" << std::endl;
+      continue;
+    }
     pg_shard_t acting_cand(i, shard_id_t::NO_SHARD);
     // skip up osds we already considered above
     if (acting_cand == primary->first)
@@ -1969,6 +1997,10 @@ void PeeringState::calc_replicated_acting(
   std::sort(candidate_by_last_update.begin(),
             candidate_by_last_update.end(), sort_by_eversion);
   for (auto &p: candidate_by_last_update) {
+    if (osdmap->is_osd_in_fenced_bucket(p.second, nullptr)) {
+      ss << " osd." << p.second << " (candidate_by_last_update) is fenced, skipping" << std::endl;
+      continue;
+    }
     ceph_assert(want->size() < size);
     want->push_back(p.second);
     pg_shard_t s = pg_shard_t(p.second, shard_id_t::NO_SHARD);
@@ -1987,6 +2019,10 @@ void PeeringState::calc_replicated_acting(
   candidate_by_last_update.reserve(all_info.size()); // overestimate but fine
   // continue to search stray to find more suitable peers
   for (auto &i : all_info) {
+    if (osdmap->is_osd_in_fenced_bucket(i.first.osd, nullptr)) {
+      ss << " osd." << i.first.osd << " (all_info) is fenced, skipping" << std::endl;
+      continue;
+    }
     // skip up osds we already considered above
     if (i.first == primary->first)
       continue;
@@ -2187,12 +2223,22 @@ void PeeringState::calc_replicated_acting_stretch(
       get_ancestor(osd)->inc_selected();
     }
   };
-  add_required(primary->first.osd);
-  ss << " osd " << primary->first.osd << " primary accepted "
+  if (osdmap->is_osd_in_fenced_bucket(primary->first.osd, nullptr)) {
+    ss << __func__ << " osd."
+      << primary->first.osd << " is fenced, skipping" << std::endl;
+  } else {
+    add_required(primary->first.osd);
+    ss << " osd " << primary->first.osd << " primary accepted "
      << osd_info(primary->first.osd) << std::endl;
+  }
   for (auto upcand: up) {
     auto upshard = pg_shard_t(upcand, shard_id_t::NO_SHARD);
     auto &curinfo = osd_info(upcand);
+    if (osdmap->is_osd_in_fenced_bucket(upcand, nullptr)) {
+      ss << __func__ << " osd."
+        << upcand << " is fenced, skipping" << std::endl;
+      continue;
+    }
     if (usable_osd(upcand)) {
       ss << " osd " << upcand << " (up) accepted " << curinfo << std::endl;
       add_required(upcand);
@@ -2224,6 +2270,11 @@ void PeeringState::calc_replicated_acting_stretch(
 	info.last_update);
     };
     for (auto &cand : acting) {
+        if (osdmap->is_osd_in_fenced_bucket(cand, nullptr)) {
+        ss << __func__ << " osd."
+          << cand << " is fenced, skipping" << std::endl;
+      continue;
+      }
       auto &cand_info = osd_info(cand);
       if (!used(cand) && usable_info(cand_info)) {
 	ss << " acting candidate " << cand << " " << cand_info << std::endl;
@@ -2232,6 +2283,11 @@ void PeeringState::calc_replicated_acting_stretch(
     }
     if (!restrict_to_up_acting) {
       for (auto &[cand, info] : all_info) {
+        if (osdmap->is_osd_in_fenced_bucket(cand.osd, nullptr)) {
+          ss << __func__ << " osd."
+            << cand.osd << " is fenced, skipping" << std::endl;
+          continue;
+        }
 	if (!used(cand.osd) && usable_info(info) &&
 	    (std::find(acting.begin(), acting.end(), cand.osd)
 	     == acting.end())) {
@@ -2603,6 +2659,7 @@ bool PeeringState::choose_acting(pg_shard_t &get_log_shard_id,
       &want,
       &want_backfill,
       &want_acting_backfill,
+      get_osdmap(),
       ss);
   }
   psdout(10) << ss.str() << dendl;

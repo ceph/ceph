@@ -2904,6 +2904,20 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
     }
   }
 
+  // is from a fenced osd?
+  if (osdmap.is_osd_in_fenced_bucket(m->get_orig_source().num(), cct)) {
+    dout(5) << "preprocess_failure: from fenced osd." << m->get_orig_source().num()
+	    << ", ignoring" << dendl;
+    send_incremental(op, m->get_epoch()+1);
+    goto didit;
+  }
+  // is targeting a fenced osd?
+  if (osdmap.is_osd_in_fenced_bucket(badboy, cct)) {
+    dout(5) << "preprocess_failure failure message about fenced osd."
+	    << badboy << ", ignoring" << dendl;
+    send_incremental(op, m->get_epoch()+1);
+    goto didit;
+  }
 
   // weird?
   if (osdmap.is_down(badboy)) {
@@ -8096,7 +8110,7 @@ void OSDMonitor::resolve_netsplit_stretch_cluster(
   *  - If more than one largest clique exists, apply heuristics to
   *    choose the "best" clique (prioritizing OSD weights, then MONs,
   *    then connection scores, then lexicographical as tiebreaker).
-  *  - Compute the set of fence_buckets = (vertices – best_clique),
+  *  - Compute the set of fenced_buckets = (vertices – best_clique),
   *    which identifies buckets to fence (mark OSDs down) so
   *    that only the surviving clique continues to serve I/O.
   */
@@ -8163,7 +8177,7 @@ void OSDMonitor::resolve_netsplit_stretch_cluster(
   dout(10) << __func__ << " best clique: {" << best_clique << "}" << dendl;
 
   // Workout the fence buckets
-  std::set<std::string> fence_buckets;
+  std::set<std::string> fenced_buckets;
   // Sanity check: best_clique should be a subset of vertices
   if (!std::includes(vertices.begin(), vertices.end(),
     best_clique.begin(), best_clique.end())) {
@@ -8173,15 +8187,25 @@ void OSDMonitor::resolve_netsplit_stretch_cluster(
 
   std::set_difference(vertices.begin(), vertices.end(),
                       best_clique.begin(), best_clique.end(),
-                      std::inserter(fence_buckets, fence_buckets.begin()));
+                      std::inserter(fenced_buckets, fenced_buckets.begin()));
 
-  if (fence_buckets.empty()) {
+  if (fenced_buckets.empty()) {
     dout(5) << __func__ << " Weird! best_clique has every vertex; No fencing needed." << dendl;
     return;
   }
+  dout(10) << __func__ << " fenced_buckets: {" << fenced_buckets << "}" << dendl;
+  // Update OSDMap with the latest fenced buckets and active_buckets
+  pending_inc.change_fenced_buckets = true;
+  pending_inc.new_fenced_buckets = fenced_buckets;
+  // if no ongoing fence yet, we execute immediately
+  
 
-  dout(10) << __func__ << " fence_buckets: {" << fence_buckets << "}" << dendl;
+  // if there is on going fence and new fenced_buckets matches, refresh Up timer & exit
+
+  // Other wise, the new computation proposes a different fence_buckets
+  // Don't change our decision immediately. Enforce a decision-min-duration
 }
+
 
 int OSDMonitor::prepare_pool_crush_rule(const unsigned pool_type,
 					const string &erasure_code_profile,
