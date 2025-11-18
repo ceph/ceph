@@ -324,6 +324,9 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
   int ret = -1;
   uint64_t freeSpace = cacheDriver->get_free_space(dpp, y);
 
+  for (const auto& key : entries_map) 
+    ldpp_dout(dpp, 0) << key << dendl;
+
   while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop?
     std::unique_lock<std::mutex> l(lfuda_lock);
     CacheBlock* victim = get_victim_block(dpp, y);
@@ -336,6 +339,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     }
 
     std::string key = entries_heap.top()->key;
+    ldpp_dout(dpp, 0) << "Victim key: " << key << dendl;
     auto it = entries_map.find(key);
     if (it == entries_map.end()) {
       delete victim;
@@ -439,6 +443,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   bool updateLocalWeight = true;
   uint64_t refcount = 0;
 
+  ldpp_dout(dpp, 10) << "\n" <<  __LINE__ << ": " << key << "\n" << dendl;
   if (!restore_val.empty()) {
     updateLocalWeight = false;
     localWeight = std::stoull(restore_val);
@@ -478,7 +483,9 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   }
   _erase(dpp, key, y);
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << refcount << dendl;
+  ldpp_dout(dpp, 0) << "Entry details: len=" << len << ", version=" << version << ", is_dirty=" << is_dirty << ", offset=" << offset << ", refcount=" << refcount << ", localWeight=" << localWeight << dendl;
   LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
+  ldpp_dout(dpp, 0) << "\n" <<  __LINE__ << ": " << e->key << "\n" << dendl;
   handle_type handle = entries_heap.push(e);
   e->set_handle(handle);
   entries_map.emplace(key, e);
@@ -490,6 +497,8 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   }
 
   weightSum += ((localWeight < 0) ? 0 : localWeight);
+  for (const auto& key : entries_map) 
+    ldpp_dout(dpp, 0) << "entries_map: " << key << dendl;
 }
 
 void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::string& key, const std::string& version, bool deleteMarker, uint64_t size, double creationTime, const rgw_user& user, const std::string& etag, const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key, uint8_t op, optional_yield y, std::string& restore_val)
