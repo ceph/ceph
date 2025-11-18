@@ -142,7 +142,7 @@ function create_scenario() {
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj6)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj7)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset corrupt || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj8)"
