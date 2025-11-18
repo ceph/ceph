@@ -73,30 +73,4 @@ export class CdFormGroup extends UntypedFormGroup {
       (errorName ? control.hasError(errorName) : control.invalid)
     );
   }
-
-  /**
-   * Usage: For setting the `invalid` property in carbon components
-   *
-   * e.g:
-   * <cds-password-label
-      [invalid]="userForm.hasError('newpassword')"
-   */
-  hasError(controlName: string): boolean {
-    const control = this.get(controlName);
-    return control.invalid && (control.dirty || control.touched);
-  }
-
-  /**
-   * Usage: For getting the name of error, which then can be used to show
-   *        the desired error message
-   * e.g:
-   * <cds-password-label
-       [invalidText]="this.INVALID_TEXTS[userForm.getErrorName('oldpassword', ['required', 'notmatch'])]">
-      </cds-password-label>
-   * INVALID_TEXTS: Map<Error Name, Error Message>
-   */
-  getErrorName(controlName: string, validationList: string[] = []): string {
-    const control = this.get(controlName);
-    return validationList.find((validation: string) => control.hasError(validation)) || '';
-  }
 }
