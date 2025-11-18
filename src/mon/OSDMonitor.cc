@@ -4289,13 +4289,18 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
 
   pg_t pgid = m->pgid;
   p.migrating_pgs.erase(pgid);
+
   dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
   if (p.lowest_migrated_pg == 0 && p.migrating_pgs.empty()) {
     dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
-    pg_pool_t target_p = *osdmap.get_pg_pool(p.migration_target.value()); //TODO need to check pending_inc first?
+    pg_pool_t target_p;
+    if (pending_inc.new_pools.count(p.migration_target.value())) {
+      target_p = pending_inc.new_pools[p.migration_target.value()];
+    } else {
+      target_p = *osdmap.get_pg_pool(p.migration_target.value());
+    }
     target_p.migration_src.reset();
-    target_p.last_change = pending_inc.epoch; //TODO needed?
-    target_p.last_force_op_resend_prenautilus = pending_inc.epoch; //TODO needed?
+    target_p.last_change = pending_inc.epoch;
     pending_inc.new_pools[p.migration_target.value()] = target_p;
   } else if (p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
@@ -4304,13 +4309,8 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     p.migrating_pgs.emplace(pg_t(p.lowest_migrated_pg - 1, pgid.pool()));
     p.lowest_migrated_pg -= 1;
   }
-  //TODO: Do we need to update this?
-  p.last_change = pending_inc.epoch;
 
-  //TODO: Do we need this - we won't have any pre-mautilus clients
-  // force pre-nautilus clients to resend their ops, since they
-  // don't understand pg_num_pending changes form a new interval
-  p.last_force_op_resend_prenautilus = pending_inc.epoch;
+  p.last_change = pending_inc.epoch;
 
   pending_inc.new_pools[m->pgid.pool()] = p;
 
