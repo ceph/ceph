@@ -9,14 +9,11 @@
 
 #include "cls/otp/cls_otp_client.h"
 #include "cls/log/cls_log_client.h"
-#include "cls/lock/cls_lock_client.h"
 
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
-
-static string log_lock_name = "rgw_log_lock";
 
 int RGWSI_Cls::do_start(optional_yield y, const DoutPrefixProvider *dpp)
 {
@@ -51,9 +48,28 @@ int RGWSI_Cls::MFA::check_mfa(const DoutPrefixProvider *dpp, const rgw_user& use
     return r;
   }
 
-  rados::cls::otp::otp_check_t result;
+  constexpr size_t TOKEN_LEN = 16;
+  std::string token = gen_rand_alphanumeric(cct, TOKEN_LEN);
+  {
+    librados::ObjectWriteOperation op;
+    rados::cls::otp::check(op, otp_id, pin, token);
 
-  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.obj.oid, otp_id, pin, &result);
+    r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), y);
+    if (r < 0)
+      return r;
+  }
+
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  rados::cls::otp::check_result(op, std::move(token), bl, rval);
+
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
+  if (r < 0)
+    return r;
+
+  rados::cls::otp::otp_check_t result;
+  r = rados::cls::otp::check_result_decode(bl, result);
   if (r < 0)
     return r;
 
@@ -177,12 +193,20 @@ int RGWSI_Cls::MFA::otp_get_current_time(const DoutPrefixProvider *dpp, const rg
     return r;
   }
 
-  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.obj.oid, result);
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int rval = 0;
+  rados::cls::otp::get_current_time(op, bl, rval);
+
+  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, std::move(op), nullptr, y);
   if (r < 0) {
     return r;
   }
+  if (rval < 0) {
+    return rval;
+  }
 
-  return 0;
+  return rados::cls::otp::get_current_time_decode(bl, *result);
 }
 
 int RGWSI_Cls::MFA::set_mfa(const DoutPrefixProvider *dpp, const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
@@ -407,51 +431,4 @@ int RGWSI_Cls::TimeLog::trim(const DoutPrefixProvider *dpp,
     r = obj.aio_operate(completion, &op);
   }
   return r;
-}
-
-int RGWSI_Cls::Lock::lock_exclusive(const DoutPrefixProvider *dpp,
-                                    const rgw_pool& pool,
-                                    const string& oid,
-                                    timespan& duration,
-                                    string& zone_id,
-                                    string& owner_id,
-                                    std::optional<string> lock_name)
-{
-
-  librados::IoCtx p;
-  int r = rgw_init_ioctx(dpp, cls->rados, pool, p, true, false);
-  if (r < 0) {
-    return r;
-  }
-
-  uint64_t msec = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-  utime_t ut(msec / 1000, msec % 1000);
-
-  rados::cls::lock::Lock l(lock_name.value_or(log_lock_name));
-  l.set_duration(ut);
-  l.set_cookie(owner_id);
-  l.set_tag(zone_id);
-  l.set_may_renew(true);
-
-  return l.lock_exclusive(&p, oid);
-}
-
-int RGWSI_Cls::Lock::unlock(const DoutPrefixProvider *dpp,
-                            const rgw_pool& pool,
-                            const string& oid,
-                            string& zone_id,
-                            string& owner_id,
-                            std::optional<string> lock_name)
-{
-  librados::IoCtx p;
-  int r = rgw_init_ioctx(dpp, cls->rados, pool, p, true, false);
-  if (r < 0) {
-    return r;
-  }
-
-  rados::cls::lock::Lock l(lock_name.value_or(log_lock_name));
-  l.set_tag(zone_id);
-  l.set_cookie(owner_id);
-
-  return l.unlock(&p, oid);
 }

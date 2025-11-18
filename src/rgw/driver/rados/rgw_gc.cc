@@ -259,6 +259,14 @@ static int gc_list(const DoutPrefixProvider* dpp, optional_yield y, librados::Io
   return cls_rgw_gc_list_decode(bl, entries, truncated, next_marker);
 }
 
+static int version_read(const DoutPrefixProvider* dpp, optional_yield y,
+                        librados::IoCtx& io_ctx, std::string& oid, obj_version* objv)
+{
+  librados::ObjectReadOperation op;
+  cls_version_read(op, objv);
+  return rgw_rados_operate(dpp, io_ctx, oid, std::move(op), nullptr, y);
+}
+
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated, bool& processing_queue)
 {
   result.clear();
@@ -276,7 +284,8 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
         return ret;
       }
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[*index], &objv);
+      std::ignore = version_read(this, null_yield, store->gc_pool_ctx,
+                                 obj_names[*index], &objv);
       if (ret == -ENOENT || entries.size() == 0) {
         if (objv.ver == 0) {
           continue;
@@ -562,6 +571,24 @@ public:
   }
 }; // class RGWGCIOManger
 
+static int lock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                      librados::IoCtx& ioctx, const std::string& oid,
+                      rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.lock_exclusive(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
+static int unlock_shard(const DoutPrefixProvider* dpp, optional_yield y,
+                        librados::IoCtx& ioctx, const std::string& oid,
+                        rados::cls::lock::Lock& lock)
+{
+  librados::ObjectWriteOperation op;
+  lock.unlock(&op);
+  return rgw_rados_operate(dpp, ioctx, oid, std::move(op), y);
+}
+
 int RGWGC::process(int index, int max_secs, bool expired_only,
                    RGWGCIOManager& io_manager, optional_yield y)
 {
@@ -583,7 +610,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
+  int ret = lock_shard(this, y, store->gc_pool_ctx, obj_names[index], l);
   if (ret == -EBUSY) { /* already locked by another gc processor */
     ldpp_dout(this, 10) << "RGWGC::process failed to acquire lock on " <<
       obj_names[index] << dendl;
@@ -609,7 +636,8 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
       ", next_marker='" << next_marker << "'" << dendl;
       obj_version objv;
-      cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
+      std::ignore = version_read(this, y, store->gc_pool_ctx,
+                                 obj_names[index], &objv);
       if ((objv.ver == 1) && entries.size() == 0) {
         std::list<cls_rgw_gc_obj_info> non_expired_entries;
         ret = gc_list(this, y, store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
@@ -732,7 +760,7 @@ done:
   /* we don't drain here, because if we're going down we don't want to
    * hold the system if backend is unresponsive
    */
-  l.unlock(&store->gc_pool_ctx, obj_names[index]);
+  std::ignore = unlock_shard(this, y, store->gc_pool_ctx, obj_names[index], l);
   delete ctx;
 
   return 0;
