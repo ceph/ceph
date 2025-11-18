@@ -1974,6 +1974,8 @@ public:
   void plpg_on_pool_change() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction &t) override;
+  void _on_activate_committed();
+  void on_activate_committed() override;
   void on_activate_complete() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction &t) override;

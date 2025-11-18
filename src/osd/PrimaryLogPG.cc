@@ -13174,9 +13174,8 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
   return current;
 }
 
-void PrimaryLogPG::on_activate_complete()
+void PrimaryLogPG::_on_activate_committed()
 {
-  check_local();
   // waiters
   if (!recovery_state.needs_flush()) {
     requeue_ops(waiting_for_peered);
@@ -13189,6 +13188,26 @@ void PrimaryLogPG::on_activate_complete()
     waiting_for_flush.swap(waiting_for_peered);
   }
 
+  if (pool.info.is_pg_migrating(info.pgid.pgid)) {
+    last_pool_migration_started = earliest_pool_migration();
+    new_pool_migration = true;
+  } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
+    last_pool_migration_started = hobject_t::get_max();
+  } else {
+    last_pool_migration_started = hobject_t();
+  }
+}
+
+void PrimaryLogPG::on_activate_committed()
+{
+  ceph_assert(!is_primary());
+  _on_activate_committed();
+}
+
+void PrimaryLogPG::on_activate_complete()
+{
+  check_local();
+  _on_activate_committed();
 
   // all clean?
   if (needs_recovery()) {
@@ -13240,15 +13259,6 @@ void PrimaryLogPG::on_activate_complete()
 	     << " from " << recovery_state.get_peer_info(*i).last_backfill
 	     << dendl;
     }
-  }
-
-  if (pool.info.is_pg_migrating(info.pgid.pgid)) {
-    last_pool_migration_started = earliest_pool_migration();
-    new_pool_migration = true;
-  } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
-    last_pool_migration_started = hobject_t::get_max();
-  } else {
-    last_pool_migration_started = hobject_t();
   }
   hit_set_setup();
   agent_setup();
