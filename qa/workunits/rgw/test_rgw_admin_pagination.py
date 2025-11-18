@@ -12,6 +12,7 @@ import requests
 import subprocess
 import unittest
 from urllib.parse import urljoin
+from common import read_local_endpoint
 
 import typing as ty
 
@@ -127,20 +128,27 @@ class TestRGWAdminHelper:
 
     def get_boto3_client(self, session: boto3.session.Session):
         """Get a boto3 s3 client from a session."""
-        def _try_client(portnum: str, ssl: bool, proto: str):
-            endpoint = proto + '://localhost:' + portnum
+        def _try_client(endpoint):
+            ssl = endpoint.startswith('https')
             client = session.client(
                 's3', use_ssl=ssl, endpoint_url=endpoint, verify=False)
             list(client.list_buckets(MaxBuckets=1))
             return endpoint, client
 
         try:
-            return _try_client('80', False, 'http')
+            endpoint = read_local_endpoint()
+            return _try_client(endpoint)
+        except:
+            # fall back to localhost
+            pass
+
+        try:
+            return _try_client('http://localhost:80')
         except Exception:
             try:
-                return _try_client('8000', False, 'http')
+                return _try_client('http://localhost:8000')
             except Exception:
-                return _try_client('443', True, 'https')
+                return _try_client('https://localhost:443')
 
 
 class TestRGWAdminBucket(unittest.TestCase):

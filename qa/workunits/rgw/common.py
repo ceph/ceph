@@ -31,14 +31,19 @@ def exec_cmd(cmd, wait = True, **kwargs):
 def create_user(uid, display_name, access_key, secret_key):
     _, ret = exec_cmd(f'radosgw-admin user create --uid {uid} --display-name "{display_name}" --access-key {access_key} --secret {secret_key}', check_retcode=False)
     assert(ret == 0 or errno.EEXIST)
-    
+
+def read_local_endpoint():
+    """
+    in teuthology, the rgw task writes the local rgw's endpoint url to this file
+    """
+    return exec_cmd('cat ${TESTDIR}/url_file')
+
 def boto_connect(access_key, secret_key, config=None):
-    def try_connect(portnum, ssl, proto):
-        endpoint = proto + '://localhost:' + portnum
+    def try_connect(endpoint):
         conn = boto3.resource('s3',
                               aws_access_key_id=access_key,
                               aws_secret_access_key=secret_key,
-                              use_ssl=ssl,
+                              use_ssl=endpoint.startswith('https'),
                               endpoint_url=endpoint,
                               verify=False,
                               config=config,
@@ -50,14 +55,22 @@ def boto_connect(access_key, secret_key, config=None):
             raise
         print('connected to', endpoint)
         return conn
+
     try:
-        return try_connect('80', False, 'http')
+        endpoint = read_local_endpoint()
+        return try_connect(endpoint)
+    except:
+        # fall back to localhost
+        pass
+
+    try:
+        return try_connect('http://localhost:80')
     except botocore.exceptions.ConnectionError:
         try: # retry on non-privileged http port
-            return try_connect('8000', False, 'http')
+            return try_connect('http://localhost:8000')
         except botocore.exceptions.ConnectionError:
             # retry with ssl
-            return try_connect('443', True, 'https')
+            return try_connect('https://localhost:443')
 
 def put_objects(bucket, key_list):
     objs = []
