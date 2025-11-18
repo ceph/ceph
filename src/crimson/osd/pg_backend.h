@@ -279,9 +279,6 @@ public:
     object_stat_sum_t& delta_stats) const;
   get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string_view key) const;
-  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
-    const hobject_t& soid,
     std::string&& key) const;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
