@@ -94,7 +94,7 @@
             Dashboard</span>
         </cds-sidenav-item>
         <!-- Multi-cluster Dashboard -->
-        <cds-sidenav-menu title="Multi-Cluster"
+        <cds-sidenav-menu title="Multi-cluster"
                           *ngIf="permissions.configOpt.read"
                           i18n-title>
           <svg cdsIcon="edge-cluster"
@@ -106,10 +106,10 @@
                             [useRouter]="true"
                             class="tc_submenuitem tc_submenuitem_multiCluster_overview"><span i18n>Overview</span></cds-sidenav-item>
           <cds-sidenav-item route="/multi-cluster/manage-clusters"
-                            title="Manage Clusters"
+                            title="Manage clusters"
                             i18n-title
                             [useRouter]="true"
-                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage Clusters</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters"><span i18n>Manage clusters</span></cds-sidenav-item>
         </cds-sidenav-menu>
         <!-- Cluster -->
         <cds-sidenav-menu title="Cluster"
@@ -139,16 +139,16 @@
                             class="tc_submenuitem tc_submenuitem_cluster_osds"><span i18n>OSDs</span></cds-sidenav-item>
           <cds-sidenav-item route="/inventory"
                             [useRouter]="true"
-                            title="Physical Disks"
+                            title="Physical disks"
                             i18n-title
                             *ngIf="permissions.hosts.read"
-                            class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical Disks</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_cluster_inventory"><span i18n>Physical disks</span></cds-sidenav-item>
           <cds-sidenav-item route="/crush-map"
                             [useRouter]="true"
-                            title="CRUSH Map"
+                            title="CRUSH map"
                             i18n-title
                             *ngIf="permissions.osd.read"
-                            class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH Map</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_cluster_crush"><span i18n>CRUSH map</span></cds-sidenav-item>
           <cds-sidenav-item route="/monitor"
                             [useRouter]="true"
                             title="Monitors"
@@ -264,10 +264,10 @@
                size="20"></svg>
           <cds-sidenav-item route="/cephfs/fs"
                             [useRouter]="true"
-                            title="File Systems"
+                            title="File systems"
                             i18n-title
                             *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
-                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File Systems</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File systems</span></cds-sidenav-item>
           <cds-sidenav-item route="/cephfs/nfs"
                             [useRouter]="true"
                             title="NFS"
@@ -332,16 +332,16 @@
                             class="tc_submenuitem tc_submenuitem_admin_upgrade"><span i18n>Upgrade</span></cds-sidenav-item>
           <cds-sidenav-item route="/ceph-users"
                             [useRouter]="true"
-                            title="Ceph Users"
+                            title="Ceph users"
                             i18n-title
                             *ngIf="permissions.configOpt.read"
-                            class="tc_submenuitem tc_submenuitem_admin_users"><span i18n>Ceph Users</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_admin_users"><span i18n>Ceph users</span></cds-sidenav-item>
           <cds-sidenav-item route="/mgr-modules"
                             [useRouter]="true"
-                            title="Manager Modules"
+                            title="Manager modules"
                             i18n-title
                             *ngIf="permissions.configOpt.read"
-                            class="tc_submenuitem tc_submenuitem_admin_modules"><span i18n>Manager Modules</span></cds-sidenav-item>
+                            class="tc_submenuitem tc_submenuitem_admin_modules"><span i18n>Manager modules</span></cds-sidenav-item>
           <cds-sidenav-item route="/configuration"
                             [useRouter]="true"
                             title="Configuration"
