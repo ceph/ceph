@@ -11,6 +11,7 @@ roles:
 tasks:
 - install:
 - cephadm:
+    distro-suffix: rockylinux-10
 - cephadm.shell:
     host.a:
       - ceph orch apply mds a

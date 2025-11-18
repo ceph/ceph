@@ -6,6 +6,7 @@ overrides:
 tasks:
 - cephadm:
     roleless: false
+    distro-suffix: rockylinux-10
 - cephadm.shell:
     mon.a:
       - ceph orch status
