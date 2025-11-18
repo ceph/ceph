@@ -450,10 +450,14 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual bool remove_ec_omap_journal_entry(const uint64_t id) {
      return false; // Only EC uses ec_omap_journal
    };
-   virtual void update_keys_using_journal(std::set<std::string> &keys_to_update) = 0;
-   virtual void update_vals_using_journal(std::map<std::string, ceph::buffer::list> &vals_to_update) = 0;
-   virtual std::optional<ceph::buffer::list> get_header_from_journal() = 0;
-   virtual std::map<std::string, ceph::buffer::list> get_keys_from_journal(std::set<std::string> &keys) = 0;
+   virtual void update_keys_using_journal(std::set<std::string> &keys_to_update) {};
+   virtual void update_vals_using_journal(std::map<std::string, ceph::buffer::list> &vals_to_update) {};
+   virtual std::optional<ceph::buffer::list> get_header_from_journal() {
+    return std::nullopt;
+   };
+   virtual std::map<std::string, ceph::buffer::list> get_keys_from_journal(std::set<std::string> &keys) {
+    return {};
+   };
  private:
    std::set<hobject_t> temp_contents;
  public:

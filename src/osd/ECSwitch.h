@@ -433,7 +433,7 @@ public:
   void update_keys_using_journal(std::set<std::string> &keys_to_update) override {
     ceph_assert(is_optimized());
     auto journal = optimized.ec_omap_journal;
-    for (const auto &entry : journal) {
+    for (auto &entry : journal) {
       if (entry.clear_omap) {
         keys_to_update.clear();
       }
@@ -444,7 +444,7 @@ public:
             ceph::buffer::list vals_bl = update.second;
             std::map<std::string, ceph::buffer::list> vals;
             decode(vals, vals_bl);
-            for (const auto &key : vals.keys()) {
+            for (const auto& [key, _] : vals) {
               keys_to_update.insert(key);
             }
             break;
@@ -454,7 +454,7 @@ public:
             std::set<std::string> keys;
             decode(keys, keys_bl);
             for (const auto &key : keys) {
-              keys_to_update.remove(key);
+              keys_to_update.erase(key);
             }
             break;
           }
@@ -475,7 +475,7 @@ public:
   void update_vals_using_journal(std::map<std::string, ceph::buffer::list> &vals_to_update) override {
     ceph_assert(is_optimized());
     auto journal = optimized.ec_omap_journal;
-    for (const auto &entry : journal) {
+    for (auto &entry : journal) {
       if (entry.clear_omap) {
         vals_to_update.clear();
       }
@@ -518,9 +518,9 @@ public:
   }
   std::optional<ceph::buffer::list> get_header_from_journal() override {
     ceph_assert(is_optimized());
-    std::optional<std::string> updated_header = std::nullopt;
+    std::optional<ceph::buffer::list> updated_header = std::nullopt;
     auto journal = optimized.ec_omap_journal;
-    for (const auto &entry : journal) {
+    for (auto &entry : journal) {
       if (entry.omap_header) {
         updated_header = entry.omap_header;
       }

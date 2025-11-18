@@ -7741,9 +7741,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
 
-	bufferlist bl;
+        std::set<std::string> returned_keys;
 	uint32_t num = 0;
 	bool truncated = false;
+        uint64_t bytes_read = 0;
 	if (oi.is_omap()) {
           const auto result = osd->store->omap_iterate(
             ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
@@ -7751,13 +7752,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
               .seek_position = start_after,
               .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
             },
-            [&bl, &num, max_return,
+            [&returned_keys, &num, max_return, &bytes_read,
 	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
             (std::string_view key, std::string_view value) mutable {
-	      if (num >= max_return || bl.length() >= max_bytes) {
+	      if (num >= max_return || bytes_read >= max_bytes) {
                 return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-	      encode(key, bl);
+              bytes_read += sizeof(key);
+              returned_keys.insert(std::string(key));
 	      ++num;
               return ObjectStore::omap_iter_ret_t::NEXT;
             });
@@ -7767,6 +7769,26 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    truncated = true;
 	  }
 	} // else return empty out_set
+
+        // MERGE WITH UPDATES IN JOURNAL
+        get_pgbackend()->update_keys_using_journal(returned_keys);
+
+        // ENCODE RESPECTING LIMITS
+        bufferlist bl;
+        num = 0;
+        truncated = false;
+
+        for (const auto &key : returned_keys) {
+          uint64_t max_bytes = cct->_conf->osd_max_omap_bytes_per_request;
+
+          if (num >= max_return || bl.length() >= max_bytes) {
+            truncated = true;
+            break;
+          }
+
+          encode(key, bl);
+          ++num;
+        }
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
@@ -7796,9 +7818,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 
+        std::map<std::string, ceph::buffer::list> returned_vals;
 	uint32_t num = 0;
 	bool truncated = false;
-	bufferlist bl;
+        uint64_t bytes_read = 0;
 	if (oi.is_omap()) {
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
 	  const auto result = osd->store->omap_iterate(
@@ -7811,18 +7834,22 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      .seek_type = filter_prefix > start_after ? omap_iter_seek_t::LOWER_BOUND
 						       : omap_iter_seek_t::UPPER_BOUND
 	    },
-	    [&bl, &truncated, &filter_prefix, &num, max_return,
-	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
+	    [&returned_vals, &truncated, &filter_prefix, &num, max_return,
+	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request, &bytes_read]
 	    (std::string_view key, std::string_view value) mutable {
 	      if (key.substr(0, filter_prefix.size()) != filter_prefix) {
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-	      if (num >= max_return || bl.length() >= max_bytes) {
+	      if (num >= max_return || bytes_read >= max_bytes) {
 	        truncated = true;
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-	      encode(key, bl);
-	      encode(value, bl);
+              // PUT KEY AND VALUE INTO MAP TO SEND TO JOURNAL
+              bufferlist val_bl;
+              encode(value, val_bl);
+              returned_vals[std::string(key)] = val_bl;
+              bytes_read += sizeof(key);
+              bytes_read += sizeof(value);
 	      ++num;
 	      return ObjectStore::omap_iter_ret_t::NEXT;
 	    });
@@ -7830,6 +7857,35 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    goto fail;
 	  }
 	} // else return empty out_set
+
+        // MERGE WITH UPDATES IN JOURNAL
+ 
+        get_pgbackend()->update_vals_using_journal(returned_vals);
+
+        // ENCODE RESPECTING LIMITS
+        bufferlist bl;
+        num = 0;
+        truncated = false;
+
+        for (auto it = returned_vals.begin(); it != returned_vals.end(); ++it) {
+          const auto &key = it->first;
+          const auto &val = it->second;
+
+          uint64_t max_bytes = cct->_conf->osd_max_omap_bytes_per_request;
+
+          if (!filter_prefix.empty() && key.substr(0, filter_prefix.size()) != filter_prefix) {
+            break;
+          }
+
+          if (num >= max_return || bl.length() >= max_bytes) {
+            truncated = true;
+            break;
+          }
+
+          encode(key, bl);
+          encode(val, bl);
+          ++num;
+        }
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
@@ -7846,8 +7902,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_read;
       {
-	osd->store->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
+        std::optional<ceph::buffer::list> header_from_journal = get_pgbackend()->get_header_from_journal();
+        if (header_from_journal) {
+          osd_op.outdata.claim_append(*header_from_journal);
+        } else {
+          osd->store->omap_get_header(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
                               &osd_op.outdata);
+        }
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
@@ -7868,8 +7929,16 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
 	map<string, bufferlist> out;
 	if (oi.is_omap()) {
-	  osd->store->omap_get_values(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard), keys_to_get, &out);
+          out = get_pgbackend()->get_keys_from_journal(keys_to_get);
+          set<string> keys_still_to_get;
+          for (auto &key : keys_to_get) {
+            if (!out.contains(key)) {
+              keys_still_to_get.insert(key);
+            }
+          }
+	  osd->store->omap_get_values(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard), keys_still_to_get, &out);
 	} // else return empty omap entries
+
 	encode(out, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
@@ -7903,8 +7972,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       i != assertions.end();
 	       ++i)
 	    to_get.insert(i->first);
+          out = get_pgbackend()->get_keys_from_journal(to_get);
+          set<string> still_to_get;
+          for (auto &key : to_get) {
+            if (!out.contains(key)) {
+              still_to_get.insert(key);
+            }
+          }
 	  int r = osd->store->omap_get_values(ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
-					      to_get, &out);
+					      still_to_get, &out);
 	  if (r < 0) {
 	    result = r;
 	    break;
