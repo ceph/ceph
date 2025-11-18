@@ -6,7 +6,7 @@ import { Observable, of as observableOf } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 import { CephServiceSpec } from '../models/service.interface';
 
-export const MAX_NAMESPACE = 4096;
+export const DEFAULT_MAX_NAMESPACE_PER_SUBSYSTEM = 512;
 
 export type GatewayGroup = CephServiceSpec;
 
