@@ -1652,22 +1652,6 @@ void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
     recovery_state.get_info());
 }
 
-void PG::on_activate_committed()
-{
-  if (!is_primary()) {
-    // waiters
-    if (recovery_state.needs_flush() == 0) {
-      requeue_ops(waiting_for_peered);
-    } else if (!waiting_for_peered.empty()) {
-      dout(10) << __func__ << " flushes in progress, moving "
-	       << waiting_for_peered.size() << " items to waiting_for_flush"
-	       << dendl;
-      ceph_assert(waiting_for_flush.empty());
-      waiting_for_flush.swap(waiting_for_peered);
-    }
-  }
-}
-
 // Compute pending backfill data
 static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t local_bytes)
 {

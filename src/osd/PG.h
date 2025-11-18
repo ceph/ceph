@@ -617,8 +617,6 @@ public:
 
   void on_replica_activate() override;
 
-  void on_activate_committed() override;
-
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
 
