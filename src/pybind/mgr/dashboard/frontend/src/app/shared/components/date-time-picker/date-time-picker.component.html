@@ -1,16 +1,17 @@
 <div cdsCol>
   <div cdsRow
        class="form-item-append">
-    <cds-text-label>{{name}}
-      <cds-date-picker  i18n-label
-                        [placeholder]="placeHolder"
-                        formControlname="expiresAt"
-                        dateFormat="Y/m/d"
-                        [value]="date"
-                        (valueChange)="onModelChange($event)"
-                        [helperText]="helperText"
-                        [disabled]="disabled"
-                        cdsTheme="theme"></cds-date-picker>
+    <cds-text-label>
+    <span class="cds--label">{{ name }}</span>
+    <cds-date-picker  i18n-label
+                      [placeholder]="placeHolder"
+                      formControlname="expiresAt"
+                      dateFormat="Y/m/d"
+                      [value]="date"
+                      (valueChange)="onModelChange($event)"
+                      [helperText]="helperText"
+                      [disabled]="disabled"
+                      cdsTheme="theme"></cds-date-picker>
     </cds-text-label>
   <cds-text-label *ngIf="hasTime">Select a time
   <cds-timepicker (valueChange)="onModelChange($event)"
