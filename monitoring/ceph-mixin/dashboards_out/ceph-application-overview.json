@@ -1193,7 +1193,10 @@
   "preload": false,
   "refresh": "30s",
   "schemaVersion": 41,
-  "tags": [],
+  "tags": [
+    "ceph-mixin",
+    "overview"
+  ],
   "templating": {
     "list": [
       {
@@ -1279,7 +1282,7 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "Ceph - Application Overview",
+  "title": "Ceph Application - Overview",
   "uid": "92LBIaJIz2",
   "version": 1
 }

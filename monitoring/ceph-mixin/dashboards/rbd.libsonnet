@@ -34,7 +34,7 @@ local info_rbd_stats = std.join(
       ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
-      'RBD Details',
+      'Ceph Block - Details',
       'Detailed Performance of RBD Images (IOPS/Throughput/Latency)',
       'YhCYGcuZz',
       'now-1h',
@@ -177,7 +177,7 @@ local info_rbd_stats = std.join(
       ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
-      'RBD Overview',
+      'Ceph Block - Overview',
       '',
       '41FrpeUiz',
       'now-1h',
