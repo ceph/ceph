@@ -1169,15 +1169,6 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
 PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
 PGBackend::getxattr(
   const hobject_t& soid,
-  std::string_view key) const
-{
-  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attr>(
-    store, coll, ghobject_t{soid}, key, 0);
-}
-
-PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::getxattr(
-  const hobject_t& soid,
   std::string&& key) const
 {
   return seastar::do_with(key, [this, &soid](auto &key) {
