@@ -7,6 +7,10 @@ Tentacle is the 20th stable release of Ceph.
 v20.2.0 Tentacle
 ================
 
+Release Date
+------------
+
+November 18, 2025
 
 Highlights
 ----------
