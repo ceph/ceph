@@ -2907,6 +2907,20 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
     }
   }
 
+  // is from a fenced osd?
+  if (osdmap.is_osd_in_fenced_bucket(m->get_orig_source().num(), cct)) {
+    dout(5) << "preprocess_failure: from fenced osd." << m->get_orig_source().num()
+	    << ", ignoring" << dendl;
+    send_incremental(op, m->get_epoch()+1);
+    goto didit;
+  }
+  // is targeting a fenced osd?
+  if (osdmap.is_osd_in_fenced_bucket(badboy, cct)) {
+    dout(5) << "preprocess_failure failure message about fenced osd."
+	    << badboy << ", ignoring" << dendl;
+    send_incremental(op, m->get_epoch()+1);
+    goto didit;
+  }
 
   // weird?
   if (osdmap.is_down(badboy)) {
@@ -8210,9 +8224,8 @@ void OSDMonitor::resolve_netsplit_stretch_cluster(
   *    choose the "best" clique (prioritizing OSD weights, then MONs,
   *    then connection scores, then lexicographical as tiebreaker).
   *  - Compute the set of fence_buckets = (vertices – best_clique),
-  *    which identifies buckets to fence (mark OSDs down) so
-  *    that only the surviving clique continues to serve I/O.
   */
+  
   dout(20) << __func__ << " vertices: {" << vertices << "}"
            << " cut_off_edges: {" << cut_off_edges << "}" << dendl;
   // Construct the adjacency list by adding
