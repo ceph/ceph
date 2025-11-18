@@ -24,6 +24,7 @@ tasks:
 - install:
 - cephadm:
     roleless: true
+    distro-suffix: rockylinux-10
 - cephadm.shell:
     host.a:
       - ceph orch status
