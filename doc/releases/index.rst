@@ -21,6 +21,7 @@ security fixes.
    :maxdepth: 1
    :hidden:
 
+   Tentacle (v20.2.*) <tentacle>
    Squid (v19.2.*) <squid>
    Reef (v18.2.*) <reef>
 
@@ -60,8 +61,11 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline_gantt:: releases.yml squid reef quincy
-.. ceph_timeline:: releases.yml squid reef quincy
+.. ceph_timeline_gantt:: releases.yml tentacle squid reef
+.. ceph_timeline:: releases.yml tentacle squid reef
+
+.. _Tentacle: tentacle
+.. _20.2.0: tentacle#v20-2-0-tentacle
 
 .. _Squid: squid
 .. _19.2.0: squid#v19-2-0-squid
