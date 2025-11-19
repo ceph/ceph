@@ -33,6 +33,16 @@ def setup():
     global main_secret_key
     main_secret_key = cfg.get('s3 main',"secret_key")
 
+    # vars from the secondary section
+    global secondary_host
+    global secondary_port
+    if cfg.has_section("secondary"):
+        secondary_host = cfg.get('secondary',"host")
+        secondary_port = int(cfg.get('secondary',"port"))
+    else:
+        secondary_host = None
+        secondary_port = None
+
 
 def get_config_host():
     global default_host
@@ -52,6 +62,16 @@ def get_access_key():
 def get_secret_key():
     global main_secret_key
     return main_secret_key
+
+
+def get_config_host2():
+    global secondary_host
+    return secondary_host
+
+
+def get_config_port2():
+    global secondary_port
+    return secondary_port
 
 
 @pytest.fixture(autouse=True, scope="package")
