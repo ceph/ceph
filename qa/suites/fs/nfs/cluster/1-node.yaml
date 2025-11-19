@@ -12,6 +12,7 @@ tasks:
 - install:
 - cephadm:
     distro-suffix: rockylinux-10
+    skip_dashboard: true
 - cephadm.shell:
     host.a:
       - ceph orch apply mds a
