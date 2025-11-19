@@ -82,8 +82,7 @@ struct mon_info_t {
     : name(n), public_addrs(p_addrs)
   { }
 
-  mon_info_t() { }
-
+  mon_info_t() = default;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
@@ -100,7 +99,7 @@ inline std::ostream& operator<<(std::ostream& out, const mon_info_t& mon) {
 
 class MonMap {
  public:
-  epoch_t epoch;       // what epoch/version of the monmap
+  epoch_t epoch{0};       // what epoch/version of the monmap
   uuid_d fsid;
   utime_t last_changed;
   utime_t created;
@@ -183,9 +182,7 @@ public:
     }
   }
 
-  MonMap()
-    : epoch(0) {
-  }
+  MonMap() = default;
 
   uuid_d& get_fsid() { return fsid; }
 
