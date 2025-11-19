@@ -29,7 +29,11 @@ class ZstdCompressor : public Compressor {
 
   int compress(const ceph::buffer::list &src, ceph::buffer::list &dst, std::optional<int32_t> &compressor_message) override {
     ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream_srcSize(s, cct->_conf->compressor_zstd_level, src.length());
+    ZSTD_CCtx_reset(s, ZSTD_reset_session_only);
+    ZSTD_CCtx_refCDict(s, NULL); // clear the dictionary (if any)
+    ZSTD_CCtx_setParameter(s, ZSTD_c_compressionLevel, cct->_conf->compressor_zstd_level);
+    ZSTD_CCtx_setPledgedSrcSize(s, src.length());
+
     auto p = src.begin();
     size_t left = src.length();
 
