@@ -7,6 +7,7 @@ tasks:
 - install:
     branch: reef
     exclude_packages:
+      - ceph-osd-classic
       - ceph-volume
 - print: "**** done install task..."
 - print: "**** done start installing reef cephadm ..."
