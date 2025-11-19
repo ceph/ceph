@@ -6,6 +6,7 @@
 #include "common/Formatter.h"
 #include "common/dout.h"
 #include <fmt/format.h>
+#include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -194,11 +195,6 @@ void delete_vector_bucket_policy_t::decode_json(JSONObj* obj) {
 }
 
 int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
-    JSONFormatter f;
-    configuration.dump(&f);
-    std::stringstream ss;
-    f.flush(ss);
-    ldpp_dout(dpp, 20) << "INFO: executing s3vector CreateVectorBucket with: " << ss.str() << dendl;
     return 0;
 }
 
@@ -212,11 +208,6 @@ int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, o
 }
 
 int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
-    JSONFormatter f;
-    configuration.dump(&f);
-    std::stringstream ss;
-    f.flush(ss);
-    ldpp_dout(dpp, 20) << "INFO: executing s3vector DeleteVectorBucket with: " << ss.str() << dendl;
     return 0;
 }
 
@@ -414,15 +405,6 @@ void get_vector_bucket_t::decode_json(JSONObj* obj) {
   decode_name_or_arn("vectorBucketName", "vectorBucketArn", vector_bucket_name, vector_bucket_arn, obj);
 }
 
-int list_vector_buckets(const list_vector_buckets_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
-    JSONFormatter f;
-    configuration.dump(&f);
-    std::stringstream ss;
-    f.flush(ss);
-    ldpp_dout(dpp, 20) << "INFO: executing s3vector ListVectorBuckets with: " << ss.str() << dendl;
-    return 0;
-}
-
 void get_index_t::dump(ceph::Formatter* f) const {
   f->open_object_section("");
   ::encode_json("indexArn", index_arn, f);
@@ -434,15 +416,6 @@ void get_index_t::dump(ceph::Formatter* f) const {
 void get_index_t::decode_json(JSONObj* obj) {
   decode_name_or_arn("indexName", "indexArn", index_name, index_arn, obj);
   decode_name("vectorBucketName", vector_bucket_name, obj);
-}
-
-int get_vector_bucket(const get_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
-    JSONFormatter f;
-    configuration.dump(&f);
-    std::stringstream ss;
-    f.flush(ss);
-    ldpp_dout(dpp, 20) << "INFO: executing s3vector GetVectorBucket with: " << ss.str() << dendl;
-    return 0;
 }
 
 void list_indexes_t::dump(ceph::Formatter* f) const {
