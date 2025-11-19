@@ -953,6 +953,8 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
+  std::optional<hobject_t> migration_watermark =
+    op->consider_updating_migration_watermark(get_parent());
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
@@ -982,6 +984,7 @@ bool ECCommonL::RMWPipeline::try_reads_to_commit()
       op->updated_hit_set_history,
       op->temp_added,
       op->temp_cleared,
+      migration_watermark,
       !should_send);
 
     ZTracer::Trace trace;
@@ -1042,6 +1045,10 @@ struct ECDummyOp : ECCommonL::RMWPipeline::Op {
   {
     // NOP, as -- in constrast to ECClassicalOp -- there is no
     // transaction involved
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) final {
+    return {};
   }
 };
 
