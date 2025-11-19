@@ -157,9 +157,12 @@ void GroupUnlinkPeerRequest<I>::process_snapshot(cls::rbd::GroupSnapshot group_s
 
   const auto& ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
       group_snap.snapshot_namespace);
-  if (ns.mirror_peer_uuids.empty()) {
+  if (ns.mirror_peer_uuids.empty() ||
+      group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
     remove_group_snapshot(group_snap);
   } else {
+    // Note: avoid calling remove_peer_uuid() for INCOMPLETE snapshots as
+    // group_snap_set() returns EEXIST error
     remove_peer_uuid(group_snap, mirror_peer_uuid);
   }
 }
