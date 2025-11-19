@@ -427,6 +427,7 @@ struct rgw_ep_info {
 };
 
 class RGWBucketCtl {
+protected:
   CephContext *cct;
 
   struct Svc {
@@ -732,3 +733,30 @@ private:
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,
                            const std::string& bucket_id, rgw_bucket* bucket_out);
+
+class RGWVectorBucketCtl : public RGWBucketCtl {
+public:
+  RGWVectorBucketCtl(RGWSI_Zone *zone_svc,
+               RGWSI_Bucket *bucket_svc,
+               RGWSI_Bucket_Sync *bucket_sync_svc,
+               RGWSI_BucketIndex *bi_svc,
+               RGWSI_User* user_svc,
+               RGWDataChangesLog *datalog_svc);
+
+  int link_bucket(librados::Rados& rados,
+                  const rgw_owner& owner,
+                  const rgw_bucket& bucket,
+                  ceph::real_time creation_time,
+		  optional_yield y,
+                  const DoutPrefixProvider *dpp,
+                  bool update_entrypoint = true,
+                  rgw_ep_info *pinfo = nullptr);
+
+  int unlink_bucket(librados::Rados& rados,
+                    const rgw_owner& owner,
+                    const rgw_bucket& bucket,
+		    optional_yield y,
+                    const DoutPrefixProvider *dpp,
+                    bool update_entrypoint = true);
+
+};

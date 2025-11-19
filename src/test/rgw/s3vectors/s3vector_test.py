@@ -48,10 +48,10 @@ def gen_bucket_name():
     global num_buckets
 
     num_buckets += 1
-    return run_prefix + '-' + str(num_buckets)
+    return 'kaboom' + run_prefix + '-' + str(num_buckets)
 
 
-def connection():
+def connection(service_name='s3vectors'):
     hostname = get_config_host()
     port_no = get_config_port()
     access_key = get_access_key()
@@ -61,11 +61,16 @@ def connection():
     else:
         scheme = 'http://'
 
-    client = boto3.client('s3vectors',
+    if service_name == 's3vectors':
+        config = Config(signature_version='s3')
+    else:
+        config = None
+
+    client = boto3.client(service_name,
             endpoint_url=scheme+hostname+':'+str(port_no),
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
-            config=Config(signature_version='s3'))
+            config=config)
 
     return client
 
@@ -100,6 +105,13 @@ def another_user(tenant=None):
 # s3vectors tests
 #################
 
+def _delete_all_vector_buckets(conn):
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    for bucket in result['vectorBuckets']:
+        _ = conn.delete_vector_bucket(vectorBucketName=bucket['vectorBucketName'])
+
+
 @pytest.mark.vector_bucket_test
 def test_create_vector_bucket():
     conn = connection()
@@ -107,7 +119,7 @@ def test_create_vector_bucket():
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _delete_all_vector_buckets(conn)
 
 
 @pytest.mark.vector_bucket_test
@@ -118,8 +130,11 @@ def test_get_vector_bucket():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.get_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("get_vector_buckets result: %s", result)
+    invalid_name = bucket_name + '-invalid'
+    pytest.raises(conn.exceptions.ClientError, conn.get_vector_bucket, vectorBucketName=invalid_name)
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    _delete_all_vector_buckets(conn)
 
 
 @pytest.mark.vector_bucket_test
@@ -132,9 +147,13 @@ def test_delete_vector_bucket():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # not implemented yet
-    #with pytest.raises(conn.exceptions.NoSuchVectorBucket):
-    #    result = conn.get_vector_bucket(vectorBucketName=bucket_name)
+    pytest.raises(conn.exceptions.ClientError, conn.get_vector_bucket, vectorBucketName=bucket_name)
+    pytest.raises(conn.exceptions.ClientError, conn.delete_vector_bucket, vectorBucketName=bucket_name)
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectorBuckets']) == 0
+    # cleanup
+    _delete_all_vector_buckets(conn)
 
 
 @pytest.mark.vector_bucket_test
@@ -148,13 +167,121 @@ def test_list_vector_bucket():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # not implemented yet
-    #bucket_names = [b['Name'] for b in result['VectorBuckets']]
-    #assert bucket_name1 in bucket_names
-    #assert bucket_name2 in bucket_names
+    log.info("list_vector_buckets result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in bucket_names
+    assert bucket_name2 in bucket_names
     # cleanup
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name1)
-    _ = conn.delete_vector_bucket(vectorBucketName=bucket_name2)
+    _delete_all_vector_buckets(conn)
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_buckets_creation_with_buckets():
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name1 = gen_bucket_name()
+    # create vector bucket
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # create s3 bucket with the same name
+    result = s3conn.create_bucket(Bucket=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # create another s3 bucket
+    bucket_name2 = gen_bucket_name()
+    result = s3conn.create_bucket(Bucket=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # list vector buckets and verify only one bucket there
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in vector_bucket_names
+    assert bucket_name2 not in vector_bucket_names
+    # list s3 buckets and verify both bucket there
+    result = s3conn.list_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_buckets result: %s", result)
+    s3_bucket_names = [b['Name'] for b in result['Buckets']]
+    assert bucket_name1 in s3_bucket_names
+    assert bucket_name2 in s3_bucket_names
+    # now try to create a vector bucket with a name that already exists as an s3 bucket
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # list vector buckets and verify both bucket there
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in vector_bucket_names
+    assert bucket_name2 in vector_bucket_names
+    # cleanup
+    _delete_all_vector_buckets(conn)
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_buckets_deletion_with_buckets():
+    conn = connection()
+    s3conn = connection('s3')
+    bucket_name1 = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # create s3 bucket with the same name
+    result = s3conn.create_bucket(Bucket=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify vector bucket exists (via get and list)
+    result = conn.get_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in vector_bucket_names
+    # verify s3 bucket exists (via get and list)
+    result = s3conn.head_bucket(Bucket=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = s3conn.list_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_buckets result: %s", result)
+    bucket_names = [b['Name'] for b in result['Buckets']]
+    assert bucket_name1 in bucket_names
+
+
+    # delete vector bucket
+    result = conn.delete_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # verify vector bucket is not there (via get and list)
+    pytest.raises(conn.exceptions.ClientError, conn.get_vector_bucket, vectorBucketName=bucket_name1)
+    # verify s3 bucket still exists
+    result = s3conn.head_bucket(Bucket=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = s3conn.list_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_buckets result: %s", result)
+    s3_bucket_names = [b['Name'] for b in result['Buckets']]
+    assert bucket_name1 in s3_bucket_names
+    # create another vector bucket
+    bucket_name2 = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # and an s3 bucket with the same name
+    result = s3conn.create_bucket(Bucket=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # delete the s3 bucket
+    result = s3conn.delete_bucket(Bucket=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 204
+    # verify s3 bucket is not there
+    pytest.raises(s3conn.exceptions.ClientError, s3conn.head_bucket, Bucket=bucket_name2)
+    # verify vector bucket still exists (via get and list)
+    result = conn.get_vector_bucket(vectorBucketName=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name2 in vector_bucket_names
+    # cleanup
+    _delete_all_vector_buckets(conn)
 
 
 @pytest.mark.index_test

@@ -21,6 +21,7 @@
 using namespace std;
 
 static const std::string instance_oid_prefix = ".bucket.meta.";
+static const std::string vector_instance_oid_prefix = ".vectorbucket.meta.";
 
 // convert bucket instance oids back to the tenant/ format for metadata keys.
 // it's safe to parse 'tenant:' only for oids, because they won't contain the
@@ -61,6 +62,44 @@ static std::string instance_oid_to_meta_key(const std::string& oid)
   return key;
 }
 
+// convert vector bucket instance oids back to the tenant/ format for metadata keys.
+// it's safe to parse 'tenant:' only for oids, because they won't contain the
+// optional :shard at the end
+static std::string vector_instance_meta_key_to_oid(const std::string& metadata_key)
+{
+  std::string oid = string_cat_reserve(vector_instance_oid_prefix, metadata_key);
+
+  // replace tenant/ with tenant:
+  auto c = oid.find('/', vector_instance_oid_prefix.size());
+  if (c != string::npos) {
+    oid[c] = ':';
+  }
+
+  return oid;
+}
+
+// convert vector bucket instance oids back to the tenant/ format for metadata keys.
+// it's safe to parse 'tenant:' only for oids, because they won't contain the
+// optional :shard at the end
+static std::string vector_instance_oid_to_meta_key(const std::string& oid)
+{
+  if (oid.size() < vector_instance_oid_prefix.size()) { /* just sanity check */
+    return string();
+  }
+
+  std::string key = oid.substr(vector_instance_oid_prefix.size());
+
+  // find first : (could be tenant:bucket or bucket:instance)
+  auto c = key.find(':');
+  if (c != string::npos) {
+    // if we find another :, the first one was for tenant
+    if (key.find(':', c + 1) != string::npos) {
+      key[c] = '/';
+    }
+  }
+
+  return key;
+}
 
 RGWSI_Bucket_SObj::RGWSI_Bucket_SObj(CephContext *cct): RGWSI_Bucket(cct) {
 }
@@ -126,6 +165,20 @@ int RGWSI_Bucket_SObj::create_entrypoint_lister(
   return 0;
 }
 
+int RGWSI_VectorBucket_SObj::create_entrypoint_lister(
+    const DoutPrefixProvider* dpp,
+    const std::string& marker,
+    std::unique_ptr<RGWMetadataLister>& lister)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  auto p = std::make_unique<BucketEntrypointLister>(svc.sysobj->get_pool(pool));
+  int r = p->init(dpp, marker, ""); // empty prefix
+  if (r < 0) {
+    return r;
+  }
+  lister = std::move(p);
+  return 0;
+}
 
 class BucketInstanceLister : public RGWMetadataLister {
  public:
@@ -167,6 +220,36 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(const string& key,
                                                    boost::optional<obj_version> refresh_version)
 {
   const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  bufferlist bl;
+  int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
+                               objv_tracker, pmtime, y, dpp,
+                               pattrs, cache_info, refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*entry_point, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int RGWSI_VectorBucket_SObj::read_bucket_entrypoint_info(const string& key,
+                                                   RGWBucketEntryPoint *entry_point,
+                                                   RGWObjVersionTracker *objv_tracker,
+                                                   real_time *pmtime,
+                                                   map<string, bufferlist> *pattrs,
+                                                   optional_yield y,
+                                                   const DoutPrefixProvider *dpp,
+                                                   rgw_cache_entry_info *cache_info,
+                                                   boost::optional<obj_version> refresh_version)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::read_bucket_entrypoint_info called" << dendl;
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
   bufferlist bl;
   int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
                                objv_tracker, pmtime, y, dpp,
@@ -577,3 +660,277 @@ int RGWSI_Bucket_SObj::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
 
   return buckets.size();
 }
+
+int RGWSI_VectorBucket_SObj::read_bucket_instance_info(const string& key,
+                                                 RGWBucketInfo *info,
+                                                 real_time *pmtime, map<string, bufferlist> *pattrs,
+                                                 optional_yield y,
+                                                 const DoutPrefixProvider *dpp,
+                                                 rgw_cache_entry_info *cache_info,
+                                                 boost::optional<obj_version> refresh_version)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::read_bucket_instance_info called" << dendl;
+  string cache_key("vbi/");
+  cache_key.append(key);
+
+  if (auto e = binfo_cache->find(cache_key)) {
+    if (refresh_version &&
+        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+      ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
+        << "a failure that should be debugged. I am a nice machine, "
+        << "so I will try to recover." << dendl;
+      binfo_cache->invalidate(key);
+    } else {
+      *info = e->info;
+      if (pattrs)
+	*pattrs = e->attrs;
+      if (pmtime)
+	*pmtime = e->mtime;
+      return 0;
+    }
+  }
+
+  bucket_info_cache_entry e;
+  rgw_cache_entry_info ci;
+
+  int ret = do_read_bucket_instance_info(key, &e.info, &e.mtime, &e.attrs,
+                                         &ci, refresh_version, y, dpp);
+  *info = e.info;
+
+  if (ret < 0) {
+    if (ret != -ENOENT) {
+      ldpp_dout(dpp, -1) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "do_read_bucket_instance_info, bucket instance not found (key=" << key << ")" << dendl;
+    }
+    return ret;
+  }
+
+  if (pmtime) {
+    *pmtime = e.mtime;
+  }
+  if (pattrs) {
+    *pattrs = e.attrs;
+  }
+  if (cache_info) {
+    *cache_info = ci;
+  }
+
+  /* chain to only bucket instance and *not* bucket entrypoint */
+  if (!binfo_cache->put(dpp, svc.cache, cache_key, &e, {&ci})) {
+    ldpp_dout(dpp, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
+  }
+
+  if (refresh_version &&
+      refresh_version->compare(&info->objv_tracker.read_version)) {
+    ldpp_dout(dpp, -1) << "WARNING: The OSD has the same version I have. Something may "
+               << "have gone squirrelly. An administrator may have forced a "
+               << "change; otherwise there is a problem somewhere." << dendl;
+  }
+
+  return 0;
+}
+
+int RGWSI_VectorBucket_SObj::store_bucket_entrypoint_info(const string& key,
+                                                    RGWBucketEntryPoint& info,
+                                                    bool exclusive,
+                                                    real_time mtime,
+                                                    const map<string, bufferlist> *pattrs,
+                                                    RGWObjVersionTracker *objv_tracker,
+                                                    optional_yield y,
+                                                    const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::store_bucket_entrypoint_info called" << dendl;
+  bufferlist bl;
+  encode(info, bl);
+
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, key, bl, exclusive,
+                               objv_tracker, mtime, y, pattrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return svc.mdlog->complete_entry(dpp, y, "vectorbucket", key, objv_tracker);
+}
+
+int RGWSI_VectorBucket_SObj::remove_bucket_entrypoint_info(const string& key,
+                                                     RGWObjVersionTracker *objv_tracker,
+                                                     optional_yield y,
+                                                     const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::remove_bucket_entrypoint_info called" << dendl;
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, key, objv_tracker, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return svc.mdlog->complete_entry(dpp, y, "vectorbucket", key, objv_tracker);
+}
+
+int RGWSI_VectorBucket_SObj::do_read_bucket_instance_info(const string& key,
+                                                    RGWBucketInfo *info,
+                                                    real_time *pmtime, map<string, bufferlist> *pattrs,
+                                                    rgw_cache_entry_info *cache_info,
+                                                    boost::optional<obj_version> refresh_version,
+                                                    optional_yield y,
+                                                    const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::do_read_bucket_instance_info called" << dendl;
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  const std::string oid = vector_instance_meta_key_to_oid(key);
+  bufferlist bl;
+  RGWObjVersionTracker objv;
+
+  int ret = rgw_get_system_obj(svc.sysobj, pool, oid, bl, &objv, pmtime, y,
+                               dpp, pattrs, cache_info, refresh_version);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*info, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
+    return -EIO;
+  }
+  info->objv_tracker = objv;
+  return 0;
+}
+
+int RGWSI_VectorBucket_SObj::store_bucket_instance_info(const string& key,
+                                                  RGWBucketInfo& info,
+                                                  std::optional<RGWBucketInfo *> orig_info,
+                                                  bool exclusive,
+                                                  real_time mtime,
+                                                  const map<string, bufferlist> *pattrs,
+                                                  optional_yield y,
+                                                  const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::store_bucket_instance_info called" << dendl;
+  bufferlist bl;
+  encode(info, bl);
+
+  /*
+   * we might need some special handling if overwriting
+   */
+  RGWBucketInfo shared_bucket_info;
+  if (!orig_info && !exclusive) {  /* if exclusive, we're going to fail when try
+                                      to overwrite, so the whole check here is moot */
+    /*
+     * we're here because orig_info wasn't passed in
+     * we don't have info about what was there before, so need to fetch first
+     */
+    int r  = read_bucket_instance_info(key, &shared_bucket_info,
+                                       nullptr, nullptr, y, dpp,
+                                       nullptr, boost::none);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_bucket_instance_info() of key=" << key << " returned r=" << r << dendl;
+        return r;
+      }
+    } else {
+      orig_info = &shared_bucket_info;
+    }
+  }
+
+  if (orig_info && *orig_info && !exclusive) {
+    int r = svc.bi->handle_overwrite(dpp, info, *(orig_info.value()), y);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): svc.bi->handle_overwrite() of key=" << key << " returned r=" << r << dendl;
+      return r;
+    }
+  }
+
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  const std::string oid = vector_instance_meta_key_to_oid(key);
+  int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl, exclusive,
+                               &info.objv_tracker, mtime, y, pattrs);
+  if (ret >= 0) {
+    int r = svc.mdlog->complete_entry(dpp, y, "vectorbucket.instance",
+                                      key, &info.objv_tracker);
+    if (r < 0) {
+      return r;
+    }
+
+    r = svc.bucket_sync->handle_bi_update(dpp, info, orig_info.value_or(nullptr), y);
+    if (r < 0) {
+      return r;
+    }
+  } else if (ret == -EEXIST) {
+    /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
+     * bucket operation on this specific bucket (e.g., being synced from the master), but
+     * since bucket instance meta object is unique for this specific bucket instance, we don't
+     * need to return an error.
+     * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
+     * master, creating a bucket, sending bucket creation to the master, we create the bucket
+     * locally, while in the sync thread we sync the new bucket.
+     */
+    ret = 0;
+  }
+
+  if (ret < 0) {
+    return ret;
+  }
+
+  return ret;
+}
+
+int RGWSI_VectorBucket_SObj::remove_bucket_instance_info(const string& key,
+                                                   const RGWBucketInfo& info,
+                                                   RGWObjVersionTracker *objv_tracker,
+                                                   optional_yield y,
+                                                   const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::remove_bucket_instance_info called" << dendl;
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  const std::string oid = vector_instance_meta_key_to_oid(key);
+  int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, oid, objv_tracker, y);
+  if (ret < 0 &&
+      ret != -ENOENT) {
+    return ret;
+  }
+
+  int r = svc.bucket_sync->handle_bi_removal(dpp, info, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to update bucket instance sync index: r=" << r << dendl;
+    /* returning success as index is just keeping hints, so will keep extra hints,
+     * but bucket removal succeeded
+     */
+  }
+
+  return 0;
+}
+
+class VectorBucketInstanceLister : public RGWMetadataLister {
+ public:
+  using RGWMetadataLister::RGWMetadataLister;
+
+  void filter_transform(std::vector<std::string>& oids,
+                        std::list<std::string>& keys) override
+  {
+    // transform instance oids to metadata keys
+    std::transform(oids.begin(), oids.end(),
+                   std::back_inserter(keys),
+                   vector_instance_oid_to_meta_key);
+  }
+};
+
+int RGWSI_VectorBucket_SObj::create_instance_lister(
+    const DoutPrefixProvider* dpp,
+    const std::string& marker,
+    std::unique_ptr<RGWMetadataLister>& lister)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWSI_VectorBucket_SObj::create_instance_lister called" << dendl;
+  const rgw_pool& pool = svc.zone->get_zone_params().vector_pool;
+  auto p = std::make_unique<VectorBucketInstanceLister>(svc.sysobj->get_pool(pool));
+  int r = p->init(dpp, marker, vector_instance_oid_prefix);
+  if (r < 0) {
+    return r;
+  }
+  lister = std::move(p);
+  return 0;
+}
+

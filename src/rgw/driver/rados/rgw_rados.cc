@@ -1275,6 +1275,10 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (ret < 0)
     return ret;
 
+  ret = open_vector_pool_ctx(dpp);
+  if (ret < 0)
+    return ret;
+
   pools_initialized = true;
 
   if (use_gc) {
@@ -1556,6 +1560,11 @@ int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool,
 {
   constexpr bool create = true; // create the pool if it doesn't exist
   return rgw_init_ioctx(dpp, get_rados_handle(), pool, io_ctx, create, mostly_omap, bulk);
+}
+
+int RGWRados::open_vector_pool_ctx(const DoutPrefixProvider *dpp)
+{
+  return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().vector_pool, vector_pool_ctx, true, true);
 }
 
 /**** logs ****/
@@ -2550,6 +2559,84 @@ int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
   return -ENOENT;
 }
 
+int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const rgw_bucket& bucket,
+                            const rgw_owner& owner,
+                            const std::string& zonegroup_id,
+                            const rgw_placement_rule& placement_rule,
+                            const std::map<std::string, bufferlist>& attrs,
+                            const std::optional<RGWQuotaInfo>& quota,
+                            std::optional<ceph::real_time> creation_time,
+                            obj_version* pep_objv,
+                            RGWBucketInfo& info)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::create_vector_bucke called" << dendl;
+  int ret = 0;
+
+#define MAX_CREATE_RETRIES 20 /* need to bound retries */
+  for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
+    RGWObjVersionTracker& objv_tracker = info.objv_tracker;
+    objv_tracker.read_version.clear();
+    objv_tracker.generate_new_write_ver(cct);
+
+    if (bucket.marker.empty()) {
+      create_bucket_id(&info.bucket.marker);
+      info.bucket.bucket_id = info.bucket.marker;
+    } else {
+      info.bucket = bucket;
+    }
+
+    info.owner = owner;
+    info.zonegroup = zonegroup_id;
+    info.placement_rule = placement_rule;
+
+    if (creation_time) {
+      info.creation_time = *creation_time;
+    } else {
+      info.creation_time = ceph::real_clock::now();
+    }
+    if (quota) {
+      info.quota = *quota;
+    }
+
+    constexpr bool exclusive = true;
+    ret = put_linked_vector_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y);
+    if (ret == -ECANCELED) {
+      ret = -EEXIST;
+    }
+    if (ret == -EEXIST) {
+       /* we need to reread the info and return it, caller will have a use for it */
+      RGWBucketInfo orig_info;
+      int r = get_vector_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, dpp);
+      if (r < 0) {
+        if (r == -ENOENT) {
+          continue;
+        }
+        ldpp_dout(dpp, 0) << "get s3vector bucket info returned " << r << dendl;
+        return r;
+      }
+
+      /* only remove it if it's a different bucket instance */
+      if (orig_info.bucket.bucket_id != bucket.bucket_id) {
+        r = ctl.vector_bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
+        if (r < 0) {
+          ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove s3vector bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;
+          /* continue anyway */
+        }
+      }
+
+      info = std::move(orig_info);
+      /* ret == -EEXIST here */
+    }
+    return ret;
+  }
+
+  /* this is highly unlikely */
+  ldpp_dout(dpp, 0) << "ERROR: could not create s3vector bucket, continuously raced with bucket creation and removal" << dendl;
+  return -ENOENT;
+}
+
 bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
@@ -2622,6 +2709,7 @@ int RGWRados::get_obj_head_ref(const DoutPrefixProvider *dpp,
 
 int RGWRados::get_raw_obj_ref(const DoutPrefixProvider *dpp, rgw_raw_obj obj, rgw_rados_ref* ref)
 {
+  ldpp_dout(dpp, 1) << "INFO: s3vector -- called RGWRados::get_raw_obj_ref()" << dendl;
   if (obj.oid.empty()) {
     obj.oid = obj.pool.to_str();
     obj.pool = svc.zone->get_zone_params().domain_root;
@@ -5992,6 +6080,69 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
     } else {
       ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
     }
+  }
+
+  return 0;
+}
+
+int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::delete_vector_bucket called" << dendl;
+  const rgw_bucket& bucket = bucket_info.bucket;
+  librados::IoCtx index_pool;
+  map<int, string> bucket_objs;
+
+  bool remove_ep = true;
+
+  int r;
+  if (objv_tracker.read_version.empty()) {
+    RGWBucketEntryPoint ep;
+    r = ctl.vector_bucket->read_bucket_entrypoint_info(bucket_info.bucket,
+                                                &ep,
+						null_yield,
+                                                dpp,
+                                                RGWBucketCtl::Bucket::GetParams()
+                                                .set_objv_tracker(&objv_tracker));
+    if (r < 0 ||
+        (!bucket_info.bucket.bucket_id.empty() &&
+         ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
+      if (r != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: read_bucket_entrypoint_info() s3vector bucket=" << bucket_info.bucket << " returned error: r=" << r << dendl;
+        /* we have no idea what caused the error, will not try to remove it */
+      }
+      /*
+       * either failed to read bucket entrypoint, or it points to a different bucket instance than
+       * requested
+       */
+      remove_ep = false;
+    }
+  }
+
+  if (remove_ep) {
+    r = ctl.vector_bucket->remove_bucket_entrypoint_info(bucket_info.bucket, y, dpp,
+                                                  RGWBucketCtl::Bucket::RemoveParams()
+                                                  .set_objv_tracker(&objv_tracker));
+    if (r < 0)
+      return r;
+  }
+
+  /* if the bucket is not synced we can remove the meta file */
+  if (!svc.zone->is_syncing_bucket_meta()) {
+    r = ctl.vector_bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
+    if (r < 0) {
+      return r;
+    }
+
+  } else {
+    // set 'deleted' flag for multisite replication to handle bucket instance removal
+    // TODO: implement store_delete_bucket_info_flag for vector buckets
+    /*r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
+    if (r < 0) {
+      // no need to treat this as an error
+      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket info flag 'deleted' on bucket: " << bucket.name << " r=" << r << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
+    }*/
   }
 
   return 0;
@@ -9961,6 +10112,23 @@ int RGWRados::get_bucket_info(RGWServices *svc,
 				      .set_attrs(pattrs));
 }
 
+int RGWRados::get_vector_bucket_info(RGWServices *svc,
+                              const string& tenant, const string& bucket_name,
+                              RGWBucketInfo& info,
+                              real_time *pmtime,
+                              optional_yield y,
+                              const DoutPrefixProvider *dpp, map<string, bufferlist> *pattrs)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::get_vector_bucket_info called" << dendl;
+  rgw_bucket bucket;
+  bucket.tenant = tenant;
+  bucket.name = bucket_name;
+  return ctl.vector_bucket->read_bucket_info(bucket, &info, y, dpp,
+				      RGWBucketCtl::BucketInstance::GetParams()
+				      .set_mtime(pmtime)
+				      .set_attrs(pattrs));
+}
+
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
                                       ceph::real_time *pmtime,
                                       const DoutPrefixProvider *dpp, optional_yield y,
@@ -9983,6 +10151,18 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               const DoutPrefixProvider *dpp, optional_yield y)
 {
   return ctl.bucket->store_bucket_instance_info(info.bucket, info, y, dpp,
+						RGWBucketCtl::BucketInstance::PutParams()
+						.set_exclusive(exclusive)
+						.set_mtime(mtime)
+						.set_attrs(pattrs));
+}
+
+int RGWRados::put_vector_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
+                              real_time mtime, const map<string, bufferlist> *pattrs,
+                              const DoutPrefixProvider *dpp, optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::put_vector_bucket_instance called" << dendl;
+  return ctl.vector_bucket->store_bucket_instance_info(info.bucket, info, y, dpp,
 						RGWBucketCtl::BucketInstance::PutParams()
 						.set_exclusive(exclusive)
 						.set_mtime(mtime)
@@ -10018,6 +10198,45 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
     }
   }
   ret = ctl.bucket->store_bucket_entrypoint_info(info.bucket, entry_point, y, dpp, RGWBucketCtl::Bucket::PutParams()
+						                          .set_exclusive(exclusive)
+									  .set_objv_tracker(&ot)
+									  .set_mtime(mtime));
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
+
+int RGWRados::put_linked_vector_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
+                                     const map<string, bufferlist> *pattrs, bool create_entry_point,
+                                     const DoutPrefixProvider *dpp, optional_yield y)
+{
+  ldpp_dout(dpp, 20) << "s3vector --- RGWRados::put_linked_vector_bucket_info called" << dendl;
+  bool create_head = !info.has_instance_obj || create_entry_point;
+
+  int ret = put_vector_bucket_instance_info(info, exclusive, mtime, pattrs, dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (!create_head)
+    return 0; /* done! */
+
+  RGWBucketEntryPoint entry_point;
+  entry_point.bucket = info.bucket;
+  entry_point.owner = info.owner;
+  entry_point.creation_time = info.creation_time;
+  entry_point.linked = true;
+  RGWObjVersionTracker ot;
+  if (pep_objv && !pep_objv->tag.empty()) {
+    ot.write_version = *pep_objv;
+  } else {
+    ot.generate_new_write_ver(cct);
+    if (pep_objv) {
+      *pep_objv = ot.write_version;
+    }
+  }
+  ret = ctl.vector_bucket->store_bucket_entrypoint_info(info.bucket, entry_point, y, dpp, RGWBucketCtl::Bucket::PutParams()
 						                          .set_exclusive(exclusive)
 									  .set_objv_tracker(&ot)
 									  .set_mtime(mtime));
