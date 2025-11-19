@@ -3280,6 +3280,29 @@ protected:
   string get_type() override { return "vectorbucket.instance"; }
 };
 
+class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+protected:
+  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+                  const std::string& entry, RGWBucketCompleteInfo& bci,
+                  const std::optional<RGWBucketCompleteInfo>& old_bci,
+                  const RGWObjVersionTracker& objv_tracker,
+                  bool from_remote_zone) override {
+    bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    return 0;
+  }
+  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+               const RGWBucketCompleteInfo& bci,
+               const std::optional<RGWBucketCompleteInfo>& old_bci,
+               RGWObjVersionTracker& objv_tracker) override {return 0;}
+ public:
+   RGWVectorBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
+                                   RGWSI_Zone* svc_zone,
+                                   RGWSI_Bucket* svc_bucket) :
+     RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
+
+  string get_type() override { return "vectorbucket.instance"; }
+};
+
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
@@ -3823,6 +3846,24 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                                    svc_datalog);
 }
 #endif
+
+auto create_vector_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketMetadataHandler>(
+      rados, svc_bucket, ctl_bucket);
+}
+
+auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
+                                                            svc_bucket);
+}
 
 auto create_vector_bucket_metadata_handler(librados::Rados& rados,
                                     RGWSI_Bucket* svc_bucket,
