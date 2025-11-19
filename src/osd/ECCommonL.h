@@ -442,6 +442,8 @@ struct ECCommonL {
         std::map<shard_id_t, ceph::os::Transaction> *transactions,
         DoutPrefixProvider *dpp,
         const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
+
+      virtual std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) = 0;
     };
     using OpRef = std::unique_ptr<Op>;
     using op_list = boost::intrusive::list<Op>;

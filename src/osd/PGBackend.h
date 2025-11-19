@@ -230,6 +230,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool pg_is_undersized() const = 0;
      virtual bool pg_is_repair() const = 0;
 
+     virtual void update_migration_watermark(const hobject_t &watermark) = 0;
+     virtual std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) = 0;
+
      virtual void log_operation(
        std::vector<pg_log_entry_t>&& logv,
        const std::optional<pg_hit_set_history_t> &hset_history,

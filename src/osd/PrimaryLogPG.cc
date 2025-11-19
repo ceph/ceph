@@ -13078,6 +13078,35 @@ void PrimaryLogPG::on_shutdown()
   }
 }
 
+std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std::set<hobject_t> &deleted)
+{
+  if (deleted.contains(last_pool_migration_started)) {
+    hobject_t current(last_pool_migration_started);
+    hobject_t next;
+    do {
+      //BILL:FIXME: This is very inefficient, it isn't looking at the missing list either...
+      dout(20) << __func__ << " deleting object " << current << dendl;
+      vector<hobject_t> sentries;
+      int r = pgbackend->objects_list_partial(
+	    current,
+	    1,
+	    1,
+	    &sentries,
+	    &next);
+      if (r != 0) {
+	// Object store should always be able to list objects for a valid colleciton
+	derr << __func__ << ": objects_list_partial failed " << r << dendl;
+	return {};
+      }
+      current = next;
+    } while (deleted.contains(current));
+    dout(20) << __func__ << " new watermark will be " << current << dendl;
+    queue_recovery(); //BILL:FIXME: Hack to advance pool migration - see recover_pool_migration
+    return current;
+  }
+  return {};
+}
+
 hobject_t PrimaryLogPG::earliest_pool_migration()
 {
   vector<hobject_t> sentries;
@@ -13155,12 +13184,12 @@ void PrimaryLogPG::_on_activate_committed()
   }
 
   if (pool.info.is_pg_migrating(info.pgid.pgid)) {
-    last_pool_migration_started = earliest_pool_migration();
+    update_migration_watermark(earliest_pool_migration());
     new_pool_migration = true;
   } else if (pool.info.has_pg_migrated(info.pgid.pgid)) {
-    last_pool_migration_started = hobject_t::get_max();
+    update_migration_watermark(hobject_t::get_max());
   } else {
-    last_pool_migration_started = hobject_t();
+    update_migration_watermark(hobject_t());
   }
 }
 
@@ -14755,8 +14784,19 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     //pending_backfill_updates.clear();
   }
 
-  // Don't change work_started and return 0 indicating that no work was started,
-  // this implies the migration has completed.
+  //BILL:FIXME: Hacky implementation of pool migration - don't complete
+  //the migration for a PG until all the objects in the PG have been
+  //deleted. For now you need to manually delete the objects in the
+  //pool. last_pool_migration_started will get incremented as
+  //the lowest object is deleted by consider_updating_migration_watermark
+  //and a hack there will queue recovery each time the watermark progreses
+  if (!last_pool_migration_started.is_max()) {
+    // Set work_started if there are still objects in the pool which
+    // will stop migration completing.
+    *work_started = true;
+  }
+  // but return 0 indicating that no work was started so we don't
+  // increment the number of inflight recovery ops
   return 0;
 }
 

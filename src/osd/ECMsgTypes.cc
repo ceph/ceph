@@ -31,7 +31,7 @@ void ECSubWrite::encode(bufferlist &bl) const
 
 void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) const
 {
-  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 5 : 4;
+  uint8_t ver = HAVE_FEATURE(features, SERVER_TENTACLE) ? 6 : 4;
   ENCODE_START(ver, 1, p_bl);
   encode(from, p_bl);
   encode(tid, p_bl);
@@ -51,6 +51,9 @@ void ECSubWrite::encode(bufferlist &p_bl, bufferlist &d_bl, uint64_t features) c
   encode(updated_hit_set_history, p_bl);
   encode(pg_committed_to, p_bl);
   encode(backfill_or_async_recovery, p_bl);
+  if (ver >= 6) {
+    encode(migration_watermark, p_bl);
+  }
   ENCODE_FINISH(p_bl);
 }
 
@@ -62,7 +65,7 @@ void ECSubWrite::decode(bufferlist::const_iterator &bl)
 void ECSubWrite::decode(bufferlist::const_iterator &p_bl,
 			bufferlist::const_iterator &d_bl)
 {
-  DECODE_START(5, p_bl);
+  DECODE_START(6, p_bl);
   decode(from, p_bl);
   decode(tid, p_bl);
   decode(reqid, p_bl);
@@ -92,6 +95,11 @@ void ECSubWrite::decode(bufferlist::const_iterator &p_bl,
     // The old protocol used an empty transaction to indicate backfill or async_recovery
     backfill_or_async_recovery = t.empty();
   }
+  if (struct_v >= 6) {
+    decode(migration_watermark, p_bl);
+  } else {
+    migration_watermark.reset();
+  }
   DECODE_FINISH(p_bl);
 }
 
@@ -105,6 +113,8 @@ std::ostream &operator<<(
       << ", pg_committed_to=" << rhs.pg_committed_to;
   if (rhs.updated_hit_set_history)
     lhs << ", has_updated_hit_set_history";
+  if (rhs.migration_watermark)
+    lhs << ", migration_watermark=" << rhs.migration_watermark;
   if (rhs.backfill_or_async_recovery)
     lhs << ", backfill_or_async_recovery";
   return lhs <<  ")";
@@ -119,6 +129,7 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_stream("pg_committed_to") << pg_committed_to;
   f->dump_bool("has_updated_hit_set_history",
       static_cast<bool>(updated_hit_set_history));
+  f->dump_stream("migration_watermark") << migration_watermark;
   f->dump_bool("backfill_or_async_recovery", backfill_or_async_recovery);
 }
 
@@ -140,6 +151,7 @@ list<ECSubWrite> ECSubWrite::generate_test_instances()
   o.back().at_version = eversion_t(10, 300);
   o.back().trim_to = eversion_t(5, 42);
   o.back().pg_committed_to = eversion_t(8, 250);
+  o.back().migration_watermark = hobject_t(sobject_t("asdf", 1));
   return o;
 }
 

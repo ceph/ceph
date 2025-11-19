@@ -850,6 +850,8 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
   std::vector<std::pair<int, Message*>> messages;
   messages.reserve(get_parent()->get_acting_recovery_backfill_shards().size());
   set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
+  std::optional<hobject_t> migration_watermark =
+    op.consider_updating_migration_watermark(get_parent());
 
   if (op.version.version != 0) {
     if (oid_to_version.contains(op.hoid)) {
@@ -910,6 +912,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       op.updated_hit_set_history,
       op.temp_added,
       op.temp_cleared,
+      migration_watermark,
       !should_send);
 
     ZTracer::Trace trace;
@@ -983,6 +986,10 @@ struct ECDummyOp final : ECCommon::RMWPipeline::Op {
       ceph::os::Transaction &transaction
     ) override {
     return !pending_roll_forward.erase(shard);
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) override {
+    return {};
   }
 };
 

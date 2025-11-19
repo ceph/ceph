@@ -1193,6 +1193,11 @@ protected:
   bool new_pool_migration;
 
   hobject_t earliest_pool_migration();
+  void update_migration_watermark(const hobject_t &watermark) override
+  {
+    last_pool_migration_started = watermark;
+  }
+  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
 
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,

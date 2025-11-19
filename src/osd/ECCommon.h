@@ -555,6 +555,8 @@ struct ECCommon {
           shard_id_t shard,
           ceph::os::Transaction &transaction) = 0;
 
+      virtual std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) = 0;
+
       void cache_ready(const hobject_t &oid, const ECUtil::shard_extent_map_t &result) {
         if (!result.empty()) {
           remote_shard_extent_map.insert(std::pair(oid, result));

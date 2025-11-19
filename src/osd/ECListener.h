@@ -181,4 +181,6 @@ struct ECListener {
     bool async = false) = 0;
   virtual void op_applied(
     const eversion_t &applied_version) = 0;
+
+  virtual std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) = 0;
 };
