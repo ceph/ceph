@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from cephadm.operations import OperationsRegistry
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 
 import string
@@ -677,6 +678,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self._init_cert_mgr()
 
         self.migration = Migrations(self)
+        self.ops = OperationsRegistry(self)
+        self.last_command_actor = None  # best-effort actor capture, may stay unused
 
         self.mgr_service: MgrService = cast(MgrService, service_registry.get_service('mgr'))
         self.osd_service: OSDService = cast(OSDService, service_registry.get_service('osd'))
@@ -3270,6 +3273,85 @@ Then run the following:
             self.set_store(PrometheusService.USER_CFG_KEY, user)
             self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return (user, password)
+
+    @handle_orch_error
+    def show_operations(
+        self,
+        all: bool = False,
+        use_json: bool = False,
+        watch: bool = False,
+    ) -> str:
+        """
+        Show cephadm operations and their status.
+
+        Examples:
+            ceph orch cephadm operations
+            ceph orch cephadm operations --all
+            ceph orch cephadm operations --json
+            ceph orch cephadm operations --watch
+        """
+        def _payload() -> List[Dict[str, Any]]:
+            idx: List[str] = self.ops._load_json(self.ops.INDEX_KEY, [])
+
+            # Load each operation record with {} as default so type is Dict[str, Any]
+            active_raw: List[Any] = [
+                self.ops._load_json(f"cephadm/operations/{i}", {}) for i in idx
+            ]
+            active: List[Dict[str, Any]] = [
+                a for a in active_raw if isinstance(a, dict)
+            ]
+
+            if not all:
+                return active
+
+            hist_raw: List[Any] = self.ops._load_json(self.ops.HIST_KEY, [])
+            hist: List[Dict[str, Any]] = [
+                h for h in hist_raw if isinstance(h, dict)
+            ]
+            return active + hist
+
+        def _render(tbl: List[Dict[str, Any]]) -> str:
+
+            if use_json:
+                return json.dumps(tbl, indent=2, sort_keys=True)
+
+            # human-readable text
+            if not tbl:
+                return "No active operations"
+
+            lines = []
+            for n, op in enumerate(tbl, 1):
+                done = op.get('progress_done', 0)
+                total = op.get('progress_total', 0)
+                step = op.get('current_step', '')
+                actor = op.get('requested_by', 'unknown')
+                title = op.get('title', op.get('service_name', ''))
+                state = op.get('state', '')
+
+                lines.append(f"{n}. {title}")
+                status = f"Status: {done}/{total}"
+                if step:
+                    status += f" — {step}"
+                if state and state not in ('running', 'pending'):
+                    status += f" ({state})"
+                lines.append(status)
+                lines.append(f"Actor: {actor}    Submitted: {op.get('submitted_at', '')}")
+
+                if state == 'failed':
+                    err = (op.get('details') or {}).get('error', '')
+                    if err:
+                        lines.append(f"Error: {err}")
+                lines.append("")
+            return "\n".join(lines).rstrip()
+
+        if watch:
+            # simple watch mode, Ctrl-C to stop
+            import time
+            while True:
+                print("\x0c" + _render(_payload()))
+                time.sleep(2)
+        else:
+            return _render(_payload())
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:

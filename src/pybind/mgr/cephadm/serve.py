@@ -884,15 +884,37 @@ class CephadmServe:
         progress_done = 0
 
         def update_progress() -> None:
+            # guard against divide-by-zero if somehow progress_total == 0
+            ev_progress = (progress_done / progress_total) if progress_total else 1.0
             self.mgr.remote(
                 'progress', 'update', progress_id,
                 ev_msg=progress_title,
-                ev_progress=(progress_done / progress_total),
+                ev_progress=ev_progress,
                 add_to_ceph_s=True,
             )
 
         if progress_total:
             update_progress()
+            op_id: Optional[str] = None
+            try:
+                op_delta: Dict[str, int] = {
+                    'add': len(slots_to_add),
+                    'remove': len(daemons_to_remove),
+                }
+                op_title = f'Updating {spec.service_name()} according to the new mapping'
+                op_id = self.mgr.ops.begin_operation(
+                    kind='placement:update',
+                    title=op_title,
+                    service_name=spec.service_name(),
+                    requested_by=self.mgr.ops.guess_actor(),
+                    progress_total=progress_total,
+                    source='reconcile',
+                    details={'delta': op_delta},
+                )
+            except Exception:
+                # best-effort only; never fail scheduling due to ops registry
+                self.log.debug('Failed to register operation in OperationsRegistry', exc_info=True)
+                op_id = None
 
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
@@ -955,6 +977,21 @@ class CephadmServe:
                         self._remove_daemon(d.name(), d.hostname)
                         daemons_to_remove.remove(d)
                         progress_done += 1
+                        update_progress()
+                        if op_id is not None:
+                            try:
+                                self.mgr.ops.update_operation(
+                                    op_id,
+                                    current_step=(
+                                        f'Removing {d.name()} before deploying to {slot}'
+                                    ),
+                                    progress_done=progress_done,
+                                )
+                            except Exception:
+                                self.log.debug(
+                                    'Failed to update operation (pre-remove)',
+                                    exc_info=True,
+                                )
                         hosts_altered.add(d.hostname)
                         break
 
@@ -990,6 +1027,15 @@ class CephadmServe:
                     r = True
                     progress_done += 1
                     update_progress()
+                    if op_id is not None:
+                        try:
+                            self.mgr.ops.update_operation(
+                                op_id,
+                                current_step=f'Deploying {slot.daemon_type}.{daemon_id} on {slot.hostname}',
+                                progress_done=progress_done,
+                            )
+                        except Exception:
+                            self.log.debug('Failed to update operation (deploy)', exc_info=True)
                     hosts_altered.add(daemon_spec.host)
                     self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 except (RuntimeError, OrchestratorError) as e:
@@ -1004,6 +1050,15 @@ class CephadmServe:
                         r = False
                     progress_done += 1
                     update_progress()
+                    if op_id is not None:
+                        try:
+                            self.mgr.ops.update_operation(
+                                op_id,
+                                current_step=f'Failed placing {slot.daemon_type}.{daemon_id} on {slot.hostname}',
+                                progress_done=progress_done,
+                            )
+                        except Exception:
+                            self.log.debug('Failed to update operation (deploy-fail)', exc_info=True)
                     continue
 
                 # add to daemon list so next name(s) will also be unique
@@ -1060,14 +1115,33 @@ class CephadmServe:
 
                 progress_done += 1
                 update_progress()
+                if op_id is not None:
+                    try:
+                        self.mgr.ops.update_operation(
+                            op_id,
+                            current_step=f'Removing {d.name()} from {d.hostname}',
+                            progress_done=progress_done,
+                        )
+                    except Exception:
+                        self.log.debug('Failed to update operation (remove)', exc_info=True)
                 hosts_altered.add(d.hostname)
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
 
             if progress_total:
                 self.mgr.remote('progress', 'complete', progress_id)
+                if op_id is not None:
+                    try:
+                        self.mgr.ops.complete_operation(op_id)
+                    except Exception:
+                        self.log.debug('Failed to complete operation in OperationsRegistry', exc_info=True)
         except Exception as e:
             if progress_total:
                 self.mgr.remote('progress', 'fail', progress_id, str(e))
+                if op_id is not None:
+                    try:
+                        self.mgr.ops.fail_operation(op_id, str(e))
+                    except Exception:
+                        self.log.debug('Failed to mark operation failed in OperationsRegistry', exc_info=True)
             raise
         finally:
             if self.mgr.spec_store.needs_configuration(spec.service_name()):
@@ -1082,6 +1156,7 @@ class CephadmServe:
             r = False
         return r
 
+    # redo
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
