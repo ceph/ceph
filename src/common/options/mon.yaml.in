@@ -60,6 +60,8 @@ options:
   default: 1_min
   services:
   - mon
+  flags:
+  - runtime
 - name: mon_down_uptime_grace
   type: secs
   level: advanced
