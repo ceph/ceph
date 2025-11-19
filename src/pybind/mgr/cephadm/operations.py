@@ -128,6 +128,10 @@ class OperationsRegistry:
         Create and register a new operation.
         """
         op_id: str = str(uuid.uuid4())
+        base_details: Dict[str, Any] = details.copy() if details else {}
+        # step history: list of {when, message, progress_done}
+        base_details.setdefault("steps", [])
+
         op: OperationRecord = {
             "op_id": op_id,
             "kind": kind,
@@ -142,7 +146,7 @@ class OperationsRegistry:
             "progress_total": int(progress_total),
             "current_step": "Queued" if progress_total == 0 else "",
             "blocked_by": [],
-            "details": details or {},
+            "details": base_details,
         }
 
         # Add to active index
@@ -171,11 +175,23 @@ class OperationsRegistry:
         if not op:
             return
 
-        if current_step is not None:
-            op["current_step"] = current_step
-
+        # progress first, so the step entry sees the latest number
         if progress_done is not None:
             op["progress_done"] = int(progress_done)
+
+        if current_step is not None:
+            op["current_step"] = current_step
+            # track step history
+            details = op.setdefault("details", {})
+            steps = details.setdefault("steps", [])
+            # keep it simple: append message + when + current progress
+            steps.append(
+                {
+                    "when": self._now(),
+                    "message": current_step,
+                    "progress_done": int(op.get("progress_done", 0)),
+                }
+            )
 
         if blocked_by is not None:
             op["blocked_by"] = blocked_by

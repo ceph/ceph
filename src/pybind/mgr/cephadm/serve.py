@@ -1160,6 +1160,55 @@ class CephadmServe:
     def _check_daemons(self) -> None:
         self.log.debug('_check_daemons')
         daemons = self.mgr.cache.get_daemons()
+        orphan_groups: DefaultDict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
+        for dd in daemons:
+            assert dd.hostname is not None
+            assert dd.daemon_type is not None
+            assert dd.daemon_id is not None
+
+            # cualquier acción sobre hosts offline va a fallar, no los contamos
+            if dd.hostname in self.mgr.offline_hosts:
+                continue
+
+            spec = self.mgr.spec_store.active_specs.get(dd.service_name(), None)
+            service_name = dd.service_name()
+            is_deleted_service = service_name in self.mgr.spec_store.spec_deleted
+
+            # Sólo consideramos como "operación de borrado de servicio"
+            # los daemons huérfanos cuyo servicio ha sido eliminado explícitamente
+            if (
+                not spec
+                and is_deleted_service
+                and dd.daemon_type not in ['mon', 'mgr', 'osd']
+            ):
+                orphan_groups[service_name].append(dd)
+
+        orphan_ops: Dict[str, Dict[str, Any]] = {}
+        for svc_name, dds in orphan_groups.items():
+            try:
+                op_title = f'Removing service {svc_name}'
+                op_id = self.mgr.ops.begin_operation(
+                    kind='service:remove',
+                    title=op_title,
+                    service_name=svc_name,
+                    requested_by=self.mgr.ops.guess_actor(),
+                    progress_total=len(dds),
+                    source='orchestrator',
+                    details={
+                        'daemons': [d.name() for d in dds],
+                    },
+                )
+                orphan_ops[svc_name] = {
+                    'op_id': op_id,
+                    'progress_done': 0,
+                    'progress_total': len(dds),
+                }
+            except Exception:
+                self.log.debug(
+                    'Failed to register service-remove operation for %s', svc_name,
+                    exc_info=True,
+                )
+
         daemons_post: Dict[str, List[orchestrator.DaemonDescription]] = defaultdict(list)
         for dd in daemons:
             # orphan?
@@ -1178,6 +1227,24 @@ class CephadmServe:
                 # to a service spec)
                 self.log.info('Removing orphan daemon %s...' % dd.name())
                 self._remove_daemon(dd.name(), dd.hostname)
+
+                # If it belongs to a service that is being removed, we update the operation.
+                svc_name = dd.service_name()
+                op_info = orphan_ops.get(svc_name)
+                if op_info:
+                    op_info['progress_done'] += 1
+                    try:
+                        self.mgr.ops.update_operation(
+                            op_info['op_id'],
+                            current_step=f"Removing {dd.name()} from {dd.hostname}",
+                            progress_done=op_info['progress_done'],
+                        )
+                    except Exception:
+                        self.log.debug(
+                            'Failed to update service-remove operation for %s', svc_name,
+                            exc_info=True,
+                        )
+                continue
 
             # ignore unmanaged services
             if spec and spec.unmanaged:
@@ -1301,6 +1368,17 @@ class CephadmServe:
             if run_post:
                 service_registry.get_service(daemon_type_to_service(
                     daemon_type)).daemon_check_post(daemon_descs)
+
+        # mark service-deletion operations as completed
+        for svc_name, op_info in orphan_ops.items():
+            if op_info['progress_total'] and op_info['progress_done'] >= op_info['progress_total']:
+                try:
+                    self.mgr.ops.complete_operation(op_info['op_id'])
+                except Exception:
+                    self.log.debug(
+                        'Failed to complete service-remove operation for %s', svc_name,
+                        exc_info=True,
+                    )
 
     def _purge_deleted_services(self) -> None:
         self.log.debug('_purge_deleted_services')

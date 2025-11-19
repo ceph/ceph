@@ -3277,23 +3277,20 @@ Then run the following:
     @handle_orch_error
     def show_operations(
         self,
-        all: bool = False,
-        use_json: bool = False,
-        watch: bool = False,
+        show_all: bool = False,
     ) -> str:
         """
         Show cephadm operations and their status.
 
         Examples:
             ceph orch cephadm operations
-            ceph orch cephadm operations --all
-            ceph orch cephadm operations --json
-            ceph orch cephadm operations --watch
+            ceph orch cephadm operations --show_all_ops
         """
-        def _payload() -> List[Dict[str, Any]]:
-            idx: List[str] = self.ops._load_json(self.ops.INDEX_KEY, [])
+        from typing import Any, Dict, List
 
-            # Load each operation record with {} as default so type is Dict[str, Any]
+        def _payload() -> List[Dict[str, Any]]:
+            # Active operations from the index
+            idx: List[str] = self.ops._load_json(self.ops.INDEX_KEY, [])
             active_raw: List[Any] = [
                 self.ops._load_json(f"cephadm/operations/{i}", {}) for i in idx
             ]
@@ -3301,9 +3298,15 @@ Then run the following:
                 a for a in active_raw if isinstance(a, dict)
             ]
 
-            if not all:
+            if not show_all:
+                # Default: show only non-closed operations
+                active = [
+                    op for op in active
+                    if op.get("state") not in ("completed", "failed")
+                ]
                 return active
 
+            # --show_all_ops: include history as well
             hist_raw: List[Any] = self.ops._load_json(self.ops.HIST_KEY, [])
             hist: List[Dict[str, Any]] = [
                 h for h in hist_raw if isinstance(h, dict)
@@ -3312,46 +3315,53 @@ Then run the following:
 
         def _render(tbl: List[Dict[str, Any]]) -> str:
 
-            if use_json:
-                return json.dumps(tbl, indent=2, sort_keys=True)
-
-            # human-readable text
             if not tbl:
                 return "No active operations"
 
-            lines = []
+            lines: List[str] = []
             for n, op in enumerate(tbl, 1):
-                done = op.get('progress_done', 0)
-                total = op.get('progress_total', 0)
-                step = op.get('current_step', '')
-                actor = op.get('requested_by', 'unknown')
-                title = op.get('title', op.get('service_name', ''))
-                state = op.get('state', '')
+                done = int(op.get("progress_done", 0))
+                total = int(op.get("progress_total", 0))
+                step = str(op.get("current_step", "") or "")
+                actor = str(op.get("requested_by", "unknown"))
+                title = str(op.get("title", op.get("service_name", "")))
+                state = str(op.get("state", ""))
 
                 lines.append(f"{n}. {title}")
                 status = f"Status: {done}/{total}"
                 if step:
                     status += f" — {step}"
-                if state and state not in ('running', 'pending'):
+                if state and state not in ("running", "pending"):
                     status += f" ({state})"
                 lines.append(status)
-                lines.append(f"Actor: {actor}    Submitted: {op.get('submitted_at', '')}")
+                lines.append(
+                    f"Actor: {actor}    Submitted: {op.get('submitted_at', '')}"
+                )
 
-                if state == 'failed':
-                    err = (op.get('details') or {}).get('error', '')
+                # Show full step history, if present
+                details = op.get("details") or {}
+                steps = details.get("steps") or []
+                if steps:
+                    lines.append("Steps:")
+                    for s in steps:
+                        msg = str(s.get("message", ""))
+                        when = str(s.get("when", ""))
+                        p_done = s.get("progress_done")
+                        if when and p_done is not None:
+                            lines.append(f"  - [{when}] {msg} (done={p_done})")
+                        elif when:
+                            lines.append(f"  - [{when}] {msg}")
+                        else:
+                            lines.append(f"  - {msg}")
+
+                if state == "failed":
+                    err = str((details.get("error", "") or ""))
                     if err:
                         lines.append(f"Error: {err}")
                 lines.append("")
             return "\n".join(lines).rstrip()
 
-        if watch:
-            # simple watch mode, Ctrl-C to stop
-            import time
-            while True:
-                print("\x0c" + _render(_payload()))
-                time.sleep(2)
-        else:
-            return _render(_payload())
+        return _render(_payload())
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
