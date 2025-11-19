@@ -13770,7 +13770,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     std::string source_pool_name;
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
-    if (cmd_getval(cmdmap, "migrate_from", source_pool_name)) {
+    if (cmd_getval(cmdmap, "migrate_from_pool", source_pool_name)) {
       //BILL:FIXME: release should be umbrella
       if (osdmap.require_min_compat_client < ceph_release_t::tentacle) {
 	ss << "require_min_compat_client "
@@ -13784,7 +13784,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
       if (source_pool_id < 0) {
-        ss << "migrate_from expects the name or ID of an existing pool. "
+        ss << "migrate_from_pool expects the name of an existing pool. "
            << source_pool_name << " does not exist";
         err = -EINVAL;
         goto reply_no_propose;
