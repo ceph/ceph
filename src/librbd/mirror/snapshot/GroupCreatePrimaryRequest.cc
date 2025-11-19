@@ -530,8 +530,10 @@ void GroupCreatePrimaryRequest<I>::handle_notify_quiesce(int r) {
 
   if (r < 0 &&
       (m_snap_create_flags & SNAP_CREATE_FLAG_IGNORE_NOTIFY_QUIESCE_ERROR) == 0) {
+    lderr(m_cct) << "failed to notify the quiesce requests: "
+                 << cpp_strerror(r) << dendl;
     m_ret_code = r;
-    notify_unquiesce();
+    remove_snap_metadata();
     return;
   }
 
