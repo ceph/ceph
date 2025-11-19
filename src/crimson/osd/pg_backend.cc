@@ -1098,11 +1098,11 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
 
 PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
   std::string name;
-  ceph::bufferlist val;
   {
     auto bp = osd_op.indata.cbegin();
     std::string aname;
