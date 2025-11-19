@@ -17,6 +17,7 @@
 #include "common/debug.h"
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
+#include "os/bluestore/BlueStore_objects.h"
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_printer& printer)
 {
@@ -114,8 +115,8 @@ BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
 /// Collects allocation units that became unused into *released_disk.
 /// Returns:
 ///   disk space size to release
-uint32_t BlueStore::Blob::put_ref_accumulate(
-  Collection *coll,
+uint32_t bluestore::Blob::put_ref_accumulate(
+  BlueStore::Collection *coll,
   uint32_t offset,
   uint32_t length,
   PExtentVector *released_disk)
@@ -131,7 +132,7 @@ uint32_t BlueStore::Blob::put_ref_accumulate(
   return res;
 }
 
-inline void BlueStore::Blob::add_tail(
+inline void bluestore::Blob::add_tail(
   uint32_t new_blob_size,
   uint32_t min_release_size)
 {
@@ -490,7 +491,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_with_data(
   uint32_t min_alloc_size = bstore->min_alloc_size;
   ceph_assert(p2phase(in_blob_offset, block_size) == 0);
   ceph_assert(p2phase(disk_data.length(), block_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t data_length = disk_data.length();
   uint32_t alloc_offset = p2align(in_blob_offset, min_alloc_size);
@@ -536,7 +537,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full(
   uint32_t min_alloc_size = bstore->min_alloc_size;
   uint32_t blob_length = disk_data.length();
   ceph_assert(p2phase<uint32_t>(blob_length, bstore->min_alloc_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t tracked_unit = min_alloc_size;
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -625,7 +626,7 @@ BlueStore::BlobRef BlueStore::Writer::_blob_create_full_compressed(
   uint32_t disk_length = disk_data.length();
   uint32_t object_length = object_data.length();
   ceph_assert(p2phase<uint32_t>(disk_length, bstore->min_alloc_size) == 0);
-  BlobRef blob = onode->c->new_blob();
+  BlobRef blob = onode->new_blob();
 
   bluestore_blob_t &bblob = blob->dirty_blob();
   uint32_t csum_order = // conv 8 -> 32 so "<<" does not overflow
@@ -1448,6 +1449,7 @@ void BlueStore::Writer::do_write_with_blobs(
     bstore->_punch_hole_2(onode->c, onode, location, data_end - location,
     released, pruned_blobs, txc->shared_blobs, statfs_delta);
   dout(25) << "after punch_hole_2: " << std::endl << onode->print(pp_mode) << dendl;
+  pruned_blobs.clear();
 
   // todo: if we align to disk block before splitting, we could do it in one go
   uint32_t pos = location;
