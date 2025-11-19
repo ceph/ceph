@@ -1,0 +1,14 @@
+[DEFAULT]
+port = 8101
+host = localhost
+
+[secondary]
+port = 8201
+host = localhost
+
+[s3 main]
+access_key = 1234567890
+secret_key = pencil
+display_name = M. Tester
+user_id = testid
+email = tester@ceph.com

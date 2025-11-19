@@ -416,6 +416,10 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
     new_env.set(std::move(key), v);
   }
 
+  const char* content_type = info.env->get("CONTENT_TYPE");
+  if (content_type) {
+    new_env.set("HTTP_CONTENT_TYPE", content_type);
+  }
 
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
