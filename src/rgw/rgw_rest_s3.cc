@@ -7364,7 +7364,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
   buffer::list en_input, dec_output;
   en_input = buffer::list::static_from_string(decodedSessionToken);
 
-  ret = keyhandler->decrypt(cct, en_input, dec_output, &error);
+  ret = keyhandler->decrypt_ext(cct, 14, en_input, dec_output, &error);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;
