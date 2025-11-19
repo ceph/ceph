@@ -372,6 +372,10 @@ def configure(ctx, config):
         if rgw_restore_debug_interval:
             s3tests_conf['s3 main']['rgw_restore_debug_interval'] = rgw_restore_debug_interval
 
+        rgw_restore_processor_period = properties.get('rgw_restore_processor_period')
+        if rgw_restore_processor_period:
+            s3tests_conf['s3 main']['rgw_restore_processor_period'] = rgw_restore_processor_period
+
         if ctx.rgw_cloudtier is not None:
             log.info(' ctx.rgw_cloudtier config  is %s ...', ctx.rgw_cloudtier.config)
             client_rgw_config = ctx.rgw_cloudtier.config.get(client)

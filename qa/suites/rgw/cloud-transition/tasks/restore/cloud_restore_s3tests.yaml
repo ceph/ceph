@@ -7,6 +7,7 @@ tasks:
     client.1:
       port: 8001
 - rgw-cloudtier:
+    client.1:
     client.0:
       cloud_storage_class: CLOUDTIER-CLIENT0
       cloud_client: client.1
@@ -15,7 +16,7 @@ tasks:
       cloud_retain_head_object: "true"
       cloud_target_path: "teuthology-client0"
       cloud_allow_read_through: "true"
-      cloud_read_through_restore_days: "1"
+      cloud_read_through_restore_days: "5"
       cloudtier_user:
         # cloud-user creds to be created on cloud-client
         cloud_secret: "abcefgh"
@@ -27,5 +28,6 @@ tasks:
       extra_attrs: ["cloud_restore"]
       lc_debug_interval: 10
       rgw_restore_debug_interval: 20
+      rgw_restore_processor_period: 10
       lifecycle_tests: True
       cloudtier_tests: True
