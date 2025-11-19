@@ -65,6 +65,8 @@ struct mon_info_t {
   uint16_t priority{0};
   uint16_t weight{0};
 
+  ceph::real_clock::time_point time_added = ceph::real_clock::zero();
+
   /**
    * The location of the monitor, in CRUSH hierarchy terms
    */
@@ -210,26 +212,16 @@ public:
     }
   }
 
+  mon_info_t const& get(std::string const& name) const {
+    return mon_info.at(name);
+  }
+
   /**
    * Add new monitor to the monmap
    *
    * @param m monitor info of the new monitor
    */
-  void add(const mon_info_t& m) {
-    ceph_assert(mon_info.count(m.name) == 0);
-    for (auto& a : m.public_addrs.v) {
-      ceph_assert(addr_mons.count(a) == 0);
-    }
-    mon_info[m.name] = m;
-    if (get_required_features().contains_all(
-	  ceph::features::mon::FEATURE_NAUTILUS)) {
-      ranks.push_back(m.name);
-      ceph_assert(ranks.size() == mon_info.size());
-    } else {
-      calc_legacy_ranks();
-    }
-    calc_addr_mons();
-  }
+  mon_info_t& add(mon_info_t&& m);
 
   /**
    * Add new monitor to the monmap
@@ -237,9 +229,9 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    * @param addr Monitor's public address
    */
-  void add(const std::string &name, const entity_addrvec_t &addrv,
+  mon_info_t& add(const std::string &name, const entity_addrvec_t &addrv,
 	   uint16_t priority=0, uint16_t weight=0) {
-    add(mon_info_t(name, addrv, priority, weight));
+    return add(mon_info_t(name, addrv, priority, weight));
   }
 
   /**
