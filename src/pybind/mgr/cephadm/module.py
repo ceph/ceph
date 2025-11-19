@@ -3278,43 +3278,74 @@ Then run the following:
     def show_operations(
         self,
         show_all: bool = False,
+        max_ops: Optional[int] = None,
     ) -> str:
         """
         Show cephadm operations and their status.
 
         Examples:
-            ceph orch cephadm operations
-            ceph orch cephadm operations --show_all_ops
+            ceph orch operations
+            ceph orch operations --show-all
+            ceph orch operations --show-all --limit 10
         """
         from typing import Any, Dict, List
 
-        def _payload() -> List[Dict[str, Any]]:
-            # Active operations from the index
+        def _sort_key(op: Dict[str, Any]) -> str:
+            # Sort by submitted_at (string ISO timestamp); newest first
+            return str(op.get("submitted_at") or "")
+
+        def _load_active(limit: Optional[int]) -> List[Dict[str, Any]]:
+            """
+            Load at most `limit` active operations (if limit is not None),
+            going from newest to oldest based on the index order.
+            """
             idx: List[str] = self.ops._load_json(self.ops.INDEX_KEY, [])
-            active_raw: List[Any] = [
-                self.ops._load_json(f"cephadm/operations/{i}", {}) for i in idx
-            ]
-            active: List[Dict[str, Any]] = [
-                a for a in active_raw if isinstance(a, dict)
-            ]
+            # Assume index is oldest -> newest; iterate in reverse for newest first
+            ops: List[Dict[str, Any]] = []
+            for op_id in reversed(idx):
+                raw: Any = self.ops._load_json(f"cephadm/operations/{op_id}", {})
+                if isinstance(raw, dict):
+                    # In practice INDEX_KEY should only contain non-closed ops,
+                    # but keep the state filter for safety.
+                    state = raw.get("state")
+                    if state not in ("completed", "failed"):
+                        ops.append(raw)
+                if limit is not None and len(ops) >= limit:
+                    break
+            # They should already be newest-first because we iterated reversed(idx),
+            # but keep a stable sort on submitted_at just in case.
+            return sorted(ops, key=_sort_key, reverse=True)
 
+        def _load_all(show_all: bool, max_ops: Optional[int]) -> List[Dict[str, Any]]:
             if not show_all:
-                # Default: show only non-closed operations
-                active = [
-                    op for op in active
-                    if op.get("state") not in ("completed", "failed")
-                ]
-                return active
+                # Only active ops, limited at the source
+                return _load_active(max_ops)
 
-            # --show_all_ops: include history as well
+            # show_all=True: active + history
+            active = _load_active(None)  # active list is usually small
+
+            # If we have a limit, figure out how many history entries we can still show
+            remaining = None
+            if max_ops is not None and max_ops > 0:
+                remaining = max_ops - len(active)
+                if remaining <= 0:
+                    # We already have enough active ops to satisfy the limit
+                    return sorted(active, key=_sort_key, reverse=True)
+
+            # Load full history blob (HIST_KEY is a list of dicts)
             hist_raw: List[Any] = self.ops._load_json(self.ops.HIST_KEY, [])
-            hist: List[Dict[str, Any]] = [
-                h for h in hist_raw if isinstance(h, dict)
-            ]
-            return active + hist
+            hist: List[Dict[str, Any]] = [h for h in hist_raw if isinstance(h, dict)]
+
+            hist_sorted = sorted(hist, key=_sort_key, reverse=True)
+
+            if remaining is not None:
+                hist_sorted = hist_sorted[:remaining]
+
+            combined = active + hist_sorted
+            # Global sort, newest first
+            return sorted(combined, key=_sort_key, reverse=True)
 
         def _render(tbl: List[Dict[str, Any]]) -> str:
-
             if not tbl:
                 return "No active operations"
 
@@ -3323,29 +3354,47 @@ Then run the following:
                 done = int(op.get("progress_done", 0))
                 total = int(op.get("progress_total", 0))
                 step = str(op.get("current_step", "") or "")
-                actor = str(op.get("requested_by", "unknown"))
-                title = str(op.get("title", op.get("service_name", "")))
-                state = str(op.get("state", ""))
+                actor = str(op.get("requested_by", "unknown") or "unknown")
+                title = str(op.get("title", "") or op.get("service_name", "") or "")
+                state = str(op.get("state", "") or "")
+                submitted = str(op.get("submitted_at", "") or "")
+                service_name = str(op.get("service_name", "") or "")
 
-                lines.append(f"{n}. {title}")
+                # Blank line between operations (but not before the first one)
+                if n > 1:
+                    lines.append("")
+
+                # Header separator
+                lines.append(f"==== Operation {n} ===============================")
+                lines.append("")  # blank line after header
+
+                # Core metadata
+                if title:
+                    lines.append(f"Title: {title}")
+                if service_name:
+                    lines.append(f"Service: {service_name}")
+                if state:
+                    lines.append(f"State: {state}")
+
                 status = f"Status: {done}/{total}"
                 if step:
                     status += f" — {step}"
                 if state and state not in ("running", "pending"):
                     status += f" ({state})"
                 lines.append(status)
-                lines.append(
-                    f"Actor: {actor}    Submitted: {op.get('submitted_at', '')}"
-                )
 
-                # Show full step history, if present
+                lines.append(f"Actor: {actor}")
+                if submitted:
+                    lines.append(f"Submitted: {submitted}")
+
+                # Full step history, if present
                 details = op.get("details") or {}
                 steps = details.get("steps") or []
                 if steps:
                     lines.append("Steps:")
                     for s in steps:
-                        msg = str(s.get("message", ""))
-                        when = str(s.get("when", ""))
+                        msg = str(s.get("message", "") or "")
+                        when = str(s.get("when", "") or "")
                         p_done = s.get("progress_done")
                         if when and p_done is not None:
                             lines.append(f"  - [{when}] {msg} (done={p_done})")
@@ -3358,10 +3407,11 @@ Then run the following:
                     err = str((details.get("error", "") or ""))
                     if err:
                         lines.append(f"Error: {err}")
-                lines.append("")
+
             return "\n".join(lines).rstrip()
 
-        return _render(_payload())
+        tbl = _load_all(show_all, max_ops)
+        return _render(tbl)
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:
