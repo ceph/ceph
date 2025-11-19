@@ -2792,6 +2792,79 @@ TEST(LibCephFS, SnapInfo) {
   ceph_shutdown(cmount);
 }
 
+// TODO: add tests for various cases such as,
+// - path passed to snap_metadata_update() is not a dir
+// - path passed to snap_metadata_update() doesn't has a snap
+TEST(LibCephFS, Snap_Metadata_Update) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d", getpid());
+  sprintf(snap_name, "snap0_%d", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}, {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta, std::size(snap_meta)));
+
+  // update snapshot metadata
+  struct snap_metadata snap_meta2[] = {{"foo", "bar-aaa"},
+                                       {"this-aaa", "that-aaa"},
+                                       {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_snap_metadata_update(cmount, snap_path, snap_meta2, std::size(snap_meta2)));
+
+  // get latest snap metadata
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 5);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found1 = false;
+    for (size_t j = 0; j < size(snap_meta); ++j) {
+      auto k2 = std::string(snap_meta[j].key);
+      auto v2 = std::string(snap_meta[j].value);
+      if (k == k2 && v == v2) {
+        found1 = true;
+        break;
+      }
+    }
+
+    if (found1)
+      continue;
+
+    bool found2 = false;
+    for (size_t j = 0; j < size(snap_meta2); ++j) {
+      auto k3 = std::string(snap_meta2[j].key);
+      auto v3 = std::string(snap_meta2[j].value);
+      if (k == k3 && v == v3) {
+        found2 = true;
+        break;
+      }
+    }
+
+    ASSERT_TRUE(found2);
+  }
+
+  // teardown
+  ceph_free_snap_info_buffer(&info);
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, LookupInoMDSDir) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(ceph_create(&cmount, NULL), 0);
