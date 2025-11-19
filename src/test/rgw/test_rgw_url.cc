@@ -91,13 +91,44 @@ TEST(TestURL, DifferentSchema)
     EXPECT_STREQ(host.c_str(), "example.com"); 
 }
 
-TEST(TestURL, InvalidHost)
+TEST(TestURL, InvalidUrl)
 {
-    std::string host;
-    std::string user;
-    std::string password;
-    const std::string url = "http://exa_mple.com";
-    ASSERT_FALSE(parse_url_authority(url, host, user, password));
+  std::string host, user, password;
+  EXPECT_FALSE(parse_url_authority("not a valid url", host, user, password));
+}
+
+TEST(TestURL, EmptyString)
+{
+  std::string host, user, password;
+  EXPECT_FALSE(parse_url_authority("", host, user, password));
+}
+
+TEST(TestURL, MalformedScheme)
+{
+  std::string host, user, password;
+  EXPECT_FALSE(
+      parse_url_authority("ht!tp://example.com", host, user, password));
+}
+
+TEST(TestURL, InvalidCharactersInHost)
+{
+  std::string host, user, password;
+  EXPECT_FALSE(
+      parse_url_authority("http://exa mple.com", host, user, password));
+}
+
+TEST(TestURL, MissingScheme)
+{
+  std::string host, user, password;
+  EXPECT_FALSE(parse_url_authority("example.com", host, user, password));
+}
+
+TEST(TestURL, SpecialCharactersInUserinfo)
+{
+  std::string host, user, password;
+  EXPECT_FALSE(
+      parse_url_authority(
+          "http://us er:pass@example.com", host, user, password));
 }
 
 TEST(TestURL, WithPath)
