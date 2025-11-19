@@ -16,6 +16,7 @@
 #include "gtest/gtest.h"
 #include "include/compat.h"
 #include "include/cephfs/libcephfs.h"
+#include "include/ceph_fs.h"
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -178,4 +179,69 @@ TEST(LibCephFS, MulticlientRevokeCaps) {
 
   thread1.join();
   thread2.join();
+}
+
+
+// Test that client #2 can successfully read snap metadata mutation made by
+// client #1.
+TEST(LibCephFS, SnapMdMutate) {
+  struct ceph_mount_info *cmount, *cmount2;
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  ASSERT_EQ(ceph_create(&cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount2, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount2, NULL), 0);
+  ASSERT_EQ(ceph_mount(cmount2, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-5", getpid());
+  sprintf(snap_name, "snap_%d_5", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  // snapshot with custom metadata
+  struct snap_metadata snap_meta[] = {{"foo", "bar"},
+                                      {"this", "that"},
+                                      {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  // actual test -
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "bar123",
+                                  CEPH_SNAP_MD_OP_CREATE));
+
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  // verify snap metadata
+  struct snap_metadata snap_meta2[] = {{"foo", "bar123"}, {"this", "that"},
+                                       {"abcde", "12345"}};
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta2); ++j) {
+      if (k == snap_meta2[j].key and v == snap_meta2[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // teardown
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+  ceph_shutdown(cmount2);
 }
