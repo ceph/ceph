@@ -171,7 +171,7 @@ class DaemonPlacement(NamedTuple):
             if self.ports:
                 if self.ports != dd.ports and dd.ports:
                     return False
-                if self.ip != dd.ip and dd.ip:
+                if self.ip and dd.ip and self.ip != dd.ip:
                     return False
         return True
 
