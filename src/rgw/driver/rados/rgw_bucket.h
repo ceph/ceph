@@ -199,6 +199,18 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
     -> std::unique_ptr<RGWMetadataHandler>;
 
 
+// vector bucket entrypoint metadata handler factory
+auto create_vector_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
+
+// vector bucket instance metadata handler factory
+auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
+
 extern int rgw_remove_object(const DoutPrefixProvider* dpp,
 			     rgw::sal::Driver* driver,
 			     rgw::sal::Bucket* bucket,
@@ -426,8 +438,16 @@ struct rgw_ep_info {
     : ep(ep), attrs(attrs) {}
 };
 
+using BucketsObjGetter = rgw_raw_obj (*)(const RGWZoneParams&, std::string_view);
+using UserBucketsObjGetter = rgw_raw_obj (RGWSI_User::*)(const rgw_user&) const;
+
 class RGWBucketCtl {
   CephContext *cct;
+  BucketsObjGetter get_buckets_obj;
+  UserBucketsObjGetter get_user_buckets_obj;
+  rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+                                         RGWSI_Zone* svc_zone,
+                                         const rgw_owner& owner);
 
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -448,7 +468,9 @@ public:
                RGWSI_Bucket_Sync *bucket_sync_svc,
                RGWSI_BucketIndex *bi_svc,
                RGWSI_User* user_svc,
-               RGWDataChangesLog *datalog_svc);
+               RGWDataChangesLog *datalog_svc,
+               BucketsObjGetter obj_getter_func,
+               UserBucketsObjGetter user_buckets_getter_func);
 
   void init(RGWUserCtl *user_ctl,
             RGWDataChangesLog *datalog,
@@ -732,3 +754,4 @@ private:
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,
                            const std::string& bucket_id, rgw_bucket* bucket_out);
+

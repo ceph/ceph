@@ -490,7 +490,7 @@ static int init_target_layout(rgw::sal::RadosStore* store,
     if (ret = fault.check("set_target_layout");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -571,7 +571,7 @@ static int revert_target_layout(rgw::sal::RadosStore* store,
         ret == 0) { // no fault injected, revert the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
                                                         real_time(),
-                                                        &bucket_attrs, dpp, y);
+                                                        &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -695,7 +695,7 @@ static int change_reshard_state(rgw::sal::RadosStore* store,
     if (ret = fault.check("change_reshard_state");
         ret == 0) { // no fault injected, write the bucket instance metadata
       ret = store->getRados()->put_bucket_instance_info(bucket_info, false,
-                                                        real_time(), &bucket_attrs, dpp, y);
+                                                        real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
     } else if (ret == -ECANCELED) {
       fault.clear(); // clear the fault so a retry can succeed
     }
@@ -805,7 +805,7 @@ static int commit_target_layout(rgw::sal::RadosStore* store,
   int ret = fault.check("commit_target_layout");
   if (ret == 0) { // no fault injected, write the bucket instance metadata
     ret = store->getRados()->put_bucket_instance_info(
-        bucket_info, false, real_time(), &bucket_attrs, dpp, y);
+        bucket_info, false, real_time(), &bucket_attrs, dpp, y, store->ctl()->bucket);
   } else if (ret == -ECANCELED) {
     fault.clear(); // clear the fault so a retry can succeed
   }
@@ -1568,6 +1568,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 					       entry.bucket_name,
                                                bucket_info, nullptr,
                                                y, dpp,
+                                               store->ctl()->bucket,
 					       &bucket_attrs);
   if (ret < 0 || bucket_info.bucket.bucket_id != entry.bucket_id) {
     if (ret < 0) {

@@ -2773,6 +2773,13 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
   }
 };
 
+class RGWVectorBucketMetadataHandler : public RGWBucketMetadataHandler {
+ public:
+  using RGWBucketMetadataHandler::RGWBucketMetadataHandler;
+
+  string get_type() override { return "vectorbucket"; }
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   rgw::sal::Driver* driver;
   RGWSI_Zone* svc_zone{nullptr};
@@ -2780,12 +2787,13 @@ class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   RGWSI_BucketIndex* svc_bi{nullptr};
   RGWDataChangesLog *svc_datalog{nullptr};
 
-  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+protected:
+  virtual int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
                   const std::string& entry, RGWBucketCompleteInfo& bci,
                   const std::optional<RGWBucketCompleteInfo>& old_bci,
                   const RGWObjVersionTracker& objv_tracker,
                   bool from_remote_zone);
-  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+  virtual int put_post(const DoutPrefixProvider* dpp, optional_yield y,
                const RGWBucketCompleteInfo& bci,
                const std::optional<RGWBucketCompleteInfo>& old_bci,
                RGWObjVersionTracker& objv_tracker);
@@ -3129,13 +3137,38 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
   }
 };
 
+class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+protected:
+  int put_prepare(const DoutPrefixProvider* dpp, optional_yield y,
+                  const std::string& entry, RGWBucketCompleteInfo& bci,
+                  const std::optional<RGWBucketCompleteInfo>& old_bci,
+                  const RGWObjVersionTracker& objv_tracker,
+                  bool from_remote_zone) override {
+    bci.info.layout.current_index.layout.type = rgw::BucketIndexType::Indexless;
+    return 0;
+  }
+  int put_post(const DoutPrefixProvider* dpp, optional_yield y,
+               const RGWBucketCompleteInfo& bci,
+               const std::optional<RGWBucketCompleteInfo>& old_bci,
+               RGWObjVersionTracker& objv_tracker) override {return 0;}
+ public:
+   RGWVectorBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
+                                   RGWSI_Zone* svc_zone,
+                                   RGWSI_Bucket* svc_bucket) :
+     RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
+
+  string get_type() override { return "vectorbucket.instance"; }
+};
+
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc,
                            RGWSI_User* user_svc,
-                           RGWDataChangesLog *datalog_svc)
-  : cct(zone_svc->ctx())
+                           RGWDataChangesLog *datalog_svc,
+                           BucketsObjGetter obj_getter_func,
+                           UserBucketsObjGetter user_obj_getter_func)
+  : cct(zone_svc->ctx()), get_buckets_obj(obj_getter_func), get_user_buckets_obj(user_obj_getter_func)
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
@@ -3414,17 +3447,17 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                                                .set_orig_info(&bucket_info));
 }
 
-static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+rgw_raw_obj RGWBucketCtl::get_owner_buckets_obj(RGWSI_User* svc_user,
                                          RGWSI_Zone* svc_zone,
                                          const rgw_owner& owner)
 {
   return std::visit(fu2::overload(
       [&] (const rgw_user& uid) {
-        return svc_user->get_buckets_obj(uid);
+        return (svc_user->*get_user_buckets_obj)(uid);
       },
       [&] (const rgw_account_id& account_id) {
         const RGWZoneParams& zone = svc_zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, account_id);
+        return get_buckets_obj(zone, account_id);
       }), owner);
 }
 
@@ -3567,11 +3600,11 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
   // flush stats to the user/account owner object
   const rgw_raw_obj& obj = std::visit(fu2::overload(
       [&] (const rgw_user& user) {
-        return svc.user->get_buckets_obj(user);
+        return (svc.user->*get_user_buckets_obj)(user);
       },
       [&] (const rgw_account_id& id) {
         const RGWZoneParams& zone = svc.zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, id);
+        return get_buckets_obj(zone, id);
       }), owner);
   return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
 }
@@ -3659,6 +3692,24 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
   return std::make_unique<RGWArchiveBucketInstanceMetadataHandler>(driver, svc_zone,
                                                                    svc_bucket, svc_bi,
                                                                    svc_datalog);
+}
+
+auto create_vector_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketMetadataHandler>(
+      rados, svc_bucket, ctl_bucket);
+}
+
+auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
+                                                            svc_bucket);
 }
 
 list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
