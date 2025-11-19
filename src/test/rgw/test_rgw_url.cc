@@ -48,11 +48,11 @@ TEST(TestURL, IPv6Authority)
     std::string host;
     std::string user;
     std::string password;
-    const std::string url = "http://FE80:CD00:0000:0CDE:1257:0000:211E:729C";
+    const std::string url = "http://[FE80:CD00:0000:0CDE:1257:0000:211E:729C]";
     ASSERT_TRUE(parse_url_authority(url, host, user, password));
     ASSERT_TRUE(user.empty());
     ASSERT_TRUE(password.empty());
-    EXPECT_STREQ(host.c_str(), "FE80:CD00:0000:0CDE:1257:0000:211E:729C"); 
+    EXPECT_STREQ(host.c_str(), "[FE80:CD00:0000:0CDE:1257:0000:211E:729C]");
 }
 
 TEST(TestURL, AuthorityWithUserinfo)
