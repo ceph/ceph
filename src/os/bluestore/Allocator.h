@@ -90,9 +90,13 @@ public:
   {
     return block_size;
   }
+  virtual void expand(int64_t new_size){
+    ceph_assert(new_size >= device_size);
+    device_size = new_size;
+  }
 
 protected:
-  const int64_t device_size = 0;
+  int64_t device_size = 0;
   const int64_t block_size = 0;
 };
 
