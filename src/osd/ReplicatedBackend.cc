@@ -778,58 +778,81 @@ int ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
   ScrubMap &map,
   ScrubMapBuilder &pos,
-  ScrubMap::object &o)
+  ScrubMap::object& smap_object)
 {
   dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   auto& perf_logger = *(get_parent()->get_logger());
 
-  utime_t sleeptime;
-  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
-  if (sleeptime != utime_t()) {
-    lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
-    sleeptime.sleep();
+  {
+    // possible debug sleep
+    utime_t sleeptime;
+    sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
+    if (sleeptime != utime_t()) {
+      lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
+      sleeptime.sleep();
+    }
   }
 
-  int r{0};
   ceph_assert(poid == pos.ls[pos.pos]);
   if (!pos.data_done()) {
     if (pos.data_pos == 0) {
       pos.data_hash = bufferhash(-1);
     }
+    ceph_assert(pos.data_pos >= 0);  // also simplifies subtraction below
 
     const uint64_t stride = cct->_conf->osd_deep_scrub_stride;
+    uint64_t to_read{1};
+    // note re the '1' (and not '0') in the next line: we should never
+    // reach here with pos == size != 0, as that is caught by the check
+    // after the 'read'. But if size==0, we do want to try to read
+    // something (and get EOF).
+    if (std::cmp_greater(smap_object.size, pos.data_pos)) {
+      to_read = std::min(stride, smap_object.size - pos.data_pos);
+      // the implicit 'else' is to_read = 1.
+    }
 
     perf_logger.inc(io_counters.read_cnt);
     bufferlist bl;
-    r = store->read(
-      ch,
-      ghobject_t(
-	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      pos.data_pos,
-      stride, bl,
-      scrub_fadvise_flags);
+    const int r = store->read(
+        ch,
+        ghobject_t(
+            poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+        pos.data_pos, to_read, bl, scrub_fadvise_flags);
     if (r < 0) {
-      dout(20) << __func__ << "  " << poid << " got "
-	       << r << " on read, read_error" << dendl;
-      o.read_error = true;
+      dout(5) << fmt::format(
+                      "{}: {} got {} on read, read_error", __func__, poid, r)
+               << dendl;
+      smap_object.read_error = true;
       return 0;
     }
     if (r > 0) {
       pos.data_hash << bl;
+      perf_logger.inc(io_counters.read_bytes, r);
     }
-    perf_logger.inc(io_counters.read_bytes, r);
     pos.data_pos += r;
-    if (static_cast<uint64_t>(r) == stride) {
-      dout(20) << __func__ << "  " << poid << " more data, digest so far 0x"
-	       << std::hex << pos.data_hash.digest() << std::dec << dendl;
+    if (std::cmp_greater_equal(pos.data_pos, smap_object.size) ||
+        std::cmp_less(r, to_read)) {
+      // done with bytes
+      smap_object.digest = pos.data_hash.digest();
+      smap_object.digest_present = true;
+      dout(10) << fmt::format(
+                      "{}: {} read {} bytes total ({} now; expected:{}; "
+                      "obj-size:{}), done "
+                      "with data. Digest {:#x}",
+                      __func__, poid, pos.data_pos, r, to_read,
+                      smap_object.size, smap_object.digest)
+               << dendl;
+      pos.data_pos = -1;
+    } else {
+      dout(10) << fmt::format(
+                      "{}: {} read {} bytes total ({} now; expected:{}; "
+                      "obj-size:{}), more "
+                      "data to read. Digest so far: {:#x}",
+                      __func__, poid, pos.data_pos, r, to_read,
+                      smap_object.size, pos.data_hash.digest())
+               << dendl;
       return -EINPROGRESS;
     }
-    // done with bytes
-    pos.data_pos = -1;
-    o.digest = pos.data_hash.digest();
-    o.digest_present = true;
-    dout(20) << __func__ << "  " << poid << " done with data, digest 0x"
-	     << std::hex << o.digest << std::dec << dendl;
   }
 
   // omap header
@@ -838,7 +861,7 @@ int ReplicatedBackend::be_deep_scrub(
 
     perf_logger.inc(io_counters.omapgetheader_cnt);
     bufferlist hdrbl;
-    r = store->omap_get_header(
+    int r = store->omap_get_header(
       ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -846,7 +869,7 @@ int ReplicatedBackend::be_deep_scrub(
     if (r == -EIO) {
       dout(20) << __func__ << "  " << poid << " got "
 	       << r << " on omap header read, read_error" << dendl;
-      o.read_error = true;
+      smap_object.read_error = true;
       return 0;
     }
     if (r == 0 && hdrbl.length()) {
@@ -903,24 +926,24 @@ int ReplicatedBackend::be_deep_scrub(
     dout(25) << __func__ << " " << poid
 	     << " large omap object detected. Object has " << pos.omap_keys
 	     << " keys and size " << pos.omap_bytes << " bytes" << dendl;
-    o.large_omap_object_found = true;
-    o.large_omap_object_key_count = pos.omap_keys;
-    o.large_omap_object_value_size = pos.omap_bytes;
+    smap_object.large_omap_object_found = true;
+    smap_object.large_omap_object_key_count = pos.omap_keys;
+    smap_object.large_omap_object_value_size = pos.omap_bytes;
     map.has_large_omap_object_errors = true;
   }
 
-  o.omap_digest = pos.omap_hash;
-  o.omap_digest_present = true;
+  smap_object.omap_digest = pos.omap_hash;
+  smap_object.omap_digest_present = true;
   dout(20) << __func__ << " done with " << poid << " omap_digest "
-	   << std::hex << o.omap_digest << std::dec << dendl;
+	   << std::hex << smap_object.omap_digest << std::dec << dendl;
 
   // Sum up omap usage
   if (pos.omap_keys > 0 || pos.omap_bytes > 0) {
     dout(25) << __func__ << " adding " << pos.omap_keys << " keys and "
              << pos.omap_bytes << " bytes to pg_stats sums" << dendl;
     map.has_omap_keys = true;
-    o.object_omap_bytes = pos.omap_bytes;
-    o.object_omap_keys = pos.omap_keys;
+    smap_object.object_omap_bytes = pos.omap_bytes;
+    smap_object.object_omap_keys = pos.omap_keys;
   }
 
   // done!
