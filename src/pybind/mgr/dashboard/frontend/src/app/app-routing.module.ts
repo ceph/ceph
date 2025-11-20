@@ -59,6 +59,7 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { CephfsMirroringWizardComponent } from './ceph/cephfs-mirroring/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 
 @Injectable()
@@ -411,6 +412,11 @@ const routes: Routes = [
             path: 'mirroring',
             component: CephfsMirroringListComponent,
             data: { breadcrumbs: 'File/Mirroring' }
+          },
+          {
+            path: `mirroring/${URLVerbs.CREATE}`,
+            component: CephfsMirroringWizardComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: 'nfs',
