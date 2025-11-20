@@ -408,6 +408,53 @@ public:
     }
   }
 
+  std::pair<bool, bool> pre_stable_extent_paddr_mod(
+    read_set_item_t<Transaction> &item)
+  {
+    LOG_PREFIX(Transaction::pre_stable_extent_paddr_mod);
+    SUBTRACET(seastore_t, "{}", *this, *item.ref);
+#ifndef NDEBUG
+    auto [existed, it] = lookup_trans_from_read_extent(item.ref);
+    assert(existed);
+    assert(item.ref.get() == it->ref.get());
+    assert(item.t = it->t);
+#endif
+
+    if (!item.is_extent_attached_to_trans()) {
+      return {false, false};
+    }
+    auto &extent = *item.ref;
+    read_set.erase(read_extent_set_t<Transaction>::s_iterator_to(item));
+    auto where1 = retired_set.find(extent.get_paddr());
+    bool retired = (where1 != retired_set.end());
+    if (where1 != retired_set.end()) {
+      retired_set.erase(where1);
+    }
+    return {true, retired};
+  }
+  void post_stable_extent_paddr_mod(
+    read_set_item_t<Transaction> &item,
+    bool retired) {
+    read_set.insert(item);
+    if (retired) {
+      retired_set.emplace(item.ref, trans_id);
+    }
+  }
+  void maybe_update_pending_paddr(
+    const paddr_t &old_paddr,
+    const paddr_t &new_paddr) {
+    if (!new_paddr.is_absolute()) {
+      return;
+    }
+    auto where2 = write_set.find_offset(old_paddr);
+    if (where2 != write_set.end()) {
+      auto &mextent = *where2;
+      write_set.erase(where2);
+      mextent.set_paddr(new_paddr);
+      write_set.insert(mextent);
+    }
+  }
+
   template <typename F>
   auto for_each_finalized_fresh_block(F &&f) const {
     std::for_each(ool_block_list.begin(), ool_block_list.end(), f);

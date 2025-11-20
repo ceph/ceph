@@ -230,6 +230,7 @@ public:
   }
   virtual key_t node_begin() const = 0;
   virtual bool is_retired_placeholder() const = 0;
+  virtual bool _is_pending_io() const = 0;
 protected:
   parent_tracker_ref<ParentT> parent_tracker;
   virtual bool _is_valid() const = 0;
@@ -459,6 +460,17 @@ protected:
     }
     ceph_assert((*it)->get_begin() <= key && key < (*it)->get_end());
     return *it;
+  }
+
+  template <typename Func>
+  void for_each_copy_dest_set(Transaction &t, Func &&f) {
+    for (auto &dests : copy_dests_by_trans) {
+      if (dests.pending_for_transaction == t.get_trans_id()) {
+        continue;
+      }
+      auto &copy_dests = static_cast<copy_dests_t&>(dests);
+      std::invoke(f, copy_dests);
+    }
   }
 
   void add_copy_dest(Transaction &t, TCachedExtentRef<T> dest) {
@@ -989,6 +1001,7 @@ protected:
   }
 
   parent_tracker_t<T>* my_tracker = nullptr;
+  std::vector<BaseChildNode<T, node_key_t>*> children;
 private:
   T& down_cast() {
     return *static_cast<T*>(this);
@@ -1017,7 +1030,6 @@ private:
     }
   }
 
-  std::vector<BaseChildNode<T, node_key_t>*> children;
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
 
   // copy dests points from a stable node back to its pending nodes
@@ -1152,6 +1164,9 @@ private:
   }
   bool _is_stable() const final {
     return down_cast().is_stable();
+  }
+  bool _is_pending_io() const final {
+    return down_cast().is_pending_io();
   }
   key_t node_begin() const final {
     return down_cast().get_begin();
