@@ -2457,20 +2457,28 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r);
  */
 struct store_statfs_t
 {
-  // Primary logical stats
-  uint64_t total = 0;                  ///< Total logical bytes, aka store's capacity.
-  uint64_t available = 0;              ///< Remaining logical bytes available, i.e. how much additional data the store can fit.
+  // Primary device stats
+  uint64_t total = 0;                  ///< Total capacity. Store is able to accomodate at least this amount of data.
+                                       /// For regular devices it is the device size. For block devices that employ compression
+                                       /// it is the physical capacity, not the logical space size.
+                                       /// This is the value crush uses for weight.
+                                       /// BlueStore: If DB volume exists, its size is added here.
+  uint64_t available = 0;              ///< Available capacity. Indicates how much more data can fit on the device.
+                                       ///  The value is a minimum if new data would be non-compressible 100% entropy.
+                                       ///  If ObjectStore compression is on or block device employs compression it might accomodate more.
 
   // Additional user-specific ObjectStore stats
-  int64_t allocated = 0;                  ///< Bytes allocated - how much of logical capacity is occupied by user data
+  int64_t allocated = 0;                  ///< Bytes allocated - how much of logical space is occupied by user data
   int64_t data_stored = 0;                ///< Bytes stored by user - how much data is kept in the store from user's perspective.
-  int64_t data_compressed = 0;            ///< Bytes compressed - how much data is persisted in compressed form.
-  int64_t data_compressed_allocated = 0;  ///< Bytes allocated after compression - how much space occupied for compressed user data.
-  int64_t data_compressed_original = 0;   ///< Bytes passed compression - how much user data has undergone compression.
+  int64_t data_compressed = 0;            ///< Output compressed - how many bytes compression produced.
+  int64_t data_compressed_allocated = 0;  ///< Stored compressed - how much logical disk space compressed data occupies.
+                                          /// Reported in bytes but counts full allocation units.
+  int64_t data_compressed_original = 0;   ///< Input data compressed - how many user bytes have undergone compression.
 
   // Additional internal ObjectStore stats
   int64_t omap_allocated = 0;         ///< Bytes for OMAP - how much space used to keep OMAPs (estimation)
   int64_t internal_metadata = 0;      ///< Bytes for internal metadata - how much space used for internal metadata
+                                      /// BlueStore: The 2 items above together reflect RocksDB size.
 
   // Obsolete
   uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes, apparently NOT USED anymore.
