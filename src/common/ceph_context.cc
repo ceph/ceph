@@ -1084,6 +1084,19 @@ CryptoHandler *CephContext::get_crypto_handler(int type)
   }
 }
 
+void CephContext::drop_temp_messenger_obj()
+{
+  auto i = associated_objs.begin();
+  while (i != associated_objs.end()) {
+    if (i->first.first.find("AsyncMessenger::NetworkStack") != std::string::npos) {
+      i = associated_objs.erase(i);
+      break;
+    } else {
+      ++i;
+    }
+  }
+}
+
 void CephContext::notify_pre_fork()
 {
   {
