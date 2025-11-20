@@ -1341,16 +1341,28 @@ class TestRmtree:
             cephfs.write(fd, b'abcd', 0)
             cephfs.close(fd)
 
+        cephfs.mkdir('dir1/dir5', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
+        cephfs.mkdir('dir1/dir6', 0o755)
+        for i in range(1, 6):
+            fd = cephfs.open(f'/dir1/dir4/file{i}', 'w', 0o755)
+            cephfs.write(fd, b'abcd', 0)
+            cephfs.close(fd)
+
         # actual test
-        cephfs.chmod('/dir1/dir3', 0o000)
+        cephfs.chmod('/dir1/dir4', 0o000)
         # Errors are expected from call to this method. Set suppress_errors to
         # True to confirm that this argument works.
         cephfs.rmtree('dir1', should_cancel, suppress_errors=True)
         # ensure /dir1/dir3 wasn't deleted
-        cephfs.stat('dir1/dir3')
-        cephfs.chmod('/dir1/dir3', 0o755)
+        cephfs.stat('dir1/dir4')
+        cephfs.chmod('/dir1/dir4', 0o755)
         for i in range(1, 6):
-            cephfs.stat(f'dir1/dir3/file{i}')
+            cephfs.stat(f'dir1/dir4/file{i}')
 
         # cleanup
         cephfs.rmtree('dir1', should_cancel)
