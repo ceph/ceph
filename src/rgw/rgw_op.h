@@ -2395,6 +2395,9 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
       "x-amz-server-side-encryption-customer-key-md5",
+      "x-amz-copy-source-server-side-encryption-customer-algorithm",
+      "x-amz-copy-source-server-side-encryption-customer-key",
+      "x-amz-copy-source-server-side-encryption-customer-key-md5",
       /* XXX agreed w/cbodley that probably a cleanup is needed here--we probably
        * don't want to store these, esp. under user.rgw */
       "x-amz-storage-class",
