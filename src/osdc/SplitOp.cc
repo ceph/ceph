@@ -240,24 +240,63 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
 int SplitOp::assemble_rc() {
   int rc = 0;
-  bool rc_zero = false;
+  std::map<shard_id_t,std::pair<eversion_t, eversion_t>> primary_and_shard_versions{};
 
-  // This should only happen on a single thread.
-  for (auto & [_, sub_read] : sub_reads) {
-    if (rc >= 0 && sub_read.rc >= 0) {
-      rc += sub_read.rc;
-      if (sub_read.rc == 0) {
-        rc_zero = true;
-      }
-    } else if (rc >= 0) {
+  // Sub-reads which use a single op should re-use original op.
+  ceph_assert(sub_reads.size() > 1);
+
+  // Pick the first bad RC, otherwise return 0.
+  for (auto & [shard, sub_read] : sub_reads) {
+    if (sub_read.rc < 0) {
+      return sub_read.rc;
+    }
+
+    // The non-primary shards only get reads, which only ever have zero RCs.
+    // Note if primary_shard is not engaged, == will return false.
+    if (shard == primary_shard) {
       rc = sub_read.rc;
-    } // else ignore subsequent errors.
+    }
   }
 
-  if (rc >= 0 && rc_zero) {
-    return 0;
+  if (rc < 0) {
+    return rc;
   }
 
+  // First we need to decode the version list from the primary.
+  ceph_assert(primary_shard);
+  ceph_assert(sub_reads.at(*primary_shard).internal_version.has_value());
+
+  std::map<shard_id_t, eversion_t> ref_vers;
+  decode(ref_vers, sub_reads.at(*primary_shard).internal_version->bl);
+
+  for (auto & [shard, sub_read] : sub_reads) {
+      // Primary shard can't be different to itself.
+    if (shard == primary_shard) {
+      continue;
+    }
+
+    ceph_assert(sub_read.internal_version.has_value());
+    std::map<shard_id_t, eversion_t> shard_vers;
+    decode(shard_vers, sub_read.internal_version->bl);
+
+    if (!ref_vers.contains(shard)) {
+      ldout(cct, 20) << __func__ << ": "
+         << "Reference shard version missing, failing split op." << dendl;
+      return -EIO;
+    }
+    if (!shard_vers.contains(shard)) {
+      ldout(cct, 20) << __func__ << ": "
+         << "Shard version missing, failing split op." << dendl;
+      return -EIO;
+    }
+    if (ref_vers.at(shard) != shard_vers.at(shard)) {
+      ldout(cct, 20) << __func__ << ": "
+               << "Primary version (" << ref_vers.at(shard) << ") != "
+               << "shard version (" << shard_vers.at(shard) <<") "
+               << "for shard " << shard << dendl;
+      return -EIO;
+    }
+  }
   return rc;
 }
 
@@ -349,6 +388,62 @@ void SplitOp::complete() {
   } else {
     ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
     objecter.op_post_submit(orig_op);
+  }
+}
+
+void SplitOp::protect_torn_reads() {
+  // If multiple reads are emitted from objecter, then it is essential that
+  // each read reads the same version. It is not possible to efficiently
+  // guarantee this, so instead read the version along with the data and if they
+  // are different, then repeat the read to the primary. Such version mismatches
+  // should be rare enough that this is not a significant performance impact.
+  for (auto [_, sr] : sub_reads) {
+    auto &internal_version = sr.internal_version;
+    internal_version = std::make_optional<InternalVersion>();
+    sr.rd.get_internal_versions(&internal_version->ec, &internal_version->bl);
+  }
+}
+
+static bool validate_call(const OSDOp &op, std::string_view cls, std::string_view method) {
+  if (cls.size() != op.op.cls.class_len) {
+    return false;
+  }
+  if (method.size() != op.op.cls.method_len) {
+    return false;
+  }
+
+  std::string cname, mname;
+  auto bp = op.indata.begin();
+  bp.copy(op.op.cls.class_len, cname);
+  bp.copy(op.op.cls.method_len, mname);
+
+  if (cname != cls) {
+    return false;
+  }
+  if (mname != method) {
+    return false;
+  }
+
+  return true;
+}
+
+void SplitOp::init(OSDOp &op, int ops_index) {
+  switch (op.op.op) {
+  case CEPH_OSD_OP_SPARSE_READ: {
+    init_read(op, true, ops_index);
+    break;
+  }
+  case CEPH_OSD_OP_READ: {
+    init_read(op, false, ops_index);
+    break;
+  }
+  default: {
+    // Invalid ops should have been rejected in validate.
+    shard_id_t shard = *primary_shard;
+    Details &d = sub_reads.at(shard).details[ops_index];
+    orig_op->pass_thru_op(sub_reads.at(shard).rd, ops_index, &d.bl, &d.rval);
+    break;
+  }
   }
 }
 
@@ -454,33 +549,6 @@ std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContex
   return {suitable_read_found, single_direct_op};
 }
 
-void SplitOp::init(OSDOp &op, int ops_index) {
-  switch (op.op.op) {
-    case CEPH_OSD_OP_SPARSE_READ: {
-      init_read(op, true, ops_index);
-      break;
-    }
-    case CEPH_OSD_OP_READ: {
-      init_read(op, false, ops_index);
-      break;
-    }
-    case CEPH_OSD_OP_GETXATTRS:
-    case CEPH_OSD_OP_CHECKSUM:
-    case CEPH_OSD_OP_GETXATTR: {
-      shard_id_t shard = *primary_shard;
-      Details &d = sub_reads.at(shard).details[ops_index];
-      orig_op->pass_thru_op(sub_reads.at(shard).rd, ops_index, &d.bl, &d.rval);
-      break;
-    }
-    default: {
-      ldout(cct, DBG_LVL) << __func__ <<" ABORT: unsupported" << dendl;
-      abort = true;
-      break;
-    }
-  }
-}
-
-namespace {
 void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct) {
   auto &t = op->target;
   ldout(cct, DBG_LVL) << str
@@ -593,6 +661,9 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     split_read->abort = true; // Required for destructor.
     return false;
   }
+
+  split_read->protect_torn_reads();
+
 
   // We are committed to doing a split read. Any re-attempts should not be either
   // split or balanced.

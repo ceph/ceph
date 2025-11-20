@@ -265,7 +265,9 @@ extern const char *ceph_osd_state_name(int s);
 	f(LIST_WATCHERS, __CEPH_OSD_OP(RD, DATA, 9),	"list-watchers")    \
 									    \
 	f(LIST_SNAPS,	__CEPH_OSD_OP(RD, DATA, 10),	"list-snaps")	    \
-									    \
+										\
+	f(GET_INTERNAL_VERSIONS, __CEPH_OSD_OP(RD, DATA, 33), "get-internal-versions") \
+										\
 	/* sync */							    \
 	f(SYNC_READ,	__CEPH_OSD_OP(RD, DATA, 11),	"sync_read")	    \
 									    \
