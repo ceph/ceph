@@ -1,0 +1,69 @@
+<div>
+  <p>Configure a new mirroring relationship between clusters</p>
+</div>
+<div cdsRow>
+  <div cdsCol
+       [columnNumbers]="{ lg: 2, md: 3, sm: 4 }">
+    <cd-wizard [stepsTitle]="stepTitles"></cd-wizard>
+  </div>
+  <div cdsCol
+       [columnNumbers]="{ lg: 14, md: 13, sm: 12 }"
+       class="mirroring-main">
+    <div class="mirroring-bg">
+      <div class="mirroring-header">
+      <h5>Choose Cluster Role</h5>
+      <p>Select how the cluster will participate in the mirroring setup.</p>
+      </div>
+      <cds-radio-group name="clusterRole"
+                       value="source">
+        <div cdsRow>
+          <div cdsCol
+               [columnNumbers]="{ lg: 6, md: 6, sm: 12 }"
+               class="mirroring-tile-col">
+            <cds-tile class="mirroring-tile">
+              <cds-radio value="source">
+                <div>
+                  <h6>Configure as Local Cluster (Source)</h6>
+                  <div>
+                    This cluster will send snapshots and replicate data to remote clusters for
+                    backup and disaster recovery.
+                  </div>
+
+                  <ul class="mirroring-list">
+                    <li class="mirroring-list-item"
+                        *ngFor="let item of sourceList">
+                      &#8594; {{ item }}
+                    </li>
+                  </ul>
+                </div>
+              </cds-radio>
+            </cds-tile>
+          </div>
+          <div cdsCol
+               [columnNumbers]="{ lg: 6, md: 6, sm: 12 }"
+               class="mirroring-tile-col">
+            <cds-tile class="mirroring-tile">
+              <cds-radio value="target">
+                <div>
+                  <h6>Configure as Remote Cluster (Target)</h6>
+                  <div>
+                    This cluster will receive replication data and generate a token for connection
+                    with source clusters.
+                  </div>
+                  <ul class="mirroring-list">
+                    <li class="mirroring-list-item"
+                        *ngFor="let item of targetList">
+                      &#8594; {{ item }}
+                    </li>
+                  </ul>
+                </div>
+              </cds-radio>
+            </cds-tile>
+          </div>
+        </div>
+      </cds-radio-group>
+    </div>
+  </div>
+</div>
+
+
