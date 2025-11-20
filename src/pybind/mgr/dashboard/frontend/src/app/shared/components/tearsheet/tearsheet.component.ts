@@ -63,7 +63,8 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() submitButtonLoadingLabel: string = $localize`Creating`;
   @Input() isSubmitLoading: boolean = true;
 
-  @Output() submitRequested = new EventEmitter<any[]>();
+  @Output() submitRequested = new EventEmitter<void>();
+  @Output() closeRequested = new EventEmitter<void>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
@@ -105,6 +106,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   closeWideTearsheet() {
+    this.closeRequested.emit();
     this.isOpen = false;
     if (this.hasModalOutlet) {
       this.location.back();
