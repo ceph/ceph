@@ -886,6 +886,8 @@ public:
   bool bdev_support_label(unsigned id);
   BlockDevice* get_block_device(unsigned bdev) const;
 
+  void expand_device(unsigned devid, uint64_t new_size, uint64_t old_size);
+
   // handler for discard event
   void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
 
