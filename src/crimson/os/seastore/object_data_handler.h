@@ -254,6 +254,13 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalChildNode(length) {}
 
+  void do_on_state_commit() final {
+    auto &prior = static_cast<ObjectDataBlock&>(*get_prior_instance());
+    prior.delta = std::move(delta);
+    prior.modified_region = std::move(modified_region);
+    prior.cached_overwrites = std::move(cached_overwrites);
+  }
+
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this, share_buffer_t{}));
   };
