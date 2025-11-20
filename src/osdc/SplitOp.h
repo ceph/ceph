@@ -152,10 +152,16 @@ class SplitOp {
     std::optional<extents_map> e;
   };
 
+  struct InternalVersion {
+    boost::system::error_code ec;
+    bufferlist bl;
+  };
+
   struct SubRead {
     ::ObjectOperation rd;
     mini_flat_map<int, Details> details;
     int rc = -EIO;
+    std::optional<InternalVersion> internal_version;
 
     SubRead(int count) : details(count) {}
   };
@@ -194,6 +200,7 @@ class SplitOp {
   virtual ~SplitOp() = default;
   void complete();
   static void prepare_single_op(Objecter::Op *op, Objecter &objecter);
+  void protect_torn_reads();
   static bool create(Objecter::Op *op, Objecter &objecter,
     shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, CephContext *cct);
 };

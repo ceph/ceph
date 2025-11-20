@@ -2011,6 +2011,8 @@ public:
   int getattrs_maybe_cache(
     ObjectContextRef obc,
     std::map<std::string, ceph::buffer::list, std::less<>> *out);
+  int get_internal_versions(const hobject_t& soid,
+                            std::map<shard_id_t, eversion_t>* out);
 
 public:
   void set_dynamic_perf_stats_queries(
