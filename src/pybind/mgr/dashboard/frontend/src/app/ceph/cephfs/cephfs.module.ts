@@ -58,7 +58,8 @@ import AddIcon from '@carbon/icons/es/add/32';
 import LaunchIcon from '@carbon/icons/es/launch/32';
 import Close from '@carbon/icons/es/close/32';
 import Trash from '@carbon/icons/es/trash-can/32';
-import { CephfsMirroringWizardComponent } from '../cephfs-mirroring/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
+import { CephfsMirroringWizardComponent } from './cephfs-mirroring-list/cephfs-mirroring/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
+import { CephfsMirroringFilesystemComponent } from './cephfs-mirroring-list/cephfs-mirroring/cephfs-mirroring-filesystem/cephfs-mirroring-filesystem.component';
 
 @NgModule({
   imports: [
@@ -92,7 +93,7 @@ import { CephfsMirroringWizardComponent } from '../cephfs-mirroring/cephfs-mirro
     BaseChartDirective,
     TabsModule,
     TilesModule,
-    RadioModule
+    RadioModule,
   ],
   declarations: [
     CephfsDetailComponent,
@@ -114,7 +115,8 @@ import { CephfsMirroringWizardComponent } from '../cephfs-mirroring/cephfs-mirro
     CephfsMountDetailsComponent,
     CephfsAuthModalComponent,
     CephfsMirroringListComponent,
-    CephfsMirroringWizardComponent
+    CephfsMirroringWizardComponent,
+    CephfsMirroringFilesystemComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })

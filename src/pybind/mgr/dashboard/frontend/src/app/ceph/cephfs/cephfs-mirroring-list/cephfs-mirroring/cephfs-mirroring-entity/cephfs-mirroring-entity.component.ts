@@ -15,7 +15,9 @@ import { CdForm } from '~/app/shared/forms/cd-form';
 
 @Component({
   selector: 'cd-cephfs-mirroring-entity',
-  templateUrl: './cephfs-mirroring-entity.component.html'
+  templateUrl: './cephfs-mirroring-entity.component.html',
+  standalone: false,
+  styleUrls: ['./cephfs-mirroring-entity.component.scss']
 })
 export class CephfsMirroringEntityComponent extends CdForm implements OnInit {
   @ViewChild('table', { static: true }) table: TableComponent;

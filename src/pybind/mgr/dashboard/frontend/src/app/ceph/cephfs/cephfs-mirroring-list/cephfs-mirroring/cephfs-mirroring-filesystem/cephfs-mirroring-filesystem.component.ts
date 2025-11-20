@@ -10,7 +10,9 @@ import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 
 @Component({
   selector: 'cd-cephfs-mirroring-filesystem',
-  templateUrl: './cephfs-mirroring-filesystem.component.html'
+  templateUrl: './cephfs-mirroring-filesystem.component.html',
+  standalone: false,
+  styleUrls: ['./cephfs-mirroring-filesystem.component.scss']
 })
 export class CephfsMirroringFilesystemComponent implements OnInit {
   @ViewChild('deleteTpl', { static: true }) deleteTpl: TemplateRef<any>;
