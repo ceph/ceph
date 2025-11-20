@@ -1634,7 +1634,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Display RBD Groups by pool name
+      summary: List groups by pool name
       tags:
       - RbdGroup
     post:
@@ -1680,7 +1680,62 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Create an RBD Group
+      summary: Create a group
+      tags:
+      - RbdGroup
+  /api/block/pool/{pool_name}/group/{group_name}:
+    get:
+      parameters:
+      - description: Name of the pool
+        in: path
+        name: pool_name
+        required: true
+        schema:
+          type: string
+      - description: Name of the group
+        in: path
+        name: group_name
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: namespace
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    group:
+                      description: group name
+                      type: string
+                    images:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                required:
+                - group
+                - images
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get the list of images in a group
       tags:
       - RbdGroup
   /api/block/pool/{pool_name}/group/{group_name}/image:
@@ -1733,7 +1788,7 @@ paths:
             trace.
       security:
       - jwt: []
-      summary: Add an image to an RBD Group
+      summary: Add image to a group
       tags:
       - RbdGroup
   /api/block/pool/{pool_name}/namespace:
