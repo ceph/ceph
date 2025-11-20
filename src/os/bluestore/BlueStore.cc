@@ -9160,6 +9160,142 @@ int BlueStore::expand_devices(ostream& out)
   return r;
 }
 
+int BlueStore::expand_devices_online(ostream& out)
+{
+  bluefs->dump_block_extents(out);
+  out << "Expanding DB/WAL..." << std::endl;
+
+  // updating dedicated devices first
+  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
+    if (devid == bluefs_layout.shared_bdev) {
+      continue;
+    }
+
+    auto my_bdev = bluefs->get_block_device(devid);
+    my_bdev->refresh_size();
+    uint64_t size = my_bdev ? my_bdev->get_size() : 0;
+
+    if (size == 0) {
+      // no bdev
+      continue;
+    }
+    if (my_bdev->supported_bdev_label()) {
+      string my_path = get_device_path(devid);
+      bluestore_bdev_label_t my_label;
+      int r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      if (r < 0) {
+        derr << "unable to read label for " << my_path << ": "
+              << cpp_strerror(r) << dendl;
+        continue;
+      } else {
+        if (size == my_label.size) {
+          // no need to expand
+          out << devid
+	      << " : nothing to do, skipped"
+	      << std::endl;
+          continue;
+        } else if (size < my_label.size) {
+          // something weird in bdev label
+          out << devid
+	      <<" : ERROR: bdev label is above device size, skipped"
+	      << std::endl;
+          continue;
+        } else {
+          int64_t old_size = my_label.size;
+          my_label.size = size;
+          out << devid
+	      << " : Expanding to 0x" << std::hex << size
+	      << std::dec << "(" << byte_u_t(size) << ")"
+	      << std::endl;
+          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
+          if (r < 0) {
+            derr << "unable to write label for " << my_path << ": "
+                  << cpp_strerror(r) << dendl;
+          } else {
+            out << devid
+                << " : size updated to 0x" << std::hex << size
+                << std::dec << "(" << byte_u_t(size) << ")"
+                << std::endl;
+          }
+          bluefs->expand_device(devid, size, old_size);
+        }
+      }
+    }
+  }
+  auto devid = bluefs_layout.shared_bdev;
+  // bluestore and bluefs hold separate instances so we need to
+  // refresh both to figure out if there is a new size
+  bluefs->get_block_device(devid)->refresh_size();
+  bdev->refresh_size();
+
+  uint64_t size0 = fm->get_size();
+  uint64_t size = bdev->get_size();
+  auto aligned_size = p2align(size, min_alloc_size);
+  int r = 0;
+  if (aligned_size == size0) {
+    // no need to expand
+    out << devid
+        << " : nothing to do, skipped"
+        << std::endl;
+  } else if (aligned_size < size0) {
+    // something weird in bdev label
+    out << devid
+        << " : ERROR: previous device size is above the current one, skipped"
+	<< std::endl;
+  } else {
+    auto my_path = get_device_path(devid);
+    out << devid
+	<<" : Expanding to 0x" << std::hex << size
+	<< std::dec << "(" << byte_u_t(size) << ")"
+	<< std::endl;  
+    r = _write_out_fm_meta(size);
+    if (r != 0) {
+      derr << "unable to write out fm meta for " << my_path << ": "
+           << cpp_strerror(r) << dendl;
+    } else if (bdev->supported_bdev_label()) {
+      bdev_label.size = size;
+      uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+      for (uint64_t loc : bdev_label_positions) {
+        if ((loc >= size0) && (loc + lsize <= size)) {
+          bdev_label_valid_locations.push_back(loc);
+          if (!bdev_label_multi) {
+            break;
+          }
+        }
+      }
+      r = _write_bdev_label(cct, bdev, my_path,
+        bdev_label, bdev_label_valid_locations);
+    }
+    if (r == 0) {
+      out << devid
+          << " : size updated to 0x" << std::hex << size
+          << std::dec << "(" << byte_u_t(size) << ")"
+          << std::endl;
+
+      // since we are not relying on db open/close to update FM
+      // need to keep FM and the shared allocator in sync now
+      fm->expand(aligned_size, db);
+      alloc->expand(aligned_size);
+      alloc->init_add_free(size0, aligned_size - size0);
+
+      need_to_destage_allocation_file = true;
+      before_expansion_bdev_size = 0;
+
+      dout(1) << __func__
+              << " : size updated to 0x" << std::hex << size
+              << std::dec << "(" << byte_u_t(size) << ")"
+              << ", allocator type " << alloc->get_type()
+              << ", capacity 0x" << alloc->get_capacity()
+              << ", block size 0x" << alloc->get_block_size()
+              << ", free 0x" << alloc->get_free()
+              << ", fragmentation " << alloc->get_fragmentation()
+              << std::dec << dendl;
+
+    }
+  }
+  return r;
+}
+
 int BlueStore::dump_bluefs_sizes(ostream& out)
 {
   int r = _open_db_and_around(true);

@@ -3181,6 +3181,7 @@ public:
     int id,
     const std::string& path);
   int expand_devices(std::ostream& out);
+  int expand_devices_online(std::ostream& out);
   std::string get_device_path(unsigned id);
 
   int dump_bluefs_sizes(std::ostream& out);
