@@ -107,12 +107,13 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
     ::crimson::interruptible::interruptor<
       ::crimson::osd::IOInterruptCondition>;
 
-#define CRIMSON_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).debug(FMT_MSG, ##__VA_ARGS__)
+SET_SUBSYS(osd);
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
 {
-  CRIMSON_DEBUG("OSDriver::{}", __func__);
+  LOG_PREFIX("OSDriver::get_keys");
+  DEBUG("");
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
@@ -130,21 +131,22 @@ int OSDriver::get_next(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next)
 {
-  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
+  LOG_PREFIX("OSDriver::get_next");
+  DEBUG("key {}", key);
   using crimson::os::FuturizedStore;
   ObjectStore::omap_iter_seek_t start_from{
     key,
     ObjectStore::omap_iter_seek_t::UPPER_BOUND
   };
   std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> callback =
-    [key, next] (std::string_view _key, std::string_view _value)
+    [FNAME, key, next] (std::string_view _key, std::string_view _value)
   {
-    CRIMSON_DEBUG("OSDriver::get_next key {} got omap values", key);
+    DEBUG("key {} got omap values", key);
     if (!SnapMapper::is_mapping(std::string(_key))) {
-      CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+      DEBUG("key {} no more values", key);
       return ObjectStore::omap_iter_ret_t::NEXT;
     } else {
-      CRIMSON_DEBUG("OSDriver::get_next returning next: {}, ", _key);
+      DEBUG("returning next: {}, ", _key);
       ceph_assertf(_key > key,
         "Key order violation: input_key='%s' got_key='%s'",
          key.c_str(), std::string(_key).c_str());
@@ -156,14 +158,14 @@ int OSDriver::get_next(
   };
   return interruptor::green_get(
     os->omap_iterate(ch, hoid, start_from, callback
-    ).safe_then([key] (auto ret) {
+    ).safe_then([FNAME, key] (auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
-        CRIMSON_DEBUG("OSDriver::get_next key {} no more values", key);
+        DEBUG("key {} no more values", key);
         return -ENOENT;
       }
       return 0; // found and Stopped
-    }, FuturizedStore::Shard::read_errorator::all_same_way([] {
-        CRIMSON_DEBUG("OSDriver::get_next saw error returning EINVAL");
+    }, FuturizedStore::Shard::read_errorator::all_same_way([FNAME] {
+        DEBUG("saw error returning EINVAL");
         return -EINVAL;
       })
     )
@@ -174,19 +176,20 @@ int OSDriver::get_next_or_current(
   const std::string &key,
   std::pair<std::string, ceph::buffer::list> *next_or_current)
 {
-  CRIMSON_DEBUG("OSDriver::{} key {}", __func__, key);
+  LOG_PREFIX("OSDriver::get_next_or_current");
+  DEBUG("key {}", key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
-  ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current returning {}", key);
+  ).safe_then([FNAME, &key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    DEBUG("returning {}", key);
     ceph_assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals.begin()->second));
     return 0;
   }, FuturizedStore::Shard::read_errorator::all_same_way(
-    [next_or_current, &key, this] {
-    CRIMSON_DEBUG("OSDriver::get_next_or_current no current, try next {}", key);
+    [FNAME, next_or_current, &key, this] {
+    DEBUG("no current, try next {}", key);
     // no current, try next
     return get_next(key, next_or_current);
   }))); // this requires seastar::thread
