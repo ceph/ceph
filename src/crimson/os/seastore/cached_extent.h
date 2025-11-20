@@ -23,6 +23,7 @@ struct cache_test_t;
 
 namespace crimson::os::seastore {
 
+class ExtentCommitter;
 class Transaction;
 class CachedExtent;
 using CachedExtentRef = boost::intrusive_ptr<CachedExtent>;
@@ -271,6 +272,36 @@ enum class extent_2q_state_t : uint8_t {
   Hot,
   Max
 };
+
+class ExtentCommitter {
+public:
+  ExtentCommitter(CachedExtent &extent, Transaction &t)
+    : extent(extent), t(t) {}
+
+  // commit all extent states to the prior instance,
+  // except poffset and extent content
+  void commit_state();
+
+  void commit_data();
+
+  // synchronize last_committed_crc among mutation pending extents
+  void sync_checksum();
+
+  void sync_dirty_from();
+
+  void sync_version();
+
+  void commit_and_share_paddr();
+
+private:
+  // the rewritten extent
+  CachedExtent &extent;
+  Transaction &t;
+
+  void _share_prior_data_to_mutations();
+  void _share_prior_data_to_pending_versions();
+};
+using ExtentCommitterRef = boost::intrusive_ptr<ExtentCommitter>;
 
 class ExtentIndex;
 class CachedExtent
@@ -867,6 +898,7 @@ private:
   using index = boost::intrusive::set<CachedExtent, index_member_options>;
   friend class ExtentIndex;
   friend class Transaction;
+  friend class ExtentCommitter;
 
   bool is_linked_to_index() {
     return extent_index_hook.is_linked();
@@ -995,11 +1027,16 @@ protected:
       dirty_from(other.dirty_from),
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
-      version(other.version),
-      poffset(other.poffset) {
+      version(other.version) {
     // the extent must be fully loaded before CoW
     assert(other.is_fully_loaded());
     assert(is_aligned(length, CEPH_PAGE_SIZE));
+    if (other.poffset.is_absolute() ||
+        !other.prior_poffset.has_value()) {
+      poffset = other.poffset;
+    } else {
+      poffset = *other.prior_poffset;
+    }
     if (length > 0) {
       ptr = create_extent_ptr_rand(length);
       other.ptr->copy_out(0, length, ptr->c_str());
@@ -1019,7 +1056,9 @@ protected:
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
       version(other.version),
-      poffset(other.poffset) {
+      poffset(other.poffset.is_absolute()
+        ? other.poffset
+        : *other.prior_poffset) {
     // the extent must be fully loaded before CoW
     assert(other.is_fully_loaded());
     assert(is_aligned(length, CEPH_PAGE_SIZE));
@@ -1063,6 +1102,36 @@ protected:
     return new T();
   }
 
+  /**
+   * on_state_commit
+   *
+   * Called when the current extent's common states
+   * are copied to its prior instance, this should
+   * only be used in the context of rewriting transactions,
+   * e.g. TRIM_DIRTY and CLEANER
+   */
+  virtual void on_state_commit() {}
+
+  /**
+   * on_data_commit
+   *
+   * Called when the current extent's ptr is shared with
+   * its prior instance, this should only be used when
+   * commit extent rewriting transactions, e.g. TRIM_DIRTY
+   * and CLEANER
+   */
+  virtual void on_data_commit() {}
+
+  /**
+   * reapply_delta
+   *
+   * Called when there's need to reapply the current extent's
+   * deltas, this happens when the rewritting transaction
+   * overwrite the data of mutation pending extents, which erase
+   * all modifications and make the deltas needed to be reapplied
+   */
+  virtual void reapply_delta() {}
+
   void reset_prior_instance() {
     prior_instance.reset();
   }
@@ -1094,6 +1163,9 @@ protected:
 
   /// set bufferptr
   void set_bptr(ceph::bufferptr &&nptr) {
+    ptr = nptr;
+  }
+  void set_bptr(ceph::bufferptr &nptr) {
     ptr = nptr;
   }
 
@@ -1310,13 +1382,17 @@ public:
   }
 
   void erase(CachedExtent &extent) {
+    auto it = extent_index.s_iterator_to(extent);
+    erase(it);
+  }
+
+  void erase(CachedExtent::index::iterator &it) {
+    auto &extent = *it;
     assert(extent.parent_index);
     assert(extent.is_linked_to_index());
-    [[maybe_unused]] auto erased = extent_index.erase(
-      extent_index.s_iterator_to(extent));
-    extent.parent_index = nullptr;
-
+    [[maybe_unused]] auto erased = extent_index.erase(it);
     assert(erased);
+    extent.parent_index = nullptr;
     bytes -= extent.get_length();
   }
 
@@ -1465,6 +1541,14 @@ protected:
   void on_delta_write(paddr_t record_block_offset) final {
     logical_on_delta_write();
   }
+
+  void on_state_commit() final {
+    auto &prior = static_cast<LogicalCachedExtent&>(*get_prior_instance());
+    prior.laddr = laddr;
+    do_on_state_commit();
+  }
+
+  virtual void do_on_state_commit() {}
 
 private:
   // the logical address of the extent, and if shared,

@@ -49,6 +49,10 @@ struct FixedKVNode : CachedExtent {
   virtual ~FixedKVNode() = default;
   virtual void do_on_rewrite(Transaction &t, CachedExtent &extent) = 0;
 
+  virtual void on_state_commit() override {
+    auto &prior = static_cast<FixedKVNode&>(*get_prior_instance());
+    prior.range = std::move(range);
+  }
   bool is_in_range(const node_key_t key) const {
     return get_node_meta().is_in_range(key);
   }
@@ -177,6 +181,10 @@ struct FixedKVInternalNode
     return this->get_split_pivot().get_offset();
   }
 
+  void sync_layout_buf() {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+
   void prepare_commit() final {
     parent_node_t::prepare_commit();
   }
@@ -197,6 +205,10 @@ struct FixedKVInternalNode
     if (this->is_btree_root()) {
       this->root_node_t::on_initial_write();
     }
+  }
+
+  void on_data_commit() final {
+    this->set_layout_buf(this->get_bptr().c_str());
   }
 
   void on_invalidated(Transaction &t) final {
@@ -483,6 +495,52 @@ struct FixedKVInternalNode
     assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() < get_min_capacity();
   }
+
+  void reapply_delta() final {
+    if (delta_buffer.empty()) {
+      return;
+    }
+    delta_buffer.replay(*this);
+  }
+
+  void merge_content_to_pending_versions(Transaction &t) {
+    ceph_assert(is_rewrite_transaction(t.get_src()));
+    this->for_each_copy_dest_set(t, [this, &t](auto &copy_dests) {
+      this->merge_content_to(t, copy_dests.dests_by_key);
+    });
+  }
+
+  template <template <typename...> typename Container, typename... T>
+  void merge_content_to(Transaction &t, Container<T...> &container) {
+    auto iter = this->begin();
+    for (auto &copy_dest : container) {
+      auto &pending_version = static_cast<this_type_t&>(*copy_dest);
+      auto it = pending_version.begin();
+      while (it != pending_version.end() && iter != this->end()) {
+        if (auto child = pending_version.children[it->get_offset()];
+            (is_valid_child_ptr(child) &&
+             (pending_version.is_pending() || child->_is_pending_io()))) {
+          it++;
+          continue;
+        }
+        if (it->get_key() == iter->get_key()) {
+          it->set_val(iter->get_val());
+          it++;
+          iter++;
+        } else if (it->get_key() > iter->get_key()) {
+          iter++;
+        } else {
+          it++;
+        }
+      }
+      if (pending_version.get_last_committed_crc()) {
+        // if pending_version has already calculated its crc,
+        // calculate it again.
+        pending_version.set_last_committed_crc(pending_version.calc_crc32c());
+      }
+    }
+  }
+
 };
 
 template <
@@ -550,6 +608,25 @@ struct FixedKVLeafNode
   // it will increase for each transaction-local change, so that
   // modifications can be detected (see BtreeLBAMapping.parent_modifications)
   uint64_t modifications = 0;
+
+  void on_state_commit() override {
+    base_t::on_state_commit();
+    auto &prior = static_cast<this_type_t&>(*this->get_prior_instance());
+    // We don't touch the prior's modifications field here, because there maybe
+    // other transactions accessing the prior, and the modifications field is
+    // not to be tainted.
+    if (!prior.is_mutation_pending()) {
+      assert(!prior.modifications);
+    }
+  }
+
+  void on_data_commit() final {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
+
+  void sync_layout_buf() {
+    this->set_layout_buf(this->get_bptr().c_str());
+  }
 
   void on_invalidated(Transaction &t) final {
     this->child_node_t::on_invalidated();
@@ -790,6 +867,13 @@ struct FixedKVLeafNode
   bool below_min_capacity() const {
     assert(this->get_size() >= (get_min_capacity() - 1));
     return this->get_size() < get_min_capacity();
+  }
+
+  void reapply_delta() final {
+    if (delta_buffer.empty()) {
+      return;
+    }
+    delta_buffer.replay(*this);
   }
 };
 
