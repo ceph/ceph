@@ -10,6 +10,9 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Daemon, MirroringRow } from '~/app/shared/models/cephfs.model';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { Permission } from '~/app/shared/models/permissions';
 
 export const MIRRORING_PATH = 'cephfs/mirroring';
 @Component({
@@ -28,8 +31,16 @@ export class CephfsMirroringListComponent implements OnInit {
   daemonStatus$: Observable<MirroringRow[]>;
   context: CdTableFetchDataContext;
   tableActions: CdTableAction[];
+  permission: Permission;
 
-  constructor(public actionLabels: ActionLabelsI18n, private cephfsService: CephfsService) {}
+  constructor(
+    public actionLabels: ActionLabelsI18n,
+    private authStorageService: AuthStorageService,
+    private cephfsService: CephfsService,
+    private urlBuilder: URLBuilderService
+  ) {
+    this.permission = this.authStorageService.getPermissions().cephfs;
+  }
 
   ngOnInit() {
     this.columns = [
@@ -44,6 +55,15 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Snapshot directories`, prop: 'directory_count', flexGrow: 1 }
     ];
 
+    const createAction: CdTableAction = {
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE,
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+    };
+
+    this.tableActions = [createAction];
     this.daemonStatus$ = this.subject$.pipe(
       switchMap(() =>
         this.cephfsService.listDaemonStatus()?.pipe(
@@ -76,7 +96,6 @@ export class CephfsMirroringListComponent implements OnInit {
                 }
               });
             });
-
             return of(result);
           }),
           catchError(() => {
