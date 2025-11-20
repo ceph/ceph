@@ -1740,13 +1740,20 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     rgw_bucket_dir_entry* o{nullptr};
     for (auto offset = 0; ol.get_obj(this, yield, &o /* , fetch_barrier */); ++offset, ol.next()) {
       const auto obj = *o;
+
+      // Update all rules to capture current lister state before spawning
       for (auto& rule : rules) {
         rule.update();
-        workpool.spawn([&pf, dpp=this, rule, obj]
-                       (boost::asio::yield_context yield) mutable {
-          pf(dpp, yield, rule, obj);
-        });
       }
+
+      // Spawn one coroutine per object to process all rules
+      workpool.spawn([&pf, dpp=this, rules_copy=rules, obj]
+                     (boost::asio::yield_context yield) mutable {
+        for (auto& rule : rules_copy) {
+          pf(dpp, yield, rule, const_cast<rgw_bucket_dir_entry&>(obj));
+        }
+      });
+
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
 	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
