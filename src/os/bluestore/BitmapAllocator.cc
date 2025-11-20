@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include "BitmapAllocator.h"
+#include <cstdint>
 #include "include/types.h" // for byte_u_t
 
 #define dout_context cct
@@ -87,6 +88,25 @@ void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
   ceph_assert(offs + l <= (uint64_t)device_size);
   _mark_allocated(offs, l);
   ldout(cct, 10) << __func__ << " done" << dendl;
+}
+
+void BitmapAllocator::expand(int64_t new_size)
+{
+  int64_t old_size = get_capacity();
+  ceph_assert(new_size >= old_size);
+
+  if (new_size == old_size) {
+    return;
+  }
+
+  ldout(cct, 1) << __func__ << " expanding from 0x" << std::hex << old_size
+                << " to 0x" << new_size << std::dec << dendl;
+
+  Allocator::expand(new_size);
+  AllocatorLevel02::expand(new_size, old_size);
+
+  ldout(cct, 1) << __func__ << " expansion complete, available=0x"
+                << std::hex << get_available() << std::dec << dendl;
 }
 
 void BitmapAllocator::shutdown()
