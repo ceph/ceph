@@ -59,6 +59,7 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { CephfsMirroringListComponent } from './ceph/cephfs-mirroring/cephfs-mirroring-list/cephfs-mirroring-list.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -405,6 +406,11 @@ const routes: Routes = [
             path: `fs/${URLVerbs.EDIT}/:id`,
             component: CephfsVolumeFormComponent,
             data: { breadcrumbs: ActionLabels.EDIT }
+          },
+          {
+            path: 'mirroring',
+            component: CephfsMirroringListComponent,
+            data: { breadcrumbs: 'File/Mirroring' }
           },
           {
             path: 'nfs',

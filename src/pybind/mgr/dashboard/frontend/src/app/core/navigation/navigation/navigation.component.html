@@ -270,6 +270,12 @@
                             i18n-title
                             *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
                             class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>File systems</span></cds-sidenav-item>
+          <cds-sidenav-item route="/cephfs/mirroring"
+                            [useRouter]="true"
+                            title="Mirroring"
+                            i18n-title
+                            *ngIf="permissions.cephfs.read && enabledFeature.cephfs"
+                            class="tc_submenuitem tc_submenuitem_file_cephfs"><span i18n>Mirroring</span></cds-sidenav-item>
           <cds-sidenav-item route="/cephfs/nfs"
                             [useRouter]="true"
                             title="NFS"
