@@ -13,6 +13,7 @@
  *
  */
 
+#include <cerrno>
 #include <limits>
 #include <unistd.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@
 #include "common/buffer_instrumentation.h"
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/errno.h"
+#include "BlockDevice.h"
 #if defined(__FreeBSD__)
 #include "bsm/audit_errno.h"
 #endif
@@ -357,6 +359,37 @@ int KernelDevice::get_devices(std::set<std::string> *ls) const
     return 0;
   }
   get_raw_devices(devname, ls);
+  return 0;
+}
+
+int KernelDevice::refresh_size()
+{
+  if (fd_directs.empty() || fd_directs[WRITE_LIFE_NOT_SET] < 0) {
+    return -ENODEV;
+  }
+
+  struct stat st;
+  int r = ::fstat(fd_directs[WRITE_LIFE_NOT_SET], &st);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " fstat failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  // logic taken from open() for block vs file
+  int64_t new_size;
+  if (S_ISBLK(st.st_mode)) {
+    BlkDev blkdev(fd_directs[WRITE_LIFE_NOT_SET]);
+    r = blkdev.get_size(&new_size);
+    if (r < 0) {
+      derr << __func__ << " ioctl failed: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+  } else {
+    new_size = st.st_size;
+  }
+
+  size = new_size;
   return 0;
 }
 
