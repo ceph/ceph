@@ -45,6 +45,11 @@ RBD_GROUP_LIST_SCHEMA = [{
     "num_images": (int, '')
 }]
 
+RBD_GROUP_GET_SCHEMA = [{
+    "group": (str, 'group name'),
+    "images": ([str], '')
+}]
+
 
 # pylint: disable=not-callable
 def RbdTask(name, metadata, wait_for):  # noqa: N802
@@ -472,7 +477,7 @@ class RbdGroup(RESTController):
         self.rbd_inst = rbd.RBD()
 
     @handle_rbd_error()
-    @EndpointDoc("Display RBD Groups by pool name",
+    @EndpointDoc("List groups by pool name",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                  },
@@ -491,7 +496,33 @@ class RbdGroup(RESTController):
             return result
 
     @handle_rbd_error()
-    @EndpointDoc("Create an RBD Group",
+    @EndpointDoc("Get the list of images in a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                 },
+                 responses={200: RBD_GROUP_GET_SCHEMA})
+    @RESTController.Collection('GET', path='/{group_name}')
+    def get(self, pool_name, group_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            result = []
+            groups = self.rbd_inst.group_list(ioctx)
+            if group_name in groups:
+                result.append({
+                    'group': group_name,
+                    'images': list(rbd.Group(ioctx, group_name).list_images())
+                })
+            else:
+                raise DashboardException(
+                    msg='Group not found',
+                    code='group_not_found',
+                    component='rbd')
+            return result
+
+    @handle_rbd_error()
+    @EndpointDoc("Create a group",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                      'name': (str, 'Name of the group'),
@@ -504,7 +535,7 @@ class RbdGroup(RESTController):
 
     @RESTController.Collection('POST', path='/{group_name}/image')
     @handle_rbd_error()
-    @EndpointDoc("Add an image to an RBD Group",
+    @EndpointDoc("Add image to a group",
                  parameters={
                      'pool_name': (str, 'Name of the pool'),
                      'group_name': (str, 'Name of the group'),
