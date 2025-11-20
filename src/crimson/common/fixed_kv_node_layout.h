@@ -365,7 +365,6 @@ public:
   virtual ~FixedKVNodeLayout() = default;
 
   void set_layout_buf(char *_buf) {
-    assert(buf == nullptr);
     assert(_buf != nullptr);
     buf = _buf;
   }
