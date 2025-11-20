@@ -1,0 +1,108 @@
+<div cdsCol>
+  <div class="bold-text" i18n>Create or Select Entity</div>
+  <p i18n>
+    Choose an existing CephFS mirroring entity or create a new one to be used for mirroring.
+  </p>
+</div>
+
+<div>
+  <cds-radio-group [(ngModel)]="isCreatingNewEntity">
+    <cds-radio [value]="true" i18n> Create New Entity </cds-radio>
+    <cds-radio [value]="false" i18n> Use Existing Entity </cds-radio>
+  </cds-radio-group>
+</div>
+
+<div *ngIf="isCreatingNewEntity">
+  <cd-alert-panel type="warning" class="mx-3" i18n>
+    This entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.
+  </cd-alert-panel>
+
+   <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+  <div>
+      <strong class="entity-note-title">Capabilities added automatically.</strong>
+      </div>
+   <div>
+        If you create a new entity, the following capabilities will be assigned automatically:
+        </div>
+       
+         <ul>
+    <li *ngFor="let cap of capabilities">
+      {{ cap.name }}: {{ cap.permission }}
+    </li>
+  </ul>
+  </cd-alert-panel>
+
+ <form name="entityForm"
+          #formDir="ngForm"
+          [formGroup]="entityForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+
+      <div class="form-item form-item-append"
+           cdsRow>
+
+        <!-- Entity -->
+        <div cdsCol>
+          <cds-text-label labelInputID="entityName"
+                          i18n
+                          helperText="Ceph Authentication entiity used by mirroring."
+                          i18n-helperText>Ceph Entity
+            <input cdsText
+                   type="text"
+                   id="entityName"
+                   formControlName="entityName"/>
+          </cds-text-label>
+        </div>
+      </div>
+
+ 
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="entityForm"
+        [submitText]="'Create Entity'"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </div>
+
+  <div *ngIf="!isCreatingNewEntity">
+   <cd-alert-panel type="warning" class="mx-3" i18n>
+    This selected entity will be used by the mirroring service to manage snapshots and replication.
+    It must have rwps capabilities on MDS, MON, and OSD.
+  </cd-alert-panel> 
+  <cd-alert-panel
+    type="info"
+    class="mb-3"
+    i18n
+  >
+  <div>
+      <strong class="entity-note-title">Entity Selection Note</strong>
+      </div>
+   
+        Only entities with valid rwps capabilities can be used for mirroring.
+    
+  </cd-alert-panel>
+ </div>
+
+<!-- Table for existing entities -->
+<ng-container *ngIf="!isCreatingNewEntity && entities$ | async as entities">
+  <cd-table
+    #table
+    [data]="entities"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="single"
+    identifier="entity"
+    (updateSelection)="updateSelection($event)"
+    (fetchData)="loadEntities($event)"
+  >
+  </cd-table>
+</ng-container>
