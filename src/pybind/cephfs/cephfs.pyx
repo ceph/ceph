@@ -2962,6 +2962,7 @@ class UnlinkTreeWorker:
                 raise OpCanceled('rmtree')
 
             self.curr_dir = self.stack[-1]
+            finished_traversing_curr_dir = True
 
             # de = directory entry
             de = self.curr_dir.read_dir()
@@ -2975,13 +2976,14 @@ class UnlinkTreeWorker:
                         # traversing the current dir and start traversing
                         # the new dir that has been freshly added to the
                         # stack.
+                        finished_traversing_curr_dir = False
                         break
                 else:
                     self.curr_dir.try_unlink(de.d_name, self.suppress_errors)
 
                 de = self.curr_dir.read_dir()
 
-            if self.curr_dir.has_any_fs_op_failed() or self.curr_dir.is_empty:
+            if finished_traversing_curr_dir:
                 if self.curr_dir.has_any_fs_op_failed():
                     self.notify_parent_dir()
 
