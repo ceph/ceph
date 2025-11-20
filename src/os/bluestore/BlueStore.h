@@ -3186,6 +3186,7 @@ public:
     int id,
     const std::string& path);
   int expand_devices(std::ostream& out);
+  int expand_devices_online(std::ostream& out);
   std::string get_device_path(unsigned id);
 
   bool get_db_sharding(std::string& res_sharding);
