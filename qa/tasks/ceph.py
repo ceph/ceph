@@ -667,9 +667,7 @@ def create_simple_monmap(ctx, remote, conf, mons,
 
 
 def is_crimson(config):
-    return config.get('flavor', 'default') == 'crimson-debug' or \
-        config.get('flavor', 'default') == 'crimson-release'
-
+    return config.get('crimson_compat', False)
 
 def maybe_redirect_stderr(config, type_, args, log_path):
     if type_ == 'osd' and is_crimson(config):

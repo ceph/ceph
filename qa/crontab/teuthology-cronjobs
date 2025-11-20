@@ -72,7 +72,7 @@ TEUTHOLOGY_SUITE_ARGS="--non-interactive --newest=100 --ceph-repo=https://git.ce
 40 20 * * 5        $CW $SS      1 --ceph main --suite        rgw -p 150 --subset "$(($RANDOM % 30000))/30000"
 48 20 * * 6        $CW $SS      4 --ceph main --suite       krbd -p 950 --kernel testing
 56 20 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-debug
-04 21 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority --flavor crimson-release
+04 21 * * 2,6      $CW $SS      1 --ceph main --suite crimson-rados -p 101 --force-priority
 
 ## tentacle branch runs - weekly
 # rados is massive and difficult to bring down to less than 300 jobs, use one higher priority
