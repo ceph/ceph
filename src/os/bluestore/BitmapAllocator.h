@@ -56,6 +56,8 @@ public:
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
 
+  void expand(int64_t new_size) override;
+
   void shutdown() override;
 };
 
