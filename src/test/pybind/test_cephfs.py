@@ -891,7 +891,7 @@ class TestWithRootUser:
         cephfs.chown('/', int(uid), int(gid))
         cephfs.conf_set('client_permissions' , 'true')
 
-    def test_chown(testdir):
+    def test_chown(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -903,7 +903,7 @@ class TestWithRootUser:
         assert_equal(st.st_uid, uid)
         assert_equal(st.st_gid, gid)
 
-    def test_chown_change_uid_but_not_gid(testdir):
+    def test_chown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -918,7 +918,7 @@ class TestWithRootUser:
         # ensure that gid is unchaged.
         assert_equal(st1.st_gid, st2.st_gid)
 
-    def test_chown_change_gid_but_not_uid(testdir):
+    def test_chown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -933,7 +933,7 @@ class TestWithRootUser:
         # ensure that uid is unchaged.
         assert_equal(st1.st_uid, st2.st_uid)
 
-    def test_lchown(testdir):
+    def test_lchown(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -946,7 +946,7 @@ class TestWithRootUser:
         assert_equal(st.st_uid, uid)
         assert_equal(st.st_gid, gid)
 
-    def test_lchown_change_uid_but_not_gid(testdir):
+    def test_lchown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file2', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -962,7 +962,7 @@ class TestWithRootUser:
         # ensure that gid is unchaged.
         assert_equal(st1.st_gid, st2.st_gid)
 
-    def test_lchown_change_gid_but_not_uid(testdir):
+    def test_lchown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file3', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
         cephfs.close(fd)
@@ -978,7 +978,7 @@ class TestWithRootUser:
         # ensure that uid is unchaged.
         assert_equal(st1.st_uid, st2.st_uid)
 
-    def test_fchown(testdir):
+    def test_fchown(self, testdir):
         fd = cephfs.open(b'/file-fchown', 'w', 0o655)
         uid = os.getuid()
         gid = os.getgid()
@@ -995,7 +995,7 @@ class TestWithRootUser:
         cephfs.close(fd)
         cephfs.unlink(b'/file-fchown')
 
-    def test_fchown_change_uid_but_not_gid(testdir):
+    def test_fchown_change_uid_but_not_gid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
 
@@ -1011,7 +1011,7 @@ class TestWithRootUser:
 
         cephfs.close(fd)
 
-    def test_fchown_change_gid_but_not_uid(testdir):
+    def test_fchown_change_gid_but_not_uid(self, testdir):
         fd = cephfs.open('file1', 'w', 0o755)
         cephfs.write(fd, b'abcd', 0)
 
@@ -1027,7 +1027,7 @@ class TestWithRootUser:
 
         cephfs.close(fd)
 
-    def test_setattrx(testdir):
+    def test_setattrx(self, testdir):
         fd = cephfs.open(b'file-setattrx', 'w', 0o655)
         cephfs.write(fd, b"1111", 0)
         cephfs.close(fd)
@@ -1072,7 +1072,7 @@ class TestWithRootUser:
         assert_equal(10, st1["size"])
         cephfs.unlink(b'file-setattrx')
 
-    def test_fsetattrx(testdir):
+    def test_fsetattrx(self, testdir):
         fd = cephfs.open(b'file-fsetattrx', 'w', 0o655)
         cephfs.write(fd, b"1111", 0)
         st = cephfs.statx(b'file-fsetattrx', libcephfs.CEPH_STATX_MODE, 0)
