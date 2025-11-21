@@ -70,6 +70,12 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 {
  return std::make_shared<transaction>(dbh, opts);
 }
+
+inline transaction_handle make_transaction(database_handle dbh, const transaction_options& opts, const ceph::libfdb::commit_after_op do_commit)
+{
+ return std::make_shared<transaction>(dbh, opts, do_commit);
+}
+
 // Note: only rarely is a direct call to this needed.
 // Note: after a transaction is committed, it cannot be used again; but right now, that is NOT
 // an error with respect to the object. So, don't do operations on the object after you've committed
@@ -106,10 +112,16 @@ struct maybe_commit final
  ~maybe_commit()
  {
   if(std::uncaught_exceptions() || commit_after_op::commit != commit_after) {
+if(std::uncaught_exceptions())
+ fmt::println("JFW: ~maybe_commit() -- uncaught exception");
    return;
   }
 
-  txn->commit();
+  if(commit_after_op::commit != commit_after) {
+   return;
+  }
+
+ txn->commit();
  }
 };
 
@@ -151,6 +163,8 @@ inline void set(transaction_handle txn, std::map<std::string, std::string>::cons
 // work for the prototype, but I've /got/ to find another way to do this.
 inline void set(transaction_handle txn, const char *k, const char *v, ceph::libfdb::commit_after_op commit_after)
 {
+ detail::maybe_commit mc(txn, commit_after);
+ 
  // Since we've got a static extent key, we need to be sure we convert data appropriately:
  return txn->set(detail::as_fdb_span(k), detail::as_fdb_span(v));
 }
@@ -203,6 +217,13 @@ inline void erase(ceph::libfdb::database_handle dbh, std::string_view k)
 } // namespace ceph::libfdb
 
 namespace ceph::libfdb {
+
+inline auto make_generator(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range)
+{
+ return [txn, key_range] -> auto { //std::generator< std::pair<std::string, std::string> > {
+  return txn->selection_generator(detail::as_fdb_span(key_range.begin_key), detail::as_fdb_span(key_range.end_key)); 
+ };
+}
 
 // get() with selector:
 // JFW: Satisfying output_iterator is not as straightforward as it appears, I need to look at this mechanism again; meanwhile, the template doesn't

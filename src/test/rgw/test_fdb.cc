@@ -32,11 +32,7 @@
 
 #include "include/random.h"
 
-#include <map>
-#include <list>
-#include <chrono>
-#include <vector>
-#include <unordered_map>
+#include "test_fdb-common.h"
 
 using Catch::Matchers::AllMatch;
 
@@ -65,47 +61,6 @@ namespace {
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
 
-/* Importantly, FDB operations are /lexicographically/ ordered. I do not have a bunch of
-time to write a fancy generator, so I've taken a "dumb as bones" approach and write a
-fixed prefix followed by integers: */
-
-// As we manipulate keys and values quite a bit, it's helpful to have a recipe for them:
-std::string make_key(const int n) {
- return fmt::format("key_{:04d}", n);
-}
-
-std::string make_value(const int n) {
- return fmt::format("value_{}", n);
-}
-
-// Collect values in selection to out_values:
-auto key_counter(auto txn, const auto& selector, auto& out_values) -> auto {
- out_values.clear();
-
- lfdb::get(txn, selector, 
-           std::inserter(out_values, std::begin(out_values)), 
-           lfdb::commit_after_op::no_commit);
-
- return out_values.size();
-};
-
-auto key_count(auto& dbh, const auto& selector) {
- std::map<std::string, std::string> _;
- return key_counter(lfdb::make_transaction(dbh), selector, _);
-}
-
-// Note that the generated keys are ONE based, not zero:
-inline std::map<std::string, std::string> make_monotonic_kvs(const int N)
-{
- std::map<std::string, std::string> kvs;
-
- for(const auto i : std::ranges::iota_view(1, 1 + N)) {
-  kvs.insert({ make_key(i), make_value(i) });
- }
-
- return kvs;
-}
-
 constexpr const char* const msg = "Hello, World!"; 
 constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 constexpr const char * const pearl_msg =
@@ -114,37 +69,6 @@ constexpr const char * const pearl_msg =
 "Oute of oryent, I hardyly saye.\n"
 "Ne proved I never her precios pere.\n";
 
-// Clean up test keys when we leave scope:
-struct janitor final
-{
- // flip this off if you need artifacts after debugging:
- bool drop_after_scope = true;
-
- janitor()
- {
-  drop_all();
- } 
-
- ~janitor()
- {
-  if(drop_after_scope)
-   drop_all();
- }
-
- static void drop_all() {
-   // Nobody'd better run this in production!
-   // Note: technically, 0xFF, 0xFF is needed to include the system keys (if the transaction's allowed to
-   // access these), but I don't think any tests will be doing this, at least not for now; the documentation
-   // with details is unfortunately light on, for instance, whether or not after 0xFF the NULL character is
-   // included, but we'll assume it is (again, for our purposes):
-   const char begin_key[] = { (char)0x00 };
-   const char end_key[]   = { (char)0xFF };
-   lfdb::erase(lfdb::make_transaction(lfdb::create_database()),
-              lfdb::select { begin_key, end_key }, 
-              lfdb::commit_after_op::commit);
-   }
-};
-
 // Basically, make sure we're actually linking with the library:
 TEST_CASE()
 {
@@ -152,7 +76,8 @@ TEST_CASE()
                    ceph::libfdb::libfdb_exception);
 }
 
-TEST_CASE("fdb simple", "[rgw][fdb]") {
+TEST_CASE("fdb simple", "[rgw][fdb]") 
+{
  janitor j;
 
  const string_view k = "key";
@@ -237,7 +162,8 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
  }
 }
 
-TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") {
+TEST_CASE("fdb simple (delete keys in range)", "[rgw][fdb]") 
+{
  janitor j;
 
  const auto selector = lfdb::select { make_key(0), make_key(25) };
@@ -310,59 +236,8 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
  }
 }
 
-/* JFW:
-TEST_CASE("cancel a transaction", "[fdb][rgw]") {
-given
-  write some data in a transaction
-then:
-  read it in the transaction should work
-when cancel the tranaction
-  should fail to read
-}
-
-template <typename SeqT=std::vector<std::pair<std::string, std::string>>>
-std::generator<SeqT> get(transaction_handle& txn, const selector, const stride)
+TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") 
 {
-JFW
-}
-
-TEST_CASE("multi-key \"infinite\" results", "[fdb][rgw]") {
- janitor j;
-
- // This really should be left at 1000 for the test to make sense:
- constexpr int nkeys = 1000;
-
- auto kvs = make_monotonic_kvs(nkeys);
-
- lfdb::set(dbh, kvs);
-
- // Note that while this will select all keys, FoundationDB system keys begin with 0xFF and cannot
- // be modified without ACCESS_SYSTEM_KEYS being turned on for the transaction:
- constexpr auto all_keys = lfdb::select { "", fmt::format("\xFF") };
-
- // Make sure they were written:
- REQUIRE(nkeys == lfdb::key_count(dbh, all_keys));
-
-
-FDBFuture *fdb_transaction_get_range(FDBTransaction *transaction, uint8_t const *begin_key_name, int begin_key_name_length, fdb_bool_t begin_or_equal, int begin_offset, uint8_t const *end_key_name, int end_key_name_length, fdb_bool_t end_or_equal, int end_offset, int limit, int target_bytes, FDBStreamingMode mode, int iteration, fdb_bool_t snapshot, fdb_bool_t reverse)
-
-check w/ generator
- for(const auto stride : { 1, 10, 100, 1000 }) {
-  auto results = lfdb::get(dbh, all_keys, stride);
-
-  while(std::vector<std::string> rs = results) {
-    ; print n results
-  } 
- }
-
-generators have iterator hooks:
- auto results = lfdb::get(dbh, all_keys, stride);
-
- for(auto b = std::begin(results); std::end(results) != b; ++b) {
- }
-}*/
-
-TEST_CASE("fdb conversions (built-in)", "[fdb][rgw]") {
  // Manual tests of conversions to and from supported FDB built-in types.
  
  SECTION("serialize/deserialize built-in FDB types") {
@@ -559,12 +434,14 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
   using namespace ceph::libfdb;
   
   auto dbh = create_database();
-  
-  set(dbh, "key", "value");
+ 
+  std::string_view in = "value"; 
+  set(dbh, "key", in);
   
   std::string out;
-  
   get(dbh, "key", out);
+
+  CHECK(out == in);
  }
 }
 
@@ -604,7 +481,77 @@ SCENARIO("options", "[fdb]")
  }
 }
 
-TEST_CASE("Gal demo", "[fdb]") {
+TEST_CASE("select group keys", "[fdb]") 
+{
+ janitor j;
+
+ const int kvcount = 1024*5;
+
+ auto dbh = lfdb::create_database();
+
+ set_monotonic_kvs(dbh, kvcount);
+
+ SECTION("make_generator() for range selection") {
+  auto txn = lfdb::make_transaction(dbh);
+  auto kvgen = lfdb::make_generator(txn, lfdb::select { "", "\xFF" });
+
+  std::map<std::string, std::string> kvs;
+  std::ranges::copy(kvgen(), std::inserter(kvs, std::end(kvs)));
+
+  // ...be sure we processed the same number that we inserted into the database:
+  REQUIRE(kvcount == kvs.size());
+ }
+}
+
+// These are /slightly/ pointless, but show how generators can work with ranges:
+TEST_CASE("generator filters", "[fdb][rgw]") 
+{
+ janitor j;
+
+ const int kvcount = 100;
+
+ auto dbh = lfdb::create_database();
+
+ set_monotonic_kvs(dbh, kvcount);
+
+ SECTION("filter keys") {
+  auto txn = lfdb::make_transaction(dbh);
+  auto kvgen = lfdb::make_generator(txn, { "", "\xFF" });
+
+  // kind of a pointless filter, but there we have it:
+  auto sevens = [](const auto& kvp) { return '7' == kvp.first.back(); };
+
+  auto l = kvgen() | std::views::filter(sevens);
+ 
+  CHECK(10 == std::ranges::distance(l));
+ }
+ 
+ SECTION("unzip kvs") {
+  auto txn = lfdb::make_transaction(dbh);
+  auto kvgen = lfdb::make_generator(txn, { "", "\xFF" });
+
+  // This is to say: unzip :: [(a, b)] -> ([a], [b])
+  // ...note that we can actually desugar any /range/ or tuple-like with this(!):
+  auto unzip = []<std::ranges::forward_range R>(R&& seq) {
+                auto in_view = std::views::all(std::forward<R>(seq));
+
+                return std::pair { 
+                        in_view | std::views::elements<0>, 
+                        in_view | std::views::elements<1> 
+                       };
+               };
+ 
+  auto in_kvs = kvgen() | std::ranges::to<std::vector>();
+
+  auto [keys, values] = unzip(in_kvs);
+
+  CHECK(kvcount == keys.size());
+  CHECK(keys.size() == values.size());
+ }
+}
+
+TEST_CASE("Gal demo", "[fdb]") 
+{
  janitor j;
 
  using std::map;
