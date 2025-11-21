@@ -1585,7 +1585,6 @@ record_t Cache::prepare_record(
     // set the version to zero because the extent state is now clean
     // in order to handle this transparently
     i->version = 0;
-    i->dirty_from = JOURNAL_SEQ_MIN;
     // no set_io_wait(), skip complete_commit()
     assert(!i->is_pending_io());
     i->state = CachedExtent::extent_state_t::CLEAN;
@@ -1954,8 +1953,6 @@ void Cache::complete_commit(
       epm.mark_space_free(i->get_paddr(), i->get_length());
     }
   }
-
-  last_commit = start_seq;
 
   if (!can_drop_backref()) {
     apply_backref_byseq(t.move_backref_entries(), start_seq);
