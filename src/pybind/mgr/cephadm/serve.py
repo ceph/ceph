@@ -1128,12 +1128,21 @@ class CephadmServe:
                 self.mgr.spec_store.mark_needs_configuration(spec.service_name())
 
             if progress_total:
+                # progress bar is done, regardless of success/failure
                 self.mgr.remote('progress', 'complete', progress_id)
                 if op_id is not None:
                     try:
-                        self.mgr.ops.complete_operation(op_id)
+                        if daemon_place_fails:
+                            # At least one daemon placement failed -> mark operation as failed
+                            self.mgr.ops.fail_operation(op_id, '; '.join(daemon_place_fails))
+                        else:
+                            # Everything went fine -> mark operation as completed
+                            self.mgr.ops.complete_operation(op_id)
                     except Exception:
-                        self.log.debug('Failed to complete operation in OperationsRegistry', exc_info=True)
+                        self.log.debug(
+                            'Failed to finalize operation in OperationsRegistry',
+                            exc_info=True,
+                        )
         except Exception as e:
             if progress_total:
                 self.mgr.remote('progress', 'fail', progress_id, str(e))
