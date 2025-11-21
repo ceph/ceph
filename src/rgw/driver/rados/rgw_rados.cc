@@ -314,7 +314,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag = true;
+  set_down_flag();
   stop_process();
   if (worker) {
     worker->signal();
