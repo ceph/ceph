@@ -430,6 +430,97 @@ public:
     return false;
   }
 
+  void get_journal_updates(std::map<std::string, std::optional<ceph::buffer::list>> &update_map, 
+    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> &remove_ranges) override {
+    ceph_assert(is_optimized());
+    auto journal = optimized.ec_omap_journal;
+    for (auto &entry : journal) {
+      if (entry.clear_omap) {
+        // Clear all previous updates
+        update_map.clear();
+        // Mark entire range as removed
+        remove_ranges.clear();
+        remove_ranges.push_back({std::nullopt, std::nullopt});
+      }
+
+      for (auto &&update : entry.omap_updates) {
+        switch (update.first) {
+          case OmapUpdateType::Insert: {
+            ceph::buffer::list vals_bl = update.second;
+            std::map<std::string, ceph::buffer::list> vals;
+            decode(vals, vals_bl);
+            // Insert key value pairs into update_map
+            for (auto it = vals.begin(); it != vals.end(); ++it) {
+              const auto &key = it->first;
+              const auto &val = it->second;
+              update_map[key] = val;
+            }
+            break;
+          }
+          case OmapUpdateType::Remove: {
+            ceph::buffer::list keys_bl = update.second;
+            std::set<std::string> keys;
+            decode(keys, keys_bl);
+            // Mark keys in update_map as removed
+            for (const auto &key : keys) {
+              update_map[key] = std::nullopt;
+            }
+            break;
+          }
+          case OmapUpdateType::RemoveRange: {
+            ceph::buffer::list range_bl = update.second;
+            std::string key_begin, key_end;
+            decode(key_begin, range_bl);
+            decode(key_end, range_bl);
+            
+            // Add range to remove_ranges, merging overlapping ranges
+            std::optional<std::string> start = key_begin;
+            std::optional<std::string> end = key_end;
+            auto it = remove_ranges.begin();
+            bool inserted = false;
+            while (it != remove_ranges.end()) {
+              // Current range is to the left of new range
+              if (it->second && *it->second < *start) {
+                it++;
+                continue;
+              }
+              // Current range is to the right of new range
+              if (it->first && (!end || *end < *it->first)) {
+                remove_ranges.insert(it, {start, end});
+                inserted = true;
+                break;
+              }
+              // Ranges overlap, merge them
+              if (!it->first || (start && *it->first < *start)) {
+                start = it->first;
+              }
+              if (!it->second) {
+                end = std::nullopt;
+              } else if (end && *it->second > *end) {
+                end = it->second;
+              }
+              it = remove_ranges.erase(it);
+            }
+            if (!inserted) {
+              remove_ranges.emplace_back(start, end);
+            }
+
+            // Erase keys in update_map that fall within the removed range
+            auto map_it = update_map.lower_bound(key_begin);
+            while (map_it != update_map.end()) {
+              if (map_it->first >= key_end) {
+                break;
+              }
+              map_it = update_map.erase(map_it);
+            }
+            break;
+          }
+        }
+      }
+    }
+    return;
+  }
+
   void update_keys_using_journal(std::set<std::string> &keys_to_update) override {
     ceph_assert(is_optimized());
     auto journal = optimized.ec_omap_journal;
