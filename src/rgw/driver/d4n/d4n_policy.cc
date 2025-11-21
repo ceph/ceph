@@ -415,16 +415,17 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, c
   refcount = entry->refcount;
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): old refcount is: " << refcount << dendl;
   if (op == RefCount::INCR) {
-    refcount += 1; 
-  }
-  if (op == RefCount::DECR) {
-    if (refcount > 1) {
+    refcount += 1;
+    (*entry->handle)->refcount = refcount;
+    entries_heap.update(entry->handle);
+  } else if (op == RefCount::DECR) {
+    if (refcount > 0) {
       refcount -= 1;
+      (*entry->handle)->refcount = refcount;
+      entries_heap.update(entry->handle);
     }
   }
-  (*entry->handle)->refcount = refcount;
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << (*entry->handle)->refcount << dendl;
-	entries_heap.update(entry->handle);
 
   return true;
 }
@@ -476,12 +477,23 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   } else if (entry) {
     is_dirty = entry->dirty;
   }
-  _erase(dpp, key, y);
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << refcount << dendl;
-  LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
-  handle_type handle = entries_heap.push(e);
-  e->set_handle(handle);
-  entries_map.emplace(key, e);
+
+  if (entry) {
+    entry->key = key;
+    entry->offset = offset;
+    entry->len = len;
+    entry->version = version;
+    entry->dirty = is_dirty;
+    entry->refcount = refcount;
+    entry->localWeight = localWeight;
+    entries_heap.update(entry->handle, entry);
+  } else {
+    LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
+    handle_type handle = entries_heap.push(e);
+    e->set_handle(handle);
+    entries_map.emplace(key, e);
+  }
 
   if (updateLocalWeight) {
     int ret = -1;
