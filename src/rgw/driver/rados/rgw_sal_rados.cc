@@ -1888,7 +1888,8 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
 
 int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
   if (!neorados) try {
-      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
+      neorados = neorados::RADOS::make_with_cct(boost::intrusive_ptr{dpp->get_cct()},
+						io_context,
 						ceph::async::use_blocked);
     } catch (const boost::system::system_error& e) {
       ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
