@@ -773,6 +773,74 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
   return crc;
 }
 
+
+std::optional<int32_t> ReplicatedBackend::be_deep_scrub_read_data(
+    const Scrub::ScrubCounterSet &io_counters,
+    const hobject_t& poid,
+    ScrubMapBuilder& pos,
+    ScrubMap::object& smap_object)
+{
+  if (pos.data_pos == 0) {
+    pos.data_hash = bufferhash(-1);
+  }
+  ceph_assert(pos.data_pos >= 0);  // also simplifies subtraction below
+  const uint64_t stride = cct->_conf->osd_deep_scrub_stride;
+
+  // note re the '1' (and not '0') in the next line: we should never
+  // reach here with pos == size != 0, as that is caught by the check
+  // after the 'read'. But if size==0, we do want to try to read
+  // something (and get EOF).
+  uint64_t to_read{1};
+  if (std::cmp_greater(smap_object.size, pos.data_pos)) {
+    to_read = std::min(stride, smap_object.size - pos.data_pos);
+    // the implicit 'else' is to_read = 1.
+  }
+
+  auto& perf_logger = *(get_parent()->get_logger());
+  perf_logger.inc(io_counters.read_cnt);
+  bufferlist bl;
+  const int r = store->read(
+      ch,
+      ghobject_t(poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      pos.data_pos, to_read, bl, scrub_fadvise_flags);
+  if (r < 0) {
+    dout(5) << fmt::format(
+                   "{}: {} got {} on read, read_error", __func__, poid, r)
+            << dendl;
+    smap_object.read_error = true;
+    return 0;
+  }
+  if (r > 0) {
+    pos.data_hash << bl;
+    perf_logger.inc(io_counters.read_bytes, r);
+  }
+  pos.data_pos += r;
+  if (std::cmp_greater_equal(pos.data_pos, smap_object.size) ||
+      std::cmp_less(r, to_read)) {
+    // done with bytes
+    smap_object.digest = pos.data_hash.digest();
+    smap_object.digest_present = true;
+    dout(10) << fmt::format(
+                    "{}: {} read {} bytes total ({} now; expected:{}; "
+                    "obj-size:{}), done with data. Digest {:#x}",
+                    __func__, poid, pos.data_pos, r, to_read, smap_object.size,
+                    smap_object.digest)
+             << dendl;
+    pos.data_pos = -1;
+    // the caller is not required to return immediately, and may continue
+    // analyzing the object.
+    return std::nullopt;
+  }
+  dout(10) << fmt::format(
+                  "{}: {} read {} bytes total ({} now; obj-size:{}), more data "
+                  "to read. Digest so far: {:#x}",
+                  __func__, poid, pos.data_pos, r, smap_object.size,
+                  pos.data_hash.digest())
+           << dendl;
+  return -EINPROGRESS;
+}
+
+
 int ReplicatedBackend::be_deep_scrub(
   const Scrub::ScrubCounterSet& io_counters,
   const hobject_t &poid,
@@ -780,7 +848,7 @@ int ReplicatedBackend::be_deep_scrub(
   ScrubMapBuilder &pos,
   ScrubMap::object& smap_object)
 {
-  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
+  dout(10) << fmt::format("{} {} pos {}", __func__, poid, pos) << dendl;
   auto& perf_logger = *(get_parent()->get_logger());
 
   {
@@ -795,63 +863,11 @@ int ReplicatedBackend::be_deep_scrub(
 
   ceph_assert(poid == pos.ls[pos.pos]);
   if (!pos.data_done()) {
-    if (pos.data_pos == 0) {
-      pos.data_hash = bufferhash(-1);
-    }
-    ceph_assert(pos.data_pos >= 0);  // also simplifies subtraction below
-
-    const uint64_t stride = cct->_conf->osd_deep_scrub_stride;
-    uint64_t to_read{1};
-    // note re the '1' (and not '0') in the next line: we should never
-    // reach here with pos == size != 0, as that is caught by the check
-    // after the 'read'. But if size==0, we do want to try to read
-    // something (and get EOF).
-    if (std::cmp_greater(smap_object.size, pos.data_pos)) {
-      to_read = std::min(stride, smap_object.size - pos.data_pos);
-      // the implicit 'else' is to_read = 1.
-    }
-
-    perf_logger.inc(io_counters.read_cnt);
-    bufferlist bl;
-    const int r = store->read(
-        ch,
-        ghobject_t(
-            poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-        pos.data_pos, to_read, bl, scrub_fadvise_flags);
-    if (r < 0) {
-      dout(5) << fmt::format(
-                      "{}: {} got {} on read, read_error", __func__, poid, r)
-               << dendl;
-      smap_object.read_error = true;
-      return 0;
-    }
-    if (r > 0) {
-      pos.data_hash << bl;
-      perf_logger.inc(io_counters.read_bytes, r);
-    }
-    pos.data_pos += r;
-    if (std::cmp_greater_equal(pos.data_pos, smap_object.size) ||
-        std::cmp_less(r, to_read)) {
-      // done with bytes
-      smap_object.digest = pos.data_hash.digest();
-      smap_object.digest_present = true;
-      dout(10) << fmt::format(
-                      "{}: {} read {} bytes total ({} now; expected:{}; "
-                      "obj-size:{}), done "
-                      "with data. Digest {:#x}",
-                      __func__, poid, pos.data_pos, r, to_read,
-                      smap_object.size, smap_object.digest)
-               << dendl;
-      pos.data_pos = -1;
-    } else {
-      dout(10) << fmt::format(
-                      "{}: {} read {} bytes total ({} now; expected:{}; "
-                      "obj-size:{}), more "
-                      "data to read. Digest so far: {:#x}",
-                      __func__, poid, pos.data_pos, r, to_read,
-                      smap_object.size, pos.data_hash.digest())
-               << dendl;
-      return -EINPROGRESS;
+    if (auto maybe_must_rtrn =
+            be_deep_scrub_read_data(io_counters, poid, pos, smap_object);
+        maybe_must_rtrn) {
+      // either -EINPROGRESS or a 0 (which means read error)
+      return *maybe_must_rtrn;
     }
   }
 
