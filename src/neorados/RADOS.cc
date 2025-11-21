@@ -840,7 +840,11 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   if (no_mon_conf)
     flags |= CINIT_FLAG_NO_MON_CONFIG;
 
-  CephContext *cct = common_preinit(ci, env, flags);
+  boost::intrusive_ptr<CephContext> cct
+  {
+    common_preinit(ci, env, flags),
+    false //< So the intrusive_ptr adopts the reference we already have
+  };
   if (cluster)
     cct->_conf->cluster = *cluster;
 
@@ -876,7 +880,7 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
 
   if (!no_mon_conf) {
-    MonClient mc_bootstrap(cct, ioctx);
+    MonClient mc_bootstrap(cct.get(), ioctx);
     // TODO This function should return an error code.
     auto err = mc_bootstrap.get_monmap_and_config();
     if (err < 0) {
@@ -889,22 +893,22 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   if (!cct->_log->is_started()) {
     cct->_log->start();
   }
-  common_init_finish(cct);
+  common_init_finish(cct.get());
 
-  RADOS::make_with_cct(cct, ioctx, std::move(c));
+  RADOS::make_with_cct(std::move(cct), ioctx, std::move(c));
 }
 
-void RADOS::make_with_cct_(CephContext* cct,
+void RADOS::make_with_cct_(boost::intrusive_ptr<CephContext> cct,
 			   asio::io_context& ioctx,
 			   BuildComp c) {
   try {
     auto r = std::make_shared<detail::NeoClient>(
-      std::make_unique<detail::RADOS>(ioctx, cct));
-    r->objecter->wait_for_osd_map(
-      [c = std::move(c), r = std::move(r)]() mutable {
-	asio::dispatch(asio::append(std::move(c), bs::error_code{},
-				    RADOS{std::move(r)}));
-      });
+      std::make_unique<detail::RADOS>(ioctx, std::move(cct)));
+    r->objecter->wait_for_osd_map([c = std::move(c),
+                                   r = std::move(r)]() mutable {
+      asio::dispatch(
+          asio::append(std::move(c), bs::error_code{}, RADOS{std::move(r)}));
+    });
   } catch (const bs::system_error& err) {
     asio::post(ioctx.get_executor(),
 	       asio::append(std::move(c), err.code(), RADOS{nullptr}));
