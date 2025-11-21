@@ -77,6 +77,7 @@ public:
   virtual int init(const DoutPrefixProvider *dpp) { return 0; }
   virtual int process(const DoutPrefixProvider *dpp) = 0;
 
+  void set_down_flag() { down_flag = true; }
   bool going_down() { return down_flag; }
 
   void start();
