@@ -905,6 +905,7 @@ class CephadmServe:
                 op_id = self.mgr.ops.begin_operation(
                     kind='placement:update',
                     title=op_title,
+                    service_type=spec.service_type or 'unknown',
                     service_name=spec.service_name(),
                     requested_by=self.mgr.ops.guess_actor(),
                     progress_total=progress_total,
@@ -1196,9 +1197,11 @@ class CephadmServe:
         for svc_name, dds in orphan_groups.items():
             try:
                 op_title = f'Removing service {svc_name}'
+                svc_type = dds[0].daemon_type if dds else None
                 op_id = self.mgr.ops.begin_operation(
                     kind='service:remove',
                     title=op_title,
+                    service_type=svc_type or 'unknwon',
                     service_name=svc_name,
                     requested_by=self.mgr.ops.guess_actor(),
                     progress_total=len(dds),

@@ -3278,7 +3278,10 @@ Then run the following:
     def show_operations(
         self,
         show_all: bool = False,
-        max_ops: Optional[int] = None,
+        filter_by_states: Optional[str] = '',
+        filter_by_service_types: Optional[str] = '',
+        filter_by_service_name: Optional[str] = '',
+        user_limit: Optional[int] = None,
     ) -> str:
         """
         Show cephadm operations and their status.
@@ -3288,113 +3291,168 @@ Then run the following:
             ceph orch operations --show-all
             ceph orch operations --show-all --limit 10
         """
-        from typing import Any, Dict, List
+        from typing import Any, Dict, List, Set
+
+        # ------------------------------------------------------
+        # Normalise filters once
+        # ------------------------------------------------------
+        state_filter: Optional[Set[str]] = None
+        if filter_by_states:
+            state_filter = {
+                s.strip().lower()
+                for s in filter_by_states.split(',')
+                if s.strip()
+            }
+            if not state_filter:
+                state_filter = None
+
+        service_type_filter: Optional[Set[str]] = None
+        if filter_by_service_types:
+            service_type_filter = {
+                s.strip().lower()
+                for s in filter_by_service_types.split(',')
+                if s.strip()
+            }
+            if not service_type_filter:
+                service_type_filter = None
+
+        service_name_filter = filter_by_service_name
+
+        # Normalized limit (None = no limit)
+        effective_limit: Optional[int] = (
+            user_limit if user_limit and user_limit > 0 else None
+        )
 
         def _sort_key(op: Dict[str, Any]) -> str:
             # Sort by submitted_at (string ISO timestamp); newest first
             return str(op.get("submitted_at") or "")
 
+        def _matches_filters(op: Dict[str, Any]) -> bool:
+            """Return True if op matches state/service filters."""
+            if state_filter is not None:
+                state = str(op.get("state", "")).lower()
+                if state not in state_filter:
+                    return False
+
+            if service_type_filter is not None:
+                svc = str(op.get("service_type", "")).lower()
+                if svc not in service_type_filter:
+                    return False
+
+            if service_name_filter is not None:
+                svc_name = str(op.get("service_name", "")).lower()
+                if svc_name != service_name_filter:
+                    return False
+
+            return True
+
         def _load_active(limit: Optional[int]) -> List[Dict[str, Any]]:
             """
-            Load at most `limit` active operations (if limit is not None),
+            Load at most `limit` *filtered* active operations (if limit is not None),
             going from newest to oldest based on the index order.
             """
             idx: List[str] = self.ops._load_json(self.ops.INDEX_KEY, [])
             # Assume index is oldest -> newest; iterate in reverse for newest first
             ops: List[Dict[str, Any]] = []
+
             for op_id in reversed(idx):
                 raw: Any = self.ops._load_json(f"cephadm/operations/{op_id}", {})
-                if isinstance(raw, dict):
-                    # In practice INDEX_KEY should only contain non-closed ops,
-                    # but keep the state filter for safety.
-                    state = raw.get("state")
-                    if state not in ("completed", "failed"):
-                        ops.append(raw)
+                if not isinstance(raw, dict):
+                    continue
+
+                # INDEX_KEY should generally only contain non-closed operations,
+                # but keep a guard so we don't treat closed as "active".
+                if raw.get("state") in ("completed", "failed"):
+                    continue
+
+                if not _matches_filters(raw):
+                    continue
+
+                ops.append(raw)
                 if limit is not None and len(ops) >= limit:
                     break
+
             # They should already be newest-first because we iterated reversed(idx),
             # but keep a stable sort on submitted_at just in case.
             return sorted(ops, key=_sort_key, reverse=True)
 
-        def _load_all(show_all: bool, max_ops: Optional[int]) -> List[Dict[str, Any]]:
+        def _load_all(show_all: bool, limit: Optional[int]) -> List[Dict[str, Any]]:
+            # Only active ops (typical path)
             if not show_all:
-                # Only active ops, limited at the source
-                return _load_active(max_ops)
+                active_only = _load_active(limit)
+                return active_only
 
             # show_all=True: active + history
-            active = _load_active(None)  # active list is usually small
+            active = _load_active(None)  # pre-filtered, no limit yet
 
-            # If we have a limit, figure out how many history entries we can still show
-            remaining = None
-            if max_ops is not None and max_ops > 0:
-                remaining = max_ops - len(active)
-                if remaining <= 0:
-                    # We already have enough active ops to satisfy the limit
-                    return sorted(active, key=_sort_key, reverse=True)
+            remaining: Optional[int] = None
+            if limit is not None:
+                remaining = max(limit - len(active), 0)
 
-            # Load full history blob (HIST_KEY is a list of dicts)
+            # Load history and apply filters
             hist_raw: List[Any] = self.ops._load_json(self.ops.HIST_KEY, [])
-            hist: List[Dict[str, Any]] = [h for h in hist_raw if isinstance(h, dict)]
+            hist: List[Dict[str, Any]] = []
+            for raw in hist_raw:
+                if not isinstance(raw, dict):
+                    continue
+                if not _matches_filters(raw):
+                    continue
+                hist.append(raw)
 
             hist_sorted = sorted(hist, key=_sort_key, reverse=True)
-
             if remaining is not None:
                 hist_sorted = hist_sorted[:remaining]
 
             combined = active + hist_sorted
-            # Global sort, newest first
-            return sorted(combined, key=_sort_key, reverse=True)
+            combined_sorted = sorted(combined, key=_sort_key, reverse=True)
+
+            if limit is not None:
+                combined_sorted = combined_sorted[:limit]
+
+            return combined_sorted
 
         def _render(tbl: List[Dict[str, Any]]) -> str:
             if not tbl:
-                return "No active operations"
+                return "No operations found"
 
             lines: List[str] = []
             for n, op in enumerate(tbl, 1):
                 done = int(op.get("progress_done", 0))
                 total = int(op.get("progress_total", 0))
                 step = str(op.get("current_step", "") or "")
-                actor = str(op.get("requested_by", "unknown") or "unknown")
-                title = str(op.get("title", "") or op.get("service_name", "") or "")
-                state = str(op.get("state", "") or "")
-                submitted = str(op.get("submitted_at", "") or "")
-                service_name = str(op.get("service_name", "") or "")
+                actor = str(op.get("requested_by", "unknown"))
+                title = str(op.get("title", op.get("service_name", "")))
+                state = str(op.get("state", ""))
+                service_type = str(op.get("service_type", ""))
+                service_name = str(op.get("service_name", ""))
 
-                # Blank line between operations (but not before the first one)
-                if n > 1:
-                    lines.append("")
-
-                # Header separator
                 lines.append(f"==== Operation {n} ===============================")
-                lines.append("")  # blank line after header
-
-                # Core metadata
-                if title:
-                    lines.append(f"Title: {title}")
+                lines.append(f"Title: {title}")
+                if service_type:
+                    lines.append(f"ServiceType: {service_type}")
                 if service_name:
-                    lines.append(f"Service: {service_name}")
+                    lines.append(f"ServiceName: {service_name}")
                 if state:
                     lines.append(f"State: {state}")
 
                 status = f"Status: {done}/{total}"
                 if step:
                     status += f" — {step}"
-                if state and state not in ("running", "pending"):
+                if state and state in ("completed", "failed"):
                     status += f" ({state})"
                 lines.append(status)
 
                 lines.append(f"Actor: {actor}")
-                if submitted:
-                    lines.append(f"Submitted: {submitted}")
+                lines.append(f"Submitted: {op.get('submitted_at', '')}")
 
-                # Full step history, if present
+                # Show full step history, if present
                 details = op.get("details") or {}
                 steps = details.get("steps") or []
                 if steps:
                     lines.append("Steps:")
                     for s in steps:
-                        msg = str(s.get("message", "") or "")
-                        when = str(s.get("when", "") or "")
+                        msg = str(s.get("message", ""))
+                        when = str(s.get("when", ""))
                         p_done = s.get("progress_done")
                         if when and p_done is not None:
                             lines.append(f"  - [{when}] {msg} (done={p_done})")
@@ -3408,10 +3466,12 @@ Then run the following:
                     if err:
                         lines.append(f"Error: {err}")
 
+                lines.append("")  # blank line between operations
+
             return "\n".join(lines).rstrip()
 
-        tbl = _load_all(show_all, max_ops)
-        return _render(tbl)
+        payload = _load_all(show_all, effective_limit)
+        return _render(payload)
 
     @handle_orch_error
     def generate_certificates(self, module_name: str) -> Optional[Dict[str, str]]:

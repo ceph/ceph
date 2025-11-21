@@ -19,6 +19,7 @@ class OperationRecord(TypedDict, total=False):
     op_id: str
     kind: str
     title: str
+    service_type: str
     service_name: str
     requested_by: str
     source: str
@@ -119,6 +120,7 @@ class OperationsRegistry:
         kind: str,
         title: str,
         service_name: str,
+        service_type: str,
         requested_by: Optional[str],
         progress_total: int,
         source: str = "reconcile",
@@ -136,6 +138,7 @@ class OperationsRegistry:
             "op_id": op_id,
             "kind": kind,
             "title": title,
+            "service_type": service_type,
             "service_name": service_name,
             "requested_by": requested_by or "unknown",
             "source": source,

@@ -587,9 +587,11 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def show_operations(self,
-                        all: bool = False,
-                        use_json: bool = False,
-                        watch: bool = False) -> OrchResult[str]:
+                        show_all: bool = False,
+                        filter_by_states: Optional[str] = None,
+                        filter_by_service_types: Optional[str] = None,
+                        filter_by_service_name: Optional[str] = None,
+                        user_limit: Optional[int] = None) -> OrchResult[str]:
         raise NotImplementedError()
 
     def cert_store_cert_ls(self,

@@ -1169,9 +1169,12 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
     @_cli_read_command('orch operations')
     def _orch_operations(self,
                          show_all: bool = False,
-                         limit: int = 10,
+                         filter_by_states: Optional[str] = None,
+                         filter_by_service_types: Optional[str] = None,
+                         filter_by_service_name: Optional[str] = None,
+                         limit: Optional[int] = None,
                          format: Format = Format.plain) -> HandleCommandResult:
-        completion = self.show_operations(show_all, limit)
+        completion = self.show_operations(show_all, filter_by_states, filter_by_service_types, filter_by_service_name, limit)
         operations_status = raise_if_exception(completion)
         if format != Format.plain:
             return HandleCommandResult(stdout=to_format(operations_status, format, many=False, cls=None))
