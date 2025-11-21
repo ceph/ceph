@@ -426,6 +426,33 @@ public:
     set_child_ptracker(child);
   }
 
+  // copy dests points from a stable node back to its pending nodes
+  // having copy sources at the same tree level, it serves as a two-level index:
+  // transaction-id then node-key to the pending node.
+  //
+  // The copy dest pointers must be symmetric to the copy source pointers.
+  //
+  // copy_dests_t will be automatically unregisterred upon transaction destruction,
+  // see Transaction::views
+  struct copy_dests_t : trans_spec_view_t {
+    std::set<TCachedExtentRef<T>, Comparator> dests_by_key;
+    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
+    ~copy_dests_t() {
+      LOG_PREFIX(~copy_dests_t);
+      SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
+    }
+  };
+
+  const copy_dests_t *get_copy_dests(Transaction &t) {
+    auto iter = copy_dests_by_trans.find(
+      t.get_trans_id(), trans_spec_view_t::cmp_t());
+    if (iter == copy_dests_by_trans.end()) {
+      return nullptr;
+    } else {
+      return static_cast<copy_dests_t*>(&*iter);
+    }
+  }
+
 protected:
   ParentNode(btreenode_pos_t capacity)
     : children(capacity, nullptr) {}
@@ -1002,6 +1029,7 @@ protected:
 
   parent_tracker_t<T>* my_tracker = nullptr;
   std::vector<BaseChildNode<T, node_key_t>*> children;
+
 private:
   T& down_cast() {
     return *static_cast<T*>(this);
@@ -1031,23 +1059,6 @@ private:
   }
 
   std::set<TCachedExtentRef<T>, Comparator> copy_sources;
-
-  // copy dests points from a stable node back to its pending nodes
-  // having copy sources at the same tree level, it serves as a two-level index:
-  // transaction-id then node-key to the pending node.
-  //
-  // The copy dest pointers must be symmetric to the copy source pointers.
-  //
-  // copy_dests_t will be automatically unregisterred upon transaction destruction,
-  // see Transaction::views
-  struct copy_dests_t : trans_spec_view_t {
-    std::set<TCachedExtentRef<T>, Comparator> dests_by_key;
-    copy_dests_t(Transaction &t) : trans_spec_view_t{t.get_trans_id()} {}
-    ~copy_dests_t() {
-      LOG_PREFIX(~copy_dests_t);
-      SUBTRACE(seastore_fixedkv_tree, "copy_dests_t destroyed");
-    }
-  };
 
   using trans_view_set_t = trans_spec_view_t::trans_view_set_t;
   trans_view_set_t copy_dests_by_trans;

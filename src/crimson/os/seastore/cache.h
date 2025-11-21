@@ -613,7 +613,6 @@ public:
       p_extent = extent->maybe_get_transactional_view(t);
       ceph_assert(p_extent);
       if (p_extent != extent.get()) {
-        assert(!extent->is_pending_io());
         assert(p_extent->is_pending_in_trans(t.get_trans_id()));
         assert(!p_extent->is_pending_io());
         ++access_stats.trans_pending;
@@ -666,7 +665,6 @@ public:
       ++stats.access.trans_pending;
       if (extent->is_mutable()) {
         assert(extent->is_fully_loaded());
-        assert(!extent->is_pending_io());
         return get_extent_iertr::make_ready_future<CachedExtentRef>(extent);
       } else {
         assert(extent->is_exist_clean());
