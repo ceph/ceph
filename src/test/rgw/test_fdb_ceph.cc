@@ -22,18 +22,10 @@
 
 #include <catch2/matchers/catch_matchers_all.hpp>
 
+#include "test_fdb-common.h"
+#include "rgw_fdb.h"
+
 #define CATCH_CONFIG_MAIN
-
-#include "rgw/rgw_fdb.h"
-
-#include <fmt/format.h>
-#include <fmt/chrono.h>
-#include <fmt/ranges.h>
-
-#include "include/random.h"
-
-#include <chrono>
-#include <vector>
 
 using Catch::Matchers::AllMatch;
 
@@ -52,22 +44,8 @@ using std::vector;
 
 using namespace std::literals::string_literals;
 
-namespace lfdb = ceph::libfdb;
-
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
-
-inline std::map<std::string, std::string> make_monotonic_kvs(const unsigned N)
-{
- std::map<std::string, std::string> kvs;
-
- for(const auto i : std::ranges::iota_view(0u, N)) {
-  auto n = std::to_string(i);
-  kvs.insert({"key_"s += n, "value_"s += n});
- }
-
- return kvs;
-}
 
 constexpr const char * const msg = "Hello, World!"; 
 constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
@@ -76,12 +54,12 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
 
  const char *msg = "Hello, World!";
 
- // ceph::buffer::list -> span<uint8_t> -> std::string
+ // ceph::buffer::list -> std::string
  {
   ceph::buffer::list n;
   n.append(msg);
 
-  std::span<const std::uint8_t> x;
+  std::vector<std::uint8_t> x;
   x = ceph::libfdb::to::convert(n);
 
   std::string o;
@@ -90,12 +68,12 @@ TEST_CASE("fdb conversions (ceph)", "[fdb][rgw]") {
   REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
  }
 
- // buffer::list -> span<uint8_t> -> buffer::list 
+ // buffer::list -> buffer::list 
  {
  ceph::buffer::list n;
  n.append(msg);
 
- std::span<const std::uint8_t> x;
+ std::vector<std::uint8_t> x;
  x = ceph::libfdb::to::convert(n);
 
  ceph::buffer::list o;
@@ -160,22 +138,6 @@ TEST_CASE("fdb conversions (round-trip, ceph)", "[fdb][rgw]") {
   
     REQUIRE_THAT(n, Catch::Matchers::RangeEquals(o));
   }
-}
-
-TEST_CASE("standard container FDB conversions") {
-
- std::map<int, std::string> kvs {
-   { 0, "hello" },
-   { 1, "world" }
- };
-
- std::vector<std::uint8_t> buffer;
-
-
- ceph::libfdb::to::convert(kvs, buffer);
- ceph::libfdb::from::convert(buffer, kvs_out);
- 
-...TODO 
 }
 
 // Adapted from Catch2 documentation:

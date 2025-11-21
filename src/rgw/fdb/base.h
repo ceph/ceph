@@ -15,6 +15,8 @@
 #ifndef CEPH_FDB_BASE_H
  #define CEPH_FDB_BASE_H
 
+#include <print> // JFW: removeme
+
 // The API version we're writing against, which can (and probably does) differ
 // from the installed version. This must be defined before the FoundationDB header
 // is included (see fdb_c_apiversion.g.h):
@@ -36,6 +38,7 @@
 #include <iterator>
 #include <concepts>
 #include <algorithm>
+#include <generator>
 #include <exception>
 #include <functional>
 #include <filesystem>
@@ -139,10 +142,11 @@ struct future_value final
  friend class transaction;
 };
 
-// May be good to revisit my earlier idea of doing this with references/string_view:
+static constexpr std::string_view range_min(""), range_max("\xFF");
+
 struct select final
 {
- std::string begin_key, end_key;
+ const std::string begin_key, end_key;
 
  public:
  select(std::string_view begin_key_, std::string_view end_key_)
@@ -415,12 +419,14 @@ class transaction final
 {
  database_handle dbh;
 
+ commit_after_op autocommit_ = commit_after_op::no_commit;
+
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
 
  private:
- inline bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output);
- inline bool get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter); 
- inline future_value get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key);
+ inline bool get_single_value_from_transaction(const std::span<const std::uint8_t>&, std::invocable<std::span<const std::uint8_t>> auto&&);
+ inline bool get_value_range_from_transaction(std::span<const std::uint8_t>, std::span<const std::uint8_t>, auto); 
+ inline future_value get_range_future_from_transaction(std::span<const std::uint8_t>, std::span<const std::uint8_t>, const FDBStreamingMode, int&);
 
  public:
  transaction(database_handle dbh_)
@@ -434,20 +440,43 @@ class transaction final
   detail::apply_options(raw_handle(), opts, fdb_transaction_set_option);
  }
 
+ transaction(database_handle dbh_, const transaction_options& opts, const commit_after_op do_commit)
+  : transaction(dbh_, opts)
+ {
+  autocommit(do_commit); 
+ }
+
+ ~transaction()
+ {
+  if(commit_after_op::commit == autocommit() && !std::uncaught_exceptions()) {
+    commit();
+  }
+ }
+
  public:
  // I vacillate between considering this ok, or not even a good idea...
  operator bool() { return dbh && nullptr != raw_handle(); }
+
+ commit_after_op autocommit() const noexcept { return autocommit_; }
+ void autocommit(const commit_after_op do_commit) noexcept { autocommit_ = do_commit; }
 
  public:
  FDBTransaction *raw_handle() const noexcept { return txn_handle.get(); }
 
  private:
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
- //   maybe_vivify();
     fdb_transaction_set(raw_handle(),
                         (const uint8_t*)k.data(), k.size(),
                         (const uint8_t*)v.data(), v.size());
  }
+
+ inline auto get_results_pair_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
+ -> std::generator< std::pair<std::string, std::string> >;
+
+/*JFW: auto selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
+  std::generator< std::map<std::string, std::string> >; */
+ auto selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
+  std::generator< std::pair<std::string, std::string> >;
 
  // The output requirement to std::string is a bit artificial, and should be revisited:
  // Satisfying std::output_iterator<std::string, ??> appears to be trickier than it looks-- so don't be
@@ -461,19 +490,16 @@ class transaction final
  }
 
  void erase(std::span<const std::uint8_t> k) {
-//    maybe_vivify();
     fdb_transaction_clear(raw_handle(),
 			  (const std::uint8_t *)k.data(), k.size());
  }
 
  void erase(const ceph::libfdb::concepts::selector auto& key_range) {
- //   maybe_vivify();
     fdb_transaction_clear_range(raw_handle(),
         (const uint8_t *)key_range.begin_key.data(), key_range.begin_key.size(), 
         (const uint8_t *)key_range.end_key.data(), key_range.end_key.size());
  }
-
- bool key_exists(std::string_view k) {
+bool key_exists(std::string_view k) {
     return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
  }
 
@@ -493,8 +519,8 @@ class transaction final
  // Clearly, this could use some work-- the trick is disambiguating the iterators, do-able but it will take a little work:
  friend inline void set(transaction_handle txn, std::map<std::string, std::string>::const_iterator b, std::map<std::string, std::string>::const_iterator e, const commit_after_op commit_after);
 
+ friend inline auto make_generator(ceph::libfdb::transaction_handle txn, const ceph::libfdb::select& key_range);
 
-// JFW: needs lifting
  friend inline bool get(ceph::libfdb::transaction_handle, std::string_view, auto&, const commit_after_op);
  friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
 
@@ -521,54 +547,137 @@ inline void shutdown_libfdb()
  ceph::libfdb::detail::database_system::shutdown_fdb();
 }
 
-} // namespace ceph::libfdb
-
-// JFW: TODO: consolidate this with get_value_from_transaction()! See details there.
-// JFW:		(it's a bit trickier than it looks at first-- I need to separate it into more components.)
-inline bool ceph::libfdb::transaction::get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter)
+// Begins a KV transaction with a selector (we can add more options via selectors):
+inline ceph::libfdb::future_value begin_fdb_range_get(ceph::libfdb::transaction& txn, const std::span<const std::uint8_t> begin_key, const std::span<const std::uint8_t> end_key, int& iteration)
 {
- const fdb_bool_t is_snapshot = false;
+/* ...Note the way that here the initial keys are used to begin the search, but to do the /continued/ search in the 
+ * possible next get_range_future_from_transaction() call, we need to use the final key retrieved as a new starting 
+ * point; the documentation does not explain this very clearly: */
+   return fdb_transaction_get_range(txn.raw_handle(),
+            begin_key.data(),
+            begin_key.size(),
+            1,                                 // begin-or-equal
+            0,                                 // begin offset (result offset)
+            end_key.data(),
+            end_key.size(),
+            1,                                 // end-or-equal
+            0,                                 // end offset
+  
+            0,                                 // limit
+            0,                                 // target bytes
+ 
+            FDB_STREAMING_MODE_WANT_ALL,       // streaming mode
+            ++iteration,                       // iteration (starts at 1, incremented each successive call)
+            0,                                 // snapshot
+            0                                  // reverse
+          );
+}
 
+inline ceph::libfdb::future_value end_fdb_range_get(ceph::libfdb::transaction& txn, const std::span<const uint8_t> begin_key, std::span< const uint8_t> end_key, int& iteration)
+{
+ return fdb_transaction_get_range(txn.raw_handle(),
+          begin_key.data(),
+          begin_key.size(),
+          1,                                 // begin-or-equal
+          1,                                 // begin offset (result offset)
+          end_key.data(), 
+          end_key.size(),
+          1,                                 // end-or-equal
+          0,                                 // end offset
+          
+          0,                                 // limit
+          0,                                 // target bytes
+
+          FDB_STREAMING_MODE_WANT_ALL,       // streaming mode
+          ++iteration,                       // iteration (starts at 1, incremented each successive call)
+          0,                                 // snapshot
+          0                                  // reverse
+        );
+}
+
+inline const FDBKeyValue *obtain_kvs(ceph::libfdb::transaction& txn, ceph::libfdb::future_value& fv, int& out_count, int& out_more)
+{
  const FDBKeyValue *out_kvs = nullptr;
- int out_count = 0;		// updated by FDB's read
- fdb_bool_t out_more = false;	// true if there's more to read
-
- future_value fv = get_range_future_from_transaction(begin_key, end_key);
-
- if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
-   throw libfdb_exception(r);
- }
 
  if(fdb_error_t r = fdb_future_get_keyvalue_array(fv.raw_handle(), &out_kvs, &out_count, &out_more); 0 != r) {
 
-   auto fv2 = future_value(fdb_transaction_on_error(raw_handle(), r));
+  // JFW: It is difficult to understand what the expected error checking and retry behavior is 
+  // during transactions, I *think* I have it right:
+  auto fv2 = future_value(fdb_transaction_on_error(txn.raw_handle(), r));
 
-   if(fdb_error_t r2 = fdb_future_block_until_ready(fv2.raw_handle()); 0 != r2) {
-     throw libfdb_exception(r);
-   }
+  if(fdb_error_t r2 = fdb_future_block_until_ready(fv2.raw_handle()); 0 != r2) {
+    // Notice that we throw the "original" failure-- very difficult to understand from the docs what is expected:
+    throw libfdb_exception(r);
+  }
 
-   return false;
+  std::swap(fv, fv2); // JFW
+
+  return nullptr;
  }
 
- std::transform(out_kvs, out_count + out_kvs, out_iter, detail::to_decoded_kv_pair);
+ return out_kvs;
+}
+
+} // namespace ceph::libfdb
+
+/* JFW: There are some possible FDB bugs around size limits (see C++-wrapped C binding unit_test.cpp); it may be necessary
+ * to fiddle with FDB_TR_OPTION_SIZE_LIMIT/FDB_DB_OPTION_TRANSACTION_SIZE_LIMIT for values over 10M: 
+*/
+// [FDBKV] . head -> pair<string>, string>
+inline auto ceph::libfdb::transaction::selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
+ std::generator< std::pair<std::string, std::string> > 
+{
+ std::map<std::string, std::string> results;
+
+ int out_count = 0;		// updated by FDB's read
+ fdb_bool_t out_more = true;	// true if there's more to read
+ int iteration = 0;
+
+ libfdb::future_value fv = begin_fdb_range_get(*this, 
+                                               begin_key, 
+                                               end_key, 
+                                               iteration);
+   
+ while(out_more) {
+
+   if(fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
+      throw libfdb_exception(r);
+   }
+
+   const FDBKeyValue *out_kvs = obtain_kvs(*this, fv, out_count, out_more); 
+   if(nullptr == out_kvs) {
+       // ...on retry, causes side-effect overwriting fv with a new value:
+       continue; // JFW: need to research if this is the correct retry behavior
+   }
+
+   while(out_count--) {
+    co_yield detail::to_decoded_kv_pair(*out_kvs++);
+   }
+
+   if(!out_more) {
+    break;
+   }
+
+   // This part is a little weird, but basically if there's more to go we need to read again /inside the loop/; I do not know
+   // why it's not a bit more orthogonal, but it isn't. It may be slightly more clear written as a for-loop, but even then it
+   // honestly is just a bit odd. In any case...
+   const auto& prev_key = out_kvs[out_count - 1];
+
+   fv = end_fdb_range_get(*this, 
+                          std::span<const std::uint8_t>((const uint8_t *)prev_key.key, prev_key.key_length),
+                          end_key, 
+                          iteration);
+  }
+}
+
+inline auto ceph::libfdb::transaction::get_value_range_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key, auto out_iter)
+ -> bool
+{
+ std::ranges::copy(selection_generator(begin_key, end_key), out_iter);
 
  return true;
 }
 
-// JFW: TODO: consolidate all of these functions-- I believe the unifying element is going to be
-// pretty simple, but I had to get my head around it first! Basically, taking a function is the
-// way forward; additionally, the event loop may not be entirely correct, it's hard to tell from
-// the FDB examples-- but I now think the high level API function actually handles all the retries
-// and backoff in the correct fashion, we're basically doing too much work-- but for now I need
-// things to "work"! :-)
-
-// JFW: TODO: consolidate this with get_value_range_from_transaction()!
-// JFW: integrate this back into base::transaction or ...
-// JFW: we could also return an fdb_error_t, but that would introduce FDB artefacts into the public
-// interace if we were to make it meaningful:
-// JFW: This probably needs to go back into base.h;
-// JFW: I think there's a simpler and also-"approved" way to do this-- I'll look at it later, getting rid
-// of the strangeness and complexity here would be good:
 inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output)
 {
  fdb_bool_t key_was_found = false;
@@ -612,48 +721,6 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
  write_output(std::span<const std::uint8_t>(out_buffer, out_len));
 
  return true;
-}
-
-// JFW: TODO: implement/expose remaining features (key selectors, batching and chunking, etc.):
-inline ceph::libfdb::future_value ceph::libfdb::transaction::get_range_future_from_transaction(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
-{
-  // By default, give (begin, end]; not much in the C API documentation about selector details, the Python docs
-  // have a bit more information:
-  constexpr bool begin_or_eq = false;
-  constexpr int begin_offset = 1;
-
-  constexpr bool end_or_eq   = true;
-  constexpr int end_offset = 1; 
-
-  constexpr int limit = 0;		// 0 == unlim; else max number of pairs to return at once (more() function)
-  constexpr int target_bytes = 0;	// 0 == unlim; else enables more() function of fdb_future_get_keyvalue_array()
-  constexpr FDBStreamingMode streaming_mode = FDB_STREAMING_MODE_WANT_ALL;
-  constexpr bool is_snapshot = false;
-  constexpr bool reverse = false;
-
-  int iterations = 1; // should start at one, is incremented when streaming_mode_t::iterator is enabled, else ignored
-
-  return fdb_transaction_get_range(
-		      raw_handle(),
-		      (const uint8_t *)begin_key.data(), begin_key.size(),	// the reference-point key (begin_key)
-		      begin_or_eq,
-		      begin_offset,
-
-		      // These components form an "end key selector":
-		      (const uint8_t *)end_key.data(), end_key.size(),
-		      end_or_eq, 
-		      end_offset,
-
-		      // How should results be grouped/chunked:
-		      limit, 
-		      target_bytes, 
-		      streaming_mode, // streaming_mode_t
-		      iterations,
-
-		      // Other options:
-		      is_snapshot,	// 0 unless this IS a snapshot read
-		      reverse		// should items come in reverse order?
-		    );
 }
 
 #endif
