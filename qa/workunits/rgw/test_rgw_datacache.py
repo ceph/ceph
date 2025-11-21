@@ -80,7 +80,7 @@ def exec_cmd(cmd):
         return False
 
 def get_radosgw_endpoint():
-    out = exec_cmd('sudo netstat -nltp | egrep "rados|valgr"')  # short for radosgw/valgrind
+    out = exec_cmd('sudo ss -nltp | egrep "rados|valgr|memcheck-"')  # short for radosgw/valgrind
     x = out.decode('utf8').split(" ")
     port = [i for i in x if ':' in i][0].split(':')[1]
     log.info('radosgw port: %s' % port)
