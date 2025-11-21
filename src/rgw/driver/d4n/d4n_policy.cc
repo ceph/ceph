@@ -418,11 +418,12 @@ bool LFUDAPolicy::update_refcount_if_key_exists(const DoutPrefixProvider* dpp, c
     refcount += 1; 
   }
   if (op == RefCount::DECR) {
-    if (refcount > 1) {
+    if (refcount > 0) {
       refcount -= 1;
     }
   }
   (*entry->handle)->refcount = refcount;
+  entries_map[key]->refcount = refcount;
   ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << (*entry->handle)->refcount << dendl;
 	entries_heap.update(entry->handle);
 
@@ -476,12 +477,17 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, const std::string& key, 
   } else if (entry) {
     is_dirty = entry->dirty;
   }
-  _erase(dpp, key, y);
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): updated refcount is: " << refcount << dendl;
+
   LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
-  handle_type handle = entries_heap.push(e);
-  e->set_handle(handle);
-  entries_map.emplace(key, e);
+  if (entry) {
+    entries_heap.update(entry->handle, e);
+  } else {
+    LFUDAEntry* e = new LFUDAEntry(key, offset, len, version, is_dirty, refcount, localWeight);
+    handle_type handle = entries_heap.push(e);
+    e->set_handle(handle);
+    entries_map.emplace(key, e);
+  }
 
   if (updateLocalWeight) {
     int ret = -1;
