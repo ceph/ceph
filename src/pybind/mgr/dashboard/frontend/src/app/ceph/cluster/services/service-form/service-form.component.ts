@@ -1166,7 +1166,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     const serviceId: string = values['service_id'];
     let serviceName: string = serviceType;
-    if (_.isString(serviceId) && !_.isEmpty(serviceId) && serviceId !== serviceType) {
+    if (_.isString(serviceId) && !_.isEmpty(serviceId)) {
       serviceName = `${serviceType}.${serviceId}`;
       serviceSpec['service_id'] = serviceId;
     }
