@@ -45,7 +45,7 @@ class RgwUserAccountsController(RgwRESTController):
         if max_roles:
             params['max-roles'] = str(max_roles)
         if max_group:
-            params['max-group'] = str(max_group)
+            params['max-groups'] = str(max_group)
         if max_access_keys:
             params['max-access-keys'] = str(max_access_keys)
 
@@ -131,7 +131,7 @@ class RgwUserAccountsController(RgwRESTController):
         if max_roles:
             params['max-roles'] = str(max_roles)
         if max_group:
-            params['max-group'] = str(max_group)
+            params['max-groups'] = str(max_group)
         if max_access_keys:
             params['max-access-keys'] = str(max_access_keys)
 
