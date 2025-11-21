@@ -566,6 +566,10 @@ key/value store. If no certificate is specified, ``cephadm`` generates a
 self-signed certificate during the deployment of the Grafana service. Each
 certificate is specific for the host it was generated on.
 
+.. note::
+
+  The config key for the Grafana certificate has been changed from ``grafana_crt`` to ``grafana_cert``.
+
 A custom certificate can be configured using the following commands:
 
 .. prompt:: bash #
