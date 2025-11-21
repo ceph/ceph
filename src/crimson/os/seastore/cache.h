@@ -1643,8 +1643,6 @@ private:
   RootBlockRef root;               ///< ref to current root
   ExtentIndex extents_index;             ///< set of live extents
 
-  journal_seq_t last_commit = JOURNAL_SEQ_MIN;
-
   // FIXME: This is specific to the segmented implementation
   std::vector<SegmentProvider*> segment_providers_by_device_id;
 
