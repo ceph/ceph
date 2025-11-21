@@ -1,6 +1,5 @@
 {
   grafanaDashboards+::
-    (import 'dashboards/cephfs.libsonnet') +
     (import 'dashboards/cephfsdashboard.libsonnet') +
     (import 'dashboards/host.libsonnet') +
     (import 'dashboards/osd.libsonnet') +
