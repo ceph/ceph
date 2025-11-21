@@ -7741,10 +7741,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
 
-        std::set<std::string> returned_keys;
+        std::map<std::string, std::optional<ceph::buffer::list>> update_map;
+        std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
+        get_pgbackend()->get_journal_updates(update_map, removed_ranges);
+
+        bufferlist bl;
 	uint32_t num = 0;
 	bool truncated = false;
-        uint64_t bytes_read = 0;
 	if (oi.is_omap()) {
           const auto result = osd->store->omap_iterate(
             ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
@@ -7752,14 +7755,20 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
               .seek_position = start_after,
               .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
             },
-            [&returned_keys, &num, max_return, &bytes_read,
+            [&bl, &num, max_return, &update_map, &removed_ranges,
 	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
             (std::string_view key, std::string_view value) mutable {
-	      if (num >= max_return || bytes_read >= max_bytes) {
+	      if (num >= max_return || bl.length() >= max_bytes) {
                 return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-              bytes_read += sizeof(key);
-              returned_keys.insert(std::string(key));
+              if (update_map.find(std::string(key)) != update_map.end()) {
+                if (!update_map[std::string(key)].has_value()) {
+                  return ObjectStore::omap_iter_ret_t::NEXT;
+                }
+              } else if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
+                return ObjectStore::omap_iter_ret_t::NEXT;
+              }
+              encode(key, bl);
 	      ++num;
               return ObjectStore::omap_iter_ret_t::NEXT;
             });
@@ -7769,26 +7778,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    truncated = true;
 	  }
 	} // else return empty out_set
-
-        // MERGE WITH UPDATES IN JOURNAL
-        get_pgbackend()->update_keys_using_journal(returned_keys);
-
-        // ENCODE RESPECTING LIMITS
-        bufferlist bl;
-        num = 0;
-        truncated = false;
-
-        for (const auto &key : returned_keys) {
-          uint64_t max_bytes = cct->_conf->osd_max_omap_bytes_per_request;
-
-          if (num >= max_return || bl.length() >= max_bytes) {
-            truncated = true;
-            break;
-          }
-
-          encode(key, bl);
-          ++num;
-        }
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
@@ -8344,6 +8333,31 @@ int PrimaryLogPG::_verify_no_head_clones(const hobject_t& soid,
     }
   }
   return 0;
+}
+
+bool PrimaryLogPG::should_be_removed(
+  const std::list<std::pair<std::optional<std::string>,
+                            std::optional<std::string>>>& removed_ranges,
+        std::string_view key) {
+  for (const auto& range : removed_ranges) {
+    const auto& start_opt = range.first;
+    const auto& end_opt = range.second;
+
+    bool start_ok = true;
+    bool end_ok = true;
+
+    if (start_opt.has_value()) {
+      start_ok = key >= start_opt.value();
+    }
+    if (end_opt.has_value()) {
+      end_ok = key < end_opt.value();
+    }
+
+    if (start_ok && end_ok) {
+      return true;
+    }
+  }
+  return false;
 }
 
 inline int PrimaryLogPG::_delete_oid(
