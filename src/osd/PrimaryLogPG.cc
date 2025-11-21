@@ -13805,7 +13805,9 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     size_t m_sz = pm->second.num_missing();
 
     dout(10) << " peer osd." << peer << " missing " << m_sz << " objects." << dendl;
-    dout(20) << " peer osd." << peer << " missing " << pm->second.get_items() << dendl;
+    // This log statement is verbose - a PG with 8000 missing objects can
+    // generate 1M+ character log entries and several GB of log output per recovery
+    dout(25) << " peer osd." << peer << " missing " << pm->second.get_items() << dendl;
 
     // oldest first!
     const pg_missing_t &m(pm->second);
