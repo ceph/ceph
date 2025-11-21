@@ -463,8 +463,11 @@ public:
             std::string key_begin, key_end;
             decode(key_begin, range_bl);
             decode(key_end, range_bl);
-            // Remove all keys in range [key_begin, key_end)
-            // How can we do this?
+            for (const auto &key : keys_to_update) {
+              if (key >= key_begin && key < key_end) {
+                keys_to_update.erase(key);
+              }
+            }
             break;
           }
         }
@@ -507,8 +510,13 @@ public:
             std::string key_begin, key_end;
             decode(key_begin, range_bl);
             decode(key_end, range_bl);
-            // Remove all keys in range [key_begin, key_end)
-            // How can we do this?
+            for (auto it = vals_to_update.begin(); it != vals_to_update.end(); ) {
+              if (it->first >= key_begin && it->first < key_end) {
+                it = vals_to_update.erase(it);
+              } else {
+                ++it;
+              }
+            }
             break;
           }
         }
@@ -565,8 +573,11 @@ public:
             std::string key_begin, key_end;
             decode(key_begin, range_bl);
             decode(key_end, range_bl);
-            // Remove all keys in range [key_begin, key_end)
-            // How can we do this?
+            for (const auto &key : keys) {
+              if (key >= key_begin && key < key_end) {
+                vals_from_keys.erase(key);
+              }
+            }
             break;
           }
         }
