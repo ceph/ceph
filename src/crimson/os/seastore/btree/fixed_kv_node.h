@@ -242,6 +242,10 @@ struct FixedKVInternalNode
     return CachedExtentRef(new node_type_t(*this));
   };
 
+  void clear_delta() final {
+    delta_buffer.clear();
+  }
+
   void on_replace_prior() final {
     this->parent_node_t::on_replace_prior();
     if (this->is_btree_root()) {
@@ -710,6 +714,10 @@ struct FixedKVLeafNode
     assert(delta_buffer.empty());
     return CachedExtentRef(new node_type_t(*static_cast<node_type_t*>(this)));
   };
+
+  void clear_delta() final {
+    delta_buffer.clear();
+  }
 
   virtual void update(
     internal_const_iterator_t iter,

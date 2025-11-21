@@ -273,7 +273,8 @@ enum class extent_2q_state_t : uint8_t {
   Max
 };
 
-class ExtentCommitter {
+class ExtentCommitter : public boost::intrusive_ref_counter<
+  ExtentCommitter, boost::thread_unsafe_counter> {
 public:
   ExtentCommitter(CachedExtent &extent, Transaction &t)
     : extent(extent), t(t) {}
@@ -300,6 +301,11 @@ private:
 
   void _share_prior_data_to_mutations();
   void _share_prior_data_to_pending_versions();
+
+  template <typename T>
+  void _set_invalidaters(Transaction &t);
+
+  friend class Cache;
 };
 using ExtentCommitterRef = boost::intrusive_ptr<ExtentCommitter>;
 
@@ -461,6 +467,13 @@ public:
    * Returns concrete type.
    */
   virtual extent_types_t get_type() const = 0;
+
+  /**
+   * clear_delta
+   *
+   * clear the mutation delta buffer of the cached extent.
+   */
+  virtual void clear_delta() {}
 
   virtual bool is_logical() const {
     assert(!is_logical_type(get_type()));
@@ -991,6 +1004,10 @@ private:
   // This field is unused when the ExtentPinboard use LRU algorithm
   extent_2q_state_t cache_state = extent_2q_state_t::Fresh;
 
+  ExtentCommitterRef committer;
+
+  void new_committer(Transaction &t);
+
 protected:
   trans_view_set_t mutation_pending_extents;
   trans_view_set_t retired_transactions;
@@ -1027,16 +1044,11 @@ protected:
       dirty_from(other.dirty_from),
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
-      version(other.version) {
+      version(other.version),
+      poffset(other.poffset) {
     // the extent must be fully loaded before CoW
     assert(other.is_fully_loaded());
     assert(is_aligned(length, CEPH_PAGE_SIZE));
-    if (other.poffset.is_absolute() ||
-        !other.prior_poffset.has_value()) {
-      poffset = other.poffset;
-    } else {
-      poffset = *other.prior_poffset;
-    }
     if (length > 0) {
       ptr = create_extent_ptr_rand(length);
       other.ptr->copy_out(0, length, ptr->c_str());
@@ -1056,9 +1068,7 @@ protected:
       length(other.get_length()),
       loaded_length(other.get_loaded_length()),
       version(other.version),
-      poffset(other.poffset.is_absolute()
-        ? other.poffset
-        : *other.prior_poffset) {
+      poffset(other.poffset) {
     // the extent must be fully loaded before CoW
     assert(other.is_fully_loaded());
     assert(is_aligned(length, CEPH_PAGE_SIZE));
