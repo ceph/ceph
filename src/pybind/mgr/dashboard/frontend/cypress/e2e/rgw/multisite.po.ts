@@ -38,14 +38,15 @@ export class MultisitePageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.create.url)
   create(group_id: string, status: string, bucket_name: string) {
     // Enter in group_id
-    cy.get('#group_id').type(group_id);
+    cy.get('#group_id').type(group_id, { force: true });
     // Show Status
     this.selectOption('status', status);
     cy.get('#status').should('have.class', 'ng-valid');
     // Enter the bucket_name
     cy.get('#bucket_name').type(bucket_name);
+    cy.get('#bucket_name').should('have.class', 'ng-valid');
     // Click the create button and wait for policy to be made
-    cy.contains('button', 'Create Sync Policy Group').wait(WAIT_TIMER).click();
+    cy.contains('cd-submit-button button', 'Create').click();
     this.getFirstTableCell(group_id).should('exist');
   }
 
@@ -55,7 +56,7 @@ export class MultisitePageHelper extends PageHelper {
 
     // Change the status field
     this.selectOption('status', status);
-    cy.contains('button', 'Edit Sync Policy Group').click();
+    cy.contains('cd-submit-button button', 'Edit').click();
 
     this.searchTable(group_id);
     cy.get(`[cdstabledata]:nth-child(${this.columnIndex.status})`)
