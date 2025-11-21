@@ -413,9 +413,6 @@ def ceph_log(ctx, config):
             stdout = r.stdout.getvalue().decode()
             if stdout:
                 return stdout
-            stderr = r.stderr.getvalue()
-            if stderr:
-                return stderr
             return None
 
         # NOTE: technically the first and third arg to first_in_ceph_log
