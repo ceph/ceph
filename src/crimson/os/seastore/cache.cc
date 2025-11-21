@@ -996,6 +996,7 @@ void Cache::mark_transaction_conflicted(
       }
       efforts.mutate.increment(i->get_length());
       delta_stat.increment(i->get_delta().length());
+      i->trans_view_hook.unlink();
     }
     efforts.mutate_delta_bytes += delta_stat.bytes;
 
@@ -1390,6 +1391,7 @@ record_t Cache::prepare_record(
     get_by_ext(efforts.delta_bytes_by_ext,
                i->get_type()) += delta_length;
     delta_stat.increment(delta_length);
+    i->trans_view_hook.unlink();
   }
 
   t.for_each_finalized_fresh_block([](auto &e) {
