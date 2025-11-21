@@ -1221,8 +1221,6 @@ CachedExtentRef Cache::duplicate_for_write(
   auto ret = i->duplicate_for_write(t);
   ret->pending_for_transaction = t.get_trans_id();
   ret->set_prior_instance(i);
-  // duplicate_for_write won't occur after ool write finished
-  assert(!i->prior_poffset);
   auto [iter, inserted] = i->mutation_pending_extents.insert(*ret);
   ceph_assert(inserted);
   if (is_root_type(ret->get_type())) {
