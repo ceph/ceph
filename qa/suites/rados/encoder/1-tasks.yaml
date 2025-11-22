@@ -4,6 +4,8 @@ tasks:
     branch: quincy
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done install task..."
 
 - print: "**** start installing quincy cephadm ..."
@@ -35,6 +37,8 @@ tasks:
     branch: reef
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done end installing task..."
 
 - print: "**** start dencoder reef... ****"
@@ -48,6 +52,8 @@ tasks:
     branch: squid
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done end installing task..."
 - print: "**** start dencoder squid... ****"
 - workunit:
