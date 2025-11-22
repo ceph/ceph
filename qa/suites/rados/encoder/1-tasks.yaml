@@ -48,6 +48,8 @@ tasks:
     branch: squid
     exclude_packages:
       - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
 - print: "**** done end installing task..."
 - print: "**** start dencoder squid... ****"
 - workunit:
