@@ -50,6 +50,8 @@ Cloud Storage Class Tier Configuration
                 "dest_id": <dest_id> } ... ],
     "location_constraint": <location-constraint>,
     "target_path": <target_path>,
+    "target_by_bucket": <true | false>,
+    "target_by_bucket_prefix": <template>,
     "target_storage_class": <target-storage-class>,
     "multipart_sync_threshold": {object_size},
     "multipart_min_part_size": {part_size},
@@ -109,13 +111,53 @@ Cloud Transition Specific Configurables
 
   A string that defines how the target path is constructed. The target path
   specifies a prefix to which the source bucket-name/object-name is appended.
-  If not specified the ``target_path`` created is ``rgwx-${zonegroup}-${storage-class}-cloud-bucket``.
+  If not specified and ``target_by_bucket`` is ``false``, the ``target_path``
+  created is ``rgwx-${zonegroup}-${storage_class}-cloud-bucket``.
 
-  For example: ``target_path = rgwx-archive-${zonegroup}/``
+  Supports the template variables ``${zonegroup}`` and ``${storage_class}``.
+
+  The ``target_path`` value is only used when ``target_by_bucket`` is ``false``.
+
+  For example: ``target_path = rgwx-${zonegroup}-archive/``
+
+* ``target_by_bucket`` (boolean)
+
+  When enabled, each source bucket transitions to a dedicated destination
+  bucket rather than sharing a common target. Defaults to ``false`` to
+  preserve the legacy behavior.
+
+* ``target_by_bucket_prefix`` (string)
+
+  Optional template used when ``target_by_bucket`` is true to derive the
+  destination bucket name. Supports the variables ``${zonegroup}``,
+  ``${storage_class}``, ``${bucket}``, ``${tenant}``, and ``${owner}``.
+  The ``${owner}`` variable expands to the bucket owner's identifier
+  (the user ID for user-owned buckets, or the account ID for account-owned
+  buckets). If unset, the template falls back to the built-in default
+  ``rgwx-${zonegroup}-${storage_class}-${bucket}``.
+
+.. note::
+   S3 bucket naming constraints still apply on the destination side
+   (lowercase letters and numbers, 3-63 characters, no slashes). RGW
+   lowercases the derived bucket name. If you include slashes or invalid
+   characters in a custom template, bucket creation may still fail on the
+   target cloud.
+
+For example, to enable per-bucket targeting with a custom prefix:
+
+.. prompt:: bash #
+
+   radosgw-admin zonegroup placement modify --rgw-zonegroup default \
+                                              --placement-id default-placement \
+                                              --storage-class CLOUDTIER \
+                                              --tier-config=target_by_bucket=true,\
+                                              target_by_bucket_prefix=archive-${owner}-${bucket}
 
 * ``location_constraint`` (string)
 
-  Specifies the region where the target bucket will be created on the remote S3 endpoint. For AWS, this location needs to be specified only if the region is other than US East (us-east-1).
+  Specifies the region where the target bucket will be created on the remote
+  S3 endpoint. For AWS, specify this only if the region is other than
+  US East (``us-east-1``).
 
 * ``target_storage_class`` (string)
 
