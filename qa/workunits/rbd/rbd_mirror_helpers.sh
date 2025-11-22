@@ -2299,7 +2299,7 @@ wait_for_group_synced()
     local secondary_group_spec=$4
     local group_snap_id
     
-    get_newest_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
+    get_newest_complete_mirror_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
     wait_for_group_snap_present "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
     wait_for_group_snap_sync_complete "${secondary_cluster}" "${secondary_group_spec}" "${group_snap_id}"
 }
@@ -2697,9 +2697,21 @@ test_group_snap_sync_state()
     local group_snap_id=$3
     local expected_state=$4
 
-    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
 
-    test "${expected_state}" = "$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")" || { fail; return 1; }
+    # Get <state> and <snaps_synced> for the given group snapshot ID
+    local state snaps_synced
+    state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT")
+    snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT")
+
+    if [ "$expected_state" = "complete" ]; then
+        # Test if state is created and snaps_synced is 'true'
+        test "$state" = "created" || { fail; return 1; }
+        test "$snaps_synced" = "true" || { fail; return 1; }
+    elif [ "$expected_state" = "incomplete" ]; then
+        # Test if snaps_synced is 'false'
+        test "$snaps_synced" = "false" || { fail; return 1; }
+    fi
 }
 
 test_group_snap_sync_complete()
@@ -2878,14 +2890,27 @@ wait_for_group_replay_stopped()
     wait_for_group_replay_state "${cluster}" "${group_spec}" 'stopped' "${image_count}" 'false'
 }
 
-get_newest_group_snapshot_id()
+get_newest_created_group_snapshot_id()
 {
     local cluster=$1
     local group_spec=$2
     local -n _group_snap_id=$3
 
-    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" 
-    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='complete']/id)[last()]" "$CMD_STDOUT" ) && return 0
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[state='created']/id)[last()]" "$CMD_STDOUT" ) && return 0
+
+    fail "Failed to get snapshot id"
+    return 1
+}
+
+get_newest_complete_mirror_group_snapshot_id()
+{
+    local cluster=$1
+    local group_spec=$2
+    local -n _group_snap_id=$3
+
+    run_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"
+    _group_snap_id=$(xmlstarlet sel -t -v "(//group_snaps/group_snap[namespace/complete='true']/id)[last()]" "$CMD_STDOUT" ) && return 0
 
     fail "Failed to get snapshot id"
     return 1
@@ -2945,7 +2970,7 @@ test_images_in_latest_synced_group()
     local expected_synced_image_count=$3
 
     local group_snap_id
-    get_newest_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
+    get_newest_complete_mirror_group_snapshot_id "${cluster}" "${group_spec}" group_snap_id
     test_group_synced_image_status "${cluster}" "${group_spec}" "${group_snap_id}" "${expected_synced_image_count}"
 }
 
