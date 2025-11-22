@@ -127,6 +127,8 @@ WRITE_INTTYPE_ENCODER(uint32_t, le32)
 WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
+WRITE_INTTYPE_ENCODER(uint8_t, le8)
+WRITE_INTTYPE_ENCODER(int8_t, le8)
 
 // -----------------------------------
 // float types
