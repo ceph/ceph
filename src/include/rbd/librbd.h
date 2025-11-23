@@ -1280,9 +1280,11 @@ CEPH_RBD_API int rbd_aio_write(rbd_image_t image, uint64_t off, size_t len,
 CEPH_RBD_API int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
                                 const char *buf, rbd_completion_t c,
                                 int op_flags);
-
 /*
- * @param precomputed_crc32c: CRC32C checksum that was precomputed (e.g., by SPDK NVMf)
+ * @param precomputed_crc32c: CRC32C checksum that was precomputed with -1
+ *        as the initial value (i.e. with the CRC "register" initialized to
+ *        0xFFFFFFFF)
+ * @param op_flags: see librados.h constants beginning with LIBRADOS_OP_FLAG
  */
 CEPH_RBD_API int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
                                            size_t len, const char *buf,
