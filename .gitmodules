@@ -59,7 +59,7 @@
 [submodule "src/libkmip"]
 	path = src/libkmip
 	url = https://github.com/ceph/libkmip
-	branch = ceph-master
+	branch = ceph-main
 [submodule "src/arrow"]
 	path = src/arrow
 	url = https://github.com/apache/arrow.git
