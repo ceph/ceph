@@ -9,6 +9,10 @@
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
+* RADOS: When objects are read during deep scrubs, the data is read in strides,
+  and the scrubbing process is delayed between each read in order to avoid monopolizing
+  the I/O capacity of the OSD.
+  The default stride size (``osd_deep_scrub_stride``) was 512 KBytes, and is now 4 MBytes.
 
 >=20.0.0
 
