@@ -48,6 +48,7 @@
 namespace neorados::cls::log {
 using ::cls::log::entry;
 using ::cls::log::header;
+using namespace ::cls::log;
 static constexpr auto max_list_entries = 1000u;
 
 /// \brief Push entries to the log
@@ -64,7 +65,7 @@ static constexpr auto max_list_entries = 1000u;
   call.entries = std::move(entries);
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec(method::add, in);
   }};
 }
 
@@ -82,7 +83,7 @@ static constexpr auto max_list_entries = 1000u;
   call.entries.push_back(std::move(e));
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec(method::add, in);
   }};
 }
 
@@ -105,7 +106,7 @@ static constexpr auto max_list_entries = 1000u;
 			    std::move(name), std::move(bl));
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "add", in);
+    op.exec(method::add, in);
   }};
 }
 
@@ -139,7 +140,7 @@ static constexpr auto max_list_entries = 1000u;
   encode(call, in);
   return ClsReadOp{[entries, result, out_marker,
 		    in = std::move(in)](ReadOp& op) {
-    op.exec("log", "list", in,
+    op.exec(method::list, in,
 	    [entries, result, out_marker](error_code ec, const buffer::list& bl) {
 	      ::cls::log::ops::list_ret ret;
 	      if (!ec) {
@@ -219,7 +220,7 @@ auto list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
   encode(call, in);
 
   return ClsReadOp{[header, in = std::move(in)](ReadOp& op) {
-    op.exec("log", "info", in,
+    op.exec(method::info, in,
 	    [header](error_code ec,
 		     const buffer::list& bl) {
 	      ::cls::log::ops::info_ret ret;
@@ -283,7 +284,7 @@ auto info(RADOS& r, Object o, IOContext ioc, CompletionToken&& token)
   call.to_time = to_time;
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "trim", in);
+    op.exec(method::trim, in);
   }};
 }
 
@@ -325,7 +326,7 @@ inline constexpr std::string_view end_marker{"9"};
   call.to_marker = std::string{to_marker};
   encode(call, in);
   return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
-    op.exec("log", "trim", in);
+    op.exec(method::trim, in);
   }};
 }
 

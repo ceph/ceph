@@ -5,6 +5,7 @@
 #define CEPH_CLS_USER_OPS_H
 
 #include "cls_user_types.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_user_set_buckets_op {
   std::list<cls_user_bucket_entry> entries;
@@ -394,5 +395,24 @@ struct cls_user_account_resource_list_ret {
   static std::list<cls_user_account_resource_list_ret> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_user_account_resource_list_ret)
+
+namespace cls::user {
+struct ClassId {
+  static constexpr auto name = "user";
+};
+namespace method {
+constexpr auto set_buckets_info = ClsMethod<RdWrTag, ClassId>("set_buckets_info");
+constexpr auto complete_stats_sync = ClsMethod<RdWrTag, ClassId>("complete_stats_sync");
+constexpr auto remove_bucket = ClsMethod<RdWrTag, ClassId>("remove_bucket");
+constexpr auto list_buckets = ClsMethod<RdTag, ClassId>("list_buckets");
+constexpr auto get_header = ClsMethod<RdTag, ClassId>("get_header");
+constexpr auto reset_user_stats = ClsMethod<RdWrTag, ClassId>("reset_user_stats");
+constexpr auto reset_user_stats2 = ClsMethod<RdWrTag, ClassId>("reset_user_stats2");
+constexpr auto account_resource_add = ClsMethod<RdWrTag, ClassId>("account_resource_add");
+constexpr auto account_resource_get = ClsMethod<RdTag, ClassId>("account_resource_get");
+constexpr auto account_resource_rm = ClsMethod<RdWrTag, ClassId>("account_resource_rm");
+constexpr auto account_resource_list = ClsMethod<RdTag, ClassId>("account_resource_list");
+}
+}
 
 #endif

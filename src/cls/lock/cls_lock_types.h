@@ -8,6 +8,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "msg/msg_types.h"
+#include "include/rados/cls_traits.h"
 
 /* lock flags */
 #define LOCK_FLAG_MAY_RENEW 0x1    /* idempotent lock acquire */
