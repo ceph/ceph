@@ -2612,7 +2612,6 @@ fi
 %{_bindir}/ceph_perf_msgr_client
 %{_bindir}/ceph_perf_msgr_server
 %{_bindir}/ceph_psim
-%{_bindir}/ceph_radosacl
 %{_bindir}/ceph_rgw_jsonparser
 %{_bindir}/ceph_rgw_multiparser
 %{_bindir}/ceph_scratchtool
