@@ -229,7 +229,7 @@ class FSCryptKeySelector(_RBase):
 
     def validate(self) -> None:
         self.scope_identity()  # raises value error if scope invalid
-        validation.check_id(self.name)
+        validation.check_fscrypt_key_name(self.name)
 
 
 @resourcelib.component()
