@@ -4669,6 +4669,18 @@ int RGWBucketFullSyncCR::operate(const DoutPrefixProvider *dpp)
           }
           return set_cr_error(-ECANCELED);
         }
+        // for testing purpose to slow down the execution pace of the this loop
+        if (cct->_conf->rgw_inject_delay_sec > 0) {
+          if (std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+              "delay_bucket_full_sync_loop") {
+            yield {
+              utime_t dur;
+              dur.set_from_double(cct->_conf->rgw_inject_delay_sec);
+              tn->log(0, SSTR("injecting a delay of " << dur << "s"));
+              wait(dur);
+            }
+          }
+        }
         tn->log(20, SSTR("[full sync] syncing object: "
             << bucket_shard_str{bs} << "/" << entries_iter->key));
         entry = &(*entries_iter);
