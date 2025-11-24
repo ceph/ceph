@@ -99,6 +99,7 @@ int main(int argc, const char* argv[])
 
   auto seastar_n_early_args = early_config.get_early_args();
   auto config_proxy_args = early_config.get_ceph_args();
+  // Initialise the Memory police
 
   seastar::app_template::config app_cfg;
   app_cfg.name = "Crimson";
