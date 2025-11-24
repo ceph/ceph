@@ -10,7 +10,7 @@ from typing import (
 
 import pytest
 
-from mgr_module import CLICommand
+from mgr_module import CLICommandRegistryMeta
 import object_format
 
 
@@ -259,7 +259,7 @@ class FancyDemoAdapter(PhonyMultiYAMLFormatAdapter):
         return f"{size} box{es} of {name}"
 
 
-class DecoDemo:
+class DecoDemo(metaclass=CLICommandRegistryMeta):
     """Class to stand in for a mgr module, used to test CLICommand integration."""
 
     @CLICommand("alpha one", perm="rw")
@@ -503,9 +503,10 @@ class DecoDemo:
         ),
     ],
 )
+
 def test_cli_with_decorators(prefix, can_format, args, response):
     dd = DecoDemo()
-    cmd = CLICommand.COMMANDS[prefix]
+    cmd = DecoDemo.CLICommand.COMMANDS[prefix]
     assert cmd.call(dd, args, None) == response
     # slighly hacky way to check that the CLI "knows" about a --format option
     # checking the extra_args feature of the Decorators that provide them (Responder)
@@ -603,4 +604,4 @@ def test_error_response():
 def test_empty_responder_return_check():
     dd = DecoDemo()
     with pytest.raises(ValueError):
-        CLICommand.COMMANDS["empty bad"].call(dd, {}, None)
+        DecoDemo.CLICommand.COMMANDS["empty bad"].call(dd, {}, None)
