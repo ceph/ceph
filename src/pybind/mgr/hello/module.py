@@ -5,7 +5,7 @@ A hello world module
 See doc/mgr/hello.rst for more info.
 """
 
-from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule, Option
+from mgr_module import HandleCommandResult, MgrModule, Option
 from threading import Event
 from typing import cast, Any, Optional, TYPE_CHECKING
 import errno

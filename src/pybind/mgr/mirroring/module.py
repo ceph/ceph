@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option, NotifyType
+from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.snapshot_mirror import FSSnapshotMirror
 

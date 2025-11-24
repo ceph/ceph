@@ -1,5 +1,5 @@
 import hashlib
-from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option
+from mgr_module import MgrModule, Option
 import datetime
 import errno
 import functools

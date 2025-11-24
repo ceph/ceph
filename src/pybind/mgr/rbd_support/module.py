@@ -11,7 +11,7 @@ import rbd
 import traceback
 from typing import cast, Any, Callable, Optional, Tuple, TypeVar
 
-from mgr_module import CLIReadCommand, CLIWriteCommand, MgrModule, Option
+from mgr_module import MgrModule, Option
 from threading import Thread, Event
 
 from .common import NotAuthorizedError

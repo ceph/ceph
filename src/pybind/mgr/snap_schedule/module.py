@@ -8,7 +8,7 @@ import json
 import sqlite3
 from typing import Any, Dict, Optional, Tuple, Union
 from .fs.schedule_client import SnapSchedClient
-from mgr_module import MgrModule, CLIReadCommand, CLIWriteCommand, Option, NotifyType
+from mgr_module import MgrModule, Option, NotifyType
 from mgr_util import CephfsConnectionException
 from threading import Event
 

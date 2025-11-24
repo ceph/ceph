@@ -11,7 +11,7 @@ import fnmatch
 import mgr_util
 import json
 
-from mgr_module import CLIReadCommand, MgrModule, HandleCommandResult
+from mgr_module import MgrModule, HandleCommandResult
 
 
 class Module(MgrModule):

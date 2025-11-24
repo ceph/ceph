@@ -3,7 +3,7 @@
 A simple cluster health alerting module.
 """
 
-from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule, Option
+from mgr_module import HandleCommandResult, MgrModule, Option
 from email.utils import formatdate, make_msgid
 from threading import Event
 from typing import Any, Optional, Dict, List, TYPE_CHECKING, Union

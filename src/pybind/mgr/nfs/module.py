@@ -3,7 +3,7 @@ import threading
 from typing import Tuple, Optional, List, Dict, Any
 import yaml
 
-from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
+from mgr_module import MgrModule, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
 from orchestrator.module import IngressType
