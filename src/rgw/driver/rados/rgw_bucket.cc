@@ -3268,7 +3268,6 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
     return 0;
   }
 };
-#endif
 
 class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
 protected:
@@ -3292,6 +3291,7 @@ protected:
 
   string get_type() override { return "vectorbucket.instance"; }
 };
+#endif
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
@@ -3835,7 +3835,6 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                                                    svc_bucket, svc_bi,
                                                                    svc_datalog);
 }
-#endif
 
 auto create_vector_bucket_metadata_handler(librados::Rados& rados,
                                     RGWSI_Bucket* svc_bucket,
@@ -3854,6 +3853,7 @@ auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
   return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
                                                             svc_bucket);
 }
+#endif
 
 list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()
 {
