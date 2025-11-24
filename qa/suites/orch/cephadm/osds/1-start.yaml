@@ -25,6 +25,8 @@ overrides:
       - CEPHADM_FAILED_DAEMON
       - but is still running
       - PG_DEGRADED
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
     conf:
       osd:
         osd shutdown pgref assert: true

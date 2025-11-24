@@ -8,8 +8,11 @@ overrides:
       - CEPHADM_STRAY_HOST
       - CEPHADM_STRAY_DAEMON
       - CEPHADM_FAILED_DAEMON
+      - PG_AVAILABILITY
+      - POOL_APP_NOT_ENABLED
     log-only-match:
       - CEPHADM_
+
 roles:
 - - host.a
   - mon.a
