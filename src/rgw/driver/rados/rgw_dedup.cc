@@ -1073,8 +1073,8 @@ namespace rgw::dedup {
                          << cpp_strerror(-ret) << dendl;
       return 0;
     }
-
-    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(p_rec->obj_name);
+    const rgw_obj_index_key roi_key(p_rec->obj_name, p_rec->instance);
+    unique_ptr<rgw::sal::Object> p_obj = bucket->get_object(roi_key);
     if (unlikely(!p_obj)) {
       // could happen when the object is removed between passes
       p_stats->ingress_failed_get_object++;
@@ -1082,7 +1082,7 @@ namespace rgw::dedup {
                          << p_rec->obj_name << ")" << dendl;
       return 0;
     }
-    p_obj->set_instance(p_rec->instance);
+
     d_ctl.metadata_access_throttle.acquire();
     ret = p_obj->get_obj_attrs(null_yield, dpp);
     if (unlikely(ret < 0)) {
