@@ -7,6 +7,8 @@
 #include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/types.h"
+#include "include/rados/cls_traits.h"
+#include "cls_2pc_queue_const.h"
 
 #include <unordered_map>
 
@@ -116,3 +118,22 @@ struct cls_2pc_urgent_data
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_urgent_data)
+
+namespace cls::tpc_queue {
+struct ClassId {
+  static constexpr auto name = "2pc_queue";
+};
+namespace method {
+constexpr auto init = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_INIT);
+constexpr auto get_capacity = ClsMethod<RdTag, ClassId>(TPC_QUEUE_GET_CAPACITY);
+constexpr auto get_topic_stats = ClsMethod<RdTag, ClassId>(TPC_QUEUE_GET_TOPIC_STATS);
+constexpr auto reserve = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_RESERVE);
+constexpr auto commit = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_COMMIT);
+constexpr auto abort = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_ABORT);
+constexpr auto list_reservations = ClsMethod<RdTag, ClassId>(TPC_QUEUE_LIST_RESERVATIONS);
+constexpr auto list_entries = ClsMethod<RdTag, ClassId>(TPC_QUEUE_LIST_ENTRIES);
+constexpr auto remove_entries = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_REMOVE_ENTRIES);
+constexpr auto expire_reservations = ClsMethod<RdWrTag, ClassId>(TPC_QUEUE_EXPIRE_RESERVATIONS);
+}
+}
+

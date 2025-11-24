@@ -16,6 +16,7 @@
 #define CEPH_LIBRBD_CLS_NUMOPS_CLIENT_H
 
 #include "include/rados/librados_fwd.hpp"
+#include "cls_numops_ops.h"
 #include <string>
 
 namespace rados {

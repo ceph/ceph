@@ -663,18 +663,21 @@ CLS_INIT(2pc_queue)
   cls_method_handle_t h_2pc_queue_remove_entries;
   cls_method_handle_t h_2pc_queue_expire_reservations;
 
-  cls_register(TPC_QUEUE_CLASS, &h_class);
+  using namespace cls::tpc_queue;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
 
-  cls_register_cxx_method(h_class, TPC_QUEUE_INIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_init, &h_2pc_queue_init);
-  cls_register_cxx_method(h_class, TPC_QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_2pc_queue_get_capacity, &h_2pc_queue_get_capacity);
-  cls_register_cxx_method(h_class, TPC_QUEUE_GET_TOPIC_STATS, CLS_METHOD_RD, cls_2pc_queue_get_topic_stats, &h_2pc_queue_get_topic_stats);
-  cls_register_cxx_method(h_class, TPC_QUEUE_RESERVE, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_reserve, &h_2pc_queue_reserve);
-  cls_register_cxx_method(h_class, TPC_QUEUE_COMMIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_commit, &h_2pc_queue_commit);
-  cls_register_cxx_method(h_class, TPC_QUEUE_ABORT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_abort, &h_2pc_queue_abort);
-  cls_register_cxx_method(h_class, TPC_QUEUE_LIST_RESERVATIONS, CLS_METHOD_RD, cls_2pc_queue_list_reservations, &h_2pc_queue_list_reservations);
-  cls_register_cxx_method(h_class, TPC_QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_2pc_queue_list_entries, &h_2pc_queue_list_entries);
-  cls_register_cxx_method(h_class, TPC_QUEUE_REMOVE_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_remove_entries, &h_2pc_queue_remove_entries);
-  cls_register_cxx_method(h_class, TPC_QUEUE_EXPIRE_RESERVATIONS, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_expire_reservations, &h_2pc_queue_expire_reservations);
+  using namespace method;
+  cls.register_cxx_method(init,                cls_2pc_queue_init,                &h_2pc_queue_init);
+  cls.register_cxx_method(get_capacity,        cls_2pc_queue_get_capacity,        &h_2pc_queue_get_capacity);
+  cls.register_cxx_method(get_topic_stats,     cls_2pc_queue_get_topic_stats,     &h_2pc_queue_get_topic_stats);
+  cls.register_cxx_method(reserve,             cls_2pc_queue_reserve,             &h_2pc_queue_reserve);
+  cls.register_cxx_method(commit,              cls_2pc_queue_commit,              &h_2pc_queue_commit);
+  cls.register_cxx_method(method::abort,       cls_2pc_queue_abort,               &h_2pc_queue_abort);
+  cls.register_cxx_method(list_reservations,   cls_2pc_queue_list_reservations,   &h_2pc_queue_list_reservations);
+  cls.register_cxx_method(list_entries,        cls_2pc_queue_list_entries,        &h_2pc_queue_list_entries);
+  cls.register_cxx_method(remove_entries,      cls_2pc_queue_remove_entries,      &h_2pc_queue_remove_entries);
+  cls.register_cxx_method(expire_reservations, cls_2pc_queue_expire_reservations, &h_2pc_queue_expire_reservations);
 
   return;
 }
