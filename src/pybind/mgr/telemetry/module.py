@@ -20,7 +20,7 @@ from threading import Event, Lock
 from collections import defaultdict
 from typing import cast, Any, DefaultDict, Dict, List, Optional, Tuple, TypeVar, TYPE_CHECKING, Union
 
-from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, ServiceInfoT
+from mgr_module import MgrModule, Option, OptionValue, ServiceInfoT
 
 
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device', 'perf']
