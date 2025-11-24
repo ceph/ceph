@@ -1039,15 +1039,15 @@ class CephadmUpgrade:
             try:
                 self.mgr.mgr_service.fail_over()
             except OrchestratorError as e:
-                # self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
-                #     'severity': 'warning',
-                #     'summary': f'Upgrade: {e}',
-                #     'count': 1,
-                #     'detail': [
-                #         'The upgrade process needs to upgrade the mgr, '
-                #         'but it needs at least one standby to proceed.',
-                #     ],
-                # })
+                self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
+                    'severity': 'warning',
+                    'summary': f'Upgrade: {e}',
+                    'count': 1,
+                    'detail': [
+                        'The upgrade process needs to upgrade the mgr, '
+                        'but it needs at least one standby to proceed.',
+                    ],
+                })
                 return
 
             return  # unreachable code, as fail_over never returns
