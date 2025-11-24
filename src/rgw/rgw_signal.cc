@@ -49,8 +49,8 @@ void signal_shutdown()
   int val = 0;
   int ret = write(signal_fd[0], (char *)&val, sizeof(val));
   if (ret < 0) {
-    derr << "ERROR: " << __func__ << ": write() returned "
-         << cpp_strerror(errno) << dendl;
+    std::cerr << "ERROR: " << __func__ << ": write() returned "
+         << cpp_strerror(errno) << std::endl;
   }
 } /* signal_shutdown */
 
@@ -76,7 +76,7 @@ void signal_fd_finalize()
 
 void handle_sigterm(int signum)
 {
-  dout(1) << __func__ << dendl;
+  std::cout << __func__ << std::endl;
 
   // send a signal to make fcgi's accept(2) wake up.  unfortunately the
   // initial signal often isn't sufficient because we race with accept's
@@ -88,7 +88,7 @@ void handle_sigterm(int signum)
     uint64_t secs = g_ceph_context->_conf->rgw_exit_timeout_secs;
     if (secs)
       alarm(secs);
-    dout(1) << __func__ << " set alarm for " << secs << dendl;
+    std::cout << __func__ << " set alarm for " << secs << std::endl;
   }
 } /* handle_sigterm */
 

@@ -136,7 +136,7 @@ void ThreadPool::worker(WorkThread *wt)
       cct->_conf->threadpool_empty_queue_max_wait);
     _cond.wait_for(ul, wait);
   }
-  ldout(cct,1) << "worker finish" << dendl;
+  // ldout(cct,1) << "worker finish" << dendl;
 
   cct->get_heartbeat_map()->remove_worker(hb);
 }
@@ -195,6 +195,7 @@ void ThreadPool::stop(bool clear_after)
   _lock.unlock();
   for (auto p = _threads.begin(); p != _threads.end(); ++p) {
     (*p)->join();
+    ldout(cct,1) << "thread "<< (*p)->get_thread_id() << "finished" << dendl;
     delete *p;
   }
   _threads.clear();

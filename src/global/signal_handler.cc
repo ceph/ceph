@@ -571,7 +571,8 @@ struct SignalHandler : public Thread {
                   message << ", si_status" << siginfo->si_status;
                   break;
               }
-              derr << message.str() << dendl;
+              // derr << message.str() << dendl;
+              std::cerr << message.str() << std::endl;
               handlers[signum]->handler(signum);
 	    }
 	  }
