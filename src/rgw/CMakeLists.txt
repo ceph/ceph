@@ -547,6 +547,21 @@ if(WITH_RADOSGW_D4N AND WITH_LIBURING)
   target_link_libraries(rgw_common PUBLIC uring::uring)
 endif()
 
+if(WITH_RADOSGW_LANCEDB)
+  # Create imported library target for liblancedb
+  add_library(lancedb SHARED IMPORTED)
+  set_target_properties(lancedb PROPERTIES
+    IMPORTED_LOCATION ${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/liblancedb.so
+    IMPORTED_NO_SONAME TRUE
+  )
+  target_link_libraries(rgw_common PUBLIC lancedb)
+  add_dependencies(rgw_common lancedb-c)
+  if(WITH_RADOSGW_STANDALONE)
+    target_link_libraries(rgw_common_standalone PUBLIC lancedb)
+    add_dependencies(rgw_common_standalone lancedb-c)
+  endif()
+endif()
+
 set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
