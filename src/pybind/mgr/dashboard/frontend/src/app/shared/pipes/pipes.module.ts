@@ -41,7 +41,6 @@ import { MbpersecondPipe } from './mbpersecond.pipe';
 import { PipeFunctionPipe } from './pipe-function.pipe';
 import { DimlessBinaryPerMinutePipe } from './dimless-binary-per-minute.pipe';
 import { RedirectLinkResolverPipe } from './redirect-link-resolver.pipe';
-import { GetErrorPipe, HasErrorPipe } from './form-validation-pipes.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -85,9 +84,7 @@ import { GetErrorPipe, HasErrorPipe } from './form-validation-pipes.pipe';
     MbpersecondPipe,
     PipeFunctionPipe,
     DimlessBinaryPerMinutePipe,
-    RedirectLinkResolverPipe,
-    HasErrorPipe,
-    GetErrorPipe
+    RedirectLinkResolverPipe
   ],
   exports: [
     ArrayPipe,
@@ -129,9 +126,7 @@ import { GetErrorPipe, HasErrorPipe } from './form-validation-pipes.pipe';
     MbpersecondPipe,
     PipeFunctionPipe,
     DimlessBinaryPerMinutePipe,
-    RedirectLinkResolverPipe,
-    HasErrorPipe,
-    GetErrorPipe
+    RedirectLinkResolverPipe
   ],
   providers: [
     ArrayPipe,
@@ -164,9 +159,7 @@ import { GetErrorPipe, HasErrorPipe } from './form-validation-pipes.pipe';
     OctalToHumanReadablePipe,
     MbpersecondPipe,
     DimlessBinaryPerMinutePipe,
-    RedirectLinkResolverPipe,
-    HasErrorPipe,
-    GetErrorPipe
+    RedirectLinkResolverPipe
   ]
 })
 export class PipesModule {}

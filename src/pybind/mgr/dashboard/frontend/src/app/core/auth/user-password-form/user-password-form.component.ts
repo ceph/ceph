@@ -105,6 +105,18 @@ export class UserPasswordFormComponent {
     );
   }
 
+  get oldPassword() {
+    return this.userForm.get('oldpassword');
+  }
+
+  get newPassword() {
+    return this.userForm.get('newpassword');
+  }
+
+  get confirmNewPassword() {
+    return this.userForm.get('confirmnewpassword');
+  }
+
   onSubmit() {
     if (this.userForm.pristine) {
       return;
