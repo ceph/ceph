@@ -11,7 +11,9 @@ import enum
 from collections import namedtuple
 from tempfile import NamedTemporaryFile
 
-from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
+from .cli import PrometheusCLICommand
+
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult
 from mgr_util import get_default_addr, profile_method, build_url
 from orchestrator import OrchestratorClientMixin, raise_if_exception, OrchestratorError
 from rbd import RBD

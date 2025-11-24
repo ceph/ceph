@@ -16,7 +16,7 @@ except ImportError:
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from mgr_module import CLICommand, HandleCommandResult
+from mgr_module import HandleCommandResult
 from mgr_module import MgrModule
 
 import orchestrator
