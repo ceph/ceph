@@ -414,6 +414,26 @@ int process_request(const RGWProcessEnv& penv,
     s->trace = tracing::rgw::tracer.start_trace(op->name(), s->trace_enabled);
     s->trace->SetAttribute(tracing::rgw::TRANS_ID, s->trans_id);
 
+    if (!is_health_request) {
+      std::string script;
+      auto rc = rgw::lua::read_script(s, penv.lua.manager.get(),
+                                      s->bucket_tenant, s->yield,
+                                      rgw::lua::context::postAuth, script);
+      if (rc == -ENOENT) {
+        // no script, nothing to do
+      } else if (rc < 0) {
+        ldpp_dout(op, 5) <<
+          "WARNING: failed to execute pre request script. "
+          "error: " << rc << dendl;
+      } else {
+        rc = rgw::lua::request::execute(rest, penv.olog.get(), s, op, script);
+        if (rc < 0) {
+          ldpp_dout(op, 5) <<
+            "WARNING: failed to execute pre request script. "
+            "error: " << rc << dendl;
+        }
+      }
+    }
     ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);

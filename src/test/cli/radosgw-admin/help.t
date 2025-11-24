@@ -404,7 +404,7 @@
      --notification-id             bucket notifications id
   
   Script options:
-     --context                     context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
+     --context                     context in which the script runs. one of: prerequest, postauth, postrequest, background, getdata, putdata
      --package                     name of the Lua package that should be added/removed to/from the allowlist
      --allow-compilation           package is allowed to compile C code as part of its installation
   

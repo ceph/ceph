@@ -20,6 +20,9 @@ context to_context(const std::string& s)
   if (strcasecmp(s.c_str(), "prerequest") == 0) {
     return context::preRequest;
   }
+  if (strcasecmp(s.c_str(), "postauth") == 0) {
+    return context::postAuth;
+  }
   if (strcasecmp(s.c_str(), "postrequest") == 0) {
     return context::postRequest;
   }
@@ -40,6 +43,8 @@ std::string to_string(context ctx)
   switch (ctx) {
     case context::preRequest:
       return "prerequest";
+    case context::postAuth:
+      return "postAuth";
     case context::postRequest:
       return "postrequest";
     case context::background:

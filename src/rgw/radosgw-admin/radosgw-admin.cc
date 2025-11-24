@@ -134,7 +134,7 @@ inline int posix_errortrans(int r)
  return ERR_NO_SUCH_BUCKET == r ? ENOENT : r;
 }
 
-static const std::string LUA_CONTEXT_LIST("prerequest, postrequest, background, getdata, putdata");
+static const std::string LUA_CONTEXT_LIST("prerequest, postauth, postrequest, background, getdata, putdata");
 
 void usage()
 {
