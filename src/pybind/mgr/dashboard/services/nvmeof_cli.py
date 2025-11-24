@@ -7,17 +7,17 @@ from typing import Annotated, Any, Dict, List, NamedTuple, Optional, Type, \
     Union, get_args, get_origin, get_type_hints
 
 import yaml
-from mgr_module import CLICheckNonemptyFileInput, CLICommand, CLIReadCommand, \
-    CLIWriteCommand, HandleCommandResult, HandlerFuncType
+from mgr_module import CLICheckNonemptyFileInput, HandleCommandResult, HandlerFuncType
 from prettytable import PrettyTable
 
+from ..cli import DBCLICommand
 from ..model.nvmeof import CliFieldTransformer, CliFlags, CliHeader
 from ..rest_client import RequestException
 from .nvmeof_conf import ManagedByOrchestratorException, \
     NvmeofGatewayAlreadyExists, NvmeofGatewaysConfig
 
 
-@CLIReadCommand('dashboard nvmeof-gateway-list')
+@DBCLICommand.Read('dashboard nvmeof-gateway-list')
 def list_nvmeof_gateways(_):
     '''
     List NVMe-oF gateways
@@ -25,7 +25,7 @@ def list_nvmeof_gateways(_):
     return 0, json.dumps(NvmeofGatewaysConfig.get_gateways_config()), ''
 
 
-@CLIWriteCommand('dashboard nvmeof-gateway-add')
+@DBCLICommand.Write('dashboard nvmeof-gateway-add')
 @CLICheckNonemptyFileInput(desc='NVMe-oF gateway configuration')
 def add_nvmeof_gateway(_, inbuf, name: str, group: str, daemon_name: str):
     '''
@@ -43,7 +43,7 @@ def add_nvmeof_gateway(_, inbuf, name: str, group: str, daemon_name: str):
         return -errno.EINVAL, '', str(ex)
 
 
-@CLIWriteCommand('dashboard nvmeof-gateway-rm')
+@DBCLICommand.Write('dashboard nvmeof-gateway-rm')
 def remove_nvmeof_gateway(_, name: str, daemon_name: str = ''):
     '''
     Remove NVMe-oF gateway configuration
@@ -245,7 +245,7 @@ class AnnotatedDataTextOutputFormatter(OutputFormatter):
         return self._convert_to_text_output(data, model)
 
 
-class NvmeofCLICommand(CLICommand):
+class NvmeofCLICommand(DBCLICommand):
     desc: str
 
     def __init__(self, prefix, model: Type[NamedTuple], alias=None, perm='rw', poll=False):
