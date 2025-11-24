@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, MgrModuleRecoverDB, CLIRequiresDB, CLICommand, CLIReadCommand, Option, MgrDBNotReady
+from mgr_module import MgrModule, CommandResult, MgrModuleRecoverDB, CLIRequiresDB, Option, MgrDBNotReady
 import operator
 import rados
 import re

@@ -8,7 +8,7 @@ import errno
 import time
 from typing import cast, Any, Dict, Iterator, List, Optional, Tuple, Union
 
-from mgr_module import CLICommand, CLIReadCommand, CLIWriteCommand, MgrModule, Option, OptionValue
+from mgr_module import MgrModule, Option, OptionValue
 
 try:
     from influxdb import InfluxDBClient

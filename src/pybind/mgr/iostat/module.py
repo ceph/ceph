@@ -1,6 +1,6 @@
 from typing import Any
 
-from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule
+from mgr_module import HandleCommandResult, MgrModule
 
 
 class Module(MgrModule):

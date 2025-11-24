@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult, HandleCommandResult, CLICommand, Option
+from mgr_module import MgrModule, CommandResult, HandleCommandResult, Option
 import enum
 import json
 import random

@@ -8,7 +8,7 @@ import threading
 from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING, Union
 import uuid
 from prettytable import PrettyTable
-from mgr_module import HealthChecksT, CLIReadCommand, CLIWriteCommand, CRUSHMap, MgrModule, Option, OSDMap
+from mgr_module import HealthChecksT, CRUSHMap, MgrModule, Option, OSDMap
 
 """
 Some terminology is made up for the purposes of this module:
