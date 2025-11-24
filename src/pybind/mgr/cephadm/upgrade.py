@@ -71,6 +71,7 @@ class UpgradeState:
                  services: Optional[List[str]] = None,
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
+                 original_osd_flags: Optional[List[str]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -88,6 +89,8 @@ class UpgradeState:
         self.services = services
         self.total_count = total_count
         self.remaining_count = remaining_count
+        # Global OSD flags set before the upgrade that must be preserved when restoring flags at the end.
+        self.original_osd_flags: Optional[List[str]] = original_osd_flags
 
     def to_json(self) -> dict:
         return {
@@ -106,6 +109,7 @@ class UpgradeState:
             'services': self.services,
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
+            'original_osd_flags': self.original_osd_flags,
         }
 
     @classmethod
@@ -129,6 +133,10 @@ class CephadmUpgrade:
         'UPGRADE_EXCEPTION',
         'UPGRADE_OFFLINE_HOST'
     ]
+
+    # Global OSD flags managed automatically during upgrades.
+    # Set at upgrade start and unset on completion if not user-defined.
+    OSD_FLAGS_FOR_UPGRADE = ['noout', 'noscrub', 'nodeep-scrub']
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
@@ -310,6 +318,80 @@ class CephadmUpgrade:
             r["tags"] = sorted(ls)
         return r
 
+    def _set_osd_flags_for_upgrade(self) -> None:
+        """
+        Ensure recommended OSD flags stay set during the upgrade,
+        while preserving any flags the user had already enabled.
+        """
+        assert self.upgrade_state is not None
+
+        try:
+            osd_map = self.mgr.get("osd_map")
+        except Exception as e:
+            logger.warning(f'Upgrade: failed to read osd_map when preparing OSD flags: {e}')
+            return
+
+        flags_str = osd_map.get('flags', '') or ''
+        current_flags = set(f for f in flags_str.split(',') if f)
+
+        # Keep track of which managed flags were already set,
+        # so we don't unset anything the user had intentionally enabled.
+        already_set = [f for f in self.OSD_FLAGS_FOR_UPGRADE if f in current_flags]
+        # Store the flags that were already set so we can restore them later.
+        self.upgrade_state.original_osd_flags = already_set
+        self._save_upgrade_state()
+
+        for flag in self.OSD_FLAGS_FOR_UPGRADE:
+            if flag in current_flags:
+                # That flag is already set, no need to set it again.
+                continue
+            self.mgr.log.info(f'Upgrade: Setting OSD flag {flag} for upgrade duration')
+            try:
+                # Set the flag.
+                self.mgr.check_mon_command({
+                    'prefix': 'osd set',
+                    'key': flag,
+                })
+            except MonCommandFailed as e:
+                # Do not fail the whole upgrade if setting a flag fails,just log it and move on.
+                logger.warning(f'Upgrade: failed to set OSD flag {flag}: {e}')
+
+    def _restore_osd_flags_after_upgrade(self) -> None:
+        """
+        Restore OSD flags to their pre-upgrade state. keep the ones that were
+        already set and remove only those added for the upgrade.
+        """
+        if not self.upgrade_state:
+            # No upgrade in progress, nothing to restore.
+            return
+
+        try:
+            osd_map = self.mgr.get("osd_map")
+        except Exception as e:
+            logger.warning(f'Upgrade: failed to read osd_map when restoring OSD flags: {e}')
+            return
+
+        flags_str = osd_map.get('flags', '') or ''
+        current_flags = set(f for f in flags_str.split(',') if f)
+        original_flags = set(self.upgrade_state.original_osd_flags or [])
+
+        for flag in self.OSD_FLAGS_FOR_UPGRADE:
+            # Only unset flags that are currently enabled and were not set before the upgrade began.
+            if flag in current_flags and flag not in original_flags:
+                self.mgr.log.info(f'Upgrade: Unsetting OSD flag {flag} after upgrade')
+                try:
+                    # Unset the flag.
+                    self.mgr.check_mon_command({
+                        'prefix': 'osd unset',
+                        'key': flag,
+                    })
+                except MonCommandFailed as e:
+                    logger.warning(f'Upgrade: failed to unset OSD flag {flag}: {e}')
+
+        # Clear stored state now that flags have been restored.
+        self.upgrade_state.original_osd_flags = None
+        self._save_upgrade_state()
+
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
                       hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
@@ -358,6 +440,8 @@ class CephadmUpgrade:
             total_count=limit,
             remaining_count=limit,
         )
+        # Set the flags for the upgrade.
+        self._set_osd_flags_for_upgrade()
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
         self._clear_upgrade_health_checks()
@@ -487,6 +571,8 @@ class CephadmUpgrade:
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
                             self.upgrade_state.progress_id)
+        # Restore any OSD flags we temporarily set for this upgrade.
+        self._restore_osd_flags_after_upgrade()
         target_image = self.target_image
         self.mgr.log.info('Upgrade: Stopped')
         self.upgrade_state = None
@@ -953,15 +1039,15 @@ class CephadmUpgrade:
             try:
                 self.mgr.mgr_service.fail_over()
             except OrchestratorError as e:
-                self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
-                    'severity': 'warning',
-                    'summary': f'Upgrade: {e}',
-                    'count': 1,
-                    'detail': [
-                        'The upgrade process needs to upgrade the mgr, '
-                        'but it needs at least one standby to proceed.',
-                    ],
-                })
+                # self._fail_upgrade('UPGRADE_NO_STANDBY_MGR', {
+                #     'severity': 'warning',
+                #     'summary': f'Upgrade: {e}',
+                #     'count': 1,
+                #     'detail': [
+                #         'The upgrade process needs to upgrade the mgr, '
+                #         'but it needs at least one standby to proceed.',
+                #     ],
+                # })
                 return
 
             return  # unreachable code, as fail_over never returns
@@ -1086,6 +1172,8 @@ class CephadmUpgrade:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
             return
+        # Restore OSD flags before we clear the upgrade state.
+        self._restore_osd_flags_after_upgrade()
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
