@@ -298,6 +298,17 @@ int PeerReplayer::init() {
     m_replayers.push_back(std::move(replayer));
   }
 
+  //TODO: Have a separate tuneable for data sync threads
+  nr_replayers = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_max_concurrent_directory_syncs");
+  dout(20) << ": spawning " << nr_replayers << " snapshot data replayer(s)" << dendl;
+  while (nr_replayers-- > 0) {
+    std::unique_ptr<SnapshotDataSyncThread> data_replayer(
+      new SnapshotDataSyncThread(this));
+    std::string name("d_replayer-" + stringify(nr_replayers));
+    data_replayer->create(name.c_str());
+    m_data_replayers.push_back(std::move(data_replayer));
+  }
   return 0;
 }
 
@@ -2104,6 +2115,22 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 
       last_directory_scan = now;
     }
+  }
+}
+
+void PeerReplayer::run_datasync(SnapshotDataSyncThread *data_replayer) {
+  dout(10) << ": snapshot datasync replayer=" << data_replayer << dendl;
+
+  // TODO Do we need separate m_lock/m_cond for synchornization or can you use the same?
+
+  while (true) {
+    // TODO is_stopping and is_blocklisted
+
+    // TODO Wait and fetch syncm from SyncMechanism Queue
+
+    // TODO pre_sync and open handles
+
+    // TODO Wait and fetch files from syncm data queue and sync
   }
 }
 

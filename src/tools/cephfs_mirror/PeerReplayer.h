@@ -95,6 +95,21 @@ private:
     PeerReplayer *m_peer_replayer;
   };
 
+  class SnapshotDataSyncThread : public Thread {
+  public:
+    SnapshotDataSyncThread(PeerReplayer *peer_replayer)
+      : m_peer_replayer(peer_replayer) {
+    }
+
+    void *entry() override {
+      m_peer_replayer->run_datasync(this);
+      return 0;
+    }
+
+  private:
+    PeerReplayer *m_peer_replayer;
+  };
+
   struct DirRegistry {
     int fd;
     bool canceled = false;
@@ -357,6 +372,7 @@ private:
   }
 
   typedef std::vector<std::unique_ptr<SnapshotReplayerThread>> SnapshotReplayers;
+  typedef std::vector<std::unique_ptr<SnapshotDataSyncThread>> SnapshotDataReplayers;
 
   CephContext *m_cct;
   FSMirror *m_fs_mirror;
@@ -378,11 +394,14 @@ private:
   bool m_stopping = false;
   SnapshotReplayers m_replayers;
 
+  SnapshotDataReplayers m_data_replayers;
+
   ServiceDaemonStats m_service_daemon_stats;
 
   PerfCounters *m_perf_counters;
 
   void run(SnapshotReplayerThread *replayer);
+  void run_datasync(SnapshotDataSyncThread *data_replayer);
 
   boost::optional<std::string> pick_directory();
   int register_directory(const std::string &dir_root, SnapshotReplayerThread *replayer);
