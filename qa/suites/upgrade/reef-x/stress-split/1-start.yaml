@@ -26,9 +26,9 @@ overrides:
       - filesystem is offline
       - with fewer MDS than max_mds
       - filesystem is degraded
-      - filesystem is offline
       - osds down
       - osd down
+      - OBJECT_UNFOUND
 tasks:
 - install:
     branch: reef
