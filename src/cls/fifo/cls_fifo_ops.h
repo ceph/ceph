@@ -26,8 +26,10 @@
 #include "include/types.h"
 
 #include "cls/fifo/cls_fifo_types.h"
+#include "include/rados/cls_traits.h"
 
-namespace rados::cls::fifo::op {
+namespace rados::cls::fifo {
+namespace op {
 struct create_meta
 {
   std::string id;
@@ -362,4 +364,19 @@ inline constexpr auto PUSH_PART = "push_part";
 inline constexpr auto TRIM_PART = "trim_part";
 inline constexpr auto LIST_PART = "part_list";
 inline constexpr auto GET_PART_INFO = "get_part_info";
-} // namespace rados::cls::fifo::op
+} // namespace op
+
+struct ClassId {
+  static constexpr auto name = op::CLASS;
+};
+namespace method {
+constexpr auto create_meta = ClsMethod<RdWrTag, ClassId>(op::CREATE_META);
+constexpr auto get_meta = ClsMethod<RdTag, ClassId>(op::GET_META);
+constexpr auto update_meta = ClsMethod<RdWrTag, ClassId>(op::UPDATE_META);
+constexpr auto init_part = ClsMethod<RdWrTag, ClassId>(op::INIT_PART);
+constexpr auto push_part = ClsMethod<RdWrTag, ClassId>(op::PUSH_PART);
+constexpr auto trim_part = ClsMethod<RdWrTag, ClassId>(op::TRIM_PART);
+constexpr auto list_part = ClsMethod<RdTag, ClassId>(op::LIST_PART);
+constexpr auto get_part_info = ClsMethod<RdTag, ClassId>(op::GET_PART_INFO);
+} // namespace method
+} // namespace rados::cls::fifo

@@ -554,25 +554,16 @@ CLS_INIT(otp)
   cls_method_handle_t h_remove_otp_op;
   cls_method_handle_t h_get_current_time_op;
 
-  cls_register("otp", &h_class);
-  cls_register_cxx_method(h_class, "otp_set",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          otp_set_op, &h_set_otp_op);
-  cls_register_cxx_method(h_class, "otp_get",
-                          CLS_METHOD_RD,
-                          otp_get_op, &h_get_otp_op);
-  cls_register_cxx_method(h_class, "otp_check",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          otp_check_op, &h_check_otp_op);
-  cls_register_cxx_method(h_class, "otp_get_result",
-                          CLS_METHOD_RD,
-                          otp_get_result, &h_get_result_op);
-  cls_register_cxx_method(h_class, "otp_remove",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          otp_remove_op, &h_remove_otp_op);
-  cls_register_cxx_method(h_class, "get_current_time",
-                          CLS_METHOD_RD,
-                          otp_get_current_time_op, &h_get_current_time_op);
+  using namespace rados::cls::otp;
+  cls_register(ClassId::name, &h_class);
+  ClassRegistrar<ClassId> cls(h_class);
+
+  cls.register_cxx_method(method::set,              otp_set_op,              &h_set_otp_op);
+  cls.register_cxx_method(method::get,              otp_get_op,              &h_get_otp_op);
+  cls.register_cxx_method(method::check,            otp_check_op,            &h_check_otp_op);
+  cls.register_cxx_method(method::get_result,       otp_get_result,          &h_get_result_op);
+  cls.register_cxx_method(method::remove,           otp_remove_op,           &h_remove_otp_op);
+  cls.register_cxx_method(method::get_current_time, otp_get_current_time_op, &h_get_current_time_op);
 
   return;
 }

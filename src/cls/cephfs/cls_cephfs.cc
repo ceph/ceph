@@ -204,10 +204,13 @@ CLS_INIT(cephfs)
   cls_handle_t h_class;
   cls_method_handle_t h_accumulate_inode_metadata;
 
-  cls_register("cephfs", &h_class);
-  cls_register_cxx_method(h_class, "accumulate_inode_metadata",
-			  CLS_METHOD_WR | CLS_METHOD_RD,
-			  accumulate_inode_metadata, &h_accumulate_inode_metadata);
+  using namespace ::cls::cephfs;
+  cls_register(ClassId::name, &h_class);
+
+  ClassRegistrar<ClassId> cls(h_class);
+
+  cls.register_cxx_method(method::accumulate_inode_metadata,
+                          accumulate_inode_metadata, &h_accumulate_inode_metadata);
 
   // A PGLS filter
   cls_register_cxx_filter(h_class, "inode_tag", inode_tag_filter);

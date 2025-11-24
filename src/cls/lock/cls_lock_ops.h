@@ -7,6 +7,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "cls/lock/cls_lock_types.h"
+#include "include/rados/cls_traits.h"
 
 struct cls_lock_lock_op
 {
@@ -241,5 +242,21 @@ struct cls_lock_set_cookie_op
   static std::list<cls_lock_set_cookie_op> generate_test_instances();
 };
 WRITE_CLASS_ENCODER(cls_lock_set_cookie_op)
+
+namespace rados::cls::lock {
+struct ClassId {
+  static constexpr auto name = "lock";
+};
+
+namespace method {
+constexpr auto lock = ClsMethod<RdWrPromoteTag, ClassId>("lock");
+constexpr auto unlock = ClsMethod<RdWrPromoteTag, ClassId>("unlock");
+constexpr auto break_lock = ClsMethod<RdWrTag, ClassId>("break_lock");
+constexpr auto get_info = ClsMethod<RdTag, ClassId>("get_info");
+constexpr auto list_locks = ClsMethod<RdTag, ClassId>("list_locks");
+constexpr auto assert_locked = ClsMethod<RdPromoteTag, ClassId>("assert_locked");
+constexpr auto set_cookie = ClsMethod<RdWrPromoteTag, ClassId>("set_cookie");
+}
+}
 
 #endif
