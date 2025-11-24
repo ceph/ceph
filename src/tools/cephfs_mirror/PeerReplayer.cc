@@ -298,6 +298,17 @@ int PeerReplayer::init() {
     m_replayers.push_back(std::move(replayer));
   }
 
+  //TODO: Have a separate tuneable for data sync threads
+  nr_replayers = g_ceph_context->_conf.get_val<uint64_t>(
+    "cephfs_mirror_max_concurrent_directory_syncs");
+  dout(20) << ": spawning " << nr_replayers << " snapshot data sync replayer(s)" << dendl;
+  while (nr_replayers-- > 0) {
+    std::unique_ptr<SnapshotDataSyncThread> datasync_replayer(
+      new SnapshotDataSyncThread(this));
+    std::string name("data_replayer-" + stringify(nr_replayers));
+    datasync_replayer->create(name.c_str());
+    m_data_replayers.push_back(std::move(datasync_replayer));
+  }
   return 0;
 }
 
@@ -2104,6 +2115,36 @@ void PeerReplayer::run(SnapshotReplayerThread *replayer) {
 
       last_directory_scan = now;
     }
+  }
+}
+
+void PeerReplayer::run_datasync(SnapshotDataSyncThread *datasync_replayer) {
+  dout(10) << ": snapshot datasync replayer=" << datasync_replayer << dendl;
+
+  // TODO Do we need something like scan_interval ???
+
+  /* TODO
+   * Do we need separate lock like m_lock to for synchornization or can you use the same m_lock?
+   * Using m_lock doesn't serve the purpose of having a separate thread as the existing thread
+   * also holds the m_lock and most of the datastructures in PeerReplayer uses it!!! So it's
+   * little tricky to solve this ??
+   */
+  while (true) {
+    /* TODO
+     * cond wait
+     * is_stopping
+     * is_blocklisted
+     * SyncMechanism initiated ?
+     */
+
+    // TODO Remove the sleep on introduction of cond_wait
+    dout(20) << ": snapshot syncdata replayer sleep for 20s!!!" << dendl;
+    std::this_thread::sleep_for(20s);
+
+    /* TODO
+     * pre_sync and open handles
+     * consume queue from SyncMechanism and sync data
+     */
   }
 }
 
