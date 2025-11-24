@@ -10,10 +10,13 @@ protected:
   int init_permissions(RGWOp* op, optional_yield y) override {return 0;}
   int read_permissions(RGWOp* op, optional_yield y) override {return 0;}
   bool supports_quota() override {return false;}
+
 public:
   explicit RGWHandler_REST_s3Vector(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST_S3(auth_registry) {}
   virtual ~RGWHandler_REST_s3Vector() = default;
+
+  int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) override;
   RGWOp *op_post() override;
   static RGWOp* create_post_op(const std::string& op_name);
 };
