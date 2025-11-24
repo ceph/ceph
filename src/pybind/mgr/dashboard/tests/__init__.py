@@ -18,6 +18,7 @@ from orchestrator import DaemonDescription, HostSpec, InventoryHost
 from pyfakefs import fake_filesystem
 
 from .. import mgr
+from ..cli import DBCLICommand
 from ..controllers import generate_controller_routes, json_error_page
 from ..controllers._version import APIVersion
 from ..module import Module
@@ -35,6 +36,7 @@ logger = logging.getLogger('tests')
 
 class ModuleTestClass(Module):
     """Dashboard module subclass for testing the module methods."""
+    CLICommand = DBCLICommand
 
     def __init__(self) -> None:
         pass
