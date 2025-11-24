@@ -64,6 +64,9 @@
 
 #include "common/ceph_time.h"
 
+// For compile-time policing of class calls.
+#include "include/rados/cls_traits.h"
+
 namespace neorados {
 class Object;
 class IOContext;
@@ -352,22 +355,43 @@ public:
   void assert_exists();
   void cmp_omap(const std::vector<cmp_assertion>& assertions);
 
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    ceph::buffer::list* out,
-	    boost::system::error_code* ec = nullptr);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code,
-				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    fu2::unique_function<void(boost::system::error_code, int,
-				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
-	    const ceph::buffer::list& inbl,
-	    boost::system::error_code* ec = nullptr);
+ protected:
+  // These methods being protected is part of the compile-time protection for
+  // read/write execs.
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            ceph::buffer::list* out,
+            boost::system::error_code* ec);
 
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code,
+                                      const ceph::buffer::list&) &&> f);
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            fu2::unique_function<void(boost::system::error_code, int,
+                                      const ceph::buffer::list&) &&> f);
+  void exec_impl(std::string_view cls, std::string_view method,
+            const ceph::buffer::list& inbl,
+            boost::system::error_code* ec);
+  // templates don't work well with default arguments.
+  void exec_impl(std::string_view cls, std::string_view method,
+          const ceph::buffer::list& inbl) {
+    exec_impl(cls, method, inbl, (boost::system::error_code*)nullptr);
+  }
+  void exec_impl(std::string_view cls, std::string_view method,
+          const ceph::buffer::list& inbl,
+          ceph::buffer::list* out) {
+    exec_impl(cls, method, inbl, out, (boost::system::error_code*)nullptr);
+  }
+ public:
+
+  template <typename Tag, typename ClassID, typename... Args>
+  void exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of a non-write op ");
+    exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
+  }
 
   // Flags that apply to all ops in the operation vector
   void balance_reads();
@@ -649,61 +673,19 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       ceph::buffer::list* out,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, out, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  ReadOp& exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) & {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of read. ");
+    Op::exec_impl(method.cls, method.name, std::forward<Args>(args)...);
     return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		ceph::buffer::list* out,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, out, ec);
-    return std::move(*this);
   }
 
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-	        const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  ReadOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
-    return *this;
-  }
-  ReadOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  ReadOp&& exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) && {
+    static_assert(FlagTraits<Tag>::is_readonly,
+      "Attempt to call a non-readonly class method as part of read. ");
+    Op::exec_impl(method.cls, method.name, std::forward<Args>(args)...);
     return std::move(*this);
   }
 
@@ -1029,61 +1011,15 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       ceph::buffer::list* out,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, out, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  decltype(auto) exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) & {
+    Op::exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
     return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		ceph::buffer::list* out,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, out, ec);
-    return std::move(*this);
   }
 
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code,
-	                            const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code,
-	                             const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       fu2::unique_function<void(boost::system::error_code, int,
-	                                 const ceph::buffer::list&) &&> f) & {
-    Op::exec(cls, method, inbl, std::move(f));
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-	        const ceph::buffer::list& inbl,
-	        fu2::unique_function<void(boost::system::error_code, int,
-	                                  const ceph::buffer::list&) &&> f) && {
-    Op::exec(cls, method, inbl, std::move(f));
-    return std::move(*this);
-  }
-
-  WriteOp& exec(std::string_view cls, std::string_view method,
-	       const ceph::buffer::list& inbl,
-	       boost::system::error_code* ec = nullptr) & {
-    Op::exec(cls, method, inbl, ec);
-    return *this;
-  }
-  WriteOp&& exec(std::string_view cls, std::string_view method,
-		const ceph::buffer::list& inbl,
-		boost::system::error_code* ec = nullptr) && {
-    Op::exec(cls, method, inbl, ec);
+  template <typename Tag, typename ClassID, typename... Args>
+  decltype(auto) exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) && {
+    Op::exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
     return std::move(*this);
   }
 
