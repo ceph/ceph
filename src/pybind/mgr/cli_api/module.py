@@ -6,7 +6,7 @@ import time
 import errno
 from typing import Any, Callable, Dict, List
 
-from mgr_module import MgrModule, HandleCommandResult, CLICommand, API
+from mgr_module import MgrModuleMeta, MgrModule, HandleCommandResult, API
 
 logger = logging.getLogger()
 get_time = time.perf_counter
@@ -38,7 +38,7 @@ class CephCommander:
         }
 
 
-class MgrAPIReflector(type):
+class MgrAPIReflectorMeta(MgrModuleMeta):
     """
     Metaclass to register COMMANDS and Command Handlers via CLICommand
     decorator
@@ -46,6 +46,7 @@ class MgrAPIReflector(type):
 
     def __new__(cls, name, bases, dct):  # type: ignore
         klass = super().__new__(cls, name, bases, dct)
+        CLICommand = dct.get('CLICommand')
         cls.threaded_benchmark_runner = None
         for base in bases:
             for name, func in inspect.getmembers(base, cls.is_public):
@@ -83,7 +84,7 @@ class MgrAPIReflector(type):
         return wrapper
 
 
-class CLI(MgrModule, metaclass=MgrAPIReflector):
+class CLI(MgrModule, metaclass=MgrAPIReflectorMeta):
     @CLICommand('mgr cli_benchmark')
     def benchmark(self, iterations: int, threads: int, func_name: str,
                   func_args: List[str] = None) -> HandleCommandResult:  # type: ignore
