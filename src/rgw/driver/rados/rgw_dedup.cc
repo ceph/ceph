@@ -465,7 +465,9 @@ namespace rgw::dedup {
                        << "::ETAG=" << std::hex << p_rec->s.md5_high
                        << p_rec->s.md5_low << std::dec << dendl;
 
-    int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest);
+    int ret = p_table->add_entry(&key, block_id, rec_id, has_shared_manifest,
+                                 &p_stats->small_objs_stat, &p_stats->big_objs_stat,
+                                 &p_stats->dup_head_bytes_estimate);
     if (ret == 0) {
       p_stats->loaded_objects ++;
       ldpp_dout(dpp, 20) << __func__ << "::" << p_rec->bucket_name << "/"
@@ -1061,6 +1063,24 @@ namespace rgw::dedup {
       return 0;
     }
 
+    // limit the number of ref_count in the SRC-OBJ to MAX_COPIES_PER_OBJ
+    // check <= because we also count the SRC-OBJ
+    if (src_val.get_count() <= MAX_COPIES_PER_OBJ) {
+      disk_block_id_t src_block_id = src_val.get_src_block_id();
+      record_id_t     src_rec_id   = src_val.get_src_rec_id();
+      // update the number of identical copies we got
+      ldpp_dout(dpp, 20) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has " << src_val.get_count() << " copies" << dendl;
+      p_table->inc_count(&key_from_bucket_index, src_block_id, src_rec_id);
+    }
+    else {
+      // We don't want more than @MAX_COPIES_PER_OBJ to prevent OMAP overload
+      p_stats->skipped_too_many_copies++;
+      ldpp_dout(dpp, 10) << __func__ << "::Obj " << p_rec->obj_name
+                         << " has too many copies already" << dendl;
+      return 0;
+    }
+
     // Every object after this point was counted as a dedup potential
     // If we conclude that it can't be dedup it should be accounted for
     rgw_bucket b{p_rec->tenant_name, p_rec->bucket_name, p_rec->bucket_id};
@@ -1250,8 +1270,8 @@ namespace rgw::dedup {
       return 0;
     }
 
-    disk_block_id_t src_block_id = src_val.block_idx;
-    record_id_t src_rec_id = src_val.rec_id;
+    disk_block_id_t src_block_id = src_val.get_src_block_id();
+    record_id_t     src_rec_id   = src_val.get_src_rec_id();
     if (block_id == src_block_id && rec_id == src_rec_id) {
       // the table entry point to this record which means it is a dedup source so nothing to do
       p_stats->skipped_source_record++;
@@ -1794,8 +1814,7 @@ namespace rgw::dedup {
         return -ECANCELED;
       }
     }
-    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat,
-                              &p_stats->dup_head_bytes_estimate);
+    p_table->count_duplicates(&p_stats->small_objs_stat, &p_stats->big_objs_stat);
     display_table_stat_counters(dpp, p_stats);
 
     ldpp_dout(dpp, 10) << __func__ << "::MD5 Loop::" << d_ctl.dedup_type << dendl;

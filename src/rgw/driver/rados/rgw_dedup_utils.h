@@ -56,6 +56,10 @@ namespace rgw::dedup {
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
 
+  // Limit the number of duplicates allowed per unique object to control
+  // the number of ref_count entries in the SRC-OBJ
+  const uint8_t MAX_COPIES_PER_OBJ = 128;
+
   //---------------------------------------------------------------------------
   enum dedup_req_type_t {
     DEDUP_TYPE_NONE     = 0,
@@ -249,6 +253,7 @@ namespace rgw::dedup {
     uint64_t skipped_purged_small = 0;
     uint64_t skipped_singleton = 0;
     uint64_t skipped_singleton_bytes = 0;
+    uint64_t skipped_too_many_copies = 0;
     uint64_t skipped_source_record = 0;
     uint64_t duplicate_records = 0;
     uint64_t size_mismatch = 0;
