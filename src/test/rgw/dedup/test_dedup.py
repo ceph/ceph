@@ -7,6 +7,7 @@ import subprocess
 import urllib.request
 import hashlib
 from multiprocessing import Process
+import filecmp
 import os
 import string
 import shutil
@@ -1419,7 +1420,6 @@ def gen_files_in_range_single_copy(files, count, min_size, max_size):
 
     idx=0
     size_range = max_size - min_size
-    size=0
     for i in range(0, count):
         size = min_size + random.randint(0, size_range-1)
         idx += 1
@@ -1432,19 +1432,19 @@ def gen_files_in_range_single_copy(files, count, min_size, max_size):
 #-------------------------------------------------------------------------------
 def simple_upload(bucket_name, files, conn, config, op_log, first_time):
     for f in files:
-        filename=f[0]
+        src_filename=f[0]
         size=f[1]
         if first_time:
-            key = filename
+            key = src_filename
         else:
             idx=random.randint(0, len(files)-1)
             key=files[idx][0]
 
-        log.debug("upload_file %s -> %s/%s (%d)", filename, bucket_name, key, size)
-        conn.upload_file(OUT_DIR + filename, bucket_name, key, Config=config)
+        log.debug("upload_file %s -> %s/%s (%d)", src_filename, bucket_name, key, size)
+        conn.upload_file(OUT_DIR + src_filename, bucket_name, key, Config=config)
         resp = conn.head_object(Bucket=bucket_name, Key=key)
         version_id = resp.get("VersionId")
-        op_log.append((filename, size, key, version_id))
+        op_log.append((src_filename, size, key, version_id))
 
 #-------------------------------------------------------------------------------
 def ver_calc_rados_obj_count(config, files, op_log):
@@ -1453,15 +1453,15 @@ def ver_calc_rados_obj_count(config, files, op_log):
     unique_s3_objs = set()
 
     for f in files:
-        filename=f[0]
+        src_filename=f[0]
         size=f[1]
-        size_dict[filename] = size
-        num_copies_dict[filename] = 0
+        size_dict[src_filename] = size
+        num_copies_dict[src_filename] = 0
 
     for o in op_log:
-        filename=o[0]
+        src_filename=o[0]
         key=o[2]
-        num_copies_dict[filename] += 1
+        num_copies_dict[src_filename] += 1
         unique_s3_objs.add(key)
 
     rados_obj_total  = 0
@@ -1484,30 +1484,31 @@ def ver_calc_rados_obj_count(config, files, op_log):
 
 #-------------------------------------------------------------------------------
 def verify_objects_with_version(bucket_name, op_log, conn, config):
-    tempfile = OUT_DIR + "temp"
+    tmpfile = OUT_DIR + "temp"
     pend_delete_set = set()
     for o in op_log:
-        filename=o[0]
+        src_filename=o[0]
         size=o[1]
         key=o[2]
         version_id=o[3]
-        log.debug("verify: %s/%s:: ver=%s", bucket_name, filename, version_id)
+        log.debug("verify: %s/%s:: ver=%s", bucket_name, src_filename, version_id)
 
-        # call garbage collect for tail objects before reading the same filename
+        # call garbage collect for tail objects before reading the same src_filename
         # this will help detect bad deletions
-        if filename in pend_delete_set:
+        if src_filename in pend_delete_set:
             result = admin(['gc', 'process', '--include-all'])
             assert result[1] == 0
 
         # only objects larger than RADOS_OBJ_SIZE got tail-objects
         if size > RADOS_OBJ_SIZE:
-            pend_delete_set.add(filename)
+            pend_delete_set.add(src_filename)
 
-        conn.download_file(Bucket=bucket_name, Key=key, Filename=tempfile,
+        conn.download_file(Bucket=bucket_name, Key=key, Filename=tmpfile,
                            Config=config, ExtraArgs={'VersionId': version_id})
-        result = bash(['cmp', tempfile, OUT_DIR + filename])
-        assert result[1] == 0 ,"Files %s and %s differ!!" % (key, tempfile)
-        os.remove(tempfile)
+
+        equal = filecmp.cmp(tmpfile, OUT_DIR + src_filename, shallow=False)
+        assert equal ,"Files %s and %s differ!!" % (key, tmpfile)
+        os.remove(tmpfile)
         conn.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
 
 
