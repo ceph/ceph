@@ -2,10 +2,11 @@
 
 from .module import OrchestratorCli
 
+from .cli import OrchestratorCLICommandBase
+
 # usage: E.g. `from orchestrator import StatelessServiceSpec`
 from ._interface import \
     OrchResult, raise_if_exception, handle_orch_error, \
-    CLICommand, _cli_write_command, _cli_read_command, CLICommandMeta, \
     Orchestrator, OrchestratorClientMixin, \
     OrchestratorValidationError, OrchestratorError, NoOrchestrator, \
     ServiceDescription, InventoryFilter, HostSpec, \
