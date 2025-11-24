@@ -563,6 +563,7 @@ option(WITH_RADOSGW_RADOS "RADOS backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
+option(WITH_RADOSGW_LANCEDB "Enable lancedb support in RADOS Gateway" ON)
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
 option(WITH_SYSTEM_UTF8PROC "Use system-provided utf8proc" OFF)
@@ -618,6 +619,13 @@ if(WITH_RADOSGW)
   endif()
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
+  if(WITH_RADOSGW_LANCEDB)
+    # Check for Rust and Cargo
+    find_program(CARGO_EXECUTABLE cargo)
+    if(NOT CARGO_EXECUTABLE)
+      message(FATAL_ERROR "cargo not found. Please install Rust and Cargo to build with WITH_RADOSGW_LANCEDB=ON")
+    endif()
+  endif(WITH_RADOSGW_LANCEDB)
 endif (WITH_RADOSGW)
 
 #option for CephFS
