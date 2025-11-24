@@ -524,7 +524,7 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    this.subs.unsubscribe();
+    this.subs?.unsubscribe();
     clearInterval(this.interval);
     this.prometheusService.unsubscribe();
   }

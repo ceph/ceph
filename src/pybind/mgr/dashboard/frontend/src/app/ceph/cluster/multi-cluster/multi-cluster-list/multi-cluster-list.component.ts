@@ -176,7 +176,7 @@ export class MultiClusterListComponent extends ListWithDetails implements OnInit
   }
 
   ngOnDestroy(): void {
-    this.subs.unsubscribe();
+    this.subs?.unsubscribe();
   }
 
   getRemainingDays(time: number): number {
