@@ -56,3 +56,4 @@ overrides:
       - filesystem is offline
       - osds down
       - osd down
+      - OBJECT_UNFOUND
