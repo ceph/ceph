@@ -425,6 +425,7 @@ def test_create_index_invalid_filterable_keys():
     """Test that invalid filterable metadata key names fail with ValidationException."""
     conn = connection()
     bucket_name = gen_bucket_name()
+    dimension = 128
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 

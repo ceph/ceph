@@ -134,6 +134,27 @@ private:
     reply.dump(f);
     rgw_flush_formatter_and_reset(s, f);
   }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    rgw::s3vector::create_index_reply_t reply{
+      rgw::s3vector::index_arn(s->zonegroup_name, s->account_name, configuration.vector_bucket_name, configuration.index_name).to_string()
+    };
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
+  }
 };
 
 class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
