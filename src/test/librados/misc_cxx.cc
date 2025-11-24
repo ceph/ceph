@@ -22,6 +22,8 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "cls/version/cls_version_ops.h"
+#include "cls/rbd/cls_rbd_types.h"
 
 #include "crimson_utils.h"
 
@@ -149,7 +151,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl;
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, 0));
   bufferlist bl2, out;
-  int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
+  int r = ioctx.exec("foo", cls::rbd::method::get_all_features, bl2, out);
   ASSERT_EQ(0, r);
   auto iter = out.cbegin();
   uint64_t all_features;
