@@ -24,12 +24,13 @@ if TYPE_CHECKING:
         from typing_extensions import Literal
 
 from ceph.cryptotools.select import choose_crypto_caller
-from mgr_module import CLIReadCommand, CLIWriteCommand, HandleCommandResult, \
-    MgrModule, MgrStandbyModule, NotifyType, Option, _get_localized_key
+from mgr_module import HandleCommandResult, MgrModule, MgrStandbyModule, \
+    NotifyType, Option, _get_localized_key
 from mgr_util import ServerConfigException, build_url, \
     create_self_signed_cert, get_default_addr, verify_tls_files
 
 from . import mgr
+from .cli import DBCLICommand
 from .controllers import nvmeof  # noqa # pylint: disable=unused-import
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
@@ -229,7 +230,7 @@ if TYPE_CHECKING:
     SslConfigKey = Literal['crt', 'key']
 
 
-class Module(MgrModule, CherryPyConfig):
+class Module(MgrModule, CherryPyConfig, CLICommandClass=DBCLICommand):
     """
     dashboard module entrypoint
     """
