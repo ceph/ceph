@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import string
 import time
 import logging
@@ -424,6 +425,16 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
     for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
         if target_conn.zone.has_buckets():
             target_conn.check_bucket_eq(source_conn, bucket_name)
+
+def get_oldest_incremental_change_not_applied_epoch(zone):
+    cmd = ['sync', 'status']
+    sync_status_output, retcode = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+    assert(retcode == 0)
+    match = re.search(r"oldest incremental change not applied:\s*([0-9T:\.\+\-Z]+)", sync_status_output)
+    timestamp = match.group(1) if match else None
+    if timestamp is not None:
+        timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
+    return timestamp
 
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
