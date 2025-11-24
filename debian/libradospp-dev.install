@@ -6,3 +6,5 @@ usr/include/rados/librados.hpp
 usr/include/rados/librados_fwd.hpp
 usr/include/rados/page.h
 usr/include/rados/rados_types.hpp
+usr/include/rados/cls_flags.h
+usr/include/rados/cls_traits.h
