@@ -437,6 +437,22 @@ def get_oldest_incremental_change_not_applied_epoch(zone):
         timestamp = datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%S.%f%z").timestamp()
     return timestamp
 
+def data_sync_making_progress(zone, time_window_sec=180, check_interval_sec=30):
+    deadline = time.time() + time_window_sec
+    oldest_inc_change = None
+    result = False
+    while time.time() < deadline:
+        new_reading = get_oldest_incremental_change_not_applied_epoch(zone)
+        if new_reading is not None:
+            if oldest_inc_change is None:
+                oldest_inc_change = new_reading
+            elif oldest_inc_change != new_reading:
+                result = True
+                oldest_inc_change = new_reading
+                break
+        time.sleep(check_interval_sec)
+    return result or oldest_inc_change is None
+
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
     zonegroup = zone.zonegroup
