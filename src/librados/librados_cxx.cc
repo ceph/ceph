@@ -151,15 +151,15 @@ void librados::ObjectOperation::assert_exists()
   o->stat(nullptr, nullptr, nullptr);
 }
 
-void librados::ObjectOperation::exec(const char *cls, const char *method,
-				     bufferlist& inbl)
+void librados::ObjectOperation::exec_impl(const char *cls, const char *method,
+				          bufferlist& inbl)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
   o->call(cls, method, inbl);
 }
 
-void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl, bufferlist *outbl, int *prval)
+void librados::ObjectOperation::exec_impl(const char *cls, const char *method, bufferlist& inbl, bufferlist *outbl, int *prval)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -181,7 +181,8 @@ public:
   }
 };
 
-void librados::ObjectOperation::exec(const char *cls, const char *method, bufferlist& inbl, librados::ObjectOperationCompletion *completion)
+void librados::ObjectOperation::exec_impl(const char *cls, const char *method,
+    bufferlist& inbl, librados::ObjectOperationCompletion *completion)
 {
   ceph_assert(impl);
   ::ObjectOperation *o = &impl->o;
@@ -1363,7 +1364,7 @@ int librados::IoCtx::stat2(const std::string& oid, uint64_t *psize, struct times
   return io_ctx_impl->stat2(obj, psize, pts);
 }
 
-int librados::IoCtx::exec(const std::string& oid, const char *cls, const char *method,
+int librados::IoCtx::exec_impl(const std::string& oid, const char *cls, const char *method,
 			  bufferlist& inbl, bufferlist& outbl)
 {
   object_t obj(oid);
@@ -1953,7 +1954,7 @@ int librados::IoCtx::aio_read(const std::string& oid, librados::AioCompletion *c
   return io_ctx_impl->aio_read(oid, c->pc, pbl, len, off, snapid);
 }
 
-int librados::IoCtx::aio_exec(const std::string& oid,
+int librados::IoCtx::aio_exec_impl(const std::string& oid,
 			      librados::AioCompletion *c, const char *cls,
 			      const char *method, bufferlist& inbl,
 			      bufferlist *outbl)
