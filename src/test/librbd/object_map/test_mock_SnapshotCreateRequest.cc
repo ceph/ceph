@@ -61,16 +61,16 @@ public:
     std::string oid(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP));
     if (r < 0) {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _,
+                  exec_internal(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _,
                        _))
                     .WillOnce(Return(r));
     } else {
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _,
+                  exec_internal(oid, _, StrEq("lock"), StrEq("assert_locked"), _, _, _,
                        _))
                     .WillOnce(DoDefault());
       EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                  exec(oid, _, StrEq("rbd"), StrEq("object_map_snap_add"), _, _,
+                  exec_internal(oid, _, StrEq("rbd"), StrEq("object_map_snap_add"), _, _,
                        _, _))
                     .WillOnce(DoDefault());
     }
@@ -78,7 +78,7 @@ public:
 
   void expect_invalidate(librbd::ImageCtx *ictx) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _,
+                exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _,
                      _, _, _))
                   .WillOnce(DoDefault());
   }

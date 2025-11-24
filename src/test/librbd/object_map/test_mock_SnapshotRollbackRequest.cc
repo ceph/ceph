@@ -37,7 +37,7 @@ public:
 
   void expect_write_map(librbd::ImageCtx *ictx, int r) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _,
+                exec_internal(ObjectMap<>::object_map_name(ictx->id, CEPH_NOSNAP), _,
 		     StrEq("lock"), StrEq("assert_locked"), _, _, _, _))
                   .WillOnce(DoDefault());
     if (r < 0) {
@@ -55,7 +55,7 @@ public:
 
   void expect_invalidate(librbd::ImageCtx *ictx, uint32_t times) {
     EXPECT_CALL(get_mock_io_ctx(ictx->md_ctx),
-                exec(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _,
+                exec_internal(ictx->header_oid, _, StrEq("rbd"), StrEq("set_flags"), _,
                      _, _, _))
                   .Times(times)
                   .WillRepeatedly(DoDefault());

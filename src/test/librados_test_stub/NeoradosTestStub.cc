@@ -375,7 +375,7 @@ void Op::localize_reads() {
   // no-op
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+void Op::exec_impl(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               ceph::buffer::list* out,
               boost::system::error_code* ec) {
@@ -386,7 +386,7 @@ void Op::exec(std::string_view cls, std::string_view method,
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl), out]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
      uint64_t snap_id, const SnapContext& snapc, uint64_t*) mutable -> int {
-      return io_ctx->exec(
+      return io_ctx->exec_internal(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl,
         (out != nullptr ? out : outbl), snap_id, snapc);
@@ -398,7 +398,7 @@ void Op::exec(std::string_view cls, std::string_view method,
   o->ops.push_back(op);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+void Op::exec_impl(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               boost::system::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
@@ -408,7 +408,7 @@ void Op::exec(std::string_view cls, std::string_view method,
     [cls_handler, cls, method, inbl = const_cast<bufferlist&>(inbl)]
     (librados::TestIoCtxImpl* io_ctx, const std::string& oid, bufferlist* outbl,
      uint64_t snap_id, const SnapContext& snapc, uint64_t*) mutable -> int {
-      return io_ctx->exec(
+      return io_ctx->exec_internal(
         oid, cls_handler, std::string(cls).c_str(),
         std::string(method).c_str(), inbl, outbl, snap_id, snapc);
     };

@@ -630,7 +630,7 @@ public:
     encode(last_copied_object, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_test_image_ctx.md_ctx),
-                exec(mock_test_image_ctx.header_oid, _, StrEq("rbd"),
+                exec_internal(mock_test_image_ctx.header_oid, _, StrEq("rbd"),
                      StrEq("mirror_image_snapshot_set_copy_progress"),
                      ContentsEqual(bl), _, _, _))
       .WillOnce(Return(r));

@@ -128,7 +128,7 @@ public:
                                     mock_image_ctx.id}, bl);
 
     EXPECT_CALL(mock_io_ctx_impl,
-                exec(util::header_name(parent_spec.image_id),
+                exec_internal(util::header_name(parent_spec.image_id),
                      _, StrEq("rbd"), StrEq("child_detach"), ContentsEqual(bl),
                      _, _, _))
       .WillOnce(Return(r));
@@ -136,7 +136,7 @@ public:
 
   void expect_remove_child(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _,
+                exec_internal(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _,
                      _, _, _))
       .WillOnce(Return(r));
   }
@@ -148,7 +148,7 @@ public:
 
     using ceph::encode;
     EXPECT_CALL(mock_io_ctx_impl,
-                exec(parent_header_name, _, StrEq("rbd"),
+                exec_internal(parent_header_name, _, StrEq("rbd"),
                      StrEq("snapshot_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([snap_info, r](bufferlist* bl) {
                              encode(snap_info, *bl);
@@ -192,7 +192,7 @@ public:
                         int r) {
     using ceph::encode;
     EXPECT_CALL(mock_io_ctx_impl,
-                exec(RBD_TRASH, _, StrEq("rbd"),
+                exec_internal(RBD_TRASH, _, StrEq("rbd"),
                      StrEq("trash_get"), _, _, _, _))
       .WillOnce(WithArg<5>(Invoke([trash_spec, r](bufferlist* bl) {
                              encode(trash_spec, *bl);
