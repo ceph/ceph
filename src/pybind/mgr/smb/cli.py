@@ -5,7 +5,7 @@ import errno
 import functools
 
 import object_format
-from mgr_module import CLICommand
+from mgr_module import CLICommandBase
 
 from . import resourcelib
 from .proto import Self
@@ -20,7 +20,7 @@ class _cmdlet:
         return self._func(*args, **kwargs)
 
 
-class SMBCommand:
+class SMBCommandBase(CLICommandBase):
     """A combined decorator and descriptor. Sets up the common parts of the
     CLICommand and object formatter.
     As a descriptor, it returns objects that can be called and wrap the
@@ -29,7 +29,7 @@ class SMBCommand:
 
     Example:
     >>> class Example:
-    ...     @SMBCommand('share foo', perm='r')
+    ...     @SMBCommandBase('share foo', perm='r')
     ...     def foo(self):
     ...         return {'test': 1}
     ...
@@ -37,14 +37,11 @@ class SMBCommand:
     >>> assert ex.foo() == {'test': 1}
     >>> assert ex.foo.command(format='yaml') == (0, "test: 1\\n", "")
     """
-
     def __init__(self, name: str, perm: str) -> None:
-        self._name = name
-        self._perm = perm
+        super().__init__(f"smb {name}", perm)
 
     def __call__(self, func: Callable) -> Self:
         self._func = func
-        cc = CLICommand(f'smb {self._name}', perm=self._perm)
         # the smb module assumes that it will always be used with python
         # versions sufficiently new enough to always use ordered dicts
         # (builtin).  We dont want the json/yaml sorted by keys losing our
@@ -54,9 +51,11 @@ class SMBCommand:
             sort_json=False,
             sort_yaml=False,
         )
+
         rsp = object_format.Responder(_fmt)
         ewrap = error_wrapper()
-        self._command = cc(rsp(ewrap(func)))
+        self._command = super().__call__(rsp(ewrap(func)))
+
         return self
 
     def __get__(self, obj: Any, objtype: Any = None) -> _cmdlet:

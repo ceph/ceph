@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+class Module(orchestrator.OrchestratorClientMixin, MgrModule, CLICommandBase=cli.SMBCommandBase):
     MODULE_OPTIONS: List[Option] = [
         Option(
             'update_orchestration',
@@ -169,7 +169,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             all_results = all_results.convert_results(out_op)
         return all_results
 
-    @cli.SMBCommand('apply', perm='rw')
+    @CLICommand('apply', perm='rw')
     def apply_resources(
         self,
         inbuf: str,
@@ -192,12 +192,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 [results.InvalidResourceResult(err.resource_data, str(err))]
             )
 
-    @cli.SMBCommand('cluster ls', perm='r')
+    @CLICommand('cluster ls', perm='r')
     def cluster_ls(self) -> List[str]:
         """List smb clusters by ID"""
         return [cid for cid in self._handler.cluster_ids()]
 
-    @cli.SMBCommand('cluster create', perm='rw')
+    @CLICommand('cluster create', perm='rw')
     def cluster_create(
         self,
         cluster_id: str,
@@ -330,7 +330,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             password_filter_out=password_filter_out,
         ).squash(cluster)
 
-    @cli.SMBCommand('cluster rm', perm='rw')
+    @CLICommand('cluster rm', perm='rw')
     def cluster_rm(
         self,
         cluster_id: str,
@@ -342,7 +342,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             [cluster], password_filter_out=password_filter
         ).one()
 
-    @cli.SMBCommand('share ls', perm='r')
+    @CLICommand('share ls', perm='r')
     def share_ls(self, cluster_id: str) -> List[str]:
         """List smb shares in a cluster by ID"""
         return [
@@ -351,7 +351,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             if cid == cluster_id
         ]
 
-    @cli.SMBCommand('share create', perm='rw')
+    @CLICommand('share create', perm='rw')
     def share_create(
         self,
         cluster_id: str,
@@ -378,7 +378,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         return self._apply_res([share], create_only=True).one()
 
-    @cli.SMBCommand('share rm', perm='rw')
+    @CLICommand('share rm', perm='rw')
     def share_rm(self, cluster_id: str, share_id: str) -> results.Result:
         """Remove an smb share"""
         share = resources.RemovedShare(
@@ -386,7 +386,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         )
         return self._apply_res([share]).one()
 
-    @cli.SMBCommand("show", perm="r")
+    @CLICommand("show", perm="r")
     def show(
         self,
         resource_names: Optional[List[str]] = None,
