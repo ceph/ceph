@@ -7,7 +7,7 @@ from threading import Event
 
 from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
-from mgr_module import CLICommand, CLIReadCommand, MgrModule, Option, OptionValue, PG_STATES
+from mgr_module import MgrModule, Option, OptionValue, PG_STATES
 
 from typing import cast, Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import urlparse
