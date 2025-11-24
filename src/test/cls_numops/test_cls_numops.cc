@@ -24,6 +24,7 @@
 #include "test/librados/test_cxx.h"
 
 using namespace librados;
+using namespace rados::cls::numops;
 
 TEST(ClsNumOps, Add) {
   Rados cluster;
@@ -36,7 +37,7 @@ TEST(ClsNumOps, Add) {
 
   bufferlist in, out;
 
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "add", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", method::add, in, out));
 
   // add a number to a non-existing key
 
@@ -220,7 +221,7 @@ TEST(ClsNumOps, Mul) {
 
   bufferlist in, out;
 
-  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", "numops", "mul", in, out));
+  ASSERT_EQ(-EINVAL, ioctx.exec("myobject", method::mul, in, out));
 
   // multiply a number to a non-existing key
 

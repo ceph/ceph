@@ -14,6 +14,10 @@
 
 #include "rgw/rgw_basic_types.h"
 
+#include "include/rados/cls_traits.h"
+
+#include "cls_rgw_const.h"
+
 #define CEPH_RGW_REMOVE 'r' // value 114
 #define CEPH_RGW_UPDATE 'u' // value 117
 #define CEPH_RGW_DIR_SUGGEST_LOG_OP  0x80
