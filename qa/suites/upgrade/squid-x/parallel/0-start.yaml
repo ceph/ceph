@@ -54,3 +54,5 @@ overrides:
       - PG_DEGRADED
       - filesystem is degraded
       - filesystem is offline
+      - osds down
+      - osd down

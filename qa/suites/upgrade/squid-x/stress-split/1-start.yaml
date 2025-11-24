@@ -26,6 +26,8 @@ overrides:
       - filesystem is offline
       - with fewer MDS than max_mds
       - filesystem is degraded
+      - osds down
+      - osd down
 tasks:
 - install:
     branch: squid
