@@ -3,7 +3,7 @@ import json
 import re
 import threading
 
-from mgr_module import CLICommand, CLIReadCommand, HandleCommandResult
+from mgr_module import HandleCommandResult
 from mgr_module import MgrModule, CommandResult, NotifyType
 from . import health as health_util
 

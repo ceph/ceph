@@ -7,7 +7,7 @@ See doc/mgr/feedback.rst for more info.
 
 from requests.exceptions import RequestException
 
-from mgr_module import CLIReadCommand, HandleCommandResult, MgrModule
+from mgr_module import HandleCommandResult, MgrModule
 import errno
 
 from .service import CephTrackerClient

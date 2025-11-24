@@ -9,7 +9,7 @@ import json
 import math
 import random
 import time
-from mgr_module import CLIReadCommand, CLICommand, CommandResult, MgrModule, Option, OSDMap, CephReleases
+from mgr_module import CommandResult, MgrModule, Option, OSDMap, CephReleases
 from threading import Event
 from typing import cast, Any, Dict, List, Optional, Sequence, Tuple, Union
 from mgr_module import CRUSHMap

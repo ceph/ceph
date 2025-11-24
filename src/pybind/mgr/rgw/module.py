@@ -8,7 +8,6 @@ import sys
 
 from mgr_module import (
     MgrModule,
-    CLICommand,
     HandleCommandResult,
     Option,
     MonCommandFailed,
