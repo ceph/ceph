@@ -6,8 +6,8 @@ from enum import Enum
 from typing import Dict, NamedTuple, Optional
 
 from ceph.utils import datetime_now, datetime_to_str, parse_timedelta, str_to_datetime
-from mgr_module import CLICommand
 
+from ..cli import DBCLICommand
 from . import PLUGIN_MANAGER as PM
 from .plugin import SimplePlugin as SP
 
@@ -40,7 +40,7 @@ class Motd(SP):
 
     @PM.add_hook
     def register_commands(self):
-        @CLICommand("dashboard {name} get".format(name=self.NAME))
+        @DBCLICommand("dashboard {name} get".format(name=self.NAME))
         def _get(_):
             stdout: str
             value: str = self.get_option(self.NAME)
@@ -54,7 +54,7 @@ class Motd(SP):
                          'expires="{expires}"'.format(**data)
             return 0, stdout, ''
 
-        @CLICommand("dashboard {name} set".format(name=self.NAME))
+        @DBCLICommand("dashboard {name} set".format(name=self.NAME))
         def _set(_, severity: MotdSeverity, expires: str, message: str):
             if expires != '0':
                 delta = parse_timedelta(expires)
@@ -72,7 +72,7 @@ class Motd(SP):
             self.set_option(self.NAME, value)
             return 0, 'Message of the day has been set.', ''
 
-        @CLICommand("dashboard {name} clear".format(name=self.NAME))
+        @DBCLICommand("dashboard {name} clear".format(name=self.NAME))
         def _clear(_):
             self.set_option(self.NAME, '')
             return 0, 'Message of the day has been cleared.', ''
