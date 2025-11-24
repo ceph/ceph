@@ -51,3 +51,5 @@ overrides:
       - FS_DEGRADED
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
+      - filesystem is degraded
+      - filesystem is offline
