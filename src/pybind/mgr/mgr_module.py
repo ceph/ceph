@@ -407,9 +407,7 @@ def _extract_target_func(
     return f, extra_args
 
 
-class CLICommand(object):
-    COMMANDS = {}  # type: Dict[str, CLICommand]
-
+class CLICommandBase(object):
     def __init__(self,
                  prefix: str,
                  perm: str = 'rw',
@@ -476,7 +474,6 @@ class CLICommand(object):
     def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
         self.store_func_metadata(func)
         self.func = func
-        self.COMMANDS[self.prefix] = self
         return self.func
 
     def __call__(self, func: HandlerFuncType) -> HandlerFuncType:
@@ -504,7 +501,7 @@ class CLICommand(object):
         special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
-            if name in CLICommand.KNOWN_ARGS:
+            if name in self.KNOWN_ARGS:
                 special_args.add(name)
                 continue
             assert self.first_default >= 0
@@ -520,7 +517,7 @@ class CLICommand(object):
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
-             inbuf: Optional[str] = None) -> HandleCommandResult:
+             inbuf: Optional[str]) -> HandleCommandResult:
         kwargs, specials = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
             if 'inbuf' not in specials:
@@ -542,16 +539,46 @@ class CLICommand(object):
         }
 
     @classmethod
-    def dump_cmd_list(cls) -> List[Dict[str, Union[str, bool]]]:
-        return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
+    def make_registry_subtype(cls):
+        class CLICommand(cls):
+            COMMANDS = {}
+
+            def _register_handler(self, func: HandlerFuncType) -> HandlerFuncType:
+                ret = super()._register_handler(func)
+                self.COMMANDS[self.prefix] = self
+                return ret
+
+            @classmethod
+            def dump_cmd_list(cls) -> List[Dict[str, Union[str, bool]]]:
+                return [cmd.dump_cmd() for cmd in cls.COMMANDS.values()]
+
+            @classmethod
+            def Read(cls, prefix: str, poll: bool = False) -> cls:
+                return cls(prefix, "r", poll)
+
+            @classmethod
+            def Write(cls, prefix: str, poll: bool = False) -> cls:
+                return cls(prefix, "w", poll)
+
+        return CLICommand
 
 
-def CLIReadCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "r", poll)
+class CLICommandRegistryMeta(type):
+    @classmethod
+    def __prepare__(cls, name, bases, **kwds):
+        ns = super().__prepare__(name, bases, **kwds)
+        ns['COMMANDS'] = []  # type: List[Any]
+        ns['COMMAND_DICT'] = {}  # type: Dict[str, CLICommand]
 
+        cclass = kwds.get(
+            'CLICommandClass',
+            kwds.get('CLICommandBase', CLICommandBase).make_registry_subtype())
 
-def CLIWriteCommand(prefix: str, poll: bool = False) -> CLICommand:
-    return CLICommand(prefix, "w", poll)
+        ns['CLICommand'] = cclass
+
+        ns['CLIReadCommand'] = cclass.Read
+        ns['CLIWriteCommand'] = cclass.Write
+        return ns
 
 
 def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerFuncType]:
@@ -706,8 +733,9 @@ class Command(dict):
         It also uses HandleCommandResult helper to return a wrapped a tuple of 3
         items.
         """
-        cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
-        return cmd(self.returns_command_result(instance, self.handler))
+        #cmd = CLICommand(prefix=self.prefix, perm=self['perm'])
+        #return cmd(self.returns_command_result(instance, self.handler))
+        return None
 
 
 class CPlusPlusHandler(logging.Handler):
@@ -1034,16 +1062,22 @@ class API:
     expose = DecoratorFactory('expose', default=False)(True)
 
 
-class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
+class MgrModuleMeta(CLICommandRegistryMeta):
+    @classmethod
+    def __prepare__(cls, name, bases, **kwds):
+        ns = super().__prepare__(name, bases, **kwds)
+        ns['MODULE_OPTIONS'] = []  # type: List[Option]
+        ns['MODULE_OPTION_DEFAULTS'] = {}  # type: Dict[str, Any]
+
+        # Database Schema
+        ns['SCHEMA'] = None  # type: Optional[List[str]]
+        ns['SCHEMA_VERSIONED'] = None  # type: Optional[List[List[str]]]
+        return ns
+
+
+class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin,
+                metaclass=MgrModuleMeta):
     MGR_POOL_NAME = ".mgr"
-
-    COMMANDS = []  # type: List[Any]
-    MODULE_OPTIONS: List[Option] = []
-    MODULE_OPTION_DEFAULTS = {}  # type: Dict[str, Any]
-
-    # Database Schema
-    SCHEMA = None  # type: Optional[List[str]]
-    SCHEMA_VERSIONED = None  # type: Optional[List[List[str]]]
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1073,6 +1107,10 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         SEC = 2
         WARN = 3
         ERROR = 4
+
+    @classmethod
+    def __init_subclass__(cls, *args, **kwargs):
+        pass
 
     def __init__(self, module_name: str, py_modules_ptr: object, this_ptr: object):
         self.module_name = module_name
@@ -1141,7 +1179,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @classmethod
     def _register_commands(cls, module_name: str) -> None:
-        cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+        cls.COMMANDS.extend(cls.CLICommand.dump_cmd_list())
 
     @property
     def log(self) -> logging.Logger:
@@ -2004,14 +2042,15 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                         inbuf: str,
                         cmd: Dict[str, Any]) -> Union[HandleCommandResult,
                                                       Tuple[int, str, str]]:
-        self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd}")
-        if cmd['prefix'] not in CLICommand.COMMANDS:
+        inbuflen = len(inbuf) if inbuf is not None else "None"
+        self.log.debug(f"_handle_command len(inbuf) {inbuflen} cmd {cmd}")
+        if cmd['prefix'] not in self.CLICommand.COMMANDS:
             ret = self.handle_command(inbuf, cmd)
-            self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd} ret {ret}")
+            self.log.debug(f"_handle_command len(inbuf) {inbuflen} cmd {cmd} ret {ret}")
             return ret
 
-        ret = CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
-        self.log.debug(f"_handle_command len(inbuf) {len(inbuf)} cmd {cmd} ret {ret}")
+        ret = self.CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+        self.log.debug(f"_handle_command len(inbuf) {inbuflen} cmd {cmd} ret {ret}")
         return ret
 
     def handle_command(self,
