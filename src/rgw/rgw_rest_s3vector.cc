@@ -6,6 +6,7 @@
 #include "rgw_s3vector.h"
 #include "rgw_process_env.h"
 #include "common/async/yield_context.h"
+#include "rgw_arn.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -74,6 +75,27 @@ class RGWS3VectorCreateIndex : public RGWS3VectorBase {
       return;
     }
     op_ret = rgw::s3vector::create_index(configuration, this, y);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    rgw::s3vector::create_index_reply_t reply{
+      rgw::s3vector::index_arn(s->zonegroup_name, s->account_name, configuration.vector_bucket_name, configuration.index_name).to_string()
+    };
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -179,11 +201,16 @@ class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
       set_req_state_err(s, op_ret);
     }
     dump_errno(s);
+    s->format = RGWFormat::JSON;
+    end_header(s, this, to_mime_type(s->format));
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+    JSONFormatter f; /* use json formatter for system requests output */
 
     if (op_ret == 0 && s->system_request) {
-      s->format = RGWFormat::JSON;
-      end_header(s, this, to_mime_type(s->format));
-      JSONFormatter f; /* use json formatter for system requests output */
 
       ceph_assert(bucket);
       ceph_assert(!bucket->empty());
@@ -194,12 +221,17 @@ class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
       encode_json("object_ver", info.objv_tracker.read_version, &f);
       encode_json("bucket_info", info, &f);
       f.close_section();
-      rgw_flush_formatter_and_reset(s, &f);
-      return;
     }
-    end_header(s);
-  }
 
+    rgw::s3vector::create_vector_bucket_reply_t reply{
+      rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name).to_string()
+    };
+    reply.dump(&f);
+    rgw_flush_formatter_and_reset(s, &f);
+  }
 };
 
 class RGWS3VectorDeleteIndex : public RGWS3VectorBase {
@@ -236,14 +268,11 @@ class RGWS3VectorDeleteIndex : public RGWS3VectorBase {
 };
 
 class RGWS3VectorDeleteVectorBucket : public RGWS3VectorBase {
-  // TODO: collapse with get_vector_bucket_t an create a common function
-  // to build and verify the ARN in init_processing()
   rgw::s3vector::delete_vector_bucket_t configuration;
-  boost::optional<rgw::ARN> arn;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector DeleteVectorBucket" << dendl;
-    if (!verify_bucket_permission(this, s, arn.get(), rgw::IAM::s3vectorsDeleteVectorBucket)) {
+    if (!verify_bucket_permission(this, s, configuration.vector_bucket_arn.get(), rgw::IAM::s3vectorsDeleteVectorBucket)) {
       // TODO: ignore failure for now "evaluate_iam_policies: implicit deny from identity-based policy"
       // return -EACCES;
       return 0;
@@ -261,36 +290,16 @@ class RGWS3VectorDeleteVectorBucket : public RGWS3VectorBase {
     if (ret < 0) {
       return ret;
     }
-    if (configuration.vector_bucket_arn.empty()) {
-      arn.emplace(rgw::Partition::aws,
-          rgw::Service::s3vectors,
-          s->penv.site->get_zonegroup().api_name,
-          s->auth.identity->get_tenant(),
-          configuration.vector_bucket_name);
-    } else {
-      arn = rgw::ARN::parse(configuration.vector_bucket_arn);
-      if (!arn) {
-        ldpp_dout(this, 1) << "ERROR: invalid s3vector bucket ARN: " << configuration.vector_bucket_arn << dendl;
-        return -EINVAL;
-      }
-      if (arn->service != rgw::Service::s3vectors ||
-          arn->partition != rgw::Partition::aws ||
-          arn->region != s->penv.site->get_zonegroup().api_name ||
-          arn->account != s->bucket_tenant ||
-          arn->resource.empty()) {
-        ldpp_dout(this, 1) << "ERROR: invalid s3vector bucket ARN service: " << arn->to_string() << dendl;
-        return -EINVAL;
-      }
-    }
-    if (!configuration.vector_bucket_name.empty() &&
-        arn->resource != configuration.vector_bucket_name) {
-      ldpp_dout(this, 1) << "ERROR: s3vector bucket ARN bucket mismatch: " << arn->to_string()
-                    << " expected bucket: " << configuration.vector_bucket_name << dendl;
-      return -EINVAL;
+    if (!configuration.vector_bucket_arn) {
+      configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name
+      );
     }
 
-    s->bucket_name = arn->resource;
-    ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << arn.get() << dendl;
+    s->bucket_name = configuration.vector_bucket_arn->resource;
+    ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
 
@@ -387,6 +396,7 @@ class RGWS3VectorPutVectors : public RGWS3VectorBase {
 
 class RGWS3VectorGetVectors : public RGWS3VectorBase {
   rgw::s3vector::get_vectors_t configuration;
+  rgw::s3vector::get_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
@@ -414,12 +424,31 @@ class RGWS3VectorGetVectors : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::get_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 class RGWS3VectorListVectors : public RGWS3VectorBase {
   rgw::s3vector::list_vectors_t configuration;
+  rgw::s3vector::list_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListVectors" << dendl;
@@ -447,7 +476,25 @@ class RGWS3VectorListVectors : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::list_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::list_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -536,12 +583,11 @@ class RGWS3VectorListVectorBuckets : public RGWS3VectorBase {
 class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
   rgw::s3vector::get_vector_bucket_t configuration;
   std::unique_ptr<rgw::sal::VectorBucket> bucket;
-  boost::optional<rgw::ARN> arn;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectorBucket" << dendl;
 
-    if (!verify_bucket_permission(this, s, arn.get(), rgw::IAM::s3vectorsGetVectorBucket)) {
+    if (!verify_bucket_permission(this, s, configuration.vector_bucket_arn.get(), rgw::IAM::s3vectorsGetVectorBucket)) {
       // TODO: ignore failure for now "evaluate_iam_policies: implicit deny from identity-based policy"
       // return -EACCES;
       return 0;
@@ -559,36 +605,16 @@ class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
     if (ret < 0) {
       return ret;
     }
-    if (configuration.vector_bucket_arn.empty()) {
-      arn.emplace(rgw::Partition::aws,
-          rgw::Service::s3vectors,
-          s->penv.site->get_zonegroup().api_name,
-          s->auth.identity->get_tenant(),
-          configuration.vector_bucket_name);
-    } else {
-      arn = rgw::ARN::parse(configuration.vector_bucket_arn);
-      if (!arn) {
-        ldpp_dout(this, 1) << "ERROR: invalid s3vector bucket ARN: " << configuration.vector_bucket_arn << dendl;
-        return -EINVAL;
-      }
-      if (arn->service != rgw::Service::s3vectors ||
-          arn->partition != rgw::Partition::aws ||
-          arn->region != s->penv.site->get_zonegroup().api_name ||
-          arn->account != s->bucket_tenant ||
-          arn->resource.empty()) {
-        ldpp_dout(this, 1) << "ERROR: invalid s3vector bucket ARN service: " << arn->to_string() << dendl;
-        return -EINVAL;
-      }
-    }
-    if (!configuration.vector_bucket_name.empty() &&
-        arn->resource != configuration.vector_bucket_name) {
-      ldpp_dout(this, 1) << "ERROR: s3vector bucket ARN bucket mismatch: " << arn->to_string()
-                    << " expected bucket: " << configuration.vector_bucket_name << dendl;
-      return -EINVAL;
+    if (!configuration.vector_bucket_arn) {
+      configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name
+      );
     }
 
-    s->bucket_name = arn->resource;
-    ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << arn.get() << dendl;
+    s->bucket_name = configuration.vector_bucket_arn->resource;
+    ldpp_dout(this, 20) << "INFO: s3vector bucket ARN: " << configuration.vector_bucket_arn.get() << dendl;
     return 0;
   }
 
@@ -618,9 +644,7 @@ class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
     f.open_object_section("");
     f.open_object_section("vectorBucket");
     ::encode_json("creationTime",  ceph::to_iso_8601(bucket->get_creation_time()), &f);
-    rgw::ARN arn(rgw::Partition::aws, rgw::Service::s3vectors,
-                       "", bucket->get_tenant(), bucket->get_name());
-    ::encode_json("vectorBucketArn", arn.to_string(), &f);
+    ::encode_json("vectorBucketArn", configuration.vector_bucket_arn->to_string(), &f);
     ::encode_json("vectorBucketName", bucket->get_name(), &f);
     f.close_section(); // vectorBucket
     f.close_section(); // root object
@@ -632,6 +656,7 @@ class RGWS3VectorGetVectorBucket : public RGWS3VectorBase {
 
 class RGWS3VectorGetIndex : public RGWS3VectorBase {
   rgw::s3vector::get_index_t configuration;
+  rgw::s3vector::get_index_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetIndex" << dendl;
@@ -659,12 +684,31 @@ class RGWS3VectorGetIndex : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::get_index(configuration, this, y);
+    op_ret = rgw::s3vector::get_index(configuration, s->zonegroup_name, s->account_name, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 class RGWS3VectorListIndexes : public RGWS3VectorBase {
   rgw::s3vector::list_indexes_t configuration;
+  rgw::s3vector::list_indexes_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector ListIndexes" << dendl;
@@ -692,7 +736,32 @@ class RGWS3VectorListIndexes : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::list_indexes(configuration, this, y);
+    if (!configuration.vector_bucket_arn) {
+      configuration.vector_bucket_arn = rgw::s3vector::vector_bucket_arn(
+        s->zonegroup_name,
+        s->account_name,
+        configuration.vector_bucket_name
+      );
+    }
+    op_ret = rgw::s3vector::list_indexes(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -797,6 +866,7 @@ class RGWS3VectorDeleteVectors : public RGWS3VectorBase {
 
 class RGWS3VectorQueryVectors : public RGWS3VectorBase {
   rgw::s3vector::query_vectors_t configuration;
+  rgw::s3vector::query_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector QueryVectors" << dendl;
@@ -824,9 +894,36 @@ class RGWS3VectorQueryVectors : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::query_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::query_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    dump_start(s);
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
+
+}
+
+int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient *cio) {
+  if (int ret = RGWHandler_REST_S3::init(driver, s, cio); ret < 0) {
+    return ret;
+  }
+  // s3vectors API uses JSON formatter
+  return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
 }
 
 RGWOp* RGWHandler_REST_s3Vector::op_post() {

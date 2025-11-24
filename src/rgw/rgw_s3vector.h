@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include "include/encoding.h"
+#include "rgw_arn.h"
 #include "common/async/yield_context.h"
 
 namespace ceph {
@@ -14,13 +15,12 @@ class Formatter;
 class JSONObj;
 class DoutPrefixProvider;
 
-struct rgw_bucket;
-
 namespace rgw::sal {
 class Driver;
 }
 
 namespace rgw::s3vector {
+
 enum class DistanceMetric {
   COSINE,
   EUCLIDEAN,
@@ -45,25 +45,18 @@ struct create_index_t {
   DistanceMetric distance_metric;
   std::string index_name;
   std::vector<std::string> non_filterable_metadata_keys;
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(create_index_t)
+
+struct create_index_reply_t {
+  std::string index_arn;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -73,22 +66,15 @@ WRITE_CLASS_ENCODER(create_index_t)
 struct create_vector_bucket_t {
   std::string vector_bucket_name;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
-
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(create_vector_bucket_t)
+
+struct create_vector_bucket_reply_t {
+  std::string vector_bucket_arn;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -98,26 +84,13 @@ WRITE_CLASS_ENCODER(create_vector_bucket_t)
   }
 */
 struct delete_index_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(delete_index_t)
 
 /*
   {
@@ -126,25 +99,12 @@ WRITE_CLASS_ENCODER(delete_index_t)
   }
 */
 struct delete_vector_bucket_t {
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(delete_vector_bucket_t)
 
 /*
   {
@@ -153,56 +113,31 @@ WRITE_CLASS_ENCODER(delete_vector_bucket_t)
   }
 */
 struct delete_vector_bucket_policy_t {
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(delete_vector_bucket_policy_t)
-
 
 using VectorData = std::vector<float>;
 /*
   {
+    "distance": "float",
     "key": "string",
-    "data": {"float32": [float]},
+    "data": {"float32": ["float"]},
     "metadata": {}
   }
 */
 struct vector_item_t {
+  std::optional<float> distance;
   std::string key;
-  VectorData data;
+  std::optional<VectorData> data;
   std::string metadata; // JSON string
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(vector_item_t)
 
 /*
   {
@@ -213,62 +148,47 @@ WRITE_CLASS_ENCODER(vector_item_t)
   }
 */
 struct put_vectors_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
   std::vector<vector_item_t> vectors;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
-
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(put_vectors_t)
 
 /*
   {
     "indexArn": "string",
     "indexName": "string",
+    "vectorBucketName": "string"
     "keys": ["string"],
     "returnData": boolean,
     "returnMetadata": boolean,
-    "vectorBucketName": "string"
   }
 */
 struct get_vectors_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
+  std::string vector_bucket_name;
   std::vector<std::string> keys;
   bool return_data = false;
   bool return_metadata = false;
-  std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(get_vectors_t)
+
+/*
+  {
+    "vectors": [vector_item_t]
+  }
+*/
+struct get_vectors_reply_t {
+  std::vector<vector_item_t> vectors;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -284,33 +204,33 @@ WRITE_CLASS_ENCODER(get_vectors_t)
   }
 */
 struct list_vectors_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
   static constexpr unsigned int default_max_results = 500;
   unsigned int max_results = default_max_results;
-  std::string next_token;
+  unsigned int offset = 0; // from nextToken
   bool return_data = false;
   bool return_metadata = false;
   unsigned int segment_count = 0;
   unsigned int segment_index = 0;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
-
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(list_vectors_t)
+
+/*
+  {
+    "nextToken": "string",
+    "vectors": [vector_item_t]
+  }
+*/
+struct list_vectors_reply_t {
+  std::string next_token;
+  std::vector<vector_item_t> vectors;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -325,22 +245,9 @@ struct list_vector_buckets_t {
   std::string next_token;
   std::string prefix;
 
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
-
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(list_vector_buckets_t)
 
 /*
   {
@@ -349,25 +256,12 @@ WRITE_CLASS_ENCODER(list_vector_buckets_t)
   }
 */
 struct get_vector_bucket_t {
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(get_vector_bucket_t)
 
 /*
   {
@@ -377,26 +271,42 @@ WRITE_CLASS_ENCODER(get_vector_bucket_t)
   }
 */
 struct get_index_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(get_index_t)
+
+/*
+  {
+    "index": {
+      "creationTime": number,
+      "dataType": "string",
+      "dimension": number,
+      "distanceMetric": "string",
+      "indexArn": "string",
+      "indexName": "string",
+      "metadataConfiguration": {
+         "nonFilterableMetadataKeys": [ "string" ]
+      },
+      "vectorBucketName": "string"
+    }
+  }
+ */
+struct get_index_reply_t {
+  unsigned int creation_time;
+  std::string data_type;
+  unsigned int dimension; /* 1 - 4096 */
+  DistanceMetric distance_metric;
+  std::string index_arn;
+  std::string index_name;
+  std::vector<std::string> non_filterable_metadata_keys;
+  std::string vector_bucket_name;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -412,25 +322,50 @@ struct list_indexes_t {
   unsigned int max_results = default_max_results;
   std::string next_token;
   std::string prefix;
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(list_indexes_t)
+
+/*
+  {
+     "creationTime": number,
+     "indexArn": "string",
+     "indexName": "string",
+     "vectorBucketName": "string"
+  }
+ */
+struct index_summary_t {
+  unsigned int creation_time;
+  std::string index_arn;
+  std::string index_name;
+  std::string vector_bucket_name;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
+
+/*
+  {
+    "indexes": [
+      {
+         "creationTime": number,
+         "indexArn": "string",
+         "indexName": "string",
+         "vectorBucketName": "string"
+      }
+    ],
+    "nextToken": "string"
+  }
+*/
+struct list_indexes_reply_t {
+  std::vector<index_summary_t> indexes;
+  std::string next_token;
+
+  void dump(ceph::Formatter* f) const;
+};
 
 /*
   {
@@ -441,25 +376,12 @@ WRITE_CLASS_ENCODER(list_indexes_t)
 */
 struct put_vector_bucket_policy_t {
   std::string policy;
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(put_vector_bucket_policy_t)
 
 /*
   {
@@ -468,95 +390,88 @@ WRITE_CLASS_ENCODER(put_vector_bucket_policy_t)
   }
 */
 struct get_vector_bucket_policy_t {
-  std::string vector_bucket_arn;
+  boost::optional<rgw::ARN> vector_bucket_arn;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(get_vector_bucket_policy_t)
 
 /*
   {
     "indexArn": "string",
     "indexName": "string",
-    "keys": ["string"],
     "vectorBucketName": "string"
+    "keys": ["string"],
   }
 */
 struct delete_vectors_t {
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
-  std::vector<std::string> keys;
   std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
+  std::vector<std::string> keys;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(delete_vectors_t)
 
 /*
   {
     "filter": {},
     "indexArn": "string",
     "indexName": "string",
+    "vectorBucketName": "string"
     "queryVector": {"float32": [float]},
     "returnDistance": boolean,
     "returnMetadata": boolean,
     "topK": number,
-    "vectorBucketName": "string"
   }
 */
 struct query_vectors_t {
   std::string filter; // JSON string
-  std::string index_arn;
+  boost::optional<rgw::ARN> index_arn;
   std::string index_name;
+  std::string vector_bucket_name;
   VectorData query_vector;
   bool return_distance = false;
   bool return_metadata = false;
   unsigned int top_k;
-  std::string vector_bucket_name;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    // TODO
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    // TODO
-    DECODE_FINISH(bl);
-  }
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
 };
-WRITE_CLASS_ENCODER(query_vectors_t)
+
+/*
+{
+  "distanceMetric": "string",
+  "vectors": [vector_item_t]
+}
+*/
+
+struct query_vectors_reply_t {
+  DistanceMetric distance_metric;
+  std::vector<vector_item_t> vectors;
+
+  void dump(ceph::Formatter* f) const;
+};
+
+inline rgw::ARN index_arn(const std::string& zonegroup, const std::string& account, const std::string& vector_bucket_name, std::string_view index_name) {
+  return rgw::ARN(rgw::Partition::aws,
+      rgw::Service::s3vectors,
+      zonegroup,
+      account,
+      fmt::format("bucket/{}/index/{}", vector_bucket_name, index_name)
+    );
+}
+
+inline rgw::ARN vector_bucket_arn(const std::string& zonegroup, const std::string& account, const std::string& vector_bucket_name) {
+  return rgw::ARN(rgw::Partition::aws,
+      rgw::Service::s3vectors,
+      zonegroup,
+      account,
+      fmt::format("bucket/{}", vector_bucket_name)
+    );
+}
 
 int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
@@ -564,14 +479,16 @@ int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, o
 int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int list_vectors(const list_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int get_index(const get_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int list_indexes(const list_indexes_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
+int list_vectors(const list_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply);
+int list_vector_buckets(const list_vector_buckets_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int get_vector_bucket(const get_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply);
+int list_indexes(const list_indexes_t& configuration, DoutPrefixProvider* dpp, optional_yield y, list_indexes_reply_t& reply);
 int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int get_vector_bucket_policy(const get_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vectors(const delete_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int query_vectors(const query_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int query_vectors(const query_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply);
 
 }
 
