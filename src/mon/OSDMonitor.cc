@@ -4277,44 +4277,65 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   auto m  = op->get_req<MOSDPGMigratedPool>();
   dout(10) << __func__ << " " << *m << dendl;
-  pg_pool_t p;
+  pg_pool_t source_p;
   if (pending_inc.new_pools.count(m->pgid.pool()))
-    p = pending_inc.new_pools[m->pgid.pool()];
+    source_p = pending_inc.new_pools[m->pgid.pool()];
   else
-    p = *osdmap.get_pg_pool(m->pgid.pool());
+    source_p = *osdmap.get_pg_pool(m->pgid.pool());
 
   // Checked in preprocess
-  ceph_assert(p.migrating_pgs.contains(m->pgid));
-  ceph_assert(p.migration_target == m->migration_target);
+  ceph_assert(source_p.migrating_pgs.contains(m->pgid));
+  ceph_assert(source_p.migration_target == m->migration_target);
 
   pg_t pgid = m->pgid;
-  p.migrating_pgs.erase(pgid);
+  source_p.migrating_pgs.erase(pgid);
 
-  dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
-  if (p.lowest_migrated_pg == 0 && p.migrating_pgs.empty()) {
-    dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
-    pg_pool_t target_p;
-    if (pending_inc.new_pools.count(p.migration_target.value())) {
-      target_p = pending_inc.new_pools[p.migration_target.value()];
-    } else {
-      target_p = *osdmap.get_pg_pool(p.migration_target.value());
-    }
-    target_p.migration_src.reset();
-    target_p.last_change = pending_inc.epoch;
-    pending_inc.new_pools[p.migration_target.value()] = target_p;
-  } else if (p.lowest_migrated_pg == 0) {
-    dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
+  pg_pool_t target_p;
+  if (pending_inc.new_pools.count(source_p.migration_target.value())) {
+    target_p = pending_inc.new_pools[source_p.migration_target.value()];
   } else {
-    dout(0) << "Starting migration of PG " << pg_t(p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
-    p.migrating_pgs.emplace(pg_t(p.lowest_migrated_pg - 1, pgid.pool()));
-    p.lowest_migrated_pg -= 1;
+    target_p = *osdmap.get_pg_pool(source_p.migration_target.value());
   }
 
-  p.last_change = pending_inc.epoch;
+  dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
+  if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
+    dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
+    target_p.migration_src.reset();
+    target_p.last_change = pending_inc.epoch;
+    pending_inc.new_pools[source_p.migration_target.value()] = target_p;
+  } else if (source_p.lowest_migrated_pg == 0) {
+    dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
+  } else {
+    if (target_pg_migrating(source_p.migrating_pgs, pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()),
+                            source_p.get_pg_num(), target_p.get_pg_num())) {
+      dout(0) << "PG" << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) <<
+              " already in target PG set, doing nothing until next PG completes migration" << dendl;
+    } else {
+      dout(0) << "Starting migration of PG " << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
+      source_p.migrating_pgs.emplace(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
+      source_p.lowest_migrated_pg -= 1;
+    }
+  }
 
-  pending_inc.new_pools[m->pgid.pool()] = p;
+  source_p.last_change = pending_inc.epoch;
+
+  pending_inc.new_pools[m->pgid.pool()] = source_p;
 
   return true;
+}
+
+bool OSDMonitor::target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_pg, int source_pgnum, int target_pgnum)
+{
+  pg_t new_target(source_pg);
+  source_pg.is_merge_source(source_pgnum, target_pgnum, &new_target);
+
+  for (const auto& pg : migrating_pgs) {
+    pg_t target(pg);
+    pg.is_merge_source(source_pgnum, target_pgnum, &target);
+    if (target.m_seed == new_target.m_seed) return true;
+  }
+
+  return false;
 }
 
 // ---
@@ -8462,7 +8483,13 @@ int OSDMonitor::prepare_new_pool(string& name,
     }
 
     for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
-      dout(0) << "Inserting migrating_pgs " << i << dendl;
+      if (spi->get_pg_num() > pi->get_pg_num()) {
+        if (target_pg_migrating(spi->migrating_pgs, pg_t(i, source_pool_id.value()),
+                                spi->get_pg_num(), pi->get_pg_num())) {
+          dout(0) << "PG" << i << " already in target PG set, breaking" << dendl;
+          break;
+        }
+      }
       spi->migrating_pgs.emplace(pg_t(i, source_pool_id.value()));
       spi->lowest_migrated_pg = i;
       if (i == 0) {
