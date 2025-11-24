@@ -28,6 +28,8 @@ overrides:
       - filesystem is degraded
       - osds down
       - osd down
+      - OBJECT_UNFOUND
+      - pg .* is stuck peering
 tasks:
 - install:
     branch: squid
