@@ -52,3 +52,5 @@ overrides:
       - OSDMAP_FLAGS
       - OSD_UPGRADE_FINISHED
       - PG_DEGRADED
+      - filesystem is degraded
+      - filesystem is offline
