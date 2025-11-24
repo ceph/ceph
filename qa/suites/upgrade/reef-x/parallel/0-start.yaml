@@ -53,3 +53,5 @@ overrides:
       - OSD_UPGRADE_FINISHED
       - filesystem is degraded
       - filesystem is offline
+      - osds down
+      - osd down
