@@ -6,14 +6,14 @@
 uint64_t ECOmapJournalEntry::global_id_counter = 0;
 
 ECOmapJournalEntry::ECOmapJournalEntry(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
-  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) : 
-  clear_omap(clear_omap), omap_header(omap_header), omap_updates(omap_updates) {
+  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates) : 
+  clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {
     id = get_new_id();
 }
 
 ECOmapJournalEntry::ECOmapJournalEntry(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
-  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) : 
-  id(id), clear_omap(clear_omap), omap_header(omap_header), omap_updates(omap_updates) {}
+  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates) : 
+  id(id), clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {}
 
 int ECOmapJournalEntry::get_new_id() {
   return ++global_id_counter;

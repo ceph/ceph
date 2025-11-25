@@ -16,13 +16,13 @@ class ECOmapJournalEntry {
   uint64_t id;
   bool clear_omap;
   std::optional<ceph::buffer::list> omap_header;
-  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates;
+  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates;
 
   ECOmapJournalEntry(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
-    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates);
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates);
 
   ECOmapJournalEntry(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
-    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates);
+    std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates);
 
   static int get_new_id();
 
