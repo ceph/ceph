@@ -46,12 +46,15 @@ struct RWState {
   bool recovery_read_marker:1;
   /// if set, requeue snaptrim on lock release
   bool snaptrimmer_write_marker:1;
+  /// if set, restart pool migration on lock release
+  bool pool_migration_write_marker:1;
 
   RWState()
     : count(0),
       state(RWNONE),
       recovery_read_marker(false),
-      snaptrimmer_write_marker(false)
+      snaptrimmer_write_marker(false),
+      pool_migration_write_marker(false)
   {}
 
   /// this function adjusts the counts if necessary
@@ -178,6 +181,14 @@ struct RWState {
       return true;
     }
     return false;
+  }
+  bool get_pool_migration_write() {
+    if (get_write_lock()) {
+      return true;
+    } else {
+      pool_migration_write_marker = true;
+      return false;
+    }
   }
 };
 
