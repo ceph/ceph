@@ -91,7 +91,9 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 {'id': '5356', 'type': 'rgw'},
                 {'id': '5357', 'type': 'rgw'},
                 {'id': '5358', 'type': 'rgw'},
-                {'id': '5359', 'type': 'rgw'}
+                {'id': '5359', 'type': 'rgw'},
+                {'id': '5360', 'type': 'rgw'},
+                {'id': '5361', 'type': 'rgw'}
             ]
         }]
         mgr.get_metadata.side_effect = [
@@ -141,6 +143,28 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'zone_name': 'zone5',
                 'frontend_config#0':
                     'beast endpoint=0.0.0.0:8445 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon6',
+                'realm_name': 'realm6',
+                'zonegroup_name': 'zg6',
+                'zonegroup_id': 'zg6-id',
+                'zone_name': 'zone6',
+                'frontend_config#0':
+                    'beast port=8081 ssl_port=8443 ssl_certificate=config:/config'
+            },
+            {
+                'ceph_version': 'ceph version master (dev)',
+                'id': 'daemon7',
+                'realm_name': 'realm7',
+                'zonegroup_name': 'zg7',
+                'zonegroup_id': 'zg7-id',
+                'zone_name': 'zone7',
+                'frontend_config#0':
+                    'beast ssl_endpoint=192.168.104.110:443 endpoint=192.168.104.110:8080 '
+                    'ssl_certificate=config:/config tcp_nodelay=1 '
+                    'port=192.168.104.100:8081 ssl_port=192.168.104.100:444'
             }, ]
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
@@ -153,7 +177,9 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_name': 'zg1',
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1', 'default': True,
-            'port': 80
+            'port': 80,
+            'secondary_port': None
+
         },
             {
             'id': 'daemon2',
@@ -166,6 +192,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': False,
             'port': 443,
+            'secondary_port': None,
         },
             {
             'id': 'daemon3',
@@ -178,6 +205,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone3',
             'default': False,
             'port': 8080,
+            'secondary_port': None,
         },
             {
             'id': 'daemon4',
@@ -190,6 +218,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone4',
             'default': False,
             'port': None,
+            'secondary_port': None,
         },
             {
             'id': 'daemon5',
@@ -202,6 +231,33 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone5',
             'default': False,
             'port': 8445,
+            'secondary_port': None,
+        },
+            {
+            'id': 'daemon6',
+            'service_map_id': '5360',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm6',
+            'zonegroup_name': 'zg6',
+            'zonegroup_id': 'zg6-id',
+            'zone_name': 'zone6',
+            'default': False,
+            'port': 8443,
+            'secondary_port': 8081,
+        },
+            {
+            'id': 'daemon7',
+            'service_map_id': '5361',
+            'version': 'ceph version master (dev)',
+            'server_hostname': 'host1',
+            'realm_name': 'realm7',
+            'zonegroup_name': 'zg7',
+            'zonegroup_id': 'zg7-id',
+            'zone_name': 'zone7',
+            'default': False,
+            'port': 443,
+            'secondary_port': 8080,
         }])
 
     def test_list_empty(self):
@@ -262,7 +318,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1',
             'default': False,
-            'port': 80
+            'port': 80,
+            'secondary_port': None
         },
             {
             'id': 'daemon2',
@@ -275,6 +332,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': True,
             'port': 443,
+            'secondary_port': None
         }])
 
         # Change the default zonegroup and test if the correct daemon gets picked up
@@ -296,7 +354,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zonegroup_id': 'zg1-id',
             'zone_name': 'zone1',
             'default': True,
-            'port': 80
+            'port': 80,
+            'secondary_port': None
         },
             {
             'id': 'daemon2',
@@ -309,6 +368,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'zone_name': 'zone2',
             'default': False,
             'port': 443,
+            'secondary_port': None,
         }])
 
 
