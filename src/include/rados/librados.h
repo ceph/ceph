@@ -3066,6 +3066,10 @@ CEPH_RADOS_API void rados_write_op_zero(rados_write_op_t write_op,
  * Execute an OSD class method on an object
  * See rados_exec() for general description.
  *
+ * Use this for reads as well as writes. The rados_read_op_exec has been
+ * deprecated as there is no client-side checking for the chosen cls method
+ * actually being a read vs write.
+ *
  * @param write_op operation to add this action to
  * @param cls the name of the class
  * @param method the name of the method

@@ -348,8 +348,19 @@ inline namespace v14_2_0 {
     void exec_impl(const char *cls, const char *method, bufferlist& inbl, ObjectOperationCompletion *completion);
    public:
 
-    // By default only allow READ operations. ObjectWriteOperation overrides this
-    // to allow writes.
+    /**
+     * Execute an OSD class method on an object
+     * See IoCtx::exec() for general description.
+     *
+     * Add an exec to read OR write operation. Only read-only methods may be
+     * added this way. Use ObjectWriteOperation::exec() for write methods.
+     *
+     * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+     * @param inbl where to find input
+     * @param obl (optional) where to store output
+     * @param prval (optional) storage for return value.
+     * @param completion (optional) completion callback.
+     */
     template <typename Tag, typename ClassID, typename... Args>
     void exec(const ClsMethod<Tag, ClassID>& method, Args&&... args) {
       static_assert(FlagTraits<Tag>::is_readonly,
