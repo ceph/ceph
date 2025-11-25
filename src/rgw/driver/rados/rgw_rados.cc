@@ -5372,7 +5372,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  ofs = end;
+  // set ofs to the total bytes read
+  // `end` is always the last byte offset, so add 1
+  ofs = end + 1;
 
   // flush
   ret = filter->flush();
