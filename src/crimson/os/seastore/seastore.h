@@ -243,7 +243,7 @@ public:
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;
 
-    static void on_error(ceph::os::Transaction &t);
+    static void transaction_dump(ceph::os::Transaction &t);
 
     template <typename Ret, typename F>
     auto repeat_with_onode(
