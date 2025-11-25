@@ -511,38 +511,16 @@ groups:
           oid: "1.3.6.1.4.1.50495.1.2.1.8.4"
           severity: "warning"
           type: "ceph_default"
-      - alert: CephNodeInconsistentMTU
-        expr: |
-          node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
-          != on (cluster, device) group_left
-            quantile by (cluster, device) (
-              0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)
-            )
-        labels:
-          severity: warning
-          type: ceph_default
+      - alert: "CephNodeInconsistentMTU"
         annotations:
-          summary: "Node {{ $labels.instance }} has inconsistent MTU settings in cluster {{ $labels.cluster }}"
           description: "Network interface {{ $labels.device }} on node {{ $labels.instance }} has MTU {{ $value }} which differs from the cluster median."
-          impact: |
-            - May cause packet fragmentation or packet drops
-            - Risk of degraded cluster communication and performance
-            - Potential instability in services relying on consistent networking (e.g., Ceph, Kubernetes)
-          fix: |
-            - Check the MTU of interface `{{ $labels.device }}` on node `{{ $labels.instance }}`:
-              ip link show {{ $labels.device }}
-
-            - Find the median MTU value across the cluster by running this PromQL query in Prometheus:
-              quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))
-
-            - Standardize MTU across all nodes to match the median (commonly 1500 or 9000):
-              ip link set dev {{ $labels.device }} mtu <median-value>
-
-            - Make MTU setting persistent:
-              - RHEL/CentOS: edit `/etc/sysconfig/network-scripts/ifcfg-<device>`
-              - Debian/Ubuntu: edit `/etc/netplan/*.yaml` and apply with `netplan apply`
-
-            - Restart the affected interface or node if required.
+          fix: "\n            - Check the MTU of interface `{{ $labels.device }}` on node `{{ $labels.instance }}`:\n              ip link show {{ $labels.device }}\n\n            - Find the median MTU value across the cluster by running this PromQL query in Prometheus:\n              quantile by (cluster, device) (0.5, node_network_mtu_bytes * (node_network_up{device!=\"lo\"} > 0))\n\n            - Standardize MTU across all nodes to match the median (commonly 1500 or 9000):\n              ip link set dev {{ $labels.device }} mtu <median-value>\n\n            - Make MTU setting persistent:\n              - RHEL/CentOS: edit `/etc/sysconfig/network-scripts/ifcfg-<device>`\n              - Debian/Ubuntu: edit `/etc/netplan/*.yaml` and apply with `netplan apply`\n\n            - Restart the affected interface or node if required."
+          impact: "\n            - May cause packet fragmentation or packet drops\n            - Risk of degraded cluster communication and performance\n            - Potential instability in services relying on consistent networking (e.g., Ceph, Kubernetes)"
+          summary: "Node {{ $labels.instance }} has inconsistent MTU settings in cluster {{ $labels.cluster }}"
+        expr: "node_network_mtu_bytes * (node_network_up{device!=\"lo\"} > 0)\n          != on (cluster, device) group_left\n            quantile by (cluster, device) (\n              0.5, node_network_mtu_bytes * (node_network_up{device!=\"lo\"} > 0)\n            )"
+        labels:
+          severity: "warning"
+          type: "ceph_default"
   - name: "pools"
     rules:
       - alert: "CephPoolGrowthWarning"

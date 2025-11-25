@@ -242,7 +242,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -257,6 +257,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [ ]
@@ -321,7 +322,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -336,6 +337,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [ ]
@@ -412,7 +414,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -427,6 +429,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [ ]
@@ -503,7 +506,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 1,
+                  "lineWidth": 0,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -518,6 +521,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [ ]

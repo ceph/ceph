@@ -1953,6 +1953,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2063,6 +2064,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2173,6 +2175,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2283,6 +2286,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2393,6 +2397,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2503,6 +2508,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2613,6 +2619,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2723,6 +2730,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -2833,6 +2841,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3466,6 +3475,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3576,6 +3586,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3686,6 +3697,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3796,6 +3808,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3906,6 +3919,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4016,6 +4030,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4126,6 +4141,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4236,6 +4252,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4346,6 +4363,7 @@
                         }
                      },
                      "decimals": 2,
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -4661,8 +4679,7 @@
    "schemaVersion": 22,
    "style": "dark",
    "tags": [
-      "ceph-mixin",
-      "protocol"
+      "ceph-mixin"
    ],
    "templating": {
       "list": [

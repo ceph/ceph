@@ -1382,6 +1382,7 @@
                   }
                },
                "decimals": 2,
+               "mappings": [ ],
                "thresholds": {
                   "mode": "percentage",
                   "steps": [
@@ -1533,6 +1534,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -1642,6 +1644,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -1751,6 +1754,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -1843,6 +1847,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -1949,6 +1954,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2041,6 +2047,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2133,6 +2140,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2243,6 +2251,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2351,6 +2360,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2664,6 +2674,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -2797,6 +2808,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -3398,6 +3410,7 @@
                            "mode": "off"
                         }
                      },
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -3495,6 +3508,7 @@
                            "mode": "off"
                         }
                      },
+                     "mappings": [ ],
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [

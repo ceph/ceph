@@ -94,6 +94,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -186,6 +187,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -278,6 +280,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -380,6 +383,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -472,6 +476,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -560,6 +565,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -652,6 +658,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -744,6 +751,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -832,6 +840,7 @@
                      "mode": "off"
                   }
                },
+               "mappings": [ ],
                "thresholds": {
                   "mode": "absolute",
                   "steps": [
@@ -892,8 +901,7 @@
    "schemaVersion": "39",
    "style": "dark",
    "tags": [
-      "ceph-mixin",
-      "protocol"
+      "ceph-mixin"
    ],
    "templating": {
       "list": [
