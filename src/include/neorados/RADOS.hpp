@@ -386,6 +386,24 @@ public:
   }
  public:
 
+  /**
+   * Execute an OSD class method on an object
+   *
+   * The OSD has a plugin mechanism for performing complicated
+   * operations on an object atomically. These plugins are called
+   * classes. This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the class.
+   * Classes in ceph.git can be found in src/cls subdirectories
+   *
+   * This Op may be a read, so only read execs are permitted with this interface
+   *
+   * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+   * @param inbl where to find input
+   * @param out (optional) where to store output
+   * @param ec (optional) storage for error code
+   * @param f (optional) handler callback
+   * @returns return code (>=0 for success, otherwise stanard OSD errors)
+   */
   template <typename Tag, typename ClassID, typename... Args>
   void exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) {
     static_assert(FlagTraits<Tag>::is_readonly,
@@ -1011,6 +1029,24 @@ public:
     return std::move(*this);
   }
 
+  /**
+   * Execute an OSD class method on an object
+   *
+   * The OSD has a plugin mechanism for performing complicated
+   * operations on an object atomically. These plugins are called
+   * classes. This function allows librados users to call the custom
+   * methods. The input and output formats are defined by the class.
+   * Classes in ceph.git can be found in src/cls subdirectories
+   *
+   * This is a write op, so all execs are permitted (including reads)
+   *
+   * @param method the method as defined in cls/<class>/cls_<class>_ops.h
+   * @param inbl where to find input
+   * @param out (optional) where to store output
+   * @param ec (optional) storage for error code
+   * @param f (optional) handler callback
+   * @returns return code (>=0 for success, otherwise stanard OSD errors)
+   */
   template <typename Tag, typename ClassID, typename... Args>
   decltype(auto) exec(const ClsMethod<Tag, ClassID>& method, const ceph::buffer::list& inbl, Args&&... args) & {
     Op::exec_impl(method.cls, method.name, inbl, std::forward<Args>(args)...);
