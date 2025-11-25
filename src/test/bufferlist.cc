@@ -1836,6 +1836,9 @@ TEST(BufferList, rebuild_aligned_size_and_memory) {
   EXPECT_TRUE(bl.is_n_align_sized(BUFFER_SIZE));
   EXPECT_EQ(3U, bl.get_num_buffers());
 
+  bl.rebuild_aligned_size_and_memory(BUFFER_SIZE, SIMD_ALIGN, 1);
+  EXPECT_EQ(1U, bl.get_num_buffers());
+
   {
     /* bug replicator, to test rebuild_aligned_size_and_memory() in the
      * scenario where the first bptr is both size and memory aligned and
