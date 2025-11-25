@@ -3120,6 +3120,15 @@ Then run the following:
                         dd.name(),
                         f"{dd.daemon_type}_memory_target"
                     ))
+                if dd.daemon_type == 'rgw':
+                    # Report the ports the daemon really listens on, the same
+                    # ones `ceph orch ls` shows for the service: besides the
+                    # ports cephadm deployed, those given in
+                    # rgw_frontend_extra_args. dd is a copy, so the cache is
+                    # not altered.
+                    rgw_ports = self.rgw_service.get_daemon_ports(dd.name())
+                    if rgw_ports:
+                        dd.ports = sorted(set(dd.ports or []) | rgw_ports)
                 result.append(dd)
         return result
 
