@@ -2273,6 +2273,18 @@ def prepare_ssh(
                 logger.error(f'Failed to apply service type {t}. '
                              'Perhaps the ceph version being bootstrapped does not support it')
 
+    if ctx.deploy_rgw:
+        logger.info('Deploying RGW service with default placement...')
+        try:
+            rgw_port = getattr(ctx, 'rgw_port', 8080)
+            cli(['orch', 'apply', 'rgw', 'default',
+                 '--placement=count:1',
+                 f'--port={rgw_port}'])
+            logger.info(f'RGW service deployed successfully on port {rgw_port}')
+        except RuntimeError:
+            ctx.error_code = -errno.EINVAL
+            logger.error('Failed to apply RGW service.')
+
 
 def enable_cephadm_mgr_module(
     cli: Callable, wait_for_mgr_restart: Callable
@@ -5129,6 +5141,15 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--custom-prometheus-alerts',
         help='provide a file with custom prometheus alerts')
+    parser_bootstrap.add_argument(
+        '--deploy-rgw',
+        action='store_true',
+        help='deploy a single RGW daemon during bootstrap')
+    parser_bootstrap.add_argument(
+        '--rgw-port',
+        type=int,
+        default=8080,
+        help='port number for RGW frontend (default: 8080)')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
