@@ -3,3 +3,11 @@ export interface MountData {
   fsName: string;
   path: string;
 }
+
+export const PERMISSION_NAMES = {
+  READ: 'read',
+  WRITE: 'write',
+  SNAPSHOT: 'snapshot',
+  QUOTA: 'quota',
+  ROOTSQUASH: 'rootSquash'
+} as const;
