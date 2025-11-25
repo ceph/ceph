@@ -481,6 +481,13 @@
 
 <ng-template #redirectTpl
              let-value="data.value"
+             let-row="data.row"
              let-column="data.column">
+@if (column.customTemplateConfig?.customRowProperty && row[column.customTemplateConfig?.customRowProperty]) {
+  <a [routerLink]="row[column.customTemplateConfig?.customRowProperty]">{{value}}</a>
+} @else if (column.customTemplateConfig?.redirectLink) {
   <a [routerLink]="column.customTemplateConfig?.redirectLink | redirectLinkResolver:value">{{value}}</a>
+} @else {
+  {{ value }}
+}
 </ng-template>
