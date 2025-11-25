@@ -132,11 +132,11 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
         [host]).stdout == f"Created osd(s) 1 on host '{host}'"
     assert _run_cephadm.mock_calls == [
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'lvm', 'list', '--format', 'json'],
+                  ['--', '--log-level', 'debug', 'lvm', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
         mock.call(host, f'osd.{osd_id}', ['_orch', 'deploy'], [], stdin=mock.ANY, error_ok=True, use_current_daemon_image=False),
         mock.call(host, 'osd', 'ceph-volume',
-                  ['--', 'raw', 'list', '--format', 'json'],
+                  ['--', '--log-level', 'debug', 'raw', 'list', '--format', 'json'],
                   no_fsid=False, error_ok=False, image='', log_output=True, use_current_daemon_image=False),
     ]
     dd = cephadm_module.cache.get_daemon(f'osd.{osd_id}', host=host)
