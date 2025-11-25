@@ -169,9 +169,8 @@ public:
  */
 class CryptoKey {
 protected:
-  __u16 type;
+  __u16 type = 0;
   utime_t created;
-//  ceph::buffer::ptr secret;   // must set this via set_secret()!
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
@@ -180,13 +179,12 @@ protected:
   int _set_secret(int type, const ceph::buffer::ptr& s);
 
 public:
-  CryptoKey() : type(0) { }
-  CryptoKey(int t, utime_t c, ceph::buffer::ptr& s)
+  CryptoKey() = default;
+  CryptoKey(int t, utime_t c, ceph::buffer::ptr const& s)
     : created(c) {
     _set_secret(t, s);
   }
-  ~CryptoKey() {
-  }
+  ~CryptoKey() = default;
 
   operator bool()const {
     return ckh && *ckh;
@@ -209,8 +207,6 @@ public:
   void print(std::ostream& out) const;
 
   int set_secret(int type, const ceph::buffer::ptr& s, utime_t created);
-//  const ceph::buffer::ptr& get_secret() { return secret; }
-//  const ceph::buffer::ptr& get_secret() const { return secret; }
 
   bool empty() const { return ckh.get() == nullptr; }
 
