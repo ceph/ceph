@@ -317,6 +317,26 @@ def _git_current_sha(ctx, short=True):
     return res.stdout.decode("utf8").strip()
 
 
+def _sanitize_for_oci_tag(branch_name):
+    """Sanitize a git branch name to be OCI tag compliant.
+
+    OCI tags must match: [a-zA-Z0-9_][a-zA-Z0-9._-]{0,127}
+    """
+    sanitized = branch_name.replace("/", "-")
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", sanitized)
+    sanitized = re.sub(r"^[^a-zA-Z0-9_]+", "", sanitized)
+    result = sanitized[:128] if sanitized else "UNKNOWN"
+
+    if result != branch_name:
+        log.warning(
+            "Branch name '%s' was sanitized to '%s' for OCI tag compliance",
+            branch_name,
+            result
+        )
+
+    return result
+
+
 @ftcache
 def _hash_sources(bsize=4096):
     hh = hashlib.sha256()
@@ -504,9 +524,11 @@ class Context:
         branch = self.cli.current_branch
         if not branch:
             try:
-                branch = _git_current_branch(self).replace("/", "-")
+                branch = _git_current_branch(self)
             except subprocess.CalledProcessError:
                 branch = "UNKNOWN"
+        # Sanitize branch name to be OCI tag compliant
+        branch = _sanitize_for_oci_tag(branch)
         variant = self.variant()
         if variant is not ImageVariant.DEFAULT:
             suffix = f".{variant}{suffix}"
