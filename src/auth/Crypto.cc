@@ -567,21 +567,19 @@ static constexpr const std::size_t AES256KRB5_KEY_LEN{32};
 static constexpr const std::size_t AES256KRB5_BLOCK_LEN{16};
 static constexpr const std::size_t AES256KRB5_HASH_LEN{24};
 static constexpr const std::size_t SHA384_LEN{48};
-static constexpr const int MAX_USAGE{20};
 
 class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
   EVP_CIPHER *cipher{nullptr};
 
   struct usage_keys {
     ceph::bufferlist ki;
-    const unsigned char *ki_raw;
+    const unsigned char *ki_raw = nullptr;
     ceph::bufferlist ke;
-    const unsigned char *ke_raw;
+    const unsigned char *ke_raw = nullptr;
   };
 
   mutable ceph::mutex lock = ceph::make_mutex("CryptoAES256KRB5KeyHandler");
-
-  mutable usage_keys *keys[MAX_USAGE];
+  mutable std::map<uint32_t, usage_keys> keys;
 
   int do_init_usage_keys(uint32_t usage, usage_keys *uk, ostringstream& err) const {
     int r = calc_kx(secret, usage,
@@ -607,36 +605,18 @@ class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
     return 0;
   }
 
-  usage_keys *init_usage_keys(uint32_t usage) const {
-    string err_str;
-    ostringstream err(err_str);
-
-    if (usage >= MAX_USAGE) {
-      return nullptr;
-    }
-
-    auto *uk = new usage_keys;
-
-    int r = do_init_usage_keys(usage, uk, err);
-    if (r < 0) {
-      delete uk;
-      return nullptr;
-    }
-    return uk;
-  }
-
   const usage_keys *get_usage_keys(uint32_t usage) const {
-    if (usage >= MAX_USAGE) {
-      return nullptr;
-    }
-    if (!keys[usage]) {
-      std::unique_lock l(lock);
-      if (!keys[usage]) {
-	auto *uk = init_usage_keys(usage);
-	keys[usage] = uk;
+    std::unique_lock l(lock);
+    auto [it, inserted] = keys.emplace(std::piecewise_construct, std::forward_as_tuple(usage), std::forward_as_tuple());
+    if (inserted) {
+      std::ostringstream ss;
+      int r = do_init_usage_keys(usage, &it->second, ss);
+      if (r < 0) {
+        keys.erase(it);
+        return nullptr;
       }
     }
-    return keys[usage];
+    return &it->second;
   }
 
 static void dump_buf(CephContext *cct, string title, const unsigned char *buf, int len)
@@ -836,19 +816,8 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
   }
 
 public:
-  CryptoAES256KRB5KeyHandler() : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
-    memset(keys, 0, sizeof keys);
-  }
-  ~CryptoAES256KRB5KeyHandler() {
-    uint32_t u;
-    for (u = 0; u < MAX_USAGE; ++u) {
-      auto *uk = keys[u];
-      if (uk) {
-        keys[u] = 0;
-        delete uk;
-      }
-    }
-  }
+  CryptoAES256KRB5KeyHandler() : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {}
+  ~CryptoAES256KRB5KeyHandler() = default;
 
   using CryptoKeyHandler::encrypt_ext;
   using CryptoKeyHandler::decrypt_ext;
@@ -862,11 +831,11 @@ public:
     }
 
     for (auto usage : usages) {
-      auto *uk = init_usage_keys(usage);
-      if (!uk) {
+      auto& uk = keys[usage];
+      int r = do_init_usage_keys(usage, &uk, err);
+      if (r < 0) {
         return -EIO;
       }
-      keys[usage] = uk;
     }
 
     return 0;
@@ -1119,7 +1088,6 @@ int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
 int CryptoKey::_set_secret(int t, const bufferptr& s)
 {
   if (s.length() == 0) {
-//    secret = s;
     ckh.reset();
     return 0;
   }
@@ -1141,7 +1109,6 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
       return -EOPNOTSUPP;
   }
   type = t;
-//  secret = s;
   return 0;
 }
 
@@ -1193,10 +1160,9 @@ void CryptoKey::encode_plaintext(bufferlist &bl)
   bl.append(encode_base64());
 }
 
-static bufferptr z;
-
 const bufferptr& CryptoKey::get_secret() const
 {
+  static bufferptr const z;
   const bufferptr &secret = ckh ? ckh->secret : z;
   return secret;
 }
