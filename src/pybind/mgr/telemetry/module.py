@@ -71,6 +71,7 @@ class Collection(str, enum.Enum):
     basic_rook_v01 = 'basic_rook_v01'
     perf_memory_metrics = 'perf_memory_metrics'
     basic_pool_options_bluestore = 'basic_pool_options_bluestore'
+    basic_stretch_cluster = 'basic_stretch_cluster'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -136,6 +137,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_pool_options_bluestore,
         "description": "Per-pool bluestore config options",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_stretch_cluster,
+        "description": "Stretch mode information for stretch clusters",
         "channel": "basic",
         "nag": False
     },
@@ -1280,6 +1287,17 @@ class Module(MgrModule):
 
             # Rook
             self.get_rook_data(report)
+
+            # Stretch Mode
+            if self.is_enabled_collection(Collection.basic_stretch_cluster):
+                stretch_mode = osd_map.get("stretch_mode", {})
+                report['stretch_cluster'] = {
+                    'stretch_mode_enabled': stretch_mode.get("stretch_mode_enabled", {}),
+                    'stretch_bucket_count': stretch_mode.get("stretch_bucket_count", {}),
+                    'degraded_stretch_mode': stretch_mode.get("degraded_stretch_mode", {}),
+                    'recovering_stretch_mode': stretch_mode.get("recovering_stretch_mode", {}),
+                    'stretch_mode_bucket': stretch_mode.get("stretch_mode_bucket", {}),
+                }
 
         if 'crash' in channels:
             report['crashes'] = self.gather_crashinfo()
