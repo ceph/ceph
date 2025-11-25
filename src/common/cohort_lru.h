@@ -66,10 +66,10 @@ namespace cohort {
     class Object
     {
     private:
-      uint32_t lru_flags;
+      bi::list_member_hook<link_mode> lru_hook;
       std::atomic<uint32_t> lru_refcnt;
-      std::atomic<uint32_t> lru_adj;
-      bi::list_member_hook< link_mode > lru_hook;
+      std::atomic_flag active;
+      std::atomic_flag evicting;
 
       typedef bi::list<Object,
 		       bi::member_hook<
@@ -87,7 +87,7 @@ namespace cohort {
 
     public:
 
-      Object() : lru_flags(FLAG_NONE), lru_refcnt(0), lru_adj(0) {}
+      Object() : lru_refcnt(0) {}
 
       uint32_t get_refcnt() const { return lru_refcnt; }
 
@@ -120,8 +120,8 @@ namespace cohort {
 
       struct Lane {
 	LK lock;
-	Object::Queue q;
-	// Object::Queue pinned; /* placeholder for possible expansion */
+        Object::Queue q;
+        Object::Queue active; /* objects with an initial ref cannot be evicted */
 	CACHE_PAD(0);
 	Lane() {}
       };
@@ -131,14 +131,7 @@ namespace cohort {
       std::atomic<uint32_t> evict_lane;
       const uint32_t lane_hiwat;
 
-      static constexpr uint32_t lru_adj_modulus = 5;
-
       static constexpr uint32_t SENTINEL_REFCNT = 1;
-
-      /* internal flag values */
-      static constexpr uint32_t FLAG_INLRU = 0x0001;
-      static constexpr uint32_t FLAG_PINNED  = 0x0002; // possible future use
-      static constexpr uint32_t FLAG_EVICTING = 0x0004;
 
       Lane& lane_of(void* addr) {
 	return qlane[(uint64_t)(addr) % n_lanes];
@@ -148,9 +141,11 @@ namespace cohort {
 	return (evict_lane++ % n_lanes);
       }
 
-      bool can_reclaim(Object* o) {
-	return ((o->lru_refcnt == SENTINEL_REFCNT) &&
-		(!(o->lru_flags & FLAG_EVICTING)));
+      bool
+      can_reclaim(Object* o) { /* XXX called with lane lock held */
+        auto evicting = o->evicting.test();
+        return ((o->lru_refcnt == SENTINEL_REFCNT) &&
+                (! evicting));
       }
 
       Object* evict_block(const ObjectFactory* newobj_fac) {
@@ -158,12 +153,16 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
-	  std::unique_lock lane_lock{lane.lock};
+          std::unique_lock lane_lock{lane.lock};
+          /* back() on empty intrusive list is undefined */
+          if (lane.q.empty()) {
+            continue;
+          }
+          Object* o = &(lane.q.back());
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
-	  Object* o = &(lane.q.back());
 	  if (can_reclaim(o)) {
 	    ++(o->lru_refcnt);
-	    o->lru_flags |= FLAG_EVICTING;
+	    (void) o->evicting.test_and_set();
 	    lane_lock.unlock();
 	    if (o->reclaim(newobj_fac)) {
 	      lane_lock.lock();
@@ -171,14 +170,13 @@ namespace cohort {
 	      /* assertions that o state has not changed across
 	       * relock */
 	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      ceph_assert(o->lru_flags & FLAG_INLRU);
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
 	      return o;
 	    } else {
-	      --(o->lru_refcnt);
-	      o->lru_flags &= ~FLAG_EVICTING;
+              --(o->lru_refcnt);
+              o->evicting.clear();
 	      /* unlock in next block */
 	    }
 	  } /* can_reclaim(o) */
@@ -199,25 +197,26 @@ namespace cohort {
 
       bool ref(Object* o, uint32_t flags) {
 	++(o->lru_refcnt);
-	if (flags & FLAG_INITIAL) {
-	  if ((++(o->lru_adj) % lru_adj_modulus) == 0) {
-	    Lane& lane = lane_of(o);
-	    lane.lock.lock();
-	    /* move to MRU */
+        if (flags & FLAG_INITIAL) {
+          Lane& lane = lane_of(o);
+          lane.lock.lock();
+	  if (! o->active.test()) {
 	    Object::Queue::iterator it =
 	      Object::Queue::s_iterator_to(*o);
 	    lane.q.erase(it);
-	    lane.q.push_front(*o);
-	    lane.lock.unlock();
-	  } /* adj */
+            lane.active.push_front(*o);
+            (void) o->active.test_and_set();
+          } /* adj */
+          lane.lock.unlock();
 	} /* initial ref */
 	return true;
       } /* ref */
 
-      void unref(Object* o, uint32_t flags) {
+      void
+      unref(Object* o, uint32_t flags) {
 	uint32_t refcnt = --(o->lru_refcnt);
 	Object* tdo = nullptr;
-	if (unlikely(refcnt == 0)) {
+	if (unlikely(refcnt == 0 /* last ref */)) {
 	  Lane& lane = lane_of(o);
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
@@ -233,15 +232,19 @@ namespace cohort {
 	  lane.lock.lock();
 	  refcnt = o->lru_refcnt.load();
 	  if (likely(refcnt == SENTINEL_REFCNT)) {
-	    /* move to LRU */
-	    Object::Queue::iterator it =
-	      Object::Queue::s_iterator_to(*o);
-	    lane.q.erase(it);
+	    /* move to MRU */
+            Object::Queue::iterator it = Object::Queue::s_iterator_to(*o);
+            auto active = o->active.test();
+            if (active) {
+              lane.active.erase(it);
+            } else {
+              lane.q.erase(it);
+            }
 	    /* hiwat check */
 	    if (lane.q.size() > lane_hiwat) {
 	      tdo = o;
 	    } else {
-	      lane.q.push_back(*o);
+	      lane.q.push_front(*o);
 	    }
 	  }
 	  lane.lock.unlock();
@@ -262,26 +265,19 @@ namespace cohort {
 	else
 	  o = fac->alloc(); /* get a new one */
 
-	o->lru_flags = FLAG_INLRU;
-
 	Lane& lane = lane_of(o);
-	lane.lock.lock();
-	switch (edge) {
-	case Edge::MRU:
-	  lane.q.push_front(*o);
-	  break;
-	case Edge::LRU:
-	  lane.q.push_back(*o);
-	  break;
-	default:
-	  ceph_abort();
-	  break;
-	}
-	if (flags & FLAG_INITIAL)
+        lane.lock.lock();
+
+        /* XXX always insert onto active */
+        lane.active.push_front(*o);
+        (void) o->active.test_and_set();
+
+        if (flags & FLAG_INITIAL)
 	  o->lru_refcnt += 2; /* sentinel ref + initial */
 	else
 	  ++(o->lru_refcnt); /* sentinel */
-	lane.lock.unlock();
+
+        lane.lock.unlock();
 	return o;
       } /* insert */
 
