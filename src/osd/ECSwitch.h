@@ -444,11 +444,12 @@ public:
       }
 
       for (auto &&update : entry.omap_updates) {
-        switch (update.first) {
+        OmapUpdateType type = update.first;
+        auto iter = update.second.cbegin();
+        switch (type) {
           case OmapUpdateType::Insert: {
-            ceph::buffer::list vals_bl = update.second;
             std::map<std::string, ceph::buffer::list> vals;
-            decode(vals, vals_bl);
+            decode(vals, iter);
             // Insert key value pairs into update_map
             for (auto it = vals.begin(); it != vals.end(); ++it) {
               const auto &key = it->first;
@@ -458,9 +459,8 @@ public:
             break;
           }
           case OmapUpdateType::Remove: {
-            ceph::buffer::list keys_bl = update.second;
             std::set<std::string> keys;
-            decode(keys, keys_bl);
+            decode(keys, iter);
             // Mark keys in update_map as removed
             for (const auto &key : keys) {
               update_map[key] = std::nullopt;
@@ -468,10 +468,9 @@ public:
             break;
           }
           case OmapUpdateType::RemoveRange: {
-            ceph::buffer::list range_bl = update.second;
             std::string key_begin, key_end;
-            decode(key_begin, range_bl);
-            decode(key_end, range_bl);
+            decode(key_begin, iter);
+            decode(key_end, iter);
             
             // Add range to remove_ranges, merging overlapping ranges
             std::optional<std::string> start = key_begin;
@@ -515,6 +514,8 @@ public:
             }
             break;
           }
+          default:
+            ceph_abort_msg("Unknown OmapUpdateType");
         }
       }
     }
