@@ -1610,6 +1610,7 @@ class RGWSpec(ServiceSpec):
             rgw_zone: myzone
             ssl: true
             rgw_frontend_port: 1234
+            rgw_frontend_secondary_port: 4321
             rgw_frontend_type: beast
             rgw_frontend_ssl_certificate: ...
             # Optional: enable D3N (L1 datacache) for RGW
@@ -1641,6 +1642,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
+                 rgw_frontend_secondary_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] = None,
                  rgw_frontend_type: Optional[str] = None,
                  rgw_frontend_extra_args: Optional[List[str]] = None,
@@ -1706,6 +1708,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone: Optional[str] = rgw_zone
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
+        #: Secondary RGW frontend port, intended for HTTP (unencrypted) traffic only.
+        self.rgw_frontend_secondary_port: Optional[int] = rgw_frontend_secondary_port
         #: List of SSL certificates
         self.rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] \
             = rgw_frontend_ssl_certificate
@@ -1713,6 +1717,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_frontend_type: Optional[str] = rgw_frontend_type
         #: List of extra arguments for rgw_frontend in the form opt=value. See :ref:`rgw_frontends`
         self.rgw_frontend_extra_args: Optional[List[str]] = rgw_frontend_extra_args
+        self.rgw_frontend_extra_port: Optional[int] = None
+        self.rgw_frontend_extra_ssl_port: Optional[int] = None
         #: enable SSL
         self.ssl = ssl
         self.rgw_realm_token = rgw_realm_token
@@ -1743,32 +1749,56 @@ class RGWSpec(ServiceSpec):
         self.qat = qat or {}
         self.d3n_cache = d3n_cache or {}
 
+        if self.rgw_frontend_extra_args is not None:
+            for arg in self.rgw_frontend_extra_args[:]:
+                if "=" in arg:
+                    key, val = arg.split("=", 1)
+                    if key == "port":
+                        if not self.ssl and not self.rgw_frontend_port:
+                            self.rgw_frontend_port = int(val)
+                            self.rgw_frontend_extra_args.remove(arg)
+                        elif self.ssl and not self.rgw_frontend_secondary_port:
+                            self.rgw_frontend_secondary_port = int(val)
+                            self.rgw_frontend_extra_args.remove(arg)
+                        else:
+                            self.rgw_frontend_extra_port = int(val)
+                    elif key == "ssl_port":
+                        if self.ssl and not self.rgw_frontend_port:
+                            self.rgw_frontend_port = int(val)
+                            self.rgw_frontend_extra_args.remove(arg)
+                        else:
+                            self.rgw_frontend_extra_ssl_port = int(val)
+
+        if self.rgw_frontend_port is None:
+            self.rgw_frontend_port = 443 if self.ssl else 80
+
     def get_port_start(self) -> List[int]:
         ports = self.get_port()
         return ports
 
     def get_port(self) -> List[int]:
         ports = []
+
         if self.rgw_frontend_port:
             ports.append(self.rgw_frontend_port)
 
-        ssl_port = next(
-            (
-                int(arg.split('=')[1])
-                for arg in (self.rgw_frontend_extra_args or [])
-                if arg.startswith("ssl_port=")
-            ),
-            None,
-        )
+        if self.ssl and self.rgw_frontend_secondary_port:
+            ports.append(self.rgw_frontend_secondary_port)
 
-        if self.ssl and ssl_port:
-            ports.append(ssl_port)
+        if self.rgw_frontend_extra_port:
+            ports.append(self.rgw_frontend_extra_port)
+
+        if self.ssl and self.rgw_frontend_extra_ssl_port:
+            ports.append(self.rgw_frontend_extra_ssl_port)
+
         if not ports:
             ports.append(443 if self.ssl else 80)
 
         return ports
 
     def validate(self) -> None:
+
+        validate_unique_ports(self.get_port_start())
 
         if self.ssl:
             if not self.ssl_cert and self.rgw_frontend_ssl_certificate:
@@ -1780,6 +1810,14 @@ class RGWSpec(ServiceSpec):
                 self.rgw_frontend_ssl_certificate = None
                 if not (self.ssl_cert and self.ssl_key):
                     raise SpecValidationError("Failed to parse rgw_frontend_ssl_certificate field.")
+        elif self.rgw_frontend_secondary_port:
+            raise SpecValidationError(
+                'Invalid rgw_frontend_secondary_port: Only can be enabled with SSL'
+            )
+        elif self.rgw_frontend_extra_ssl_port:
+            raise SpecValidationError(
+                'Invalid use of ssl_port in rgw_frontend_extra_args : Only can be enabled with SSL'
+            )
 
         # This validation is done after adjusting the SSL field so when
         # RGW Spec is updated with the right fields before validation
