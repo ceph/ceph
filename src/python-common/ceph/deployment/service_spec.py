@@ -2926,7 +2926,7 @@ class GrafanaSpec(MonitoringSpec):
                  only_bind_port_on_networks: bool = False,
                  port: Optional[int] = None,
                  protocol: Optional[str] = 'https',
-                 initial_admin_password: Optional[str] = None,
+                 initial_admin_password: Optional[str] = 'admin',
                  anonymous_access: bool = True,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
