@@ -102,6 +102,35 @@ example spec file:
 	  ``rgw_frontend_extra_args`` into a single space-separated arguments list
 	  which is used to set the value of the ``rgw_frontends`` configuration parameter.
 
+Adding a second port to accept HTTP traffic
+-------------------------------------------
+
+The RGW service specification can be used to pass a second port to the frontend by using
+the ``rgw_frontend_secondary_port`` argument list. It can only be used to accept HTTP traffic.
+
+example spec file:
+
+.. code-block:: yaml
+  
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+      count_per_host: 2
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_frontend_type: "beast"
+      rgw_frontend_port: 443
+      rgw_frontend_secondary_port: 8080
+      ssl: true
+      generate_cert: true
+.. note:: ``cephadm`` combines the arguments from the ``spec`` section with those from
+          ``rgw_frontend_extra_args`` into a single space-separated argument list
+          which is used to set the value of the ``rgw_frontends`` configuration parameter.
+    If a tcp port is also defined within the ``rgw_frontend_extra_args`` beast will accept HTTP traffic on both the rgw_frontend_secondary_port and the port defined there.
+    
+
 Multisite zones
 ---------------
 
