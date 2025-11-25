@@ -199,14 +199,13 @@ class Module(MgrModule):
             pool = 3
             group = 4
             placement = "asdf"
-            from ceph.deployment.service_spec import NvmeofServiceSpec, ServiceSpec, PlacementSpec
+            from ceph.deployment.service_spec import NvmeofServiceSpec, PlacementSpec
             ret = NvmeofServiceSpec(
                 service_id=f'{pool}.{group}' if group else pool,
                 pool=pool,
                 group=group,
                 placement=PlacementSpec.from_string(placement),
             )
-            #ret.validate()
             return ret
 
     @CLIReadCommand('rbd perf image counters')
