@@ -161,7 +161,7 @@ public:
  */
 class CryptoKey {
 protected:
-  __u16 type;
+  __u16 type = 0;
   utime_t created;
   ceph::buffer::ptr secret;   // must set this via set_secret()!
 
@@ -172,13 +172,12 @@ protected:
   int _set_secret(int type, const ceph::buffer::ptr& s);
 
 public:
-  CryptoKey() : type(0) { }
-  CryptoKey(int t, utime_t c, ceph::buffer::ptr& s)
+  CryptoKey() = default;
+  CryptoKey(int t, utime_t c, ceph::buffer::ptr const& s)
     : created(c) {
     _set_secret(t, s);
   }
-  ~CryptoKey() {
-  }
+  ~CryptoKey() = default;
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
