@@ -8967,6 +8967,23 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
         }
       }
     }
+  } else if (var == "set_pool_flags" || var == "unset_pool_flags") {
+    bool force;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    if (!force) {
+      ss << "This is a development tool and should not be used in production.";
+      return -EINVAL;
+    }
+    if (!interr.empty()) {
+      ss << "expecting integer value";
+      return -EINVAL;
+    }
+    bool enable = (var == "set_pool_flags");
+    if (enable) {
+      p.set_flag(n);
+    } else {
+      p.unset_flag(n);
+    }
   } else if (var == "target_max_objects") {
     if (interr.length()) {
       ss << "error parsing int '" << val << "': " << interr;
