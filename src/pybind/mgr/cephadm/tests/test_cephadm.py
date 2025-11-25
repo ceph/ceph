@@ -32,6 +32,7 @@ from ceph.deployment.service_spec import (
     PlacementSpec,
     RGWSpec,
     ServiceSpec,
+    MonitoringSpec,
 )
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
@@ -1553,6 +1554,40 @@ class TestCephadm(object):
             assert cephadm_module.health_checks['CEPHADM_APPLY_SPEC_FAIL']['count'] == 1
             assert 'Failed to apply 1 service(s)' in cephadm_module.health_checks[
                 'CEPHADM_APPLY_SPEC_FAIL']['summary']
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_remove_host_updates_spec_placement(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        # Create three hosts in the cluster.
+        wait(cephadm_module, cephadm_module.add_host(HostSpec(hostname='folio01')))
+        wait(cephadm_module, cephadm_module.add_host(HostSpec(hostname='folio02')))
+        wait(cephadm_module, cephadm_module.add_host(HostSpec(hostname='folio03')))
+
+        # Deploy a monitoring service with explicit host placement on all three.
+        loki_spec = MonitoringSpec(
+            service_type='loki',
+            placement=PlacementSpec(
+                hosts=['folio01', 'folio02', 'folio03'],
+            ),
+        )
+        assert wait(cephadm_module, cephadm_module.apply_loki(loki_spec)) == 'Scheduled loki update...'
+
+        # Ensure the spec store reflects all three hosts in the placement.
+        placement_hosts = [
+            h.hostname
+            for h in cephadm_module.spec_store['loki'].spec.placement.hosts
+        ]
+        assert sorted(placement_hosts) == ['folio01', 'folio02', 'folio03']
+
+        # Remove one host from the cluster and verify it is pruned from the spec placement.
+        wait(cephadm_module, cephadm_module.remove_host('folio02', force=True))
+
+        placement_hosts_after = [
+            h.hostname
+            for h in cephadm_module.spec_store['loki'].spec.placement.hosts
+        ]
+        assert sorted(placement_hosts_after) == ['folio01', 'folio03']
 
     @mock.patch("cephadm.module.CephadmOrchestrator.get_foreign_ceph_option")
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
