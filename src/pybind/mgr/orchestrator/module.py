@@ -1745,6 +1745,7 @@ Usage:
                  placement: Optional[str] = None,
                  _end_positional_: int = 0,
                  port: Optional[int] = None,
+                 secondary_port: Optional[int] = None,
                  ssl: bool = False,
                  inbuf: Optional[str] = None) -> HandleCommandResult:
         """Start RGW daemon(s)"""
@@ -1754,6 +1755,7 @@ Usage:
         spec = RGWSpec(
             service_id=svc_id,
             rgw_frontend_port=port,
+            rgw_frontend_secondary_port=secondary_port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
         )
@@ -2064,6 +2066,7 @@ Usage:
                    zone: Optional[str] = None,
                    networks: Optional[List[str]] = None,
                    port: Optional[int] = None,
+                   secondary_port: Optional[int] = None,
                    ssl: bool = False,
                    dry_run: bool = False,
                    format: Format = Format.plain,
@@ -2088,6 +2091,7 @@ Usage:
             rgw_zone=zone,
             networks=networks,
             rgw_frontend_port=port,
+            rgw_frontend_secondary_port=secondary_port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
