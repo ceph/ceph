@@ -1506,11 +1506,8 @@ namespace rgw {
     if (factory == nullptr) {
       return false;
     }
-    /* make sure the reclaiming object is the same partition with newobject factory,
-     * then we can recycle the object, and replace with newobject */
-    if (!fs->fh_cache.is_same_partition(factory->fhk.fh_hk.object, fh.fh_hk.object)) {
-      return false;
-    }
+    /* XXXX seems like we should use a flag rather than is_linked(),
+     * as we now depend on safe_link mode */
     /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
       /* in this case, we are being called from a context which holds
