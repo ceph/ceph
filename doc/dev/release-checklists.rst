@@ -116,6 +116,7 @@ QA suite
 - [x] remove qa/suites/upgrade/(X-3)-x-*
 - [x] create qa/releases/X.yaml
 - [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [x] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
 ceph-build
