@@ -185,7 +185,42 @@ template<typename T> std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
+class PoolMigrationInterval: public BackfillInterval<std::map<hobject_t,
+						              eversion_t>> {
+public:
+  /// clear content
+  void clear() override {
+    *this = PoolMigrationInterval();
+  }
+
+  /// drop first entry, and adjust @begin accordingly
+  void pop_front() {
+    ceph_assert(!objects.empty());
+    objects.erase(objects.begin());
+    trim();
+  }
+
+  /// dump
+  void dump(ceph::Formatter *f) const override {
+    f->dump_stream("begin") << begin;
+    f->dump_stream("end") << end;
+    f->open_array_section("objects");
+    for (const auto& [hoid, version] : objects) {
+      f->open_object_section("object");
+      f->dump_stream("object") << hoid;
+      f->dump_stream("version") << version;
+      f->close_section();
+    }
+    f->close_section();
+  }
+};
+
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<PrimaryBackfillInterval> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ReplicaBackfillInterval> : fmt::ostream_formatter {};
+#endif
+
+// TODO check if this is correct
+#if FMT_VERSION >= 110104
+template <> struct fmt::formatter<PoolMigrationInterval> : fmt::ostream_formatter {};
 #endif

@@ -1365,10 +1365,20 @@ protected:
     const std::set<pg_shard_t> &backfill_targets
     );
 
+  void scan_range_migration(
+    int min, int max, PoolMigrationInterval *pmi,
+    ThreadPool::TPHandle &handle
+    );
+
   /// Update a hash range to reflect changes since the last scan
   void update_range(
     PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
+    );
+
+  void update_range(
+    PoolMigrationInterval *pmi,
+    ThreadPool::TPHandle &handle
     );
 
   int prep_backfill_object_push(
