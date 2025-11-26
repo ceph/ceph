@@ -5,11 +5,14 @@ performance stats for ceph filesystem (for now...)
 import json
 from typing import List, Dict
 
+from .cli import StatsCLICommand
+
 from mgr_module import MgrModule, Option, NotifyType
 
 from .fs.perf_stats import FSPerfStats
 
 class Module(MgrModule):
+    CLICommand = StatsCLICommand
     COMMANDS = [
         {
             "cmd": "fs perf stats "

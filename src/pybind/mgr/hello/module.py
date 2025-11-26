@@ -10,8 +10,11 @@ from threading import Event
 from typing import cast, Any, Optional, TYPE_CHECKING
 import errno
 
+from .cli import HelloCLICommand
+
 
 class Hello(MgrModule):
+    CLICommand = HelloCLICommand
     # These are module options we understand.  These can be set with
     #
     #   ceph config set global mgr/hello/<name> <value>
@@ -77,7 +80,7 @@ class Hello(MgrModule):
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     # there are CLI commands we implement
-    @CLIReadCommand('hello')
+    @HelloCLICommand.Read('hello')
     def hello(self, person_name: Optional[str] = None) -> HandleCommandResult:
         """
         Say hello
@@ -89,7 +92,7 @@ class Hello(MgrModule):
         fin = '!' if self.get_module_option('emphatic') else ''
         return HandleCommandResult(stdout=f'Hello, {who}{fin}')
 
-    @CLIReadCommand('count')
+    @HelloCLICommand.Read('count')
     def count(self, num: int) -> HandleCommandResult:
         """
         Do some counting

@@ -8,6 +8,8 @@ import errno
 import time
 from typing import cast, Any, Dict, Iterator, List, Optional, Tuple, Union
 
+from .cli import InfluxCLICommand
+
 from mgr_module import MgrModule, Option, OptionValue
 
 try:
@@ -19,6 +21,7 @@ except ImportError:
 
 
 class Module(MgrModule):
+    CLICommand = InfluxCLICommand
     MODULE_OPTIONS = [
         Option(name='hostname',
                default=None,
@@ -425,14 +428,14 @@ class Module(MgrModule):
 
         return json.dumps(result, indent=2, sort_keys=True)
 
-    @CLIReadCommand('influx config-show')
+    @InfluxCLICommand.Read('influx config-show')
     def config_show(self) -> Tuple[int, str, str]:
         """
         Show current configuration
         """
         return 0, json.dumps(self.config, sort_keys=True), ''
 
-    @CLIWriteCommand('influx config-set')
+    @InfluxCLICommand.Write('influx config-set')
     def config_set(self, key: str, value: str) -> Tuple[int, str, str]:
         if not value:
             return -errno.EINVAL, '', 'Value should not be empty'
@@ -445,7 +448,7 @@ class Module(MgrModule):
         except ValueError as e:
             return -errno.EINVAL, '', str(e)
 
-    @CLICommand('influx send')
+    @InfluxCLICommand('influx send')
     def send(self) -> Tuple[int, str, str]:
         """
         Force sending data to Influx

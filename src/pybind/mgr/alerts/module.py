@@ -11,8 +11,11 @@ import json
 import smtplib
 import ssl
 
+from .cli import AlertsCLICommand
+
 
 class Alerts(MgrModule):
+    CLICommand = AlertsCLICommand
     MODULE_OPTIONS = [
         Option(
             name='interval',
@@ -112,7 +115,7 @@ class Alerts(MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
-    @CLIReadCommand('alerts send')
+    @AlertsCLICommand.Read('alerts send')
     def send(self) -> HandleCommandResult:
         """
         (re)send alerts immediately

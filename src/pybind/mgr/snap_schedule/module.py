@@ -12,8 +12,11 @@ from mgr_module import MgrModule, Option, NotifyType
 from mgr_util import CephfsConnectionException
 from threading import Event
 
+from .cli import SnapScheduleCLICommand
+
 
 class Module(MgrModule):
+    CLICommand = SnapScheduleCLICommand
     NOTIFY_TYPES = [NotifyType.fs_map]
 
     MODULE_OPTIONS = [
@@ -122,7 +125,7 @@ class Module(MgrModule):
         self._initialized.wait()
         return -errno.EINVAL, "", "Unknown command"
 
-    @CLIReadCommand('fs snap-schedule status')
+    @SnapScheduleCLICommand.Read('fs snap-schedule status')
     def snap_schedule_get(self,
                           path: str = '/',
                           fs: Optional[str] = None,
@@ -151,7 +154,7 @@ class Module(MgrModule):
         self.log.info(errstr)
         return 0, '\n===\n'.join([ret_sched.report() for ret_sched in ret_scheds]), ''
 
-    @CLIReadCommand('fs snap-schedule list')
+    @SnapScheduleCLICommand.Read('fs snap-schedule list')
     def snap_schedule_list(self, path: str,
                            recursive: bool = False,
                            fs: Optional[str] = None,
@@ -188,7 +191,7 @@ class Module(MgrModule):
             return 0, json.dumps(out), ''
         return 0, '\n'.join([str(sched) for sched in scheds]), ''
 
-    @CLIWriteCommand('fs snap-schedule add')
+    @SnapScheduleCLICommand.Write('fs snap-schedule add')
     def snap_schedule_add(self,
                           path: str,
                           snap_schedule: str,
@@ -226,7 +229,7 @@ class Module(MgrModule):
             return -errno.EIO, '', str(e)
         return 0, suc_msg, ''
 
-    @CLIWriteCommand('fs snap-schedule remove')
+    @SnapScheduleCLICommand.Write('fs snap-schedule remove')
     def snap_schedule_rm(self,
                          path: str,
                          repeat: Optional[str] = None,
@@ -254,7 +257,7 @@ class Module(MgrModule):
             return -errno.EIO, '', str(e)
         return 0, 'Schedule removed for path {}'.format(abs_path), ''
 
-    @CLIWriteCommand('fs snap-schedule retention add')
+    @SnapScheduleCLICommand.Write('fs snap-schedule retention add')
     def snap_schedule_retention_add(self,
                                     path: str,
                                     retention_spec_or_period: str,
@@ -284,7 +287,7 @@ class Module(MgrModule):
             return -errno.EIO, '', str(e)
         return 0, 'Retention added to path {}'.format(abs_path), ''
 
-    @CLIWriteCommand('fs snap-schedule retention remove')
+    @SnapScheduleCLICommand.Write('fs snap-schedule retention remove')
     def snap_schedule_retention_rm(self,
                                    path: str,
                                    retention_spec_or_period: str,
@@ -314,7 +317,7 @@ class Module(MgrModule):
             return -errno.EIO, '', str(e)
         return 0, 'Retention removed from path {}'.format(abs_path), ''
 
-    @CLIWriteCommand('fs snap-schedule activate')
+    @SnapScheduleCLICommand.Write('fs snap-schedule activate')
     def snap_schedule_activate(self,
                                path: str,
                                repeat: Optional[str] = None,
@@ -342,7 +345,7 @@ class Module(MgrModule):
             return -errno.EIO, '', str(e)
         return 0, 'Schedule activated for path {}'.format(abs_path), ''
 
-    @CLIWriteCommand('fs snap-schedule deactivate')
+    @SnapScheduleCLICommand.Write('fs snap-schedule deactivate')
     def snap_schedule_deactivate(self,
                                  path: str,
                                  repeat: Optional[str] = None,

@@ -10,6 +10,8 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from typing import Any, Dict, List, Optional, Tuple
 
+from .cli import SelftestCLICommand
+
 
 # These workloads are things that can be requested to run inside the
 # serve() function
@@ -20,6 +22,7 @@ class Workload(enum.Enum):
 
 
 class Module(MgrModule):
+    CLICommand = SelftestCLICommand
     """
     This module is for testing the ceph-mgr python interface from within
     a running ceph-mgr daemon.
@@ -65,7 +68,7 @@ class Module(MgrModule):
         self._health: Dict[str, Dict[str, Any]] = {}
         self._repl = InteractiveInterpreter(dict(mgr=self))
 
-    @CLICommand('mgr self-test python-version', perm='r')
+    @SelftestCLICommand('mgr self-test python-version', perm='r')
     def python_version(self) -> Tuple[int, str, str]:
         '''
         Query the version of the embedded Python runtime
@@ -75,7 +78,7 @@ class Module(MgrModule):
         micro = sys.version_info.micro
         return 0, f'{major}.{minor}.{micro}', ''
 
-    @CLICommand('mgr self-test run')
+    @SelftestCLICommand('mgr self-test run')
     def run(self) -> Tuple[int, str, str]:
         '''
         Run mgr python interface tests
@@ -83,7 +86,7 @@ class Module(MgrModule):
         self._self_test()
         return 0, '', 'Self-test succeeded'
 
-    @CLICommand('mgr self-test background start')
+    @SelftestCLICommand('mgr self-test background start')
     def backgroun_start(self, workload: Workload) -> Tuple[int, str, str]:
         '''
         Activate a background workload (one of command_spam, throw_exception)
@@ -92,7 +95,7 @@ class Module(MgrModule):
         self._event.set()
         return 0, '', 'Running `{0}` in background'.format(self._workload)
 
-    @CLICommand('mgr self-test background stop')
+    @SelftestCLICommand('mgr self-test background stop')
     def background_stop(self) -> Tuple[int, str, str]:
         '''
         Stop background workload if any is running
@@ -106,21 +109,21 @@ class Module(MgrModule):
         else:
             return 0, '', 'No background workload was running'
 
-    @CLICommand('mgr self-test config get')
+    @SelftestCLICommand('mgr self-test config get')
     def config_get(self, key: str) -> Tuple[int, str, str]:
         '''
         Peek at a configuration value
         '''
         return 0, str(self.get_module_option(key)), ''
 
-    @CLICommand('mgr self-test config get_localized')
+    @SelftestCLICommand('mgr self-test config get_localized')
     def config_get_localized(self, key: str) -> Tuple[int, str, str]:
         '''
         Peek at a configuration value (localized variant)
         '''
         return 0, str(self.get_localized_module_option(key)), ''
 
-    @CLICommand('mgr self-test remote')
+    @SelftestCLICommand('mgr self-test remote')
     def test_remote(self) -> Tuple[int, str, str]:
         '''
         Test inter-module calls
@@ -128,7 +131,7 @@ class Module(MgrModule):
         self._test_remote_calls()
         return 0, '', 'Successfully called'
 
-    @CLICommand('mgr self-test module')
+    @SelftestCLICommand('mgr self-test module')
     def module(self, module: str) -> Tuple[int, str, str]:
         '''
         Run another module's self_test() method
@@ -140,7 +143,7 @@ class Module(MgrModule):
         else:
             return 0, str(r), "Self-test OK"
 
-    @CLICommand('mgr self-test cluster-log')
+    @SelftestCLICommand('mgr self-test cluster-log')
     def do_cluster_log(self,
                        channel: str,
                        priority: str,
@@ -159,7 +162,7 @@ class Module(MgrModule):
                          message)
         return 0, '', 'Successfully called'
 
-    @CLICommand('mgr self-test health set')
+    @SelftestCLICommand('mgr self-test health set')
     def health_set(self, checks: str) -> Tuple[int, str, str]:
         '''
         Set a health check from a JSON-formatted description.
@@ -183,7 +186,7 @@ class Module(MgrModule):
         self.set_health_checks(self._health)
         return 0, "", ""
 
-    @CLICommand('mgr self-test health clear')
+    @SelftestCLICommand('mgr self-test health clear')
     def health_clear(self, checks: Optional[List[str]] = None) -> Tuple[int, str, str]:
         '''
         Clear health checks by name. If no names provided, clear all.
@@ -198,7 +201,7 @@ class Module(MgrModule):
         self.set_health_checks(self._health)
         return 0, "", ""
 
-    @CLICommand('mgr self-test insights_set_now_offset')
+    @SelftestCLICommand('mgr self-test insights_set_now_offset')
     def insights_set_now_offset(self, hours: int) -> Tuple[int, str, str]:
         '''
         Set the now time for the insights module.
@@ -468,7 +471,7 @@ class Module(MgrModule):
         self._event.clear()
         self.log.info("Ended command_spam workload...")
 
-    @CLICommand('mgr self-test eval')
+    @SelftestCLICommand('mgr self-test eval')
     def eval(self,
              s: Optional[str] = None,
              inbuf: Optional[str] = None) -> HandleCommandResult:
