@@ -216,7 +216,7 @@ check_snapshot_info()
     test "$actual_snap_name" = "$snap_name" || return 1
 
     local snap_state=$(jq -r ".state" <<< "$snap_info_json")
-    test "$snap_state" = "complete" || return 1
+    test "$snap_state" = "created" || return 1
 
     local actual_image_count=$(jq '.images | length' <<< "$snap_info_json")
     test "$actual_image_count" = "$image_count" || return 1
@@ -224,7 +224,7 @@ check_snapshot_info()
     local image_snap_name=$(jq -r '.image_snap_name' <<< "$snap_info_json")
     local snap_info=$(rbd group snap info $group_name@$snap_name)
     local snap_state=$(grep -w 'state:' <<< "$snap_info" | tr -d '\t')
-    test "$snap_state" = "state: complete" || return 1
+    test "$snap_state" = "state: created" || return 1
     local image_snap_field=$(grep -w 'image snap:' <<< "$snap_info")
     local images_field=$(grep -w 'images:' <<< "$snap_info")
     if ((image_count != 0)); then
