@@ -255,11 +255,43 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
   return false;
 }
 
+static int load_account_name(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             rgw::sal::Driver* driver,
+                             const rgw_account_id& id,
+                             std::string& name)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_account_by_id(dpp, y, id, info, attrs, objv);
+  if (r < 0) {
+    return r;
+  }
+  name = std::move(info.name);
+  return 0;
+}
+
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
-  const rgw_owner& new_owner = user->get_id();
-  const std::string& new_owner_name = user->get_display_name();
+  rgw_owner new_owner;
+  std::string new_owner_name;
+
+  if (!op_state.account_id.empty()) {
+    new_owner = op_state.account_id;
+    int r = load_account_name(dpp, y, driver, op_state.account_id, new_owner_name);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to load account");
+      return r;
+    }
+  } else if (!user->get_info().account_id.empty()) {
+    set_err_msg(err_msg, "account users cannot own buckets. use --account-id instead");
+    return -EINVAL;
+  } else {
+    new_owner = user->get_id();
+    new_owner_name = user->get_display_name();
+  }
 
   return rgw_chown_bucket_and_objects(driver, bucket.get(), new_owner, new_owner_name, marker, err_msg, dpp, y);
 }
