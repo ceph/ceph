@@ -1486,7 +1486,9 @@ public:
     } else if (capacity && notifications.size() >= capacity) {
       // We are allowed one over, so the client knows where in the
       // sequence of notifications we started losing data.
-      notifications.push({errc::notification_overflow, {}});
+      if (notifications.size() == capacity) {
+        notifications.push({errc::notification_overflow, {}});
+      }
     } else {
       notifications.push({{},
 			  Notification{
