@@ -19,7 +19,6 @@ describe('NvmeofGatewayComponent', () => {
 
     fixture = TestBed.createComponent(NvmeofGatewayComponent);
     component = fixture.componentInstance;
-    component.ngOnInit();
     fixture.detectChanges();
   });
 

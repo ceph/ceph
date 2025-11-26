@@ -1,3 +1,5 @@
+import { CephServiceSpec } from './service.interface';
+
 export interface NvmeofGateway {
   cli_version: string;
   version: string;
@@ -47,4 +49,11 @@ export interface NvmeofSubsystemNamespace {
   rw_mbytes_per_second: number;
   r_mbytes_per_second: number;
   w_mbytes_per_second: number;
+}
+
+export interface NvmeGatewayGroup extends CephServiceSpec {
+  name: string;
+  gateway: number;
+  gateWayCount: { running: number; error: number };
+  events: { created: string }[];
 }

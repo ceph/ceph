@@ -1,4 +1,4 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, TemplateRef, ViewChild } from '@angular/core';
 
 import _ from 'lodash';
 
@@ -16,7 +16,7 @@ enum TABS {
   templateUrl: './nvmeof-gateway.component.html',
   styleUrls: ['./nvmeof-gateway.component.scss']
 })
-export class NvmeofGatewayComponent implements OnInit {
+export class NvmeofGatewayComponent {
   selectedTab: TABS;
 
   onSelected(tab: TABS) {
@@ -32,6 +32,4 @@ export class NvmeofGatewayComponent implements OnInit {
   selection = new CdTableSelection();
 
   constructor(public actionLabels: ActionLabelsI18n) {}
-
-  ngOnInit() {}
 }

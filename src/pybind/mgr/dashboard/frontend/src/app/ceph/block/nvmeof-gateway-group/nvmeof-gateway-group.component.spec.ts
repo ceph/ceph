@@ -19,7 +19,8 @@ describe('NvmeofGatewayGroupComponent', () => {
       listSubsystems: jest.fn().mockReturnValue(of([]))
     };
     const cephServiceServiceSpy = {
-      getDaemons: jest.fn().mockReturnValue(of([]))
+      getDaemons: jest.fn().mockReturnValue(of([])),
+      delete: jest.fn().mockReturnValue(of('done'))
     };
 
     await TestBed.configureTestingModule({
