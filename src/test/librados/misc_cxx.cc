@@ -22,6 +22,7 @@
 #include "global/global_context.h"
 #include "test/librados/testcase_cxx.h"
 #include "test/librados/test_cxx.h"
+#include "cls/version/cls_version_ops.h"
 
 #include "crimson_utils.h"
 
@@ -477,23 +478,27 @@ public:
 protected:
   static void SetUpTestCase() {
     SKIP_IF_CRIMSON();
-    pool_name = get_temp_pool_name();
-    ASSERT_EQ("", create_one_ec_pool_pp(pool_name, s_cluster));
+    pool_name_default = get_temp_pool_name();
+    pool_name_fast = get_temp_pool_name();
+    pool_name_fast_split = get_temp_pool_name();
     src_pool_name = get_temp_pool_name();
+    ASSERT_EQ("", connect_cluster_pp(s_cluster));
     ASSERT_EQ(0, s_cluster.pool_create(src_pool_name.c_str()));
 
-    librados::IoCtx ioctx;
-    ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
-    ioctx.application_enable("rados", true);
-
-    librados::IoCtx src_ioctx;
-    ASSERT_EQ(0, s_cluster.ioctx_create(src_pool_name.c_str(), src_ioctx));
-    src_ioctx.application_enable("rados", true);
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+      ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
+      librados::IoCtx ioctx;
+      ASSERT_EQ(0, s_cluster.ioctx_create(pool_name.c_str(), ioctx));
+      ioctx.application_enable("rados", true);
+    }
+    ASSERT_EQ("", set_split_ops_pp(pool_name_fast_split, s_cluster, true));
   }
   static void TearDownTestCase() {
     SKIP_IF_CRIMSON();
-    ASSERT_EQ(0, s_cluster.pool_delete(src_pool_name.c_str()));
-    ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, s_cluster));
+    for (const std::string& pool_name : {pool_name_default, pool_name_fast, pool_name_fast_split, src_pool_name}) {
+      ASSERT_EQ(0, destroy_ec_pool_pp(pool_name, s_cluster));
+    }
+    s_cluster.shutdown();
   }
   static std::string src_pool_name;
 
@@ -869,7 +874,7 @@ TEST_F(LibRadosMiscPP, Applications) {
   ASSERT_EQ(expected_meta, meta);
 }
 
-TEST_F(LibRadosMiscECPP, CompareExtentRange) {
+TEST_P(LibRadosMiscECPP, CompareExtentRange) {
   SKIP_IF_CRIMSON();
   bufferlist bl1;
   bl1.append("ceph");
@@ -959,6 +964,27 @@ TEST_F(LibRadosMiscPP, NoVer) {
 
   // last version should now have been corrected.
   ASSERT_EQ(2, ioctx.get_last_version());
+}
+
+TEST_F(LibRadosMiscPP, ExecReadonlyWithWrite) {
+  SKIP_IF_CRIMSON();
+  bufferlist bl1, bl2;
+  bl1.append("ceph");
+  ObjectWriteOperation write;
+  write.write(0, bl1);
+  ASSERT_EQ(0, ioctx.operate("foo", &write));
+
+  // Not yet implemented.
+  // ObjectReadOperation read1;
+  // cls_version_inc_op call;
+  // encode(call, bl2);
+  // read1.exec("version", "inc", bl2);
+  // EXPECT_EQ(-EIO, ioctx.operate("foo", &read1, nullptr));
+
+  // This should work, to prove the issue is the read.
+  ObjectWriteOperation write2;
+  write2.exec("version", "inc", bl2);
+  ASSERT_EQ(0, ioctx.operate("foo", &write2));
 }
 
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosMiscECPP);
