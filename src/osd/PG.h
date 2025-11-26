@@ -892,6 +892,8 @@ protected:
   std::map<pg_shard_t, ReplicaBackfillInterval> peer_backfill_info;
   bool backfill_reserving;
 
+  PoolMigrationInterval pool_migration_info;
+
   // The primary's num_bytes and local num_bytes for this pg, only valid
   // during backfill for non-primary shards.
   // Both of these are adjusted for EC to reflect the on-disk bytes

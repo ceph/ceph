@@ -13135,7 +13135,7 @@ hobject_t PrimaryLogPG::earliest_pool_migration()
 	    &sentries,
 	    &next);
     if (r != 0) {
-      // Object store should always be able to list objects for a valid colleciton
+      // Object store should always be able to list objects for a valid collection
       derr << __func__ << ": objects_list_partial failed " << r << dendl;
       return hobject_t();
     }
@@ -14610,6 +14610,64 @@ void PrimaryLogPG::update_range(
   }
 }
 
+void PrimaryLogPG::update_range(
+  PoolMigrationInterval *pmi,
+  ThreadPool::TPHandle &handle)
+{
+  int local_min = cct->_conf->osd_backfill_scan_min;
+  int local_max = cct->_conf->osd_backfill_scan_max;
+
+  if (pmi->version < info.log_tail) {
+    dout(10) << __func__<< ": pmi is old, rescanning local pool_migration_info" << dendl;
+    pmi->version = info.last_update;
+    scan_range_migration(local_min, local_max, pmi, handle);
+  }
+
+  if (pmi->version >= projected_last_update) {
+    dout(10) << __func__<< ": pmi is current" << dendl;
+    ceph_assert(pmi->version == projected_last_update);
+  } else if (pmi->version >= info.log_tail) {
+    if (recovery_state.get_pg_log().get_log().empty() && projected_log.empty()) {
+      /* Because we don't move log_tail on split, the log might be
+       * empty even if log_tail != last_update.  However, the only
+       * way to get here with an empty log is if log_tail is actually
+       * eversion_t(), because otherwise the entry which changed
+       * last_update since the last scan would have to be present.
+       */
+      ceph_assert(pmi->version == eversion_t());
+      return;
+    }
+
+    dout(10) << __func__<< ": pmi is old, (" << pmi->version
+	     << ") can be updated with log to projected_last_update "
+	     << projected_last_update << dendl;
+
+    auto func = [&](const pg_log_entry_t &e) {
+      dout(10) << __func__ << ": updating from version " << e.version << dendl;
+      const hobject_t &soid = e.soid;
+      if (soid >= pmi->begin && soid < pmi->end) {
+	if (e.is_update()) {
+	  dout(10) << __func__ << ": " << e.soid << " updated to version "
+		   << e.version << dendl;
+          pmi->objects.erase(e.soid);
+          pmi->objects.insert(make_pair(e.soid, e.version));
+	} else if (e.is_delete()) {
+	  dout(10) << __func__ << ": " << e.soid << " removed" << dendl;
+	  pmi->objects.erase(e.soid);
+	}
+      }
+    };
+
+    dout(10) << "scanning pg log first" << dendl;
+    recovery_state.get_pg_log().get_log().scan_log_after(pmi->version, func);
+    dout(10) << "scanning projected log" << dendl;
+    projected_log.scan_log_after(pmi->version, func);
+    pmi->version = projected_last_update;
+  } else {
+    ceph_abort_msg("scan_range_migration should have raised pmi->version past log_tail");
+  }
+}
+
 void PrimaryLogPG::scan_range_primary(
   int min, int max, PrimaryBackfillInterval *bi,
   ThreadPool::TPHandle &handle,
@@ -14717,6 +14775,56 @@ void PrimaryLogPG::scan_range_replica(
   }
 }
 
+void PrimaryLogPG::scan_range_migration(
+  int min, int max, PoolMigrationInterval *pmi,
+  ThreadPool::TPHandle &handle)
+{
+  ceph_assert(is_locked());
+  dout(10) << "scan_range_migration from " << pmi->begin << dendl;
+  pmi->clear_objects();
+
+  vector<hobject_t> ls;
+  ls.reserve(max);
+  int r = pgbackend->objects_list_partial(pmi->begin, min, max, &ls, &pmi->end);
+  ceph_assert(r >= 0);
+  dout(10) << " got " << ls.size() << " items, next " << pmi->end << dendl;
+  dout(20) << ls << dendl;
+
+  for (vector<hobject_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
+    handle.reset_tp_timeout();
+
+    ceph_assert(is_primary());
+
+    eversion_t version;
+    ObjectContextRef obc = object_contexts.lookup(*p);
+
+    if (obc) {
+      if (!obc->obs.exists) {
+	/* If the object does not exist here, it must have been removed
+	 * between the objects_list_partial and here.
+	 */
+	continue;
+      }
+      version = obc->obs.oi.version;
+    } else {
+      bufferlist bl;
+      int r = pgbackend->objects_get_attr(*p, OI_ATTR, &bl);
+      /* If the object does not exist here, it must have been removed
+       * between the objects_list_partial and here.
+       */
+      if (r == -ENOENT)
+	continue;
+
+      ceph_assert(r >= 0);
+      object_info_t oi(bl);
+      version = oi.version;
+    }
+
+    dout(20) << "  " << *p << " " << version << dendl;
+    pmi->objects.insert(make_pair(*p, version));
+  }
+}
+
 /** check_local
  *
  * verifies that stray objects have been deleted
@@ -14786,8 +14894,8 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     //BILL:FIXME: initialize PoolMigrationIntervals? Maybe we need to move
     //all of the code in this if into earliest_pool_migration as we need to
     //calculate pool_migration_watermark before allowing I/O to start.
-    //
-    //pool_migration_info.reset(last_pool_migration_started);
+    pool_migration_info.reset(last_pool_migration_started);
+    update_range(&pool_migration_info, handle);
 
     pool_migrations_in_flight.clear();
   }
