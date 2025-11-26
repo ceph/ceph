@@ -31,6 +31,29 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 #define CEPHX_CRYPT_ERR			1
 
+
+/* Principal <-> AuthMonitor */
+/* The session's connection secret: encrypted with AUTH ticket session key */
+#define CEPHX_KEY_USAGE_AUTH_CONNECTION_SECRET  0x03
+/* The ticket's CephXServiceTicket containing the session key: uses principal's key for the AUTH ticket otherwise the AUTH ticket session key for the service tickets */
+#define CEPHX_KEY_USAGE_TICKET_SESSION_KEY         0x04
+/* The ticket's CephXTicketBlob: uses old AUTH session key (if presented) */
+#define CEPHX_KEY_USAGE_TICKET_BLOB                0x05
+
+/* Principal <-> Service */
+/* Client Authorization Request: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE             0x10
+/* Service's Challenge: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE_CHALLENGE   0x11
+/* Service's final reply: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE_REPLY       0x12
+
+/* Service Daemon <-> AuthMonitor */
+/* Rotating Secret Fetch by Services: service daemon's principal key */
+#define CEPHX_KEY_USAGE_ROTATING_SECRET       0x20
+/* CephXServiceTicketInfo: rotating service key */
+#define CEPHX_KEY_USAGE_TICKET_INFO           0x30
+
 #include "auth/Auth.h"
 #include <errno.h>
 #include <sstream>
