@@ -375,6 +375,9 @@ export class TaskMessageService {
       this.iscsiTarget(metadata)
     ),
     // nvmeof
+    'nvmeof/gateway/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+      this.nvmeofGateway(metadata)
+    ),
     'nvmeof/subsystem/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.nvmeofSubsystem(metadata)
     ),
@@ -583,7 +586,9 @@ export class TaskMessageService {
   nvmeofSubsystem(metadata: any) {
     return $localize`subsystem '${metadata.nqn}'`;
   }
-
+  nvmeofGateway(metadata: any) {
+    return $localize`Gateway group '${metadata.group}'`;
+  }
   nvmeofListener(metadata: any) {
     return $localize`listener '${metadata.host_name} for subsystem ${metadata.nqn}`;
   }
