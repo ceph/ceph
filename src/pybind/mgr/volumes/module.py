@@ -3,6 +3,8 @@ import logging
 import traceback
 import threading
 
+from .cli import VolumesCLICommand
+
 from mgr_module import MgrModule, Option
 import orchestrator
 
@@ -40,6 +42,7 @@ def mgr_cmd_wrap(f):
 
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
+    CLICommand = VolumesCLICommand
     COMMANDS = [
         {
             'cmd': 'fs volume ls',
