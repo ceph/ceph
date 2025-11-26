@@ -10,6 +10,8 @@ import time
 from typing import Optional, Dict, Union, Tuple, Type, Optional
 from functools import wraps
 
+from .cli import RookCLICommand
+
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
 from ceph.utils import datetime_now
@@ -100,6 +102,7 @@ class RookEnv(object):
 
 
 class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
+    CLICommand = RookCLICommand
     """
     Writes are a two-phase thing, firstly sending
     the write to the k8s API (fast) and then waiting
