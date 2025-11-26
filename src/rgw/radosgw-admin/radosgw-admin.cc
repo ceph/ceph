@@ -7851,6 +7851,7 @@ int main(int argc, const char **argv)
       return EINVAL;
     }
 
+    bucket_op.account_id = account_id;
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
