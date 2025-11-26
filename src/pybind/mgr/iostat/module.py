@@ -2,8 +2,12 @@ from typing import Any
 
 from mgr_module import HandleCommandResult, MgrModule
 
+from .cli import IostatCLICommand
+
 
 class Module(MgrModule):
+    CLICommand = IostatCLICommand
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
 
@@ -17,7 +21,7 @@ class Module(MgrModule):
         assert 'num_write' in r['pg_stats_delta']['stat_sum']
         assert 'num_read' in r['pg_stats_delta']['stat_sum']
 
-    @CLIReadCommand('iostat', poll=True)
+    @IostatCLICommand.Read('iostat', poll=True)
     def iostat(self, width: int = 80, print_header: bool = False) -> HandleCommandResult:
         """
         Get IO rates
