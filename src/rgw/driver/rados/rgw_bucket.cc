@@ -258,7 +258,10 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
-  return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y);
+  const rgw_owner& new_owner = user->get_id();
+  const std::string& new_owner_name = user->get_display_name();
+
+  return rgw_chown_bucket_and_objects(driver, bucket.get(), new_owner, new_owner_name, marker, err_msg, dpp, y);
 }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg)

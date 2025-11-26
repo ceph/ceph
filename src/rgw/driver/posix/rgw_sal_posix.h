@@ -1096,7 +1096,10 @@ public:
 				    Attrs* vals) override;
   virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key,
 				  bufferlist& val, bool must_exist, optional_yield y) override;
-  virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int chown(const DoutPrefixProvider* dpp,
+                    const rgw_owner& new_owner,
+                    const std::string& new_owner_name,
+                    optional_yield y);
   virtual std::unique_ptr<Object> clone() override {
     return std::unique_ptr<Object>(new POSIXObject(*this));
   }

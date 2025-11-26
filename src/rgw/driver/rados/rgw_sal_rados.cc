@@ -2999,7 +2999,10 @@ int RadosObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return sysobj.omap().set_must_exist(must_exist).set(dpp, key, val, y);
 }
 
-int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y)
 {
   int r = get_obj_attrs(y, dpp);
   if (r < 0) {
@@ -3026,7 +3029,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
     return -EIO;
   }
 
-  chown_acl(new_user.get_id(), new_user.get_display_name(), policy);
+  chown_acl(new_owner, new_owner_name, policy);
 
   bl.clear();
   encode(policy, bl);
