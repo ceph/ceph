@@ -240,11 +240,14 @@ namespace cohort {
             } else {
               lane.q.erase(it);
             }
+            lane.q.push_front(*o);
 	    /* hiwat check */
-	    if (lane.q.size() > lane_hiwat) {
-	      tdo = o;
-	    } else {
-	      lane.q.push_front(*o);
+            if (lane.q.size() > lane_hiwat) {
+              /* discard the actual lane LRU immediately */
+              Object* o2 = &(lane.q.back());
+	      Object::Queue::iterator it = Object::Queue::s_iterator_to(*o2);
+	      lane.q.erase(it);
+	      tdo = o2;
 	    }
 	  }
 	  lane.lock.unlock();
