@@ -1,12 +1,14 @@
 import { Component, Inject, OnInit, Optional, TemplateRef, ViewChild } from '@angular/core';
 import { UntypedFormControl, AbstractControl, ValidationErrors, Validators } from '@angular/forms';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { map, startWith } from 'rxjs/operators';
 
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { BaseModal } from 'carbon-components-angular';
 import { CdValidators } from '../../forms/cd-validators';
 import { DeletionImpact } from '../../enum/delete-confirmation-modal-impact.enum';
+import { DeleteConfirmationBodyContext } from '../../models/delete-confirmation.model';
 
 @Component({
   selector: 'cd-deletion-modal',
@@ -21,7 +23,7 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
   impactEnum = DeletionImpact;
   childFormGroup: CdFormGroup;
   childFormGroupTemplate: TemplateRef<any>;
-
+  submitDisabled$: Observable<boolean> = of(false);
   constructor(
     @Optional() @Inject('impact') public impact: DeletionImpact,
     @Optional() @Inject('itemDescription') public itemDescription: 'entry',
@@ -30,7 +32,10 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     @Optional() @Inject('submitAction') public submitAction?: Function,
     @Optional() @Inject('backAction') public backAction?: Function,
     @Optional() @Inject('bodyTemplate') public bodyTemplate?: TemplateRef<any>,
-    @Optional() @Inject('bodyContext') public bodyContext?: object,
+    @Optional() @Inject('subHeading') public subHeading?: string,
+    @Optional()
+    @Inject('bodyContext')
+    public bodyContext?: DeleteConfirmationBodyContext,
     @Optional() @Inject('infoMessage') public infoMessage?: string,
     @Optional()
     @Inject('submitActionObservable')
@@ -57,13 +62,16 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
           )
         ]
       }),
-      confirmInput: new UntypedFormControl('', [
-        CdValidators.composeIf({ impact: this.impactEnum.high }, [
-          this.matchResourceName.bind(this),
-          Validators.required
-        ])
-      ])
+      confirmInput: new UntypedFormControl('', {
+        validators: [
+          CdValidators.composeIf({ impact: this.impactEnum.high }, [
+            this.matchResourceName.bind(this),
+            Validators.required
+          ])
+        ]
+      })
     };
+
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
     }
@@ -71,9 +79,27 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
     if (!(this.submitAction || this.submitActionObservable)) {
       throw new Error('No submit action defined');
     }
+    if (this.bodyContext?.disableForm) {
+      this.toggleFormControls(this.bodyContext?.disableForm);
+      return;
+    }
+
+    if (this.impact === this.impactEnum.high && this.itemNames?.[0]) {
+      const target = String(this.itemNames[0]);
+      const confirmControl = this.deletionForm.controls.confirmInput;
+
+      this.submitDisabled$ = confirmControl.valueChanges.pipe(
+        startWith(confirmControl.value),
+        map((value: string) => value !== target)
+      );
+    }
   }
 
   matchResourceName(control: AbstractControl): ValidationErrors | null {
+    if (!control.value) {
+      return null;
+    }
+
     if (this.itemNames && control.value !== String(this.itemNames?.[0])) {
       return { matchResource: true };
     }
@@ -108,5 +134,16 @@ export class DeleteConfirmationModalComponent extends BaseModal implements OnIni
 
   stopLoadingSpinner() {
     this.deletionForm.setErrors({ cdSubmitButton: true });
+  }
+
+  toggleFormControls(disableForm = false) {
+    if (disableForm) {
+      this.deletionForm.disable();
+      this.deletionForm.setErrors({ disabledByContext: true });
+      this.submitDisabled$ = of(true);
+    } else {
+      this.deletionForm.enable();
+      this.deletionForm.setErrors(null);
+    }
   }
 }
