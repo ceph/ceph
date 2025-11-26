@@ -12,24 +12,27 @@
           novalidate>
       <cd-alert-panel *ngIf="infoMessage"
                       type="info"
-                      spacingClass="mb-3"
+                      spacingClass="cds-mb-3"
                       i18n>
         <p>{{ infoMessage }}</p>
       </cd-alert-panel>
       <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
       <div class="question">
         <span *ngIf="itemNames; else noNames">
-          <p *ngIf="itemNames.length === 1; else manyNames"
-             i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+          <ng-container *ngIf="itemNames.length === 1; else manyNames">
+            <p *ngIf="impact == impactEnum.medium"
+               i18n>Are you sure that you want to {{ actionDescription | lowercase }} <strong>{{ itemNames[0] }}</strong>?</p>
+          </ng-container>
           <ng-template #manyNames>
             <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected items?</p>
             <ul>
               <li *ngFor="let itemName of itemNames"><strong>{{ itemName }}</strong></li>
             </ul>
-          </ng-template >
+          </ng-template>
         </span>
         <ng-template #noNames>
-          <p i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
+          <p *ngIf="impact == impactEnum.medium"
+             i18n>Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?</p>
         </ng-template>
         <ng-container *ngTemplateOutlet="childFormGroupTemplate; context:{form:deletionForm}"></ng-container>
         <div class="form-item">
@@ -43,26 +46,35 @@
                           i18n>Yes, I am sure.</cds-checkbox>
           </ng-container>
           <ng-template #highImpactDeletion>
-            <cds-text-label label="Resource Name"
+            <p i18n
+               class="cds--type-body-01">
+              Deleting <strong>{{ itemNames[0] }}</strong> will remove all associated {{itemDescription}} and may disrupt traffic routing for
+              services relying on it. This action cannot be undone.
+            </p>
+            <ng-template #labelTemplate>
+              <span i18n>Type <strong>{{ itemNames[0] }}</strong> to confirm (required)</span>
+            </ng-template>
+            <cds-text-label [labelTemplate]="labelTemplate"
                             labelInputID="resource_name"
-                            cdRequiredField="Resource Name"
-                            [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.dirty"
+                            [cdRequiredField]="'Type ' + itemNames[0] + ' to confirm'"
+                            [invalid]="!deletionForm.controls.confirmInput.valid && deletionForm.controls.confirmInput.touched"
                             [invalidText]="ResourceError"
-                            i18n
-                            i18n-label>Resource Name
+                            [disabled]="deletionForm.controls.confirmInput.disabled">
               <input cdsText
                      type="text"
-                     placeholder="Enter resource name to delete"
+                     [placeholder]="'Name of resource'"
                      id="resource_name"
                      formControlName="confirmInput"
-                     i18n-placeholder/>
+                     [attr.disabled]="deletionForm.controls.confirmInput.disabled ? true : null"
+                     i18n-placeholder
+                     autofocus/>
             </cds-text-label>
             <ng-template #ResourceError>
-              <span *ngIf="deletionForm.showError('confirmInput', formDir, 'required')"
+              <span *ngIf="deletionForm.controls.confirmInput.hasError('required')"
                     class="invalid-feedback">
                 <ng-container i18n>This field is required.</ng-container>
               </span>
-              <span *ngIf="deletionForm.showError('confirmInput', formDir, 'matchResource')"
+              <span *ngIf="deletionForm.controls.confirmInput.hasError('matchResource')"
                     class="invalid-feedback">
                 <ng-container i18n>Enter the correct resource name.</ng-container>
               </span>
@@ -77,13 +89,25 @@
                         [form]="deletionForm"
                         [submitText]="(actionDescription | titlecase) + ' ' + itemDescription"
                         [modalForm]="true"
+                        [disabled]="(submitDisabled$ | async) || deletionForm.disabled || (impact === impactEnum.high ? !deletionForm.controls.confirmInput.value : !deletionForm.controls.confirmation.value)"
                         [submitBtnType]="(actionDescription === 'delete' || actionDescription === 'remove') ? 'danger' : 'primary'"></cd-form-button-panel>
 
 </cds-modal>
-
 <ng-template #deletionHeading>
+  @if (impact === impactEnum.high) {
+  <h2 cdsModalHeaderLabel
+      i18n>
+      {{(actionDescription | titlecase) + ' ' + itemDescription}}
+  </h2>
+  <h2 class="cds--type-heading-03"
+      cdsModalHeaderHeading
+      i18n>
+    Confirm delete
+  </h2>
+  } @else {
   <h3 cdsModalHeaderHeading
       i18n>
-    {{ actionDescription | titlecase }} {{ itemDescription }}
+      {{(actionDescription | titlecase) + ' ' + itemDescription}}
   </h3>
+  }
 </ng-template>
