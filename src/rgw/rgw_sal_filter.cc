@@ -1225,9 +1225,12 @@ int FilterObject::omap_set_val_by_key(const DoutPrefixProvider *dpp,
   return next->omap_set_val_by_key(dpp, key, val, must_exist, y);
 }
 
-int FilterObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int FilterObject::chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y)
 {
-  return next->chown(new_user, dpp, y);
+  return next->chown(dpp, new_owner, new_owner_name, y);
 }
 
 int FilterObject::FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)

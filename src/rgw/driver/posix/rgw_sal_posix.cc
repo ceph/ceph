@@ -3291,7 +3291,10 @@ int POSIXObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
   return 0;
 }
 
-int POSIXObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
+int POSIXBucket::chown(const DoutPrefixProvider* dpp,
+                       const rgw_owner& new_owner,
+                       const std::string& new_owner_name,
+                       optional_yield y)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
