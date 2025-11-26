@@ -25,7 +25,7 @@
                   *ngIf="accounts !== null"
                   [value]="''">-- Select an Account --</option>
           <option *ngFor="let account of accounts"
-                  [value]="account.id">{{ account.name }} {{account.tenant ? '- '+account.tenant : ''}}</option>
+                  [value]="account.id">{{account.tenant ? account.tenant+'$' : ''}}{{ account.name }}</option>
         </cds-select>
         <ng-template #accountError>
           <span class="invalid-feedback"
@@ -79,7 +79,12 @@
       </ng-template>
     </div>
 
-    <!-- Show Tenant -->
+    <!--
+    Show Tenant, but when the user is selecting an account
+    we don't need to show this option as the tenant is inherited
+    from the selected account.
+    -->
+    @if (!userForm?.controls?.account_id?.value) {
     <div class="form-item">
       <cds-checkbox formControlName="show_tenant"
                     id="show_tenant"
@@ -87,6 +92,7 @@
                     (checkedChange)="updateFieldsWhenTenanted()">Show Tenant
       </cds-checkbox>
     </div>
+    }
 
     <!-- Tenant -->
     <div class="form-item"
