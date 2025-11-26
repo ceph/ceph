@@ -13,6 +13,8 @@
 #include "osdc/SplitOp.h"
 #include "osd/osd_types.h"
 
+using namespace std::literals;
+
 #define dout_subsys ceph_subsys_objecter
 #define DBG_LVL 20
 
@@ -85,10 +87,16 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
   for (auto &&chunk_info : stripe_view) {
     ldout(cct, DBG_LVL) << __func__ << " chunk info " << chunk_info << dendl;
     auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+    uint64_t src_len = details.bl.length();
+    uint64_t buf_off = buffer_offset[(int)chunk_info.shard];
+    if (src_len <= buf_off) {
+      break;
+    }
+    uint64_t len = std::min(chunk_info.length, src_len - buf_off);
     bufferlist bl;
-    bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], chunk_info.length);
+    bl.substr_of(details.bl, buf_off, len);
     bl_out.append(bl);
-    buffer_offset[(int)chunk_info.shard] += chunk_info.length;
+    buffer_offset[(int)chunk_info.shard] += len;
   }
 }
 
@@ -115,9 +123,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   for (unsigned i = first_shard; i < first_shard + count; i++) {
     shard_id_t shard(i >= data_chunk_count ? i - data_chunk_count : i);
     int direct_osd = t.acting[(int)shard];
-    // TODO: This is broken because there might be multiple shards on one OSD.
-    // Will fix in the next PR.
-    if (t.acting_primary == direct_osd) {
+    if (t.actual_pgid.shard == shard) {
       primary_shard.emplace(shard);
     }
     if (!objecter.osdmap->exists(direct_osd)) {
@@ -126,7 +132,7 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
       return;
     }
     if (!sub_reads.contains(shard)) {
-      sub_reads.emplace(shard, orig_op->ops.size());
+      sub_reads.emplace(shard, orig_op->ops.size() + 1);
     }
     auto &d = sub_reads.at(shard).details[ops_index];
     if (sparse) {
@@ -138,15 +144,10 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   }
 
   if (primary_required && !primary_shard) {
-    for (unsigned i=0; i < t.acting.size(); ++i) {
-      // TODO: Can't compare OSDs for EC as there may be more than one shard on
-      //       each OSD.
-      // Will fix in next PR.
-      if (t.acting[i] == t.acting_primary) {
-        primary_shard.emplace(i);
-        sub_reads.emplace(*primary_shard, orig_op->ops.size());
-      }
-    }
+    // _calc_target will have picked the primary by default on EC. The "primary"
+    // on replica is an arbitrary shard.
+    primary_shard.emplace(t.actual_pgid.shard);
+    sub_reads.emplace(*primary_shard, orig_op->ops.size() + 1);
 
     // No primary???  Let the normal code paths deal with this.
     if (!primary_shard) {
@@ -217,7 +218,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
     shard_id_t shard(i);
     if (!sub_reads.contains(shard)) {
-      sub_reads.emplace(shard, orig_op->ops.size());
+      sub_reads.emplace(shard, orig_op->ops.size() + 1);
     }
     auto &sr = sub_reads.at(shard);
     auto bl = &sr.details[ops_index].bl;
@@ -312,12 +313,61 @@ void SplitOp::complete() {
   }
 }
 
-static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
+namespace {
+std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint64_t len) {
+  if (!pi->is_erasure()) {
+    return {false, false};
+  }
+
+  uint64_t stripe_width = pi->get_stripe_width();
+
+  // k is a minimum of 2
+  if (len > stripe_width / 2) {
+    return {false, false};
+  }
+  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
+
+  // Chunk_size should never be zero, so this is paranoia.
+  if (len > chunk_size || chunk_size == 0) {
+    return {false, false};
+  }
+
+  uint64_t offset_to_end_of_chunk;
+
+  // Chunk size is normally, but not always a power of 2.
+  if (std::has_single_bit(chunk_size)) {
+    offset_to_end_of_chunk = chunk_size - (offset & (chunk_size - 1));
+  } else {
+    offset_to_end_of_chunk = chunk_size - (offset % chunk_size);
+  }
+
+  if (len > offset_to_end_of_chunk) {
+    return {false, false};
+  }
+
+  return {true, offset % stripe_width < chunk_size};
+}
+
+std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContext *cct) {
+
+  bool is_erasure = pi->is_erasure();
 
   if ((op->target.flags & CEPH_OSD_FLAG_BALANCE_READS) == 0 ) {
     ldout(cct, DBG_LVL) << __func__ <<" REJECT: Client rejects balanced read" << dendl;
-    return false;
+    return {false, false};
   }
+
+  // We really should not have a WRITE flagged as balanced read, but out of
+  // paranoia ignore it.
+  if (op->target.flags & CEPH_OSD_FLAG_WRITE) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: Flagged as write!" << dendl;
+    return {false, false};
+  }
+
+  bool has_primary_ops = nullptr != op->objver;
+  bool single_direct_op = is_erasure;
+  bool is_first_chunk = true;
 
   uint64_t suitable_read_found = false;
   for (auto & o : op->ops) {
@@ -325,25 +375,44 @@ static bool validate(Objecter::Op *op, bool is_erasure, CephContext *cct) {
       case CEPH_OSD_OP_READ:
       case CEPH_OSD_OP_SPARSE_READ: {
         uint64_t length = o.op.extent.length;
+        if (length == 0) {
+          // length of zero actually means "the whole object". This code cannot
+          // know the size of the object efficiently, so reject the op.
+          ldout(cct, DBG_LVL) << __func__ <<" REJECT: Zero length read" << dendl;
+          return {false, false};
+        }
         if ((is_erasure && length > 0) ||
             (!is_erasure && length >= kReplicaMinReadSize)) {
           suitable_read_found = true;
+        }
+        if (single_direct_op) {
+          auto [single_chunk, first_chunk] = is_single_chunk(pi, o.op.extent.offset, o.op.extent.length);
+          is_first_chunk = is_first_chunk && first_chunk;
+          single_direct_op = single_direct_op && single_chunk;
         }
         break;
       }
       case CEPH_OSD_OP_GETXATTRS:
       case CEPH_OSD_OP_CHECKSUM:
-      case CEPH_OSD_OP_GETXATTR: {
+      case CEPH_OSD_OP_GETXATTR:
+      case CEPH_OSD_OP_STAT:
+      case CEPH_OSD_OP_CMPXATTR:
+      case CEPH_OSD_OP_CALL: {
+        has_primary_ops = true;
         break; // Do not block validate.
       }
       default: {
         ldout(cct, DBG_LVL) << __func__ <<" REJECT: unsupported op" << dendl;
-        return false;
+        return {false, false};
       }
     }
   }
 
-  return suitable_read_found;
+  if (single_direct_op && has_primary_ops) {
+    single_direct_op = is_first_chunk;
+  }
+
+  return {suitable_read_found, single_direct_op};
 }
 
 void SplitOp::init(OSDOp &op, int ops_index) {
@@ -398,6 +467,22 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
 }
 }
 
+void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter) {
+  auto &t = op->target;
+  const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
+
+  objecter._calc_target(&op->target, op);
+  uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
+  uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
+
+  //FIXME: Raw shard calculation.
+  shard_id_t shard((op->ops[0].op.extent.offset) / chunk_size % data_chunk_count);
+
+  if (objecter.osdmap->exists(op->target.acting[(int)shard])) {
+    op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
+    t.force_shard.emplace(shard);
+  }
+}
 
 bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct) {
@@ -418,9 +503,15 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  bool validated = validate(op, pi->is_erasure(), cct);
+  auto [validated, single_op] = validate(op, pi, cct);
 
   if (!validated) {
+    return false;
+  }
+
+  if (single_op) {
+    ldout(cct, DBG_LVL) << __func__ <<" reusing original op " << dendl;
+    prepare_single_op(op, objecter);
     return false;
   }
 
@@ -453,7 +544,14 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  ldout(cct, DBG_LVL) << __func__ <<" sub_reads ready. count=" << split_read->sub_reads.size() << dendl;
+  // Ideally, the validate should detect any single-op read. However, if that
+  // fails, then this will catch the cases (albeit less efficiently).
+  if (split_read->sub_reads.size() <= 1) {
+    ldout(cct, DBG_LVL) << __func__ <<" reusing original op  - inefficient" << dendl;
+    prepare_single_op(op, objecter);
+    split_read->abort = true; // Required for destructor.
+    return false;
+  }
 
   // We are committed to doing a split read. Any re-attempts should not be either
   // split or balanced.
@@ -468,12 +566,18 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto sub_op = objecter.prepare_read_op(
       t.base_oid, t.base_oloc, split_read->sub_reads.at(shard).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
-    sub_op->target.force_shard.emplace(shard);
+
+    auto &st = sub_op->target;
+    st = t; // Target can start off in same state as parent.
+    st.force_shard.emplace(shard);
+    st.flags |= CEPH_OSD_FLAG_FAIL_ON_EAGAIN;
     if (pi->is_erasure()) {
-      sub_op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
+      st.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
     } else {
-      sub_op->target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
+      st.flags |= CEPH_OSD_FLAG_BALANCE_READS;
     }
+    st.osd = st.acting[(int)shard];
+    st.actual_pgid.reset_shard(shard);
 
     objecter._op_submit_with_budget(sub_op, sul, ptid, ctx_budget);
     debug_op_summary("sent_op", sub_op, cct);
