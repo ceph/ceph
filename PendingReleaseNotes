@@ -91,6 +91,15 @@
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
   tune this value; see also ``rgw_max_concurrent_requests``.
+* RGW: New Keystone scope logging options for the ops log. When
+  ``rgw_keystone_scope_enabled`` is true (default false), operations
+  authenticated via Keystone include scope information (project, domain,
+  roles, and, for application-credential auth, the credential metadata)
+  in the ops log. Human-readable names are opt-in via
+  ``rgw_keystone_scope_include_user`` (default false, GDPR-friendly) —
+  opaque IDs are always logged so operators can correlate with Keystone
+  without exposing names. Role names can be omitted via
+  ``rgw_keystone_scope_include_roles`` (default true).
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
