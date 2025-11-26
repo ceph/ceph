@@ -526,7 +526,7 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter) {
 }
 
 bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
-  shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct) {
+  shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, CephContext *cct) {
 
   auto &t = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
@@ -620,7 +620,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     st.osd = st.acting[(int)shard];
     st.actual_pgid.reset_shard(shard);
 
-    objecter._op_submit_with_budget(sub_op, sul, ptid, ctx_budget);
+    objecter._op_submit_with_timeout(sub_op, sul, ptid);
     debug_op_summary("sent_op", sub_op, cct);
   }
 
