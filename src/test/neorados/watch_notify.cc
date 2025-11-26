@@ -312,6 +312,7 @@ CORO_TEST_F(NeoRadosWatchNotifyPoll, WrongWatchType, NeoRadosTest) {
   co_await expect_error_code(
     rados().next_notification(handle, asio::use_awaitable),
     sys::errc::invalid_argument);
+  co_await rados().unwatch(handle, pool(), asio::use_awaitable);
 }
 
 CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotifyCancel, NeoRadosTest) {
