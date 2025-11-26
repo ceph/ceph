@@ -67,15 +67,21 @@ struct BucketCacheEntry : public cohort::lru::Object
 
 public:
   BucketCacheEntry(BucketCache<D, B>* bc, const std::string& name, uint64_t hk)
-    : bc(bc), name(name), hk(hk), flags(FLAG_NONE) {}
+    : bc(bc), name(name), env{nullptr}, hk(hk), flags(FLAG_NONE) {}
 
   void set_env(std::shared_ptr<LMDBSafe::MDBEnv>& _env, LMDBSafe::MDBDbi& _dbi) {
     env = _env;
     dbi = _dbi;
   }
 
-  virtual ~BucketCacheEntry() {
-    int stop_here = 1;
+  virtual ~BucketCacheEntry()
+  {
+    /* XXX depends on safe_link -- but I think on balance, built-in safe_link
+     * is preferable to a custom mechanism with likely the same cost */
+    if (name_hook.is_linked()) {
+      bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
+    }
+    mdb_dbi_close(*env, dbi); // return db handle
   }
 
   inline bool deleted() const {
@@ -156,14 +162,12 @@ public:
 
 	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
 	bc->un->remove_watch(name);
-#if 1
-	// depends on safe_link
+
+	// XXX depends on safe_link
 	if (! name_hook.is_linked()) {
 	  // this should not happen!
 	  abort();
 	}
-#endif
-	bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
 
 	/* discard lmdb data associated with this bucket */
 	auto txn = env->getRWTransaction();
@@ -624,6 +628,7 @@ public:
       b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 
       ulk.unlock();
+      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
 
     return 0;
