@@ -94,6 +94,7 @@ public:
   void update_bucket_stats(const std::string& bucket_name,
                           uint64_t bytes_used,
                           uint64_t num_objects,
+                          const std::string& user_id = "",
                           bool update_cache = true);
 
 void mark_bucket_active(const std::string& bucket_name,

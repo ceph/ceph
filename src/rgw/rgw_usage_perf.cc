@@ -170,7 +170,82 @@ int UsagePerfCounters::init() {
 void UsagePerfCounters::start() {
   ldout(cct, 10) << "Starting usage perf counters" << dendl;
   shutdown_flag = false;
-  
+
+  if (cache) {
+    ldout(cct, 10) << "Loading all stats from cache on startup" << dendl;
+    
+    // Load users - directly populate perf counters without touching cache
+    auto all_users = cache->get_all_users();
+    for (const auto& [user_id, stats] : all_users) {
+      // Create perf counter if needed
+      {
+        std::unique_lock lock(counters_mutex);
+        auto it = user_perf_counters.find(user_id);
+        if (it == user_perf_counters.end()) {
+          PerfCounters* counters = create_user_counters(user_id);
+          if (counters) {
+            user_perf_counters[user_id] = counters;
+            it = user_perf_counters.find(user_id);
+            ldout(cct, 15) << "Created perf counter for user " << user_id << dendl;
+          }
+        }
+        
+        // Set values directly on perf counter
+        if (it != user_perf_counters.end() && it->second) {
+          it->second->set(930001, stats.bytes_used);   // l_rgw_user_bytes
+          it->second->set(930002, stats.num_objects);  // l_rgw_user_objects
+          ldout(cct, 15) << "Set perf counter for user " << user_id 
+                         << " bytes=" << stats.bytes_used 
+                         << " objects=" << stats.num_objects << dendl;
+        }
+      }
+      
+      // Mark as active for refresh worker
+      mark_user_active(user_id);
+    }
+    
+    // Load buckets - directly populate perf counters without touching cache
+    auto all_buckets = cache->get_all_buckets();
+    for (const auto& [bucket_key, stats] : all_buckets) {
+      std::string bucket_name = bucket_key;
+      std::string tenant;
+      size_t pos = bucket_key.find('/');
+      if (pos != std::string::npos) {
+        tenant = bucket_key.substr(0, pos);
+        bucket_name = bucket_key.substr(pos + 1);
+      }
+      
+      // Create perf counter if needed
+      {
+        std::unique_lock lock(counters_mutex);
+        auto it = bucket_perf_counters.find(bucket_name);
+        if (it == bucket_perf_counters.end()) {
+          PerfCounters* counters = create_bucket_counters(bucket_name);
+          if (counters) {
+            bucket_perf_counters[bucket_name] = counters;
+            it = bucket_perf_counters.find(bucket_name);
+            ldout(cct, 15) << "Created perf counter for bucket " << bucket_name << dendl;
+          }
+        }
+        
+        // Set values directly on perf counter
+        if (it != bucket_perf_counters.end() && it->second) {
+          it->second->set(940001, stats.bytes_used);   // l_rgw_bucket_bytes
+          it->second->set(940002, stats.num_objects);  // l_rgw_bucket_objects
+          ldout(cct, 15) << "Set perf counter for bucket " << bucket_name 
+                         << " bytes=" << stats.bytes_used 
+                         << " objects=" << stats.num_objects << dendl;
+        }
+      }
+      
+      // Mark as active for refresh worker
+      mark_bucket_active(bucket_name, tenant);
+    }
+    
+    ldout(cct, 10) << "Initial load complete: " << all_users.size() 
+                   << " users, " << all_buckets.size() << " buckets" << dendl;
+  }
+
   // Start cleanup thread
   cleanup_thread = std::thread(&UsagePerfCounters::cleanup_worker, this);
   
@@ -246,15 +321,17 @@ void UsagePerfCounters::shutdown() {
 void UsagePerfCounters::update_bucket_stats(const std::string& bucket_name,
                                             uint64_t bytes_used,
                                             uint64_t num_objects,
+                                            const std::string& user_id,
                                             bool update_cache) {
   ldout(cct, 20) << "update_bucket_stats: bucket=" << bucket_name
                  << " bytes=" << bytes_used 
-                 << " objects=" << num_objects 
+                 << " objects=" << num_objects
+                 << " user=" << user_id 
                  << " update_cache=" << update_cache << dendl;
   
-  // Update cache if requested - ALWAYS write the total values passed in
-  if (update_cache && cache) {
-    int ret = cache->update_bucket_stats(bucket_name, bytes_used, num_objects);
+  // Update cache if requested - cache will aggregate user stats
+  if (update_cache && cache && !user_id.empty()) {
+    int ret = cache->update_bucket_stats(bucket_name, bytes_used, num_objects, user_id);
     if (ret == 0) {
       global_counters->inc(l_rgw_usage_cache_update);
       ldout(cct, 15) << "Cache updated for bucket " << bucket_name 
@@ -388,7 +465,7 @@ void UsagePerfCounters::mark_bucket_active(const std::string& bucket_name,
     }
     
     update_bucket_stats(bucket_only, cached_stats->bytes_used, 
-                       cached_stats->num_objects, false);
+                       cached_stats->num_objects,"" ,false);
   }
 }
 
@@ -485,7 +562,7 @@ void UsagePerfCounters::refresh_bucket_stats(const std::string& bucket_key) {
                    << " objects=" << cached_stats->num_objects << dendl;
     
     update_bucket_stats(bucket_name, cached_stats->bytes_used, 
-                       cached_stats->num_objects, false);
+                       cached_stats->num_objects, "", false);
   }
 }
 
@@ -527,7 +604,7 @@ void UsagePerfCounters::refresh_from_cache(const std::string& user_id,
     if (bucket_stats) {
       global_counters->inc(l_rgw_usage_cache_hit);
       update_bucket_stats(bucket_name, bucket_stats->bytes_used,
-                         bucket_stats->num_objects, false);
+                         bucket_stats->num_objects, "", false);
     } else {
       global_counters->inc(l_rgw_usage_cache_miss);
     }

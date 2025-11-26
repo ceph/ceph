@@ -70,7 +70,8 @@ public:
   // Bucket stats operations (non-const to update counters)
   int update_bucket_stats(const std::string& bucket_name,
                          uint64_t bytes_used,
-                         uint64_t num_objects);
+                         uint64_t num_objects,
+                         const std::string& user_id);
   std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
   int remove_bucket_stats(const std::string& bucket_name);
   
@@ -85,6 +86,10 @@ public:
   uint64_t get_cache_misses() const;
   double get_hit_rate() const;
 
+  // Iterator methods for initial load
+  std::vector<std::pair<std::string, UsageStats>> get_all_users();
+  std::vector<std::pair<std::string, UsageStats>> get_all_buckets();
+  
 private:
   // Database operations
   int open_database();

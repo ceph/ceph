@@ -510,15 +510,56 @@ int UsageCache::remove_user_stats(const std::string& user_id) {
 
 int UsageCache::update_bucket_stats(const std::string& bucket_name,
                                     uint64_t bytes_used,
-                                    uint64_t num_objects) {
+                                    uint64_t num_objects,
+                                    const std::string& user_id) {
+
+  if (!initialized || user_id.empty()) {
+    return -EINVAL;
+  }
+
   std::unique_lock lock(db_mutex);
   
+  // Get old bucket stats to calculate delta
+  auto old_bucket_stats = get_stats<UsageStats>(bucket_dbi, bucket_name);
+
   UsageStats stats;
   stats.bytes_used = bytes_used;
   stats.num_objects = num_objects;
   stats.last_updated = ceph::real_clock::now();
   
   int ret = put_stats(bucket_dbi, bucket_name, stats);
+  if (ret != 0) {
+    return ret;
+  }
+  
+  // Get current user stats
+  auto current_user_stats = get_stats<UsageStats>(user_dbi, user_id);
+  
+  UsageStats new_user_stats;
+  if (current_user_stats.has_value()) {
+    new_user_stats.bytes_used = current_user_stats->bytes_used;
+    new_user_stats.num_objects = current_user_stats->num_objects;
+  } else {
+    new_user_stats.bytes_used = 0;
+    new_user_stats.num_objects = 0;
+  }
+  
+  // Calculate delta (what changed for this bucket)
+  int64_t delta_bytes = (int64_t)bytes_used;
+  int64_t delta_objects = (int64_t)num_objects;
+  
+  if (old_bucket_stats.has_value()) {
+    delta_bytes -= (int64_t)old_bucket_stats->bytes_used;
+    delta_objects -= (int64_t)old_bucket_stats->num_objects;
+  }
+  
+  // Apply delta to user stats
+  new_user_stats.bytes_used = (uint64_t)((int64_t)new_user_stats.bytes_used + delta_bytes);
+  new_user_stats.num_objects = (uint64_t)((int64_t)new_user_stats.num_objects + delta_objects);
+  new_user_stats.last_updated = ceph::real_clock::now();
+  
+  // Update user stats in cache
+  ret = put_stats(user_dbi, user_id, new_user_stats);
   if (ret == 0) {
     inc_counter(PERF_CACHE_UPDATE);
     set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
@@ -731,6 +772,112 @@ double UsageCache::get_hit_rate() const {
   uint64_t total = hits + misses;
   
   return (total > 0) ? (double)hits / total * 100.0 : 0.0;
+}
+
+std::vector<std::pair<std::string, UsageStats>> UsageCache::get_all_users() {
+  std::vector<std::pair<std::string, UsageStats>> result;
+  
+  if (!env) {
+    ldout(cct, 5) << "get_all_users: database not initialized" << dendl;
+    return result;
+  }
+  
+  MDB_txn* txn = nullptr;
+  int rc = mdb_txn_begin(env, nullptr, MDB_RDONLY, &txn);
+  if (rc != 0) {
+    ldout(cct, 5) << "LMDB txn_begin failed in get_all_users: " 
+                  << mdb_strerror(rc) << dendl;
+    return result;
+  }
+  
+  MDB_cursor* cursor = nullptr;
+  rc = mdb_cursor_open(txn, user_dbi, &cursor);
+  if (rc != 0) {
+    ldout(cct, 5) << "LMDB cursor_open failed in get_all_users: " 
+                  << mdb_strerror(rc) << dendl;
+    mdb_txn_abort(txn);
+    return result;
+  }
+  
+  MDB_val key, data;
+  while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
+    std::string user_id((char*)key.mv_data, key.mv_size);
+    
+    UsageStats stats;
+    try {
+      bufferlist bl;
+      bl.append((char*)data.mv_data, data.mv_size);
+      auto iter = bl.cbegin();
+      stats.decode(iter);
+      
+      result.push_back({user_id, stats});
+      ldout(cct, 20) << "get_all_users: loaded user=" << user_id 
+                     << " bytes=" << stats.bytes_used 
+                     << " objects=" << stats.num_objects << dendl;
+    } catch (const std::exception& e) {
+      ldout(cct, 1) << "Failed to decode user stats for " << user_id 
+                    << ": " << e.what() << dendl;
+    }
+  }
+  
+  mdb_cursor_close(cursor);
+  mdb_txn_abort(txn);
+  
+  ldout(cct, 10) << "get_all_users: loaded " << result.size() << " users" << dendl;
+  return result;
+}
+
+std::vector<std::pair<std::string, UsageStats>> UsageCache::get_all_buckets() {
+  std::vector<std::pair<std::string, UsageStats>> result;
+  
+  if (!env) {
+    ldout(cct, 5) << "get_all_buckets: database not initialized" << dendl;
+    return result;
+  }
+  
+  MDB_txn* txn = nullptr;
+  int rc = mdb_txn_begin(env, nullptr, MDB_RDONLY, &txn);
+  if (rc != 0) {
+    ldout(cct, 5) << "LMDB txn_begin failed in get_all_buckets: " 
+                  << mdb_strerror(rc) << dendl;
+    return result;
+  }
+  
+  MDB_cursor* cursor = nullptr;
+  rc = mdb_cursor_open(txn, bucket_dbi, &cursor);
+  if (rc != 0) {
+    ldout(cct, 5) << "LMDB cursor_open failed in get_all_buckets: " 
+                  << mdb_strerror(rc) << dendl;
+    mdb_txn_abort(txn);
+    return result;
+  }
+  
+  MDB_val key, data;
+  while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
+    std::string bucket_key((char*)key.mv_data, key.mv_size);
+    
+    UsageStats stats;
+    try {
+      bufferlist bl;
+      bl.append((char*)data.mv_data, data.mv_size);
+      auto iter = bl.cbegin();
+      stats.decode(iter);
+      
+      result.push_back({bucket_key, stats});
+      ldout(cct, 20) << "get_all_buckets: loaded bucket=" << bucket_key 
+                     << " bytes=" << stats.bytes_used 
+                     << " objects=" << stats.num_objects << dendl;
+    } catch (const std::exception& e) {
+      ldout(cct, 1) << "Failed to decode bucket stats for " << bucket_key 
+                    << ": " << e.what() << dendl;
+    }
+  }
+  
+  mdb_cursor_close(cursor);
+  mdb_txn_abort(txn);
+  
+  ldout(cct, 10) << "get_all_buckets: loaded " << result.size() << " buckets" << dendl;
+  return result;
 }
 
 // Explicit template instantiations
