@@ -6,7 +6,9 @@ import time
 import errno
 from typing import Any, Callable, Dict, List
 
-from mgr_module import MgrModule, HandleCommandResult, CLICommand, API
+from .cli import CLIAPICLICommand
+
+from mgr_module import MgrModule, HandleCommandResult, API
 
 logger = logging.getLogger()
 get_time = time.perf_counter
@@ -53,7 +55,7 @@ class MgrAPIReflector(type):
                 # save functions to klass._cli_{n}() methods. This
                 # can help on unit testing
                 wrapper = cls.func_wrapper(func)
-                command = CLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
+                command = CLIAPICLICommand(**CephCommander(func).to_ceph_signature())(  # type: ignore
                     wrapper)
                 setattr(
                     klass,
@@ -84,7 +86,9 @@ class MgrAPIReflector(type):
 
 
 class CLI(MgrModule, metaclass=MgrAPIReflector):
-    @CLICommand('mgr cli_benchmark')
+    CLICommand = CLIAPICLICommand
+
+    @CLIAPICLICommand('mgr cli_benchmark')
     def benchmark(self, iterations: int, threads: int, func_name: str,
                   func_args: List[str] = None) -> HandleCommandResult:  # type: ignore
         func_args = () if func_args is None else func_args
