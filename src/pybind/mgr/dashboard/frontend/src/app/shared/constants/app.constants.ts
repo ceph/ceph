@@ -153,6 +153,7 @@ export class ActionLabelsI18n {
   EXPAND_CLUSTER: string;
   SETUP_MULTISITE_REPLICATION: string;
   NFS_EXPORT: string;
+  VIEW_DETAILS: string;
 
   constructor() {
     /* Create a new item */
@@ -245,6 +246,7 @@ export class ActionLabelsI18n {
     this.EXPAND_CLUSTER = $localize`Expand Cluster`;
 
     this.NFS_EXPORT = $localize`Create NFS Export`;
+    this.VIEW_DETAILS = $localize`View details`;
   }
 }
 
