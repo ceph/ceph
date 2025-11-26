@@ -152,3 +152,4 @@ First stable release
 - [x] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [x] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
+- [ ] add release and supported distros to tables in `doc/start/os-recommendations.rst`
