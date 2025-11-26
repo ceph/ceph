@@ -94,6 +94,7 @@ RGW
   deprecated in favor of accounts. While we'll continue to support the tenant feature
   itself for namespace isolation, the following features will be removed no sooner
   than the V release:
+
     * Tenant-level IAM APIs including CreateRole, PutRolePolicy and PutUserPolicy,
     * Use of tenant names instead of accounts in IAM policy documents,
     * Interpretation of IAM policy without cross-account policy evaluation,
