@@ -1,5 +1,5 @@
 CephFS Fscrypt
-================
+==============
 
 Fscrypt is an encryption implementation at the file system level. This file
 system encryption allows for encrypting on a per directory level. This allows
@@ -11,7 +11,7 @@ implementation. If you would like to see the full kernel specification
 please visit: https://docs.kernel.org/filesystems/fscrypt.html
 
 Key Derivation Process
--------------------------
+----------------------
 The master key is the cornerstone to derive all keys within an fscrypt context.
 
 When an fscrypt policy is applied to an empty directory, a per-directory key
@@ -27,7 +27,7 @@ the size of 4K each. These block will each be encrypted a on a per-block
 basis that is derived from the per-file key.
 
 Generating filenames
--------------------
+--------------------
 When a new inode is created, the name provided is encrypted using the
 per-directory key. The plaintext file name will be encrypted. This cipher
 text is then converted to a base64 format. This is to ensure that there are no
@@ -38,7 +38,7 @@ the ``alternate_name`` field. This cipher text will then be truncated to a small
 size to be base64 encoded and stored in the dname.
 
 Per-block encryption keys
--------------------
+-------------------------
 When data blocks are written to a file each block will be written in fscrypt
 block sized chunks (4096 bytes) with a unique key. Each per-block key will be
 derived from the per-file key+block_num. This means that each encrypted block
@@ -65,8 +65,9 @@ in Figure 1, then a rmw workload is needed. First the block is read, then
 decrypted based on the key+blocknum, then new data is merged with the plaintext
 version and then encrypted before being written out to the osds.
 
-.. image:: cephfs_fscrypt_rmw_partially_aligned.svg
-Figure 1
+.. figure:: cephfs_fscrypt_rmw_partially_aligned.svg
+
+   Figure 1
 
 To determine if a rmw is needed the offset and len of write is analyzed. 
 
@@ -81,22 +82,24 @@ To determine if a rmw is needed the offset and len of write is analyzed.
   be performed and any previous data read will not be needed. This behavior is
   shown in Figure 2. In this case, only blocks 3 and 5 will need to be read.
 
-.. image:: cephfs_fscrypt_rmw_3blocks.svg
-Figure 2
+.. figure:: cephfs_fscrypt_rmw_3blocks.svg
+
+   Figure 2
 
 Space Amplification
----------------------
+-------------------
 In nearly all cases, using encryption will cause space amplification. Any data
 sets that aren’t uniformly aligned to fscrypt block boundaries will have this.
 The ``max_size`` quota is based off this amplified real size.
 
 Truncates
--------------------------
+---------
 In cases where a truncate call is not fscrypt block aligned, it will require
 rmw on the end block. Since a truncate call is handled by the mds, this rmw
 operation is partially handled by the mds. First, the client reads the last block.
 Then, as shown in Figure 3, the client requests a truncate (1), mds then does the
 write directly to the osds(2,3) before returning status back to the client(4).
 
-.. image:: cephfs_fscrypt_truncate_handshake.svg
-Figure 3
+.. figure:: cephfs_fscrypt_truncate_handshake.svg
+
+   Figure 3
