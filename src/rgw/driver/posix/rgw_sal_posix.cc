@@ -2944,6 +2944,8 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
+
+  /* XXXX we should get bucket cache once, ne? hint:  operate functor */
   driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
   if (!key.instance.empty() && !ent->exists()) {

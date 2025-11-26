@@ -74,6 +74,10 @@ public:
     dbi = _dbi;
   }
 
+  virtual ~BucketCacheEntry() {
+    int stop_here = 1;
+  }
+
   inline bool deleted() const {
     return flags & FLAG_DELETED;
   }
@@ -597,6 +601,8 @@ public:
       auto concat_k = concat_key(key);
       txn->del(b->dbi, concat_k);
       txn->commit();
+
+      // XXXX POOPOO -- lru_refcnt is reaching 0 here, but the (refcnt underrun)
 
       lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
