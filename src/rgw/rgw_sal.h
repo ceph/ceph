@@ -1937,11 +1937,11 @@ class VectorBucket {
                        const CreateParams& params,
                        optional_yield y) = 0;
 
-    /** Get the cached attributes associated with this bucket */
+    /** Get the cached attributes associated with this vector bucket */
     virtual Attrs& get_attrs(void) = 0;
-    /** Set the cached attributes on this bucket */
+    /** Set the cached attributes on this vector bucket */
     virtual int set_attrs(Attrs a) = 0;
-    /** Load this vector bucket from the backing store.  Requires the key to be set, fills other fields. */
+    /** Load this vector bucket from the backing store. Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Get the owner of this vector bucket */
     virtual const rgw_owner& get_owner() const = 0;
@@ -1949,30 +1949,30 @@ class VectorBucket {
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if this instantiation is empty */
     virtual bool empty() const = 0;
-    /** Get the cached name of this bucket */
+    /** Get the cached name of this vector bucket */
     virtual const std::string& get_name() const = 0;
-    /** Get the cached tenant of this bucket */
+    /** Get the cached tenant of this vector bucket */
     virtual const std::string& get_tenant() const = 0;
-    /** Get the cached marker of this bucket */
+    /** Get the cached marker of this vector bucket */
     virtual const std::string& get_marker() const = 0;
-    /** Get the cached ID of this bucket */
+    /** Get the cached ID of this vector bucket */
     virtual const std::string& get_bucket_id() const = 0;
-    /** Get the cached placement rule of this bucket */
+    /** Get the cached placement rule of this vector bucket */
     virtual rgw_placement_rule& get_placement_rule() = 0;
-    /** Get the cached creation time of this bucket */
+    /** Get the cached creation time of this vector bucket */
     virtual ceph::real_time& get_creation_time() = 0;
-    /** Get the cached modification time of this bucket */
+    /** Get the cached modification time of this vector bucket */
     virtual ceph::real_time& get_modification_time() = 0;
-    /** Get the key for this bucket */
+    /** Get the key for this vector bucket */
     virtual rgw_bucket& get_key() = 0;
-    /** Get the info for this bucket */
+    /** Get the info for this vector bucket */
     virtual RGWBucketInfo& get_info() = 0;
 
-    /** Check if a Bucket pointer is empty */
+    /** Check if a VectorBucket pointer is empty */
     static bool empty(const VectorBucket* b) { return (!b || b->empty()); }
-    /** Check if a Bucket unique pointer is empty */
+    /** Check if a VectorBucket unique pointer is empty */
     static bool empty(const std::unique_ptr<VectorBucket>& b) { return (!b || b->empty()); }
-    /** Clone a copy of this bucket.  Used when modification is necessary of the copy */
+    /** Clone a copy of this vector bucket.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<VectorBucket> clone() = 0;
 
     /** Print the User to @a out */
@@ -1998,6 +1998,47 @@ class VectorBucket {
 
     virtual bool operator==(const VectorBucket& b) const = 0;
     virtual bool operator!=(const VectorBucket& b) const = 0;
+
+    // TODO check if we need these API from Bucket class:
+    /** Read the bucket stats from the backing Store, synchronous */
+    //virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y,
+    //			   const bucket_index_layout_generation& idx_layout,
+    //			   int shard_id, std::string* bucket_ver, std::string* master_ver,
+    //			   std::map<RGWObjCategory, RGWStorageStats>& stats,
+    //			   std::string* max_marker = nullptr,
+    //			   bool* syncstopped = nullptr) = 0;
+    /** Read the bucket stats from the backing Store, asynchronous */
+    //virtual int read_stats_async(const DoutPrefixProvider *dpp,
+    //				 const bucket_index_layout_generation& idx_layout,
+    //				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
+    /** Sync this bucket's stats to the owning user's stats in the backing store */
+    //virtual int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+    //                             RGWBucketEnt* optional_ent) = 0;
+    /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
+     * change ownership of the objects in the bucket. */
+    //virtual int chown(const DoutPrefixProvider* dpp,
+    //                  const rgw_owner& new_owner,
+    //                  const std::string& new_owner_name,
+    //                  optional_yield y) = 0;
+    /** Store the cached bucket info into the backing store */
+    //virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
+    /** Check if the given size fits within the quota */
+    // virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
+    /** Set the attributes in attrs, leaving any other existing attrs set, and
+     * write them to the backing store; a merge operation */
+    //virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
+    /** Try to refresh the cached bucket info from the backing store.  Used in
+     * read-modify-update loop. */
+    //virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) = 0;
+    /** Read usage information about this bucket from the backing store */
+    //virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
+    //			   bool* is_truncated, RGWUsageIter& usage_iter,
+    //			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
+    /** Trim the usage information to the given epoch range */
+    //virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
+    /** Remove this specific vector bucket instance from the backing store.  May be removed from API */
+    //virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    /** Check if this instantiation is empty */
 };
 
 /** @} namespace rgw::sal in group RGWSAL */
