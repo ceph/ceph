@@ -1,0 +1,23 @@
+name: Commit Message Check
+
+on:
+  push:
+    branches:
+      - main # Or your default branch
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check_commit_title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4 # Checkout the repository
+       - name: Check Commit Message
+        uses: GsActions/commit-message-checker@v1.0.0 # Use the commit message checker action
+        with:
+          # Regex to check commit and PR titles
+          # Quotes, backticks, and non-7-bit-ASCII chars can cause problems
+	  # e.g. with release notes formatting
+          regexp: '^[a-zA-Z0-9_-]+$'
+          # If you want to check the actual commit messages in a PR, not just the PR title
+          validate-pull-request-commits: true
