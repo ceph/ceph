@@ -185,8 +185,10 @@ struct FixedKVInternalNode
     this->set_layout_buf(this->get_bptr().c_str());
   }
 
-  void prepare_commit() final {
-    parent_node_t::prepare_commit();
+  void prepare_commit(Transaction &t) final {
+    if (!is_rewrite_transaction(t.get_src())) {
+      parent_node_t::prepare_commit();
+    }
   }
 
   virtual ~FixedKVInternalNode() {
@@ -246,12 +248,14 @@ struct FixedKVInternalNode
     delta_buffer.clear();
   }
 
-  void on_replace_prior() final {
-    this->parent_node_t::on_replace_prior();
-    if (this->is_btree_root()) {
-      this->root_node_t::on_replace_prior();
-    } else {
-      this->child_node_t::on_replace_prior();
+  void on_replace_prior(Transaction &t) final {
+    if (!is_rewrite_transaction(t.get_src())) {
+      this->parent_node_t::on_replace_prior();
+      if (this->is_btree_root()) {
+        this->root_node_t::on_replace_prior();
+      } else {
+        this->child_node_t::on_replace_prior();
+      }
     }
   }
 
@@ -672,19 +676,23 @@ struct FixedKVLeafNode
   }
 
   virtual void do_prepare_commit() = 0;
-  void prepare_commit() final {
-    do_prepare_commit();
+  void prepare_commit(Transaction &t) final {
+    if (!is_rewrite_transaction(t.get_src())) {
+      do_prepare_commit();
+    }
     modifications = 0;
   }
 
   virtual void do_on_replace_prior() = 0;
-  void on_replace_prior() final {
+  void on_replace_prior(Transaction &t) final {
     ceph_assert(!this->is_rewrite());
-    do_on_replace_prior();
-    if (this->is_btree_root()) {
-      this->root_node_t::on_replace_prior();
-    } else {
-      this->child_node_t::on_replace_prior();
+    if (!is_rewrite_transaction(t.get_src())) {
+      do_on_replace_prior();
+      if (this->is_btree_root()) {
+        this->root_node_t::on_replace_prior();
+      } else {
+        this->child_node_t::on_replace_prior();
+      }
     }
     modifications = 0;
   }
