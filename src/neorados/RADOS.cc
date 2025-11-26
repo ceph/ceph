@@ -1682,6 +1682,7 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
   bool finished = false;
   bs::error_code res;
   bufferlist rbl;
+  bool cleaned = false;
 
   NotifyHandler(asio::io_context& ioc,
 		Objecter* objecter,
@@ -1716,9 +1717,13 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 
   // Should be called from strand.
   void maybe_cleanup(bs::error_code ec) {
+    if (cleaned) {
+      return;
+    }
     if (!res && ec)
       res = ec;
     if ((acked && finished) || res) {
+      cleaned = true;
       objecter->linger_cancel(op.get());
       ceph_assert(c);
       bc::flat_map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
