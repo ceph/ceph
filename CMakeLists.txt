@@ -538,13 +538,10 @@ if(WITH_CATCH2)
   message("-- Enabled Catch2 support")
 endif()
 
-if(WIN32)
-    set(WITH_BREAKPAD_DEFAULT OFF)
-else()
-    set(WITH_BREAKPAD_DEFAULT ON)
-endif()
-
-option(WITH_BREAKPAD "Build with Google Breakpad crash reporter"  ${WITH_BREAKPAD_DEFAULT})
+# enable breakpad unless win32 or power
+# ppc64le port tracked in https://issues.chromium.org/issues/41479970
+CMAKE_DEPENDENT_OPTION(WITH_BREAKPAD "Build with Google Breakpad crash reporter" OFF
+  "WIN32 OR CMAKE_SYSTEM_PROCESSOR MATCHES ppc64le" ON)
 if(WITH_BREAKPAD)
   set(HAVE_BREAKPAD ON)
   message("-- Enabled Google Breakpad crash reporter")
