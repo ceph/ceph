@@ -2230,6 +2230,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // Missing direct read (EC version)
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
+      get_local_missing().is_missing(head)) {
+    dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
+    return;
+  }
+
   if (write_ordered) {
     // degraded object?
     if (is_degraded_or_backfilling_object(head)) {
@@ -5896,10 +5904,17 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
       maybe_crc = oi.data_digest;
 
     if (ctx->op->ec_direct_read()) {
-      result = pgbackend->objects_read_sync(
+      int r = pgbackend->objects_read_sync(
         soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
-
-        dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+      if (r >= 0) {
+        op.extent.length = r;
+      } else if (r == -EAGAIN) {
+        result = -EAGAIN;
+      } else {
+        result = r;
+        op.extent.length = 0;
+      }
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
     } else {
     ctx->pending_async_reads.push_back(
       make_pair(
