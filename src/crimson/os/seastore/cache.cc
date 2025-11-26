@@ -1348,10 +1348,10 @@ record_t Cache::prepare_record(
     }
 
     i->prepare_write();
-    i->prepare_commit();
+    i->prepare_commit(t);
 
     if (i->is_mutation_pending()) {
-      i->on_replace_prior();
+      i->on_replace_prior(t);
     } // else, is_exist_mutation_pending():
       // - it doesn't have prior_instance to replace
 
@@ -1414,12 +1414,12 @@ record_t Cache::prepare_record(
     i->trans_view_hook.unlink();
   }
 
-  t.for_each_finalized_fresh_block([](auto &e) {
+  t.for_each_finalized_fresh_block([&t](auto &e) {
     // fresh blocks' `prepare_commit` must be invoked before
     // retiering extents, this is because logical linked tree
     // nodes needs to access their prior instances in this
     // phase if they are rewritten.
-    e->prepare_commit();
+    e->prepare_commit(t);
   });
 
   /*

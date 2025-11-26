@@ -294,7 +294,10 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalChildNode {
     modified_region.clear();
   }
 
-  void prepare_commit() final {
+  void prepare_commit(Transaction &t) final {
+    if (is_rewrite_transaction(t.get_src())) {
+      return;
+    }
     if (has_mutation()) {
       ceph_assert(!cached_overwrites.is_empty());
       if (cached_overwrites.has_cached_bptr()) {

@@ -399,7 +399,7 @@ public:
    * Called prior to committing the transaction in which this extent
    * is living.
    */
-  virtual void prepare_commit() {}
+  virtual void prepare_commit(Transaction &) {}
 
   /**
    * on_initial_write
@@ -450,7 +450,7 @@ public:
    * with the states of Cache and can't wait till transaction
    * completes.
    */
-  virtual void on_replace_prior() {}
+  virtual void on_replace_prior(Transaction &) {}
 
   /**
    * on_invalidated
