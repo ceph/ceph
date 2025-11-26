@@ -1188,6 +1188,10 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// current watermark tracking pool migration progress
+  hobject_t pool_migration_watermark;
+  /// currently migrating objects
+  std::set<hobject_t> pool_migrations_in_flight;
   /// last pool migration operation started
   hobject_t last_pool_migration_started;
   bool new_pool_migration;
@@ -1195,7 +1199,8 @@ protected:
   hobject_t earliest_pool_migration();
   void update_migration_watermark(const hobject_t &watermark) override
   {
-    last_pool_migration_started = watermark;
+    pool_migration_watermark = watermark;
+    last_pool_migration_started = watermark; // BILL:FIXME: should be updated when work is scheduled
   }
   std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
 

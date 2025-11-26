@@ -517,6 +517,7 @@ void PrimaryLogPG::on_global_recover(
   }
 
   backfills_in_flight.erase(soid);
+  pool_migrations_in_flight.erase(soid);
 
   recovering.erase(i);
   finish_recovery_op(soid);
@@ -684,6 +685,11 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
         recovery_state.get_peer_info(peer).last_backfill <= soid &&
 	last_backfill_started >= soid &&
 	backfills_in_flight.count(soid))
+      return true;
+    // Object is degraded if we are migrating it to another pool
+    if (pool_migration_watermark <= soid &&
+	last_pool_migration_started >= soid &&
+	pool_migrations_in_flight.count(soid))
       return true;
   }
   return false;
@@ -2202,13 +2208,13 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
       osd->reply_op_error(op, -EIO);
       return;
     }
-    if (m->get_hobj() < last_pool_migration_started) {
+    if (m->get_hobj() < pool_migration_watermark) {
       // object has been migrated to the target pool
       dout(20) << __func__ << ": object has been migrated to pool "
 	       << *pi->migration_target << dendl;
       //BILL:FIXME: Need to change client to handle EXDEV (retry request to
       //the target pool) and find a way of returning
-      //last_pool_migration_started here so the client can update its cached
+      //pool_migration_watermark here so the client can update its cached
       //copy of the watermark so it directs I/O to the correct pool
       osd->reply_op_error(op, -EXDEV);
       return;
@@ -13080,8 +13086,8 @@ void PrimaryLogPG::on_shutdown()
 
 std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std::set<hobject_t> &deleted)
 {
-  if (deleted.contains(last_pool_migration_started)) {
-    hobject_t current(last_pool_migration_started);
+  if (deleted.contains(pool_migration_watermark)) {
+    hobject_t current(pool_migration_watermark);
     hobject_t next;
     do {
       //BILL:FIXME: This is very inefficient, it isn't looking at the missing list either...
@@ -13100,8 +13106,7 @@ std::optional<hobject_t> PrimaryLogPG::consider_updating_migration_watermark(std
       }
       current = next;
     } while (deleted.contains(current));
-    dout(20) << __func__ << " new watermark will be " << current << dendl;
-    queue_recovery(); //BILL:FIXME: Hack to advance pool migration - see recover_pool_migration
+    dout(20) << __func__ << " new pool migration watermark will be " << current << dendl;
     return current;
   }
   return {};
@@ -13411,6 +13416,8 @@ void PrimaryLogPG::_clear_recovery_state()
     backfills_in_flight.erase(i++);
   }
 
+  pool_migrations_in_flight.clear();
+
   list<OpRequestRef> blocked_ops;
   for (map<hobject_t, ObjectContextRef>::iterator i = recovering.begin();
        i != recovering.end();
@@ -13420,6 +13427,7 @@ void PrimaryLogPG::_clear_recovery_state()
       requeue_ops(blocked_ops);
     }
   }
+  ceph_assert(pool_migrations_in_flight.empty());
   ceph_assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
   ceph_assert(recovering.empty());
@@ -14764,7 +14772,6 @@ uint64_t PrimaryLogPG::recover_pool_migration(
   uint64_t max,
   ThreadPool::TPHandle &handle, bool *work_started)
 {
-  //BILL:FIXME: Stub function
   dout(10) << __func__ << " (" << max << ")"
 	   << " last_pool_migration_started " << last_pool_migration_started
 	   << (new_pool_migration ? " new_pool_migration":"")
@@ -14776,30 +14783,67 @@ uint64_t PrimaryLogPG::recover_pool_migration(
     ceph_assert(last_pool_migration_started == earliest_pool_migration());
     new_pool_migration = false;
 
-    // initialize PoolMigrationIntervals
-    //BILL:FIXME: Stub function
-    //pool_migration_info.reset(last_pool_migration_started);
+    //BILL:FIXME: initialize PoolMigrationIntervals? Maybe we need to move
+    //all of the code in this if into earliest_pool_migration as we need to
+    //calculate pool_migration_watermark before allowing I/O to start.
     //
-    //backfills_in_flight.clear();
-    //pending_backfill_updates.clear();
+    //pool_migration_info.reset(last_pool_migration_started);
+
+    pool_migrations_in_flight.clear();
   }
 
-  //BILL:FIXME: Hacky implementation of pool migration - don't complete
-  //the migration for a PG until all the objects in the PG have been
-  //deleted. For now you need to manually delete the objects in the
-  //pool. last_pool_migration_started will get incremented as
-  //the lowest object is deleted by consider_updating_migration_watermark
-  //and a hack there will queue recovery each time the watermark progreses
-  if (!last_pool_migration_started.is_max()) {
-    // Set work_started if there are still objects in the pool which
-    // will stop migration completing.
-    *work_started = true;
+  //BILL:FIXME: Simple implementation, we only migrate one object
+  //at a time - so can use last_pool_migration_started as the next
+  //object to be migrated
+
+  if (last_pool_migration_started.is_max()) {
+    // Finished pool migration
+    return 0;
   }
-  // but return 0 indicating that no work was started so we don't
-  // increment the number of inflight recovery ops
-  return 0;
+  // Start next pool migration
+  *work_started = true;
+
+  //BILL:FIXME: Currently we just delete the object from the source
+  //pool, we should be copying it to the target pool first!
+  hobject_t soid = last_pool_migration_started;
+  ceph_assert(!is_degraded_or_backfilling_object(soid));
+  ObjectContextRef obc = get_object_context(soid, false);
+  ceph_assert(obc);
+  OpContextUPtr ctx = simple_opc_create(obc);
+  if (!ctx->lock_manager.get_pool_migration_write(
+	soid,
+	obc)) {
+    close_op_ctx(ctx.release());
+    dout(20) << "pool migration delayed on " << soid
+	     << "; could not get rw_manager lock" << dendl;
+    return 0;
+  }
+  start_recovery_op(soid);
+  ceph_assert(!recovering.count(soid));
+  recovering.insert(make_pair(soid, obc));
+  pool_migrations_in_flight.insert(soid);
+
+  ctx->register_on_finish(
+    [this,soid]() {
+      dout(20) << "pool migration finished migrating " << soid << dendl;
+      auto i = recovering.find(soid);
+      ceph_assert(i != recovering.end());
+      object_stat_sum_t stat_diff;
+      on_global_recover(soid, stat_diff, false);
+    });
+  ctx->at_version = get_next_version();
+  ceph_assert(ctx->new_obs.exists);
+  int r = _delete_oid(ctx.get(), false, false);
+  ceph_assert(r == 0);
+  if (obc->obs.oi.is_omap()) {
+    ctx->delta_stats.num_objects_omap--;
+  }
+  finish_ctx(ctx.get(), pg_log_entry_t::DELETE);
+  dout(20) << "pool migration deleleting " << soid << dendl;
+  simple_opc_submit(std::move(ctx));
+  *work_started = true;
+  return 1;
 }
-
 
 // ===========================
 // hit sets
