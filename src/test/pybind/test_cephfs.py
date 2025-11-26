@@ -1566,7 +1566,7 @@ class TestRmtree:
         cephfs.rmtree('dir6', should_cancel)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_broad_tree(self, testdir):
+    def test_rmtree_on_a_200_dir_broad_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 200
         subdirectories on the same level.
@@ -1586,7 +1586,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_very_broad_tree(self, testdir):
+    def test_rmtree_on_a_2k_dir_broad_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         subdirectories on the same level.
@@ -1606,7 +1606,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_deep_tree(self, testdir):
+    def test_rmtree_on_a_200_dir_deep_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         levels.
@@ -1625,7 +1625,7 @@ class TestRmtree:
         cephfs.rmtree('dir1', should_cancel, suppress_errors=False)
         assert_raises(libcephfs.ObjectNotFound, cephfs.stat, 'dir1')
 
-    def test_rmtree_on_a_very_very_deep_tree(self, testdir):
+    def test_rmtree_on_a_2k_dir_deep_tree(self, testdir):
         '''
         Test that rmtree() successfully deletes a file hierarchy with 2000
         levels.
