@@ -66,11 +66,9 @@ class SplitOp {
       uint64_t chunk = start_offset / chunk_size;
       current_info.length = std::min(total_len, (chunk + 1) * chunk_size - start_offset);
 
-      // Maybe this is paranoia, as compiler would probably detect that this
-      // / and % could be done in a single op.
-      auto chunk_div = std::lldiv(chunk, data_chunk_count);
-      current_info.shard = shard_id_t(chunk_div.rem);
-      current_info.shard_offset = (chunk_div.quot) * chunk_size + start_offset % chunk_size;
+      current_info.shard = shard_id_t(chunk % data_chunk_count);
+      current_info.shard_offset = (chunk / data_chunk_count) * chunk_size +
+        start_offset % chunk_size;
     }
 
     value_type operator*() const {

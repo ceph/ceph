@@ -8454,25 +8454,26 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
 }
 
 void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
-  if (p.is_erasure()) {
-    ErasureCodeInterfaceRef erasure_code;
-    stringstream tmp;
-    int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
+  if (!p.is_erasure()) {
+     return;
+  }
+  ErasureCodeInterfaceRef erasure_code;
+  stringstream tmp;
+  int err = get_erasure_code(p.erasure_code_profile, &erasure_code, &tmp);
 
-    // Once this feature is finished, we will replace this with upgrade code.
-    // The upgrade code will enable the split read flag once all OSDs are at
-    // Umbrella. For now, if the plugin does not support direct reads, we just
-    // disable it.  All plugins and techniques should be capable of supporting
-    // direct reads, but we put in place this capability to reduce the test
-    // matrix for less important plugins/techniques.
-    //
-    // To enable direct reads in development, set the osd_pool_default_flags to
-    // 1<<20 = 0x100000 = 1048576
-    if (err != 0 || !p.allows_ecoptimizations() ||
-          (erasure_code->get_supported_optimizations() &
-            ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
-      p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
-    }
+  // Once this feature is finished, we will replace this with upgrade code.
+  // The upgrade code will enable the split read flag once all OSDs are at
+  // Umbrella. For now, if the plugin does not support direct reads, we just
+  // disable it.  All plugins and techniques should be capable of supporting
+  // direct reads, but we put in place this capability to reduce the test
+  // matrix for less important plugins/techniques.
+  //
+  // To enable direct reads in development, set the osd_pool_default_flags to
+  // 1<<20 = 0x100000 = 1048576
+  if (err != 0 || !p.allows_ecoptimizations() ||
+        (erasure_code->get_supported_optimizations() &
+          ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
+    p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
   }
 }
 
