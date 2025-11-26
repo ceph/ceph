@@ -4073,7 +4073,7 @@ void RGWCreateBucket::execute(optional_yield y)
     auto* usage_counters = rgw::get_usage_perf_counters();
     if (usage_counters && s->bucket) {
       // For new buckets, initialize with 0 bytes and 0 objects
-      usage_counters->update_bucket_stats(s->bucket->get_name(), 0, 0);
+      usage_counters->update_bucket_stats(s->bucket->get_name(), 0, 0, s->user->get_id().id);
       
       // Update user stats - use sync_owner_stats to get current info
       if (s->user) {
@@ -4084,7 +4084,8 @@ void RGWCreateBucket::execute(optional_yield y)
           usage_counters->update_user_stats(
             s->user->get_id().id,
             ent.size,
-            ent.count
+            ent.count,
+            false
           );
         }
       }
@@ -5049,40 +5050,40 @@ void RGWPutObj::execute(optional_yield y)
       
       ldpp_dout(this, 20) << "PUT completed: updating usage for bucket=" 
                           << bucket_key << " size=" << s->obj_size << dendl;
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters && s->bucket && s->user) {
+      // Get actual bucket stats from RGW metadata (includes this PUT)
+      RGWBucketEnt stats;
+      int ret = s->bucket->sync_owner_stats(this, y, &stats);
       
-      // Increment bucket stats in cache (adds to existing)
-      auto existing = usage_counters->get_bucket_stats(bucket_key);
-      uint64_t new_bytes = s->obj_size;
-      uint64_t new_objects = 1;
-      
-      if (existing) {
-        new_bytes += existing->bytes_used;
-        new_objects += existing->num_objects;
-      }
-      
-      // Update cache with new totals
-      usage_counters->update_bucket_stats(s->bucket->get_name(), 
-                                         new_bytes, new_objects, true);
-      
-      // Mark as active to trigger perf counter update
-      usage_counters->mark_bucket_active(s->bucket->get_name(),
-                                        s->bucket->get_tenant());
-      
-      // Update user stats
-      if (s->user) {
-        auto user_existing = usage_counters->get_user_stats(s->user->get_id().to_str());
-        uint64_t user_bytes = s->obj_size;
-        uint64_t user_objects = 1;
+      if (ret >= 0) {
+        ldpp_dout(this, 20) << "PUT completed: updating usage for bucket="
+                            << s->bucket->get_name() 
+                            << " bytes=" << stats.size
+                            << " objects=" << stats.count << dendl;
         
-        if (user_existing) {
-          user_bytes += user_existing->bytes_used;
-          user_objects += user_existing->num_objects;
+        // Update with ACTUAL bucket totals (not calculated)
+        usage_counters->update_bucket_stats(s->bucket->get_name(),
+                                           stats.size,
+                                           stats.count,
+                                           s->user->get_id().id,
+                                           true);
+        
+        // Mark as active
+        usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                          s->bucket->get_tenant());
+        
+        // User stats are aggregated in cache, just update perf counter
+        auto user_stats = usage_counters->get_user_stats(s->user->get_id().to_str());
+        if (user_stats) {
+          usage_counters->update_user_stats(s->user->get_id().to_str(),
+                                           user_stats->bytes_used,
+                                           user_stats->num_objects,
+                                           false);
+          usage_counters->mark_user_active(s->user->get_id().to_str());
         }
-        
-        usage_counters->update_user_stats(s->user->get_id().to_str(),
-                                         user_bytes, user_objects, true);
-        usage_counters->mark_user_active(s->user->get_id().to_str());
       }
+    }
     }
   }
 
@@ -5890,34 +5891,36 @@ void RGWDeleteObj::execute(optional_yield y)
     op_ret = -EINVAL;
   }
   
-  // Update usage statistics after successful delete
-  if (op_ret == 0 && s->bucket) {
-    auto usage_counters = rgw::get_usage_perf_counters();
-    if (usage_counters) {
-      std::string bucket_key = s->bucket->get_tenant().empty() ? 
-                               s->bucket->get_name() : 
-                               s->bucket->get_tenant() + "/" + s->bucket->get_name();
+  auto usage_counters = rgw::get_usage_perf_counters();
+  if (usage_counters && s->bucket && s->user) {
+    // Get actual bucket stats from RGW metadata (after deletion)
+    RGWBucketEnt stats;
+    int ret = s->bucket->sync_owner_stats(this, y, &stats);
+    
+    if (ret >= 0) {
+      ldpp_dout(this, 20) << "DELETE completed: updating usage for bucket="
+                          << s->bucket->get_name() 
+                          << " bytes=" << stats.size
+                          << " objects=" << stats.count << dendl;
       
-      ldpp_dout(this, 20) << "DELETE completed: updating usage for bucket=" 
-                          << bucket_key << dendl;
+      // Update with ACTUAL bucket totals (not calculated)
+      usage_counters->update_bucket_stats(s->bucket->get_name(),
+                                          stats.size,
+                                          stats.count,
+                                          s->user->get_id().id,
+                                          true);
       
-      // Decrement bucket stats in cache
-      auto existing = usage_counters->get_bucket_stats(bucket_key);
-      if (existing && existing->num_objects > 0) {
-        uint64_t obj_size = existing->bytes_used / existing->num_objects; // approximate
-        uint64_t new_bytes = existing->bytes_used > obj_size ? 
-                            existing->bytes_used - obj_size : 0;
-        uint64_t new_objects = existing->num_objects - 1;
-        
-        usage_counters->update_bucket_stats(s->bucket->get_name(),
-                                           new_bytes, new_objects, true);
-      }
-      
-      // Mark as active to trigger perf counter update
+      // Mark as active
       usage_counters->mark_bucket_active(s->bucket->get_name(),
                                         s->bucket->get_tenant());
       
-      if (s->user) {
+      // User stats are aggregated in cache, just update perf counter
+      auto user_stats = usage_counters->get_user_stats(s->user->get_id().to_str());
+      if (user_stats) {
+        usage_counters->update_user_stats(s->user->get_id().to_str(),
+                                          user_stats->bytes_used,
+                                          user_stats->num_objects,
+                                          false);
         usage_counters->mark_user_active(s->user->get_id().to_str());
       }
     }
