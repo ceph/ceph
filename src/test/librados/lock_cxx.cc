@@ -107,19 +107,19 @@ TEST_F(LibRadosLockPP, BreakLockPP) {
 }
 
 // EC testing
-TEST_F(LibRadosLockECPP, LockExclusivePP) {
+TEST_P(LibRadosLockECPP, LockExclusivePP) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP1", "Cookie", "", NULL,  0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLockECPP1", "Cookie", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockECPP, LockSharedPP) {
+TEST_P(LibRadosLockECPP, LockSharedPP) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLockECPP2", "Cookie", "Tag", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_shared("foo", "TestLockECPP2", "Cookie", "Tag", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockECPP, LockExclusiveDurPP) {
+TEST_P(LibRadosLockECPP, LockExclusiveDurPP) {
   SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
@@ -132,7 +132,7 @@ TEST_F(LibRadosLockECPP, LockExclusiveDurPP) {
   ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_exclusive, nullptr));
 }
 
-TEST_F(LibRadosLockECPP, LockSharedDurPP) {
+TEST_P(LibRadosLockECPP, LockSharedDurPP) {
   SKIP_IF_CRIMSON();
   struct timeval tv;
   tv.tv_sec = 1;
@@ -145,21 +145,21 @@ TEST_F(LibRadosLockECPP, LockSharedDurPP) {
   ASSERT_EQ(expected, wait_until(1.0s, 0.1s, expected, lock_shared, nullptr));
 }
 
-TEST_F(LibRadosLockECPP, LockMayRenewPP) {
+TEST_P(LibRadosLockECPP, LockMayRenewPP) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP5", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
-TEST_F(LibRadosLockECPP, UnlockPP) {
+TEST_P(LibRadosLockECPP, UnlockPP) {
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP6", "Cookie", "", NULL, 0));
   ASSERT_EQ(0, ioctx.unlock("foo", "TestLockECPP6", "Cookie"));
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLockECPP6", "Cookie", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockECPP, ListLockersPP) {
+TEST_P(LibRadosLockECPP, ListLockersPP) {
   SKIP_IF_CRIMSON();
   std::stringstream sstm;
   sstm << "client." << cluster.get_instance_id();
@@ -185,7 +185,7 @@ TEST_F(LibRadosLockECPP, ListLockersPP) {
   }
 }
 
-TEST_F(LibRadosLockECPP, BreakLockPP) {
+TEST_P(LibRadosLockECPP, BreakLockPP) {
   SKIP_IF_CRIMSON();
   int exclusive;
   std::string tag;
@@ -201,3 +201,5 @@ TEST_F(LibRadosLockECPP, BreakLockPP) {
   ASSERT_EQ("Cookie", it->cookie);
   ASSERT_EQ(0, ioctx.break_lock("foo", "TestLockECPP8", it->client, "Cookie"));
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosLockECPP);

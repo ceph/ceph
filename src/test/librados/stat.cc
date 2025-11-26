@@ -12,7 +12,7 @@
 typedef RadosTest LibRadosStat;
 typedef RadosTestEC LibRadosStatEC;
 
-TEST_F(LibRadosStat, Stat) {
+TEST_P(LibRadosStat, Stat) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -23,7 +23,7 @@ TEST_F(LibRadosStat, Stat) {
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
 }
 
-TEST_F(LibRadosStat, Stat2) {
+TEST_P(LibRadosStat, Stat2) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   rados_write_op_t op = rados_create_write_op();
@@ -49,7 +49,7 @@ TEST_F(LibRadosStat, Stat2) {
   ASSERT_EQ(-ENOENT, rados_stat2(ioctx, "nonexistent", &size, &ts2));
 }
 
-TEST_F(LibRadosStat, StatNS) {
+TEST_P(LibRadosStat, StatNS) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   rados_ioctx_set_namespace(ioctx, "");
@@ -75,14 +75,14 @@ TEST_F(LibRadosStat, StatNS) {
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "foo2", &size, &mtime));
 }
 
-TEST_F(LibRadosStat, ClusterStat) {
+TEST_P(LibRadosStat, ClusterStat) {
   struct rados_cluster_stat_t result;
   ASSERT_EQ(0, rados_cluster_stat(cluster, &result));
 }
 
-TEST_F(LibRadosStat, PoolStat) {
+TEST_P(LibRadosStat, PoolStat) {
   char buf[128];
-  char actual_pool_name[80];
+  char actual_pool_name[160];
   unsigned l = rados_ioctx_get_pool_name(ioctx, actual_pool_name, sizeof(actual_pool_name));
   ASSERT_EQ(strlen(actual_pool_name), l);
   ASSERT_EQ(0, strcmp(actual_pool_name, pool_name.c_str()));
@@ -93,7 +93,7 @@ TEST_F(LibRadosStat, PoolStat) {
   ASSERT_EQ(0, rados_ioctx_pool_stat(ioctx, &stats));
 }
 
-TEST_F(LibRadosStatEC, Stat) {
+TEST_P(LibRadosStatEC, Stat) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -105,7 +105,7 @@ TEST_F(LibRadosStatEC, Stat) {
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "nonexistent", &size, &mtime));
 }
 
-TEST_F(LibRadosStatEC, StatNS) {
+TEST_P(LibRadosStatEC, StatNS) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -132,16 +132,16 @@ TEST_F(LibRadosStatEC, StatNS) {
   ASSERT_EQ(-ENOENT, rados_stat(ioctx, "foo2", &size, &mtime));
 }
 
-TEST_F(LibRadosStatEC, ClusterStat) {
+TEST_P(LibRadosStatEC, ClusterStat) {
   SKIP_IF_CRIMSON();
   struct rados_cluster_stat_t result;
   ASSERT_EQ(0, rados_cluster_stat(cluster, &result));
 }
 
-TEST_F(LibRadosStatEC, PoolStat) {
+TEST_P(LibRadosStatEC, PoolStat) {
   SKIP_IF_CRIMSON();
   char buf[128];
-  char actual_pool_name[80];
+  char actual_pool_name[160];
   unsigned l = rados_ioctx_get_pool_name(ioctx, actual_pool_name, sizeof(actual_pool_name));
   ASSERT_EQ(strlen(actual_pool_name), l);
   ASSERT_EQ(0, strcmp(actual_pool_name, pool_name.c_str()));
@@ -151,3 +151,6 @@ TEST_F(LibRadosStatEC, PoolStat) {
   memset(&stats, 0, sizeof(stats));
   ASSERT_EQ(0, rados_ioctx_pool_stat(ioctx, &stats));
 }
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosStat);
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosStatEC);

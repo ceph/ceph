@@ -14,6 +14,8 @@
 #include "test/librados/testcase_cxx.h"
 
 #include "crimson_utils.h"
+#include "cls/version/cls_version_ops.h"
+#include "cls/fifo/cls_fifo_ops.h"
 
 using namespace librados;
 using std::string;
@@ -50,8 +52,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       bufferlist op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -59,8 +61,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       bufferlist op_bl;
       ObjectReadOperation op;
-      op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data.
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, 0, nullptr, nullptr); //len=0 mean read the whole object data.
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -68,8 +70,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), &read_bl, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), &read_bl, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -80,8 +82,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       bufferlist op_bl;
       int rval = 1000;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, &rval);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, rval);
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -92,7 +94,7 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       int rval = 1000;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, rval);
@@ -106,7 +108,7 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl1, &rval1);
       op.read(0, sizeof(buf), &read_bl2, &rval2);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl1.length());
       ASSERT_EQ(sizeof(buf), read_bl2.length());
       ASSERT_EQ(sizeof(buf) * 2, op_bl.length());
@@ -121,8 +123,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       bufferlist op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -130,8 +132,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       bufferlist read_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), &read_bl, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      op.read(0, sizeof(buf), &read_bl, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
   }
@@ -139,8 +141,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
   {
       int rval = 1000;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      op.read(0, sizeof(buf), nullptr, &rval);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(0, rval);
   }
 
@@ -149,7 +151,7 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       int rval = 1000;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(0, rval);
       ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
@@ -161,7 +163,7 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl1, &rval1);
       op.read(0, sizeof(buf), &read_bl2, &rval2);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl1.length());
       ASSERT_EQ(sizeof(buf), read_bl2.length());
       ASSERT_EQ(0, rval1);
@@ -177,8 +179,8 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ASSERT_NE(op_bl.crc32c(0), bl.crc32c(0));  // cache 'x' crc
 
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
 
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -199,7 +201,7 @@ TEST_F(LibRadosIoPP, SparseReadOpPP) {
     int rval = -1;
     ObjectReadOperation op;
     op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
     ASSERT_EQ(0, rval);
     assert_eq_sparse(bl, extents, read_bl);
   }
@@ -212,7 +214,7 @@ TEST_F(LibRadosIoPP, SparseReadOpPP) {
     int rval = -1;
     ObjectReadOperation op;
     op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval, sizeof(buf) / 2, 1);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
     ASSERT_EQ(0, rval);
     assert_eq_sparse(bl, extents, read_bl);
   }
@@ -246,7 +248,7 @@ TEST_F(LibRadosIoPP, SparseReadExtentArrayOpPP) {
   int rval = -1;
   ObjectReadOperation op;
   op.sparse_read(0, len * buf_len, &extents, &read_bl, &rval);
-  ASSERT_EQ(0, ioctx.operate("sparse-read", &op, nullptr));
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "sparse-read", &op, nullptr, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, rval);
   assert_eq_sparse(expect_bl, extents, read_bl);
 }
@@ -270,12 +272,12 @@ TEST_F(LibRadosIoPP, RoundTripPP2)
   ObjectWriteOperation write;
   write.write(0, bl);
   write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
+  read.read(0, bl.length(), nullptr, nullptr);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOCACHE|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
@@ -360,12 +362,12 @@ TEST_F(LibRadosIoPP, WriteFullRoundTripPP2)
   ObjectWriteOperation write;
   write.write_full(bl);
   write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_NOCACHE);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
+  read.read(0, bl.length(), nullptr, nullptr);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
@@ -503,11 +505,11 @@ TEST_F(LibRadosIoPP, CrcZeroWrite) {
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, sizeof(buf)));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
 }
 
-TEST_F(LibRadosIoECPP, SimpleWritePP) {
+TEST_P(LibRadosIoECPP, SimpleWritePP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -518,7 +520,7 @@ TEST_F(LibRadosIoECPP, SimpleWritePP) {
   ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIoECPP, ReadOpPP) {
+TEST_P(LibRadosIoECPP, ReadOpPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -529,8 +531,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
       bufferlist op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -538,8 +540,9 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
     bufferlist op_bl;
     ObjectReadOperation op;
-    op.read(0, 0, NULL, NULL); //len=0 mean read the whole object data
-    ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+    op.read(0, 0, nullptr, nullptr); //len=0 mean read the whole object data
+    // SplitOps doesn't know the size of the object, so never splits.
+    ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &op, &op_bl));
     ASSERT_EQ(sizeof(buf), op_bl.length());
     ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -547,8 +550,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
       bufferlist read_bl, op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), &read_bl, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), &read_bl, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -559,8 +562,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       bufferlist op_bl;
       int rval = 1000;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, &rval);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, rval);
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -571,7 +574,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       int rval = 1000;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, rval);
@@ -585,7 +588,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl1, &rval1);
       op.read(0, sizeof(buf), &read_bl2, &rval2);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl1.length());
       ASSERT_EQ(sizeof(buf), read_bl2.length());
       ASSERT_EQ(sizeof(buf) * 2, op_bl.length());
@@ -600,8 +603,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
       bufferlist op_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
   }
@@ -609,8 +612,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
       bufferlist read_bl;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), &read_bl, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      op.read(0, sizeof(buf), &read_bl, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
   }
@@ -618,8 +621,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   {
       int rval = 1000;
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      op.read(0, sizeof(buf), nullptr, &rval);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(0, rval);
   }
 
@@ -628,7 +631,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       int rval = 1000;
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl, &rval);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl.length());
       ASSERT_EQ(0, rval);
       ASSERT_EQ(0, memcmp(read_bl.c_str(), buf, sizeof(buf)));
@@ -640,7 +643,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ObjectReadOperation op;
       op.read(0, sizeof(buf), &read_bl1, &rval1);
       op.read(0, sizeof(buf), &read_bl2, &rval2);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, NULL));
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
       ASSERT_EQ(sizeof(buf), read_bl1.length());
       ASSERT_EQ(sizeof(buf), read_bl2.length());
       ASSERT_EQ(0, rval1);
@@ -656,8 +659,8 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_NE(op_bl.crc32c(0), bl.crc32c(0));  // cache 'x' crc
 
       ObjectReadOperation op;
-      op.read(0, sizeof(buf), NULL, NULL);
-      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+      op.read(0, sizeof(buf), nullptr, nullptr);
+      ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, &op_bl, librados::OPERATION_BALANCE_READS));
 
       ASSERT_EQ(sizeof(buf), op_bl.length());
       ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
@@ -665,7 +668,7 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
   }
 }
 
-TEST_F(LibRadosIoECPP, SparseReadOpPP) {
+TEST_P(LibRadosIoECPP, SparseReadOpPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
@@ -679,13 +682,13 @@ TEST_F(LibRadosIoECPP, SparseReadOpPP) {
     int rval = -1;
     ObjectReadOperation op;
     op.sparse_read(0, sizeof(buf), &extents, &read_bl, &rval);
-    ASSERT_EQ(0, ioctx.operate("foo", &op, nullptr));
+    ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &op, nullptr, librados::OPERATION_BALANCE_READS));
     ASSERT_EQ(0, rval);
     assert_eq_sparse(bl, extents, read_bl);
   }
 }
 
-TEST_F(LibRadosIoECPP, RoundTripPP) {
+TEST_P(LibRadosIoECPP, RoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   Rados cluster;
@@ -698,7 +701,7 @@ TEST_F(LibRadosIoECPP, RoundTripPP) {
   ASSERT_EQ(0, memcmp(buf, cl.c_str(), sizeof(buf)));
 }
 
-TEST_F(LibRadosIoECPP, RoundTripPP2)
+TEST_P(LibRadosIoECPP, RoundTripPP2)
 {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -706,16 +709,16 @@ TEST_F(LibRadosIoECPP, RoundTripPP2)
   ObjectWriteOperation write;
   write.write(0, bl);
   write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
+  read.read(0, bl.length(), nullptr, nullptr);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
+TEST_P(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   SKIP_IF_CRIMSON();
   int bsize = alignment;
   int dbsize = bsize * 2;
@@ -740,7 +743,7 @@ TEST_F(LibRadosIoECPP, OverlappingWriteRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, dbsize));
 }
 
-TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
+TEST_P(LibRadosIoECPP, WriteFullRoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char buf2[64];
@@ -757,7 +760,7 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf2, sizeof(buf2)));
 }
 
-TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
+TEST_P(LibRadosIoECPP, WriteFullRoundTripPP2)
 {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -765,16 +768,16 @@ TEST_F(LibRadosIoECPP, WriteFullRoundTripPP2)
   ObjectWriteOperation write;
   write.write_full(bl);
   write.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
+  read.read(0, bl.length(), nullptr, nullptr);
   read.set_op_flags2(LIBRADOS_OP_FLAG_FADVISE_DONTNEED|LIBRADOS_OP_FLAG_FADVISE_RANDOM);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
+TEST_P(LibRadosIoECPP, AppendRoundTripPP) {
   SKIP_IF_CRIMSON();
   char *buf = (char *)new char[alignment];
   char *buf2 = (char *)new char[alignment];
@@ -799,7 +802,7 @@ TEST_F(LibRadosIoECPP, AppendRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl3_str + alignment, buf2, alignment));
 }
 
-TEST_F(LibRadosIoECPP, TruncTestPP) {
+TEST_P(LibRadosIoECPP, TruncTestPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
@@ -814,7 +817,7 @@ TEST_F(LibRadosIoECPP, TruncTestPP) {
   ASSERT_EQ(0, memcmp(bl2.c_str(), buf, sizeof(buf)));
 }
 
-TEST_F(LibRadosIoECPP, RemoveTestPP) {
+TEST_P(LibRadosIoECPP, RemoveTestPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   memset(buf, 0xaa, sizeof(buf));
@@ -826,7 +829,7 @@ TEST_F(LibRadosIoECPP, RemoveTestPP) {
   ASSERT_EQ(-ENOENT, ioctx.read("foo", bl2, sizeof(buf), 0));
 }
 
-TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
+TEST_P(LibRadosIoECPP, XattrsRoundTripPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -846,7 +849,7 @@ TEST_F(LibRadosIoECPP, XattrsRoundTripPP) {
   ASSERT_EQ(0, memcmp(bl4.c_str(), attr1_buf, sizeof(attr1_buf)));
 }
 
-TEST_F(LibRadosIoECPP, RmXattrPP) {
+TEST_P(LibRadosIoECPP, RmXattrPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -877,7 +880,7 @@ TEST_F(LibRadosIoECPP, RmXattrPP) {
   ASSERT_EQ(-ENOENT, ioctx.rmxattr("foo_rmxattr", attr2));
 }
 
-TEST_F(LibRadosIoECPP, CrcZeroWrite) {
+TEST_P(LibRadosIoECPP, CrcZeroWrite) {
   SKIP_IF_CRIMSON();
   set_allow_ec_overwrites();
   char buf[128];
@@ -889,11 +892,11 @@ TEST_F(LibRadosIoECPP, CrcZeroWrite) {
   ASSERT_EQ(0, ioctx.write("foo", bl, 0, sizeof(buf)));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
 }
 
-TEST_F(LibRadosIoECPP, XattrListPP) {
+TEST_P(LibRadosIoECPP, XattrListPP) {
   SKIP_IF_CRIMSON();
   char buf[128];
   char attr1[] = "attr1";
@@ -934,18 +937,18 @@ TEST_F(LibRadosIoPP, CmpExtPP) {
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   bufferlist new_bl;
   new_bl.append("CEPH");
   ObjectWriteOperation write2;
   write2.cmpext(0, bl, nullptr);
   write2.write(0, new_bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write2));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
@@ -958,11 +961,11 @@ TEST_F(LibRadosIoPP, CmpExtDNEPP) {
   ObjectWriteOperation write;
   write.cmpext(0, bl, nullptr);
   write.write(0, new_bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
@@ -971,43 +974,43 @@ TEST_F(LibRadosIoPP, CmpExtMismatchPP) {
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   bufferlist new_bl;
   new_bl.append("CEPH");
   ObjectWriteOperation write2;
   write2.cmpext(0, new_bl, nullptr);
   write2.write(0, new_bl);
-  ASSERT_EQ(-MAX_ERRNO, ioctx.operate("foo", &write2));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(-MAX_ERRNO, "foo", &write2));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtPP) {
+TEST_P(LibRadosIoECPP, CmpExtPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   bufferlist new_bl;
   new_bl.append("CEPH");
   ObjectWriteOperation write2;
   write2.cmpext(0, bl, nullptr);
   write2.write_full(new_bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write2));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write2));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
+TEST_P(LibRadosIoECPP, CmpExtDNEPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append(std::string(4, '\0'));
@@ -1017,31 +1020,33 @@ TEST_F(LibRadosIoECPP, CmpExtDNEPP) {
   ObjectWriteOperation write;
   write.cmpext(0, bl, nullptr);
   write.write_full(new_bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "CEPH", 4));
 }
 
-TEST_F(LibRadosIoECPP, CmpExtMismatchPP) {
+TEST_P(LibRadosIoECPP, CmpExtMismatchPP) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
   bl.append("ceph");
   ObjectWriteOperation write1;
   write1.write(0, bl);
-  ASSERT_EQ(0, ioctx.operate("foo", &write1));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
 
   bufferlist new_bl;
   new_bl.append("CEPH");
   ObjectWriteOperation write2;
   write2.cmpext(0, new_bl, nullptr);
   write2.write_full(new_bl);
-  ASSERT_EQ(-MAX_ERRNO, ioctx.operate("foo", &write2));
+  ASSERT_TRUE(AssertOperateWithoutSplitOp(-MAX_ERRNO, "foo", &write2));
 
   ObjectReadOperation read;
-  read.read(0, bl.length(), NULL, NULL);
-  ASSERT_EQ(0, ioctx.operate("foo", &read, &bl));
+  read.read(0, bl.length(), nullptr, nullptr);
+  ASSERT_TRUE(AssertOperateWithSplitOp(0, "foo", &read, &bl, librados::OPERATION_BALANCE_READS));
   ASSERT_EQ(0, memcmp(bl.c_str(), "ceph", 4));
 }
+
+INSTANTIATE_TEST_SUITE_P_EC(LibRadosIoECPP);
