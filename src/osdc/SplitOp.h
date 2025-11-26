@@ -195,6 +195,7 @@ class SplitOp {
   SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
   virtual ~SplitOp() = default;
   void complete();
+  static void prepare_single_op(Objecter::Op *op, Objecter &objecter);
   static bool create(Objecter::Op *op, Objecter &objecter,
     shunique_lock<ceph::shared_mutex>& sul, ceph_tid_t *ptid, int *ctx_budget, CephContext *cct);
 };
