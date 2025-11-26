@@ -15,6 +15,8 @@ from typing import cast, Any, Dict, List, Optional, Sequence, Tuple, Union
 from mgr_module import CRUSHMap
 import datetime
 
+from .cli import BalancerCLICommand
+
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
 
@@ -239,6 +241,7 @@ class Eval:
 
 
 class Module(MgrModule):
+    CLICommand = BalancerCLICommand
     MODULE_OPTIONS = [
         Option(name='active',
                type='bool',
@@ -353,7 +356,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
 
-    @CLIReadCommand('balancer status')
+    @BalancerCLICommand.Read('balancer status')
     def show_status(self) -> Tuple[int, str, str]:
         """
         Show balancer status
@@ -369,7 +372,7 @@ class Module(MgrModule):
         }
         return (0, json.dumps(s, indent=4, sort_keys=True), '')
 
-    @CLIReadCommand('balancer status detail')
+    @BalancerCLICommand.Read('balancer status detail')
     def show_status_detail(self) -> Tuple[int, str, str]:
         """
         Show balancer status (detailed)
@@ -394,7 +397,7 @@ class Module(MgrModule):
         }
         return (0, json.dumps(s, indent=4, sort_keys=True), '')
 
-    @CLICommand('balancer mode')
+    @BalancerCLICommand('balancer mode')
     def set_mode(self, mode: Mode) -> Tuple[int, str, str]:
         """
         Set balancer mode
@@ -435,7 +438,7 @@ class Module(MgrModule):
         self.set_module_option('mode', mode.value)
         return (0, '', '')
 
-    @CLICommand('balancer on')
+    @BalancerCLICommand('balancer on')
     def on(self) -> Tuple[int, str, str]:
         """
         Enable automatic balancing
@@ -446,7 +449,7 @@ class Module(MgrModule):
         self.event.set()
         return (0, '', '')
 
-    @CLICommand('balancer off')
+    @BalancerCLICommand('balancer off')
     def off(self) -> Tuple[int, str, str]:
         """
         Disable automatic balancing
@@ -457,7 +460,7 @@ class Module(MgrModule):
         self.event.set()
         return (0, '', '')
 
-    @CLIReadCommand('balancer pool ls')
+    @BalancerCLICommand.Read('balancer pool ls')
     def pool_ls(self) -> Tuple[int, str, str]:
         """
         List automatic balancing pools
@@ -484,7 +487,7 @@ class Module(MgrModule):
             self.set_module_option('pool_ids', ','.join(str(p) for p in final_ids))
         return (0, json.dumps(sorted(final_names), indent=4, sort_keys=True), '')
 
-    @CLICommand('balancer pool add')
+    @BalancerCLICommand('balancer pool add')
     def pool_add(self, pools: Sequence[str]) -> Tuple[int, str, str]:
         """
         Enable automatic balancing for specific pools
@@ -502,7 +505,7 @@ class Module(MgrModule):
         self.set_module_option('pool_ids', ','.join(final))
         return (0, '', '')
 
-    @CLICommand('balancer pool rm')
+    @BalancerCLICommand('balancer pool rm')
     def pool_rm(self, pools: Sequence[str]) -> Tuple[int, str, str]:
         """
         Disable automatic balancing for specific pools
@@ -558,7 +561,7 @@ class Module(MgrModule):
                               f'pool "{option}"')
         return ms, pools
 
-    @CLIReadCommand('balancer eval-verbose')
+    @BalancerCLICommand.Read('balancer eval-verbose')
     def plan_eval_verbose(self, option: Optional[str] = None):
         """
         Evaluate data distribution for the current cluster or specific pool or specific
@@ -570,7 +573,7 @@ class Module(MgrModule):
         except ValueError as e:
             return (-errno.EINVAL, '', str(e))
 
-    @CLIReadCommand('balancer eval')
+    @BalancerCLICommand.Read('balancer eval')
     def plan_eval_brief(self, option: Optional[str] = None):
         """
         Evaluate data distribution for the current cluster or specific pool or specific plan
@@ -581,7 +584,7 @@ class Module(MgrModule):
         except ValueError as e:
             return (-errno.EINVAL, '', str(e))
 
-    @CLIReadCommand('balancer optimize')
+    @BalancerCLICommand.Read('balancer optimize')
     def plan_optimize(self, plan: str, pools: List[str] = []) -> Tuple[int, str, str]:
         """
         Run optimizer to create a new plan
@@ -614,7 +617,7 @@ class Module(MgrModule):
             self.optimize_result = detail
         return (r, '', detail)
 
-    @CLIReadCommand('balancer show')
+    @BalancerCLICommand.Read('balancer show')
     def plan_show(self, plan: str) -> Tuple[int, str, str]:
         """
         Show details of an optimization plan
@@ -624,7 +627,7 @@ class Module(MgrModule):
             return (-errno.ENOENT, '', f'plan {plan} not found')
         return (0, plan_.show(), '')
 
-    @CLICommand('balancer rm')
+    @BalancerCLICommand('balancer rm')
     def plan_rm(self, plan: str) -> Tuple[int, str, str]:
         """
         Discard an optimization plan
@@ -633,7 +636,7 @@ class Module(MgrModule):
             del self.plans[plan]
         return (0, '', '')
 
-    @CLICommand('balancer reset')
+    @BalancerCLICommand('balancer reset')
     def plan_reset(self) -> Tuple[int, str, str]:
         """
         Discard all optimization plans
@@ -641,7 +644,7 @@ class Module(MgrModule):
         self.plans = {}
         return (0, '', '')
 
-    @CLIReadCommand('balancer dump')
+    @BalancerCLICommand.Read('balancer dump')
     def plan_dump(self, plan: str) -> Tuple[int, str, str]:
         """
         Show an optimization plan
@@ -652,14 +655,14 @@ class Module(MgrModule):
         else:
             return (0, plan_.dump(), '')
 
-    @CLIReadCommand('balancer ls')
+    @BalancerCLICommand.Read('balancer ls')
     def plan_ls(self) -> Tuple[int, str, str]:
         """
         List all plans
         """
         return (0, json.dumps([p for p in self.plans], indent=4, sort_keys=True), '')
 
-    @CLIReadCommand('balancer execute')
+    @BalancerCLICommand.Read('balancer execute')
     def plan_execute(self, plan: str) -> Tuple[int, str, str]:
         """
         Execute an optimization plan
