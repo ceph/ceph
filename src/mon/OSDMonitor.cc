@@ -6008,7 +6008,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(ds);
   } else if (prefix == "osd blocklist ls" ||
 	     prefix == "osd blacklist ls") {
-    bool new_format = false;
+    // Use UMBRELLA flag here instead when it gets added
+    bool new_format = op->get_connection()->has_features(CEPH_FEATUREMASK_SERVER_TENTACLE);
     if (f) {
       if (new_format) {
         f->open_array_section("combined_blocklists");
