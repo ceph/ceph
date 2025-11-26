@@ -131,7 +131,7 @@ class RGWS3VectorCreateVectorBucket : public RGWS3VectorBase {
       ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::create_vector_bucket(driver, bucket_id, configuration, this, y);
+    op_ret = rgw::s3vector::create_vector_bucket(configuration, this, y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "ERROR: failed to initialize s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       return;

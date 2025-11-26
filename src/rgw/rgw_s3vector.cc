@@ -194,12 +194,7 @@ void delete_vector_bucket_policy_t::decode_json(JSONObj* obj) {
   decode_name_or_arn("vectorBucketName", "vectorBucketArn", vector_bucket_name, vector_bucket_arn, obj);
 }
 
-int create_vector_bucket(rgw::sal::Driver* driver, const rgw_bucket& bucket_id, const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
-    JSONFormatter f;
-    configuration.dump(&f);
-    std::stringstream ss;
-    f.flush(ss);
-    ldpp_dout(dpp, 20) << "INFO: executing s3vector CreateVectorBucket with: " << ss.str() << dendl;
+int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y) {
     return 0;
 }
 

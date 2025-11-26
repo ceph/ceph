@@ -559,7 +559,7 @@ struct query_vectors_t {
 WRITE_CLASS_ENCODER(query_vectors_t)
 
 int create_index(const create_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int create_vector_bucket(rgw::sal::Driver* driver, const rgw_bucket& bucket_id, const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int create_vector_bucket(const create_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
