@@ -2986,6 +2986,7 @@ fi
 %{_includedir}/cephfs/dump.h
 %{_includedir}/cephfs/json.h
 %{_includedir}/cephfs/keys_and_values.h
+%{_includedir}/cephfs/snap_types.h
 %{_libdir}/libcephfs.so
 %{_libdir}/libcephfs_proxy.so
 %{_libdir}/pkgconfig/cephfs.pc
