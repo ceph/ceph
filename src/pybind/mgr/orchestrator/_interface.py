@@ -1473,6 +1473,9 @@ class DaemonDescription(object):
     def update_pending_daemon_config(self, value: bool) -> None:
         self.pending_daemon_config = value
 
+    def update_user_stopped_status(self, value: bool) -> None:
+        self.user_stopped = value
+
     def __repr__(self) -> str:
         return "<DaemonDescription>({type}.{id})".format(type=self.daemon_type,
                                                          id=self.daemon_id)

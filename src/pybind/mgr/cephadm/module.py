@@ -2759,11 +2759,11 @@ Then run the following:
 
         # Track user-initiated stop/start actions
         if action == 'stop':
-            d.user_stopped = True
-            self.cache.update_host_daemons(d.hostname, {d.name(): d})
+            d.update_user_stopped_status(True)
+            self.cache.save_host(d.hostname)
         elif action in ['start', 'restart']:
-            d.user_stopped = False
-            self.cache.update_host_daemons(d.hostname, {d.name(): d})
+            d.update_user_stopped_status(False)
+            self.cache.save_host(d.hostname)
 
         self._daemon_action_set_image(action, image, d.daemon_type, d.daemon_id)
 
