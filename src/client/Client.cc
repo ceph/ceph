@@ -14237,6 +14237,71 @@ int Client::rmsnap(const char *relpath, const char *name, const UserPerm& perms,
   return _rmdir(snapdir.get(), name, perms, check_perms);
 }
 
+int Client::snap_metadata_update(const char* path,
+  const map<string, string>& new_metadata, const UserPerm &perms)
+{
+  RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+  if (!mref_reader.is_state_satisfied())
+    return -ENOTCONN;
+
+  std::scoped_lock l(client_lock);
+
+  walk_dentry_result wdr;
+  if (int rc = path_walk(cwd, filepath(path), &wdr, perms, {}); rc < 0) {
+    return rc;
+  }
+
+  if (wdr.target->snapid == CEPH_NOSNAP) {
+    return -EINVAL;
+  }
+
+  ldout(cct, 10) << "here123 printing snap metadata passed by the user" << dendl;
+  for (auto& [key, value] : new_metadata) {
+    ldout(cct, 10) << "here123 key " << key << dendl;
+    ldout(cct, 10) << "here123 value " << value << dendl;
+  }
+
+  MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SNAP_METADATA_UPDATE);
+  req->set_filepath(wdr.getpath());
+  req->set_inode(wdr.diri);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_unless = CEPH_CAP_FILE_EXCL;
+
+  /* TODO: do we need to care for fscrypt here?
+   *
+  if (fscrypt_options.fscrypt_auth.size())
+    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+#if defined(__linux__)
+  else
+    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+#endif
+  if (fscrypt_options.fscrypt_file.size())
+    req->fscrypt_file = fscrypt_options.fscrypt_file;
+   */
+
+  SnapPayload payload;
+  payload.metadata = new_metadata;
+  bufferlist bl;
+  encode(payload, bl);
+
+  if (bl.length() > 0) {
+    req->set_data(bl);
+  }
+
+  req->set_dentry(wdr.dn);
+
+  ldout(cct, 10) << "_snap_metadata_update: making request" << dendl;
+  int res = make_request(req, perms, &wdr.target);
+  ldout(cct, 10) << "_snap_metadata_update: result is " << res << dendl;
+
+  trim_cache();
+
+  ldout(cct, 8) << "_snap_metadata_update(" << wdr.getpath() << ", " << perms
+                << ") = " << res << dendl;
+
+  return 0;
+}
+
 // =============================
 // expose caps
 
