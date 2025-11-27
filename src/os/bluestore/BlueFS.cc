@@ -3841,6 +3841,37 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
   return bl;
 }
 
+ceph::bufferlist BlueFS::FileWriter::get_write_data(
+  CephContext* cct,
+  uint64_t want_end)
+{
+  ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
+  ceph_assert(get_pos() < want_end);
+  ceph::bufferlist bl;
+  uint64_t data_end = get_pos() + get_buffer_length();
+  uint64_t io_end = p2roundup<uint64_t>(
+    std::min(want_end, data_end), super_block_size);
+  uint64_t io_size = io_end - buffer_pos;
+  if (io_end <= data_end) {
+    // only partial flush
+    buffer.splice(0, io_size, &bl);
+    pos = want_end;
+    buffer_pos += io_size;
+  } else {
+    // need to pad with zeros
+    ceph_assert(io_end - data_end < super_block_size);
+    uint64_t tail = p2phase<uint64_t>(data_end, super_block_size);
+    buffer_appender.append_zero(super_block_size - tail);
+    // now aligned; append (duplicate) tail for next flush
+    buffer_appender.substr_of(buffer, (data_end - tail) - buffer_pos, tail);
+    buffer.splice(0, io_size, &bl);
+    pos = want_end;
+    buffer_pos += io_size - super_block_size;
+    ceph_assert(buffer.length() < super_block_size);
+  }
+  return bl;
+}
+
 int BlueFS::_signal_dirty_to_log_D(FileWriter *h)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
@@ -3980,19 +4011,8 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
     ceph_assert(ceph_mutex_is_locked(h->lock));
     ceph_assert(ceph_mutex_is_locked(h->file->lock));
   }
-  uint64_t x_off = 0;
-  auto p = h->file->fnode.seek(offset, &x_off);
-  ceph_assert(p != h->file->fnode.extents.end());
-  dout(20) << __func__ << " in " << *p << " x_off 0x"
-           << std::hex << x_off << std::dec << dendl;
 
-  unsigned partial = x_off & ~super.block_mask();
-  if (partial) {
-    dout(20) << __func__ << " using partial tail 0x"
-             << std::hex << partial << std::dec << dendl;
-    x_off -= partial;
-    offset -= partial;
-    length += partial;
+  if (h->get_write_overwrites()) {
     dout(20) << __func__ << " waiting for previous aio to complete" << dendl;
     for (auto p : h->iocv) {
       if (p) {
@@ -4000,11 +4020,15 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
       }
     }
   }
-
-  auto bl = h->flush_buffer(cct, partial, length, super);
-  ceph_assert(bl.length() >= length);
-  h->pos = offset + length;
+  uint64_t write_offset = h->get_write_offset();
+  bufferlist bl = h->get_write_data(cct, offset + length);
   length = bl.length();
+
+  uint64_t x_off = 0;
+  auto p = h->file->fnode.seek(write_offset, &x_off);
+  ceph_assert(p != h->file->fnode.extents.end());
+  dout(20) << __func__ << " in " << *p << " x_off 0x"
+           << std::hex << x_off << std::dec << dendl;
 
   logger->inc(l_bluefs_write_count, 1);
   logger->inc(l_bluefs_write_bytes, length);
@@ -4703,7 +4727,7 @@ int BlueFS::open_for_write(
 
 BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 {
-  FileWriter *w = new FileWriter(f);
+  FileWriter *w = new FileWriter(f, super.block_size);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       w->iocv[i] = new IOContext(cct, NULL);

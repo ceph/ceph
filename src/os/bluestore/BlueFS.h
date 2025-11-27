@@ -416,15 +416,26 @@ public:
     uint64_t pos = 0;        ///< offset of data in file
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
     ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
+    uint32_t super_block_size;
+    uint64_t buffer_pos = 0; ///< offset of the buffer in file
   public:
     unsigned get_buffer_length() const {
-      return buffer.length();
+      return buffer.length() - (pos - buffer_pos);
     }
     ceph::bufferlist flush_buffer(
       CephContext* cct,
       const bool partial,
       const unsigned length,
       const bluefs_super_t& super);
+    bool get_write_overwrites() {
+      return pos != buffer_pos;
+    }
+    uint64_t get_write_offset() {
+      return buffer_pos;
+    }
+    ceph::bufferlist get_write_data(
+      CephContext* cct,
+      uint64_t flush_end);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
     bufferlist::contiguous_filler envelope_head_filler;
   public:
@@ -435,9 +446,10 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
-    FileWriter(FileRef f)
+    FileWriter(FileRef f, uint32_t super_block_size)
       : file(std::move(f)),
-       buffer_appender(buffer.get_page_aligned_appender(
+        super_block_size(super_block_size),
+        buffer_appender(buffer.get_page_aligned_appender(
                          g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
