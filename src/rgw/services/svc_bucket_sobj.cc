@@ -212,6 +212,12 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(const string& key,
 }
 
 
+int RGWSI_Bucket_SObj::complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                     const std::string& section, const std::string& key,
+                     const RGWObjVersionTracker* objv) {
+  return svc.mdlog->complete_entry(dpp, y, section, key, objv);
+}
+
 int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(const string& key,
                                                     RGWBucketEntryPoint& info,
                                                     bool exclusive,
@@ -231,7 +237,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(const string& key,
     return ret;
   }
 
-  return svc.mdlog->complete_entry(dpp, y, "bucket", key, objv_tracker);
+  return complete_entry(dpp, y, "bucket", key, objv_tracker);
 }
 
 int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(const string& key,
@@ -245,7 +251,7 @@ int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(const string& key,
     return ret;
   }
 
-  return svc.mdlog->complete_entry(dpp, y, "bucket", key, objv_tracker);
+  return complete_entry(dpp, y, "bucket", key, objv_tracker);
 }
 
 int RGWSI_Bucket_SObj::read_bucket_instance_info(const string& key,
@@ -502,7 +508,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(const string& key,
   int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl, exclusive,
                                &info.objv_tracker, mtime, y, pattrs);
   if (ret >= 0) {
-    int r = svc.mdlog->complete_entry(dpp, y, "bucket.instance",
+    int r = complete_entry(dpp, y, "bucket.instance",
                                       key, &info.objv_tracker);
     if (r < 0) {
       return r;
@@ -615,4 +621,11 @@ std::string RGWSI_VectorBucket_SObj::get_cache_key(const std::string& key) const
   std::string cache_key("vbi/");
   cache_key.append(key);
   return cache_key;
+}
+
+int RGWSI_VectorBucket_SObj::complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                     const std::string& section, const std::string& key,
+                     const RGWObjVersionTracker* objv) {
+  // TODO: implement metadata sync for vector buckets
+  return 0;
 }
