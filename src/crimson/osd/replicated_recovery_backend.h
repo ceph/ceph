@@ -23,7 +23,7 @@ public:
 			    crimson::osd::ShardServices& shard_services,
 			    crimson::os::CollectionRef coll,
 			    PGBackend* backend)
-    : RecoveryBackend(pg, shard_services, coll, backend)
+    : RecoveryBackend(pg, shard_services, coll, pg.get_store_index(), backend)
   {}
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
