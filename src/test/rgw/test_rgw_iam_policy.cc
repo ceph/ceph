@@ -130,6 +130,7 @@ using rgw::IAM::iamAll;
 using rgw::IAM::stsAll;
 using rgw::IAM::snsAll;
 using rgw::IAM::organizationsAll;
+using rgw::IAM::s3vectorsAll;
 using rgw::IAM::allCount;
 
 using rgw::IAM::s3AllValue;
@@ -488,6 +489,7 @@ TEST_F(PolicyTest, Parse3) {
 TEST_F(PolicyTest, Eval3) {
   auto p  = Policy(cct.get(), &arbitrary_tenant, example3, true);
   Environment em;
+
   Environment tr = { { "aws:MultiFactorAuthPresent", "true" } };
   Environment fa = { { "aws:MultiFactorAuthPresent", "false" } };
 
@@ -708,6 +710,8 @@ TEST_F(PolicyTest, Parse6) {
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
   for (auto i = 0U; i <= organizationsAll; i++)
+    act[i] = 1;
+  for (auto i = 0U; i <= s3vectorsAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);
