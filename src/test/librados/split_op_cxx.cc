@@ -12,6 +12,20 @@ using namespace librados;
 typedef RadosTestPP LibRadosSplitOpPP;
 typedef RadosTestECPP LibRadosSplitOpECPP;
 
+// After a write is committed, it isn't necessarily true that the log is
+// committed. We do a read of the written area, which allows us to be
+// sure that the shards have all received the message that the log can be
+// committed, allowing us to test split ops with certainty that it won't be
+// bounced due to unstability.
+void RadosTestPPBase::ensure_log_committed(const char* oid, uint64_t offset, uint64_t length) {
+  ObjectReadOperation read;
+  read.read(offset, length, NULL, NULL);
+
+  bufferlist bl;
+  int rc = ioctx.operate(oid, &read, &bl);
+  ASSERT_EQ(0, rc);
+}
+
 TEST_P(LibRadosSplitOpECPP, ReadWithVersion) {
   SKIP_IF_CRIMSON();
   bufferlist bl;
@@ -58,6 +72,8 @@ TEST_P(LibRadosSplitOpECPP, ReadTwoShards) {
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+  
+  ensure_log_committed("foo", 0, bl.length());
 
   ioctx.set_no_version_on_read(true);
   ObjectReadOperation read;
@@ -73,6 +89,8 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShard) {
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+  
+  ensure_log_committed("foo", 0, bl.length());
 
   ioctx.set_no_version_on_read(true);
   ObjectReadOperation read;
@@ -88,6 +106,8 @@ TEST_P(LibRadosSplitOpECPP, ReadSecondShardWithVersion) {
   ObjectWriteOperation write1;
   write1.write(0, bl);
   ASSERT_TRUE(AssertOperateWithoutSplitOp(0, "foo", &write1));
+
+  ensure_log_committed("foo", 0, bl.length());
 
   ObjectReadOperation read;
   read.read(4*1024, 4*1024, NULL, NULL);

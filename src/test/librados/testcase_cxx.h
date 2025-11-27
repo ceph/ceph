@@ -88,6 +88,8 @@ protected:
 
   uint64_t get_perf_counter_by_path(std::string_view path);
 
+  void ensure_log_committed(const char* oid, uint64_t offset, uint64_t length);
+
   template<typename... Args>
   ::testing::AssertionResult AssertOperateSplitOp(int split_ios, int rc, Args... args)
   {
