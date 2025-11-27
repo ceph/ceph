@@ -948,7 +948,7 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp,
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y, store->ctl()->bucket);
 }
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)

@@ -662,10 +662,11 @@ int RGWAsyncGetBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+// TODO: add vector bucket support
 int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 {
   auto r = store->getRados()->put_bucket_instance_info(bucket_info, exclusive,
-						       mtime, attrs, dpp, null_yield);
+						       mtime, attrs, dpp, null_yield, store->ctl()->bucket);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to put bucket instance info for "
 		      << bucket_info.bucket << dendl;
