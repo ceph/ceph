@@ -1747,6 +1747,7 @@ public:
 
 private:
   std::vector<uint32_t> grade_table;
+  std::vector<shard_id_t> shard_mapping; // Used by EC direct reads.
 
 public:
   uint32_t get_grade(unsigned i) const {
@@ -1962,6 +1963,17 @@ public:
   /// EC partial writes: test if a shard is a non-primary
   bool is_nonprimary_shard(const shard_id_t shard) const {
     return !nonprimary_shards.empty() && nonprimary_shards.contains(shard);
+  }
+
+  void set_shard_mapping(std::vector<shard_id_t> && mapping) {
+    shard_mapping = mapping;
+  }
+
+  shard_id_t get_shard(raw_shard_id_t raw) const {
+    if (shard_mapping.size() == 0) {
+      return shard_id_t((int)raw);
+    }
+    return shard_mapping[(int)raw];
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;

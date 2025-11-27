@@ -1987,7 +1987,7 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 32;
+  uint8_t v = 33;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_TENTACLE)) {
@@ -2108,6 +2108,9 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
   }
   if (v >= 32) {
     encode(nonprimary_shards, bl);
+  }
+  if (v >= 33) {
+    encode(shard_mapping, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -2309,6 +2312,12 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(nonprimary_shards, bl);
   } else {
     nonprimary_shards.clear();
+  }
+
+  if (struct_v >= 33) {
+    decode(shard_mapping, bl);
+  } else {
+    shard_mapping.clear();
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
