@@ -1,0 +1,27 @@
+overrides:
+  install:
+    extra_system_packages:
+      rpm:
+        - fio
+      deb:
+        - fio
+  ceph-deploy:
+    conf:
+      global:
+        osd crush chooseleaf type: 0
+        osd pool default pg num:  128
+        osd pool default pgp num:  128
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+        crimson cpu num: 3
+      global:
+        ms cluster mode: crc
+        ms service mode: crc
+        ms client mode: crc
+        ms mon service mode: crc
+        ms mon cluster mode: crc
+        ms mon client mode: crc
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]

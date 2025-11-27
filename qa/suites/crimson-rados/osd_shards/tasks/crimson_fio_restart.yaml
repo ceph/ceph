@@ -1,0 +1,99 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph -s
+
+- exec:
+    client.0:
+      - |
+        set -ex
+        if ! ceph osd pool ls | grep -qx 'testpool'; then
+          ceph osd pool create testpool 64 64
+        fi
+        ceph osd pool application enable testpool rbd || true
+        ceph -s
+        if ! rbd info testpool/testimage; then
+          rbd create testpool/testimage --size 10G --image-format=2
+        fi
+- exec:
+    client.0:
+      - |
+        set -ex
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
+
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 2
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+      - |
+        set -ex
+        ceph health detail
+- exec:
+    client.0:
+      - |
+        set -ex
+        rbd info testpool/testimage
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 5
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+      - |
+        set -ex
+        ceph health detail
+
+- exec:
+    client.0:
+      - |
+        set -ex
+        rbd info testpool/testimage
+        fio --name=rbdtest \
+            --ioengine=rbd \
+            --pool=testpool \
+            --rbdname=testimage \
+            --clientname=admin \
+            --rw=randwrite \
+            --bs=4k \
+            --iodepth=32 \
+            --numjobs=4 \
+            --runtime=120 \
+            --time_based  \
+            --group_reporting \
+            --direct=1 \
+            --invalidate=0
