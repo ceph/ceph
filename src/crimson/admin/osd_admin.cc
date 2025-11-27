@@ -442,7 +442,9 @@ public:
       logger().info("error during data error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_data_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_data_error>(
+      shard_services.get_store(DEFAULT_STORE_INDEX),
+      obj);
     logger().info("successfully injected data error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);
@@ -484,7 +486,9 @@ public:
       logger().info("error during metadata error injection: {}", e.what());
       co_return tell_result_t(-EINVAL, e.what());
     }
-    co_await shard_services.get_store().inject_mdata_error(obj);
+    co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::inject_mdata_error>(
+      shard_services.get_store(DEFAULT_STORE_INDEX),
+      obj);
     logger().info("successfully injected metadata error for obj={}", obj);
     ceph::bufferlist bl;
     bl.append("ok"sv);

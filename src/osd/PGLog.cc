@@ -1093,7 +1093,7 @@ void PGLog::rebuild_missing_set_with_deletes(
 
 namespace {
   struct FuturizedShardStoreLogReader {
-    crimson::os::FuturizedStore::Shard &store;
+    crimson::os::FuturizedStore::StoreShardRef store;
     const pg_info_t &info;
     PGLog::IndexedLog &log;
     std::set<std::string>* log_keys_debug = NULL;
@@ -1175,8 +1175,9 @@ namespace {
         return ObjectStore::omap_iter_ret_t::NEXT;
       };
 
-      co_await store.omap_iterate(
-        ch, pgmeta_oid, start_from, callback
+      co_await crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+        store,
+        ch, pgmeta_oid, start_from, callback, 0
       ).safe_then([] (auto ret) {
         ceph_assert (ret == ObjectStore::omap_iter_ret_t::NEXT);
       }).handle_error(
@@ -1200,7 +1201,7 @@ namespace {
 }
 
 seastar::future<> PGLog::read_log_and_missing_crimson(
-  crimson::os::FuturizedStore::Shard &store,
+  crimson::os::FuturizedStore::StoreShardRef store,
   crimson::os::CollectionRef ch,
   const pg_info_t &info,
   IndexedLog &log,

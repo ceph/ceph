@@ -115,8 +115,10 @@ int OSDriver::get_keys(
   LOG_PREFIX("OSDriver::get_keys");
   DEBUG("");
   using crimson::os::FuturizedStore;
-  return interruptor::green_get(os->omap_get_values(
-    ch, hoid, keys
+  return interruptor::green_get(
+    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
+    os,
+    ch, hoid, keys, 0
   ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
     reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
@@ -157,7 +159,8 @@ int OSDriver::get_next(
     }
   };
   return interruptor::green_get(
-    os->omap_iterate(ch, hoid, start_from, callback
+    crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+      os, ch, hoid, start_from, callback, 0
     ).safe_then([FNAME, key] (auto ret) {
       if (ret == ObjectStore::omap_iter_ret_t::NEXT) {
         DEBUG("key {} no more values", key);
@@ -180,8 +183,10 @@ int OSDriver::get_next_or_current(
   DEBUG("key {}", key);
   using crimson::os::FuturizedStore;
   // let's try to get current first
-  return interruptor::green_get(os->omap_get_values(
-    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
+  return interruptor::green_get(crimson::os::with_store<
+    &crimson::os::FuturizedStore::Shard::omap_get_values>(
+    os,
+    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}, 0
   ).safe_then([FNAME, &key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     DEBUG("returning {}", key);
     ceph_assert(vals.size() == 1);
