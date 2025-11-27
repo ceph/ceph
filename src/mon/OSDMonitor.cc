@@ -52,6 +52,7 @@
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
+#include "messages/MOSDPGMigratedPool.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MRoute.h"
@@ -2720,6 +2721,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_pg_created(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return preprocess_pg_ready_to_merge(op);
+  case MSG_OSD_PG_MIGRATED_POOL:
+    return preprocess_pg_migrated_pool(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -2766,6 +2769,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_pgtemp(op);
   case MSG_OSD_PG_READY_TO_MERGE:
     return prepare_pg_ready_to_merge(op);
+  case MSG_OSD_PG_MIGRATED_POOL:
+    return prepare_pg_migrated_pool(op);
   case MSG_OSD_BEACON:
     return prepare_beacon(op);
 
@@ -4225,6 +4230,114 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
   return true;
 }
 
+// -------------
+// pg_migrated_pool
+
+bool OSDMonitor::preprocess_pg_migrated_pool(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MOSDPGMigratedPool>();
+  dout(10) << __func__ << " " << *m << dendl;
+  const pg_pool_t *pi;
+  auto session = op->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    goto ignore;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    goto ignore;
+  }
+  pi = osdmap.get_pg_pool(m->pgid.pool());
+  if (!pi) {
+    // Raced with pool delete
+    dout(20) << __func__ << " pool for " << m->pgid << " dne" << dendl;
+    goto ignore;
+  }
+  if (pi->get_pg_num() <= m->pgid.ps()) {
+    // Duplicated message
+    dout(20) << __func__ << " pg_num " << pi->get_pg_num() << " already < " << m->pgid << dendl;
+    goto ignore;
+  }
+  if (!pi->migrating_pgs.contains(m->pgid) ||
+      (pi->migration_target != m->migration_target)) {
+    // Duplicated message
+    dout(20) << __func__ << " pg_num " << m->pgid << " is not migrating to " << m->migration_target << dendl;
+    goto ignore;
+  }
+  return false;
+
+ ignore:
+  mon.no_reply(op);
+  return true;
+}
+
+bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m  = op->get_req<MOSDPGMigratedPool>();
+  dout(10) << __func__ << " " << *m << dendl;
+  pg_pool_t source_p;
+  if (pending_inc.new_pools.count(m->pgid.pool()))
+    source_p = pending_inc.new_pools[m->pgid.pool()];
+  else
+    source_p = *osdmap.get_pg_pool(m->pgid.pool());
+
+  // Checked in preprocess
+  ceph_assert(source_p.migrating_pgs.contains(m->pgid));
+  ceph_assert(source_p.migration_target == m->migration_target);
+
+  pg_t pgid = m->pgid;
+  source_p.migrating_pgs.erase(pgid);
+
+  pg_pool_t target_p;
+  if (pending_inc.new_pools.count(source_p.migration_target.value())) {
+    target_p = pending_inc.new_pools[source_p.migration_target.value()];
+  } else {
+    target_p = *osdmap.get_pg_pool(source_p.migration_target.value());
+  }
+
+  dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
+  if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
+    dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
+    target_p.migration_src.reset();
+    target_p.last_change = pending_inc.epoch;
+    pending_inc.new_pools[source_p.migration_target.value()] = target_p;
+  } else if (source_p.lowest_migrated_pg == 0) {
+    dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
+  } else {
+    if (target_pg_migrating(source_p.migrating_pgs, pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()),
+                            source_p.get_pg_num(), target_p.get_pg_num())) {
+      dout(0) << "PG" << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) <<
+              " already in target PG set, doing nothing until next PG completes migration" << dendl;
+    } else {
+      dout(0) << "Starting migration of PG " << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
+      source_p.migrating_pgs.emplace(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
+      source_p.lowest_migrated_pg -= 1;
+    }
+  }
+
+  source_p.last_change = pending_inc.epoch;
+
+  pending_inc.new_pools[m->pgid.pool()] = source_p;
+
+  return true;
+}
+
+bool OSDMonitor::target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_pg, int source_pgnum, int target_pgnum)
+{
+  pg_t new_target(source_pg);
+  source_pg.is_merge_source(source_pgnum, target_pgnum, &new_target);
+
+  for (const auto& pg : migrating_pgs) {
+    pg_t target(pg);
+    pg.is_merge_source(source_pgnum, target_pgnum, &target);
+    if (target.m_seed == new_target.m_seed) return true;
+  }
+
+  return false;
+}
 
 // ---
 
@@ -7450,6 +7563,7 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+			 std::nullopt,
 			 &ss);
 
   if (ret < 0) {
@@ -8084,6 +8198,7 @@ int OSDMonitor::check_pg_num(int64_t pool,
  * @param pg_autoscale_mode autoscale mode, one of on, off, warn
  * @param bool bulk indicates whether pool should be a bulk pool
  * @param bool crimson indicates whether pool is a crimson pool
+ * @param int64_t Optional ID of migration source pool
  * @param ss human readable error message, if any.
  *
  * @return 0 on success, negative errno on failure.
@@ -8104,6 +8219,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+				 const std::optional<int64_t> source_pool_id,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8355,6 +8471,45 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
     // This will fail if the pool cannot support ec optimizations.
     enable_pool_ec_optimizations(*pi, nullptr, true);
+  }
+
+
+  if (source_pool_id) {
+    const pg_pool_t *sp = osdmap.get_pg_pool(source_pool_id.value());
+    pg_pool_t *spi = pending_inc.get_new_pool(source_pool_id.value(), sp);
+
+    dout(0) << "Configuring pool migration for PG "
+            << pg_t(spi->get_pg_num() - 1, source_pool_id.value()) << dendl;
+
+    spi->migration_src.reset();
+    spi->migration_target = pool;
+    pi->migration_src = source_pool_id.value();
+    pi->migration_target.reset();
+
+    uint64_t migrating_pgs_size = 0;
+    auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
+    if (spi->get_pg_num() > pi->get_pg_num()) {
+      migrating_pgs_size = (static_cast<uint64_t>(pi->get_pg_num() * migration_percent) + 99) / 100;
+    } else {
+      migrating_pgs_size = (static_cast<uint64_t>(spi->get_pg_num() * migration_percent) + 99) / 100;
+    }
+
+    for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
+      if (spi->get_pg_num() > pi->get_pg_num()) {
+        if (target_pg_migrating(spi->migrating_pgs, pg_t(i, source_pool_id.value()),
+                                spi->get_pg_num(), pi->get_pg_num())) {
+          dout(0) << "PG" << i << " already in target PG set, breaking" << dendl;
+          break;
+        }
+      }
+      spi->migrating_pgs.emplace(pg_t(i, source_pool_id.value()));
+      spi->lowest_migrated_pg = i;
+      if (i == 0) {
+        break;
+      }
+    }
+    dout(0) << "spi->migrating_pgs contains" << spi->migrating_pgs << dendl;
+    dout(0) << "lowest_migrated_pg is " << spi->lowest_migrated_pg << dendl;
   }
 
   pending_inc.new_pool_names[pool] = name;
@@ -13612,14 +13767,48 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
-    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", 0);
-    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", 0);
-    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", 0);
-    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", pg_num);
-    string pool_type_str;
-    cmd_getval(cmdmap, "pool_type", pool_type_str);
-    if (pool_type_str.empty())
-      pool_type_str = g_conf().get_val<string>("osd_pool_default_type");
+    std::string source_pool_name;
+    std::optional<int64_t> source_pool_id;
+    const pg_pool_t *source_pool = nullptr;
+    if (cmd_getval(cmdmap, "migrate_from", source_pool_name)) {
+      //BILL:FIXME: release should be umbrella
+      if (osdmap.require_min_compat_client < ceph_release_t::tentacle) {
+	ss << "require_min_compat_client "
+	   << osdmap.require_min_compat_client
+	   << " < umbrella, which is required for pool migration. "
+           << "Try 'ceph osd set-require-min-compat-client umbrella' "
+           << "before using the new feature";
+	err = -EPERM;
+	goto reply_no_propose;
+      }
+
+      source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
+      if (source_pool_id < 0) {
+        ss << "migrate_from expects the name or ID of an existing pool. "
+           << source_pool_name << " does not exist";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+      source_pool = osdmap.get_pg_pool(source_pool_id.value_or(-1));
+      if (source_pool->is_migrating()) {
+        ss << "Cannot migrate from a pool which is part of an ongoing migration";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+    }
+
+    int64_t default_pg_num = (source_pool) ? source_pool->get_pg_num() : 0;
+    int64_t default_pg_num_min = (source_pool) ? source_pool->get_pg_num_min() : 0;
+    int64_t default_pg_num_max = (source_pool) ? source_pool->get_pg_num_max() : 0;
+    int64_t default_pgp_num = (source_pool) ? source_pool->get_pgp_num() : default_pg_num;
+    int64_t pg_num = cmd_getval_or<int64_t>(cmdmap, "pg_num", default_pg_num);
+    int64_t pg_num_min = cmd_getval_or<int64_t>(cmdmap, "pg_num_min", default_pg_num_min);
+    int64_t pg_num_max = cmd_getval_or<int64_t>(cmdmap, "pg_num_max", default_pg_num_max);
+    int64_t pgp_num = cmd_getval_or<int64_t>(cmdmap, "pgp_num", default_pgp_num);
+
+    string default_type_str = (source_pool) ?
+      string(source_pool->get_type_name()) : g_conf().get_val<string>("osd_pool_default_type");
+    string pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
 
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
@@ -13655,12 +13844,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    int64_t default_expected_num_objects = (source_pool) ? source_pool->expected_num_objects : 0;
+    string default_profile = (source_pool) ? source_pool->erasure_code_profile : "";
+    string default_rule_name = (source_pool) ? osdmap.crush->get_rule_name(source_pool->get_crush_rule()) : "";
+
     bool implicit_rule_creation = false;
-    int64_t expected_num_objects = 0;
-    string rule_name;
-    cmd_getval(cmdmap, "rule", rule_name);
-    string erasure_code_profile;
-    cmd_getval(cmdmap, "erasure_code_profile", erasure_code_profile);
+    int64_t expected_num_objects = default_expected_num_objects;
+    string erasure_code_profile = cmd_getval_or<string>(cmdmap, "erasure_code_profile", default_profile);
+    string rule_name = cmd_getval_or<string>(cmdmap, "rule", default_rule_name);
 
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       if (erasure_code_profile == "")
@@ -13694,8 +13885,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
+
       expected_num_objects =
-	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+	cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
       //     and put expected_num_objects to rule field
@@ -13712,7 +13904,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         rule_name = erasure_code_profile;
       } else { // cmd is well-formed
         expected_num_objects =
-	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", 0);
+	  cmd_getval_or<int64_t>(cmdmap, "expected_num_objects", default_expected_num_objects);
       }
     }
 
@@ -13732,26 +13924,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
+    int64_t default_fast_read_param = (source_pool) ? source_pool->fast_read : -1;
+    int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", default_fast_read_param);
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
     else if (fast_read_param > 0)
       fast_read = FAST_READ_ON;
 
-    int64_t repl_size = 0;
-    cmd_getval(cmdmap, "size", repl_size);
-    int64_t target_size_bytes = 0;
-    double target_size_ratio = 0.0;
-    cmd_getval(cmdmap, "target_size_bytes", target_size_bytes);
-    cmd_getval(cmdmap, "target_size_ratio", target_size_ratio);
+    int64_t default_repl_size = (source_pool) ? source_pool->get_size() : 0;
+    int64_t default_target_size_bytes = (source_pool) ? source_pool->get_target_size_bytes() : 0;
+    double default_target_size_ratio = (source_pool) ? source_pool->get_target_size_ratio() : 0.0;
+    int64_t repl_size = cmd_getval_or<int64_t>(cmdmap, "size", default_repl_size);
+    int64_t target_size_bytes = cmd_getval_or<int64_t>(cmdmap, "target_size_bytes", default_target_size_bytes);
+    double target_size_ratio = cmd_getval_or<double>(cmdmap, "target_size_ratio", default_target_size_ratio);
 
-    string pg_autoscale_mode;
-    cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
+    string default_pg_autoscale_mode =
+      (source_pool) ? source_pool->get_pg_autoscale_mode_name(source_pool->pg_autoscale_mode) : "";
+    string pg_autoscale_mode = cmd_getval_or<string>(cmdmap, "autoscale_mode", default_pg_autoscale_mode);
 
-    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
+    bool default_bulk = (source_pool) ? source_pool->is_bulk() : false;
+    bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", default_bulk);
 
-    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
+    bool default_crimson = (source_pool) ? source_pool->is_crimson() : false;
+    bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", default_crimson) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
 
     err = prepare_new_pool(poolstr,
@@ -13765,6 +13961,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+			   source_pool_id,
 			   &ss);
     if (err < 0) {
       switch(err) {

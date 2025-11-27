@@ -1442,3 +1442,12 @@ options:
   - mon
   flags:
   - runtime
+- name: mon_pool_migration_max_pg_percent
+  type: uint
+  level: advanced
+  desc: The percentage of total PGs that will be migrated in parallel during a pool migration.
+  default: 5
+  services:
+  - mon
+  min: 1
+  max: 100

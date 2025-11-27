@@ -257,6 +257,11 @@ enum {
   rs_getmissing_latency,
   rs_waitupthru_latency,
   rs_notrecovering_latency,
+  rs_waitlocalpoolmigrationreserved_latency,
+  rs_waitremotepoolmigrationreserved_latency,
+  rs_notmigrating_latency,
+  rs_repwaitmigrationreserved_latency,
+  rs_migratingsource_latency,
   rs_last,
 };
 

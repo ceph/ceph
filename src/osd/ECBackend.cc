@@ -402,6 +402,9 @@ void ECBackend::handle_sub_write(
   if (!op.temp_added.empty()) {
     switcher->add_temp_objs(op.temp_added);
   }
+  if (op.migration_watermark) {
+    get_parent()->update_migration_watermark(*op.migration_watermark);
+  }
   if (op.backfill_or_async_recovery) {
     for (set<hobject_t>::iterator i = op.temp_removed.begin();
          i != op.temp_removed.end();
@@ -924,6 +927,16 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
     }
     pending_roll_forward.insert(shard);
     return false;
+  }
+
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) final {
+    std::set<hobject_t> deleted;
+    for (auto &[hoid, op] : t.get()->op_map) {
+      if (op.is_delete()) {
+	deleted.insert(hoid);
+      }
+    }
+    return parent->consider_updating_migration_watermark(deleted);
   }
 };
 

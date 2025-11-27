@@ -511,6 +511,8 @@ public:
   void queue_want_pg_temp(const std::vector<int> &wanted) override;
   void clear_want_pg_temp() override;
 
+  void send_pg_migrated_pool() override;
+
   void on_new_interval() override;
 
   void on_role_change() override;
@@ -616,8 +618,6 @@ public:
 
   void on_replica_activate() override;
 
-  void on_activate_committed() override;
-
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
 
@@ -627,6 +627,8 @@ public:
   void on_backfill_suspended() override;
   void on_recovery_cancelled() override {}
   void on_recovery_reserved() override;
+  void on_pool_migration_suspended() override;
+  void on_pool_migration_reserved() override;
 
   bool is_forced_recovery_or_backfill() const {
     return recovery_state.is_forced_recovery_or_backfill();
@@ -913,7 +915,9 @@ public:
     return primary_num_bytes.load() > 0;
   }
 
-  bool try_reserve_recovery_space(int64_t primary, int64_t local) override;
+  bool try_reserve_recovery_space(int64_t primary,
+				  int64_t local,
+				  int64_t num_objects) override;
   void unreserve_recovery_space() override;
 
   // If num_bytes are inconsistent and local_num- goes negative
@@ -1121,6 +1125,9 @@ protected:
   }
   bool needs_backfill() const {
     return recovery_state.needs_backfill();
+  }
+  bool needs_pool_migration() const {
+    return recovery_state.needs_pool_migration();
   }
 
   bool all_unfound_are_queried_or_lost(const OSDMapRef osdmap) const;

@@ -1865,6 +1865,7 @@ public:
     bool sort_bitwise = false; ///< whether the hobject_t sort order is bitwise
     bool recovery_deletes = false; ///< whether the deletes are performed during recovery instead of peering
     bool allows_ecoptimizations = false; ///< whether EC plugin optimizations are enabled.
+    std::set<pg_t> migrating_pgs; ///< PGs migrating for pool migration
     uint32_t peering_crush_bucket_count = 0;
     uint32_t peering_crush_bucket_target = 0;
     uint32_t peering_crush_bucket_barrier = 0;
