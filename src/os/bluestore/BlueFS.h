@@ -415,18 +415,12 @@ public:
   private:
     uint64_t pos = 0;        ///< offset of data in file
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
-    ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
     uint32_t super_block_size;
     uint64_t buffer_pos = 0; ///< offset of the buffer in file
   public:
     unsigned get_buffer_length() const {
       return buffer.length() - (pos - buffer_pos);
     }
-    ceph::bufferlist flush_buffer(
-      CephContext* cct,
-      const bool partial,
-      const unsigned length,
-      const bluefs_super_t& super);
     bool get_write_overwrites() {
       return pos != buffer_pos;
     }

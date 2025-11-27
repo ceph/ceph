@@ -3794,53 +3794,6 @@ int BlueFS::_flush_and_sync_log_jump_D(uint64_t jump_to)
   return 0;
 }
 
-ceph::bufferlist BlueFS::FileWriter::flush_buffer(
-  CephContext* const cct,
-  const bool partial,
-  const unsigned length,
-  const bluefs_super_t& super)
-{
-  ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
-  ceph::bufferlist bl;
-  if (partial) {
-    tail_block.splice(0, tail_block.length(), &bl);
-  }
-  dout(20) << __func__ << " tail is" << std::hex << bl.length() << dendl;
-  ceph_assert(length >= bl.length());
-  const auto remaining_len = length - bl.length();
-  buffer.splice(0, remaining_len, &bl);
-  if (buffer.length()) {
-    dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
-             << " unflushed" << dendl;
-  }
-  // Append padding to fill block
-  unsigned tail = bl.length() & ~super.block_mask();
-  if (tail) {
-    unsigned padding_len = super.block_size - tail;
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << padding_len
-             << " buffer.length() " << buffer.length()
-             << std::dec << dendl;
-    // We need to go through the `buffer_appender` to get a chance to
-    // preserve in-memory contiguity and not mess with the alignment.
-    // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
-    buffer_appender.append_zero(padding_len);
-    buffer.splice(buffer.length() - padding_len, padding_len, &bl);
-    // Deep copy the tail here. This allows to avoid costlier copy on
-    // bufferlist rebuild in e.g. `KernelDevice` and minimizes number
-    // of memory allocations.
-    // The alternative approach would be to place the entire tail and
-    // padding on a dedicated, 4 KB long memory chunk. This shouldn't
-    // trigger the rebuild while still being less expensive.
-    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
-    buffer.splice(buffer.length() - tail, tail, &tail_block);
-  } else {
-    tail_block.clear();
-  }
-  return bl;
-}
-
 ceph::bufferlist BlueFS::FileWriter::get_write_data(
   CephContext* cct,
   uint64_t want_end)
