@@ -1024,7 +1024,7 @@ class Module(MgrModule, OrchestratorClientMixin):
           blocklist_count = len(blocklist) + len(range_blocklist)
         except json.JSONDecodeError:
           # Fallback for older Ceph monitor versions
-          blocklist_entries = err.split(' ')
+          blocklist_entries = out.split(' ')
           blocklist_count = blocklist_entries[1]
 
         for stat in OSD_BLOCKLIST:
