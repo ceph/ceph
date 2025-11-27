@@ -16,6 +16,7 @@
 #include "rados.h"
 #include "include/encoding.h"
 #include "include/denc.h"
+#include "include/cephfs/snap_types.h"
 
 /*
  * The data structures defined here are shared between Linux kernel and
