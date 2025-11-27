@@ -200,7 +200,7 @@ struct RGWCtlDef {
 
   std::unique_ptr<RGWUserCtl> user;
   std::unique_ptr<RGWBucketCtl> bucket;
-  std::unique_ptr<RGWVectorBucketCtl> vector_bucket;
+  std::unique_ptr<RGWBucketCtl> vector_bucket;
 
   RGWCtlDef();
   ~RGWCtlDef();
@@ -231,7 +231,7 @@ struct RGWCtl {
 
   RGWUserCtl *user{nullptr};
   RGWBucketCtl *bucket{nullptr};
-  RGWVectorBucketCtl *vector_bucket{nullptr};
+  RGWBucketCtl *vector_bucket{nullptr};
 
   int init(RGWServices *_svc, rgw::sal::Driver* driver,
            librados::Rados& rados, const DoutPrefixProvider *dpp);

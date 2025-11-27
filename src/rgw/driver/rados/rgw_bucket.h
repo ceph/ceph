@@ -426,9 +426,16 @@ struct rgw_ep_info {
     : ep(ep), attrs(attrs) {}
 };
 
+using BucketsObjGetter = rgw_raw_obj (*)(const RGWZoneParams&, std::string_view);
+using UserBucketsObjGetter = rgw_raw_obj (RGWSI_User::*)(const rgw_user&) const;
+
 class RGWBucketCtl {
-protected:
   CephContext *cct;
+  BucketsObjGetter get_buckets_obj;
+  UserBucketsObjGetter get_user_buckets_obj;
+  rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+                                         RGWSI_Zone* svc_zone,
+                                         const rgw_owner& owner);
 
   struct Svc {
     RGWSI_Zone *zone{nullptr};
@@ -449,7 +456,9 @@ public:
                RGWSI_Bucket_Sync *bucket_sync_svc,
                RGWSI_BucketIndex *bi_svc,
                RGWSI_User* user_svc,
-               RGWDataChangesLog *datalog_svc);
+               RGWDataChangesLog *datalog_svc,
+               BucketsObjGetter obj_getter_func,
+               UserBucketsObjGetter user_buckets_getter_func);
 
   void init(RGWUserCtl *user_ctl,
             RGWDataChangesLog *datalog,
@@ -734,29 +743,3 @@ private:
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,
                            const std::string& bucket_id, rgw_bucket* bucket_out);
 
-class RGWVectorBucketCtl : public RGWBucketCtl {
-public:
-  RGWVectorBucketCtl(RGWSI_Zone *zone_svc,
-               RGWSI_Bucket *bucket_svc,
-               RGWSI_Bucket_Sync *bucket_sync_svc,
-               RGWSI_BucketIndex *bi_svc,
-               RGWSI_User* user_svc,
-               RGWDataChangesLog *datalog_svc);
-
-  int link_bucket(librados::Rados& rados,
-                  const rgw_owner& owner,
-                  const rgw_bucket& bucket,
-                  ceph::real_time creation_time,
-		  optional_yield y,
-                  const DoutPrefixProvider *dpp,
-                  bool update_entrypoint = true,
-                  rgw_ep_info *pinfo = nullptr);
-
-  int unlink_bucket(librados::Rados& rados,
-                    const rgw_owner& owner,
-                    const rgw_bucket& bucket,
-		    optional_yield y,
-                    const DoutPrefixProvider *dpp,
-                    bool update_entrypoint = true);
-
-};

@@ -352,12 +352,16 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
                                 svc.bucket,
                                 svc.bucket_sync,
                                 svc.bi, svc.user,
-                                svc.datalog_rados));
-  vector_bucket.reset(new RGWVectorBucketCtl(svc.zone,
+                                svc.datalog_rados,
+                                rgwrados::account::get_buckets_obj,
+                                &RGWSI_User::get_buckets_obj));
+  vector_bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.vector_bucket,
                                 svc.bucket_sync,
                                 svc.bi, svc.user,
-                                svc.datalog_rados));
+                                svc.datalog_rados,
+                                rgwrados::account::get_vector_buckets_obj,
+                                &RGWSI_User::get_vector_buckets_obj));
 
   auto sync_module = svc.sync_modules->get_sync_module();
   if (sync_module) {

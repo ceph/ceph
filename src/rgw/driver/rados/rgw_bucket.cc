@@ -3134,8 +3134,10 @@ RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc,
                            RGWSI_User* user_svc,
-                           RGWDataChangesLog *datalog_svc)
-  : cct(zone_svc->ctx())
+                           RGWDataChangesLog *datalog_svc,
+                           BucketsObjGetter obj_getter_func,
+                           UserBucketsObjGetter user_obj_getter_func)
+  : cct(zone_svc->ctx()), get_buckets_obj(obj_getter_func), get_user_buckets_obj(user_obj_getter_func)
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
@@ -3414,31 +3416,17 @@ int RGWBucketCtl::set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
                                                                .set_orig_info(&bucket_info));
 }
 
-static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+rgw_raw_obj RGWBucketCtl::get_owner_buckets_obj(RGWSI_User* svc_user,
                                          RGWSI_Zone* svc_zone,
                                          const rgw_owner& owner)
 {
   return std::visit(fu2::overload(
       [&] (const rgw_user& uid) {
-        return svc_user->get_buckets_obj(uid);
+        return (svc_user->*get_user_buckets_obj)(uid);
       },
       [&] (const rgw_account_id& account_id) {
         const RGWZoneParams& zone = svc_zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, account_id);
-      }), owner);
-}
-
-static rgw_raw_obj get_owner_vector_buckets_obj(RGWSI_User* svc_user,
-                                         RGWSI_Zone* svc_zone,
-                                         const rgw_owner& owner)
-{
-  return std::visit(fu2::overload(
-      [&] (const rgw_user& uid) {
-        return svc_user->get_vector_buckets_obj(uid);
-      },
-      [&] (const rgw_account_id& account_id) {
-        const RGWZoneParams& zone = svc_zone->get_zone_params();
-        return rgwrados::account::get_vector_buckets_obj(zone, account_id);
+        return get_buckets_obj(zone, account_id);
       }), owner);
 }
 
@@ -3511,76 +3499,6 @@ done_err:
   return ret;
 }
 
-int RGWVectorBucketCtl::link_bucket(librados::Rados& rados,
-                              const rgw_owner& owner,
-                              const rgw_bucket& bucket,
-                              ceph::real_time creation_time,
-			      optional_yield y,
-                              const DoutPrefixProvider *dpp,
-                              bool update_entrypoint,
-                              rgw_ep_info *pinfo)
-{
-  ldpp_dout(dpp, 20) << "s3vector --- RGWBucketCtl::link_vector_bucke called" << dendl;
-  int ret;
-
-  RGWBucketEntryPoint ep;
-  RGWObjVersionTracker ot;
-  RGWObjVersionTracker& rot = (pinfo) ? pinfo->ep_objv : ot;
-  map<string, bufferlist> attrs, *pattrs = nullptr;
-  string meta_key;
-
-  if (update_entrypoint) {
-    meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-    if (pinfo) {
-      ep = pinfo->ep;
-      pattrs = &pinfo->attrs;
-    } else {
-      ret = svc.bucket->read_bucket_entrypoint_info(meta_key,
-                                                    &ep, &rot,
-                                                    nullptr, &attrs,
-                                                    y, dpp);
-      if (ret < 0 && ret != -ENOENT) {
-        ldpp_dout(dpp, 0) << "ERROR: read_bucket_entrypoint_info() returned: "
-                      << cpp_strerror(-ret) << dendl;
-      }
-      pattrs = &attrs;
-    }
-  }
-
-  const auto& buckets_obj = get_owner_vector_buckets_obj(svc.user, svc.zone, owner);
-  ret = rgwrados::buckets::add(dpp, y, rados, buckets_obj,
-                               bucket, creation_time);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: error adding s3vector bucket to owner directory:"
-		  << " owner=" << owner
-                  << " bucket=" << bucket
-		  << " err=" << cpp_strerror(-ret)
-		  << dendl;
-    goto done_err;
-  }
-
-  if (!update_entrypoint)
-    return 0;
-
-  ep.linked = true;
-  ep.owner = owner;
-  ep.bucket = bucket;
-  ret = svc.bucket->store_bucket_entrypoint_info(
-    meta_key, ep, false, real_time(), pattrs, &rot, y, dpp);
-  if (ret < 0)
-    goto done_err;
-
-  return 0;
-
-done_err:
-  int r = unlink_bucket(rados, owner, bucket, y, dpp, true);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed unlinking s3vector bucket on error cleanup: "
-                           << cpp_strerror(-r) << dendl;
-  }
-  return ret;
-}
-
 int RGWBucketCtl::unlink_bucket(librados::Rados& rados, const rgw_owner& owner,
                                 const rgw_bucket& bucket, optional_yield y,
                                 const DoutPrefixProvider *dpp, bool update_entrypoint)
@@ -3617,50 +3535,6 @@ int RGWBucketCtl::unlink_bucket(librados::Rados& rados, const rgw_owner& owner,
   return svc.bucket->store_bucket_entrypoint_info(meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
 }
 
-int RGWVectorBucketCtl::unlink_bucket(librados::Rados& rados, const rgw_owner& owner,
-                                const rgw_bucket& bucket, optional_yield y,
-                                const DoutPrefixProvider *dpp, bool update_entrypoint)
-{
-  ldpp_dout(dpp, 20) << "s3vector --- RGWBucketCtl::unlink_vector_bucket( called" << dendl;
-  const auto& buckets_obj = get_owner_vector_buckets_obj(svc.user, svc.zone, owner);
-  int ret = rgwrados::buckets::remove(dpp, y, rados, buckets_obj, bucket);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: error removing s3vector bucket from directory: "
-        << cpp_strerror(-ret)<< dendl;
-  }
-
-  if (!update_entrypoint)
-    return 0;
-
-  RGWBucketEntryPoint ep;
-  RGWObjVersionTracker ot;
-  map<string, bufferlist> attrs;
-  string meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-  ret = svc.bucket->read_bucket_entrypoint_info(meta_key, &ep, &ot, nullptr, &attrs, y, dpp);
-  if (ret == -ENOENT)
-    return 0;
-  if (ret < 0)
-    return ret;
-
-  if (!ep.linked)
-    return 0;
-
-  if (ep.owner != owner) {
-    ldpp_dout(dpp, 0) << "s3vector bucket entry point owner mismatch, can't unlink bucket: " << ep.owner << " != " << owner << dendl;
-    return -EINVAL;
-  }
-
-  ep.linked = false;
-  return svc.bucket->store_bucket_entrypoint_info(meta_key, ep, false, real_time(), &attrs, &ot, y, dpp);
-}
-
-RGWVectorBucketCtl::RGWVectorBucketCtl(RGWSI_Zone *zone_svc,
-               RGWSI_Bucket *bucket_svc,
-               RGWSI_Bucket_Sync *bucket_sync_svc,
-               RGWSI_BucketIndex *bi_svc,
-               RGWSI_User* user_svc,
-               RGWDataChangesLog *datalog_svc) : RGWBucketCtl(zone_svc, bucket_svc, bucket_sync_svc, bi_svc, user_svc, datalog_svc) {}
-
 int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
                                     RGWBucketEnt *result,
                                     optional_yield y,
@@ -3695,11 +3569,11 @@ int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
   // flush stats to the user/account owner object
   const rgw_raw_obj& obj = std::visit(fu2::overload(
       [&] (const rgw_user& user) {
-        return svc.user->get_buckets_obj(user);
+        return (svc.user->*get_user_buckets_obj)(user);
       },
       [&] (const rgw_account_id& id) {
         const RGWZoneParams& zone = svc.zone->get_zone_params();
-        return rgwrados::account::get_buckets_obj(zone, id);
+        return get_buckets_obj(zone, id);
       }), owner);
   return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
 }
