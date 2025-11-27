@@ -51,6 +51,10 @@ public:
   ll_read_ierrorator::future<> handle_rep_read_reply(ECSubReadReply& mop);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
 
+  PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+    const hobject_t& soid,
+    std::string&& key) const final;
+
 private:
   friend class ECRecoveryBackend;
 

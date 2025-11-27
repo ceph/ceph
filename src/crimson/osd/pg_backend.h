@@ -279,13 +279,15 @@ public:
       get_attr_errorator>;
   get_attr_ierrorator::future<> getxattr(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+  virtual get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string&& key) const;
+    std::string&& key) const = 0;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using cmp_xattr_errorator = get_attr_errorator::extend<
