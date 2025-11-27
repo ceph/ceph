@@ -1,0 +1,63 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph -s
+- exec:
+    mon.a:
+      - |
+        ceph osd pool create testpool 128
+- rbd.create_image:
+    client.0:
+      pool: testpool
+      image_name: testimage
+      image_size: 10240     # 10GB
+      image_format: 2
+- rbd_fio:
+    client.0:
+      pool: testpool
+      image: testimage
+      fio-io-size: 100%
+      formats: [2]
+      io-engine: rbd
+      rw: randwrite
+      bs: 4k
+      runtime: 120
+
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 2
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2] 
+
+- exec:
+    mon.a:
+      - ceph -s
+- rbd_fio:
+    client.0:
+      pool: testpool
+      image: testimage
+      fio-io-size: 100%
+      formats: [2]
+      io-engine: rbd
+      rw: randwrite
+      bs: 4k
+      runtime: 120
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 5
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+
+- exec:
+    mon.a:
+      - ceph -s
+- rbd_fio:
+    client.0:
+      pool: testpool
+      image: testimage
+      fio-io-size: 100%
+      formats: [2]
+      io-engine: rbd
+      rw: randwrite
+      bs: 4k
+      runtime: 120
