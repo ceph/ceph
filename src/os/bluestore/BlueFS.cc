@@ -3833,6 +3833,17 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // The alternative approach would be to place the entire tail and
     // padding on a dedicated, 4 KB long memory chunk. This shouldn't
     // trigger the rebuild while still being less expensive.
+    if (file->envelope_mode() &&
+      buffer.get_append_buffer_unused_tail_length() <= super.block_size &&
+      p2phase(tail, super.block_size) >
+      p2phase<unsigned>(tail + File::envelope_t::head_size(), super.block_size)
+    ) {
+      // Envelope mode header must completely fit in single buffer::ptr,
+      // otherwise append_hole() will allocate new unaligned buffer.
+      // Clearing the buffer is a way to force buffer_appender to allocate fresh
+      // pages. The size is min 2 * super.block_size so header will fit.
+      buffer.clear();
+    }
     buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
     buffer.splice(buffer.length() - tail, tail, &tail_block);
   } else {
@@ -4099,8 +4110,8 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
   {
     std::unique_lock hl(h->lock);
     if (h->file->envelope_mode() && h->get_buffer_length() == 0) {
-      uint32_t pos1 = h->get_effective_write_pos();
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
+      uint32_t pos1 = h->get_effective_write_pos() - File::envelope_t::head_size();
       uint32_t pos2 = reinterpret_cast<uintptr_t>(h->envelope_head_filler.c_str());
       ceph_assert(p2aligned(pos1 ^ pos2, CEPH_PAGE_SIZE));
     }
@@ -4706,7 +4717,7 @@ int BlueFS::open_for_write(
 
 BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 {
-  FileWriter *w = new FileWriter(f);
+  FileWriter *w = new FileWriter(f, super.block_size);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       w->iocv[i] = new IOContext(cct, NULL);
