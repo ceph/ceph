@@ -15,6 +15,7 @@
 #include "msgr.h"
 #include "rados.h"
 #include "include/buffer.h" // for ceph::buffer::list
+#include "include/cephfs/snap_types.h"
 
 /*
  * The data structures defined here are shared between Linux kernel and
