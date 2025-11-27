@@ -17,6 +17,9 @@ NFS_CORE_PARAM {
 	Monitoring_Addr = {{ monitoring_addr }};
 {% endif %}
         Monitoring_Port = {{ monitoring_port }};
+{% if cqos_port %}
+        Cqos_Port = {{ cqos_port }};
+{% endif %}
 }
 
 NFSv4 {
