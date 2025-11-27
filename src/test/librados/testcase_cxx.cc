@@ -37,7 +37,7 @@ int RadosTestECPP::freeze_omap_journal() {
   bufferlist inbl, outbl;
   std::ostringstream oss;
   oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
-  int rc = rados.mon_command(oss.str(), std::move(inbl), outbl, nullptr);
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
   return rc;
 }
 
@@ -45,11 +45,13 @@ int RadosTestECPP::unfreeze_omap_journal() {
   bufferlist inbl, outbl;
   std::ostringstream oss;
   oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
-  int rc = rados.mon_command(oss.str(), std::move(inbl), outbl, nullptr);
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
   return rc;
 }
 
-void RadosTestECPP::write_omap_keys(std::string oid, int min_index, int max_index) {
+void RadosTestECPP::write_omap_keys(std::string oid, int min_index, 
+  int max_index, std::set<std::string> &keys_written) 
+{
   const std::string omap_value = "val";
   bufferlist omap_val_bl;
   encode(omap_value, omap_val_bl);
@@ -62,8 +64,9 @@ void RadosTestECPP::write_omap_keys(std::string oid, int min_index, int max_inde
 
   for (int i = min_index; i <= max_index; i++) {
     std::stringstream key_ss;
-    key_ss << "key_" << std:setw(width) << std::setfill('0') << i;
+    key_ss << "key_" << std::setw(width) << std::setfill('0') << i;
     omap_map[key_ss.str()] = omap_val_bl;
+    keys_written.insert(key_ss.str());
   }
   
   ObjectWriteOperation write;
@@ -74,21 +77,16 @@ void RadosTestECPP::write_omap_keys(std::string oid, int min_index, int max_inde
   EXPECT_EQ(ret, 0);
 }
 
-void RadosTestECPP::check_returned_keys(
-    std::list<std::pair<std::string, std::string>> expected_ranges,
-    std::set<std::string> returned_keys)
+void RadosTestECPP::read_omap_keys(
+  std::string oid, 
+  std::set<std::string> &keys_read)
 {
-  for (auto &range : expected_ranges) {
-    // Need to do!
-  }
-}
-
-void RadosTestECPP::remove_omap_range(
-    std::string oid, 
-    std::string start, 
-    std::string end)
-{
-  // How can we do this?
+  ObjectReadOperation read;
+  int err = 0;
+  read.omap_get_keys2("", LONG_MAX, &keys_read, nullptr, &err);
+  int ret = ioctx.operate(oid, &read, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(0, err);
 }
 
 std::string RadosTestPPNS::pool_name;
@@ -572,7 +570,7 @@ int RadosTestECPP::wait_for_upmap(
   return upmap_in_effect ? 0 : -ETIMEDOUT;
 }
 
-void RadosTestECPP::read_xattrs(
+void RadosTestECPP::check_xattr_read(
     std::string oid,
     std::string xattr_key,
     std::string xattr_value,
@@ -593,7 +591,7 @@ void RadosTestECPP::read_xattrs(
   EXPECT_EQ(xattrs_read.size(), expected_size);
 }
 
-void RadosTestECPP::read_omap(
+void RadosTestECPP::check_omap_read(
     std::string oid,
     std::string omap_key,
     std::string omap_value,

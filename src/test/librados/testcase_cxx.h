@@ -133,7 +133,16 @@ protected:
   void set_allow_ec_overwrites();
   int freeze_omap_journal();
   int unfreeze_omap_journal();
-  void write_omap_keys(std::string oid, int min_index, int max_index);
+  void write_omap_keys(
+    std::string oid, 
+    int min_index, 
+    int max_index, 
+    std::set<std::string> &keys_written
+  );
+  void read_omap_keys(
+    std::string oid, 
+    std::set<std::string> &keys_read
+  );
   void check_returned_keys(
     std::list<std::pair<std::string, std::string>> expected_ranges,
     std::set<std::string> returned_keys
@@ -160,7 +169,7 @@ protected:
     int desired_primary,
     std::chrono::seconds timeout
   );
-  void read_xattrs(
+  void check_xattr_read(
     std::string oid,
     std::string xattr_key,
     std::string xattr_value,
@@ -168,7 +177,7 @@ protected:
     int expected_ret,
     int expected_err
   );
-  void read_omap(
+  void check_omap_read(
     std::string oid,
     std::string omap_key,
     std::string omap_value,
