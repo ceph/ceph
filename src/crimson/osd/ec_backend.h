@@ -24,6 +24,11 @@ public:
     return seastar::now();
   }
   void on_actingset_changed(bool same_primary) final {}
+
+  PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+    const hobject_t& soid,
+    std::string&& key) const final;
+
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;

@@ -268,7 +268,8 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
-    object_stat_sum_t& delta_stats);
+    object_stat_sum_t& delta_stats,
+    ObjectContext::attr_cache_t& attr_cache);
   using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
@@ -276,13 +277,15 @@ public:
       get_attr_errorator>;
   get_attr_ierrorator::future<> getxattr(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
-  get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+  virtual get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,
-    std::string&& key) const;
+    std::string&& key) const = 0;
   get_attr_ierrorator::future<> get_xattrs(
     const ObjectState& os,
+    const ObjectContext::attr_cache_t& attr_cache,
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using cmp_xattr_errorator = get_attr_errorator::extend<
@@ -304,7 +307,8 @@ public:
   rm_xattr_iertr::future<> rm_xattr(
     ObjectState& os,
     const OSDOp& osd_op,
-    ceph::os::Transaction& trans);
+    ceph::os::Transaction& trans,
+    ObjectContext::attr_cache_t& attr_cache);
   interruptible_future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;

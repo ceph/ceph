@@ -1068,7 +1068,8 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
@@ -1092,6 +1093,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   }
   logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
   txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
+  attr_cache[name] = val;
   delta_stats.num_wr++;
   return seastar::now();
 }
@@ -1109,8 +1111,16 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
+  auto get_attr_maybe_from_cache =
+    [&] () mutable -> get_attr_ierrorator::future<ceph::bufferlist> {
+    if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
+      return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
+        cache_it->second);
+    }
+    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+    return crimson::ct_error::enodata::make();
+  };
+  return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
@@ -1120,36 +1130,27 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   });
 }
 
-PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::getxattr(
-  const hobject_t& soid,
-  std::string&& key) const
-{
-  return seastar::do_with(key, [this, &soid](auto &key) {
-    return store->get_attr(coll, ghobject_t{soid}, key);
-  });
-}
-
 PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  return store->get_attrs(coll, ghobject_t{os.oi.soid}).safe_then(
-    [&delta_stats, &osd_op](auto&& attrs) {
-    std::vector<std::pair<std::string, bufferlist>> user_xattrs;
-    ceph::bufferlist bl;
-    for (auto& [key, val] : attrs) {
-      if (key.size() > 1 && key[0] == '_') {
-	bl.append(std::move(val));
-	user_xattrs.emplace_back(key.substr(1), std::move(bl));
-      }
+  if (std::empty(attr_cache)) {
+    return crimson::ct_error::enodata::make();
+  }
+  std::vector<std::pair<std::string, bufferlist>> user_xattrs;
+  ceph::bufferlist bl;
+  for (auto& [key, val] : attr_cache) {
+    if (key.size() > 1 && key[0] == '_') {
+      bl.append(std::move(val));
+      user_xattrs.emplace_back(key.substr(1), std::move(bl));
     }
-    ceph::encode(user_xattrs, osd_op.outdata);
-    delta_stats.num_rd++;
-    delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
-    return get_attr_errorator::now();
-  });
+  }
+  ceph::encode(user_xattrs, osd_op.outdata);
+  delta_stats.num_rd++;
+  delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+  return get_attr_errorator::now();
 }
 
 namespace {
@@ -1264,7 +1265,8 @@ PGBackend::rm_xattr_iertr::future<>
 PGBackend::rm_xattr(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
@@ -1274,6 +1276,7 @@ PGBackend::rm_xattr(
   string attr_name{"_"};
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
+  attr_cache.erase(attr_name);
   return rm_xattr_iertr::now();
 }
 

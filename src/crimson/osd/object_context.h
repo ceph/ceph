@@ -75,7 +75,8 @@ public:
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
   // attr cache. ECTransaction is the initial user
-  std::map<std::string, ceph::buffer::list, std::less<>> attr_cache;
+  using attr_cache_t = std::map<std::string, ceph::buffer::list, std::less<>>;
+  attr_cache_t attr_cache;
 
   CommonOBCPipeline obc_pipeline;
 
