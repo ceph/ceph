@@ -337,6 +337,9 @@ private:
   }
 
   template <class Func>
+  auto do_read_attr_cache(Func&& f);
+
+  template <class Func>
   auto do_snapset_op(Func&& f) {
     ++num_read;
     return std::invoke(
