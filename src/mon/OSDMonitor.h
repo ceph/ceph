@@ -471,6 +471,7 @@ private:
 
   bool target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_pg,
                            int source_pgnum, int target_pgnum);
+  uint64_t calculate_migrating_pg_count(int source_pgnum, int target_pgnum);
 
   int _check_remove_pool(int64_t pool_id, const pg_pool_t &pool, std::ostream *ss);
   bool _check_become_tier(

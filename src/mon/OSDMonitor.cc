@@ -4306,14 +4306,22 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   } else if (source_p.lowest_migrated_pg == 0) {
     dout(0) << "No more PGs to schedule for pool " << pgid.pool() << dendl;
   } else {
-    if (target_pg_migrating(source_p.migrating_pgs, pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()),
-                            source_p.get_pg_num(), target_p.get_pg_num())) {
-      dout(0) << "PG" << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) <<
-              " already in target PG set, doing nothing until next PG completes migration" << dendl;
-    } else {
-      dout(0) << "Starting migration of PG " << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
-      source_p.migrating_pgs.emplace(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
-      source_p.lowest_migrated_pg -= 1;
+    uint64_t migrating_pgs_target_total = calculate_migrating_pg_count(source_p.get_pg_num(), target_p.get_pg_num());
+    uint64_t num_pgs_to_add = migrating_pgs_target_total - source_p.migrating_pgs.size();
+    if (num_pgs_to_add > source_p.lowest_migrated_pg) {
+      num_pgs_to_add = source_p.lowest_migrated_pg;
+    }
+    for (int i = 0; i < num_pgs_to_add; i++) {
+      if (target_pg_migrating(source_p.migrating_pgs, pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()),
+                              source_p.get_pg_num(), target_p.get_pg_num())) {
+        dout(0) << "PG" << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) <<
+                " already in target PG set, doing nothing until next PG completes migration" << dendl;
+        break;
+      } else {
+        dout(0) << "Starting migration of PG " << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
+        source_p.migrating_pgs.emplace(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
+        source_p.lowest_migrated_pg -= 1;
+      }
     }
   }
 
@@ -4336,6 +4344,18 @@ bool OSDMonitor::target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_p
   }
 
   return false;
+}
+
+uint64_t OSDMonitor::calculate_migrating_pg_count(int source_pgnum, int target_pgnum)
+{
+  uint64_t migrating_pgs_size = 0;
+  auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
+  if (source_pgnum > target_pgnum) {
+    migrating_pgs_size = (static_cast<uint64_t>(target_pgnum * migration_percent) + 99) / 100;
+  } else {
+    migrating_pgs_size = (static_cast<uint64_t>(source_pgnum * migration_percent) + 99) / 100;
+  }
+  return migrating_pgs_size;
 }
 
 // ---
@@ -8474,13 +8494,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->migration_src = source_pool_id.value();
     pi->migration_target.reset();
 
-    uint64_t migrating_pgs_size = 0;
-    auto migration_percent = g_conf().get_val<uint64_t>("mon_pool_migration_max_pg_percent");
-    if (spi->get_pg_num() > pi->get_pg_num()) {
-      migrating_pgs_size = (static_cast<uint64_t>(pi->get_pg_num() * migration_percent) + 99) / 100;
-    } else {
-      migrating_pgs_size = (static_cast<uint64_t>(spi->get_pg_num() * migration_percent) + 99) / 100;
-    }
+    uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num());
 
     for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
       if (spi->get_pg_num() > pi->get_pg_num()) {
