@@ -383,6 +383,7 @@ enum {
   CEPH_OSD_RMW_FLAG_RWORDERED         = (1 << 10),
   CEPH_OSD_RMW_FLAG_RETURNVEC = (1 << 11),
   CEPH_OSD_RMW_FLAG_READ_DATA  = (1 << 12),
+  CEPH_OSD_RMW_FLAG_EC_DIRECT_READ  = (1 << 13),
 };
 
 
@@ -1331,6 +1332,7 @@ struct pg_pool_t {
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
+    FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1355,6 +1357,7 @@ struct pg_pool_t {
     case FLAG_BULK: return "bulk";
     case FLAG_CRIMSON: return "crimson";
     case FLAG_EC_OPTIMIZATIONS: return "ec_optimizations";
+    case FLAG_CLIENT_SPLIT_READS: return "split_reads";
     default: return "???";
     }
   }
@@ -1413,6 +1416,8 @@ struct pg_pool_t {
       return FLAG_CRIMSON;
     if (name == "ec_optimizations")
       return FLAG_EC_OPTIMIZATIONS;
+    if (name == "split_reads")
+      return FLAG_CLIENT_SPLIT_READS;
     return 0;
   }
 

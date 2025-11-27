@@ -552,7 +552,7 @@ common::intrusive_timer &PrimaryLogPG::get_pg_timer()
   return osd->pg_timer;
 }
 
-void PrimaryLogPG::replica_clear_repop_obc(
+void PrimaryLogPG::clear_repop_obc(
   const vector<pg_log_entry_t> &logv,
   ObjectStore::Transaction &t)
 {
@@ -2047,19 +2047,27 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // check for op with rwordered and rebalance or localize reads
-  if ((m->has_flag(CEPH_OSD_FLAG_BALANCE_READS) || m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
-      op->rwordered()) {
-    dout(4) << __func__ << ": rebelance or localized reads with rwordered not allowed "
+  if (m->has_flag(CEPH_OSD_FLAGS_DIRECT_READ) && op->rwordered()) {
+    dout(4) << __func__ << ": rebalance or localized reads with rwordered not allowed "
        << *m << dendl;
     osd->reply_op_error(op, -EINVAL);
     return;
   }
 
-  if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+  if (m->get_flags() & CEPH_OSD_FLAG_EC_DIRECT_READ) {
+    // This means "is in acting set"
+    if (is_primary() || is_nonprimary()) {
+      op->set_ec_direct_read();
+    } else {
+      osd->handle_misdirected_op(this, op);
+      return;
+    }
+  } else if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
+                                CEPH_OSD_FLAG_LOCALIZE_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
+    // This means "is in acting set"
     if (!(is_primary() || is_nonprimary())) {
       osd->handle_misdirected_op(this, op);
       return;
@@ -2224,6 +2232,14 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     return;
   }
 
+  // Missing direct read (EC version)
+  if (m->has_flag(CEPH_OSD_FLAG_EC_DIRECT_READ) &&
+      get_local_missing().is_missing(head)) {
+    dout(20) << __func__ << ": oid=" << head << " missing in direct read" << dendl;
+    osd->reply_op_error(op, -EAGAIN);
+    return;
+  }
+
   if (write_ordered) {
     // degraded object?
     if (is_degraded_or_backfilling_object(head)) {
@@ -2346,15 +2362,20 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (!is_primary()) {
-    if (!recovery_state.can_serve_replica_read(oid)) {
+    if (!recovery_state.can_serve_read(oid)) {
+      std::string_view storage_object = "replica";
+      if (pool.info.is_erasure()) {
+        storage_object = "shard";
+      }
       dout(20) << __func__
-               << ": unstable write on replica, bouncing to primary "
+               << ": unstable write on " << storage_object
+               << ", bouncing to primary "
 	       << *m << dendl;
       osd->logger->inc(l_osd_replica_read_redirect_conflict);
       osd->reply_op_error(op, -EAGAIN);
       return;
     }
-    dout(20) << __func__ << ": serving replica read on oid " << oid
+    dout(20) << __func__ << ": serving read on oid " << oid
              << dendl;
     osd->logger->inc(l_osd_replica_read_served);
   }
@@ -5883,6 +5904,20 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
+
+    if (ctx->op->ec_direct_read()) {
+      int r = pgbackend->objects_read_sync(
+        soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
+      if (r >= 0) {
+        op.extent.length = r;
+      } else if (r == -EAGAIN) {
+        result = -EAGAIN;
+      } else {
+        result = r;
+        op.extent.length = 0;
+      }
+      dout(20) << " EC sync read for " << soid << " result=" << result << dendl;
+    } else {
     ctx->pending_async_reads.push_back(
       make_pair(
         boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
@@ -5894,6 +5929,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
+    }
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5953,7 +5989,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.is_erasure()) {
+  if (pool.info.is_erasure() && !ctx->op->ec_direct_read()) {
     // translate sparse read to a normal one if not supported
 
     if (length > 0) {
@@ -5976,9 +6012,10 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   } else {
     // read into a buffer
     map<uint64_t, uint64_t> m;
+    auto [shard_offset, shard_length] = pgbackend->extent_to_shard_extent(offset, length);
     int r = osd->store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN,
 					      info.pgid.shard),
-			       offset, length, m);
+			       shard_offset, shard_length, m);
     if (r < 0)  {
       return r;
     }
@@ -5989,6 +6026,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       r = rep_repair_primary_object(soid, ctx);
     }
     if (r < 0) {
+      dout(10) << " sparse_read failed r=" << r << " from object " << soid << dendl;
       return r;
     }
 
@@ -6540,6 +6578,15 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
       }
       break;
+
+    case CEPH_OSD_OP_GET_INTERNAL_VERSIONS: {
+      std::map<shard_id_t, eversion_t> out;
+      result = get_internal_versions(soid, &out);
+      if (result >= 0) {
+        encode(out, osd_op.outdata);
+      }
+    }
+    break;
 
     case CEPH_OSD_OP_LIST_WATCHERS:
       ++ctx->num_read;
@@ -16032,6 +16079,28 @@ int PrimaryLogPG::getattrs_maybe_cache(
   }
   tmp.swap(*out);
   return r;
+}
+
+int PrimaryLogPG::get_internal_versions(const hobject_t& soid,
+                                        std::map<shard_id_t, eversion_t>* out) {
+  const std::set<pg_shard_t>& acting_shards = get_acting_shards();
+  ObjectContextRef obc = get_object_context(soid, false);
+
+  if (!obc->obs.exists) {
+    return -ENOENT;
+  }
+
+  if (is_primary()) {
+    for (const auto& shard : acting_shards) {
+      (*out)[shard.shard] = obc->obs.oi.version;
+    }
+    for (const auto& [shard, version] : obc->obs.oi.shard_versions) {
+      out->at(shard) = version;
+    }
+  } else {
+    (*out)[pg_whoami.shard] = obc->obs.oi.version;
+  }
+  return 0;
 }
 
 bool PrimaryLogPG::check_failsafe_full() {

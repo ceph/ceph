@@ -158,14 +158,14 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   rados_shutdown(cluster_a);
 }
 
-TEST_F(LibRadosMisc, ClusterFSID) {
+TEST_P(LibRadosMisc, ClusterFSID) {
   char fsid[37];
   ASSERT_EQ(-ERANGE, rados_cluster_fsid(cluster, fsid, sizeof(fsid) - 1));
   ASSERT_EQ(sizeof(fsid) - 1,
             (size_t)rados_cluster_fsid(cluster, fsid, sizeof(fsid)));
 }
 
-TEST_F(LibRadosMisc, Exec) {
+TEST_P(LibRadosMisc, Exec) {
   char buf[128];
   memset(buf, 0xcc, sizeof(buf));
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
@@ -182,7 +182,7 @@ TEST_F(LibRadosMisc, Exec) {
   ASSERT_NE(all_features, (unsigned)0);
 }
 
-TEST_F(LibRadosMisc, WriteSame) {
+TEST_P(LibRadosMisc, WriteSame) {
   char buf[128];
   char full[128 * 4];
   char *cmp;
@@ -213,7 +213,7 @@ TEST_F(LibRadosMisc, WriteSame) {
   ASSERT_EQ(0, rados_writesame(ioctx, "ws", buf, sizeof(buf), sizeof(buf), 0));
 }
 
-TEST_F(LibRadosMisc, CmpExt) {
+TEST_P(LibRadosMisc, CmpExt) {
   bufferlist cmp_bl, bad_cmp_bl, write_bl;
   char stored_str[] = "1234567891";
   char mismatch_str[] = "1234577777";
@@ -228,7 +228,7 @@ TEST_F(LibRadosMisc, CmpExt) {
 	    rados_cmpext(ioctx, "cmpextpp", mismatch_str, sizeof(mismatch_str), 0));
 }
 
-TEST_F(LibRadosMisc, Applications) {
+TEST_P(LibRadosMisc, Applications) {
   const char *cmd[] = {"{\"prefix\":\"osd dump\"}", nullptr};
   char *buf, *st;
   size_t buflen, stlen;
@@ -300,14 +300,14 @@ TEST_F(LibRadosMisc, Applications) {
   ASSERT_EQ(0, memcmp("value2\0", vals, val_len));
 }
 
-TEST_F(LibRadosMisc, MinCompatOSD) {
+TEST_P(LibRadosMisc, MinCompatOSD) {
   int8_t require_osd_release;
   ASSERT_EQ(0, rados_get_min_compatible_osd(cluster, &require_osd_release));
   ASSERT_LE(-1, require_osd_release);
   ASSERT_GT(CEPH_RELEASE_MAX, require_osd_release);
 }
 
-TEST_F(LibRadosMisc, MinCompatClient) {
+TEST_P(LibRadosMisc, MinCompatClient) {
   int8_t min_compat_client;
   int8_t require_min_compat_client;
   ASSERT_EQ(0, rados_get_min_compatible_client(cluster,
@@ -339,7 +339,7 @@ static void shutdown_racer_func()
 
 #ifndef _WIN32
 // See trackers #20988 and #42026
-TEST_F(LibRadosMisc, ShutdownRace)
+TEST_P(LibRadosMisc, ShutdownRace)
 {
   const int nthreads = 128;
   std::thread threads[nthreads];
@@ -359,3 +359,5 @@ TEST_F(LibRadosMisc, ShutdownRace)
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }
 #endif /* _WIN32 */
+
+INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosMisc);

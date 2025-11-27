@@ -161,6 +161,11 @@ struct ObjectOperation {
 
   }
 
+  OSDOp& pass_thru_op(OSDOp& op) {
+    ops.emplace_back(op);
+    return ops.back();
+  }
+
   OSDOp& add_op(int op) {
     ops.emplace_back();
     ops.back().op.op = op;
@@ -1505,6 +1510,14 @@ struct ObjectOperation {
     osd_op.op.assert_ver.ver = ver;
   }
 
+  void get_internal_versions(boost::system::error_code* ec,
+		buffer::list *pbl) {
+  	ceph::buffer::list bl;
+  	add_op(CEPH_OSD_OP_GET_INTERNAL_VERSIONS);
+  	out_bl.back() = pbl;
+  	out_ec.back() = ec;
+  }
+
   void cmpxattr(const char *name, const ceph::buffer::list& val,
 		int op, int mode) {
     add_xattr(CEPH_OSD_OP_CMPXATTR, name, val);
@@ -1686,6 +1699,10 @@ inline std::ostream& operator <<(std::ostream& m, const ObjectOperation& oo) {
 // ----------------
 
 class Objecter : public md_config_obs_t, public Dispatcher {
+  friend class SplitOp;
+  friend class ECSplitOp;
+  friend class ReplicaSplitOp;
+
   using MOSDOp = _mosdop::MOSDOp<osdc_opvec>;
 public:
   using OpSignature = void(boost::system::error_code);
@@ -1874,6 +1891,7 @@ public:
     bool paused = false;
 
     int osd = -1;      ///< the final target osd, or -1
+    std::optional<shard_id_t> force_shard; // If set, only this shard may be used.
 
     epoch_t last_force_resend = 0;
 
@@ -2117,6 +2135,26 @@ public:
 
     bool operator<(const Op& other) const {
       return tid < other.tid;
+    }
+
+    void pass_thru_op(::ObjectOperation &other, unsigned index, bufferlist *bl, int *rval) {
+      ceph_assert(index < ops.size());
+
+      other.pass_thru_op(ops[index]);
+      unsigned p = other.ops.size() - 1;
+      ceph_assert(out_bl.size() == ops.size());
+      ceph_assert(out_rval.size() == ops.size());
+      ceph_assert(out_ec.size() == ops.size());
+      ceph_assert(out_handler.size() == ops.size());
+
+      other.out_bl.resize(p + 1);
+      other.out_rval.resize(p + 1);
+      other.out_ec.resize(p + 1);
+      other.out_handler.resize(p + 1);
+
+      other.out_bl[p] = bl;
+      other.out_rval[p] = rval;
+      // We don't copy the out handler here - it must be run by the copied-from op.
     }
 
   private:
@@ -2559,8 +2597,7 @@ public:
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
-  int _calc_target(op_target_t *t, Connection *con,
-		   bool any_change = false);
+  int _calc_target(op_target_t *t, bool any_change = false);
   int _map_session(op_target_t *op, OSDSession **s,
 		   ceph::shunique_lock<ceph::shared_mutex>& lc);
 
@@ -2744,6 +2781,7 @@ private:
   }
 
   void handle_osd_op_reply(class MOSDOpReply *m);
+  boost::system::error_code handle_osd_op_reply2(Op *op, std::vector<OSDOp> &out_ops);
   void handle_osd_backoff(class MOSDBackoff *m);
   void handle_watch_notify(class MWatchNotify *m);
   void handle_osd_map(class MOSDMap *m);
@@ -2806,8 +2844,12 @@ private:
 			      ceph::shunique_lock<ceph::shared_mutex>& lc,
 			      ceph_tid_t *ptid,
 			      int *ctx_budget = NULL);
+  void _op_submit_with_timeout(Op *op,
+                            ceph::shunique_lock<ceph::shared_mutex>& lc,
+                            ceph_tid_t *ptid);
   // public interface
 public:
+  void op_post_submit(Op *op);
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
   bool is_active() {
     std::shared_lock l(rwlock);
