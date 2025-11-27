@@ -1142,8 +1142,16 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, std::move(name)).safe_then_interruptible(
+  auto get_attr_maybe_from_cache =
+    [&] () mutable -> get_attr_ierrorator::future<ceph::bufferlist> {
+    if (auto cache_it = attr_cache.find(name); cache_it != std::end(attr_cache)) {
+      return get_attr_ierrorator::make_ready_future<ceph::bufferlist>(
+        cache_it->second);
+    }
+    logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
+    return getxattr(os.oi.soid, std::move(name));
+  };
+  return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
     osd_op.outdata = std::move(val);
     osd_op.op.xattr.value_len = osd_op.outdata.length();
@@ -1153,22 +1161,21 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
   });
 }
 
-PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
-PGBackend::getxattr(
-  const hobject_t& soid,
-  std::string&& key) const
-{
-  return seastar::do_with(key, [this, &soid](auto &key) {
-    return store->get_attr(coll, ghobject_t{soid}, key);
-  });
-}
-
 PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   const ObjectState& os,
+  const ObjectContext::attr_cache_t& attr_cache,
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  return store->get_attrs(coll, ghobject_t{os.oi.soid}).safe_then(
+  auto get_attrs_maybe_from_cache =
+    [&] () {
+    if (!std::empty(attr_cache)) {
+      return crimson::os::FuturizedStore::Shard::get_attrs_ertr::make_ready_future<
+	crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);
+    }
+    return store->get_attrs(coll, ghobject_t{os.oi.soid});
+  };
+  return get_attrs_maybe_from_cache().safe_then(
     [&delta_stats, &osd_op](auto&& attrs) {
     std::vector<std::pair<std::string, bufferlist>> user_xattrs;
     ceph::bufferlist bl;

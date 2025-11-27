@@ -789,4 +789,13 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   return ll_read_ierrorator::now();
 }
 
+PGBackend::get_attr_ierrorator::future<ceph::bufferlist>
+ECBackend::getxattr(
+  const hobject_t& soid,
+  std::string&& key) const
+{
+  // ENOSUPP! ECBackend reads xattr solely from the ObjectContext::attr_cache
+  return crimson::ct_error::enodata::make();
+}
+
 } // namespace crimson::osd
