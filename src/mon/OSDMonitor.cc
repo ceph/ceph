@@ -8474,6 +8474,22 @@ void OSDMonitor::enable_pool_ec_direct_reads(pg_pool_t &p) {
         (erasure_code->get_supported_optimizations() &
           ErasureCodeInterface::FLAG_EC_PLUGIN_DIRECT_READS) == 0) {
     p.flags &= ~pg_pool_t::FLAG_CLIENT_SPLIT_READS;
+    return;
+  }
+
+  auto mapping = erasure_code->get_chunk_mapping();
+
+  // Plugins are permitted to provide an incomplete mapping, which makes for
+  // an inconvenient interface. Here make it either fully populated or not
+  // populated at all.
+  if (mapping.size() > 0) {
+    int shard_count = erasure_code->get_chunk_count();
+    int old_count = mapping.size();
+    mapping.resize(shard_count);
+    for (int s = old_count; s < shard_count; ++s) {
+      mapping[s] = shard_id_t(s);
+    }
+    p.set_shard_mapping(std::move(mapping));
   }
 }
 

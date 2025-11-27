@@ -46,14 +46,16 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
   mini_flat_map<shard_id_t, extents_map::iterator> map_iterators(stripe_view.data_chunk_count);
 
   for (auto &&chunk_info : stripe_view) {
-    ldout(cct, DBG_LVL) << __func__ << " chunk: " << chunk_info << dendl;
-    auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+    shard_id_t shard = pi->get_shard(chunk_info.raw_shard);
+    ldout(cct, DBG_LVL) << __func__ << " chunk: " << chunk_info
+        << " shard: " << shard << dendl;
+    auto &details = sub_reads.at(shard).details[ops_index];
 
-    if (!map_iterators.contains(chunk_info.shard)) {
-      map_iterators.emplace(chunk_info.shard, details.e->begin());
+    if (!map_iterators.contains(shard)) {
+      map_iterators.emplace(shard, details.e->begin());
     }
 
-    extents_map::iterator &extent_iter = map_iterators.at(chunk_info.shard);
+    extents_map::iterator &extent_iter = map_iterators.at(shard);
 
     uint64_t bl_len = 0;
     while (extent_iter != details.e->end() && extent_iter->first < chunk_info.ro_offset + stripe_view.chunk_size) {
@@ -67,9 +69,9 @@ std::pair<SplitOp::extent_set, bufferlist> ECSplitOp::assemble_buffer_sparse_rea
     // We try to keep the buffers together where possible.
     if (bl_len != 0) {
       bufferlist bl;
-      bl.substr_of(details.bl, buffer_offset[(int)chunk_info.shard], bl_len);
+      bl.substr_of(details.bl, buffer_offset[(int)chunk_info.raw_shard], bl_len);
       bl_out.append(bl);
-      buffer_offset[(int)chunk_info.shard] += bl_len;
+      buffer_offset[(int)chunk_info.raw_shard] += bl_len;
     }
   }
 
@@ -86,9 +88,10 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
 
   for (auto &&chunk_info : stripe_view) {
     ldout(cct, DBG_LVL) << __func__ << " chunk info " << chunk_info << dendl;
-    auto &details = sub_reads.at(chunk_info.shard).details[ops_index];
+    shard_id_t shard = pi->get_shard(chunk_info.raw_shard);
+    auto &details = sub_reads.at(shard).details[ops_index];
     uint64_t src_len = details.bl.length();
-    uint64_t buf_off = buffer_offset[(int)chunk_info.shard];
+    uint64_t buf_off = buffer_offset[(int)chunk_info.raw_shard];
     if (src_len <= buf_off) {
       break;
     }
@@ -96,7 +99,7 @@ void ECSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) {
     bufferlist bl;
     bl.substr_of(details.bl, buf_off, len);
     bl_out.append(bl);
-    buffer_offset[(int)chunk_info.shard] += len;
+    buffer_offset[(int)chunk_info.raw_shard] += len;
   }
 }
 
@@ -121,7 +124,9 @@ void ECSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   int first_shard = start_chunk % data_chunk_count;
   // Check all shards are online.
   for (unsigned i = first_shard; i < first_shard + count; i++) {
-    shard_id_t shard(i >= data_chunk_count ? i - data_chunk_count : i);
+    raw_shard_id_t raw_shard(i >= data_chunk_count ? i - data_chunk_count : i);
+    shard_id_t shard(pi->get_shard(raw_shard));
+
     int direct_osd = t.acting[(int)shard];
     if (t.actual_pgid.shard == shard) {
       primary_shard.emplace(shard);
@@ -240,7 +245,6 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
 int SplitOp::assemble_rc() {
   int rc = 0;
-  std::map<shard_id_t,std::pair<eversion_t, eversion_t>> primary_and_shard_versions{};
 
   // Sub-reads which use a single op should re-use original op.
   ceph_assert(sub_reads.size() > 1);
@@ -576,7 +580,7 @@ void debug_op_summary(const std::string &str, Objecter::Op *op, CephContext *cct
 }
 }
 
-void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter) {
+void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct) {
   auto &t = op->target;
   const pg_pool_t *pi = objecter.osdmap->get_pg_pool(t.base_oloc.pool);
 
@@ -584,13 +588,22 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter) {
   uint64_t data_chunk_count = pi->nonprimary_shards.size() + 1;
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
-  //FIXME: Raw shard calculation.
-  shard_id_t shard((op->ops[0].op.extent.offset) / chunk_size % data_chunk_count);
-
-  if (objecter.osdmap->exists(op->target.acting[(int)shard])) {
-    op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
-    t.force_shard.emplace(shard);
+  // Find the first read to work out where the IO goes.
+  for (auto o : op->ops) {
+    if (o.op.op == CEPH_OSD_OP_SPARSE_READ ||
+        o.op.op == CEPH_OSD_OP_READ) {
+      raw_shard_id_t raw_shard((o.op.extent.offset) / chunk_size % data_chunk_count);
+      shard_id_t shard = pi->get_shard(raw_shard);
+      if (objecter.osdmap->exists(op->target.acting[(int)shard])) {
+        op->target.flags |= CEPH_OSD_FLAG_EC_DIRECT_READ;
+        t.force_shard.emplace(shard);
+        t.osd = t.acting[(int)shard];
+        t.actual_pgid.reset_shard(shard);
+      }
+      break;
+    }
   }
+  debug_op_summary("reuse_op: ", op, cct);
 }
 
 bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
@@ -620,7 +633,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   if (single_op) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op " << dendl;
-    prepare_single_op(op, objecter);
+    prepare_single_op(op, objecter, cct);
     return false;
   }
 
@@ -656,8 +669,8 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   // Ideally, the validate should detect any single-op read. However, if that
   // fails, then this will catch the cases (albeit less efficiently).
   if (split_read->sub_reads.size() <= 1) {
-    ldout(cct, DBG_LVL) << __func__ <<" reusing original op  - inefficient" << dendl;
-    prepare_single_op(op, objecter);
+    ldout(cct, DBG_LVL) << __func__ <<" reusing original op - inefficient" << dendl;
+    prepare_single_op(op, objecter, cct);
     split_read->abort = true; // Required for destructor.
     return false;
   }
