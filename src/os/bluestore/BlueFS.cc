@@ -4099,7 +4099,10 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
   {
     std::unique_lock hl(h->lock);
     if (h->file->envelope_mode() && h->get_buffer_length() == 0) {
+      uint32_t pos1 = h->get_effective_write_pos();
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
+      uint32_t pos2 = reinterpret_cast<uintptr_t>(h->envelope_head_filler.c_str());
+      ceph_assert(p2aligned(pos1 ^ pos2, CEPH_PAGE_SIZE));
     }
     size_t max_size = 1ull << 30; // cap to 1GB
     while (len > 0) {
