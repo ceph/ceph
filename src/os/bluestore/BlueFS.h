@@ -409,8 +409,14 @@ public:
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
-    uint64_t pos = 0;       ///< start offset for buffer
+    uint64_t get_pos() {
+      return pos;
+    }
+    void set_pos(uint64_t new_pos) {
+      pos = new_pos;
+    }
   private:
+    uint64_t pos = 0;        ///< offset of data in file
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
     ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
   public:
