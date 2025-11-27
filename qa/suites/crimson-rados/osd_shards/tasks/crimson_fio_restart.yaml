@@ -1,0 +1,92 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph -s
+
+- workunit:
+    clients:
+      client.0:
+        - |
+          set -ex
+          ceph osd pool create testpool 64 64
+          ceph osd pool application enable testpool rbd
+          rbd create testpool/testimage --size 10G --image-format=2
+- workunit:
+    clients:
+      client.0:
+        - |
+          set -ex
+          fio --name=rbdtest \
+              --ioengine=rbd \
+              --pool=testpool \
+              --rbdname=testimage \
+              --clientname=admin \
+              --rw=randwrite \
+              --bs=4k \
+              --iodepth=32 \
+              --numjobs=4 \
+              --runtime=120 \
+              --time_based  \
+              --group_reporting
+
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 2
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+
+- ceph.wait_for_health:
+    timeout: 300
+    health: ["HEALTH_OK", "HEALTH_WARN"]
+- workunit:
+    clients:
+      client.0:
+        - |
+          set -ex
+          rbd info testpool/testimage
+          fio --name=rbdtest \
+              --ioengine=rbd \
+              --pool=testpool \
+              --rbdname=testimage \
+              --clientname=admin \
+              --rw=randwrite \
+              --bs=4k \
+              --iodepth=32 \
+              --numjobs=4 \
+              --runtime=120 \
+              --time_based  \
+              --group_reporting
+- exec:
+    mon.a:
+      - ceph config set osd.* crimson_cpu_num 5
+- ceph.restart:
+    daemons: [osd.0, osd.1, osd.2]
+
+- ceph.wait_for_health:
+    timeout: 300
+    health: ["HEALTH_OK", "HEALTH_WARN"]
+- workunit:
+    clients:
+      client.0:
+        - |
+          set -ex
+          rbd info testpool/testimage
+          fio --name=rbdtest \
+              --ioengine=rbd \
+              --pool=testpool \
+              --rbdname=testimage \
+              --clientname=admin \
+              --rw=randwrite \
+              --bs=4k \
+              --iodepth=32 \
+              --numjobs=4 \
+              --runtime=120 \
+              --time_based  \
+              --group_reporting
+
+- workunit:
+    clients:
+      client.0:
+        - |
+          set -ex
+          rbd rm testpool/testimage
