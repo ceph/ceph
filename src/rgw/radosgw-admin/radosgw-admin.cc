@@ -91,6 +91,7 @@ extern "C" {
 
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
+#include "driver/rados/rgw_bl_rados.h"
 
 #include <iomanip>
 
@@ -192,6 +193,7 @@ void usage()
   cout << "  bucket radoslist                 list rados objects backing bucket's objects\n";
   cout << "  bucket logging flush             flush pending log records object of source bucket to the log bucket\n";
   cout << "  bucket logging info              get info on bucket logging configuration on source bucket or list of sources in log bucket\n";
+  cout << "  bucket logging list              list the log objects pending commit for the source bucket\n";
   cout << "  bi get                           retrieve bucket index object entries\n";
   cout << "  bi put                           store bucket index object entries\n";
   cout << "  bi list                          list raw bucket index entries\n";
@@ -738,6 +740,7 @@ enum class OPT {
   BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   BUCKET_LOGGING_FLUSH,
   BUCKET_LOGGING_INFO,
+  BUCKET_LOGGING_LIST,
   POLICY,
   LOG_LIST,
   LOG_SHOW,
@@ -990,6 +993,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
   { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
+  { "bucket logging list", OPT::BUCKET_LOGGING_LIST },
   { "policy", OPT::POLICY },
   { "log list", OPT::LOG_LIST },
   { "log show", OPT::LOG_SHOW },
@@ -4703,6 +4707,7 @@ int main(int argc, const char **argv)
 					false,
 					false,
                                         false,
+                                        false,
 					false, // No background tasks!
                                         null_yield,
 					cfgstore.get(),
@@ -7900,7 +7905,7 @@ int main(int argc, const char **argv)
     }
     std::string old_obj;
     const auto region = driver->get_zone()->get_zonegroup().get_api_name();
-    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, &old_obj);
+    ret = rgw::bucketlogging::rollover_logging_object(configuration, target_bucket, obj_name, dpp(), region, bucket, null_yield, true, &objv_tracker, false, &old_obj);
     if (ret < 0) {
       cerr << "ERROR: failed to flush pending logging object '" << obj_name << "' to target bucket '" << configuration.target_bucket
         << "'. error: " << cpp_strerror(-ret) << std::endl;
@@ -7949,6 +7954,55 @@ int main(int argc, const char **argv)
       formatter->flush(cout);
     }
 
+    return 0;
+  }
+
+  if (opt_cmd == OPT::BUCKET_LOGGING_LIST) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (driver->get_name() != "rados") {
+      cerr << "ERROR: this command is only available with the RADOS driver." << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::bucketlogging::configuration configuration;
+    std::unique_ptr<rgw::sal::Bucket> target_bucket;
+    ret =  rgw::bucketlogging::get_target_and_conf_from_source(dpp(),
+         driver, bucket.get(), tenant, configuration, target_bucket, null_yield);
+    if (ret < 0 && ret != -ENODATA) {
+      cerr << "ERROR: failed to get target bucket and logging conf from source bucket '"
+        << bucket_name << "': " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    } else if (ret == -ENODATA) {
+      cerr << "ERROR: bucket '" << bucket_name << "' does not have logging enabled" << std::endl;
+      return 0;
+    }
+    std::string target_prefix = configuration.target_prefix;
+    std::set<std::string> entries;
+
+    ret = rgw::bucketlogging::list_pending_commit_objects(dpp(),
+        static_cast<rgw::sal::RadosStore*>(driver), target_bucket.get(),
+        target_prefix, entries, null_yield);
+
+    if (ret < 0) {
+      cerr << "ERROR: failed to get pending log entries for bucket '" << bucket_name
+           << "': " << cpp_strerror(-ret) << std::endl;
+      return ret;
+    }
+
+    formatter->open_array_section("pending_logs");
+    for (auto &entry: entries) {
+        formatter->dump_string("log", entry);
+    }
+    formatter->close_section(); // objs
+    formatter->flush(cout);
     return 0;
   }
 
