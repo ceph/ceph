@@ -413,21 +413,34 @@ public:
       return pos;
     }
     void set_pos(uint64_t new_pos) {
+      ceph_assert(buffer.length() == 0);
+      ceph_assert(p2aligned<uint32_t>(new_pos, super_block_size));
       pos = new_pos;
+      buffer_pos = pos;
     }
   private:
-    uint64_t pos = 0;        ///< offset of data in file
-    ceph::buffer::list buffer;      ///< new data to write (at end of file)
-    ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
+    uint64_t pos = 0;          ///< offset of unflushed data
+    ceph::buffer::list buffer; ///< new data to write (at end of file)
+                               ///  includes unaligned tail from last flush
+    uint32_t super_block_size;
+    uint64_t buffer_pos = 0;   ///< offset of buffer in file
   public:
+    // does not take into account part of `buffer` already flushed to disk
     unsigned get_buffer_length() const {
-      return buffer.length();
+      return buffer.length() - (pos - buffer_pos);
     }
-    ceph::bufferlist flush_buffer(
+    // indicates that a part of buffer has already been flushed to disk
+    bool has_flushed_data() {
+      return pos != buffer_pos;
+    }
+    // offset (in file) of `buffer` to flush
+    uint64_t get_flush_offset() {
+      return buffer_pos;
+    }
+    // create bufferlist to write to disk, modify buffer
+    ceph::bufferlist get_flush_buffer(
       CephContext* cct,
-      const bool partial,
-      const unsigned length,
-      const bluefs_super_t& super);
+      uint64_t flush_end);
     ceph::buffer::list::page_aligned_appender buffer_appender;  //< for const char* only
     bufferlist::contiguous_filler envelope_head_filler;
   public:
@@ -440,6 +453,7 @@ public:
 
     FileWriter(FileRef f, unsigned super_block_size)
       : file(std::move(f))
+      , super_block_size(super_block_size)
       , buffer_appender(buffer.get_page_aligned_appender(
         std::max<uint64_t>(g_conf()->bluefs_alloc_size, 2 * super_block_size) / CEPH_PAGE_SIZE))
       , envelope_head_filler() {
@@ -494,7 +508,7 @@ public:
     }
 
     uint64_t get_effective_write_pos() {
-      return pos + buffer.length();
+      return buffer_pos + buffer.length();
     }
 
   };
