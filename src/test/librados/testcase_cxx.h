@@ -131,6 +131,18 @@ protected:
   static void TearDownTestCase();
   static librados::Rados s_cluster;
   void set_allow_ec_overwrites();
+  int freeze_omap_journal();
+  int unfreeze_omap_journal();
+  void write_omap_keys(std::string oid, int min_index, int max_index);
+  void check_returned_keys(
+    std::list<std::pair<std::string, std::string>> expected_ranges,
+    std::set<std::string> returned_keys
+  );
+  void remove_omap_range(
+    std::string oid, 
+    std::string start, 
+    std::string end
+  );
   int request_osd_map(
     std::string pool_name, 
     std::string oid, 

@@ -53,6 +53,9 @@ using ceph::bufferptr;
 using ceph::ErasureCodeInterfaceRef;
 using ceph::Formatter;
 
+bool omap_journal_frozen = false;
+
+
 static ostream &_prefix(std::ostream *_dout,
                         ECCommon::RMWPipeline const *rmw_pipeline) {
   return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
@@ -897,6 +900,12 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
           ? get_info().stats
           : get_parent()->get_shard_info().find(pg_shard)->second.stats;
 
+    /* if omap_journal_frozen is set, avoid using pg_committed_to so
+    * the trim/writes aren't committed. This allows the journal to
+    * build up for testing purposes.
+    */
+    // eversion_t pg_committed_for_send = omap_journal_frozen ? eversion_t() : op.pg_committed_to;    
+
     ECSubWrite sop(
       get_parent()->whoami_shard(),
       op.tid,
@@ -906,7 +915,7 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
       should_send ? transaction : empty,
       op.version,
       op.trim_to,
-      op.pg_committed_to,
+      omap_journal_frozen ? eversion_t() : op.pg_committed_to,
       op.log_entries,
       op.updated_hit_set_history,
       op.temp_added,
@@ -1001,6 +1010,8 @@ void ECCommon::RMWPipeline::try_finish_rmw() {
 }
 
 void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
+  eversion_t pg_committed_for_send = omap_journal_frozen ? eversion_t() : op->version;
+
   dout(20) << __func__ << " op=" << *op << dendl;
 
   if (op->on_all_commit) {
@@ -1010,10 +1021,12 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
     op->trace.event("ec write all committed");
   }
 
-  if (op->pg_committed_to > completed_to)
-    completed_to = op->pg_committed_to;
-  if (op->version > committed_to)
-    committed_to = op->version;
+  if(!omap_journal_frozen) {
+    if (op->pg_committed_to > completed_to)
+      completed_to = op->pg_committed_to;
+    if (op->version > committed_to)
+      committed_to = op->version;
+  } 
 
   op->cache_ops.clear();
 
@@ -1025,7 +1038,8 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       const auto nop = std::make_shared<ECDummyOp>();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
-      nop->pg_committed_to = op->version;
+      //nop->pg_committed_to = op->version;
+      nop->pg_committed_to = pg_committed_for_send;
       nop->tid = tid;
       nop->reqid = op->reqid;
       nop->pending_cache_ops = 1;

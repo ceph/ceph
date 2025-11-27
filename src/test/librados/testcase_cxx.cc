@@ -33,6 +33,64 @@ void init_rand() {
 
 } // anonymous namespace
 
+int RadosTestECPP::freeze_omap_journal() {
+  bufferlist inbl, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
+  int rc = rados.mon_command(oss.str(), std::move(inbl), outbl, nullptr);
+  return rc;
+}
+
+int RadosTestECPP::unfreeze_omap_journal() {
+  bufferlist inbl, outbl;
+  std::ostringstream oss;
+  oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
+  int rc = rados.mon_command(oss.str(), std::move(inbl), outbl, nullptr);
+  return rc;
+}
+
+void RadosTestECPP::write_omap_keys(std::string oid, int min_index, int max_index) {
+  const std::string omap_value = "val";
+  bufferlist omap_val_bl;
+  encode(omap_value, omap_val_bl);
+  std::map<std::string, bufferlist> omap_map;
+
+  int width = std::to_string(max_index).length();
+  if (width < 3) {
+    width = 3;
+  }
+
+  for (int i = min_index; i <= max_index; i++) {
+    std::stringstream key_ss;
+    key_ss << "key_" << std:setw(width) << std::setfill('0') << i;
+    omap_map[key_ss.str()] = omap_val_bl;
+  }
+  
+  ObjectWriteOperation write;
+  write.omap_set(omap_map);
+
+  std::cout << "Writing OMap keys from " << min_index << " to " << max_index << "..." << std::endl;
+  int ret = ioctx.operate(oid, &write);
+  EXPECT_EQ(ret, 0);
+}
+
+void RadosTestECPP::check_returned_keys(
+    std::list<std::pair<std::string, std::string>> expected_ranges,
+    std::set<std::string> returned_keys)
+{
+  for (auto &range : expected_ranges) {
+    // Need to do!
+  }
+}
+
+void RadosTestECPP::remove_omap_range(
+    std::string oid, 
+    std::string start, 
+    std::string end)
+{
+  // How can we do this?
+}
+
 std::string RadosTestPPNS::pool_name;
 Rados RadosTestPPNS::s_cluster;
 
