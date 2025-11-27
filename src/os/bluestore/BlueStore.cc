@@ -20230,12 +20230,12 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   }
 
   bluefs->fsync(p_handle);
-  bluefs->truncate(p_handle, p_handle->pos);
+  bluefs->truncate(p_handle, p_handle->get_pos());
   bluefs->fsync(p_handle);
 
   utime_t duration = ceph_clock_now() - start_time;
   dout(5) <<"WRITE-extent_count=" << extent_count << ", allocation_size=" << allocation_size << ", serial=" << s_serial << dendl;
-  dout(5) <<"p_handle->pos=" << p_handle->pos << " WRITE-duration=" << duration << " seconds" << dendl;
+  dout(5) <<"p_handle->pos=" << p_handle->get_pos() << " WRITE-duration=" << duration << " seconds" << dendl;
 
   bluefs->close_writer(p_handle);
   need_to_destage_allocation_file = false;
