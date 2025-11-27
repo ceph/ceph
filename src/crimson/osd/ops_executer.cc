@@ -472,12 +472,29 @@ auto OpsExecuter::do_const_op(Func&& f) {
   return std::forward<Func>(f)(pg->get_backend(), std::as_const(obc->obs));
 }
 
+template <class Func>
+auto OpsExecuter::do_read_attr_cache(Func&& f) {
+  ++num_read;
+  // TODO: pass backend as read-only
+  return std::invoke(
+    std::forward<Func>(f),
+    pg->get_backend(),
+    std::as_const(obc->attr_cache),
+    std::as_const(obc->obs));
+}
+
 // Defined here because there is a circular dependency between OpsExecuter and PG
 template <class Func>
 auto OpsExecuter::do_write_op(Func&& f, OpsExecuter::modified_by m) {
   ++num_write;
   check_init_op_params(m);
   return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn);
+}
+template <class Func>
+auto OpsExecuter::do_write_op_attr_cache(Func&& f, OpsExecuter::modified_by m) {
+  ++num_write;
+  check_init_op_params(m);
+  return std::forward<Func>(f)(pg->get_backend(), obc->obs, txn, obc->attr_cache);
 }
 OpsExecuter::call_errorator::future<> OpsExecuter::do_assert_ver(
   OSDOp& osd_op,
@@ -617,20 +634,24 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.cmp_ext(os, osd_op);
     });
   case CEPH_OSD_OP_GETXATTR:
-    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
-      return backend.getxattr(os, osd_op, delta_stats);
+    return do_read_attr_cache([this, &osd_op](auto& backend,
+					      const auto& attr_cache,
+					      const auto& os) {
+      return backend.getxattr(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_GETXATTRS:
-    return do_read_op([this, &osd_op](auto& backend, const auto& os) {
-      return backend.get_xattrs(os, osd_op, delta_stats);
+    return do_read_attr_cache([this, &osd_op](auto& backend,
+					      const auto& attr_cache,
+					      const auto& os) {
+      return backend.get_xattrs(os, attr_cache, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_CMPXATTR:
     return do_read_op([this, &osd_op](auto& backend, const auto& os) {
       return backend.cmp_xattr(os, osd_op, delta_stats);
     });
   case CEPH_OSD_OP_RMXATTR:
-    return do_write_op([&osd_op](auto& backend, auto& os, auto& txn) {
-      return backend.rm_xattr(os, osd_op, txn);
+    return do_write_op_attr_cache([&osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {
+      return backend.rm_xattr(os, osd_op, txn, attr_cache);
     });
   case CEPH_OSD_OP_CREATE:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -675,8 +696,8 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
       return backend.set_allochint(os, osd_op, txn, delta_stats);
     });
   case CEPH_OSD_OP_SETXATTR:
-    return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
-      return backend.setxattr(os, osd_op, txn, delta_stats);
+    return do_write_op_attr_cache([this, &osd_op](auto& backend, auto& os, auto& txn, auto& attr_cache) {
+      return backend.setxattr(os, osd_op, txn, delta_stats, attr_cache);
     });
   case CEPH_OSD_OP_DELETE:
   {
