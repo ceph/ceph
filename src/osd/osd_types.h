@@ -383,6 +383,7 @@ enum {
   CEPH_OSD_RMW_FLAG_RWORDERED         = (1 << 10),
   CEPH_OSD_RMW_FLAG_RETURNVEC = (1 << 11),
   CEPH_OSD_RMW_FLAG_READ_DATA  = (1 << 12),
+  CEPH_OSD_RMW_FLAG_EC_DIRECT_READ  = (1 << 13),
 };
 
 
@@ -1331,6 +1332,7 @@ struct pg_pool_t {
     // Note, does not prohibit being created on classic osd.
     FLAG_CRIMSON = 1<<18,
     FLAG_EC_OPTIMIZATIONS = 1<<19, // enable optimizations, once enabled, cannot be disabled
+    FLAG_CLIENT_SPLIT_READS = 1<<20, // Optimized EC is permitted to do direct reads.
   };
 
   static const char *get_flag_name(uint64_t f) {

@@ -685,6 +685,11 @@ namespace ceph {
        * to decode a parity CRC to get the CRC of a data shard.
        */
       FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT = 1<<7,
+      /* This plugin supports the ability for the client to read directly from
+       * the OSD containing a shard. This currently requires that raw shard ==
+       * shard and that the data shards are simply striped.
+       */
+      FLAG_EC_PLUGIN_DIRECT_READS = 1<<8,
     };
     static const char *get_optimization_flag_name(const plugin_flags flag) {
       switch (flag) {
@@ -697,6 +702,8 @@ namespace ceph {
       case FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED: return "optimizedsupport";
       case FLAG_EC_PLUGIN_CRC_ENCODE_DECODE_SUPPORT:
         return "crcencodedecode";
+      case FLAG_EC_PLUGIN_DIRECT_READS:
+        return "directreads";
       default: return "???";
       }
     }
