@@ -1139,7 +1139,7 @@ struct POSIXMPObj {
 	     std::optional<std::string> _upload_id, ACLOwner& _owner) {
     if (_upload_id && !_upload_id->empty()) {
       init(_oid, *_upload_id, _owner);
-    } else if (!from_meta(_oid, _owner)) {
+    } else {
       init_gen(driver, _oid, _owner);
     }
   }

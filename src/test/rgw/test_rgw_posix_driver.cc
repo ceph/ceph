@@ -2549,3 +2549,23 @@ int main(int argc, char *argv[]) {
 
   return RUN_ALL_TESTS();
 }
+
+TEST_F(POSIXMPObjectTest, MPUploadWithDots)
+{
+  std::string objname = "host.example.com";
+  std::unique_ptr<rgw::sal::MultipartUpload> upload = bucket->get_multipart_upload(objname, std::nullopt);
+
+  ASSERT_NE(upload.get(), nullptr);
+  EXPECT_EQ(upload->get_key(), objname);
+
+  rgw_placement_rule placement;
+  Attrs attrs;
+  int ret = upload->init(env->dpp, null_yield, acl_owner, placement, attrs);
+  ASSERT_EQ(ret, 0);
+
+  std::string upload_id = upload->get_upload_id();
+  ASSERT_FALSE(upload_id.empty());
+  EXPECT_NE(upload_id, "com");
+  EXPECT_EQ(upload_id.substr(0, 2), "2~");
+}
+
