@@ -159,8 +159,12 @@ export class RgwMultisiteDetailsComponent extends CdForm implements OnDestroy, O
     if (entityName === 'realm') {
       this.cdsModalService.show(RgwMultisiteRealmFormComponent, initialState);
     } else if (entityName === 'zonegroup') {
-      this.bsModalRef = this.modalService.show(RgwMultisiteZonegroupFormComponent, initialState, {
-        size: 'lg'
+      this.cdsModalService.show(RgwMultisiteZonegroupFormComponent, {
+        resource: entityName,
+        action: action,
+        info: entity,
+        defaultsInfo: this.defaultsInfo,
+        multisiteInfo: this.multisiteInfo
       });
     } else {
       this.cdsModalService.show(RgwMultisiteZoneFormComponent, {
