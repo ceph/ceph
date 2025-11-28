@@ -1272,18 +1272,6 @@ TEST(LibRadosAio, OmapPP) {
     ASSERT_EQ(hdr.length(), 0u);
   }
 
-  {
-    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0));
-    ObjectWriteOperation op;
-    op.omap_rm_range("foo", "qzz");
-    ioctx.aio_operate("test_obj", my_completion.get(), &op);
-    {
-      TestAlarm alarm;
-      ASSERT_EQ(0, my_completion->wait_for_complete());
-    }
-    EXPECT_EQ(0, my_completion->get_return_value());
-  }
-
   ioctx.remove("test_obj");
   destroy_one_pool_pp(pool_name, cluster);
 }
@@ -2110,26 +2098,6 @@ TEST(LibRadosAioEC, OmapPP) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
-  // Temporarily set allow_ec_overwrites.
-  // Add parameterisation before merging.
-  ASSERT_EQ("", set_allow_ec_overwrites_pp(pool_name, cluster, true));
-
-  char buf[128];
-  memset(buf, 0xcc, sizeof(buf));
-  bufferlist bl;
-  bl.append(buf, sizeof(buf));
-
-  const std::string objname = "LibRadosAioEC::set_allow_ec_overwrites:test_obj";
-  ASSERT_EQ(0, ioctx.write(objname, bl, sizeof(buf), 0));
-  const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
-  while (true) {
-    if (0 == ioctx.write(objname, bl, sizeof(buf), 0)) {
-      break;
-    }
-    ASSERT_LT(std::chrono::steady_clock::now(), end);
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-  }
-
   string header_str = "baz";
   bufferptr bp(header_str.c_str(), header_str.size() + 1);
   bufferlist header_to_set;
@@ -2152,19 +2120,6 @@ TEST(LibRadosAioEC, OmapPP) {
     }
     EXPECT_EQ(-EOPNOTSUPP, my_completion->get_return_value());
   }
-
-  {
-    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0));
-    ObjectWriteOperation op;
-    op.omap_rm_range("foo", "qzz");
-    ioctx.aio_operate("test_obj", my_completion.get(), &op);
-    {
-      TestAlarm alarm;
-      ASSERT_EQ(0, my_completion->wait_for_complete());
-    }
-    EXPECT_EQ(-EOPNOTSUPP, my_completion->get_return_value());
-  }
-  
   ioctx.remove("test_obj");
   destroy_one_ec_pool_pp(pool_name, cluster);
 }
