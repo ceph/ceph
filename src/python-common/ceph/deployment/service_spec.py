@@ -2409,6 +2409,8 @@ class MgmtGatewaySpec(ServiceSpec):
         ports = []
         if self.port is not None:
             ports.append(cast(int, self.port))
+        else:
+            ports.append(443)  # default HTTPS port
         return ports
 
     def validate(self) -> None:

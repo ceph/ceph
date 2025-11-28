@@ -5756,3 +5756,29 @@ class TestMgmtGateway:
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_mgmt_gateway_default_port_is_443_when_unspecified(
+        self,
+        _run_cephadm,
+        cephadm_module: CephadmOrchestrator,
+    ):
+        """
+        When no --port is provided and the spec has no port field,
+        the mgmt-gateway daemon spec must use port 443 so that
+        firewalld can open the correct port.
+        """
+
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        # NOTE: no port passed here, let's test the defaults
+        spec = MgmtGatewaySpec()
+        with with_host(cephadm_module, 'ceph-node'):
+            with with_service(cephadm_module, spec):
+                HTTPS_PORT = 443
+                # Inspect the daemon spec passed to cephadm
+                deployed = json.loads(_run_cephadm.call_args.kwargs['stdin'])
+                # The default port must be 443 (from get_port_start)
+                assert 'tcp_ports' in deployed['params']
+                assert deployed['params']['tcp_ports'] == [HTTPS_PORT]
+                assert deployed['meta']['ports'] == [HTTPS_PORT]
