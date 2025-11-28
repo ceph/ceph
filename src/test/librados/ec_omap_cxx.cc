@@ -313,6 +313,10 @@ TEST_P(LibRadosOmapECPP, RemoveOneRange) {
   expected_keys.erase(it_start, it_end);
 
   // Remove range 20-40 from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_020", "key_041");
+  int ret = ioctx.operate("remove_one_range", &write);
+  EXPECT_EQ(ret, 0);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
