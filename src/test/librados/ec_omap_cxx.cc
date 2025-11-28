@@ -301,22 +301,19 @@ TEST_P(LibRadosOmapECPP, RemoveOneRange) {
   // 1. Freeze journal
   freeze_omap_journal();
 
-  // 2. Insert keys 1-100 to omap
+  // 2. Insert keys to omap
   std::set<std::string> expected_keys;
   write_omap_keys("remove_one_range", 1, 100, expected_keys);
   
-  // 3. Remove range 20-40 from omap
-
-  // Erase keys 20-40 from expected keys
-  auto it_start = expected_keys.lower_bound("key_020");
-  auto it_end = expected_keys.upper_bound("key_040");
-  expected_keys.erase(it_start, it_end);
-
-  // Remove range 20-40 from omap
+  // 3. Remove range from omap
   ObjectWriteOperation write;
   write.omap_rm_range("key_020", "key_041");
   int ret = ioctx.operate("remove_one_range", &write);
   EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_020");
+  auto it_end = expected_keys.upper_bound("key_040");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -328,6 +325,7 @@ TEST_P(LibRadosOmapECPP, RemoveOneRange) {
   // 6. Unfreeze journal
   unfreeze_omap_journal();
 }
+
 TEST_P(LibRadosOmapECPP, RemoveTwoRanges) {
   // 1. Freeze journal
   freeze_omap_journal();
@@ -336,8 +334,19 @@ TEST_P(LibRadosOmapECPP, RemoveTwoRanges) {
   std::set<std::string> expected_keys;
   write_omap_keys("remove_two_ranges", 1, 100, expected_keys);
 
-  // 3. Remove ranges from omatwos
-  
+  // 3. Remove ranges from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_020", "key_041");
+  write.omap_rm_range("key_060", "key_081");
+  int ret = ioctx.operate("remove_two_ranges", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_020");
+  auto it_end = expected_keys.upper_bound("key_040");
+  expected_keys.erase(it_start, it_end);
+  it_start = expected_keys.lower_bound("key_060");
+  it_end = expected_keys.upper_bound("key_080");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -358,8 +367,16 @@ TEST_P(LibRadosOmapECPP, RightOverlappingRanges) {
   std::set<std::string> expected_keys;
   write_omap_keys("right_overlap", 1, 100, expected_keys);
 
-  // 3. Remove ranges frightoveralap
+  // 3. Remove ranges from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_010", "key_021");
+  write.omap_rm_range("key_015", "key_031");
+  int ret = ioctx.operate("right_overlap", &write);
+  EXPECT_EQ(ret, 0);
 
+  auto it_start = expected_keys.lower_bound("key_010");
+  auto it_end = expected_keys.upper_bound("key_030");
+  expected_keys.erase(it_start, it_end);
   
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -380,8 +397,16 @@ TEST_P(LibRadosOmapECPP, LeftOverlappingRanges) {
   std::set<std::string> expected_keys;
   write_omap_keys("left_overlap", 1, 100, expected_keys);
 
-  // 3. Remove ranges fleft_overlap
-  
+  // 3. Remove ranges from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_015", "key_031");
+  write.omap_rm_range("key_010", "key_021");
+  int ret = ioctx.operate("left_overlap", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_010");
+  auto it_end = expected_keys.upper_bound("key_030");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -393,6 +418,7 @@ TEST_P(LibRadosOmapECPP, LeftOverlappingRanges) {
   // 6. Unfreeze journal
   unfreeze_omap_journal();
 }
+
 TEST_P(LibRadosOmapECPP, FullyOverlappingRanges) {
   // 1. Freeze journal
   freeze_omap_journal();
@@ -402,6 +428,15 @@ TEST_P(LibRadosOmapECPP, FullyOverlappingRanges) {
   write_omap_keys("full_overlap", 1, 100, expected_keys);
 
   // 3. Remove ranges from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_015", "key_026");
+  write.omap_rm_range("key_010", "key_031");
+  int ret = ioctx.operate("full_overlap", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_010");
+  auto it_end = expected_keys.upper_bound("key_030");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -422,7 +457,16 @@ TEST_P(LibRadosOmapECPP, FullyOverlappingRanges2) {
   write_omap_keys("full_overlap_2", 1, 100, expected_keys);
 
   // 3. Remove ranges from omap
-  
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_010", "key_031");
+  write.omap_rm_range("key_015", "key_026");
+  int ret = ioctx.operate("full_overlap_2", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_010");
+  auto it_end = expected_keys.upper_bound("key_030");
+  expected_keys.erase(it_start, it_end);
+
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
   read_omap_keys("full_overlap_2", returned_keys);
@@ -443,6 +487,14 @@ TEST_P(LibRadosOmapECPP, RemoveWithNullStart) {
   write_omap_keys("remove_null_start", 1, 100, expected_keys);
 
   // 3. Remove range from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("", "key_021");
+  int ret = ioctx.operate("remove_null_start", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.begin();
+  auto it_end = expected_keys.upper_bound("key_020");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
@@ -451,27 +503,6 @@ TEST_P(LibRadosOmapECPP, RemoveWithNullStart) {
   // 5. Check returned keys
   EXPECT_EQ(returned_keys, expected_keys);
   
-  // 6. Unfreeze journal
-  unfreeze_omap_journal();
-}
-
-TEST_P(LibRadosOmapECPP, RemoveWithNullEnd) {
-  // 1. Freeze journal
-  freeze_omap_journal();
-
-  // 2. Insert keys to omap
-  std::set<std::string> expected_keys;
-  write_omap_keys("remove_null_end", 1, 100, expected_keys);
-
-  // 3. Remove range from omap
-
-  // 4. Read keys from omap
-  std::set<std::string> returned_keys;
-  read_omap_keys("remove_null_end", returned_keys);
-  
-  // 5. Check returned keys
-  EXPECT_EQ(returned_keys, expected_keys);
-
   // 6. Unfreeze journal
   unfreeze_omap_journal();
 }
@@ -485,31 +516,19 @@ TEST_P(LibRadosOmapECPP, OverlapWithNullStart) {
   write_omap_keys("overlap_null_start", 1, 100, expected_keys);
 
   // 3. Remove ranges from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("", "key_031");
+  write.omap_rm_range("key_020", "key_051");
+  int ret = ioctx.operate("overlap_null_start", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.begin();
+  auto it_end = expected_keys.upper_bound("key_050");
+  expected_keys.erase(it_start, it_end);
   
   // 4. Read keys from omap
   std::set<std::string> returned_keys;
   read_omap_keys("overlap_null_start", returned_keys);
-
-  // 5. Check returned keys
-  EXPECT_EQ(returned_keys, expected_keys);
-
-  // 6. Unfreeze journal
-  unfreeze_omap_journal();
-}
-
-TEST_P(LibRadosOmapECPP, OverlapWithNullEnd) {
-  // 1. Freeze journal
-  freeze_omap_journal();
-
-  // 2. Insert keys to omap
-  std::set<std::string> expected_keys;
-  write_omap_keys("overlap_null_end", 1, 100, expected_keys);
-
-  // 3. Remove ranges from omap
-
-  // 4. Read keys from omap
-  std::set<std::string> returned_keys;
-  read_omap_keys("overlap_null_end", returned_keys);
 
   // 5. Check returned keys
   EXPECT_EQ(returned_keys, expected_keys);
@@ -528,8 +547,17 @@ TEST_P(LibRadosOmapECPP, RemoveRangeThenInsert) {
   write_omap_keys("remove_then_insert", 1, 100, expected_keys);
 
   // 3. Remove range from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_030", "key_061");
+  int ret = ioctx.operate("remove_then_insert", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_030");
+  auto it_end = expected_keys.upper_bound("key_060");
+  expected_keys.erase(it_start, it_end);
   
   // 4. Insert key into omap
+  write_omap_keys("remove_then_insert", 45, 45, expected_keys);
 
   // 5. Read keys from omap
   std::set<std::string> returned_keys;
@@ -552,10 +580,26 @@ TEST_P(LibRadosOmapECPP, RemoveRangeThenInsertThenRemoveRange) {
   write_omap_keys("remove_insert_remove", 1, 100, expected_keys);
 
   // 3. Remove range from omap
+  ObjectWriteOperation write;
+  write.omap_rm_range("key_030", "key_061");
+  int ret = ioctx.operate("remove_insert_remove", &write);
+  EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_030");
+  auto it_end = expected_keys.upper_bound("key_060");
+  expected_keys.erase(it_start, it_end);
 
   // 4. Insert key into omap
+  write_omap_keys("remove_insert_remove", 45, 45, expected_keys);
 
   // 5. Remove range from omap
+  write.omap_rm_range("key_030", "key_061");
+  ret = ioctx.operate("remove_insert_remove", &write);
+  EXPECT_EQ(ret, 0);
+
+  it_start = expected_keys.lower_bound("key_030");
+  it_end = expected_keys.upper_bound("key_060");
+  expected_keys.erase(it_start, it_end);
 
   // 6. Read keys from omap
   std::set<std::string> returned_keys;
@@ -570,10 +614,6 @@ TEST_P(LibRadosOmapECPP, RemoveRangeThenInsertThenRemoveRange) {
 
 TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
 
-  int err = 0;
-  bufferlist bl_read;
-  ObjectReadOperation read;
-
   // 1. Freeze journal
   freeze_omap_journal();
   // 2. Insert keys to omap
@@ -581,14 +621,13 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
   write_omap_keys("frozen_journal_reads", 1, 50, expected_keys);
 
   std::set<std::string> returned_keys;
-  read.omap_get_keys2("", 100, &returned_keys, nullptr, &err);
-  int ret = ioctx.operate("frozen_journal_reads", &read, nullptr);
-  EXPECT_EQ(ret, 0);
+  read_omap_keys("frozen_journal_reads", returned_keys);
 
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(returned_keys.size(), (unsigned)50);
+  EXPECT_EQ(returned_keys, expected_keys);
   
   // 3. Remove specific keys and remove a range
+
+  ObjectWriteOperation write;
   std::set<std::string> keys_to_remove;
 
   for (int i = 11; i <= 20; i++) {
@@ -597,23 +636,25 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
     keys_to_remove.insert(key_ss.str());
   }
 
-  ObjectWriteOperation write;
   write.omap_rm_keys(keys_to_remove);
-  // Will need to implement remove range in C++ first?
-  // write.omap_rm_range("key_031", "key_040");
+  write.omap_rm_range("key_031", "key_041");
 
-  std::cout << "Removing keys 1 by 1 from 10 to 20..." << std::endl;
-  // std::cout << "Removing range of keys from 31 to 40..." << std::endl;
-  ret = ioctx.operate("frozen_journal_reads", &write);
+  auto it_start = expected_keys.lower_bound("key_011");
+  auto it_end = expected_keys.upper_bound("key_020");
+  expected_keys.erase(it_start, it_end);
+
+  it_start = expected_keys.lower_bound("key_031");
+  it_end = expected_keys.upper_bound("key_040");
+  expected_keys.erase(it_start, it_end);
+
+  int ret = ioctx.operate("frozen_journal_reads", &write);
   EXPECT_EQ(ret, 0);
   
   // 4. Read keys from omap
-  read.omap_get_keys2("", 100, &returned_keys, nullptr, &err);
-  ret = ioctx.operate("frozen_journal_reads", &read, nullptr);
-  EXPECT_EQ(ret, 0);
+  returned_keys.clear();
+  read_omap_keys("frozen_journal_reads", returned_keys);
 
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(returned_keys.size(), (unsigned)40);
+  EXPECT_EQ(returned_keys, expected_keys);
 
   // 5. Unfreeze journal
   unfreeze_omap_journal();
@@ -621,25 +662,18 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
 
 TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
 
-  int err = 0;
-  bufferlist bl_read;
-  ObjectReadOperation read;
-
   // 1. Insert keys and allow journal to trim
   std::set<std::string> expected_keys;
-  write_omap_keys("mixed_bluestore_journal_reads", 1, 25, expected_keys);
-
   std::set<std::string> returned_keys;
 
-  read.omap_get_keys2("", 100, &returned_keys, nullptr, &err);
-  int ret = ioctx.operate("mixed_bluestore_journal_reads", &read, nullptr);
-  EXPECT_EQ(ret, 0);
+  write_omap_keys("mixed_bluestore_journal_reads", 1, 25, expected_keys);
 
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(returned_keys.size(), (unsigned)25);
+  read_omap_keys("mixed_bluestore_journal_reads", returned_keys);
+
+  EXPECT_EQ(returned_keys, expected_keys);
 
   // 2. Wait for Journal to trim then Freeze journal
-  sleep(1);
+  sleep(2);
   freeze_omap_journal();
   
   // 3. Add some more keys (now some exist in Bluestore, some in journal)
@@ -647,38 +681,29 @@ TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
 
   returned_keys.clear();
 
-  read.omap_get_keys2("", 100, &returned_keys, nullptr, &err);
-  ret = ioctx.operate("mixed_bluestore_journal_reads", &read, nullptr);
-  EXPECT_EQ(ret, 0);
+  read_omap_keys("mixed_bluestore_journal_reads", returned_keys);
 
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(returned_keys.size(), (unsigned)50);
+  EXPECT_EQ(returned_keys, expected_keys);
 
-  // 4. Remove a key that exists in Bluestore
+  // 4. Remove keys that exist in Bluestore
   std::set<std::string> keys_to_remove;
 
-  for (int i = 11; i <= 15; i++) {
-    std::stringstream key_ss;
-    key_ss << "key_" << std::setw(3) << std::setfill('0') << i;
-    keys_to_remove.insert(key_ss.str());
-  }
-
   ObjectWriteOperation write;
-  write.omap_rm_keys(keys_to_remove);
+  write.omap_rm_range("key_011", "key_016");
 
-  std::cout << "Removing keys from 11 to 15 from Bluestore..." << std::endl;
-  ret = ioctx.operate("mixed_bluestore_journal_reads", &write);
+  int ret = ioctx.operate("mixed_bluestore_journal_reads", &write);
   EXPECT_EQ(ret, 0);
+
+  auto it_start = expected_keys.lower_bound("key_011");
+  auto it_end = expected_keys.upper_bound("key_015");
+  expected_keys.erase(it_start, it_end);
 
   // 5. Read keys from omap
   returned_keys.clear();
 
-  read.omap_get_keys2("", 100, &returned_keys, nullptr, &err);
-  ret = ioctx.operate("mixed_bluestore_journal_reads", &read, nullptr);
-  EXPECT_EQ(ret, 0);
+  read_omap_keys("mixed_bluestore_journal_reads", returned_keys);
 
-  EXPECT_EQ(0, err);
-  EXPECT_EQ(returned_keys.size(), (unsigned)45);
+  EXPECT_EQ(returned_keys, expected_keys);
 
   // 6. Unfreeze journal
   unfreeze_omap_journal();
