@@ -582,3 +582,213 @@ void RGWDeletePolicyVersion::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
+int RGWGetPolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWGetPolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  rgw::IAM::PolicyVersion policy_version;
+  op_ret = driver->get_policy_version(this, y, arn.account, policy_name, version_id, policy_version);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to delete policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("GetPolicyVersionResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("GetPolicyVersionResult");
+    s->formatter->open_object_section("PolicyVersion");
+    encode_json("Document", policy_version.document , s->formatter);
+    encode_json("IsDefaultVersion", policy_version.is_default_version , s->formatter);
+    encode_json("VersionId", policy_version.version_id , s->formatter);
+    encode_json("CreateDate", policy_version.create_date , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+int RGWSetDefaultPolicyVersion::init_processing(optional_yield y)
+{
+  version_id = s->info.args.get("VersionId");
+  const std::regex pattern(R"(^v[1-9][0-9]*$)");
+
+  if(std::regex_match(version_id, pattern)) {
+    std::string_view account;
+    if (const auto& acc = s->auth.identity->get_account(); acc) {
+      account = acc->id;
+      std::string provider_arn = s->info.args.get("PolicyArn");
+      return validate_policy_arn(provider_arn, account, arn, s->err.message);
+    }
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWSetDefaultPolicyVersion::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  rgw::IAM::PolicyVersion policy_version;
+  op_ret = driver->set_default_policy_version(this, y, arn.account, policy_name, version_id);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to set default policy version: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("SetDefaultPolicyVersionResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+int RGWListPolicyVersions::init_processing(optional_yield y)
+{
+  marker = s->info.args.get("Marker");
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWListPolicyVersions::execute(optional_yield y)
+{
+  rgw::IAM::VersionList listing;
+  listing.next_marker = marker;
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->list_policy_versions(this, y, arn.account, policy_name,
+                      listing.next_marker, max_items, listing);
+  if (op_ret == -ENOENT) {
+    op_ret = 0;
+  } else if (op_ret < 0) {
+    return;
+  }
+
+  send_response_data(listing.versions);
+
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+  end_response(listing.next_marker);
+}
+
+void RGWListPolicyVersions::start_response()
+{
+  const int64_t proposed_content_length =
+      op_ret ? NO_CONTENT_LENGTH : CHUNKED_TRANSFER_ENCODING;
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format), proposed_content_length);
+
+  if (op_ret) {
+    return;
+  }
+
+  dump_start(s);
+  s->formatter->open_object_section_in_ns("ListPolicyVersionsResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ListPolicyVersionsResult");
+  s->formatter->open_array_section("Versions");
+}
+
+void RGWListPolicyVersions::end_response(std::string_view next_marker)
+{
+  s->formatter->close_section();
+
+  const bool truncated = !next_marker.empty();
+  s->formatter->dump_bool("IsTruncated", truncated);
+  if (truncated) {
+    s->formatter->dump_string("Marker", next_marker);
+  }
+
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWListPolicyVersions::send_response_data(std::span<rgw::IAM::PolicyVersion> policy_versions)
+{
+  if (!started_response) {
+    started_response = true;
+    start_response();
+  }
+
+  for (const auto& pv : policy_versions) {
+    s->formatter->open_object_section("member");
+    encode_json("IsDefaultVersion", pv.is_default_version, s->formatter);
+    encode_json("VersionId", pv.version_id, s->formatter);
+    encode_json("CreateDate", pv.create_date, s->formatter);
+    s->formatter->close_section();
+  }
+
+  rgw_flush_formatter(s, s->formatter);
+}
+
+void RGWListPolicyVersions::send_response()
+{
+  if (!started_response) {
+    start_response();
+  }
+}
+
+int RGWTagPolicy::init_processing(optional_yield y)
+{
+  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
+  if(ret < 0) {
+    return ret;
+  }
+
+  if (tags.size() > 50) {
+    s->err.message = "Tags count cannot exceed 50";
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWTagPolicy::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->tag_policy(this, y, arn.account, policy_name, tags);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to tag policy: " << policy_name << " with: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("TagPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+

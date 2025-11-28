@@ -192,6 +192,10 @@ enum {
   iamListPolicies,
   iamCreatePolicyVersion,
   iamDeletePolicyVersion,
+  iamGetPolicyVersion,
+  iamSetDefaultPolicyVersion,
+  iamListPolicyVersions,
+  iamTagPolicy,
   iamAll,
 
 

@@ -732,6 +732,29 @@ class Driver {
                             std::string_view policy_name,
                             std::string_view version_id,
                             bool exclusive) = 0;
+    virtual int get_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id,
+                            rgw::IAM::PolicyVersion& policy_version) = 0;
+    virtual int set_default_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id) = 0;
+    virtual int list_policy_versions(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view policy_name,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::VersionList& listing) = 0;
+    virtual int tag_policy(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::multimap<std::string, std::string>& tags) = 0;
 
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
