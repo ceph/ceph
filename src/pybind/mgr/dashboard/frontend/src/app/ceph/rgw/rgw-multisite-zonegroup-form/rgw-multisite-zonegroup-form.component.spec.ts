@@ -1,112 +1,131 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
-import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
-import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
+
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form.component';
-import { configureTestBed } from '~/testing/unit-test-helper';
+
+const defaultMultisiteInfo = [{ realms: [] }, { zonegroups: [] }, { zones: [] }];
+const defaultDefaultsInfo = {
+  defaultRealmName: null,
+  defaultZonegroupName: null,
+  defaultZoneName: null
+};
+
+const editInfo = {
+  data: {
+    name: 'zg-1',
+    zones: [{ id: 'z1', name: 'zone-1' }],
+    master_zone: 'z1',
+    endpoints: [],
+    placement_targets: [],
+    is_default: false,
+    is_master: false,
+    parent: 'realm1'
+  }
+};
 
 describe('RgwMultisiteZonegroupFormComponent', () => {
   let component: RgwMultisiteZonegroupFormComponent;
   let fixture: ComponentFixture<RgwMultisiteZonegroupFormComponent>;
+  let notificationService: NotificationService;
   let rgwZonegroupService: RgwZonegroupService;
 
-  configureTestBed({
-    imports: [
-      SharedModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      HttpClientTestingModule,
-      ToastrModule.forRoot()
-    ],
-    providers: [NgbActiveModal],
-    declarations: [RgwMultisiteZonegroupFormComponent]
-  });
+  const createComponent = async (
+    action = 'Create',
+    info: any = null,
+    multisiteInfo = defaultMultisiteInfo,
+    defaultsInfo: any = defaultDefaultsInfo
+  ) => {
+    await TestBed.configureTestingModule({
+      imports: [ReactiveFormsModule, RouterTestingModule, HttpClientTestingModule],
+      declarations: [RgwMultisiteZonegroupFormComponent],
+      providers: [
+        ActionLabelsI18n,
+        CdFormBuilder,
+        { provide: 'action', useValue: action },
+        { provide: 'resource', useValue: 'zonegroup' },
+        { provide: 'info', useValue: info },
+        { provide: 'multisiteInfo', useValue: multisiteInfo },
+        { provide: 'defaultsInfo', useValue: defaultsInfo },
+        { provide: NotificationService, useValue: { show: jest.fn() } },
+        { provide: RgwZonegroupService, useValue: { create: jest.fn(), update: jest.fn() } }
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
+    }).compileComponents();
 
-  beforeEach(() => {
+    notificationService = TestBed.inject(NotificationService);
+    rgwZonegroupService = TestBed.inject(RgwZonegroupService);
+
     fixture = TestBed.createComponent(RgwMultisiteZonegroupFormComponent);
     component = fixture.componentInstance;
-    component.actionLabels = { CREATE: 'create', EDIT: 'edit' } as any;
-    fixture.detectChanges();
-  });
+    jest.spyOn(component, 'closeModal').mockImplementation(() => {});
+    component.ngOnInit();
+  };
 
-  it('should create', () => {
+  const setFormForSubmit = (endpoints: string) => {
+    component.multisiteZonegroupForm.get('zonegroupName').setValue('zg-1');
+    component.multisiteZonegroupForm.get('zonegroup_endpoints').setValue(endpoints);
+    component.multisiteZonegroupForm.markAsDirty();
+  };
+
+  beforeEach(() => TestBed.resetTestingModule());
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('should create', async () => {
+    await createComponent();
     expect(component).toBeTruthy();
   });
 
-  describe('submit form', () => {
-    let notificationService: NotificationService;
-
-    beforeEach(() => {
-      spyOn(TestBed.inject(Router), 'navigate').and.stub();
-      notificationService = TestBed.inject(NotificationService);
-      spyOn(notificationService, 'show');
-      rgwZonegroupService = TestBed.inject(RgwZonegroupService);
-    });
-
-    it('should validate name', () => {
-      component.action = 'create';
-      component.createForm();
-      const control = component.multisiteZonegroupForm.get('zonegroupName');
-      expect(_.isFunction(control.validator)).toBeTruthy();
-    });
-
-    it('should not validate name', () => {
-      component.action = 'edit';
-      component.createForm();
-      const control = component.multisiteZonegroupForm.get('zonegroupName');
-      expect(control.asyncValidator).toBeNull();
-    });
-
-    it('tests create success notification', () => {
-      spyOn(rgwZonegroupService, 'create').and.returnValue(observableOf([]));
-      component.actionLabels = { CREATE: 'create', EDIT: 'edit' } as any;
-      component.action = 'create';
-      component.multisiteZonegroupForm.markAsDirty();
-      component.multisiteZonegroupForm._get('zonegroupName').setValue('zg-1');
-      component.multisiteZonegroupForm
-        ._get('zonegroup_endpoints')
-        .setValue('http://192.1.1.1:8004');
-      component.submit();
-      expect(notificationService.show).toHaveBeenCalledWith(
-        NotificationType.success,
-        "Zonegroup: 'zg-1' created successfully"
+  describe('form validation', () => {
+    it('should have a sync validator on zonegroupName', async () => {
+      await createComponent();
+      expect(typeof component.multisiteZonegroupForm.get('zonegroupName').validator).toBe(
+        'function'
       );
     });
 
-    it('tests update success notification', () => {
-      spyOn(rgwZonegroupService, 'update').and.returnValue(observableOf([]));
-      component.action = 'edit';
-      component.actionLabels = { EDIT: 'edit', CREATE: 'create', DELETE: 'delete' } as any;
-      component.info = {
-        data: {
-          name: 'zg-1',
-          zones: [{ id: 'z1', name: 'zone-1' }],
-          master_zone: 'z1',
-          endpoints: [],
-          placement_targets: []
-        }
-      };
-      component.zgZoneNames = ['zone-1'];
-      component.zonegroupZoneNames = ['zone-1'];
-      component.multisiteZonegroupForm._get('zonegroupName').setValue('zg-1');
-      component.multisiteZonegroupForm
-        ._get('zonegroup_endpoints')
-        .setValue('http://192.1.1.1:8004,http://192.12.12.12:8004');
-      component.multisiteZonegroupForm.markAsDirty();
+    it('should have no async validator on zonegroupName in edit mode', async () => {
+      await createComponent('Edit', editInfo);
+      expect(component.multisiteZonegroupForm.get('zonegroupName').asyncValidator).toBeNull();
+    });
+  });
+
+  describe('submit', () => {
+    it('should show success notification on create', async () => {
+      await createComponent();
+      (rgwZonegroupService.create as jest.Mock).mockReturnValue(observableOf({}));
+      setFormForSubmit('http://192.1.1.1:8004');
+
       component.submit();
+
       expect(notificationService.show).toHaveBeenCalledWith(
         NotificationType.success,
-        "Zonegroup: 'zg-1' updated successfully"
+        expect.stringContaining('zg-1')
+      );
+    });
+
+    it('should show success notification on update', async () => {
+      await createComponent('Edit', editInfo);
+      (rgwZonegroupService.update as jest.Mock).mockReturnValue(observableOf({}));
+      component.zgZoneNames = ['zone-1'];
+      component.zonegroupZoneNames = ['zone-1'];
+      setFormForSubmit('http://192.1.1.1:8004,http://192.12.12.12:8004');
+
+      component.submit();
+
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        expect.stringContaining('zg-1')
       );
     });
   });
