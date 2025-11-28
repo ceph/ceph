@@ -383,7 +383,7 @@
         {
           alert: 'CephMgrPrometheusModuleInactive',
           'for': '1m',
-          expr: 'up{job="ceph"} == 0',
+          expr: 'ceph_mgr_module_status{name="prometheus"} != 0',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.6.2' },
           annotations: {
             summary: 'The mgr/prometheus module is not available',
