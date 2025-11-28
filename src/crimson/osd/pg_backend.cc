@@ -1101,7 +1101,8 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   ObjectState& os,
   const OSDOp& osd_op,
   ceph::os::Transaction& txn,
-  object_stat_sum_t& delta_stats)
+  object_stat_sum_t& delta_stats,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
@@ -1125,6 +1126,7 @@ PGBackend::setxattr_ierrorator::future<> PGBackend::setxattr(
   }
   logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
   txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
+  attr_cache[name] = val;
   delta_stats.num_wr++;
   return seastar::now();
 }
@@ -1149,7 +1151,7 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::getxattr(
         cache_it->second);
     }
     logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-    return getxattr(os.oi.soid, std::move(name));
+    return crimson::ct_error::enodata::make();
   };
   return get_attr_maybe_from_cache().safe_then_interruptible(
     [&delta_stats, &osd_op] (ceph::bufferlist&& val) {
@@ -1168,12 +1170,12 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   object_stat_sum_t& delta_stats) const
 {
   auto get_attrs_maybe_from_cache =
-    [&] () {
+    [&] () -> get_attr_errorator::future<crimson::os::FuturizedStore::Shard::attrs_t> {
     if (!std::empty(attr_cache)) {
-      return crimson::os::FuturizedStore::Shard::get_attrs_ertr::make_ready_future<
+      return get_attr_errorator::make_ready_future<
 	crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);
     }
-    return store->get_attrs(coll, ghobject_t{os.oi.soid});
+    return crimson::ct_error::enodata::make();
   };
   return get_attrs_maybe_from_cache().safe_then(
     [&delta_stats, &osd_op](auto&& attrs) {
@@ -1304,7 +1306,8 @@ PGBackend::rm_xattr_iertr::future<>
 PGBackend::rm_xattr(
   ObjectState& os,
   const OSDOp& osd_op,
-  ceph::os::Transaction& txn)
+  ceph::os::Transaction& txn,
+  ObjectContext::attr_cache_t& attr_cache)
 {
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("{}: {} DNE", __func__, os.oi.soid);
@@ -1314,6 +1317,7 @@ PGBackend::rm_xattr(
   string attr_name{"_"};
   bp.copy(osd_op.op.xattr.name_len, attr_name);
   txn.rmattr(coll->get_cid(), ghobject_t{os.oi.soid}, attr_name);
+  attr_cache.erase(attr_name);
   return rm_xattr_iertr::now();
 }
 
