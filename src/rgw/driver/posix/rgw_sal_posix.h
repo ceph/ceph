@@ -676,6 +676,11 @@ public:
           std::string_view policy_name,
           std::string_view version_id,
           rgw::IAM::PolicyVersion& policy_version) override { return -ENOTSUP; }
+  virtual int set_default_policy_version(const DoutPrefixProvider* dpp,
+          optional_yield y,
+          std::string_view account,
+          std::string_view policy_name,
+          std::string_view version_id) override { return -ENOTSUP; }
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;

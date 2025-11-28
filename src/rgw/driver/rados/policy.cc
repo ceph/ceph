@@ -495,4 +495,40 @@ int get_policy_version(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int set_default_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    info.default_version = version_id;
+    info.is_attachable = false;
+    it->second.is_default_version = true;
+    ret = write_policy(dpp, y, rados, sysobj, zone, info, false);
+    if(ret < 0) {
+      ldpp_dout(dpp, 20) << "failed to set_default_policy_version " << policy_name << " with: " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return ret;
+}
+
 }

@@ -779,6 +779,15 @@ int FilterDriver::get_policy_version(const DoutPrefixProvider* dpp,
   return next->get_policy_version(dpp, y, account, policy_name, version_id, policy_version);
 }
 
+int FilterDriver::set_default_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id)
+{
+  return next->set_default_policy_version(dpp, y, account, policy_name, version_id);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
