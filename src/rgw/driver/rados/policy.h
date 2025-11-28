@@ -119,4 +119,14 @@ int create_policy_version(const DoutPrefixProvider *dpp,
               std::string &version_id,
               ceph::real_time &create_date,
               bool exclusive);
+
+int delete_policy_version(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view policy_name,
+              std::string_view version_id,
+              bool exclusive);
 }
