@@ -462,4 +462,37 @@ int delete_policy_version(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+int get_policy_version(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::string_view version_id,
+    rgw::IAM::PolicyVersion& policy_version)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  int key = ceph::parse<int>(version_id.substr(1)).value();
+  auto it = info.versions.find(key);
+
+  if(it != info.versions.end()) {
+    policy_version.document = it->second.document;
+    policy_version.version_id = it->second.version_id;
+    policy_version.is_default_version= it->second.is_default_version;
+    policy_version.create_date = it->second.create_date;
+  } else {
+    ldpp_dout(dpp, 20) << "version_id does not exist" << dendl;
+    return -ENOENT;
+  }
+
+  return ret;
+}
+
 }

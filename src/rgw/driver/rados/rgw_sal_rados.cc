@@ -2687,6 +2687,24 @@ int RadosStore::delete_policy_version(const DoutPrefixProvider* dpp,
                       exclusive);
 }
 
+
+int RadosStore::get_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        rgw::IAM::PolicyVersion& policy_version)
+{
+  return rgwrados::policy::get_policy_version(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      version_id,
+                      policy_version);
+}
+
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

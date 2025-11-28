@@ -1043,6 +1043,12 @@ public:
                         std::string_view policy_name,
                         std::string_view version_id,
                         bool exclusive) override;
+      int get_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        rgw::IAM::PolicyVersion& policy_version) override;
 
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,

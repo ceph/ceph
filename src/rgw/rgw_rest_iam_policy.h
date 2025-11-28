@@ -96,3 +96,14 @@ public:
   const char* name() const override { return "delete_policy_version"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_POLICY_VERSION; }
 };
+
+class RGWGetPolicyVersion : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string version_id;
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWGetPolicyVersion() : RGWRestPolicy(rgw::IAM::iamGetPolicyVersion, RGW_CAP_READ){ }
+  const char* name() const override { return "get_policy_version"; }
+  RGWOpType get_type() override { return RGW_OP_GET_POLICY_VERSION; }
+};
