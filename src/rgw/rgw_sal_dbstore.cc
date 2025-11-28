@@ -1578,6 +1578,17 @@ int DBStore::set_default_policy_version(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int DBStore::list_policy_versions(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view policy_name,
+                          std::string_view marker,
+                          uint32_t max_items,
+                          rgw::IAM::VersionList& listing)
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

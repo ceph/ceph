@@ -118,3 +118,23 @@ public:
   const char* name() const override { return "set_default_policy_version"; }
   RGWOpType get_type() override { return RGW_OP_SET_DEFAULT_POLICY_VERSION; }
 };
+
+class RGWListPolicyVersions : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string marker;
+  int max_items = 100;
+
+  bool started_response = false;
+  void start_response();
+  void end_response(std::string_view next_marker);
+  void send_response_data(std::span<rgw::IAM::PolicyVersion> policy_versions);
+public:
+  RGWListPolicyVersions() : RGWRestPolicy(rgw::IAM::iamListPolicyVersions, RGW_CAP_READ){ }
+
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_policy_versions"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_POLICY_VERSIONS; }
+};

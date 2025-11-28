@@ -855,6 +855,7 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamDeletePolicyVersion] = 1;
   act[iamGetPolicyVersion] = 1;
   act[iamSetDefaultPolicyVersion] = 1;
+  act[iamListPolicyVersions] = 1;
 
   EXPECT_EQ(act, p->statements[0].action);
 }
