@@ -33,20 +33,68 @@ void init_rand() {
 
 } // anonymous namespace
 
-int RadosTestECPP::freeze_omap_journal() {
-  bufferlist inbl, outbl;
+void RadosTestECPP::freeze_omap_journal() {
+  bufferlist inbl_tell, outbl;
   std::ostringstream oss;
-  oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
-  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
-  return rc;
+  oss << "{\"prefix\": \"freezeomapjournal\"}";
+  int rc = cluster.osd_command(0, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer off\"}";
+  bufferlist inbl_balancer; 
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd set\", \"key\": \"nodeep-scrub\"}";
+  bufferlist inbl_nodeep;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_nodeep), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd set\", \"key\": \"noscrub\"}";
+  bufferlist inbl_noscrub;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_noscrub), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
 }
 
-int RadosTestECPP::unfreeze_omap_journal() {
-  bufferlist inbl, outbl;
+void RadosTestECPP::unfreeze_omap_journal() {
+  bufferlist inbl_tell, outbl;
   std::ostringstream oss;
-  oss << "{\"prefix\": \"tell\", \"target\": \"osd.*\", \"args\": [\"freezeomapjournal\"]}";
-  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
-  return rc;
+  oss << "{\"prefix\": \"unfreezeomapjournal\"}";
+  int rc = cluster.osd_command(0, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str(""); 
+  bufferlist inbl_autoscaler;
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noautoscale\"}";
+  rc = cluster.mon_command(oss.str(), std::move(inbl_autoscaler), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"balancer on\"}";
+  bufferlist inbl_balancer;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_balancer), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"nodeep-scrub\"}";
+  bufferlist inbl_nodeep;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_nodeep), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
+
+  oss.str("");
+  oss << "{\"prefix\": \"osd unset\", \"key\": \"noscrub\"}";
+  bufferlist inbl_noscrub;
+  rc = cluster.mon_command(oss.str(), std::move(inbl_noscrub), &outbl, nullptr);
+  EXPECT_EQ(rc, 0);
 }
 
 void RadosTestECPP::write_omap_keys(std::string oid, int min_index, 
