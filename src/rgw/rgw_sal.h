@@ -726,6 +726,12 @@ class Driver {
                             std::string &version_id,
                             ceph::real_time &create_date,
                             bool exclusive) = 0;
+    virtual int delete_policy_version(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account,
+                            std::string_view policy_name,
+                            std::string_view version_id,
+                            bool exclusive) = 0;
 
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,

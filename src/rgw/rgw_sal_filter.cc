@@ -759,6 +759,16 @@ int FilterDriver::create_policy_version(const DoutPrefixProvider* dpp,
   return next->create_policy_version(dpp, y, account, policy_name, policy_document, set_as_default, version_id, create_date, exclusive);
 }
 
+int FilterDriver::delete_policy_version(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::string_view version_id,
+                        bool exclusive)
+{
+  return next->delete_policy_version(dpp, y, account, policy_name, version_id, exclusive);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
