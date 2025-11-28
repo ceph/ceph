@@ -693,6 +693,13 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
     auto &complete = rop.complete.at(hoid);
     complete.errors.emplace(from, err);
     complete.buffers_read.erase_shard(from.shard);
+    // If we are doing redundant reads, then we must take care that any failed
+    // reads are not replaced with a zero buffer. When fast_reads are disabled,
+    // the send_all_remaining_reads() call will replace the zeros_for_decode
+    // based on the recovery read.
+    if (rop.do_redundant_reads) {
+      rop.to_read.at(hoid).zeros_for_decode.erase(from.shard);
+    }
     complete.processed_read_requests.erase(from.shard);
     logger().debug("{} shard={} error={}", __func__, from, err);
   }
@@ -710,7 +717,8 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   // or in a non-recovery read check for completion once all the shards read.
   unsigned is_complete = 0;
   bool need_resend = false;
-  if (rop.do_redundant_reads || rop.in_progress.empty()) {
+  bool all_sub_reads_done = rop.in_progress.empty();
+  if (rop.do_redundant_reads || all_sub_reads_done) {
     for (auto &&[oid, read_result]: rop.complete) {
       shard_id_set have;
       read_result.processed_read_requests.populate_shard_id_set(have);
@@ -718,6 +726,12 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
       shard_id_set want_to_read;
       rop.to_read.at(oid).shard_want_to_read.
           populate_shard_id_set(want_to_read);
+
+      // If all reads are done, we can safely assume that zero buffers can
+      // be applied.
+      if (all_sub_reads_done) {
+        rop.to_read.at(oid).zeros_for_decode.populate_shard_id_set(have);
+      }
 
       int err = -EIO; // If attributes needed but not read.
       if (!rop.to_read.at(oid).want_attrs || rop.complete.at(oid).attrs) {
@@ -727,23 +741,18 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
 
       if (err) {
 	logger().debug("{} minimum_to_decode failed {}", __func__, err);
-        if (rop.in_progress.empty()) {
+        if (all_sub_reads_done) {
           // If we don't have enough copies, try other pg_shard_ts if available.
           // During recovery there may be multiple osds with copies of the same shard,
           // so getting EIO from one may result in multiple passes through this code path.
-          if (!rop.do_redundant_reads) {
-            int r = read_pipeline.send_all_remaining_reads(oid, rop);
-            if (r == 0) {
-              // We found that new reads are required to do a decode.
-              need_resend = true;
-              continue;
-            } else if (r >  0) {
-              // No new reads were requested. This means that some parity
-              // shards can be assumed to be zeros.
-              err = 0;
-            }
-            // else insufficient shards are available, keep the errors.
-          }
+          int r = read_pipeline.send_all_remaining_reads(oid, rop);
+          if (r == 0 && !rop.do_redundant_reads) {
+            // We found that new reads are required to do a decode.
+            need_resend = true;
+            continue;
+           }
+          // else insufficient shards are available, keep the errors.
+
           // Couldn't read any additional shards so handle as completed with errors
           // We don't want to confuse clients / RBD with objectstore error
           // values in particular ENOENT.  We may have different error returns
@@ -782,6 +791,16 @@ ECBackend::handle_rep_read_reply(ECSubReadReply& mop)
   } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
     logger().debug("{}: complete {}", __func__, rop);
+    /* If do_redundant_reads is set then there might be some in progress
+     * reads remaining.  We need to make sure that these non-read shards
+     * do not get padded. If there was no in progress read, then the zero
+     * padding is allowed to stay.
+     */
+    for (auto pg_shard : rop.in_progress) {
+      for (auto &&[oid, read] : rop.to_read) {
+        read.zeros_for_decode.erase(pg_shard.shard);
+      }
+    }
     read_pipeline.complete_read_op(std::move(rop));
   } else {
     logger().info("{}: readop not completed yet: {}", __func__, rop);
