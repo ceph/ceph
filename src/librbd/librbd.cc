@@ -6418,8 +6418,9 @@ extern "C" int rbd_aio_write_with_crc32c(rbd_image_t image, uint64_t off,
 
   auto aio_completion = get_aio_completion(comp);
   auto raw = create_write_raw(ictx, buf, len, aio_completion);
+  // store with initial value -1
   raw->set_crc(std::make_pair(0, len),
-               std::make_pair(0, precomputed_crc32c));
+               std::make_pair(-1, precomputed_crc32c));
   bufferlist bl;
   bl.push_back(std::move(raw));
   librbd::api::Io<>::aio_write(
