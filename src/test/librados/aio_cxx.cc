@@ -1185,18 +1185,6 @@ TEST(LibRadosAio, OmapPP) {
 
   {
     boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0));
-    ObjectWriteOperation op;
-    op.omap_rm_range("foo", "qzz");
-    ioctx.aio_operate("test_obj", my_completion.get(), &op);
-    {
-      TestAlarm alarm;
-      ASSERT_EQ(0, my_completion->wait_for_complete());
-    }
-    EXPECT_EQ(0, my_completion->get_return_value());
-  }
-
-  {
-    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0));
     ObjectReadOperation op;
 
     set<string> set_got;
@@ -1282,6 +1270,18 @@ TEST(LibRadosAio, OmapPP) {
     EXPECT_EQ(0, my_completion->get_return_value());
     ASSERT_EQ(set_got.size(), (unsigned)0);
     ASSERT_EQ(hdr.length(), 0u);
+  }
+
+  {
+    boost::scoped_ptr<AioCompletion> my_completion(cluster.aio_create_completion(0, 0));
+    ObjectWriteOperation op;
+    op.omap_rm_range("foo", "qzz");
+    ioctx.aio_operate("test_obj", my_completion.get(), &op);
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, my_completion->wait_for_complete());
+    }
+    EXPECT_EQ(0, my_completion->get_return_value());
   }
 
   ioctx.remove("test_obj");
