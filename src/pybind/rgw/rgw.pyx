@@ -9,11 +9,12 @@ from libc.stdlib cimport malloc, realloc, free
 from cstat cimport stat
 cimport libcpp
 
-IF BUILD_DOC:
-    include "mock_rgw.pxi"
-ELSE:
-    from c_rgw cimport *
-    cimport rados
+{{if BUILD_DOC}}
+include "mock_rgw.pxi"
+{{else}}
+from c_rgw cimport *
+cimport rados
+{{endif}}
 
 from collections import namedtuple
 from datetime import datetime
@@ -90,32 +91,36 @@ class WouldBlock(Error):
 class OutOfRange(Error):
     pass
 
-IF UNAME_SYSNAME == "FreeBSD":
-    cdef errno_to_exception =  {
-        errno.EPERM      : PermissionError,
-        errno.ENOENT     : ObjectNotFound,
-        errno.EIO        : IOError,
-        errno.ENOSPC     : NoSpace,
-        errno.EEXIST     : ObjectExists,
-        errno.ENOATTR    : NoData,
-        errno.EINVAL     : InvalidValue,
-        errno.EOPNOTSUPP : OperationNotSupported,
-        errno.ERANGE     : OutOfRange,
-        errno.EWOULDBLOCK: WouldBlock,
-    }
-ELSE:
-    cdef errno_to_exception =  {
-        errno.EPERM      : PermissionError,
-        errno.ENOENT     : ObjectNotFound,
-        errno.EIO        : IOError,
-        errno.ENOSPC     : NoSpace,
-        errno.EEXIST     : ObjectExists,
-        errno.ENODATA    : NoData,
-        errno.EINVAL     : InvalidValue,
-        errno.EOPNOTSUPP : OperationNotSupported,
-        errno.ERANGE     : OutOfRange,
-        errno.EWOULDBLOCK: WouldBlock,
-    }
+
+# Build errno mapping based on platform
+# FreeBSD uses ENOATTR while Linux uses ENODATA
+{{if UNAME_SYSNAME == "FreeBSD"}}
+cdef errno_to_exception =  {
+    errno.EPERM      : PermissionError,
+    errno.ENOENT     : ObjectNotFound,
+    errno.EIO        : IOError,
+    errno.ENOSPC     : NoSpace,
+    errno.EEXIST     : ObjectExists,
+    errno.ENOATTR    : NoData,
+    errno.EINVAL     : InvalidValue,
+    errno.EOPNOTSUPP : OperationNotSupported,
+    errno.ERANGE     : OutOfRange,
+    errno.EWOULDBLOCK: WouldBlock,
+}
+{{else}}
+cdef errno_to_exception =  {
+    errno.EPERM      : PermissionError,
+    errno.ENOENT     : ObjectNotFound,
+    errno.EIO        : IOError,
+    errno.ENOSPC     : NoSpace,
+    errno.EEXIST     : ObjectExists,
+    errno.ENODATA    : NoData,
+    errno.EINVAL     : InvalidValue,
+    errno.EOPNOTSUPP : OperationNotSupported,
+    errno.ERANGE     : OutOfRange,
+    errno.EWOULDBLOCK: WouldBlock,
+}
+{{endif}}
 
 
 cdef class FileHandle(object):

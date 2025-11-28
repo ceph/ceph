@@ -141,13 +141,15 @@ def check_sanity():
         shutil.rmtree(tmp_dir)
 
 
+import platform
+
 if 'BUILD_DOC' in os.environ or 'READTHEDOCS' in os.environ:
     ext_args = {}
-    cython_constants = dict(BUILD_DOC=True)
+    cython_constants = dict(BUILD_DOC=True, UNAME_SYSNAME=platform.system())
     cythonize_args = dict(compile_time_env=cython_constants)
 elif check_sanity():
     ext_args = get_python_flags(['rados', 'rgw'])
-    cython_constants = dict(BUILD_DOC=False)
+    cython_constants = dict(BUILD_DOC=False, UNAME_SYSNAME=platform.system())
     include_path = [os.path.join(os.path.dirname(__file__), "..", "rados")]
     cythonize_args = dict(compile_time_env=cython_constants,
                           include_path=include_path)
@@ -158,6 +160,7 @@ cmdclass = {}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+    from Cython import Tempita
 
     cmdclass = {'build_ext': build_ext}
 except ImportError:
@@ -172,7 +175,27 @@ except ImportError:
 
         source = "rgw.c"
 else:
-    source = "rgw.pyx"
+    # Process Tempita template
+    source_pyx = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "rgw.pyx"
+    )
+
+    # Read the template from source
+    with open(source_pyx) as f:
+        template_content = f.read()
+
+    # Process the template with cython_constants
+    processed = Tempita.sub(template_content, **cython_constants)
+
+    # Write processed output to current working directory
+    # (which is the build directory when invoked by CMake)
+    output_pyx = "rgw_processed.pyx"
+
+    with open(output_pyx, 'w') as f:
+        f.write(processed)
+
+    source = output_pyx
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and

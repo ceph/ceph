@@ -159,6 +159,7 @@ cmdclass = {}
 try:
     from Cython.Build import cythonize
     from Cython.Distutils import build_ext
+    from Cython import Tempita
 
     cmdclass = {'build_ext': build_ext}
 except ImportError:
@@ -173,7 +174,27 @@ except ImportError:
 
         source = "cephfs.c"
 else:
-    source = "cephfs.pyx"
+    # Process Tempita template
+    source_pyx = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        "cephfs.pyx"
+    )
+
+    # Read the template from source
+    with open(source_pyx) as f:
+        template_content = f.read()
+
+    # Process the template with cython_constants
+    processed = Tempita.sub(template_content, **cython_constants)
+
+    # Write processed output to current working directory
+    # (which is the build directory when invoked by CMake)
+    output_pyx = "cephfs_processed.pyx"
+
+    with open(output_pyx, 'w') as f:
+        f.write(processed)
+
+    source = output_pyx
 
 # Disable cythonification if we're not really building anything
 if (len(sys.argv) >= 2 and
