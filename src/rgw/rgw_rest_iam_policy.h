@@ -162,3 +162,23 @@ public:
   const char* name() const override { return "untag_policy"; }
   RGWOpType get_type() override { return RGW_OP_UNTAG_POLICY; }
 };
+
+class RGWListPolicyTags : public RGWRestPolicy {
+  std::string policy_arn;
+  std::string marker;
+  int max_items = 100;
+
+  bool started_response = false;
+  void start_response();
+  void end_response(std::string_view next_marker);
+  void send_response_data(std::multimap<std::string, std::string>& tags);
+public:
+  RGWListPolicyTags() : RGWRestPolicy(rgw::IAM::iamListPolicyTags, RGW_CAP_READ){ }
+
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_policy_tags"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_POLICY_TAGS; }
+};

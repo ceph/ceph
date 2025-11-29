@@ -817,6 +817,17 @@ int FilterDriver::untag_policy(const DoutPrefixProvider* dpp,
   return next->untag_policy(dpp, y, account, policy_name, keys);
 }
 
+int FilterDriver::list_policy_tags(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            std::string_view policy_name,
+                            std::string_view marker,
+                            uint32_t max_items,
+                            rgw::IAM::PolicyTagList& listing)
+{
+  return next->list_policy_tags(dpp, y, account_id, policy_name, marker, max_items, listing);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
