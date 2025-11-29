@@ -138,3 +138,15 @@ public:
   const char* name() const override { return "list_policy_versions"; }
   RGWOpType get_type() override { return RGW_OP_LIST_POLICY_VERSIONS; }
 };
+
+class RGWTagPolicy : public RGWRestPolicy {
+  std::string policy_arn;
+  std::multimap<std::string, std::string> tags;
+
+public:
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  RGWTagPolicy() : RGWRestPolicy(rgw::IAM::iamTagPolicy, RGW_CAP_WRITE){ }
+  const char* name() const override { return "tag_policy"; }
+  RGWOpType get_type() override { return RGW_OP_TAG_POLICY; }
+};

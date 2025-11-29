@@ -754,3 +754,41 @@ void RGWListPolicyVersions::send_response()
   }
 }
 
+int RGWTagPolicy::init_processing(optional_yield y)
+{
+  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
+  if(ret < 0) {
+    return ret;
+  }
+
+  if (tags.size() > 50) {
+    s->err.message = "Tags count cannot exceed 50";
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+    std::string provider_arn = s->info.args.get("PolicyArn");
+    return validate_policy_arn(provider_arn, account, arn, s->err.message);
+  }
+
+  return -ERR_METHOD_NOT_ALLOWED;
+}
+
+void RGWTagPolicy::execute(optional_yield y)
+{
+  std::string policy_name = arn.resource.substr(arn.resource.rfind('/') + 1);
+  op_ret = driver->tag_policy(this, y, arn.account, policy_name, tags);
+  if(op_ret < 0) {
+    ldpp_dout(this, 20) << "failed to tag policy: " << policy_name << " with: " << strerror(op_ret) << dendl;
+  } else {
+    s->formatter->open_object_section_in_ns("TagPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+

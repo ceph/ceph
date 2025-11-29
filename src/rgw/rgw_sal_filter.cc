@@ -799,6 +799,15 @@ int FilterDriver::list_policy_versions(const DoutPrefixProvider* dpp,
   return next->list_policy_versions(dpp, y, account_id, policy_name, marker, max_items, listing);
 }
 
+int FilterDriver::tag_policy(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::multimap<std::string, std::string>& tags)
+{
+  return next->tag_policy(dpp, y, account, policy_name, tags);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

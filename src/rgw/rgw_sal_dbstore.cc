@@ -1589,6 +1589,15 @@ int DBStore::list_policy_versions(const DoutPrefixProvider* dpp,
   return -ENOTSUP;
 }
 
+int DBStore::tag_policy(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          std::string_view account_id,
+                          std::string_view policy_name,
+                          std::multimap<std::string, std::string>& tags)
+{
+  return -ENOTSUP;
+}
+
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,

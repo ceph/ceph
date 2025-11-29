@@ -160,4 +160,13 @@ int list_policy_versions(const DoutPrefixProvider *dpp,
               uint32_t max_items,
               rgw::IAM::VersionList& listing);
 
+int tag_policy(const DoutPrefixProvider *dpp,
+              optional_yield y,
+              librados::Rados& rados,
+              RGWSI_SysObj &sysobj,
+              const RGWZoneParams &zone,
+              std::string_view account,
+              std::string_view policy_name,
+              std::multimap<std::string, std::string>& tags);
+
 }

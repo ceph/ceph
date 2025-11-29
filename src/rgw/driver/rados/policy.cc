@@ -13,6 +13,7 @@
 namespace rgwrados::policy
 {
 static const int max_policy_versions = 5;
+static const int max_tags = 50;
 static const std::string oid_prefix = "customer-managed-policy.";
 static constexpr std::string_view policy_oid_prefix = "policies.";
 
@@ -551,6 +552,37 @@ int list_policy_versions(const DoutPrefixProvider *dpp,
 
   for(const auto &version : info.versions) {
     listing.versions.push_back(std::move(version.second));
+  }
+
+  return ret;
+}
+
+int tag_policy(const DoutPrefixProvider *dpp,
+    optional_yield y,
+    librados::Rados& rados,
+    RGWSI_SysObj &sysobj,
+    const RGWZoneParams &zone,
+    std::string_view account,
+    std::string_view policy_name,
+    std::multimap<std::string, std::string>& tags)
+{
+  rgw::IAM::ManagedPolicyInfo info;
+  auto oid = get_name_key(account, policy_name);
+  int ret = get_policy(dpp, y, sysobj, zone, account, policy_name, info);
+  if(ret < 0){
+    return ret;
+  }
+
+  if(tags.size() + info.tags.size() > max_tags) {
+    return -ERR_LIMIT_EXCEEDED;
+  }
+
+  info.tags.insert(tags.begin(), tags.end());
+
+  ret = write_policy(dpp, y, rados, sysobj, zone, info, false);
+  if(ret < 0) {
+    ldpp_dout(dpp, 20) << "failed to tag policy " << policy_name << " with: " << cpp_strerror(ret) << dendl;
+    return ret;
   }
 
   return ret;
