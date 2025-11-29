@@ -2894,6 +2894,21 @@ int RadosStore::tag_policy(const DoutPrefixProvider* dpp,
                       tags);
 }
 
+int RadosStore::untag_policy(const DoutPrefixProvider* dpp,
+                      optional_yield y,
+                      std::string_view account,
+                      std::string_view policy_name,
+                      std::vector<std::string>& keys)
+{
+  return rgwrados::policy::untag_policy(dpp, y,
+                      *getRados()->get_rados_handle(),
+                      *svc()->sysobj,
+                      svc()->zone->get_zone_params(),
+                      account,
+                      policy_name,
+                      keys);
+}
+
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
