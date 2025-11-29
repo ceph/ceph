@@ -808,6 +808,15 @@ int FilterDriver::tag_policy(const DoutPrefixProvider* dpp,
   return next->tag_policy(dpp, y, account, policy_name, tags);
 }
 
+int FilterDriver::untag_policy(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        std::string_view account,
+                        std::string_view policy_name,
+                        std::vector<std::string>& keys)
+{
+  return next->untag_policy(dpp, y, account, policy_name, keys);
+}
+
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
