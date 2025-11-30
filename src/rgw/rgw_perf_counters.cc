@@ -68,6 +68,11 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_kms_error_permanent, "kms_error_permanent", "Permanent (e.g key not found) errors returned from KMS");
   pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g timeout, overloaded) errors returned from KMS");
   pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g kernel keyring quota)");
+
+  pcb->add_u64_counter(l_rgw_cloud_delete_queued, "cloud_delete_queued", "Cloud delete operations enqueued");
+  pcb->add_u64_counter(l_rgw_cloud_delete_success, "cloud_delete_success", "Cloud delete operations succeeded");
+  pcb->add_u64_counter(l_rgw_cloud_delete_fail, "cloud_delete_fail", "Cloud delete operations failed");
+  pcb->add_u64_counter(l_rgw_cloud_delete_retry, "cloud_delete_retry", "Cloud delete operations retried");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {

@@ -95,6 +95,23 @@ static inline string get_key_oid(const rgw_obj_key& key)
   return oid;
 }
 
+std::string make_target_obj_name(const std::string& bucket_name,
+                                 const rgw_obj_key& obj_key,
+                                 bool target_by_bucket,
+                                 bool is_current)
+{
+  std::string target_obj_name;
+  if (target_by_bucket) {
+    target_obj_name = obj_key.name;
+  } else {
+    target_obj_name = bucket_name + "/" + obj_key.name;
+  }
+  if (!is_current) {
+    target_obj_name += get_key_instance(obj_key);
+  }
+  return target_obj_name;
+}
+
 static inline string obj_to_aws_path(const rgw_obj& obj)
 {
   return obj.bucket.name + "/" + get_key_oid(obj.key);
