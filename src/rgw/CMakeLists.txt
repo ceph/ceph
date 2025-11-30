@@ -69,6 +69,7 @@ set(librgw_common_srcs
   rgw_lc_s3.cc
   rgw_restore.cc
   rgw_restore_waiter.cc
+  rgw_cloud_delete_util.cc
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
@@ -140,6 +141,7 @@ set(librgw_common_srcs
   rgw_lua.cc
   rgw_lua_data_filter.cc
   rgw_bucket_encryption.cc
+  rgw_cloud_delete.cc
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc

@@ -52,6 +52,10 @@ enum {
   l_rgw_d4n_cache_hits,
   l_rgw_d4n_cache_misses,
   l_rgw_d4n_cache_evictions,
+  l_rgw_cloud_delete_queued,
+  l_rgw_cloud_delete_success,
+  l_rgw_cloud_delete_fail,
+  l_rgw_cloud_delete_retry,
 
   l_rgw_last,
 };

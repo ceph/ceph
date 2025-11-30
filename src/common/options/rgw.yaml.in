@@ -251,6 +251,7 @@ options:
   - rgw_enable_gc_threads
   - rgw_enable_lc_threads
   - rgw_enable_restore_threads
+  - rgw_enable_cloud_delete_threads
   with_legacy: true
 - name: rgw_enable_gc_threads
   type: bool
@@ -268,6 +269,7 @@ options:
   - rgw_enable_quota_threads
   - rgw_enable_lc_threads
   - rgw_enable_restore_threads
+  - rgw_enable_cloud_delete_threads
   with_legacy: true
 - name: rgw_enable_lc_threads
   type: bool
@@ -286,6 +288,7 @@ options:
   - rgw_enable_gc_threads
   - rgw_enable_quota_threads
   - rgw_enable_restore_threads
+  - rgw_enable_cloud_delete_threads
   with_legacy: true
 - name: rgw_enable_restore_threads
   type: bool
@@ -303,6 +306,23 @@ options:
   - rgw_enable_gc_threads
   - rgw_enable_quota_threads
   - rgw_enable_lc_threads
+  with_legacy: true
+- name: rgw_enable_cloud_delete_threads
+  type: bool
+  level: advanced
+  desc: Enables the cloud delete maintenance thread.
+  long_desc: >-
+    The cloud delete maintenance thread processes background deletions of objects
+    that have been transitioned to a cloud tier. Disable this only if another RGW
+    instance in the same zone is responsible for draining the cloud delete queue.
+  default: true
+  services:
+  - rgw
+  see_also:
+  - rgw_enable_gc_threads
+  - rgw_enable_quota_threads
+  - rgw_enable_lc_threads
+  - rgw_enable_restore_threads
   with_legacy: true
 - name: rgw_data
   type: str
@@ -581,6 +601,45 @@ options:
     Set to 0 to fail immediately without waiting.
   default: 10000
   min: 0
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_cloud_delete_interval
+  type: int
+  level: advanced
+  desc: Interval in seconds between processing cycles for the cloud delete queue
+  default: 300
+  min: 1
+  max: 86400
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_cloud_delete_max_objs
+  type: int
+  level: advanced
+  desc: Number of shards for cloud delete processing
+  long_desc: >-
+    Number of RADOS objects to use for storing cloud delete entries.
+    More shards allow greater parallelism across RGW instances.
+  default: 127
+  min: 1
+  max: 7877
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_cloud_delete_retry_window
+  type: int
+  level: advanced
+  desc: Maximum time in seconds to retry a failed cloud delete before giving up
+  long_desc: >-
+    When a cloud delete operation fails with a retryable error, RGW re-enqueues
+    the entry with exponential backoff. Once the entry's age (time since first
+    enqueue) exceeds this window, it is dropped permanently and the remote
+    object may be orphaned. Increase this value if cloud outages in your
+    environment can last longer than the default.
+  default: 86400
+  min: 86400
+  max: 604800
   services:
   - rgw
   with_legacy: true
@@ -1440,6 +1499,14 @@ options:
   type: bool
   level: advanced
   desc: run objects' restore threads in librgw (default off)
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_nfs_run_cloud_delete_threads
+  type: bool
+  level: advanced
+  desc: run cloud delete threads in librgw (default off)
   default: false
   services:
   - rgw

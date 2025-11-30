@@ -498,6 +498,19 @@ rgw::restore::Restore* FilterDriver::get_rgwrestore()
   return next->get_rgwrestore();
 }
 
+rgw::cloud_delete::CloudDelete* FilterDriver::get_rgwcloud_delete()
+{
+  return next->get_rgwcloud_delete();
+}
+
+std::unique_ptr<CloudDelete> FilterDriver::get_cloud_delete()
+{
+  std::unique_ptr<CloudDelete> cd = next->get_cloud_delete();
+  if (!cd)
+    return nullptr;
+  return std::make_unique<FilterCloudDelete>(std::move(cd));
+}
+
 RGWCoroutinesManagerRegistry* FilterDriver::get_cr_registry()
 {
   return next->get_cr_registry();
@@ -1502,6 +1515,43 @@ int FilterRestore::trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
   return next->trim_entries(dpp, y, index, marker);
 }
 
+int FilterCloudDeleteSerializer::try_lock(const DoutPrefixProvider *dpp,
+					  ceph::timespan dur, optional_yield y)
+{
+  return next->try_lock(dpp, dur, y);
+}
+
+int FilterCloudDelete::initialize(const DoutPrefixProvider* dpp, optional_yield y,
+				  int n_objs, std::vector<std::string>& obj_names) {
+  return next->initialize(dpp, y, n_objs, obj_names);
+}
+
+int FilterCloudDelete::enqueue(const DoutPrefixProvider* dpp, optional_yield y,
+			       const rgw::cloud_delete::CloudDeleteEntry& entry) {
+  return next->enqueue(dpp, y, entry);
+}
+
+int FilterCloudDelete::list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+				    int index, const std::string& marker,
+				    std::string* out_marker, uint32_t max_entries,
+				    std::vector<rgw::cloud_delete::CloudDeleteEntry>& entries,
+				    bool* truncated) {
+  return next->list_entries(dpp, y, index, marker, out_marker, max_entries,
+			    entries, truncated);
+}
+
+int FilterCloudDelete::trim_entries(const DoutPrefixProvider* dpp, optional_yield y,
+				    int index, const std::string& marker) {
+  return next->trim_entries(dpp, y, index, marker);
+}
+
+std::unique_ptr<CloudDeleteSerializer> FilterCloudDelete::get_serializer(
+    const std::string& lock_name, const std::string& oid,
+    const std::string& cookie) {
+  std::unique_ptr<CloudDeleteSerializer> ns;
+  ns = next->get_serializer(lock_name, oid, cookie);
+  return std::make_unique<FilterCloudDeleteSerializer>(std::move(ns));
+}
 
 int FilterNotification::publish_reserve(const DoutPrefixProvider *dpp,
 					RGWObjTags* obj_tags)

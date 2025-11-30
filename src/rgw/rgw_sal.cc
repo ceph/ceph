@@ -104,6 +104,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool use_gc_thread,
 						     bool use_lc_thread,
 					             bool use_restore_thread,
+						     bool use_cloud_delete_thread,
 						     bool quota_threads,
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
@@ -127,6 +128,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_gc_thread(use_gc_thread)
                 .set_run_lc_thread(use_lc_thread)
 		.set_run_restore_thread(use_restore_thread)
+		.set_run_cloud_delete_thread(use_cloud_delete_thread)
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
@@ -162,6 +164,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_gc_thread(use_gc_thread)
                 .set_run_lc_thread(use_lc_thread)
 		.set_run_restore_thread(use_restore_thread)
+		.set_run_cloud_delete_thread(use_cloud_delete_thread)
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)

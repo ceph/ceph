@@ -57,6 +57,7 @@ extern "C" {
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"
+#include "rgw_cloud_delete.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_datalog.h"
@@ -368,6 +369,8 @@ void usage()
   cout << "  restore status                   shows restoration status of object in a bucket\n";
   cout << "  restore list                     list restore status of each object in the bucket\n";
   cout << "                                   can be filtered with help of --restore-status which shows objects with specified status\n";
+  cout << "  cloud-delete list                list pending cloud-tier delete entries across shards\n";
+  cout << "                                   --shard-id to limit to a single shard, --max-entries to cap output\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>                 tenant name\n";
   cout << "   --user_ns=<namespace>             namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -952,6 +955,7 @@ enum class OPT {
   RESTORE_STATUS,
   RESTORE_LIST,
   GLOBAL_CORS_GET,
+  CLOUD_DELETE_LIST,
 };
 
 }
@@ -1221,6 +1225,7 @@ static SimpleCmd::Commands all_cmds = {
   { "restore status", OPT::RESTORE_STATUS },
   { "restore list", OPT::RESTORE_LIST },
   { "global-cors get", OPT::GLOBAL_CORS_GET},
+  { "cloud-delete list", OPT::CLOUD_DELETE_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -4724,6 +4729,7 @@ int main(int argc, const char **argv)
 			 OPT::SCRIPT_GET,
        OPT::RESTORE_STATUS,
        OPT::RESTORE_LIST,
+       OPT::CLOUD_DELETE_LIST,
     };
 
     std::set<OPT> gc_ops_list = {
@@ -4772,6 +4778,7 @@ int main(int argc, const char **argv)
 					cfg,
 					context_pool,
 					*site,
+					false,
 					false,
 					false,
 					false,
@@ -12531,6 +12538,78 @@ next:
     }
 
     optional_global_cors->dump(formatter.get());
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::CLOUD_DELETE_LIST) {
+    auto* cd = driver->get_rgwcloud_delete();
+    if (!cd) {
+      cerr << "ERROR: cloud-delete is not configured on this driver" << std::endl;
+      return ENOTSUP;
+    }
+    const int num_shards = cd->num_shards();
+    if (num_shards <= 0) {
+      cerr << "ERROR: cloud-delete has no shards" << std::endl;
+      return EINVAL;
+    }
+    if (specified_shard_id && (shard_id < 0 || shard_id >= num_shards)) {
+      cerr << "ERROR: --shard-id out of range [0, " << num_shards << ")" << std::endl;
+      return EINVAL;
+    }
+    const uint32_t per_batch = 1000;
+    int64_t remaining = (max_entries < 0) ? -1 : max_entries;
+
+    formatter->open_array_section("shards");
+    int start = specified_shard_id ? shard_id : 0;
+    int end = specified_shard_id ? shard_id + 1 : num_shards;
+    for (int i = start; i < end && remaining != 0; ++i) {
+      formatter->open_object_section("shard");
+      encode_json("shard_id", i, formatter.get());
+      encode_json("name", cd->shard_name(i), formatter.get());
+      formatter->open_array_section("entries");
+      std::string smarker = marker;
+      bool truncated = false;
+      bool capped_mid_shard = false;
+      do {
+        std::vector<rgw::cloud_delete::CloudDeleteEntry> entries;
+        std::string out_marker;
+        uint32_t batch = per_batch;
+        if (remaining > 0 && remaining < (int64_t)batch) {
+          batch = (uint32_t)remaining;
+        }
+        int r = cd->list_entries(dpp(), null_yield, i, smarker, &out_marker,
+                                 batch, entries, &truncated);
+        if (r < 0) {
+          cerr << "ERROR: list_entries shard=" << i << ": "
+               << cpp_strerror(-r) << std::endl;
+          formatter->close_section();  // entries
+          formatter->close_section();  // shard
+          formatter->close_section();  // shards
+          formatter->flush(cout);
+          return -r;
+        }
+        size_t emitted = 0;
+        for (const auto& e : entries) {
+          encode_json("entry", e, formatter.get());
+          ++emitted;
+          if (remaining > 0) --remaining;
+          if (remaining == 0) break;
+        }
+        if (remaining == 0 && (emitted < entries.size() || truncated)) {
+          capped_mid_shard = true;
+        }
+        smarker = std::move(out_marker);
+        formatter->flush(cout);
+      } while (truncated && remaining != 0);
+      const bool shard_truncated = truncated || capped_mid_shard;
+      formatter->close_section();  // entries
+      if (shard_truncated) {
+        encode_json("next_marker", smarker, formatter.get());
+        encode_json("truncated", true, formatter.get());
+      }
+      formatter->close_section();  // shard
+    }
+    formatter->close_section();  // shards
     formatter->flush(cout);
   }
   return 0;

@@ -29,11 +29,12 @@ public:
   virtual ~FilterPlacementTier() = default;
 
   virtual const std::string& get_tier_type() override { return next->get_tier_type(); }
-  virtual bool is_tier_type_s3() { return next->is_tier_type_s3(); }
+  virtual bool is_tier_type_s3() override { return next->is_tier_type_s3(); }
   virtual const std::string& get_storage_class() override { return next->get_storage_class(); }
   virtual bool retain_head_object() override { return next->retain_head_object(); }
-  virtual bool allow_read_through() { return next->allow_read_through(); }
-  virtual uint64_t get_read_through_restore_days() { return next->get_read_through_restore_days(); }
+  virtual bool allow_read_through() override { return next->allow_read_through(); }
+  virtual uint64_t get_read_through_restore_days() override { return next->get_read_through_restore_days(); }
+  virtual bool allow_delete_through() override { return next->allow_delete_through(); }
 
   /* Internal to Filters */
   PlacementTier* get_next() { return next.get(); }
@@ -293,6 +294,7 @@ public:
   virtual int cluster_stat(RGWClusterStat& stats) override;
   virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
   virtual std::unique_ptr<Restore> get_restore(void) override;
+  virtual std::unique_ptr<CloudDelete> get_cloud_delete(void) override;
   virtual bool process_expired_objects(const DoutPrefixProvider *dpp, optional_yield y) override;
 
   virtual std::unique_ptr<Notification> get_notification(rgw::sal::Object* obj,
@@ -385,6 +387,7 @@ public:
   }
   virtual RGWLC* get_rgwlc(void) override;
   virtual rgw::restore::Restore* get_rgwrestore(void) override;
+  virtual rgw::cloud_delete::CloudDelete* get_rgwcloud_delete(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 
   virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket,
@@ -1108,7 +1111,46 @@ public:
 				const std::string& oid,
 				const std::string& cookie) override;
 };
-  
+
+class FilterCloudDeleteSerializer : public CloudDeleteSerializer {
+protected:
+  std::unique_ptr<CloudDeleteSerializer> next;
+
+public:
+  FilterCloudDeleteSerializer(std::unique_ptr<CloudDeleteSerializer> _next)
+    : next(std::move(_next)) {}
+  ~FilterCloudDeleteSerializer() override = default;
+  int try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur, optional_yield y) override;
+  int unlock(const DoutPrefixProvider* dpp, optional_yield y) override
+	{ return next->unlock(dpp, y); }
+  void print(std::ostream& out) const override { return next->print(out); }
+};
+
+class FilterCloudDelete : public CloudDelete {
+protected:
+  std::unique_ptr<CloudDelete> next;
+
+public:
+  FilterCloudDelete(std::unique_ptr<CloudDelete> _next) : next(std::move(_next)) {}
+  ~FilterCloudDelete() override = default;
+
+  int initialize(const DoutPrefixProvider* dpp, optional_yield y,
+                 int n_objs, std::vector<std::string>& obj_names) override;
+  int enqueue(const DoutPrefixProvider* dpp, optional_yield y,
+              const rgw::cloud_delete::CloudDeleteEntry& entry) override;
+  int list_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                   int index, const std::string& marker,
+                   std::string* out_marker, uint32_t max_entries,
+                   std::vector<rgw::cloud_delete::CloudDeleteEntry>& entries,
+                   bool* truncated) override;
+  int trim_entries(const DoutPrefixProvider* dpp, optional_yield y,
+                   int index, const std::string& marker) override;
+  std::unique_ptr<CloudDeleteSerializer> get_serializer(
+                   const std::string& lock_name,
+                   const std::string& oid,
+                   const std::string& cookie) override;
+};
+
 class FilterNotification : public Notification {
 protected:
   std::unique_ptr<Notification> next;

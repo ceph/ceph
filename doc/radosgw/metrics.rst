@@ -74,6 +74,18 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
    * - list_bucket_lat
      - Gauge
      - Total latency of list bucket operations
+   * - cloud_delete_queued
+     - Counter
+     - Cloud delete operations enqueued
+   * - cloud_delete_success
+     - Counter
+     - Cloud delete operations succeeded
+   * - cloud_delete_fail
+     - Counter
+     - Cloud delete operations failed
+   * - cloud_delete_retry
+     - Counter
+     - Cloud delete operations retried
 
 There are three different sections in the output of the ``counter dump`` and ``counter schema`` commands that show the op metrics and their information.
 The sections are ``rgw_op``, ``rgw_op_per_user``, and ``rgw_op_per_bucket``.

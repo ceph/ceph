@@ -476,6 +476,26 @@ public:
   virtual ~StoreRestore() = default;
 };
 
+class StoreCloudDeleteSerializer : public CloudDeleteSerializer {
+
+protected:
+  std::string oid;
+
+public:
+  StoreCloudDeleteSerializer() {}
+  StoreCloudDeleteSerializer(std::string _oid) : oid(_oid) {}
+
+  virtual ~StoreCloudDeleteSerializer() = default;
+  virtual void print(std::ostream& out) const override { out << oid; }
+};
+
+class StoreCloudDelete : public CloudDelete {
+
+public:
+  StoreCloudDelete() = default;
+  virtual ~StoreCloudDelete() = default;
+};
+
 class StoreNotification : public Notification {
 protected:
   Object* obj;
