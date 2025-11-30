@@ -1713,6 +1713,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  transport_tcp_options: Optional[Dict[str, int]] =
                  {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
                  enable_dsa_acceleration: bool = False,
+                 rbd_with_crc32c: bool = False,
                  tgt_cmd_extra_args: Optional[str] = None,
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
@@ -1905,6 +1906,8 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
         #: ``enable_dsa_acceleration`` enable  dsa acceleration
         self.enable_dsa_acceleration = enable_dsa_acceleration
+        #: ``rbd_with_crc32c`` enable RBD CRC32C checksum reuse optimization
+        self.rbd_with_crc32c = rbd_with_crc32c
         #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
         self.tgt_cmd_extra_args = tgt_cmd_extra_args
         #: List of extra arguments for SPDK iobuf in the form opt=value
@@ -2099,6 +2102,8 @@ class NvmeofServiceSpec(ServiceSpec):
         verify_boolean(self.log_files_rotation_enabled, "Log files rotation enabled")
         verify_boolean(self.verbose_log_messages, "Verbose log messages")
         verify_boolean(self.enable_monitor_client, "Enable monitor client")
+        verify_boolean(self.enable_dsa_acceleration, "Enable DSA acceleration")
+        verify_boolean(self.rbd_with_crc32c, "Enable RBD CRC32C checksum reuse")
         verify_positive_int(self.spdk_mem_size, "SPDK memory size")
         verify_positive_int(self.spdk_huge_pages, "SPDK huge pages count")
         if self.spdk_mem_size and self.spdk_huge_pages:

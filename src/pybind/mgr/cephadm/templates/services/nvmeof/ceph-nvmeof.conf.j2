@@ -113,6 +113,7 @@ transports = {{ spec.transports }}
 transport_tcp_options = {{ transport_tcp_options }}
 {% endif %}
 enable_dsa_acceleration = {{ spec.enable_dsa_acceleration }}
+rbd_with_crc32c = {{ spec.rbd_with_crc32c }}
 {% if spec.tgt_cmd_extra_args %}
 tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}
