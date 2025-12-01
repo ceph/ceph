@@ -175,8 +175,8 @@ target_link_libraries(unittest_mclock_scheduler
 )
 
 # unittest ECOmapJournalEntry
-add_executable(unittest_ec_omap_journal_entry
-  test_ec_omap_journal_entry.cc
+add_executable(unittest_ec_omap_journal
+  test_ec_omap_journal.cc
 )
-add_ceph_unittest(unittest_ec_omap_journal_entry)
-target_link_libraries(unittest_ec_omap_journal_entry osd global ${BLKID_LIBRARIES})
+add_ceph_unittest(unittest_ec_omap_journal)
+target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})

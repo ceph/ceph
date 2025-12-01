@@ -59,7 +59,7 @@ struct RecoveryMessages;
 extern bool omap_journal_frozen;
 
 struct ECCommon {
-  std::list<ECOmapJournalEntry> ec_omap_journal;
+  ECOmapJournal ec_omap_journal;
 
   struct ec_extent_t {
     int err;

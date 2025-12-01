@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include "test/unit.cc"
 
-#include "osd/ECOmapJournalEntry.h"
+#include "osd/ECOmapJournal.h"
 
 TEST(ecomapjournalentry, construct_without_id)
 {
@@ -100,4 +100,42 @@ TEST(ecomapjournalentry, attributes_retained)
   ASSERT_TRUE(entry.clear_omap == clear_omap);
   ASSERT_TRUE(*entry.omap_header == omap_header_bl);
   ASSERT_TRUE(entry.omap_updates == omap_updates);
+}
+
+TEST(ecomapjournal, new_journal_starts_empty)
+{
+  ECOmapJournal journal;
+
+  // A new journal should start empty
+  ASSERT_EQ(0u, journal.size());
+}
+
+TEST(ecomapjournal, add_entry)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  journal.add_entry(entry1);
+
+  // The journal should contain the added entry
+  ASSERT_EQ(1u, journal.size());
+  ASSERT_TRUE(journal.begin()->id == entry1.id);
+}
+
+TEST(ecomapjournal, remove_entry)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  ECOmapJournalEntry entry2(false, std::nullopt, {});
+  ECOmapJournalEntry entry3(false, std::nullopt, {});
+  journal.add_entry(entry1);
+  journal.add_entry(entry2);
+  journal.add_entry(entry3);
+  journal.remove_entry(entry1);
+
+  // The journal should have 2 entries in it after removal
+  ASSERT_EQ(2u, journal.size());
+  ASSERT_TRUE(journal.begin()->id == entry2.id);
+  ASSERT_TRUE((++journal.begin())->id == entry3.id);
 }

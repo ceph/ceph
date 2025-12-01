@@ -56,7 +56,7 @@
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
 #include "ECTypes.h"
-#include "ECOmapJournalEntry.h"
+#include "ECOmapJournal.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 

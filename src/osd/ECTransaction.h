@@ -122,7 +122,7 @@ class Generate {
     WritePlanObj &plan,
     DoutPrefixProvider *dpp,
     pg_log_entry_t *entry,
-    std::list<ECOmapJournalEntry> &ec_omap_journal);
+    ECOmapJournal &ec_omap_journal);
 };
 
 void generate_transactions(
@@ -139,6 +139,6 @@ void generate_transactions(
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
     const OSDMapRef &osdmap,
-    std::list<ECOmapJournalEntry> &ec_omap_journal
+    ECOmapJournal &ec_omap_journal
   );
 }
