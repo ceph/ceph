@@ -490,6 +490,10 @@ ECTransaction::Generate::Generate(PGTransaction &t,
     plan(plan),
     read_sem(&sinfo),
     to_write(&sinfo) {
+  ldpp_dout(dpp, 20) << __func__ << ": " << oid
+		     << " partial_extents=" << partial_extents
+		     << " written_map=" << *written_map
+                     << dendl;
 
   vector<unsigned> old_transaction_counts(sinfo.get_k_plus_m());
 
