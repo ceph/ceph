@@ -37,12 +37,9 @@ export class RgwMultisiteRealmFormComponent extends BaseModal implements OnInit 
     @Optional() @Inject('resource') public resource: string,
     @Optional() @Inject('info') public info: any,
     @Optional() @Inject('multisiteInfo') public multisiteInfo: object[],
-    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[],
-    @Optional() @Inject('editing') public editing: boolean
+    @Optional() @Inject('defaultsInfo') public defaultsInfo: string[]
   ) {
     super();
-
-    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.createForm();
   }
 
