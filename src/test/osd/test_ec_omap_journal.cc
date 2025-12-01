@@ -132,10 +132,78 @@ TEST(ecomapjournal, remove_entry)
   journal.add_entry(entry1);
   journal.add_entry(entry2);
   journal.add_entry(entry3);
-  journal.remove_entry(entry1);
+  bool res = journal.remove_entry(entry1);
+  ASSERT_TRUE(res);
 
   // The journal should have 2 entries in it after removal
   ASSERT_EQ(2u, journal.size());
   ASSERT_TRUE(journal.begin()->id == entry2.id);
   ASSERT_TRUE((++journal.begin())->id == entry3.id);
+}
+
+TEST(ecomapjournal, remove_entry_by_id)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  ECOmapJournalEntry entry2(false, std::nullopt, {});
+  ECOmapJournalEntry entry3(false, std::nullopt, {});
+  journal.add_entry(entry1);
+  journal.add_entry(entry2);
+  journal.add_entry(entry3);
+  bool res = journal.remove_entry_by_id(entry2.id);
+  ASSERT_TRUE(res);
+
+  // The journal should have 2 entries in it after removal
+  ASSERT_EQ(2u, journal.size());
+  ASSERT_TRUE(journal.begin()->id == entry1.id);
+  ASSERT_TRUE((++journal.begin())->id == entry3.id);
+}
+
+TEST(ecomapjournal, clear_journal)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  ECOmapJournalEntry entry2(false, std::nullopt, {});
+  journal.add_entry(entry1);
+  journal.add_entry(entry2);
+  journal.clear();
+
+  // The journal should be empty after clearing
+  ASSERT_EQ(0u, journal.size());
+}
+
+TEST(ecomapjournal, remove_bad_entry)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  ECOmapJournalEntry entry2(false, std::nullopt, {});
+  journal.add_entry(entry1);
+
+  // Attempting to remove an entry not in the journal should fail
+  bool res = journal.remove_entry(entry2);
+  ASSERT_FALSE(res);
+
+  // The journal should still have 1 entry in it after failed removal
+  ASSERT_EQ(1u, journal.size());
+  ASSERT_TRUE(journal.begin()->id == entry1.id);
+}
+
+TEST(ecomapjournal, remove_bad_entry_by_id)
+{
+  ECOmapJournal journal;
+
+  ECOmapJournalEntry entry1(false, std::nullopt, {});
+  ECOmapJournalEntry entry2(false, std::nullopt, {});
+  journal.add_entry(entry1);
+
+  // Attempting to remove an entry not in the journal should fail
+  bool res = journal.remove_entry_by_id(entry2.id);
+  ASSERT_FALSE(res);
+
+  // The journal should still have 1 entry in it after failed removal
+  ASSERT_EQ(1u, journal.size());
+  ASSERT_TRUE(journal.begin()->id == entry1.id);
 }
