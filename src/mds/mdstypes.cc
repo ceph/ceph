@@ -763,12 +763,12 @@ void MDSCacheObjectInfo::generate_test_instances(std::list<MDSCacheObjectInfo*>&
   ls.push_back(new MDSCacheObjectInfo);
   ls.push_back(new MDSCacheObjectInfo);
   ls.back()->ino = 1;
-  ls.back()->dirfrag = dirfrag_t(2, 3);
+  ls.back()->dirfrag = dirfrag_t(2, frag_t((1<<22), 2));
   ls.back()->dname = "fooname";
   ls.back()->snapid = CEPH_NOSNAP;
   ls.push_back(new MDSCacheObjectInfo);
   ls.back()->ino = 121;
-  ls.back()->dirfrag = dirfrag_t(222, 0);
+  ls.back()->dirfrag = dirfrag_t(222, frag_t((1<<19), 8));
   ls.back()->dname = "bar foo";
   ls.back()->snapid = 21322;
 }
