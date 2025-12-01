@@ -1169,29 +1169,21 @@ PGBackend::get_attr_ierrorator::future<> PGBackend::get_xattrs(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  auto get_attrs_maybe_from_cache =
-    [&] () -> get_attr_errorator::future<crimson::os::FuturizedStore::Shard::attrs_t> {
-    if (!std::empty(attr_cache)) {
-      return get_attr_errorator::make_ready_future<
-	crimson::os::FuturizedStore::Shard::attrs_t>(attr_cache);
-    }
+  if (std::empty(attr_cache)) {
     return crimson::ct_error::enodata::make();
-  };
-  return get_attrs_maybe_from_cache().safe_then(
-    [&delta_stats, &osd_op](auto&& attrs) {
-    std::vector<std::pair<std::string, bufferlist>> user_xattrs;
-    ceph::bufferlist bl;
-    for (auto& [key, val] : attrs) {
-      if (key.size() > 1 && key[0] == '_') {
-	bl.append(std::move(val));
-	user_xattrs.emplace_back(key.substr(1), std::move(bl));
-      }
+  }
+  std::vector<std::pair<std::string, bufferlist>> user_xattrs;
+  ceph::bufferlist bl;
+  for (auto& [key, val] : attr_cache) {
+    if (key.size() > 1 && key[0] == '_') {
+      bl.append(std::move(val));
+      user_xattrs.emplace_back(key.substr(1), std::move(bl));
     }
-    ceph::encode(user_xattrs, osd_op.outdata);
-    delta_stats.num_rd++;
-    delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
-    return get_attr_errorator::now();
-  });
+  }
+  ceph::encode(user_xattrs, osd_op.outdata);
+  delta_stats.num_rd++;
+  delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+  return get_attr_errorator::now();
 }
 
 namespace {
