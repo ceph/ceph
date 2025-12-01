@@ -46,9 +46,9 @@ void frag_t::dump(ceph::Formatter *f) const {
 }
 
 void frag_t::generate_test_instances(std::list<frag_t*>& ls) {
-  ls.push_back(new frag_t);
-  ls.push_back(new frag_t(10, 2));
-  ls.push_back(new frag_t(11, 3));
+  ls.emplace_back(new frag_t);
+  ls.push_back(new frag_t((1<<22), 2));
+  ls.push_back(new frag_t((1<<21), 3));
 }
 
 std::ostream& operator<<(std::ostream& out, const frag_t& hb)
