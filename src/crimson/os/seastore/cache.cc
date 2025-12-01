@@ -1301,6 +1301,7 @@ record_t Cache::prepare_record(
     if (is_rewrite_transaction(t.get_src()) &&
         !is_root_type(i->get_type())) {
       i->new_committer(t);
+      i->committer->block_trans(t);
     }
     assert(i->is_exist_mutation_pending() ||
 	   i->prior_instance);
@@ -1573,6 +1574,7 @@ record_t Cache::prepare_record(
       if (is_lba_backref_node(i->get_type())) {
         committer.sync_checksum();
       }
+      committer.block_trans(t);
       i->get_prior_instance()->set_io_wait(
         CachedExtent::extent_state_t::CLEAN, true);
     }
@@ -1939,6 +1941,7 @@ void Cache::complete_commit(
         committer.share_prior_data_to_pending();
       }
       touch_extent_fully(prior, &t_src, t.get_cache_hint());
+      committer.unblock_trans(t);
       prior.complete_io();
       i->committer.reset();
       prior.committer.reset();
@@ -2015,6 +2018,7 @@ void Cache::complete_commit(
         t, *i, *i->prior_instance);
       assert(i->committer);
       auto &committer = *i->committer;
+      committer.unblock_trans(t);
       auto &prior = *i->prior_instance;
       prior.pending_for_transaction = TRANS_ID_NULL;
       ceph_assert(prior.is_valid());
