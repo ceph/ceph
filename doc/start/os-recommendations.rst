@@ -82,11 +82,6 @@ This table shows the operating systems that support Ceph's official container im
 
 - **H**: Ceph tests this distribution as a container host.
 
-.. note:: See the list of QAed container hosts in the Ceph repository here:
-   `List of Container Hosts
-   <https://github.com/ceph/ceph/tree/main/qa/distros/supported-container-hosts>`_.
-
-
 .. _CRUSH Tunables: ../../rados/operations/crush-map#tunables
 
 .. _Mounting CephFS using Kernel Driver: ../../cephfs/mount-using-kernel-driver#which-kernel-version
