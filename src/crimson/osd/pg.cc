@@ -1926,4 +1926,73 @@ void PG::send_message_osd_cluster(int osd, MOSDPGPush* msg, epoch_t from_epoch)
   }
 }
 
+void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
+                                          eversion_t previous_version,
+                                          const pg_log_entry_t &entry)
+{
+  assert(info != nullptr);
+  if (entry.written_shards.empty() && info->partial_writes_last_complete.empty()) {
+    return;
+  }
+  logger().debug("{}: version version={} written_shards={}"
+                 "present_shards={} pwlc={} previous_version={}",
+                 __func__,
+                 entry.version,
+                 entry.written_shards,
+                 entry.present_shards,
+                 info->partial_writes_last_complete,
+                 previous_version);
+  const pg_pool_t &pool = pg->get_pool();
+  for (shard_id_t shard : pool.nonprimary_shards) {
+    auto pwlc_iter = info->partial_writes_last_complete.find(shard);
+    if (!entry.is_written_shard(shard)) {
+      if (pwlc_iter == info->partial_writes_last_complete.end()) {
+	// 1st partial write since all logs were updated
+	info->partial_writes_last_complete[shard] =
+	  std::pair(previous_version, entry.version);
+
+	continue;
+      }
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      if (old_v == new_v) {
+        if (old_v.version == eversion_t::max().version) {
+	  // shard is backfilling or in async recovery, pwlc is
+	  // invalid
+          logger().debug("{}: pwlc invalid {}", __func__, shard);
+	} else if (old_v.version >= entry.version.version) {
+	  // Abnormal case - consider_adjusting_pwlc may advance pwlc
+	  // during peering because all shards have updates but these
+	  // have not been marked complete. At the end of peering
+	  // partial_write catches up with these entries - these need
+	  // to be ignored to preserve old_v.epoch
+          logger().debug("{}: pwlc is ahead of entry {}", __func__, shard);
+	} else {
+	  old_v = previous_version;
+	  new_v = entry.version;
+	}
+      } else if (new_v == previous_version) {
+	// Subsequent partial write, contiguous versions
+	new_v = entry.version;
+      } else {
+	// Subsequent partial write, discontiguous versions
+        logger().debug("{}: cannot update shard {}", __func__, shard);
+      }
+    } else if (pwlc_iter != info->partial_writes_last_complete.end()) {
+      auto &&[old_v,  new_v] = pwlc_iter->second;
+      // Log updated or shard absent, partial write entry is a no-op
+      if (old_v.version == eversion_t::max().version) {
+	// shard is backfilling or in async recovery, pwlc is invalid
+        logger().debug("{}: pwlc invalid {}", __func__, shard);
+      } else if (old_v.version >= entry.version.version) {
+	// Abnormal case - see above
+        logger().debug("{}: pwlc is ahead of entry {}", __func__, shard);
+      } else {
+	old_v = new_v = entry.version;
+      }
+    }
+  }
+  logger().debug("{}: after pwlc={}",
+                 __func__, info->partial_writes_last_complete);
+}
+
 }
