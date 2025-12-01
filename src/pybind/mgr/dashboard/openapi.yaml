@@ -3720,6 +3720,187 @@ paths:
       - jwt: []
       tags:
       - Cephfs
+  /api/certificate:
+    get:
+      description: "\n        List all certificates configured in the cluster.\n\n\
+        \        This endpoint returns a list of all certificates managed by certmgr,\n\
+        \        including both user-provided and cephadm-signed certificates.\n\n\
+        \        :param status: Filter by certificate status. Valid values: 'expired',\n\
+        \            'expiring', 'valid', 'invalid'\n        :param scope: Filter\
+        \ by certificate scope. Valid values: 'SERVICE',\n            'HOST', 'GLOBAL'\n\
+        \        :param service_name: Filter by certificate name. Supports wildcards\n\
+        \            (e.g., 'rgw*')\n        :param include_cephadm_signed: If True,\
+        \ include cephadm-signed certificates.\n            If False (default), only\
+        \ user-provided certificates are returned.\n            Can be boolean or\
+        \ string ('true'/'false').\n        :return: List of certificate objects with\
+        \ their details\n        "
+      parameters:
+      - allowEmptyValue: true
+        description: Filter by certificate status (e.g., "expired", "expiring", "valid",
+          "invalid")
+        in: query
+        name: status
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Filter by certificate scope (e.g., "SERVICE", "HOST", "GLOBAL")
+        in: query
+        name: scope
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: Filter by certificate name (e.g., "rgw*")
+        in: query
+        name: service_name
+        schema:
+          type: string
+      - default: false
+        description: 'Include cephadm-signed certificates in the list (default: False)'
+        in: query
+        name: include_cephadm_signed
+        schema:
+          type: boolean
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v2.0+json:
+              schema:
+                items:
+                  properties:
+                    cert_name:
+                      description: Certificate name
+                      type: string
+                    common_name:
+                      description: Certificate common name (CN)
+                      type: string
+                    days_to_expiration:
+                      description: Days remaining until expiration
+                      type: integer
+                    expiry_date:
+                      description: Certificate expiration date
+                      type: string
+                    issuer:
+                      description: Certificate issuer distinguished name
+                      type: string
+                    key_size:
+                      description: Public key size in bits
+                      type: integer
+                    key_type:
+                      description: Public key type (RSA, ECC, etc.)
+                      type: string
+                    scope:
+                      description: Certificate scope (SERVICE, HOST, or GLOBAL)
+                      type: string
+                    signed_by:
+                      description: Certificate issuer (user or cephadm)
+                      type: string
+                    status:
+                      description: Certificate status (valid, expiring, expired, invalid)
+                      type: string
+                    subject:
+                      description: Certificate subject details
+                      items:
+                        type: object
+                      type: array
+                    target:
+                      description: Certificate target (service name or hostname)
+                      type: string
+                  type: object
+                required:
+                - cert_name
+                - scope
+                - signed_by
+                - status
+                - days_to_expiration
+                - expiry_date
+                - issuer
+                - common_name
+                - target
+                - subject
+                - key_type
+                - key_size
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List All Certificates
+      tags:
+      - Certificate
+  /api/certificate/root-ca:
+    get:
+      description: "\n        Get the cephadm root CA certificate.\n\n        This\
+        \ endpoint returns the root Certificate Authority (CA) certificate\n     \
+        \   used by cephadm to sign other certificates in the cluster.\n\n       \
+        \ :return: Dictionary with certificate field containing root CA certificate\
+        \ in PEM format\n        "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                properties:
+                  certificate:
+                    description: Root CA certificate in PEM format
+                    type: string
+                required:
+                - certificate
+                type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get Root CA Certificate
+      tags:
+      - Certificate
+  /api/certificate/{service_name}:
+    get:
+      description: "\n        Get detailed certificate information for a service.\n\
+        \n        :param service_name: The service name, e.g. 'rgw.myzone'.\n    \
+        \    :return: Detailed certificate information including full certificate\
+        \ details\n        "
+      parameters:
+      - in: path
+        name: service_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Certificate
   /api/cluster:
     get:
       parameters: []
@@ -19434,6 +19615,8 @@ tags:
   name: CephfsSubvolumeGroup
 - description: Cephfs Subvolume Snapshot Management API
   name: CephfsSubvolumeSnapshot
+- description: Certificate Management API
+  name: Certificate
 - description: Get Cluster Details
   name: Cluster
 - description: Manage Cluster Configurations
