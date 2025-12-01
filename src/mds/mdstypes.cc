@@ -842,7 +842,7 @@ void MDSCacheObjectInfo::decode(bufferlist::const_iterator& p)
 void MDSCacheObjectInfo::dump(Formatter *f) const
 {
   f->dump_unsigned("ino", ino);
-  f->dump_stream("dirfrag") << dirfrag;
+  f->dump_object("dirfrag", dirfrag);
   f->dump_string("name", dname);
   f->dump_unsigned("snapid", snapid);
 }
