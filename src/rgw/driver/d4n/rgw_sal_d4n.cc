@@ -653,6 +653,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               std::string* etag,
                               void (*progress_cb)(off_t, void *),
                               void* progress_data,
+                              rgw::sal::DataProcessorFactory* dp_factory,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
@@ -684,7 +685,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                            mod_ptr, unmod_ptr, high_precision_time, if_match,
                            if_nomatch, attrs_mod, copy_if_newer, attrs,
                            category, olh_epoch, delete_at, version_id, tag,
-                           etag, progress_cb, progress_data, dpp, y);
+                           etag, progress_cb, progress_data, dp_factory, dpp, y);
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): next->copy_object failed with ret: " << ret << dendl;
       return ret;
