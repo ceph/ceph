@@ -617,11 +617,7 @@ public:
     void partial_write(pg_info_t *info,
                        eversion_t previous_version,
                        const pg_log_entry_t &entry
-      ) override {
-      // TODO
-      ceph_assert(entry.written_shards.empty() &&
-                  info->partial_writes_last_complete.empty());
-    }
+      ) override;
   };
   PGLog::LogEntryHandlerRef get_log_handler(
     ceph::os::Transaction &t) final {
