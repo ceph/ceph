@@ -14,6 +14,8 @@ overrides:
         seastore max concurrent transactions: 8
     crimson_compat: true
 
+  cephadm:
+    crimson_compat: true
   cephadm.apply:
     specs:
       - service_type: osd
