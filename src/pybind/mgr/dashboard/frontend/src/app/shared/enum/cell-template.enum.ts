@@ -113,6 +113,18 @@ export enum CellTemplate {
   // }
   // you can also use '::prop' in the redirectLink array to replace it with the cell value.
   // e.g ['dashboard', '::prop', 'details']
+  //
+  // if you want to use some other property of the row for redirection instead of the cell value,
+  // you can use the 'customRowProperty' property in the customTemplateConfig to specify
+  // the property name.
+  // {
+  //    ...
+  //    cellTransformation: CellTemplate.redirect,
+  //    customTemplateConfig: {
+  //          customRowProperty: 'otherPropertyName'}
+  //    }
+  //    ...
+  // }
   */
   redirect = 'redirect'
 }
