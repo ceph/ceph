@@ -108,12 +108,12 @@ namespace rgw::dedup {
       inline uint16_t        get_count() { return this->count; }
       inline disk_block_id_t get_src_block_id() { return this->block_idx; }
       inline record_id_t     get_src_rec_id() { return this->rec_id; }
+      inline bool has_valid_hash() const {return flags.has_valid_hash(); }
     private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
       inline void inc_count() { count ++; }
       inline void reset_count() { count = 0; }
       inline void clear_flags() { flags.clear(); }
-      inline bool has_valid_hash() const {return flags.has_valid_hash(); }
       inline void set_has_valid_hash_src() { this->flags.set_has_valid_hash(); }
       inline bool is_singleton() const { return (count == 1); }
       inline bool is_occupied() const { return flags.is_occupied(); }
@@ -172,7 +172,11 @@ namespace rgw::dedup {
     static_assert(sizeof(table_entry_t) == 32);
 
     uint32_t find_entry(const key_t *p_key) const;
-    uint32_t       values_count = 0;
+    void     inc_counters(const key_t *p_key,
+                          dedup_stats_t *p_small_objs,
+                          dedup_stats_t *p_big_objs,
+                          uint64_t *p_duplicate_head_bytes);
+
     uint32_t       entries_count = 0;
     uint32_t       occupied_count = 0;
     uint32_t       head_object_size;

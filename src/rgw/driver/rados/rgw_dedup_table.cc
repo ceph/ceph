@@ -34,7 +34,6 @@ namespace rgw::dedup {
     memset(p_slab, 0, slab_size);
     hash_tab = (table_entry_t*)p_slab;
     entries_count = slab_size/sizeof(table_entry_t);
-    values_count = 0;
     occupied_count = 0;
   }
 
@@ -113,17 +112,16 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void inc_counters(const key_t *p_key,
-                           uint32_t head_object_size,
-                           dedup_stats_t *p_small_objs,
-                           dedup_stats_t *p_big_objs,
-                           uint64_t *p_duplicate_head_bytes)
+  void dedup_table_t::inc_counters(const key_t *p_key,
+                                   dedup_stats_t *p_small_objs,
+                                   dedup_stats_t *p_big_objs,
+                                   uint64_t *p_duplicate_head_bytes)
   {
     // This is an approximation only since size is stored in 4KB resolution
     uint64_t byte_size_approx = disk_blocks_to_byte_size(p_key->size_4k_units);
 
     // skip small single part objects which we can't dedup
-    if (!p_key->multipart_object() && (byte_size_approx <= head_object_size)) {
+    if (!dedupable_object(p_key->multipart_object(), min_obj_size_for_dedup, byte_size_approx)) {
       p_small_objs->duplicate_count ++;
       p_small_objs->dedup_bytes_estimate += byte_size_approx;
       return;
@@ -139,7 +137,7 @@ namespace rgw::dedup {
 
       // object smaller than max_obj_size_for_split will split their head
       // and won't dup it
-      if (!key.multipart_object() && byte_size_approx > max_obj_size_for_split) {
+      if (!p_key->multipart_object() && byte_size_approx > max_obj_size_for_split) {
         // single part objects duplicate the head object when dedup is used
         *p_duplicate_head_bytes += head_object_size;
       }
@@ -174,8 +172,7 @@ namespace rgw::dedup {
     else {
       ceph_assert(hash_tab[idx].key == *p_key);
       if (val.count <= MAX_COPIES_PER_OBJ) {
-        inc_counters(p_key, head_object_size, p_small_objs, p_big_objs,
-                     p_duplicate_head_bytes);
+        inc_counters(p_key, p_small_objs, p_big_objs, p_duplicate_head_bytes);
       }
       if (val.count < std::numeric_limits<std::uint16_t>::max()) {
         val.count ++;
@@ -190,7 +187,6 @@ namespace rgw::dedup {
       }
       ceph_assert(val.count > 1);
     }
-    values_count++;
     ldpp_dout(dpp, 20) << __func__ << "::COUNT="<< val.count << dendl;
     return 0;
   }
