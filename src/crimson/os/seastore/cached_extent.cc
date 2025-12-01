@@ -18,6 +18,8 @@ namespace {
   }
 }
 
+SET_SUBSYS(seastore_cache);
+
 namespace crimson::os::seastore {
 
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -470,6 +472,26 @@ void CachedExtent::new_committer(Transaction &t) {
   assert(prior_instance);
   assert(!prior_instance->committer);
   prior_instance->committer = committer;
+}
+
+void ExtentCommitter::block_trans(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::block_trans);
+  auto &prior = *extent.prior_instance;
+  for (auto &item : prior.read_transactions) {
+    TRACET("blocking trans {} for rewriting {}",
+      t, item.t->get_trans_id(), *item.ref);
+    item.t->need_wait_rewrite = true;
+  }
+}
+
+void ExtentCommitter::unblock_trans(Transaction &t) {
+  LOG_PREFIX(ExtentCommitter::unblock_trans);
+  auto &prior = *extent.prior_instance;
+  for (auto &item : prior.read_transactions) {
+    TRACET("unblocking trans {} for rewriting {}",
+      t, item.t->get_trans_id(), *item.ref);
+    item.t->need_wait_rewrite = false;
+  }
 }
 
 }
