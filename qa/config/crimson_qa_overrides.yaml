@@ -13,6 +13,19 @@ overrides:
         seastore cachepin size pershard: 64M
         seastore max concurrent transactions: 8
     crimson_compat: true
+
+  cephadm.apply:
+    specs:
+      - service_type: osd
+        service_id: osd.crimson
+        placement:
+          host_pattern: "*"
+        data_devices:
+          all: true
+        extra_container_args:
+          - "-v"
+          - "/usr/bin/ceph-osd-crimson:/usr/bin/ceph-osd"
+
   workunit:
     env:
       CRIMSON_COMPAT: '1'
