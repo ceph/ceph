@@ -341,6 +341,7 @@ function create_objects_2()
 # Parameters:
 # $1: the test directory
 # $2: [in/out] an array of configuration values
+# $3: test name to appear in the output
 #
 # Argument 2 might look like this:
 # (note: the dict contains all the elements required by standard_scrub_cluster,
@@ -353,6 +354,7 @@ function create_objects_2()
 # - pool_default_size: size of the pool
 # - objects_per_pg: average number of objects per PG
 # - object_size: size of each object in bytes
+# - stride: deep-scrub stride (bytes); if 0 - use default
 # - modify_as_prim_cnt: number of objects to corrupt their Primary version
 # - modify_as_repl_cnt: number of objects to corrupt one of their replicas
 # - manipulations: a list of functions to perform on the objects
@@ -368,6 +370,7 @@ function create_objects_2()
 #    ['msg']="Test message"
 #    ['objects_per_pg']="100"
 #    ['object_size']="256"
+#    ['stride']="1048576"
 #    ['modify_as_prim_cnt']="10" # elements to corrupt their Primary version
 #    ['modify_as_repl_cnt']="10" # elements to corrupt one of their replicas
 #    ['manipulations']="delete_oi rm_object" the list of manipulations to perform
@@ -376,6 +379,7 @@ function corrupt_and_measure()
 {
   local dir=$1
   local -n alargs=$2
+  local test_name=$3
 
   local OSDS=${alargs['osds_num']}
   local PGS=${alargs['pgs_in_pool']}
@@ -383,6 +387,7 @@ function corrupt_and_measure()
   local OBJECT_SIZE=${alargs['object_size']:-256}
   local modify_as_prim_cnt=${alargs['modify_as_prim_cnt']}
   local modify_as_repl_cnt=${alargs['modify_as_repl_cnt']}
+  local stride_override=${alargs['stride']:-0}
 
   local objects=$(($PGS * $OBJS_PER_PG))
   # the total number of corrupted objects cannot exceed the number of objects
@@ -409,14 +414,20 @@ function corrupt_and_measure()
   set -x
 
   # Create some objects
-  #create_objects_2 "$dir" "$poolname" "$objects" 256 4 || return 1
   create_objects "$dir" "$poolname" "$objects" "$OBJECT_SIZE" 4 || return 1
 
   echo "Pre-wait-forclean: $(date +%T.%N)"
   wait_for_clean || return 1
   ceph osd pool stats
+  if (( stride_override > 0 )); then
+    echo "Setting osd_deep_scrub_stride to $stride_override"
+    ceph tell osd.* config set osd_deep_scrub_stride "$stride_override"
+  fi
   sleep 5
   ceph pg dump pgs
+  # the actual stride (either a default or the override value)
+  (( extr_dbg >= 1 )) && echo "Getting actual osd_deep_scrub_stride: " && ceph tell osd.0 config show | jq -r '.osd_deep_scrub_stride'
+  local actual_stride=$(ceph tell osd.0 config show | jq -r '.osd_deep_scrub_stride')
 
   echo "Pre dict creation: $(date +%T.%N)"
   local start_dict=$(date +%s%N)
@@ -472,7 +483,6 @@ function corrupt_and_measure()
   # disable rescheduling of the queue due to 'no-scrub' flags
   ceph tell osd.* config set osd_scrub_backoff_ratio 0.9999
 
-
   # --------------------------  step 2: corruption of objects --------------------------
 
   kill_daemons $dir TERM osd || return 1
@@ -502,6 +512,14 @@ function corrupt_and_measure()
   ceph tell osd.* config set osd_scrub_chunk_max 5
   ceph tell osd.* config set osd_shallow_scrub_chunk_max 5
   ceph tell osd.* config set osd_scrub_backoff_ratio 0.9999
+  if (( stride_override > 0 )); then
+    echo "Setting osd_deep_scrub_stride to $stride_override"
+    ceph tell osd.* config set osd_deep_scrub_stride "$stride_override"
+  fi
+  sleep 5
+  ceph pg dump pgs
+  # the actual stride (either a default or the override value)
+  (( extr_dbg >= 1 )) && echo "Getting actual osd_deep_scrub_stride: " && ceph tell osd.0 config show | jq -r '.osd_deep_scrub_stride'
 
   # no auto-repair
   ceph tell osd.* config set osd_scrub_auto_repair false
@@ -542,8 +560,9 @@ function corrupt_and_measure()
 
   sleep 2
   ceph pg dump pgs
-  printf 'MSR NAUT %3d %3d %3d %3d/%3d %6d\n' "$OSDS" "$PGS" "$OBJS_PER_PG" \
-                      "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$duration"
+  printf 'MSR @%15s@ NAUT %3d %3d %3d %3d/%3d %7d %7d/%7d %6d\n' "$test_name" "$OSDS" "$PGS" "$OBJS_PER_PG" \
+                      "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$OBJECT_SIZE" "$actual_stride" \
+                      "$stride_override"  "$duration"
   for pg in "${!pg_pr[@]}"; do
     echo "list-inconsistent for PG $pg"
     rados -p $poolname list-inconsistent-obj $pg --format=json-pretty | jq '.' | wc -l
@@ -579,8 +598,9 @@ function corrupt_and_measure()
 
   sleep 5
   ceph pg dump pgs
-  printf 'MSR REPR %3d %3d %3d %3d/%3d %6d\n' "$OSDS" "$PGS" "$OBJS_PER_PG" \
-                     "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$duration"
+  printf 'MSR @%15s@ REPR %3d %3d %3d %3d/%3d %7d %7d/%7d %6d\n' "$test_name" "$OSDS" "$PGS" "$OBJS_PER_PG" \
+                      "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$OBJECT_SIZE" "$actual_stride" \
+                      "$stride_override"  "$duration"
   dump_scrub_counters "$dir" "$OSDS" "After repair"
 
   # -- collecting some data after the repair
@@ -612,8 +632,9 @@ function corrupt_and_measure()
   wait_for_pool_scrubbed "$dir" "$poolid" saved_last_stamp
   end_time=$(date +%s%N)
   duration=$(( (end_time - start_time)/1000000 ))
-  printf 'MSR REDE %3d %3d %3d %3d/%3d %6d\n' "$OSDS" "$PGS" "$OBJS_PER_PG" \
-                     "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$duration"
+  printf 'MSR @%15s@ REDE %3d %3d %3d %3d/%3d %7d %7d/%7d %6d\n' "$test_name" "$OSDS" "$PGS" "$OBJS_PER_PG" \
+                      "$modify_as_prim_cnt" "$modify_as_repl_cnt" "$OBJECT_SIZE" "$actual_stride" \
+                      "$stride_override"  "$duration"
   sleep 3
   ceph pg dump pgs
   dump_scrub_counters "$dir" "$OSDS" "Final"
@@ -627,7 +648,7 @@ function corrupt_and_measure()
 function TEST_time_measurements_basic_1()
 {
   # the following is enough to trigger the 'auto-repair operator-repair' bug
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="8"
     ['pool_name']="test"
@@ -638,12 +659,12 @@ function TEST_time_measurements_basic_1()
     ['modify_as_repl_cnt']="24" # elements to corrupt one of their replicas
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "basic_1" || return 1
 }
 
 function TEST_rmobj_1()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="4"
     ['pool_name']="test"
@@ -654,12 +675,12 @@ function TEST_rmobj_1()
     ['modify_as_repl_cnt']="2"
     ['manipulations']="rm_object"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "rmobj_1" || return 1
 }
 
 function TEST_time_measurements_basic_2()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="4"
     ['pool_name']="test"
@@ -670,12 +691,12 @@ function TEST_time_measurements_basic_2()
     ['modify_as_repl_cnt']="0"
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "basic_2" || return 1
 }
 
 function TEST_time_measurements_basic_2b()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="8"
     ['pool_name']="test"
@@ -686,12 +707,12 @@ function TEST_time_measurements_basic_2b()
     ['modify_as_repl_cnt']="10"
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "basic_2b" || return 1
 }
 
 function TEST_time_measurements_basic_2c()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="4"
     ['pool_name']="test"
@@ -702,12 +723,12 @@ function TEST_time_measurements_basic_2c()
     ['modify_as_repl_cnt']="10"
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "basic_2c" || return 1
 }
 
 function TEST_time_measurements_basic_3()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="4"
     ['pgs_in_pool']="16"
     ['pool_name']="test"
@@ -718,12 +739,12 @@ function TEST_time_measurements_basic_3()
     ['modify_as_repl_cnt']="10"
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "basic_3" || return 1
 }
 
 function TEST_time_large_objects()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="8"
     ['pool_name']="test"
@@ -735,13 +756,12 @@ function TEST_time_large_objects()
     ['modify_as_repl_cnt']="10"
     ['manipulations']="rm_object"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "large_obj" || return 1
 }
-
 
 function TEST_time_large_objects_2()
 {
-  local -A cls_conf=(
+  local -A cluster_conf=(
     ['osds_num']="3"
     ['pgs_in_pool']="8"
     ['pool_name']="test"
@@ -753,7 +773,62 @@ function TEST_time_large_objects_2()
     ['modify_as_repl_cnt']="20"
     ['manipulations']="delete_oi"
   )
-  corrupt_and_measure "$1" cls_conf || return 1
+  corrupt_and_measure "$1" cluster_conf "large_obj_2" || return 1
+}
+
+function TEST_time_large_objects_2b()
+{
+  local -A cluster_conf=(
+    ['osds_num']="3"
+    ['pgs_in_pool']="8"
+    ['pool_name']="test"
+    ['pool_default_size']="3"
+    ['msg']="large_objs"
+    ['objects_per_pg']="8"
+    ['object_size']="4194300" # 4MB - 4bytes
+    ['stride']="4194304" # 4MB
+    ['modify_as_prim_cnt']="20"
+    ['modify_as_repl_cnt']="20"
+    ['manipulations']="delete_oi"
+  )
+  corrupt_and_measure "$1" cluster_conf "large_obj_2b" || return 1
+}
+
+
+function TEST_time_large_objects_2bs1M()
+{
+  local -A cluster_conf=(
+    ['osds_num']="3"
+    ['pgs_in_pool']="8"
+    ['pool_name']="test"
+    ['pool_default_size']="3"
+    ['msg']="large_objs"
+    ['objects_per_pg']="8"
+    ['object_size']="4194300" # 4MB - 4bytes
+    ['stride']="1048576" # 1MB
+    ['modify_as_prim_cnt']="20"
+    ['modify_as_repl_cnt']="20"
+    ['manipulations']="delete_oi"
+  )
+  corrupt_and_measure "$1" cluster_conf "large_obj_2bs1M" || return 1
+}
+
+function TEST_time_large_objects_3()
+{
+  // stride size unmodified from the default configuration value
+  local -A cluster_conf=(
+    ['osds_num']="3"
+    ['pgs_in_pool']="8"
+    ['pool_name']="test"
+    ['pool_default_size']="3"
+    ['msg']="large_objs"
+    ['objects_per_pg']="16"
+    ['object_size']="12582912" # 12MB
+    ['modify_as_prim_cnt']="20"
+    ['modify_as_repl_cnt']="20"
+    ['manipulations']="delete_oi"
+  )
+  corrupt_and_measure "$1" cluster_conf "large_obj_3" || return 1
 }
 
 main osd-scrub-dump "$@"

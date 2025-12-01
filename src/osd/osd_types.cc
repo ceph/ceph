@@ -7389,6 +7389,26 @@ auto ScrubMap::object::generate_test_instances() -> list<object>
   return o;
 }
 
+// -- ScrubMapBuilder --
+
+ostream& operator<<(ostream& out, const ScrubMapBuilder& bldr)
+{
+  return out << bldr.fmt_print();
+}
+
+std::string ScrubMapBuilder::fmt_print() const
+{
+  const string elem = pos < ls.size() ? fmt::format(" {}", ls[pos]) : "";
+  const string byte_pos = data_pos < 0 ? fmt::format(" byte {}", data_pos) : "";
+  const string key = !omap_pos.empty() ? fmt::format(" key {}", omap_pos) : "";
+  const string ret_s = ret ? fmt::format(" ret {}", ret) : "";
+
+  return fmt::format(
+    "({}/{}{} metadata_done {}{}{}{}{})",
+    pos, ls.size(), elem, static_cast<int>(metadata_done),
+    byte_pos, key, (deep ? " deep" : ""), ret_s);
+}
+
 // -- OSDOp --
 
 ostream& operator<<(ostream& out, const OSDOp& op)

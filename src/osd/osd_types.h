@@ -6649,26 +6649,9 @@ struct ScrubMapBuilder {
     omap_bytes = 0;
   }
 
-  friend std::ostream& operator<<(std::ostream& out, const ScrubMapBuilder& pos) {
-    out << "(" << pos.pos << "/" << pos.ls.size();
-    if (pos.pos < pos.ls.size()) {
-      out << " " << pos.ls[pos.pos];
-    }
-    out << " metadata_done " << pos.metadata_done;
-    if (pos.data_pos < 0) {
-      out << " byte " << pos.data_pos;
-    }
-    if (!pos.omap_pos.empty()) {
-      out << " key " << pos.omap_pos;
-    }
-    if (pos.deep) {
-      out << " deep";
-    }
-    if (pos.ret) {
-      out << " ret " << pos.ret;
-    }
-    return out << ")";
-  }
+  std::string fmt_print() const;
+
+  friend std::ostream& operator<<(std::ostream& out, const ScrubMapBuilder& pos);
 };
 
 struct watch_item_t {
