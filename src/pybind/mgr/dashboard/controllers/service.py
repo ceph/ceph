@@ -4,6 +4,7 @@ import cherrypy
 from ceph.deployment.service_spec import ServiceSpec
 
 from ..security import Scope
+from ..services.certificate import CertificateService
 from ..services.exception import handle_custom_error, handle_orchestrator_error
 from ..services.orchestrator import OrchClient, OrchFeature
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
@@ -36,7 +37,12 @@ class Service(RESTController):
         orch = OrchClient.instance()
         services, count = orch.services.list(service_name=service_name, offset=int(offset),
                                              limit=int(limit), search=search, sort=sort)
-        cherrypy.response.headers['X-Total-Count'] = count
+
+        # Get all certificates and enrich services with certificate status
+        cert_ls_data = CertificateService.fetch_all_certificates(orch)
+        CertificateService.enrich_services_with_certificates(orch, services, cert_ls_data)
+
+        cherrypy.response.headers['X-Total-Count'] = str(count)
         return services
 
     @raise_if_no_orchestrator([OrchFeature.SERVICE_LIST])
@@ -45,7 +51,14 @@ class Service(RESTController):
         services = orch.services.get(service_name)
         if not services:
             raise cherrypy.HTTPError(404, 'Service {} not found'.format(service_name))
-        return services[0].to_json()
+
+        service = services[0].to_json()
+
+        # Get all certificates and enrich single service
+        cert_ls_data = CertificateService.fetch_all_certificates(orch)
+        CertificateService.enrich_services_with_certificates(orch, [service], cert_ls_data)
+
+        return service
 
     @RESTController.Resource('GET')
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
