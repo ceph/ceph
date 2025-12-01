@@ -279,6 +279,8 @@ public:
   ExtentCommitter(CachedExtent &extent, Transaction &t)
     : extent(extent), t(t) {}
 
+  void block_trans(Transaction &);
+  void unblock_trans(Transaction &);
   // commit all extent states to the prior instance,
   // except poffset and extent content
   void commit_state();
