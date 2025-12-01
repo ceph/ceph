@@ -96,12 +96,7 @@ Dedup code can split the head object into 2 objects
 - a new tail-object with only data.
 
 The new-tail object will be deduped (unlike the head objects which can't be deduplicated)
-
-The split-Head mode is controlled by the following central configuration option:
-
-.. confval:: rgw_dedup_max_obj_size_for_split
-
-We will split head for objects with size smaller or equal to rgw_dedup_max_obj_size_for_split
+This feature is only enabled for RGW Objects without existing tail-objects (in other words object-size <= 4MB)
 
 ************
 Memory Usage

@@ -84,10 +84,16 @@ namespace rgw::dedup {
   using storage_class_idx_t = uint8_t;
 
   //---------------------------------------------------------------------------
-  [[maybe_unused]] static int print_manifest(const DoutPrefixProvider *dpp,
+  [[maybe_unused]] static int print_manifest(CephContext              *cct,
+                                             const DoutPrefixProvider *dpp,
                                              RGWRados                 *rados,
                                              const RGWObjManifest     &manifest)
   {
+    bool debug = cct->_conf->subsys.should_gather<ceph_subsys_rgw_dedup, 20>();
+    if (!debug) {
+      return 0;
+    }
+
     unsigned idx = 0;
     for (auto p = manifest.obj_begin(dpp); p != manifest.obj_end(dpp); ++p, ++idx) {
       rgw_raw_obj raw_obj = p.get_location().get_raw_obj(rados);
@@ -407,8 +413,9 @@ namespace rgw::dedup {
   {
     d_head_object_size = cct->_conf->rgw_max_chunk_size;
     d_min_obj_size_for_dedup = cct->_conf->rgw_dedup_min_obj_size_for_dedup;
-    d_max_obj_size_for_split = cct->_conf->rgw_dedup_max_obj_size_for_split;
 
+    // limit split head to objects without tail
+    d_max_obj_size_for_split = d_head_object_size;
     ldpp_dout(dpp, 10) << "Config Vals::d_head_object_size=" << d_head_object_size
                        << "::d_min_obj_size_for_dedup=" << d_min_obj_size_for_dedup
                        << "::d_max_obj_size_for_split=" << d_max_obj_size_for_split
@@ -618,10 +625,8 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   inline bool Background::should_split_head(uint64_t head_size, uint64_t obj_size)
   {
-    // max_obj_size_for_split of zero means don't split!
-    return (head_size > 0            &&
-            d_max_obj_size_for_split &&
-            obj_size <= d_max_obj_size_for_split);
+    // Don't split RGW objects with existing tail-objects
+    return (head_size > 0 && head_size == obj_size);
   }
 
   //---------------------------------------------------------------------------
@@ -1598,77 +1603,32 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  static void set_explicit_manifest(RGWObjManifest *p_manifest,
-                                    std::map<uint64_t, RGWObjManifestPart> &objs_map)
+  static void build_and_set_explicit_manifest(const DoutPrefixProvider *dpp,
+                                              const rgw_bucket *p_bucket,
+                                              const std::string &tail_name,
+                                              RGWObjManifest *p_manifest)
   {
     uint64_t obj_size = p_manifest->get_obj_size();
+    ceph_assert(obj_size == p_manifest->get_head_size());
+
+    const rgw_obj &head_obj = p_manifest->get_obj();
+    const rgw_obj_key &head_key = head_obj.key;
+    rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
+    rgw_obj tail_obj(*p_bucket, tail_key);
+
+    RGWObjManifestPart tail_part;
+    tail_part.loc     = tail_obj;
+    tail_part.loc_ofs = 0;
+    tail_part.size    = obj_size;
+
+    std::map<uint64_t, RGWObjManifestPart> objs_map;
+    objs_map[0] = tail_part;
+
     p_manifest->set_head_size(0);
     p_manifest->set_max_head_size(0);
     p_manifest->set_prefix("");
     p_manifest->clear_rules();
     p_manifest->set_explicit(obj_size, objs_map);
-  }
-
-  //---------------------------------------------------------------------------
-  // This code is based on RGWObjManifest::convert_to_explicit()
-  static void build_explicit_objs_map(const DoutPrefixProvider *dpp,
-                                      RGWRados *rados,
-                                      const RGWObjManifest &manifest,
-                                      const rgw_bucket *p_bucket,
-                                      std::map<uint64_t, RGWObjManifestPart> *p_objs_map,
-                                      const std::string &tail_name,
-                                      md5_stats_t *p_stats)
-  {
-    bool manifest_raw_obj_logged = false;
-    unsigned idx = 0;
-    auto p = manifest.obj_begin(dpp);
-    while (p != manifest.obj_end(dpp)) {
-      const uint64_t offset = p.get_stripe_ofs();
-      const rgw_obj_select& os = p.get_location();
-      ldpp_dout(dpp, 20) << __func__ << "::[" << idx <<"]OBJ: "
-                         << os.get_raw_obj(rados).oid << "::ofs=" << p.get_ofs()
-                         << "::strp_offset=" << offset << dendl;
-
-      RGWObjManifestPart& part = (*p_objs_map)[offset];
-      part.loc_ofs = 0;
-
-      if (offset == 0) {
-        ldpp_dout(dpp, 20) << __func__ << "::[" << idx <<"] HEAD OBJ: "
-                           << os.get_raw_obj(rados).oid << dendl;
-        const rgw_obj &head_obj = manifest.get_obj();
-        const rgw_obj_key &head_key = head_obj.key;
-        // TBD: Can we have different instance/ns values for head/tail ??
-        // Should we take the instance/ns from the head or tail?
-        // Maybe should refuse objects with different instance/ns on head/tail ?
-        rgw_obj_key tail_key(tail_name, head_key.instance, head_key.ns);
-        rgw_obj tail_obj(*p_bucket, tail_key);
-        part.loc = tail_obj;
-      }
-      else {
-        // RGWObjManifest::convert_to_explicit() is assuming raw_obj, but looking
-        // at the RGWObjManifest::obj_iterator code it is clear the obj is not raw.
-        // If it happens to be raw we still handle it correctly (and inc stat-count)
-        std::optional<rgw_obj> obj_opt = os.get_head_obj();
-        if (obj_opt.has_value()) {
-          part.loc = obj_opt.value();
-        }
-        else {
-          // report raw object in manifest only once
-          if (!manifest_raw_obj_logged) {
-            manifest_raw_obj_logged = true;
-            ldpp_dout(dpp, 10) << __func__ << "::WARN: obj is_raw" << dendl;
-            p_stats->manifest_raw_obj++;
-          }
-          const rgw_raw_obj& raw = os.get_raw_obj(rados);
-          RGWSI_Tier_RADOS::raw_obj_to_obj(*p_bucket, raw, &part.loc);
-        }
-      }
-
-      ++p;
-      uint64_t next_offset = p.get_stripe_ofs();
-      part.size = next_offset - offset;
-      idx++;
-    } // while (p != manifest.obj_end())
   }
 
   //---------------------------------------------------------------------------
@@ -1772,10 +1732,7 @@ namespace rgw::dedup {
                          << ret << dendl;
     }
 
-    std::map<uint64_t, RGWObjManifestPart> objs_map;
-    build_explicit_objs_map(dpp, rados, src_manifest, p_bucket, &objs_map,
-                            tail_name, p_stats);
-    set_explicit_manifest(&src_manifest, objs_map);
+    build_and_set_explicit_manifest(dpp, p_bucket, tail_name, &src_manifest);
 
     bufferlist manifest_bl;
     encode(src_manifest, manifest_bl);
