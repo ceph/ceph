@@ -653,7 +653,7 @@ public:
 
   /// Returns true iff extent is stable and not io-pending
   bool is_stable_ready() const {
-    return is_stable() && !is_pending_io();
+    return is_stable() && (!is_pending_io() || io_wait->rewriting);
   }
 
   /// Returns true if extent can not be mutated,
@@ -963,12 +963,13 @@ private:
   struct io_wait_t {
     seastar::shared_promise<> pr;
     extent_state_t from_state;
+    bool rewriting = false;
   };
   std::optional<io_wait_t> io_wait;
 
-  void set_io_wait(extent_state_t new_state) {
+  void set_io_wait(extent_state_t new_state, bool rewriting) {
     ceph_assert(!io_wait);
-    io_wait.emplace(seastar::shared_promise<>(), state);
+    io_wait.emplace(seastar::shared_promise<>(), state, rewriting);
     state = new_state;
     assert(is_data_stable());
   }
