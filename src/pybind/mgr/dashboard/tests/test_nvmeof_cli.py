@@ -23,7 +23,7 @@ def fixture_sample_command():
         b: int
 
     @NvmeofCLICommand(test_cmd, Model)
-    def func(_): # noqa # pylint: disable=unused-variable
+    def func(_):  # noqa # pylint: disable=unused-variable
         return {'a': '1', 'b': 2}
     yield test_cmd
     del NvmeofCLICommand.COMMANDS[test_cmd]
@@ -136,7 +136,7 @@ class TestNvmeofCLICommand:
 
         @NvmeofCLICommand(test_cmd, Model)
         @EndpointDoc(test_desc)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             return {'a': '1', 'b': 2}
 
         assert NvmeofCLICommand.COMMANDS[test_cmd].desc == test_desc
@@ -155,7 +155,7 @@ class TestNvmeofCLICommand:
 
         @NvmeofCLICommand(test_cmd, Model)
         @EndpointDoc(test_desc)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             """test docstr"""
             return {'a': '1', 'b': 2}
 
@@ -173,7 +173,7 @@ class TestNvmeofCLICommand:
             b: int
 
         @NvmeofCLICommand(test_cmd, Model, alias=test_alias)
-        def func(_): # noqa # pylint: disable=unused-variable
+        def func(_):  # noqa # pylint: disable=unused-variable
             return {'a': '1', 'b': 2}
 
         assert test_cmd in NvmeofCLICommand.COMMANDS
