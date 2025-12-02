@@ -7741,62 +7741,24 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetkeys, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return);
 
-  bufferlist bl;
+	bufferlist bl;
 	uint32_t num = 0;
 	bool truncated = false;
 	if (oi.is_omap()) {
-    // Updates in update_map take priority over removed_ranges
-    std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
-    get_pgbackend()->get_journal_updates(update_map, removed_ranges);
-
-    auto map_it = update_map.upper_bound(start_after);
-
-    const auto result = osd->store->omap_iterate(
+    const auto result = get_pgbackend()->omap_iterate(
       ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
       ObjectStore::omap_iter_seek_t{
         .seek_position = start_after,
         .seek_type = ObjectStore::omap_iter_seek_t::UPPER_BOUND
       },
-      [&bl, &num, max_return, &update_map, &removed_ranges, &map_it,
-	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
+      [&bl, &num, max_return,
+       max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
       (std::string_view key, std::string_view value) mutable {
-        // Add new keys from update map that come before the current key
-        std::string key_str(key);
-        while (map_it != update_map.end() && map_it->first < key_str) {
-          if (num >= max_return || bl.length() >= max_bytes) {
-            return ObjectStore::omap_iter_ret_t::STOP;
-          }
-          if (map_it->second.has_value()) {
-            encode(map_it->first, bl);
-            ++num;
-          }
-          ++map_it;
-        }
-
-	      if (num >= max_return || bl.length() >= max_bytes) {
+        if (num >= max_return || bl.length() >= max_bytes) {
           return ObjectStore::omap_iter_ret_t::STOP;
-	      }
-
-        auto it = update_map.find(key_str);
-        if (it != update_map.end()) {
-          if (map_it != update_map.end() && map_it->first == key_str) {
-            ++map_it; // Key already processed in the loop above
-          }
-          if (!it->second.has_value()) {
-            return ObjectStore::omap_iter_ret_t::NEXT;
-          }
-          encode(key, bl);
-          ++num;
-          return ObjectStore::omap_iter_ret_t::NEXT;
         }
-
-        if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
-          return ObjectStore::omap_iter_ret_t::NEXT;
-        }
-
         encode(key, bl);
-	      ++num;
+        ++num;
         return ObjectStore::omap_iter_ret_t::NEXT;
       });
     if (result < 0) {
@@ -7804,18 +7766,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  } else if (const auto more = static_cast<bool>(result); more) {
 	    truncated = true;
 	  }
-
-    while (!truncated && map_it != update_map.end()) {
-      if (num >= max_return || bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
-        truncated = true;
-        break;
-      }
-      if (map_it->second.has_value()) {
-        encode(map_it->first, bl);
-        ++num;
-      }
-      ++map_it;
-    }
 	} // else return empty out_set
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
@@ -7846,25 +7796,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omapgetvals, soid.oid.name.c_str(), soid.snap.val, start_after.c_str(), max_return, filter_prefix.c_str());
 
-  uint32_t num = 0;
-  bool truncated = false;
-  bufferlist bl;
+	uint32_t num = 0;
+	bool truncated = false;
+	bufferlist bl;
 	if (oi.is_omap()) {
-    // Updates in update_map take priority over removed_ranges
-    std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
-    get_pgbackend()->get_journal_updates(update_map, removed_ranges);
-
-    // Set iterator to the first relevant entry in update_map
-    auto map_it = update_map.end();
-    if (filter_prefix > start_after) {
-      map_it = update_map.lower_bound(filter_prefix);
-    } else {
-      map_it = update_map.upper_bound(start_after);
-    }
-
 	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
-	  const auto result = osd->store->omap_iterate(
+	  const auto result = get_pgbackend()->omap_iterate(
 	    ch, ghobject_t(soid, ghobject_t::NO_GEN, whoami_shard().shard),
 	    // try to seek as many keys-at-once as possible for the sake of performance.
 	    // note complexity should be logarithmic, so seek(n/2) + seek(n/2) is worse
@@ -7874,92 +7811,26 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      .seek_type = filter_prefix > start_after ? omap_iter_seek_t::LOWER_BOUND
 						       : omap_iter_seek_t::UPPER_BOUND
 	    },
-	    [&update_map, &removed_ranges, &truncated, &filter_prefix, &num, max_return,
-	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request, &bl, &map_it]
+	    [&bl, &truncated, &filter_prefix, &num, max_return,
+	     max_bytes=cct->_conf->osd_max_omap_bytes_per_request]
 	    (std::string_view key, std::string_view value) mutable {
-        if (key.substr(0, filter_prefix.size()) != filter_prefix) {
+	      if (key.substr(0, filter_prefix.size()) != filter_prefix) {
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-
-        // Add new keys from update map that come before the current key
-        std::string key_str(key);
-        while (map_it != update_map.end() && map_it->first < key_str) {
-          if (map_it->first.substr(0, filter_prefix.size()) != filter_prefix) {
-            if (map_it->first > filter_prefix) {
-              map_it = update_map.end(); 
-              break;
-            }
-            ++map_it;
-            continue;
-          }
-
-          if (num >= max_return || bl.length() >= max_bytes) {
-            truncated = true;
-            return ObjectStore::omap_iter_ret_t::STOP;
-          }
-
-          if (map_it->second.has_value()) {
-            encode(map_it->first, bl);
-            encode(*map_it->second, bl);
-            ++num;
-          }
-          ++map_it;
-        }
-
 	      if (num >= max_return || bl.length() >= max_bytes) {
 	        truncated = true;
 	        return ObjectStore::omap_iter_ret_t::STOP;
 	      }
-
-        auto it = update_map.find(key_str);
-        if (it != update_map.end()) {
-          if (map_it != update_map.end() && map_it->first == key_str) {
-            ++map_it; // Key already processed in the loop above
-          }
-
-          if (it->second.has_value()) {
-            encode(key, bl);
-            encode(*it->second, bl);
-            ++num;
-            return ObjectStore::omap_iter_ret_t::NEXT;
-          } else {
-            return ObjectStore::omap_iter_ret_t::NEXT;
-          }
-        }
-
-        if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
-          return ObjectStore::omap_iter_ret_t::NEXT;
-        }
-
-        encode(key, bl);
-        encode(value, bl);
+	      encode(key, bl);
+	      encode(value, bl);
 	      ++num;
 	      return ObjectStore::omap_iter_ret_t::NEXT;
 	    });
 	  if (result < 0) {
 	    goto fail;
 	  }
-
-    while (!truncated && map_it != update_map.end()) {
-      if (map_it->first.substr(0, filter_prefix.size()) != filter_prefix) {
-          break;
-      }
-
-      if (num >= max_return || bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
-        truncated = true;
-        break;
-      }
-
-      if (map_it->second.has_value()) {
-        encode(map_it->first, bl);
-        encode(*map_it->second, bl);
-        ++num;
-      }
-      ++map_it;
-    }
 	} // else return empty out_set
- 
-  encode(num, osd_op.outdata);
+	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);

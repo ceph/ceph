@@ -280,7 +280,7 @@ int ReplicatedBackend::omap_iterate (
   ObjectStore::CollectionHandle &c_, ///< [in] collection
   const ghobject_t &oid, ///< [in] object
   ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
-  std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> f ///< [in] function to call for each key/value pair
+  OmapIterFunction f ///< [in] function to call for each key/value pair
 ) {
   return store->omap_iterate(c_, oid, start_from, f);
 }

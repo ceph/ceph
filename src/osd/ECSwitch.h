@@ -533,7 +533,7 @@ public:
     ObjectStore::CollectionHandle &c_, ///< [in] collection
     const ghobject_t &oid, ///< [in] object
     ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
-    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> f ///< [in] function to call for each key/value pair
+    OmapIterFunction f ///< [in] function to call for each key/value pair
   ) override {
     // Updates in update_map take priority over removed_ranges
     std::map<std::string, std::optional<ceph::buffer::list>> update_map;
@@ -541,12 +541,12 @@ public:
     get_journal_updates(update_map, removed_ranges);
 
     auto map_it = update_map.begin();
+    if (!start_from.seek_position.empty()) {
+      map_it = update_map.lower_bound(start_from.seek_position);
+    }
 
-    // Change this lambda to loop through store and update map, calling f on all relevant key/value pairs
     auto wrapper = [&](std::string_view store_key, std::string_view store_value) {
-      // Add new keys from update map that come before the current key
-      std::string store_key_str(store_key);
-      while (map_it != update_map.end() && map_it->first < store_key_str) {
+      while (map_it != update_map.end() && map_it->first < store_key) {
         if (map_it->second.has_value()) {
           ObjectStore::omap_iter_ret_t r = f(map_it->first, std::string_view(map_it->second->c_str(), map_it->second->length()));
           if (r == ObjectStore::omap_iter_ret_t::STOP) return r;
@@ -554,29 +554,28 @@ public:
         map_it++;
       }
 
-      if (map_it != update_map.end() && map_it->first == store_key_str) {
+      if (map_it != update_map.end() && map_it->first == store_key) {
         ObjectStore::omap_iter_ret_t ret = ObjectStore::omap_iter_ret_t::NEXT;
         if (map_it->second.has_value()) {
-          ret = f(store_key_str, std::string_view(map_it->second->c_str(), map_it->second->length()));
+          ret = f(store_key, std::string_view(map_it->second->c_str(), map_it->second->length()));
         }
         ++map_it;
         return ret;
       }
 
-      if (should_be_removed(removed_ranges, store_key_str)) {
+      if (should_be_removed(removed_ranges, store_key)) {
         return ObjectStore::omap_iter_ret_t::NEXT;
       }
 
       return f(store_key, store_value);
     };
 
-	  using omap_iter_seek_t = ObjectStore::omap_iter_seek_t;
 	  const auto result = store->omap_iterate(c_, oid, start_from, wrapper);
 	  if (result < 0) {
 	    return result;
 	  }
 
-    ObjectStore::omap_iter_ret_t ret;
+    ObjectStore::omap_iter_ret_t ret = ObjectStore::omap_iter_ret_t::NEXT;
     while (map_it != update_map.end()) {
       if (map_it->second.has_value()) {
         ret = f(map_it->first, std::string_view(map_it->second->c_str(), map_it->second->length()));
@@ -585,7 +584,7 @@ public:
       map_it++;
     }
 
-    return ret == ObjectStore::omap_iter_ret_t::STOP;
+    return ret == ObjectStore::omap_iter_ret_t::STOP ? 0 : 1;
   }
 
   bool should_be_removed(
