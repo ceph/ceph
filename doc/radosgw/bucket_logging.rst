@@ -54,6 +54,22 @@ them, regardless if enough time passed or if no more records are written to the
 object. Flushing will happen automatically when logging is disabled on a
 bucket, or its logging configuration is changed, or the bucket is deleted.
 
+The process of adding a new log object to the log bucket is asynchronous when
+triggered by a log record being written. Consequently, the operation that
+generated the log is completed immediately and does not wait for the log object
+addition to finish; this addition occurs later.
+The log object is added to the log bucket immediately when flushed. Consequently,
+this action may result in temporary gaps in the log records within the bucket
+until any pending log objects are also added.
+
+To check which log objects for a source bucket are currently pending addition to
+the log bucket, execute the following command:
+
+.. prompt:: bash #
+
+   radosgw-admin bucket logging list --bucket <source bucket>
+
+
 Standard
 ````````
 If the logging type is set to "Standard" (the default) the log records are

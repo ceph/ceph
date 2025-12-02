@@ -185,6 +185,7 @@ int rollover_logging_object(const configuration& conf,
     optional_yield y,
     bool must_commit,
     RGWObjVersionTracker* objv_tracker,
+    bool async,
     std::string* last_committed,
     std::string* err_message = nullptr);
 
