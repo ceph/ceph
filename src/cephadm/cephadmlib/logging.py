@@ -5,6 +5,7 @@ import logging
 import logging.config
 import logging.handlers
 import os
+import shutil
 import sys
 
 from typing import List, Any, Dict, Optional, cast
@@ -240,7 +241,38 @@ def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
             f.write(cephadm_logrotate_config)
 
 
+def _get_systemd_run_path() -> str:
+    return shutil.which('systemd-run') or '/usr/bin/systemd-run'
+
+
+def _get_container_runtime_path(ctx: CephadmContext) -> str:
+    engine = getattr(ctx, 'container_engine', None)
+    if engine and getattr(engine, 'path', None):
+        return engine.path
+    return (
+        shutil.which('podman')
+        or shutil.which('docker')
+        or '/usr/bin/podman'
+    )
+
+
 def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
+    helper_dir = os.path.join(ctx.data_dir, fsid)
+    os.makedirs(helper_dir, exist_ok=True)
+    helper_script = os.path.join(helper_dir, 'logrotate-reopen-logs.sh')
+
+    container_runtime = _get_container_runtime_path(ctx)
+    with write_new(helper_script, perms=0o755) as helper_fd:
+        templating.render_to_file(
+            helper_fd,
+            ctx,
+            templating.Templates.cluster_logrotate_helper,
+            fsid=fsid,
+            container_runtime=container_runtime,
+        )
+
+    systemd_run_path = _get_systemd_run_path()
+
     # logrotate for the cluster
     with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
         """
@@ -270,6 +302,8 @@ def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
             ctx,
             templating.Templates.cluster_logrotate_config,
             fsid=fsid,
+            helper_script=helper_script,
+            systemd_run=systemd_run_path,
             targets=targets,
         )
 

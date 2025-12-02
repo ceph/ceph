@@ -5,6 +5,7 @@
     compress
     sharedscripts
     postrotate
+        {{ systemd_run|shellquote }} --wait --collect --quiet {{ helper_script|shellquote }} || true
         killall -q -1 {{ targets|join(' ') }} || pkill -1 -x '{{ targets|join('|') }}' || true
     endscript
     missingok

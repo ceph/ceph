@@ -190,9 +190,17 @@ def _install_base_units(ctx: CephadmContext, fsid: str) -> None:
         call_throws(ctx, ['systemctl', 'enable', 'ceph-%s.target' % fsid])
         call_throws(ctx, ['systemctl', 'start', 'ceph-%s.target' % fsid])
 
-    # don't overwrite file in order to allow users to manipulate it
-    if os.path.exists(ctx.logrotate_dir + f'/ceph-{fsid}'):
-        return
+    logrotate_path = os.path.join(ctx.logrotate_dir, f'ceph-{fsid}')
+    if os.path.exists(logrotate_path):
+        try:
+            with open(logrotate_path, 'r') as existing:
+                contents = existing.read()
+        except Exception:
+            return
+        if '# created by cephadm' not in contents:
+            return
+        if 'systemd-run' in contents:
+            return
 
     write_cluster_logrotate_config(ctx, fsid)
 
