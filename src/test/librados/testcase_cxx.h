@@ -131,6 +131,7 @@ protected:
   static void TearDownTestCase();
   static librados::Rados s_cluster;
   void set_allow_ec_overwrites();
+  std::vector<int> get_osd_ids();
   void freeze_omap_journal();
   void unfreeze_omap_journal();
   void write_omap_keys(

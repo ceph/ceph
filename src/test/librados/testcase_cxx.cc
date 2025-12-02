@@ -33,12 +33,35 @@ void init_rand() {
 
 } // anonymous namespace
 
-void RadosTestECPP::freeze_omap_journal() {
-  bufferlist inbl_tell, outbl;
+std::vector<int> RadosTestECPP::get_osd_ids() {
+  bufferlist inbl, outbl;
   std::ostringstream oss;
-  oss << "{\"prefix\": \"freezeomapjournal\"}";
-  int rc = cluster.osd_command(0, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+  oss << "{\"prefix\": \"osd ls\", \"format\": \"json\"}";
+  int rc = cluster.mon_command(oss.str(), std::move(inbl), &outbl, nullptr);
   EXPECT_EQ(rc, 0);
+
+  std::vector<int> osd_ids;
+  std::string out_str = outbl.to_str();
+  if (rc == 0) {
+    JSONParser parser;
+    parser.parse(out_str.c_str(), out_str.size());
+    decode_json_obj(osd_ids, &parser);
+  }
+
+  return osd_ids;
+}
+
+void RadosTestECPP::freeze_omap_journal() {
+  std::vector<int> osd_ids = get_osd_ids();
+
+  int rc;
+  std::ostringstream oss;
+  bufferlist inbl_tell, outbl;
+  oss << "{\"prefix\": \"freezeomapjournal\"}";
+  for (const auto &id : osd_ids) {
+    rc = cluster.osd_command(id, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+    EXPECT_EQ(rc, 0);
+  }
 
   oss.str("");
   bufferlist inbl_autoscaler;
@@ -66,11 +89,16 @@ void RadosTestECPP::freeze_omap_journal() {
 }
 
 void RadosTestECPP::unfreeze_omap_journal() {
+  std::vector<int> osd_ids = get_osd_ids();
+
+  int rc;
   bufferlist inbl_tell, outbl;
   std::ostringstream oss;
   oss << "{\"prefix\": \"unfreezeomapjournal\"}";
-  int rc = cluster.osd_command(0, oss.str(), std::move(inbl_tell), &outbl, nullptr);
-  EXPECT_EQ(rc, 0);
+  for (const auto &id : osd_ids) {
+    rc = cluster.osd_command(id, oss.str(), std::move(inbl_tell), &outbl, nullptr);
+    EXPECT_EQ(rc, 0);
+  }
 
   oss.str(""); 
   bufferlist inbl_autoscaler;
@@ -119,8 +147,6 @@ void RadosTestECPP::write_omap_keys(std::string oid, int min_index,
   
   ObjectWriteOperation write;
   write.omap_set(omap_map);
-
-  std::cout << "Writing OMap keys from " << min_index << " to " << max_index << "..." << std::endl;
   int ret = ioctx.operate(oid, &write);
   EXPECT_EQ(ret, 0);
 }

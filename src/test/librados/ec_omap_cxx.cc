@@ -626,7 +626,6 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
   EXPECT_EQ(returned_keys, expected_keys);
   
   // 3. Remove specific keys and remove a range
-
   ObjectWriteOperation write;
   std::set<std::string> keys_to_remove;
 
