@@ -24,9 +24,7 @@ inline boost::system::error_code osdcode(int r) {
 }
 }
 
-constexpr static uint64_t kReplicaMinShardReadSize = 128 * 1024;
 constexpr static uint64_t kReplicaMinShardReads = 2;
-constexpr static uint64_t kReplicaMinReadSize = kReplicaMinShardReadSize * kReplicaMinShardReads;
 
 #undef dout_prefix
 #define dout_prefix *_dout << " ECSplitOp::"
@@ -213,6 +211,9 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     abort = true;
     return;
   }
+
+  uint64_t kReplicaMinShardReadSize
+    = g_conf().get_val<uint64_t>("osd_min_split_replica_read_size");
 
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
@@ -506,6 +507,10 @@ std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContex
   bool has_primary_ops = nullptr != op->objver;
   bool single_direct_op = is_erasure;
   bool is_first_chunk = true;
+
+  uint64_t kReplicaMinShardReadSize
+    = g_conf().get_val<uint64_t>("osd_min_split_replica_read_size");
+  uint64_t kReplicaMinReadSize = kReplicaMinShardReadSize * kReplicaMinShardReads;
 
   uint64_t suitable_read_found = false;
   for (auto & o : op->ops) {
