@@ -346,6 +346,40 @@ export class CdValidators {
   }
 
   /**
+   * Validator that requires that both specified controls have a different value.
+   * Error will be added to the `path2` control.
+   * @param {string} path1 A dot-delimited string that define the path to the control.
+   * @param {string} path2 A dot-delimited string that define the path to the control.
+   * @return {ValidatorFn} Returns a validator function that always returns `null`.
+   *   If the validation fails an error map with the `match` property will be set
+   *   on the `path2` control.
+   */
+  static donotmatch(path1: string, path2: string): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } => {
+      const ctrl1 = control.get(path1);
+      const ctrl2 = control.get(path2);
+      if (!ctrl1 || !ctrl2) {
+        return null;
+      }
+      if (ctrl1.value === ctrl2.value) {
+        ctrl2.setErrors({ donotmatch: true });
+      } else {
+        const hasError = ctrl2.hasError('donotmatch');
+        if (hasError) {
+          // Remove the 'match' error. If no more errors exists, then set
+          // the error value to 'null', otherwise the field is still marked
+          // as invalid.
+          const errors = ctrl2.errors;
+          _.unset(errors, 'donotmatch');
+          ctrl2.setErrors(_.isEmpty(_.keys(errors)) ? null : errors);
+        }
+      }
+      return null;
+    };
+  }
+
+
+  /**
    * Asynchronous validator that requires the control's value to be unique.
    * The validation is only executed after the specified delay. Every
    * keystroke during this delay will restart the timer.
