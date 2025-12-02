@@ -388,13 +388,15 @@ target_include_directories(unittest_rgw_usage_perf_counters PRIVATE
   ${CMAKE_SOURCE_DIR}/src/rgw/store/rados
   ${CMAKE_SOURCE_DIR}/src/dmclock/support/src
   ${CMAKE_SOURCE_DIR}/src/dmclock/src
+  ${LUA_INCLUDE_DIR}
 )
 
 target_link_libraries(unittest_rgw_usage_perf_counters
                       ${UNITTEST_LIBS}
                       global
                       ceph-common
-                      lmdb)
+                      lmdb
+                      ${LUA_LIBRARIES})
 
 add_ceph_unittest(unittest_rgw_usage_perf_counters)
 endif()

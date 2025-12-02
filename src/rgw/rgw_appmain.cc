@@ -61,6 +61,7 @@
 #include "rgw_perf_counters.h"
 #include "rgw_signal.h"
 #include "rgw_usage_perf.h"
+#include "rgw_usage_cache.h"
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight_frontend.h"
 #endif
@@ -266,21 +267,13 @@ int rgw::AppMain::init_storage()
   if (!env.driver) {
     return -EIO;
   }
-  return 0;
-} /* init_storage */
 
-void rgw::AppMain::init_perfcounters()
-{
-  (void) rgw_perf_start(dpp->get_cct());
-
+  // Initialize usage perf counters once we have driver available
   if (g_conf()->rgw_enable_usage_perf_counters) {
-    // Validate and create cache directory
     rgw::UsageCache::Config cache_config;
     cache_config.db_path = g_conf()->rgw_usage_cache_path;
     cache_config.max_db_size = g_conf()->rgw_usage_cache_max_size;
-    cache_config.ttl = std::chrono::seconds(g_conf()->rgw_usage_cache_ttl);
     
-    // Check if cache directory exists
     if (!cache_config.db_path.empty()) {
       std::string db_dir = cache_config.db_path;
       size_t pos = db_dir.find_last_of('/');
@@ -290,30 +283,30 @@ void rgw::AppMain::init_perfcounters()
       
       struct stat st;
       if (stat(db_dir.c_str(), &st) != 0) {
-        // Try to create directory
         if (mkdir(db_dir.c_str(), 0755) == 0) {
           ldpp_dout(dpp, 10) << "Created usage cache directory: " << db_dir << dendl;
         } else {
-          ldpp_dout(dpp, 0) << "WARNING: Failed to create usage cache directory: " 
-                            << db_dir << " - " << cpp_strerror(errno) 
+          ldpp_dout(dpp, 0) << "WARNING: Failed to create usage cache directory: "
+                            << db_dir << " - " << cpp_strerror(errno)
                             << " (continuing without usage cache)" << dendl;
           cache_config.db_path = "";
         }
       } else if (!S_ISDIR(st.st_mode)) {
-        ldpp_dout(dpp, 0) << "WARNING: Usage cache path is not a directory: " 
+        ldpp_dout(dpp, 0) << "WARNING: Usage cache path is not a directory: "
                           << db_dir << " (continuing without usage cache)" << dendl;
         cache_config.db_path = "";
       }
     }
-    
-    // Create and initialize usage perf counters
+
     if (!cache_config.db_path.empty()) {
       usage_perf_counters = std::make_unique<rgw::UsagePerfCounters>(
-          dpp->get_cct(), cache_config);
+          dpp->get_cct(),
+          env.driver,
+          cache_config);
       
       int r = usage_perf_counters->init();
       if (r < 0) {
-        ldpp_dout(dpp, 1) << "WARNING: Failed to initialize usage perf counters: " 
+        ldpp_dout(dpp, 1) << "WARNING: Failed to initialize usage perf counters: "
                           << cpp_strerror(-r) << " (continuing without them)" << dendl;
         usage_perf_counters.reset();
       } else {
@@ -322,25 +315,14 @@ void rgw::AppMain::init_perfcounters()
         ldpp_dout(dpp, 10) << "Usage performance counters initialized successfully" << dendl;
       }
     }
-
-    if (!cache_config.db_path.empty()) {
-      
-      usage_perf_counters = std::make_unique<rgw::UsagePerfCounters>(
-          dpp->get_cct(),
-          env.driver,  // the driver parameter
-          cache_config);
-      
-      int r = usage_perf_counters->init();
-      if (r < 0) {
-        ldpp_dout(dpp, 1) << "WARNING: Failed to initialize usage perf counters: " 
-                          << cpp_strerror(-r) << " (continuing without them)" << dendl;
-        usage_perf_counters.reset();
-      } else {
-        rgw::set_usage_perf_counters(usage_perf_counters.get());
-        ldpp_dout(dpp, 10) << "Usage performance counters initialized successfully" << dendl;
-      }
-    }
   }
+  return 0;
+} /* init_storage */
+
+void rgw::AppMain::init_perfcounters()
+{
+  (void) rgw_perf_start(dpp->get_cct());
+
 } /* init_perfcounters */
 
 void rgw::AppMain::init_http_clients()

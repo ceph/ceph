@@ -4006,92 +4006,7 @@ void RGWCreateBucket::execute(optional_yield y)
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "Bucket::create() returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
-
-  if (op_ret < 0 && op_ret != -EEXIST && op_ret != -ERR_BUCKET_EXISTS)
-    return;
-
-  const bool existed = s->bucket_exists;
-  if (need_metadata_upload() && existed) {
-    /* OK, it looks we lost race with another request. As it's required to
-     * handle metadata fusion and upload, the whole operation becomes very
-     * similar in nature to PutMetadataBucket. However, as the attrs may
-     * changed in the meantime, we have to refresh. */
-    short tries = 0;
-    do {
-      map<string, bufferlist> battrs;
-
-      op_ret = s->bucket->load_bucket(this, y);
-      if (op_ret < 0) {
-        return;
-      } else if (!s->auth.identity->is_owner_of(s->bucket->get_owner())) {
-        /* New bucket doesn't belong to the account we're operating on. */
-        op_ret = -EEXIST;
-        return;
-      } else {
-        s->bucket_attrs = s->bucket->get_attrs();
-      }
-
-      createparams.attrs.clear();
-
-      op_ret = rgw_get_request_metadata(this, s->cct, s->info, createparams.attrs, false);
-      if (op_ret < 0) {
-        return;
-      }
-      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, createparams.attrs);
-      populate_with_generic_attrs(s, createparams.attrs);
-      op_ret = filter_out_quota_info(createparams.attrs, rmattr_names,
-                                     s->bucket->get_info().quota);
-      if (op_ret < 0) {
-        return;
-      }
-
-      /* Handle updates of the metadata for Swift's object versioning. */
-      if (createparams.swift_ver_location) {
-        s->bucket->get_info().swift_ver_location = *createparams.swift_ver_location;
-        s->bucket->get_info().swift_versioning = !createparams.swift_ver_location->empty();
-      }
-
-      /* Web site of Swift API. */
-      filter_out_website(createparams.attrs, rmattr_names,
-                         s->bucket->get_info().website_conf);
-      s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
-
-      /* This will also set the quota on the bucket. */
-      s->bucket->set_attrs(std::move(createparams.attrs));
-      constexpr bool exclusive = false; // overwrite
-      constexpr ceph::real_time no_set_mtime{};
-      op_ret = s->bucket->put_info(this, exclusive, no_set_mtime, y);
-    } while (op_ret == -ECANCELED && tries++ < 20);
-
-    /* Restore the proper return code. */
-    if (op_ret >= 0) {
-      op_ret = -ERR_BUCKET_EXISTS;
-    }
-  } /* if (need_metadata_upload() && existed) */
   
-  if (op_ret >= 0 || op_ret == -ERR_BUCKET_EXISTS) {
-    auto* usage_counters = rgw::get_usage_perf_counters();
-    if (usage_counters && s->bucket) {
-      // For new buckets, initialize with 0 bytes and 0 objects
-      usage_counters->update_bucket_stats(s->bucket->get_name(), 0, 0, s->user->get_id().id);
-      
-      // Update user stats - use sync_owner_stats to get current info
-      if (s->user) {
-        RGWBucketEnt ent;
-        int ret = s->bucket->sync_owner_stats(this, y, &ent);
-        if (ret >= 0) {
-          // This updates with the user's total across this bucket
-          usage_counters->update_user_stats(
-            s->user->get_id().id,
-            ent.size,
-            ent.count,
-            false
-          );
-        }
-      }
-    }
-  }
-
 } /* RGWCreateBucket::execute() */
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
@@ -4169,21 +4084,6 @@ void RGWDeleteBucket::execute(optional_yield y)
   rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
 
-  // Add usage counter update here, right before return
-  if (op_ret >= 0) {
-    auto* usage_counters = rgw::get_usage_perf_counters();
-    if (usage_counters && s->bucket) {
-      // Remove bucket from cache since it's deleted
-      usage_counters->evict_from_cache("", s->bucket->get_name());
-      
-      // Update user stats - bucket count has changed
-      // Since bucket is deleted, we can't use it to get stats
-      // Just evict the user from cache to force refresh next time
-      if (s->user) {
-        usage_counters->evict_from_cache(s->user->get_id().id, "");
-      }
-    }
-  }
   return;
 }
 
@@ -5040,53 +4940,18 @@ void RGWPutObj::execute(optional_yield y)
     // too late to rollback operation, hence op_ret is not set here
   }
   
-  // Update usage statistics after successful upload
+  // Mark user/bucket as active for background sync (NO cache updates in I/O path)
   if (op_ret == 0 && s->bucket && s->obj_size > 0) {
     auto usage_counters = rgw::get_usage_perf_counters();
-    if (usage_counters) {
-      std::string bucket_key = s->bucket->get_tenant().empty() ? 
-                               s->bucket->get_name() : 
-                               s->bucket->get_tenant() + "/" + s->bucket->get_name();
+    if (usage_counters && s->user) {
+      // Just mark as active - background thread will sync from RADOS
+      usage_counters->mark_bucket_active(s->bucket->get_name(),
+                                         s->bucket->get_tenant());
+      usage_counters->mark_user_active(s->user->get_id().to_str());
       
-      ldpp_dout(this, 20) << "PUT completed: updating usage for bucket=" 
-                          << bucket_key << " size=" << s->obj_size << dendl;
-    auto usage_counters = rgw::get_usage_perf_counters();
-    if (usage_counters && s->bucket && s->user) {
-      // Get actual bucket stats from RGW metadata (includes this PUT)
-      RGWBucketEnt stats;
-      int ret = s->bucket->sync_owner_stats(this, y, &stats);
-      
-      if (ret >= 0) {
-        ldpp_dout(this, 20) << "PUT completed: updating usage for bucket="
-                            << s->bucket->get_name() 
-                            << " bytes=" << stats.size
-                            << " objects=" << stats.count << dendl;
-        
-        // Update with ACTUAL bucket totals (not calculated)
-        usage_counters->update_bucket_stats(s->bucket->get_name(),
-                                           stats.size,
-                                           stats.count,
-                                           s->user->get_id().id,
-                                           true);
-        
-        // Mark as active
-        usage_counters->mark_bucket_active(s->bucket->get_name(),
-                                          s->bucket->get_tenant());
-        
-        // User stats are aggregated in cache, just update perf counter
-        auto user_stats = usage_counters->get_user_stats(s->user->get_id().to_str());
-        if (user_stats) {
-          usage_counters->update_user_stats(s->user->get_id().to_str(),
-                                           user_stats->bytes_used,
-                                           user_stats->num_objects,
-                                           false);
-          usage_counters->mark_user_active(s->user->get_id().to_str());
-        }
-      }
-    }
+      ldpp_dout(this, 20) << "PUT completed: marked user/bucket active for background sync" << dendl;
     }
   }
-
 } /* RGWPutObj::execute() */
 
 int RGWPostObj::init_processing(optional_yield y)
@@ -5890,42 +5755,18 @@ void RGWDeleteObj::execute(optional_yield y)
   } else {
     op_ret = -EINVAL;
   }
-  
-  auto usage_counters = rgw::get_usage_perf_counters();
-  if (usage_counters && s->bucket && s->user) {
-    // Get actual bucket stats from RGW metadata (after deletion)
-    RGWBucketEnt stats;
-    int ret = s->bucket->sync_owner_stats(this, y, &stats);
-    
-    if (ret >= 0) {
-      ldpp_dout(this, 20) << "DELETE completed: updating usage for bucket="
-                          << s->bucket->get_name() 
-                          << " bytes=" << stats.size
-                          << " objects=" << stats.count << dendl;
-      
-      // Update with ACTUAL bucket totals (not calculated)
-      usage_counters->update_bucket_stats(s->bucket->get_name(),
-                                          stats.size,
-                                          stats.count,
-                                          s->user->get_id().id,
-                                          true);
-      
-      // Mark as active
+
+  // Mark user/bucket as active for background sync after successful delete
+  if (op_ret >= 0 && s->bucket && s->user) {
+    auto usage_counters = rgw::get_usage_perf_counters();
+    if (usage_counters) {
       usage_counters->mark_bucket_active(s->bucket->get_name(),
-                                        s->bucket->get_tenant());
-      
-      // User stats are aggregated in cache, just update perf counter
-      auto user_stats = usage_counters->get_user_stats(s->user->get_id().to_str());
-      if (user_stats) {
-        usage_counters->update_user_stats(s->user->get_id().to_str(),
-                                          user_stats->bytes_used,
-                                          user_stats->num_objects,
-                                          false);
-        usage_counters->mark_user_active(s->user->get_id().to_str());
-      }
+                                         s->bucket->get_tenant());
+      usage_counters->mark_user_active(s->user->get_id().to_str());
+      ldpp_dout(this, 20) << "DELETE completed: marked user/bucket active for background sync" << dendl;
     }
   }
-
+  
 }
 
 class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {

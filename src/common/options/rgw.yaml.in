@@ -4582,7 +4582,7 @@ options:
   desc: Enable per-user and per-bucket usage performance counters
   long_desc: When enabled, RGW will track and expose usage metrics (bytes and objects) 
     for users and buckets through the Ceph performance counter framework
-  default: true
+  default: false
   services:
   - rgw
   with_legacy: true
@@ -4605,22 +4605,11 @@ options:
   - rgw
   with_legacy: true
 
-- name: rgw_usage_cache_ttl
-  type: uint
-  level: advanced
-  desc: Time-to-live in seconds for cached usage statistics
-  default: 300
-  min: 60
-  max: 3600
-  services:
-  - rgw
-  with_legacy: true
-
 - name: rgw_usage_stats_refresh_interval
   type: int
   level: advanced
   desc: Interval in seconds for background refresh of usage statistics for active buckets/users
-  default: 5_min
+  default: 20_min
   services:
   - rgw
   see_also:

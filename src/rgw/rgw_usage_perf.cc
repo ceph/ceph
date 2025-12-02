@@ -8,6 +8,9 @@
 #include "common/perf_counters_collection.h"
 #include "common/errno.h" 
 #include "common/async/yield_context.h"
+#include "rgw_sal.h"
+#include "rgw_common.h"
+#include "rgw_sal_rados.h"   
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -135,26 +138,6 @@ PerfCounters* UsagePerfCounters::create_bucket_counters(const std::string& bucke
   return counters;
 }
 
-void UsagePerfCounters::cleanup_worker() {
-  ldout(cct, 10) << "Starting usage cache cleanup worker thread" << dendl;
-  
-  while (!shutdown_flag.load()) {
-    // Sleep with periodic checks for shutdown
-    for (int i = 0; i < cleanup_interval.count(); ++i) {
-      if (shutdown_flag.load()) {
-        break;
-      }
-      std::this_thread::sleep_for(std::chrono::seconds(1));
-    }
-    
-    if (!shutdown_flag.load()) {
-      cleanup_expired_entries();
-    }
-  }
-  
-  ldout(cct, 10) << "Usage cache cleanup worker thread exiting" << dendl;
-}
-
 int UsagePerfCounters::init() {
   int ret = cache->init();
   if (ret < 0) {
@@ -245,9 +228,6 @@ void UsagePerfCounters::start() {
     ldout(cct, 10) << "Initial load complete: " << all_users.size() 
                    << " users, " << all_buckets.size() << " buckets" << dendl;
   }
-
-  // Start cleanup thread
-  cleanup_thread = std::thread(&UsagePerfCounters::cleanup_worker, this);
   
   // Start refresh thread
   refresh_thread = std::thread(&UsagePerfCounters::refresh_worker, this);
@@ -255,16 +235,51 @@ void UsagePerfCounters::start() {
   ldout(cct, 10) << "Started usage perf counters threads" << dendl;
 }
 
+void UsagePerfCounters::sync_user_from_rados(const std::string& user_id) {
+  if (!driver) {
+    ldout(cct, 10) << "sync_user_from_rados: no driver available" << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "sync_user_from_rados: user=" << user_id << dendl;
+  
+  UsagePerfDoutPrefix dpp(cct);
+
+  // Use existing RGW infrastructure to get user stats from RADOS
+  // This is the distributed source of truth
+  RGWStorageStats stats;
+  ceph::real_time last_synced;
+  ceph::real_time last_updated;
+  
+  rgw_user uid(user_id);
+  
+  int ret = driver->load_stats(&dpp, null_yield, uid, stats, 
+                                last_synced, last_updated);
+  
+  if (ret < 0) {
+    ldout(cct, 10) << "Failed to load stats from RADOS for user " << user_id 
+                   << ": " << cpp_strerror(-ret) << dendl;
+    return;
+  }
+  
+  ldout(cct, 15) << "Got stats from RADOS: user=" << user_id
+                 << " bytes=" << stats.size
+                 << " objects=" << stats.num_objects << dendl;
+  
+  // Update local LMDB cache for persistence across restarts
+  if (cache) {
+    cache->update_user_stats(user_id, stats.size, stats.num_objects);
+  }
+  
+  // Update perf counters (for Prometheus)
+  update_user_stats(user_id, stats.size, stats.num_objects, false);
+}
+
 void UsagePerfCounters::stop() {
   ldout(cct, 10) << "Stopping usage perf counters" << dendl;
   
   // Signal threads to stop
   shutdown_flag = true;
-  
-  // Wait for cleanup thread
-  if (cleanup_thread.joinable()) {
-    cleanup_thread.join();
-  }
   
   // Wait for refresh thread
   if (refresh_thread.joinable()) {
@@ -276,10 +291,6 @@ void UsagePerfCounters::stop() {
 
 void UsagePerfCounters::shutdown() {
   shutdown_flag = true;
-  
-  if (cleanup_thread.joinable()) {
-    cleanup_thread.join();
-  }
   
   if (refresh_thread.joinable()) {
     refresh_thread.join();
@@ -516,30 +527,33 @@ void UsagePerfCounters::refresh_worker() {
       break;
     }
     
-    // Get snapshot of active buckets and users
-    std::unordered_set<std::string> buckets_to_refresh;
+    // Get snapshot of active users
     std::unordered_set<std::string> users_to_refresh;
-    
     {
       std::lock_guard<std::mutex> lock(activity_mutex);
-      buckets_to_refresh = active_buckets;
       users_to_refresh = active_users;
     }
     
-    ldout(cct, 15) << "Background refresh: checking " << buckets_to_refresh.size() 
-                   << " buckets and " << users_to_refresh.size() 
-                   << " users" << dendl;
+    ldout(cct, 15) << "Background refresh: syncing " << users_to_refresh.size() 
+                   << " users from RADOS" << dendl;
     
-    // Refresh bucket stats from cache
+    // Sync user stats from RADOS (source of truth)
+    for (const auto& user_id : users_to_refresh) {
+      if (shutdown_flag) break;
+      sync_user_from_rados(user_id);
+    }
+    
+    // Bucket stats can still be refreshed from local cache
+    // they're updated by the existing quota sync mechanism
+    std::unordered_set<std::string> buckets_to_refresh;
+    {
+      std::lock_guard<std::mutex> lock(activity_mutex);
+      buckets_to_refresh = active_buckets;
+    }
+    
     for (const auto& bucket_key : buckets_to_refresh) {
       if (shutdown_flag) break;
       refresh_bucket_stats(bucket_key);
-    }
-    
-    // Refresh user stats from cache
-    for (const auto& user_id : users_to_refresh) {
-      if (shutdown_flag) break;
-      refresh_user_stats(user_id);
     }
   }
   
@@ -569,15 +583,7 @@ void UsagePerfCounters::refresh_bucket_stats(const std::string& bucket_key) {
 void UsagePerfCounters::refresh_user_stats(const std::string& user_id) {
   ldout(cct, 20) << "refresh_user_stats: user=" << user_id << dendl;
   
-  auto cached_stats = cache->get_user_stats(user_id);
-  if (cached_stats) {
-    ldout(cct, 15) << "Refreshing user " << user_id
-                   << " bytes=" << cached_stats->bytes_used 
-                   << " objects=" << cached_stats->num_objects << dendl;
-    
-    update_user_stats(user_id, cached_stats->bytes_used, 
-                     cached_stats->num_objects, false);
-  }
+  sync_user_from_rados(user_id);
 }
 
 void UsagePerfCounters::refresh_from_cache(const std::string& user_id,
@@ -656,15 +662,6 @@ std::optional<UsageStats> UsagePerfCounters::get_bucket_stats(const std::string&
   }
   
   return stats;
-}
-
-void UsagePerfCounters::cleanup_expired_entries() {
-  if (cache) {
-    int removed = cache->clear_expired_entries();
-    if (removed > 0) {
-      ldout(cct, 10) << "Cleaned up " << removed << " expired cache entries" << dendl;
-    }
-  }
 }
 
 size_t UsagePerfCounters::get_cache_size() const {
