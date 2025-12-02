@@ -1143,7 +1143,6 @@ void RGWRados::finalize()
     reshard->stop_processor();
   }
   delete reshard;
-  delete index_completion_manager;
 
   if (run_notification_thread) {
     rgw::notify::shutdown();
@@ -1158,6 +1157,7 @@ void RGWRados::finalize()
     restore->stop_processor();
   }
   restore = NULL;
+  delete index_completion_manager;
 }
 
 /** 
@@ -1286,6 +1286,8 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     return ret;
 
   pools_initialized = true;
+
+  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (use_gc) {
     gc = new RGWGC();
@@ -1434,8 +1436,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
   if (run_reshard_thread)  {
     reshard->start_processor();
   }
-
-  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_bucket_logging_thread) {
     if (!rgw::bucketlogging::init(dpp, this->driver, *svc.site)) {
