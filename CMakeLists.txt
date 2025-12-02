@@ -576,7 +576,7 @@ cmake_dependent_option(WITH_RADOSGW_POSIX "POSIX backend for RADOS Gateway" ON W
 
 # D4N can use Redis or FDB as sink:
 CMAKE_DEPENDENT_OPTION(D4N_USE_FDB_SINK "Use FoundationDB as a sink for D4N (experimental)" OFF
-                       "WITH_RADOSGW_D4N; WITH_RADOSGW_FDB" ON)
+                       "WITH_RADOSGW_FDB" ON)
 
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)

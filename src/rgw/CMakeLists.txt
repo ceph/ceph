@@ -298,6 +298,27 @@ if(WITH_RADOSGW_D4N)
         driver/d4n/rgw_sal_d4n.cc)
 endif()
 
+if(D4N_USE_FDB_SINK)
+  message("Building with FoundationDB (FDB) support as D4N sink (experimental).")
+
+  target_include_directories(rgw_common PRIVATE
+    rgw/driver/d4n
+	driver/fdb
+    rgw/driver/shared
+    rgw/driver/)
+
+  list(APPEND librgw_common_srcs
+    driver/fdb/sal_d4n-fdb.cc)
+endif()
+
+#JFW: I think this is just junk?
+#include(CheckCXXCompilerFlag)
+#check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
+#  COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+#if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+#  target_compile_definitions(common-objs PRIVATE
+#    HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
+
 if(WITH_RADOSGW_FDB)
  message("FoundationDB support is active (experimental)")
 
@@ -336,21 +357,6 @@ if(WITH_RADOSGW_FDB)
  target_link_libraries(rgw_fdb PRIVATE zpp_bits)
 
 endif(WITH_RADOSGW_FDB)
-
-if(D4N_USE_FDB_SINK)
- message("Building with FDB support as D4N sink (experimental).")
-
- target_include_directories(rgw_common PRIVATE
-	driver/fdb)
-endif(D4N_USE_FDB_SINK)
-
-include(CheckCXXCompilerFlag)
-check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
-  COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
-if(COMPILER_SUPPORTS_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
-  target_compile_definitions(common-objs PRIVATE
-    HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION)
-endif()
 
 target_sources(rgw_common PRIVATE 
   ${librgw_common_srcs})

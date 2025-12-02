@@ -473,8 +473,6 @@ class transaction final
  inline auto get_results_pair_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key)
  -> std::generator< std::pair<std::string, std::string> >;
 
-/*JFW: auto selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
-  std::generator< std::map<std::string, std::string> >; */
  auto selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
   std::generator< std::pair<std::string, std::string> >;
 
@@ -627,8 +625,6 @@ inline const FDBKeyValue *obtain_kvs(ceph::libfdb::transaction& txn, ceph::libfd
 inline auto ceph::libfdb::transaction::selection_generator(std::span<const std::uint8_t> begin_key, std::span<const std::uint8_t> end_key) ->
  std::generator< std::pair<std::string, std::string> > 
 {
- std::map<std::string, std::string> results;
-
  int out_count = 0;		// updated by FDB's read
  fdb_bool_t out_more = true;	// true if there's more to read
  int iteration = 0;

@@ -45,6 +45,9 @@
 #ifdef WITH_RADOSGW_D4N
 #include "driver/d4n/rgw_sal_d4n.h" 
 #endif
+#ifdef D4N_USE_FDB_SINK
+#include "driver/fdb/sal_d4n_fdb.h"
+#endif
 
 #ifdef WITH_RADOSGW_MOTR
 #include "driver/motr/rgw_sal_motr.h"
@@ -77,8 +80,10 @@ extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
 extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
 #endif
+#ifdef D4N_USE_FDB_SINK
+extern rgw::sal::Driver* newD4N_FDB_Filter(CephContext* cct, rgw::sal::Driver* next, boost::asio::io_context& io_context, bool admin);
+#endif
 }
-
 
 #ifdef WITH_RADOSGW_RADOS
 std::optional<neorados::RADOS>
@@ -267,6 +272,19 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
       return nullptr;
     }
   }
+#endif
+#ifdef D4N_USE_FDB_SINK
+ if ("d4n_fdb" == cfg.filter_name) {
+  rgw::sal::Driver *next = driver;
+  driver = newD4N_FDB_Filter(next);
+
+  if (int ret = driver->initialize(cct, dpp); 0 > ret) {
+      ldpp_dout(dpp, 20) << "ERROR: unable to initialize D4N FDB driver: " << ret << dendl;
+      delete driver;
+      delete next;
+      return nullptr;
+    }
+ }
 #endif
 
   return driver;
