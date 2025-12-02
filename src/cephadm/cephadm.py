@@ -832,8 +832,10 @@ def get_ceph_volume_container(ctx: CephadmContext,
                               envs: Optional[List[str]] = None) -> 'CephContainer':
     if envs is None:
         envs = []
-    envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
-    envs.append('CEPH_VOLUME_DEBUG=1')
+    if 'CEPH_VOLUME_SKIP_RESTORECON=yes' not in envs:
+        envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
+    if 'CEPH_VOLUME_DEBUG=1' not in envs:
+        envs.append('CEPH_VOLUME_DEBUG=1')
 
     return CephContainer(
         ctx,
