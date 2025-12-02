@@ -50,7 +50,7 @@ namespace {
 
 void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  uint8_t v = 5;
+  uint8_t v = 6;
   uint8_t min_v = 1;
   if (!crush_loc.empty()) {
     // we added crush_loc in version 5, but need to let old clients decode it
@@ -82,12 +82,13 @@ void mon_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(priority, bl);
   encode(weight, bl);
   encode(crush_loc, bl);
+  encode(time_added, bl);
   ENCODE_FINISH(bl);
 }
 
 void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
 {
-  DECODE_START(5, p);
+  DECODE_START(6, p);
   decode(name, p);
   decode(public_addrs, p);
   if (struct_v >= 2) {
@@ -99,24 +100,32 @@ void mon_info_t::decode(ceph::buffer::list::const_iterator& p)
   if (struct_v >= 5) {
     decode(crush_loc, p);
   }
+  if (struct_v >= 6) {
+    decode(time_added, p);
+  }
   DECODE_FINISH(p);
 }
 
 void mon_info_t::print(ostream& out) const
 {
   out << "mon." << name
-      << " addrs " << public_addrs
+      << "(addrs " << public_addrs
       << " priority " << priority
       << " weight " << weight
-      << " crush location " << crush_loc;
+      << " crush_location " << crush_loc
+      << " added " << time_added
+      << ")";
 }
 
 void mon_info_t::dump(ceph::Formatter *f) const
 {
   f->dump_string("name", name);
-  f->dump_stream("addr") << public_addrs;
+  f->dump_object("public_addrs", public_addrs);
+  f->dump_stream("addr") << public_addrs; /* sigh: backwards compat */
+  f->dump_string("public_addr", public_addrs.get_legacy_str()); /* sighhhhh */
   f->dump_int("priority", priority);
   f->dump_float("weight", weight);
+  f->dump_string("time_added", fmt::format("{}", time_added));
   encode_json("crush_location", crush_loc, f);
 }
 
@@ -131,6 +140,7 @@ list<mon_info_t> mon_info_t::generate_test_instances()
   ls.back().weight = 1.0;
   ls.back().crush_loc.emplace("root", "default");
   ls.back().crush_loc.emplace("host", "foo");
+  ls.back().time_added = ceph::real_clock::from_time_t(1);
   return ls;
 }
 namespace {
@@ -328,24 +338,36 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
 list<MonMap> MonMap::generate_test_instances()
 {
   list<MonMap> o;
-  o.emplace_back();
-  o.emplace_back();
-  o.back().epoch = 1;
-  o.back().last_changed = utime_t(123, 456);
-  o.back().created = utime_t(789, 101112);
-  o.back().add("one", entity_addrvec_t());
 
-  MonMap m;
+  o.emplace_back(); /* empty */
+
   {
+    auto& map = o.emplace_back();
+    map.epoch = 1;
+    map.last_changed = utime_t(123, 456);
+    map.created = utime_t(789, 101112);
+    auto& info = map.add("one", entity_addrvec_t());
+    info.time_added = ceph::real_clock::from_time_t(2468);
+  }
+
+  {
+    MonMap m;
     m.epoch = 1;
     m.last_changed = utime_t(123, 456);
 
-    entity_addrvec_t empty_addr_one = entity_addrvec_t(entity_addr_t());
-    empty_addr_one.v[0].set_nonce(1);
-    m.add("empty_addr_one", empty_addr_one);
-    entity_addrvec_t empty_addr_two = entity_addrvec_t(entity_addr_t());
-    empty_addr_two.v[0].set_nonce(2);
-    m.add("empty_addr_two", empty_addr_two);
+    {
+      entity_addrvec_t empty_addr_one = entity_addrvec_t(entity_addr_t());
+      empty_addr_one.v[0].set_nonce(1);
+      auto& info = m.add("empty_addr_one", empty_addr_one);
+      info.time_added = ceph::real_clock::from_time_t(123456);
+    }
+
+    {
+      entity_addrvec_t empty_addr_two = entity_addrvec_t(entity_addr_t());
+      empty_addr_two.v[0].set_nonce(2);
+      auto& info = m.add("empty_addr_two", empty_addr_two);
+      info.time_added = ceph::real_clock::from_time_t(100000);
+    }
 
     const char *local_pub_addr_s = "127.0.1.2";
 
@@ -353,11 +375,17 @@ list<MonMap> MonMap::generate_test_instances()
     entity_addrvec_t local_pub_addr;
     local_pub_addr.parse(local_pub_addr_s, &end_p);
 
-    m.add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
+    {
+      auto& info = m.add(mon_info_t("filled_pub_addr", entity_addrvec_t(local_pub_addr), 1, 1));
+      info.time_added = ceph::real_clock::from_time_t(1);
+    }
 
-    m.add("empty_addr_zero", entity_addrvec_t());
+    {
+      auto& info = m.add("empty_addr_zero", entity_addrvec_t());
+      info.time_added = ceph::real_clock::from_time_t(1);
+    }
+    o.push_back(std::move(m));
   }
-  o.push_back(std::move(m));
   return o;
 }
 
@@ -381,6 +409,25 @@ int MonMap::read(const char *fn)
     return r;
   decode(bl);
   return 0;
+}
+
+mon_info_t& MonMap::add(mon_info_t&& m)
+{
+  ceph_assert(mon_info.count(m.name) == 0);
+  for (auto& a : m.public_addrs.v) {
+    ceph_assert(addr_mons.count(a) == 0);
+  }
+  m.time_added = ceph::real_clock::now();
+  auto& info = mon_info[m.name];
+  info = std::move(m);
+  if (get_required_features().contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+    ranks.push_back(info.name);
+    ceph_assert(ranks.size() == mon_info.size());
+  } else {
+    calc_legacy_ranks();
+  }
+  calc_addr_mons();
+  return info;
 }
 
 void MonMap::print_summary(ostream& out) const
@@ -419,13 +466,11 @@ void MonMap::print(ostream& out) const
       !disallowed_leaders.empty()) {
     out << "disallowed_leaders " << disallowed_leaders << "\n";
   }
-  unsigned i = 0;
-  for (auto p = ranks.begin(); p != ranks.end(); ++p) {
-    const auto &mi = mon_info.find(*p);
-    ceph_assert(mi != mon_info.end());
-    out << i++ << ": " << mi->second.public_addrs << " mon." << *p;
-    if (!mi->second.crush_loc.empty()) {
-      out << "; crush_location " << mi->second.crush_loc;
+  for (unsigned rank = 0; auto& name : ranks) {
+    auto& info = get(name);
+    out << rank++ << ": " << info.public_addrs << " mon." << name;
+    if (!info.crush_loc.empty()) {
+      out << "; crush_location " << info.crush_loc;
     }
     out << "\n";
   }
@@ -449,20 +494,11 @@ void MonMap::dump(Formatter *f) const
   optional_features.dump(f, "optional");
   f->close_section();
   f->open_array_section("mons");
-  int i = 0;
-  for (auto p = ranks.begin(); p != ranks.end(); ++p, ++i) {
+  for (unsigned rank = 0; auto& name : ranks) {
+    auto const& info = get(name);
     f->open_object_section("mon");
-    f->dump_int("rank", i);
-    f->dump_string("name", *p);
-    f->dump_object("public_addrs", get_addrs(*p));
-    // compat: make these look like pre-nautilus entity_addr_t
-    f->dump_stream("addr") << get_addrs(*p).get_legacy_str();
-    f->dump_stream("public_addr") << get_addrs(*p).get_legacy_str();
-    f->dump_unsigned("priority", get_priority(*p));
-    f->dump_unsigned("weight", get_weight(*p));
-    const auto &mi = mon_info.find(*p);
-    // we don't need to assert this validity as all the get_* functions did
-    f->dump_stream("crush_location") << mi->second.crush_loc;
+    f->dump_int("rank", rank++);
+    info.dump(f);
     f->close_section();
   }
   f->close_section();

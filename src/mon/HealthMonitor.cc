@@ -811,29 +811,37 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks, std::set<std:
 {
   int max = mon.monmap->size();
   int actual = mon.get_quorum().size();
+  const auto mon_down_mkfs_grace = g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace");
+  const auto mon_down_uptime_grace = g_conf().get_val<std::chrono::seconds>("mon_down_uptime_grace");
+  const auto mon_down_added_grace = g_conf().get_val<std::chrono::seconds>("mon_down_added_grace");
+
   const auto rcnow = ceph::real_clock::now();
   const auto created = mon.monmap->created.to_real_time();
   const auto mcnow = ceph::coarse_mono_clock::now();
   const auto starttime = mon.get_starttime();
 
-  if (actual < max &&
-      (rcnow - created) > g_conf().get_val<std::chrono::seconds>("mon_down_mkfs_grace") &&
-      (mcnow - starttime) > g_conf().get_val<std::chrono::seconds>("mon_down_uptime_grace")) {
-    ostringstream ss;
-    ss << (max-actual) << "/" << max << " mons down, quorum "
-       << mon.get_quorum_names();
-    auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
-    set<int> q = mon.get_quorum();
+  if (actual < max && ((rcnow - created) > mon_down_mkfs_grace) && ((mcnow - starttime) > mon_down_uptime_grace)) {
+    auto q = mon.get_quorum();
+    std::list<std::string> details;
     for (int i=0; i<max; i++) {
       if (q.count(i) == 0) {
-	ostringstream ss;
-  std::string mon_name = mon.monmap->get_name(i);
-  mon_downs.insert(mon_name);
-	ss << "mon." << mon_name << " (rank " << i
-	   << ") addr " << mon.monmap->get_addrs(i)
-	   << " is down (out of quorum)";
-	d.detail.push_back(ss.str());
+        ostringstream ss;
+        std::string mon_name = mon.monmap->get_name(i);
+        auto const& info = mon.monmap->get(mon_name);
+        if ((rcnow - info.time_added) > mon_down_added_grace) {
+          mon_downs.insert(mon_name);
+	  ss << "mon." << mon_name << " (rank " << i
+	     << ") addr " << mon.monmap->get_addrs(i)
+	     << " is down (out of quorum)";
+	  details.push_back(ss.str());
+        }
       }
+    }
+    if (details.size()) {
+      ostringstream ss;
+      ss << (max-actual) << "/" << max << " mons down, quorum " << mon.get_quorum_names();
+      auto& d = checks->add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
+      d.detail = std::move(details);
     }
   }
 }
