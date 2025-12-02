@@ -63,6 +63,7 @@ set(librgw_common_srcs
   rgw_formats.cc
   rgw_http_client.cc
   rgw_keystone.cc
+  rgw_keystone_scope.cc
   rgw_ldap.cc
   rgw_lc.cc
   rgw_lc_s3.cc

@@ -954,6 +954,42 @@ options:
   - '1'
   - none
   with_legacy: true
+- name: rgw_keystone_scope_enabled
+  type: bool
+  level: advanced
+  desc: Enable logging of Keystone scope information in ops log
+  long_desc: When enabled, operations authenticated via Keystone will include scope
+    information (project, domain, roles) in the ops log. This is disabled by default
+    as it adds additional data to each log entry and most deployments do not require
+    this level of Keystone audit detail. User identity logging is controlled separately
+    by rgw_keystone_scope_include_user for privacy considerations. Requires
+    rgw_enable_ops_log to be enabled.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_scope_include_user
+  type: bool
+  level: advanced
+  desc: Include human-readable identity names in Keystone scope logs
+  long_desc: When false (default), only opaque IDs are logged for all identity fields
+    (project_id, domain_id, user_id, app_cred_id), which is GDPR-compliant and
+    privacy-friendly. When true, human-readable names (project_name, domain names,
+    user_name, app_cred_name) are included. Opaque IDs are always logged regardless
+    of this setting, allowing operators to correlate with Keystone without exposing
+    names in logs.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_scope_include_roles
+  type: bool
+  level: advanced
+  desc: Include role names in Keystone scope logs
+  default: true
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_cross_domain_policy
   type: str
   level: advanced
