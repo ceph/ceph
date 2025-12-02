@@ -2568,6 +2568,8 @@ public:
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
 
+  uint64_t min_split_replica_read_size;
+
   // last time osdmap was requested
   ceph::coarse_mono_time last_osdmap_request_time;
 
@@ -2976,6 +2978,10 @@ public:
   /** Clear the passed flags from the global op flag set */
   void clear_global_op_flag(int flags) {
     global_op_flags.fetch_and(~flags);
+  }
+
+  uint64_t get_min_split_replica_read_size() {
+  	return min_split_replica_read_size;
   }
 
   /// cancel an in-progress request with the given return code

@@ -2927,14 +2927,6 @@ options:
     This setting must be set in both the [mon] and [osd] or [global]
     sections so that it is read by both monitor and OSD daemons.
   with_legacy: true
-- name: osd_min_split_replica_read_size
-  type: uint
-  level: advanced
-  default: 131072
-  fmt_desc: The minimum size (in bytes) of a read to a single replica. For split
-    reads, all reads will be at least this size before a client will split it
-    across multiple replicas.
-  with_legacy: true
 - name: osd_heartbeat_stale
   type: int
   level: advanced
@@ -2958,6 +2950,13 @@ options:
     MTU configuration issues when jumbo frames are in use.
   default: 2000
   with_legacy: true
+- name: osd_min_split_replica_read_size
+  type: uint
+  level: advanced
+  default: 131072
+  fmt_desc: The minimum size (in bytes) of a read to a single replica. For split
+    reads, all reads will be at least this size before a client will split it
+    across multiple replicas.
 # max number of parallel snap trims/pg
 - name: osd_pg_max_concurrent_snap_trims
   type: uint
