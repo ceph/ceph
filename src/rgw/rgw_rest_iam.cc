@@ -14,6 +14,7 @@
 #include "rgw_rest_iam_user.h"
 #include "rgw_rest_conn.h"
 #include "rgw_zone.h"
+#include "rgw_rest_iam_policy.h"
 #include "rgw_rest_iam_account.h"
 
 #define dout_context g_ceph_context
@@ -35,6 +36,18 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"AttachRolePolicy", make_iam_attach_role_policy_op},
   {"DetachRolePolicy", make_iam_detach_role_policy_op},
   {"ListAttachedRolePolicies", make_iam_list_attached_role_policies_op},
+  {"CreatePolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWCreatePolicy(bl_post_body);}},
+  {"GetPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetPolicy;}},
+  {"DeletePolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeletePolicy;}},
+  {"ListPolicies", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListPolicies;}},
+  {"CreatePolicyVersion", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWCreatePolicyVersion;}},
+  {"DeletePolicyVersion", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeletePolicyVersion;}},
+  {"GetPolicyVersion", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetPolicyVersion;}},
+  {"SetDefaultPolicyVersion", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWSetDefaultPolicyVersion;}},
+  {"ListPolicyVersions", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListPolicyVersions;}},
+  {"TagPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWTagPolicy;}},
+  {"UntagPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUntagPolicy;}},
+  {"ListPolicyTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListPolicyTags;}},
   {"GetAccountSummary", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetAccountSummary;}},
   {"PutUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWPutUserPolicy(bl_post_body);}},
   {"GetUserPolicy", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetUserPolicy;}},
