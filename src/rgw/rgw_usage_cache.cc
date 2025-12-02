@@ -21,13 +21,7 @@ enum {
   PERF_CACHE_HIT,
   PERF_CACHE_MISS,
   PERF_CACHE_UPDATE,
-  PERF_CACHE_REMOVE,
-  PERF_CACHE_EXPIRED,
   PERF_CACHE_SIZE,
-  PERF_CACHE_USER_HIT,
-  PERF_CACHE_USER_MISS,
-  PERF_CACHE_BUCKET_HIT,
-  PERF_CACHE_BUCKET_MISS,
   PERF_CACHE_LAST
 };
 
@@ -123,27 +117,9 @@ void UsageCache::init_perf_counters() {
   pcb.add_u64_counter(PERF_CACHE_UPDATE, "cache_updates", 
                      "Total number of cache updates", "upd",
                      PerfCountersBuilder::PRIO_INTERESTING);
-  pcb.add_u64_counter(PERF_CACHE_REMOVE, "cache_removes", 
-                     "Total number of cache removes", "rm",
-                     PerfCountersBuilder::PRIO_INTERESTING);
-  pcb.add_u64_counter(PERF_CACHE_EXPIRED, "cache_expired", 
-                     "Total number of expired entries", "exp",
-                     PerfCountersBuilder::PRIO_DEBUGONLY);
   pcb.add_u64(PERF_CACHE_SIZE, "cache_size", 
              "Current cache size", "size",
              PerfCountersBuilder::PRIO_USEFUL);
-  pcb.add_u64_counter(PERF_CACHE_USER_HIT, "user_cache_hits", 
-                     "User cache hits", "uhit",
-                     PerfCountersBuilder::PRIO_DEBUGONLY);
-  pcb.add_u64_counter(PERF_CACHE_USER_MISS, "user_cache_misses", 
-                     "User cache misses", "umis",
-                     PerfCountersBuilder::PRIO_DEBUGONLY);
-  pcb.add_u64_counter(PERF_CACHE_BUCKET_HIT, "bucket_cache_hits", 
-                     "Bucket cache hits", "bhit",
-                     PerfCountersBuilder::PRIO_DEBUGONLY);
-  pcb.add_u64_counter(PERF_CACHE_BUCKET_MISS, "bucket_cache_misses", 
-                     "Bucket cache misses", "bmis",
-                     PerfCountersBuilder::PRIO_DEBUGONLY);
   
   perf_counters = pcb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perf_counters);
@@ -410,13 +386,6 @@ std::optional<T> UsageCache::get_stats(MDB_dbi dbi, const std::string& key) {
     auto iter = bl.cbegin();
     stats.decode(iter);
     
-    // Check TTL
-    auto now = ceph::real_clock::now();
-    if (now - stats.last_updated > config.ttl) {
-      inc_counter(PERF_CACHE_EXPIRED);
-      return std::nullopt;
-    }
-    
     return stats;
   } catch (const buffer::error& e) {
     if (cct) {
@@ -454,11 +423,9 @@ std::optional<UsageStats> UsageCache::get_user_stats(const std::string& user_id)
   if (result.has_value()) {
     cache_hits++;
     inc_counter(PERF_CACHE_HIT);
-    inc_counter(PERF_CACHE_USER_HIT);
   } else {
     cache_misses++;
     inc_counter(PERF_CACHE_MISS);
-    inc_counter(PERF_CACHE_USER_MISS);
   }
   
   return result;
@@ -501,8 +468,7 @@ int UsageCache::remove_user_stats(const std::string& user_id) {
     }
     return -EIO;
   }
-  
-  inc_counter(PERF_CACHE_REMOVE);
+
   set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
   
   return 0;
@@ -513,57 +479,33 @@ int UsageCache::update_bucket_stats(const std::string& bucket_name,
                                     uint64_t num_objects,
                                     const std::string& user_id) {
 
-  if (!initialized || user_id.empty()) {
+  // Only store bucket stats
+  // User aggregation is done by background thread reading from RADOS
+  
+  if (!initialized) {
     return -EINVAL;
   }
 
   std::unique_lock lock(db_mutex);
-  
-  // Get old bucket stats to calculate delta
-  auto old_bucket_stats = get_stats<UsageStats>(bucket_dbi, bucket_name);
-
   UsageStats stats;
   stats.bytes_used = bytes_used;
   stats.num_objects = num_objects;
   stats.last_updated = ceph::real_clock::now();
   
   int ret = put_stats(bucket_dbi, bucket_name, stats);
-  if (ret != 0) {
-    return ret;
-  }
-  
-  // Get current user stats
-  auto current_user_stats = get_stats<UsageStats>(user_dbi, user_id);
-  
-  UsageStats new_user_stats;
-  if (current_user_stats.has_value()) {
-    new_user_stats.bytes_used = current_user_stats->bytes_used;
-    new_user_stats.num_objects = current_user_stats->num_objects;
-  } else {
-    new_user_stats.bytes_used = 0;
-    new_user_stats.num_objects = 0;
-  }
-  
-  // Calculate delta (what changed for this bucket)
-  int64_t delta_bytes = (int64_t)bytes_used;
-  int64_t delta_objects = (int64_t)num_objects;
-  
-  if (old_bucket_stats.has_value()) {
-    delta_bytes -= (int64_t)old_bucket_stats->bytes_used;
-    delta_objects -= (int64_t)old_bucket_stats->num_objects;
-  }
-  
-  // Apply delta to user stats
-  new_user_stats.bytes_used = (uint64_t)((int64_t)new_user_stats.bytes_used + delta_bytes);
-  new_user_stats.num_objects = (uint64_t)((int64_t)new_user_stats.num_objects + delta_objects);
-  new_user_stats.last_updated = ceph::real_clock::now();
-  
-  // Update user stats in cache
-  ret = put_stats(user_dbi, user_id, new_user_stats);
   if (ret == 0) {
     inc_counter(PERF_CACHE_UPDATE);
     set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
+    
+    if (cct) {
+      ldout(cct, 15) << "Cache updated for bucket " << bucket_name 
+                     << " bytes=" << bytes_used 
+                     << " objects=" << num_objects << dendl;
+    }
   }
+  
+  // NOTE: User stats are NOT updated here!
+  // Background thread reads from RADOS and updates user totals
   
   return ret;
 }
@@ -576,11 +518,9 @@ std::optional<UsageStats> UsageCache::get_bucket_stats(const std::string& bucket
   if (result.has_value()) {
     cache_hits++;
     inc_counter(PERF_CACHE_HIT);
-    inc_counter(PERF_CACHE_BUCKET_HIT);
   } else {
     cache_misses++;
     inc_counter(PERF_CACHE_MISS);
-    inc_counter(PERF_CACHE_BUCKET_MISS);
   }
   
   return result;
@@ -624,101 +564,17 @@ int UsageCache::remove_bucket_stats(const std::string& bucket_name) {
     return -EIO;
   }
   
-  inc_counter(PERF_CACHE_REMOVE);
-  set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
-  
-  return 0;
-}
-
-int UsageCache::clear_expired_entries() {
-  if (!initialized) {
-    return -EINVAL;
-  }
-
-  std::unique_lock lock(db_mutex);
-  
-  auto now = ceph::real_clock::now();
-  int total_removed = 0;
-  
-  // Helper lambda to clear expired entries from a database
-  auto clear_db = [this, &now](MDB_dbi dbi) -> int {
-    MDB_txn* txn = nullptr;
-    MDB_cursor* cursor = nullptr;
-    
-    int rc = mdb_txn_begin(env, nullptr, 0, &txn);
-    if (rc != 0) {
-      if (cct) {
-        ldout(cct, 5) << "LMDB txn_begin failed in clear_expired_entries: " 
-                      << mdb_strerror(rc) << dendl;
-      }
-      return -EIO;
-    }
-    
-    rc = mdb_cursor_open(txn, dbi, &cursor);
-    if (rc != 0) {
-      if (cct) {
-        ldout(cct, 5) << "LMDB cursor_open failed: " << mdb_strerror(rc) << dendl;
-      }
-      mdb_txn_abort(txn);
-      return -EIO;
-    }
-    
-    MDB_val key, val;
-    int removed = 0;
-    
-    while (mdb_cursor_get(cursor, &key, &val, MDB_NEXT) == 0) {
-      bufferlist bl;
-      bl.append(static_cast<char*>(val.mv_data), val.mv_size);
-      
-      try {
-        UsageStats stats;
-        auto iter = bl.cbegin();
-        stats.decode(iter);
-        
-        if (now - stats.last_updated > config.ttl) {
-          mdb_cursor_del(cursor, 0);
-          removed++;
-          inc_counter(PERF_CACHE_EXPIRED);
-        }
-      } catch (const buffer::error& e) {
-        // Skip malformed entries
-        if (cct) {
-          ldout(cct, 10) << "Skipping malformed entry: " << e.what() << dendl;
-        }
-      }
-    }
-    
-    mdb_cursor_close(cursor);
-    
-    rc = mdb_txn_commit(txn);
-    if (rc != 0) {
-      if (cct) {
-        ldout(cct, 5) << "LMDB txn_commit failed in clear_expired_entries: " 
-                      << mdb_strerror(rc) << dendl;
-      }
-      return -EIO;
-    }
-    
-    return removed;
-  };
-  
-  int ret = clear_db(user_dbi);
-  if (ret >= 0) {
-    total_removed += ret;
-  }
-  
-  ret = clear_db(bucket_dbi);
-  if (ret >= 0) {
-    total_removed += ret;
-  }
-  
   set_counter(PERF_CACHE_SIZE, get_cache_size_internal());
   
   if (cct) {
-    ldout(cct, 10) << "Cleared " << total_removed << " expired cache entries" << dendl;
+    ldout(cct, 10) << "Removed bucket " << bucket_name << " from cache" << dendl;
   }
   
-  return total_removed;
+  // NOTE: User stats are NOT updated here!
+  // Background thread reads from RADOS and recalculates user totals
+
+  
+  return 0;
 }
 
 size_t UsageCache::get_cache_size() const {
@@ -764,6 +620,10 @@ uint64_t UsageCache::get_cache_hits() const {
 
 uint64_t UsageCache::get_cache_misses() const {
   return cache_misses.load();
+}
+
+uint64_t UsageCache::get_cache_updates() const {
+  return perf_counters ? perf_counters->get(PERF_CACHE_UPDATE) : 0;
 }
 
 double UsageCache::get_hit_rate() const {

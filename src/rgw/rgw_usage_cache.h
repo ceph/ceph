@@ -35,13 +35,11 @@ public:
     std::string db_path;
     size_t max_db_size;
     uint32_t max_readers;
-    std::chrono::seconds ttl;
     
     Config() 
       : db_path("/var/lib/ceph/radosgw/usage_cache.mdb"),
         max_db_size(1 << 30),  // 1GB default
-        max_readers(126),
-        ttl(300) {}  // 5 min TTL
+        max_readers(126) {}
   };
 
   explicit UsageCache(const Config& config);
@@ -71,12 +69,10 @@ public:
   int update_bucket_stats(const std::string& bucket_name,
                          uint64_t bytes_used,
                          uint64_t num_objects,
-                         const std::string& user_id);
+                         const std::string& user_id = "");
   std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
   int remove_bucket_stats(const std::string& bucket_name);
   
-  // Maintenance
-  int clear_expired_entries();
   size_t get_cache_size() const;
   
   const Config& get_config() const { return config; }
@@ -85,6 +81,7 @@ public:
   uint64_t get_cache_hits() const;
   uint64_t get_cache_misses() const;
   double get_hit_rate() const;
+  uint64_t get_cache_updates() const;
 
   // Iterator methods for initial load
   std::vector<std::pair<std::string, UsageStats>> get_all_users();

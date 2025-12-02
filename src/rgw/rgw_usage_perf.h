@@ -13,6 +13,7 @@
 
 #include "common/perf_counters.h"
 #include "rgw_usage_cache.h"
+#include "common/dout.h"
 
 // To avoid heavy header rgw_sal.h , we are adding a forward declaration here
 namespace rgw::sal {
@@ -31,6 +32,18 @@ enum {
   l_rgw_usage_cache_update,
   l_rgw_usage_cache_evict,
   l_rgw_usage_last
+};
+
+class UsagePerfDoutPrefix : public DoutPrefixProvider {
+  CephContext* cct;
+public:
+  explicit UsagePerfDoutPrefix(CephContext* _cct) : cct(_cct) {}
+  
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out << "usage_perf: ";
+  }
 };
 
 class UsagePerfCounters {
@@ -52,12 +65,9 @@ private:
   std::unordered_set<std::string> active_users;
   mutable std::mutex activity_mutex;
   
-  // Cleanup thread management
-  std::thread cleanup_thread;
   std::thread refresh_thread;
   std::atomic<bool> shutdown_flag{false};
-  std::chrono::seconds cleanup_interval{300}; // 5 minutes
-  std::chrono::seconds refresh_interval{60};
+  std::chrono::seconds refresh_interval{1200};
   
   void create_global_counters();
   PerfCounters* create_user_counters(const std::string& user_id);
@@ -84,6 +94,8 @@ public:
   void stop();
   void shutdown();
   
+  void set_driver(rgw::sal::Driver* d) { driver = d; }
+
   // User stats updates
   void update_user_stats(const std::string& user_id,
                         uint64_t bytes_used,
@@ -97,33 +109,28 @@ public:
                           const std::string& user_id = "",
                           bool update_cache = true);
 
-void mark_bucket_active(const std::string& bucket_name,
-                        const std::string& tenant = "");
+  void mark_bucket_active(const std::string& bucket_name,
+                          const std::string& tenant = "");
 
-void mark_user_active(const std::string& user_id);
+  void mark_user_active(const std::string& user_id);
 
-  // Cache operations
-  void refresh_from_cache(const std::string& user_id,
-                         const std::string& bucket_name);
-  void evict_from_cache(const std::string& user_id,
-                       const std::string& bucket_name);
+// Cache operations
+void refresh_from_cache(const std::string& user_id,
+                        const std::string& bucket_name);
+void evict_from_cache(const std::string& user_id,
+                      const std::string& bucket_name);
   
-  // Stats retrieval (from cache)
-  std::optional<UsageStats> get_user_stats(const std::string& user_id);
-  std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
-  
-  // Maintenance
-  void cleanup_expired_entries();
-  size_t get_cache_size() const;
-  
-  // Set cleanup interval
-  void set_cleanup_interval(std::chrono::seconds interval) {
-    cleanup_interval = interval;
-  }
+void sync_user_from_rados(const std::string& user_id);
 
-  void set_refresh_interval(std::chrono::seconds interval) {
-    refresh_interval = interval;
-  }
+// Stats retrieval (from cache)
+std::optional<UsageStats> get_user_stats(const std::string& user_id);
+std::optional<UsageStats> get_bucket_stats(const std::string& bucket_name);
+
+size_t get_cache_size() const;
+
+void set_refresh_interval(std::chrono::seconds interval) {
+  refresh_interval = interval;
+}
 };
 
 // Global singleton access
