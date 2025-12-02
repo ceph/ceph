@@ -58,6 +58,7 @@ rgw_http_errors rgw_http_s3_errors({
     { STATUS_REDIRECT, {303, "" }},
     { ERR_NOT_MODIFIED, {304, "NotModified" }},
     { EINVAL, {400, "InvalidArgument" }},
+    { ENAMETOOLONG, {400, "InvalidArgument" }},
     { ERR_INVALID_REQUEST, {400, "InvalidRequest" }},
     { ERR_INVALID_DIGEST, {400, "InvalidDigest" }},
     { ERR_BAD_DIGEST, {400, "BadDigest" }},
