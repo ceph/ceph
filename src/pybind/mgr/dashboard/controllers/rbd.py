@@ -548,3 +548,19 @@ class RbdGroup(RESTController):
             RbdService.validate_namespace(ioctx, namespace)
             ioctx.set_namespace(namespace)
             return group.add_image(ioctx, image_name)
+
+    @RESTController.Collection('DELETE', path='/{group_name}/image')
+    @handle_rbd_error()
+    @EndpointDoc("Remove image from a group",
+                 parameters={
+                     'pool_name': (str, 'Name of the pool'),
+                     'group_name': (str, 'Name of the group'),
+                     'image_name': (str, 'Name of the image'),
+                 },
+                 responses={200: None})
+    def remove_image(self, pool_name, group_name, image_name, namespace=None):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            group = rbd.Group(ioctx, group_name)
+            RbdService.validate_namespace(ioctx, namespace)
+            ioctx.set_namespace(namespace)
+            return group.remove_image(ioctx, image_name)
