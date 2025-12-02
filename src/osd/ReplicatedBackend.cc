@@ -600,6 +600,14 @@ void ReplicatedBackend::submit_transaction(
   ObjectStore::Transaction op_t;
   PGTransactionUPtr t(std::move(_t));
   set<hobject_t> added, removed;
+  std::set<hobject_t> deleted;
+  for (auto &[hoid, op] : t.get()->op_map) {
+    if (op.is_delete()) {
+      deleted.insert(hoid);
+    }
+  }
+  std::optional<hobject_t> migration_watermark =
+    parent->consider_updating_migration_watermark(deleted);
   generate_transaction(
     t,
     coll,
@@ -638,11 +646,15 @@ void ReplicatedBackend::submit_transaction(
     removed.size() ? *(removed.begin()) : hobject_t(),
     log_entries,
     hset_history,
+    migration_watermark,
     &op,
     op_t);
 
   add_temp_objs(added);
   clear_temp_objs(removed);
+  if (migration_watermark) {
+    get_parent()->update_migration_watermark(*migration_watermark);
+  }
 
   parent->log_operation(
     std::move(log_entries),
@@ -1107,6 +1119,7 @@ Message * ReplicatedBackend::generate_subop(
   hobject_t discard_temp_oid,
   const bufferlist &log_entries,
   std::optional<pg_hit_set_history_t> &hset_hist,
+  std::optional<hobject_t> &migration_watermark,
   ObjectStore::Transaction &op_t,
   pg_shard_t peer,
   const pg_info_t &pinfo)
@@ -1153,6 +1166,7 @@ Message * ReplicatedBackend::generate_subop(
   wr->new_temp_oid = new_temp_oid;
   wr->discard_temp_oid = discard_temp_oid;
   wr->updated_hit_set_history = hset_hist;
+  wr->migration_watermark = migration_watermark;
   return wr;
 }
 
@@ -1167,6 +1181,7 @@ void ReplicatedBackend::issue_op(
   hobject_t discard_temp_oid,
   const vector<pg_log_entry_t> &log_entries,
   std::optional<pg_hit_set_history_t> &hset_hist,
+  std::optional<hobject_t> &migration_watermark,
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
@@ -1200,6 +1215,7 @@ void ReplicatedBackend::issue_op(
 	  discard_temp_oid,
 	  logs,
 	  hset_hist,
+	  migration_watermark,
 	  op_t,
 	  shard,
 	  pinfo);
@@ -1264,6 +1280,9 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
       rm->localt.remove(coll, ghobject_t(m->discard_temp_oid));
     }
     clear_temp_obj(m->discard_temp_oid);
+  }
+  if (m->migration_watermark) {
+    get_parent()->update_migration_watermark(*m->migration_watermark);
   }
 
   p = const_cast<bufferlist&>(m->logbl).begin();

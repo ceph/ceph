@@ -24,7 +24,7 @@
 
 class MOSDRepOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -85,6 +85,9 @@ public:
   /// non-empty if this transaction involves a hit_set history update
   std::optional<pg_hit_set_history_t> updated_hit_set_history;
 
+  /// non-empty if pool migration watermark is being updated
+  std::optional<hobject_t> migration_watermark;
+
   bufferlist txn_payload;
 
   epoch_t get_map_epoch() const override {
@@ -142,6 +145,11 @@ public:
 
     ceph_assert(header.version >= 3);
     decode(pg_committed_to, p);
+    if (header.version >= 4) {
+      decode(migration_watermark, p);
+    } else {
+      migration_watermark.reset();
+    }
     final_decode_needed = false;
   }
 
@@ -166,6 +174,8 @@ public:
     encode(from, payload);
     encode(updated_hit_set_history, payload);
     encode(pg_committed_to, payload);
+    encode(migration_watermark, payload);
+
     bufferlist middle(txn_payload);
     set_middle(middle);
   }
@@ -202,6 +212,9 @@ public:
       out << " " << poid << " v " << version;
       if (updated_hit_set_history)
         out << ", has_updated_hit_set_history";
+      if (migration_watermark) {
+	out << ", mw " << *migration_watermark;
+      }
       out << ", pct=" << pg_committed_to;
     }
     out << ")";
