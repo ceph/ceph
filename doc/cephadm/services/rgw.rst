@@ -105,7 +105,7 @@ example spec file:
 Adding a second port to accept HTTP traffic
 -------------------------------------------
 
-The RGW service specification can be used to pass a second port to the frontend by using
+The RGW service specification can be used to configure a second port on the frontend by using
 the ``rgw_frontend_secondary_port`` argument list. It can only be used to accept HTTP traffic.
 
 example spec file:

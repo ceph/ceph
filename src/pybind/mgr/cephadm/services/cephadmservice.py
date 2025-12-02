@@ -1390,7 +1390,8 @@ class RgwService(CephService):
                     args.append(
                         f"ssl_endpoint={build_url(host=ip_to_bind_to, port=port).lstrip('/')}")
                     if secondary_port is not None:
-                        args.append(f"port={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}s")
+                        args.append(
+                            f"endpoint={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}")
                 else:
                     args.append(f"ssl_port={port}")
                     if secondary_port is not None:
@@ -1410,11 +1411,11 @@ class RgwService(CephService):
                     # note the 's' suffix on port
                     args.append(f"port={build_url(host=ip_to_bind_to, port=port).lstrip('/')}s")
                     if secondary_port is not None:
-                        args.append(f"port={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}s")
+                        args.append(f"port={build_url(host=ip_to_bind_to, port=secondary_port).lstrip('/')}")
                 else:
                     args.append(f"port={port}s")  # note the 's' suffix on port
                     if secondary_port is not None:
-                        args.append(f"port={secondary_port}s")
+                        args.append(f"port={secondary_port}")
                 if spec.generate_cert:
                     args.append(f"ssl_certificate=config://rgw/cert/{daemon_spec.name()}")
                 elif not extra_ssl_cert_provided:
