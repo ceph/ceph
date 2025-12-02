@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - \(MON_DOWN\)
+      - pgs peering
 tasks:
 - install:
     branch: squid
