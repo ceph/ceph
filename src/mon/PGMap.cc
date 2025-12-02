@@ -2013,8 +2013,9 @@ void PGMap::get_stuck_stats(
     }
 
     if ((types & STUCK_PEERING) && (i->second.state & PG_STATE_PEERING)) {
-      if (i->second.last_peered < val)
-	val = i->second.last_peered;
+      utime_t latest = std::max(i->second.last_active, i->second.last_peered);
+      if (latest < val)
+	val = latest;
     }
     // val is now the earliest any of the requested stuck states began
     if (val < cutoff) {
@@ -2508,7 +2509,7 @@ void PGMap::get_health_checks(
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
     { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
     // Delayed (wait until stuck) reports
-    { PG_STATE_PEERING,          {UNAVAILABLE, [](const pg_stat_t &p){return p.last_peered;}    } },
+    { PG_STATE_PEERING,          {UNAVAILABLE, [](const pg_stat_t &p){return std::max(p.last_active, p.last_peered);}    } },
     { PG_STATE_UNDERSIZED,       {DEGRADED,    [](const pg_stat_t &p){return p.last_fullsized;} } },
     { PG_STATE_STALE,            {UNAVAILABLE, [](const pg_stat_t &p){return p.last_unstale;}   } },
     // Delayed and inverted reports
