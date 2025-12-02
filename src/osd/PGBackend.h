@@ -455,6 +455,12 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual std::optional<ceph::buffer::list> get_header_from_journal() {
     return std::nullopt; // Only EC uses ec_omap_journal
    };
+   virtual int omap_iterate(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid, ///< [in] object
+    ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
+    std::function<ObjectStore::omap_iter_ret_t(std::string_view, std::string_view)> f ///< [in] function to call for each key/value pair
+   ) = 0;
  private:
    std::set<hobject_t> temp_contents;
  public:
