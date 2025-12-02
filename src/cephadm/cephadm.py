@@ -72,6 +72,7 @@ from cephadmlib.context_getters import (
 from cephadmlib.exceptions import (
     ClusterAlreadyExists,
     Error,
+    TimeoutExpired,
     UnauthorizedRegistryError,
     DaemonStartException,
 )
@@ -3331,6 +3332,41 @@ def command_logs(ctx: CephadmContext) -> None:
 ##################################
 
 
+def command_exec(ctx: CephadmContext) -> int:
+    """
+    Execute a shell command on the host
+    Return Codes:
+        - `0`: Command executed successfully
+        - `124`: Command timed out
+        - `1`: Error during execution
+        - Other: Return code from the executed command
+    """
+    if not ctx.command:
+        raise Error('No command provided to execute')
+    cmd = ctx.command
+    logger.debug('Executing command: %s' % ' '.join(cmd))
+    try:
+        stdout, stderr, returncode = call(
+            ctx,
+            cmd,
+            verbosity=CallVerbosity.SILENT,
+            timeout=ctx.timeout
+        )
+        if stdout:
+            sys.stdout.write(stdout)
+        if stderr:
+            sys.stderr.write(stderr)
+        return returncode
+    except TimeoutExpired:
+        logger.exception('Command timed out after %s seconds' % ctx.timeout)
+        return 124
+    except Exception as e:
+        logger.exception('Error executing command: %s' % str(e))
+        return 1
+
+##################################
+
+
 def command_list_networks(ctx):
     # type: (CephadmContext) -> None
     r = list_networks(ctx)
@@ -4953,6 +4989,16 @@ def _get_parser():
     parser_logs.add_argument(
         'command', nargs='*',
         help='additional journalctl args')
+
+    parser_exec = subparsers.add_parser(
+        'exec', help='execute a shell command on the host')
+    parser_exec.set_defaults(func=command_exec)
+    parser_exec.add_argument(
+        '--command', nargs=argparse.REMAINDER,
+        help='command to execute')
+    parser_exec.add_argument(
+        '--fsid',
+        help='cluster FSID')
 
     parser_bootstrap = subparsers.add_parser(
         'bootstrap', help='bootstrap a cluster (mon + mgr daemons)')
