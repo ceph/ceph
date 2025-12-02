@@ -12,162 +12,160 @@ from google.protobuf import symbol_database as _symbol_database
 _sym_db = _symbol_database.Default()
 
 
-
-
 DESCRIPTOR = _descriptor.FileDescriptor(
-  name='dashboard/services/proto/gateway.proto',
-  package='',
-  syntax='proto3',
-  serialized_options=None,
-  create_key=_descriptor._internal_create_key,
-  serialized_pb=b'\n&dashboard/services/proto/gateway.proto\"\xeb\x03\n\x11namespace_add_req\x12\x15\n\rrbd_pool_name\x18\x01 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x11\n\x04nsid\x18\x04 \x01(\rH\x00\x88\x01\x01\x12\x12\n\nblock_size\x18\x05 \x01(\r\x12\x11\n\x04uuid\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x07 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0c\x63reate_image\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x11\n\x04size\x18\t \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\n \x01(\x08H\x05\x88\x01\x01\x12\x1c\n\x0fno_auto_visible\x18\x0b \x01(\x08H\x06\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x0c \x01(\x08H\x07\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\r \x01(\x08H\x08\x88\x01\x01\x12\x16\n\tread_only\x18\x0e \x01(\x08H\t\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x0f\n\r_create_imageB\x07\n\x05_sizeB\x08\n\x06_forceB\x12\n\x10_no_auto_visibleB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_only\"{\n\x14namespace_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08new_size\x18\x04 \x01(\x04\x42\x10\n\x0e_OBSOLETE_uuid\"o\n\x1anamespace_get_io_stats_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuid\"\xee\x02\n\x15namespace_set_qos_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1e\n\x11rw_ios_per_second\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12!\n\x14rw_mbytes_per_second\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12 \n\x13r_mbytes_per_second\x18\x06 \x01(\x04H\x03\x88\x01\x01\x12 \n\x13w_mbytes_per_second\x18\x07 \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x14\n\x12_rw_ios_per_secondB\x17\n\x15_rw_mbytes_per_secondB\x16\n\x14_r_mbytes_per_secondB\x16\n\x14_w_mbytes_per_secondB\x08\n\x06_force\"\xbe\x01\n)namespace_change_load_balancing_group_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08\x61nagrpid\x18\x04 \x01(\x05\x12\x1a\n\rauto_lb_logic\x18\x05 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x10\n\x0e_auto_lb_logic\"z\n\x1fnamespace_change_visibility_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x14\n\x0c\x61uto_visible\x18\x03 \x01(\x08\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"]\n!namespace_set_rbd_trash_image_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0btrash_image\x18\x03 \x01(\x08\"Y\n\x1dnamespace_set_auto_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0b\x61uto_resize\x18\x03 \x01(\x08\"\x8f\x01\n\x14namespace_delete_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x04 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x0c\n\n_i_am_sure\"m\n\x16namespace_add_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"R\n\x19namespace_delete_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\"\x8f\x02\n\x14\x63reate_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x15\n\rserial_number\x18\x02 \x01(\t\x12\x1b\n\x0emax_namespaces\x18\x03 \x01(\rH\x00\x88\x01\x01\x12\x11\n\tenable_ha\x18\x04 \x01(\x08\x12\x1c\n\x0fno_group_append\x18\x05 \x01(\x08H\x01\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x07 \x01(\x08H\x03\x88\x01\x01\x42\x11\n\x0f_max_namespacesB\x12\n\x10_no_group_appendB\r\n\x0b_dhchap_keyB\x10\n\x0e_key_encrypted\"K\n\x14\x64\x65lete_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x12\n\x05\x66orce\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"Y\n\x18\x63hange_subsystem_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x17\n\ndhchap_key\x18\x02 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\"`\n\x13list_namespaces_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x11\n\x04uuid\x18\x03 \x01(\tH\x01\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuid\"\xd5\x01\n\x0c\x61\x64\x64_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x10\n\x03psk\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rpsk_encrypted\x18\x05 \x01(\x08H\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x06 \x01(\x08H\x03\x88\x01\x01\x42\x06\n\x04_pskB\r\n\x0b_dhchap_keyB\x10\n\x0e_psk_encryptedB\x10\n\x0e_key_encrypted\"f\n\x13\x63hange_host_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x17\n\ndhchap_key\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\":\n\x0fremove_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\"O\n\x0elist_hosts_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\")\n\x14list_connections_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"\xeb\x01\n\x13\x63reate_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x13\n\x06secure\x18\x07 \x01(\x08H\x02\x88\x01\x01\x12\x1d\n\x10verify_host_name\x18\x08 \x01(\x08H\x03\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\t\n\x07_secureB\x13\n\x11_verify_host_name\"\xb5\x01\n\x13\x64\x65lete_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x07 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\x08\n\x06_force\"\'\n\x12list_listeners_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"q\n\x13list_subsystems_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x1a\n\rserial_number\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x10\n\x0e_serial_number\"\x14\n\x12get_subsystems_req\"U\n%get_spdk_nvmf_log_flags_and_level_req\x12\x1a\n\rall_log_flags\x18\x01 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_all_log_flags\"5\n\x1a\x64isable_spdk_nvmf_logs_req\x12\x17\n\x0f\x65xtra_log_flags\x18\x01 \x03(\t\"\x97\x01\n\x16set_spdk_nvmf_logs_req\x12!\n\tlog_level\x18\x01 \x01(\x0e\x32\t.LogLevelH\x00\x88\x01\x01\x12#\n\x0bprint_level\x18\x02 \x01(\x0e\x32\t.LogLevelH\x01\x88\x01\x01\x12\x17\n\x0f\x65xtra_log_flags\x18\x03 \x03(\tB\x0c\n\n_log_levelB\x0e\n\x0c_print_level\"@\n\x14get_gateway_info_req\x12\x18\n\x0b\x63li_version\x18\x01 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_cli_version\"\x1b\n\x19get_gateway_log_level_req\";\n\x19set_gateway_log_level_req\x12\x1e\n\tlog_level\x18\x01 \x01(\x0e\x32\x0b.GwLogLevel\"8\n\x1fshow_gateway_listeners_info_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\"\x17\n\x15get_gateway_stats_req\"<\n\x0f\x61na_group_state\x12\x0e\n\x06grp_id\x18\x01 \x01(\r\x12\x19\n\x05state\x18\x02 \x01(\x0e\x32\n.ana_state\"?\n\x0enqn_ana_states\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12 \n\x06states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"+\n\x08\x61na_info\x12\x1f\n\x06states\x18\x01 \x03(\x0b\x32\x0f.nqn_ana_states\"3\n\nreq_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\"C\n\rsubsys_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0b\n\x03nqn\x18\x03 \x01(\t\"B\n\x0bnsid_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0c\n\x04nsid\x18\x03 \x01(\r\"1\n\x0fsubsystems_info\x12\x1e\n\nsubsystems\x18\x01 \x03(\x0b\x32\n.subsystem\"\xac\x03\n\tsubsystem\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0f\n\x07subtype\x18\x02 \x01(\t\x12)\n\x10listen_addresses\x18\x03 \x03(\x0b\x32\x0f.listen_address\x12\x14\n\x05hosts\x18\x04 \x03(\x0b\x32\x05.host\x12\x16\n\x0e\x61llow_any_host\x18\x05 \x01(\x08\x12\x1a\n\rserial_number\x18\x06 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0cmodel_number\x18\x07 \x01(\tH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x08 \x01(\rH\x02\x88\x01\x01\x12\x17\n\nmin_cntlid\x18\t \x01(\rH\x03\x88\x01\x01\x12\x17\n\nmax_cntlid\x18\n \x01(\rH\x04\x88\x01\x01\x12\x1e\n\nnamespaces\x18\x0b \x03(\x0b\x32\n.namespace\x12\x1b\n\x0ehas_dhchap_key\x18\x0c \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_serial_numberB\x0f\n\r_model_numberB\x11\n\x0f_max_namespacesB\r\n\x0b_min_cntlidB\r\n\x0b_max_cntlidB\x11\n\x0f_has_dhchap_key\"\x97\x01\n\x0elisten_address\x12\x0e\n\x06trtype\x18\x01 \x01(\t\x12\x0e\n\x06\x61\x64rfam\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12\x0f\n\x07trsvcid\x18\x04 \x01(\t\x12\x16\n\ttransport\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x01\x88\x01\x01\x42\x0c\n\n_transportB\t\n\x07_secure\"\x84\x02\n\tnamespace\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x16\n\tbdev_name\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05nguid\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x02\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x06 \x01(\rH\x03\x88\x01\x01\x12\x12\n\x05nonce\x18\x07 \x01(\tH\x04\x88\x01\x01\x12\x19\n\x0c\x61uto_visible\x18\x08 \x01(\x08H\x05\x88\x01\x01\x12\r\n\x05hosts\x18\t \x03(\tB\x0c\n\n_bdev_nameB\x08\n\x06_nguidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x08\n\x06_nonceB\x0f\n\r_auto_visible\"`\n\x13subsystems_info_cli\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\nsubsystems\x18\x03 \x03(\x0b\x32\x0e.subsystem_cli\"\xe0\x02\n\rsubsystem_cli\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\tenable_ha\x18\x02 \x01(\x08\x12\x15\n\rserial_number\x18\x03 \x01(\t\x12\x14\n\x0cmodel_number\x18\x04 \x01(\t\x12\x12\n\nmin_cntlid\x18\x05 \x01(\r\x12\x12\n\nmax_cntlid\x18\x06 \x01(\r\x12\x17\n\x0fnamespace_count\x18\x07 \x01(\r\x12\x0f\n\x07subtype\x18\x08 \x01(\t\x12\x16\n\x0emax_namespaces\x18\t \x01(\r\x12\x1b\n\x0ehas_dhchap_key\x18\n \x01(\x08H\x00\x88\x01\x01\x12\x1b\n\x0e\x61llow_any_host\x18\x0b \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x63reated_without_key\x18\x0c \x01(\x08H\x02\x88\x01\x01\x42\x11\n\x0f_has_dhchap_keyB\x11\n\x0f_allow_any_hostB\x16\n\x14_created_without_key\"\x99\x04\n\x0cgateway_info\x12\x13\n\x0b\x63li_version\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05group\x18\x04 \x01(\t\x12\x0c\n\x04\x61\x64\x64r\x18\x05 \x01(\t\x12\x0c\n\x04port\x18\x06 \x01(\t\x12\x13\n\x0b\x62ool_status\x18\x07 \x01(\x08\x12\x0e\n\x06status\x18\x08 \x01(\x05\x12\x15\n\rerror_message\x18\t \x01(\t\x12\x19\n\x0cspdk_version\x18\n \x01(\tH\x00\x88\x01\x01\x12\x1c\n\x14load_balancing_group\x18\x0b \x01(\r\x12\x10\n\x08hostname\x18\x0c \x01(\t\x12\x1b\n\x0emax_subsystems\x18\r \x01(\rH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x0e \x01(\rH\x02\x88\x01\x01\x12$\n\x17max_hosts_per_subsystem\x18\x0f \x01(\rH\x03\x88\x01\x01\x12)\n\x1cmax_namespaces_per_subsystem\x18\x10 \x01(\rH\x04\x88\x01\x01\x12\x16\n\tmax_hosts\x18\x11 \x01(\rH\x05\x88\x01\x01\x42\x0f\n\r_spdk_versionB\x11\n\x0f_max_subsystemsB\x11\n\x0f_max_namespacesB\x1a\n\x18_max_hosts_per_subsystemB\x1f\n\x1d_max_namespaces_per_subsystemB\x0c\n\n_max_hosts\"E\n\x0b\x63li_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"D\n\ngw_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"+\n\x19poll_group_transport_info\x12\x0e\n\x06trtype\x18\x01 \x01(\t\"\xe5\x01\n\x0fpoll_group_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x64min_qpairs\x18\x02 \x01(\r\x12\x11\n\tio_qpairs\x18\x03 \x01(\r\x12\x1c\n\x14\x63urrent_admin_qpairs\x18\x04 \x01(\r\x12\x19\n\x11\x63urrent_io_qpairs\x18\x05 \x01(\r\x12\x17\n\x0fpending_bdev_io\x18\x06 \x01(\x04\x12\x19\n\x11\x63ompleted_nvme_io\x18\x07 \x01(\x04\x12.\n\ntransports\x18\x08 \x03(\x0b\x32\x1a.poll_group_transport_info\"u\n\x12gateway_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12%\n\x0bpoll_groups\x18\x04 \x03(\x0b\x32\x10.poll_group_info\"\xb3\x01\n\rlistener_info\x12\x11\n\thost_name\x18\x01 \x01(\t\x12\x0e\n\x06trtype\x18\x02 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x03 \x01(\x0e\x32\x0e.AddressFamily\x12\x0e\n\x06traddr\x18\x04 \x01(\t\x12\x0f\n\x07trsvcid\x18\x05 \x01(\r\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06\x61\x63tive\x18\x07 \x01(\x08H\x01\x88\x01\x01\x42\t\n\x07_secureB\t\n\x07_active\"Z\n\x0elisteners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12!\n\tlisteners\x18\x03 \x03(\x0b\x32\x0e.listener_info\"^\n\x15gateway_listener_info\x12 \n\x08listener\x18\x01 \x01(\x0b\x32\x0e.listener_info\x12#\n\tlb_states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"m\n\x16gateway_listeners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\x0cgw_listeners\x18\x03 \x03(\x0b\x32\x16.gateway_listener_info\"\xbb\x01\n\x04host\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x14\n\x07use_psk\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x03 \x01(\x08H\x01\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\x04 \x01(\x08H\x02\x88\x01\x01\x42\n\n\x08_use_pskB\r\n\x0b_use_dhchapB(\n&_disconnected_due_to_keepalive_timeout\"x\n\nhosts_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x16\n\x0e\x61llow_any_host\x18\x03 \x01(\x08\x12\x15\n\rsubsystem_nqn\x18\x04 \x01(\t\x12\x14\n\x05hosts\x18\x05 \x03(\x0b\x32\x05.host\"\x98\x03\n\nconnection\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0e\n\x06traddr\x18\x02 \x01(\t\x12\x0f\n\x07trsvcid\x18\x03 \x01(\r\x12\x0e\n\x06trtype\x18\x04 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamily\x12\x11\n\tconnected\x18\x06 \x01(\x08\x12\x14\n\x0cqpairs_count\x18\x07 \x01(\x05\x12\x15\n\rcontroller_id\x18\x08 \x01(\x05\x12\x13\n\x06secure\x18\t \x01(\x08H\x00\x88\x01\x01\x12\x14\n\x07use_psk\x18\n \x01(\x08H\x01\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x0b \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tsubsystem\x18\x0c \x01(\tH\x03\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\r \x01(\x08H\x04\x88\x01\x01\x42\t\n\x07_secureB\n\n\x08_use_pskB\r\n\x0b_use_dhchapB\x0c\n\n_subsystemB(\n&_disconnected_due_to_keepalive_timeout\"r\n\x10\x63onnections_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12 \n\x0b\x63onnections\x18\x04 \x03(\x0b\x32\x0b.connection\"\xbf\x05\n\rnamespace_cli\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x11\n\tbdev_name\x18\x02 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x03 \x01(\t\x12\x15\n\rrbd_pool_name\x18\x04 \x01(\t\x12\x1c\n\x14load_balancing_group\x18\x05 \x01(\r\x12\x12\n\nblock_size\x18\x06 \x01(\r\x12\x16\n\x0erbd_image_size\x18\x07 \x01(\x04\x12\x0c\n\x04uuid\x18\x08 \x01(\t\x12\x19\n\x11rw_ios_per_second\x18\t \x01(\x04\x12\x1c\n\x14rw_mbytes_per_second\x18\n \x01(\x04\x12\x1b\n\x13r_mbytes_per_second\x18\x0b \x01(\x04\x12\x1b\n\x13w_mbytes_per_second\x18\x0c \x01(\x04\x12\x14\n\x0c\x61uto_visible\x18\r \x01(\x08\x12\r\n\x05hosts\x18\x0e \x03(\t\x12\x1d\n\x10ns_subsystem_nqn\x18\x0f \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x10 \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\x11 \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tread_only\x18\x12 \x01(\x08H\x03\x88\x01\x01\x12\x19\n\x0c\x63luster_name\x18\x13 \x01(\tH\x04\x88\x01\x01\x12,\n\x1f\x63onfigured_load_balancing_group\x18\x14 \x01(\rH\x05\x88\x01\x01\x12\x1d\n\x10image_was_shrunk\x18\x15 \x01(\x08H\x06\x88\x01\x01\x42\x13\n\x11_ns_subsystem_nqnB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x0f\n\r_cluster_nameB\"\n _configured_load_balancing_groupB\x13\n\x11_image_was_shrunk\"s\n\x0fnamespaces_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\"\n\nnamespaces\x18\x04 \x03(\x0b\x32\x0e.namespace_cli\"1\n\x12namespace_io_error\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r\"\xda\x05\n\x17namespace_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x0c\n\x04nsid\x18\x04 \x01(\r\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x11\n\tbdev_name\x18\x06 \x01(\t\x12\x11\n\ttick_rate\x18\x07 \x01(\x04\x12\r\n\x05ticks\x18\x08 \x01(\x04\x12\x12\n\nbytes_read\x18\t \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\n \x01(\x04\x12\x15\n\rbytes_written\x18\x0b \x01(\x04\x12\x15\n\rnum_write_ops\x18\x0c \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\r \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x0e \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\x0f \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x10 \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x11 \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\x12 \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x13 \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x14 \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x15 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x16 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x17 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x18 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x19 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x1a \x01(\x04\x12%\n\x08io_error\x18\x1b \x03(\x0b\x32\x13.namespace_io_errorB\x07\n\x05_uuid\"3\n\x12spdk_log_flag_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\"\xba\x01\n\"spdk_nvmf_log_flags_and_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12+\n\x0envmf_log_flags\x18\x03 \x03(\x0b\x32\x13.spdk_log_flag_info\x12\x1c\n\tlog_level\x18\x04 \x01(\x0e\x32\t.LogLevel\x12\"\n\x0flog_print_level\x18\x05 \x01(\x0e\x32\t.LogLevel\"_\n\x16gateway_log_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x1e\n\tlog_level\x18\x03 \x01(\x0e\x32\x0b.GwLogLevel*#\n\rAddressFamily\x12\x08\n\x04ipv4\x10\x00\x12\x08\n\x04ipv6\x10\x01*C\n\x08LogLevel\x12\t\n\x05\x45RROR\x10\x00\x12\x0b\n\x07WARNING\x10\x01\x12\n\n\x06NOTICE\x10\x02\x12\x08\n\x04INFO\x10\x03\x12\t\n\x05\x44\x45\x42UG\x10\x04*S\n\nGwLogLevel\x12\n\n\x06notset\x10\x00\x12\t\n\x05\x64\x65\x62ug\x10\n\x12\x08\n\x04info\x10\x14\x12\x0b\n\x07warning\x10\x1e\x12\t\n\x05\x65rror\x10(\x12\x0c\n\x08\x63ritical\x10\x32*J\n\tana_state\x12\t\n\x05UNSET\x10\x00\x12\r\n\tOPTIMIZED\x10\x01\x12\x11\n\rNON_OPTIMIZED\x10\x02\x12\x10\n\x0cINACCESSIBLE\x10\x03\x32\xcd\x11\n\x07Gateway\x12\x33\n\rnamespace_add\x12\x12.namespace_add_req\x1a\x0c.nsid_status\"\x00\x12;\n\x10\x63reate_subsystem\x12\x15.create_subsystem_req\x1a\x0e.subsys_status\"\x00\x12\x38\n\x10\x64\x65lete_subsystem\x12\x15.delete_subsystem_req\x1a\x0b.req_status\"\x00\x12@\n\x14\x63hange_subsystem_key\x12\x19.change_subsystem_key_req\x1a\x0b.req_status\"\x00\x12;\n\x0flist_namespaces\x12\x14.list_namespaces_req\x1a\x10.namespaces_info\"\x00\x12\x38\n\x10namespace_resize\x12\x15.namespace_resize_req\x1a\x0b.req_status\"\x00\x12Q\n\x16namespace_get_io_stats\x12\x1b.namespace_get_io_stats_req\x1a\x18.namespace_io_stats_info\"\x00\x12\x41\n\x18namespace_set_qos_limits\x12\x16.namespace_set_qos_req\x1a\x0b.req_status\"\x00\x12\x62\n%namespace_change_load_balancing_group\x12*.namespace_change_load_balancing_group_req\x1a\x0b.req_status\"\x00\x12N\n\x1bnamespace_change_visibility\x12 .namespace_change_visibility_req\x1a\x0b.req_status\"\x00\x12R\n\x1dnamespace_set_rbd_trash_image\x12\".namespace_set_rbd_trash_image_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_set_auto_resize\x12\x1e.namespace_set_auto_resize_req\x1a\x0b.req_status\"\x00\x12\x38\n\x10namespace_delete\x12\x15.namespace_delete_req\x1a\x0b.req_status\"\x00\x12<\n\x12namespace_add_host\x12\x17.namespace_add_host_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15namespace_delete_host\x12\x1a.namespace_delete_host_req\x1a\x0b.req_status\"\x00\x12(\n\x08\x61\x64\x64_host\x12\r.add_host_req\x1a\x0b.req_status\"\x00\x12.\n\x0bremove_host\x12\x10.remove_host_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x63hange_host_key\x12\x14.change_host_key_req\x1a\x0b.req_status\"\x00\x12,\n\nlist_hosts\x12\x0f.list_hosts_req\x1a\x0b.hosts_info\"\x00\x12>\n\x10list_connections\x12\x15.list_connections_req\x1a\x11.connections_info\"\x00\x12\x36\n\x0f\x63reate_listener\x12\x14.create_listener_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x64\x65lete_listener\x12\x14.delete_listener_req\x1a\x0b.req_status\"\x00\x12\x38\n\x0elist_listeners\x12\x13.list_listeners_req\x1a\x0f.listeners_info\"\x00\x12?\n\x0flist_subsystems\x12\x14.list_subsystems_req\x1a\x14.subsystems_info_cli\"\x00\x12\x39\n\x0eget_subsystems\x12\x13.get_subsystems_req\x1a\x10.subsystems_info\"\x00\x12)\n\rset_ana_state\x12\t.ana_info\x1a\x0b.req_status\"\x00\x12r\n!get_spdk_nvmf_log_flags_and_level\x12&.get_spdk_nvmf_log_flags_and_level_req\x1a#.spdk_nvmf_log_flags_and_level_info\"\x00\x12\x44\n\x16\x64isable_spdk_nvmf_logs\x12\x1b.disable_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12<\n\x12set_spdk_nvmf_logs\x12\x17.set_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12:\n\x10get_gateway_info\x12\x15.get_gateway_info_req\x1a\r.gateway_info\"\x00\x12N\n\x15get_gateway_log_level\x12\x1a.get_gateway_log_level_req\x1a\x17.gateway_log_level_info\"\x00\x12\x42\n\x15set_gateway_log_level\x12\x1a.set_gateway_log_level_req\x1a\x0b.req_status\"\x00\x12Z\n\x1bshow_gateway_listeners_info\x12 .show_gateway_listeners_info_req\x1a\x17.gateway_listeners_info\"\x00\x12\x42\n\x11get_gateway_stats\x12\x16.get_gateway_stats_req\x1a\x13.gateway_stats_info\"\x00\x62\x06proto3'
+    name='dashboard/services/proto/gateway.proto',
+    package='',
+    syntax='proto3',
+    serialized_options=None,
+    create_key=_descriptor._internal_create_key,
+    serialized_pb=b'\n&dashboard/services/proto/gateway.proto\"\xeb\x03\n\x11namespace_add_req\x12\x15\n\rrbd_pool_name\x18\x01 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x11\n\x04nsid\x18\x04 \x01(\rH\x00\x88\x01\x01\x12\x12\n\nblock_size\x18\x05 \x01(\r\x12\x11\n\x04uuid\x18\x06 \x01(\tH\x01\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x07 \x01(\x05H\x02\x88\x01\x01\x12\x19\n\x0c\x63reate_image\x18\x08 \x01(\x08H\x03\x88\x01\x01\x12\x11\n\x04size\x18\t \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\n \x01(\x08H\x05\x88\x01\x01\x12\x1c\n\x0fno_auto_visible\x18\x0b \x01(\x08H\x06\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x0c \x01(\x08H\x07\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\r \x01(\x08H\x08\x88\x01\x01\x12\x16\n\tread_only\x18\x0e \x01(\x08H\t\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x0f\n\r_create_imageB\x07\n\x05_sizeB\x08\n\x06_forceB\x12\n\x10_no_auto_visibleB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_only\"{\n\x14namespace_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08new_size\x18\x04 \x01(\x04\x42\x10\n\x0e_OBSOLETE_uuid\"o\n\x1anamespace_get_io_stats_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuid\"\xee\x02\n\x15namespace_set_qos_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x1e\n\x11rw_ios_per_second\x18\x04 \x01(\x04H\x01\x88\x01\x01\x12!\n\x14rw_mbytes_per_second\x18\x05 \x01(\x04H\x02\x88\x01\x01\x12 \n\x13r_mbytes_per_second\x18\x06 \x01(\x04H\x03\x88\x01\x01\x12 \n\x13w_mbytes_per_second\x18\x07 \x01(\x04H\x04\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x08 \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x14\n\x12_rw_ios_per_secondB\x17\n\x15_rw_mbytes_per_secondB\x16\n\x14_r_mbytes_per_secondB\x16\n\x14_w_mbytes_per_secondB\x08\n\x06_force\"\xbe\x01\n)namespace_change_load_balancing_group_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x10\n\x08\x61nagrpid\x18\x04 \x01(\x05\x12\x1a\n\rauto_lb_logic\x18\x05 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x10\n\x0e_auto_lb_logic\"z\n\x1fnamespace_change_visibility_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x14\n\x0c\x61uto_visible\x18\x03 \x01(\x08\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"]\n!namespace_set_rbd_trash_image_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0btrash_image\x18\x03 \x01(\x08\"Y\n\x1dnamespace_set_auto_resize_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x13\n\x0b\x61uto_resize\x18\x03 \x01(\x08\"\x8f\x01\n\x14namespace_delete_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x1a\n\rOBSOLETE_uuid\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x16\n\ti_am_sure\x18\x04 \x01(\x08H\x01\x88\x01\x01\x42\x10\n\x0e_OBSOLETE_uuidB\x0c\n\n_i_am_sure\"m\n\x16namespace_add_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\x12\x12\n\x05\x66orce\x18\x04 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"R\n\x19namespace_delete_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x0c\n\x04nsid\x18\x02 \x01(\r\x12\x10\n\x08host_nqn\x18\x03 \x01(\t\"\x8f\x02\n\x14\x63reate_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x15\n\rserial_number\x18\x02 \x01(\t\x12\x1b\n\x0emax_namespaces\x18\x03 \x01(\rH\x00\x88\x01\x01\x12\x11\n\tenable_ha\x18\x04 \x01(\x08\x12\x1c\n\x0fno_group_append\x18\x05 \x01(\x08H\x01\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x06 \x01(\tH\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x07 \x01(\x08H\x03\x88\x01\x01\x42\x11\n\x0f_max_namespacesB\x12\n\x10_no_group_appendB\r\n\x0b_dhchap_keyB\x10\n\x0e_key_encrypted\"K\n\x14\x64\x65lete_subsystem_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x12\n\x05\x66orce\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x08\n\x06_force\"Y\n\x18\x63hange_subsystem_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x17\n\ndhchap_key\x18\x02 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\"`\n\x13list_namespaces_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x11\n\x04nsid\x18\x02 \x01(\rH\x00\x88\x01\x01\x12\x11\n\x04uuid\x18\x03 \x01(\tH\x01\x88\x01\x01\x42\x07\n\x05_nsidB\x07\n\x05_uuid\"\xd5\x01\n\x0c\x61\x64\x64_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x10\n\x03psk\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x17\n\ndhchap_key\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x1a\n\rpsk_encrypted\x18\x05 \x01(\x08H\x02\x88\x01\x01\x12\x1a\n\rkey_encrypted\x18\x06 \x01(\x08H\x03\x88\x01\x01\x42\x06\n\x04_pskB\r\n\x0b_dhchap_keyB\x10\n\x0e_psk_encryptedB\x10\n\x0e_key_encrypted\"f\n\x13\x63hange_host_key_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\x12\x17\n\ndhchap_key\x18\x03 \x01(\tH\x00\x88\x01\x01\x42\r\n\x0b_dhchap_key\":\n\x0fremove_host_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\x12\x10\n\x08host_nqn\x18\x02 \x01(\t\"O\n\x0elist_hosts_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\x12\x19\n\x0c\x63lear_alerts\x18\x02 \x01(\x08H\x00\x88\x01\x01\x42\x0f\n\r_clear_alerts\")\n\x14list_connections_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"\xeb\x01\n\x13\x63reate_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x13\n\x06secure\x18\x07 \x01(\x08H\x02\x88\x01\x01\x12\x1d\n\x10verify_host_name\x18\x08 \x01(\x08H\x03\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\t\n\x07_secureB\x13\n\x11_verify_host_name\"\xb5\x01\n\x13\x64\x65lete_listener_req\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\thost_name\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12#\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamilyH\x00\x88\x01\x01\x12\x14\n\x07trsvcid\x18\x06 \x01(\rH\x01\x88\x01\x01\x12\x12\n\x05\x66orce\x18\x07 \x01(\x08H\x02\x88\x01\x01\x42\t\n\x07_adrfamB\n\n\x08_trsvcidB\x08\n\x06_force\"\'\n\x12list_listeners_req\x12\x11\n\tsubsystem\x18\x01 \x01(\t\"q\n\x13list_subsystems_req\x12\x1a\n\rsubsystem_nqn\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x1a\n\rserial_number\x18\x02 \x01(\tH\x01\x88\x01\x01\x42\x10\n\x0e_subsystem_nqnB\x10\n\x0e_serial_number\"\x14\n\x12get_subsystems_req\"U\n%get_spdk_nvmf_log_flags_and_level_req\x12\x1a\n\rall_log_flags\x18\x01 \x01(\x08H\x00\x88\x01\x01\x42\x10\n\x0e_all_log_flags\"5\n\x1a\x64isable_spdk_nvmf_logs_req\x12\x17\n\x0f\x65xtra_log_flags\x18\x01 \x03(\t\"\x97\x01\n\x16set_spdk_nvmf_logs_req\x12!\n\tlog_level\x18\x01 \x01(\x0e\x32\t.LogLevelH\x00\x88\x01\x01\x12#\n\x0bprint_level\x18\x02 \x01(\x0e\x32\t.LogLevelH\x01\x88\x01\x01\x12\x17\n\x0f\x65xtra_log_flags\x18\x03 \x03(\tB\x0c\n\n_log_levelB\x0e\n\x0c_print_level\"@\n\x14get_gateway_info_req\x12\x18\n\x0b\x63li_version\x18\x01 \x01(\tH\x00\x88\x01\x01\x42\x0e\n\x0c_cli_version\"\x1b\n\x19get_gateway_log_level_req\";\n\x19set_gateway_log_level_req\x12\x1e\n\tlog_level\x18\x01 \x01(\x0e\x32\x0b.GwLogLevel\"8\n\x1fshow_gateway_listeners_info_req\x12\x15\n\rsubsystem_nqn\x18\x01 \x01(\t\"\x17\n\x15get_gateway_stats_req\"<\n\x0f\x61na_group_state\x12\x0e\n\x06grp_id\x18\x01 \x01(\r\x12\x19\n\x05state\x18\x02 \x01(\x0e\x32\n.ana_state\"?\n\x0enqn_ana_states\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12 \n\x06states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"+\n\x08\x61na_info\x12\x1f\n\x06states\x18\x01 \x03(\x0b\x32\x0f.nqn_ana_states\"3\n\nreq_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\"C\n\rsubsys_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0b\n\x03nqn\x18\x03 \x01(\t\"B\n\x0bnsid_status\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0c\n\x04nsid\x18\x03 \x01(\r\"1\n\x0fsubsystems_info\x12\x1e\n\nsubsystems\x18\x01 \x03(\x0b\x32\n.subsystem\"\xac\x03\n\tsubsystem\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0f\n\x07subtype\x18\x02 \x01(\t\x12)\n\x10listen_addresses\x18\x03 \x03(\x0b\x32\x0f.listen_address\x12\x14\n\x05hosts\x18\x04 \x03(\x0b\x32\x05.host\x12\x16\n\x0e\x61llow_any_host\x18\x05 \x01(\x08\x12\x1a\n\rserial_number\x18\x06 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0cmodel_number\x18\x07 \x01(\tH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x08 \x01(\rH\x02\x88\x01\x01\x12\x17\n\nmin_cntlid\x18\t \x01(\rH\x03\x88\x01\x01\x12\x17\n\nmax_cntlid\x18\n \x01(\rH\x04\x88\x01\x01\x12\x1e\n\nnamespaces\x18\x0b \x03(\x0b\x32\n.namespace\x12\x1b\n\x0ehas_dhchap_key\x18\x0c \x01(\x08H\x05\x88\x01\x01\x42\x10\n\x0e_serial_numberB\x0f\n\r_model_numberB\x11\n\x0f_max_namespacesB\r\n\x0b_min_cntlidB\r\n\x0b_max_cntlidB\x11\n\x0f_has_dhchap_key\"\x97\x01\n\x0elisten_address\x12\x0e\n\x06trtype\x18\x01 \x01(\t\x12\x0e\n\x06\x61\x64rfam\x18\x02 \x01(\t\x12\x0e\n\x06traddr\x18\x03 \x01(\t\x12\x0f\n\x07trsvcid\x18\x04 \x01(\t\x12\x16\n\ttransport\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x01\x88\x01\x01\x42\x0c\n\n_transportB\t\n\x07_secure\"\x84\x02\n\tnamespace\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x0c\n\x04name\x18\x02 \x01(\t\x12\x16\n\tbdev_name\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x12\n\x05nguid\x18\x04 \x01(\tH\x01\x88\x01\x01\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x02\x88\x01\x01\x12\x15\n\x08\x61nagrpid\x18\x06 \x01(\rH\x03\x88\x01\x01\x12\x12\n\x05nonce\x18\x07 \x01(\tH\x04\x88\x01\x01\x12\x19\n\x0c\x61uto_visible\x18\x08 \x01(\x08H\x05\x88\x01\x01\x12\r\n\x05hosts\x18\t \x03(\tB\x0c\n\n_bdev_nameB\x08\n\x06_nguidB\x07\n\x05_uuidB\x0b\n\t_anagrpidB\x08\n\x06_nonceB\x0f\n\r_auto_visible\"`\n\x13subsystems_info_cli\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\"\n\nsubsystems\x18\x03 \x03(\x0b\x32\x0e.subsystem_cli\"\xe0\x02\n\rsubsystem_cli\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x11\n\tenable_ha\x18\x02 \x01(\x08\x12\x15\n\rserial_number\x18\x03 \x01(\t\x12\x14\n\x0cmodel_number\x18\x04 \x01(\t\x12\x12\n\nmin_cntlid\x18\x05 \x01(\r\x12\x12\n\nmax_cntlid\x18\x06 \x01(\r\x12\x17\n\x0fnamespace_count\x18\x07 \x01(\r\x12\x0f\n\x07subtype\x18\x08 \x01(\t\x12\x16\n\x0emax_namespaces\x18\t \x01(\r\x12\x1b\n\x0ehas_dhchap_key\x18\n \x01(\x08H\x00\x88\x01\x01\x12\x1b\n\x0e\x61llow_any_host\x18\x0b \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x63reated_without_key\x18\x0c \x01(\x08H\x02\x88\x01\x01\x42\x11\n\x0f_has_dhchap_keyB\x11\n\x0f_allow_any_hostB\x16\n\x14_created_without_key\"\x99\x04\n\x0cgateway_info\x12\x13\n\x0b\x63li_version\x18\x01 \x01(\t\x12\x0f\n\x07version\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\r\n\x05group\x18\x04 \x01(\t\x12\x0c\n\x04\x61\x64\x64r\x18\x05 \x01(\t\x12\x0c\n\x04port\x18\x06 \x01(\t\x12\x13\n\x0b\x62ool_status\x18\x07 \x01(\x08\x12\x0e\n\x06status\x18\x08 \x01(\x05\x12\x15\n\rerror_message\x18\t \x01(\t\x12\x19\n\x0cspdk_version\x18\n \x01(\tH\x00\x88\x01\x01\x12\x1c\n\x14load_balancing_group\x18\x0b \x01(\r\x12\x10\n\x08hostname\x18\x0c \x01(\t\x12\x1b\n\x0emax_subsystems\x18\r \x01(\rH\x01\x88\x01\x01\x12\x1b\n\x0emax_namespaces\x18\x0e \x01(\rH\x02\x88\x01\x01\x12$\n\x17max_hosts_per_subsystem\x18\x0f \x01(\rH\x03\x88\x01\x01\x12)\n\x1cmax_namespaces_per_subsystem\x18\x10 \x01(\rH\x04\x88\x01\x01\x12\x16\n\tmax_hosts\x18\x11 \x01(\rH\x05\x88\x01\x01\x42\x0f\n\r_spdk_versionB\x11\n\x0f_max_subsystemsB\x11\n\x0f_max_namespacesB\x1a\n\x18_max_hosts_per_subsystemB\x1f\n\x1d_max_namespaces_per_subsystemB\x0c\n\n_max_hosts\"E\n\x0b\x63li_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"D\n\ngw_version\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x0f\n\x07version\x18\x03 \x01(\t\"+\n\x19poll_group_transport_info\x12\x0e\n\x06trtype\x18\x01 \x01(\t\"\xe5\x01\n\x0fpoll_group_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x14\n\x0c\x61\x64min_qpairs\x18\x02 \x01(\r\x12\x11\n\tio_qpairs\x18\x03 \x01(\r\x12\x1c\n\x14\x63urrent_admin_qpairs\x18\x04 \x01(\r\x12\x19\n\x11\x63urrent_io_qpairs\x18\x05 \x01(\r\x12\x17\n\x0fpending_bdev_io\x18\x06 \x01(\x04\x12\x19\n\x11\x63ompleted_nvme_io\x18\x07 \x01(\x04\x12.\n\ntransports\x18\x08 \x03(\x0b\x32\x1a.poll_group_transport_info\"u\n\x12gateway_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x11\n\ttick_rate\x18\x03 \x01(\x04\x12%\n\x0bpoll_groups\x18\x04 \x03(\x0b\x32\x10.poll_group_info\"\xb3\x01\n\rlistener_info\x12\x11\n\thost_name\x18\x01 \x01(\t\x12\x0e\n\x06trtype\x18\x02 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x03 \x01(\x0e\x32\x0e.AddressFamily\x12\x0e\n\x06traddr\x18\x04 \x01(\t\x12\x0f\n\x07trsvcid\x18\x05 \x01(\r\x12\x13\n\x06secure\x18\x06 \x01(\x08H\x00\x88\x01\x01\x12\x13\n\x06\x61\x63tive\x18\x07 \x01(\x08H\x01\x88\x01\x01\x42\t\n\x07_secureB\t\n\x07_active\"Z\n\x0elisteners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12!\n\tlisteners\x18\x03 \x03(\x0b\x32\x0e.listener_info\"^\n\x15gateway_listener_info\x12 \n\x08listener\x18\x01 \x01(\x0b\x32\x0e.listener_info\x12#\n\tlb_states\x18\x02 \x03(\x0b\x32\x10.ana_group_state\"m\n\x16gateway_listeners_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12,\n\x0cgw_listeners\x18\x03 \x03(\x0b\x32\x16.gateway_listener_info\"\xbb\x01\n\x04host\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x14\n\x07use_psk\x18\x02 \x01(\x08H\x00\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x03 \x01(\x08H\x01\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\x04 \x01(\x08H\x02\x88\x01\x01\x42\n\n\x08_use_pskB\r\n\x0b_use_dhchapB(\n&_disconnected_due_to_keepalive_timeout\"x\n\nhosts_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x16\n\x0e\x61llow_any_host\x18\x03 \x01(\x08\x12\x15\n\rsubsystem_nqn\x18\x04 \x01(\t\x12\x14\n\x05hosts\x18\x05 \x03(\x0b\x32\x05.host\"\x98\x03\n\nconnection\x12\x0b\n\x03nqn\x18\x01 \x01(\t\x12\x0e\n\x06traddr\x18\x02 \x01(\t\x12\x0f\n\x07trsvcid\x18\x03 \x01(\r\x12\x0e\n\x06trtype\x18\x04 \x01(\t\x12\x1e\n\x06\x61\x64rfam\x18\x05 \x01(\x0e\x32\x0e.AddressFamily\x12\x11\n\tconnected\x18\x06 \x01(\x08\x12\x14\n\x0cqpairs_count\x18\x07 \x01(\x05\x12\x15\n\rcontroller_id\x18\x08 \x01(\x05\x12\x13\n\x06secure\x18\t \x01(\x08H\x00\x88\x01\x01\x12\x14\n\x07use_psk\x18\n \x01(\x08H\x01\x88\x01\x01\x12\x17\n\nuse_dhchap\x18\x0b \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tsubsystem\x18\x0c \x01(\tH\x03\x88\x01\x01\x12\x32\n%disconnected_due_to_keepalive_timeout\x18\r \x01(\x08H\x04\x88\x01\x01\x42\t\n\x07_secureB\n\n\x08_use_pskB\r\n\x0b_use_dhchapB\x0c\n\n_subsystemB(\n&_disconnected_due_to_keepalive_timeout\"r\n\x10\x63onnections_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12 \n\x0b\x63onnections\x18\x04 \x03(\x0b\x32\x0b.connection\"\xbf\x05\n\rnamespace_cli\x12\x0c\n\x04nsid\x18\x01 \x01(\r\x12\x11\n\tbdev_name\x18\x02 \x01(\t\x12\x16\n\x0erbd_image_name\x18\x03 \x01(\t\x12\x15\n\rrbd_pool_name\x18\x04 \x01(\t\x12\x1c\n\x14load_balancing_group\x18\x05 \x01(\r\x12\x12\n\nblock_size\x18\x06 \x01(\r\x12\x16\n\x0erbd_image_size\x18\x07 \x01(\x04\x12\x0c\n\x04uuid\x18\x08 \x01(\t\x12\x19\n\x11rw_ios_per_second\x18\t \x01(\x04\x12\x1c\n\x14rw_mbytes_per_second\x18\n \x01(\x04\x12\x1b\n\x13r_mbytes_per_second\x18\x0b \x01(\x04\x12\x1b\n\x13w_mbytes_per_second\x18\x0c \x01(\x04\x12\x14\n\x0c\x61uto_visible\x18\r \x01(\x08\x12\r\n\x05hosts\x18\x0e \x03(\t\x12\x1d\n\x10ns_subsystem_nqn\x18\x0f \x01(\tH\x00\x88\x01\x01\x12\x18\n\x0btrash_image\x18\x10 \x01(\x08H\x01\x88\x01\x01\x12 \n\x13\x64isable_auto_resize\x18\x11 \x01(\x08H\x02\x88\x01\x01\x12\x16\n\tread_only\x18\x12 \x01(\x08H\x03\x88\x01\x01\x12\x19\n\x0c\x63luster_name\x18\x13 \x01(\tH\x04\x88\x01\x01\x12,\n\x1f\x63onfigured_load_balancing_group\x18\x14 \x01(\rH\x05\x88\x01\x01\x12\x1d\n\x10image_was_shrunk\x18\x15 \x01(\x08H\x06\x88\x01\x01\x42\x13\n\x11_ns_subsystem_nqnB\x0e\n\x0c_trash_imageB\x16\n\x14_disable_auto_resizeB\x0c\n\n_read_onlyB\x0f\n\r_cluster_nameB\"\n _configured_load_balancing_groupB\x13\n\x11_image_was_shrunk\"s\n\x0fnamespaces_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\"\n\nnamespaces\x18\x04 \x03(\x0b\x32\x0e.namespace_cli\"1\n\x12namespace_io_error\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\r\"\xda\x05\n\x17namespace_io_stats_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x15\n\rsubsystem_nqn\x18\x03 \x01(\t\x12\x0c\n\x04nsid\x18\x04 \x01(\r\x12\x11\n\x04uuid\x18\x05 \x01(\tH\x00\x88\x01\x01\x12\x11\n\tbdev_name\x18\x06 \x01(\t\x12\x11\n\ttick_rate\x18\x07 \x01(\x04\x12\r\n\x05ticks\x18\x08 \x01(\x04\x12\x12\n\nbytes_read\x18\t \x01(\x04\x12\x14\n\x0cnum_read_ops\x18\n \x01(\x04\x12\x15\n\rbytes_written\x18\x0b \x01(\x04\x12\x15\n\rnum_write_ops\x18\x0c \x01(\x04\x12\x16\n\x0e\x62ytes_unmapped\x18\r \x01(\x04\x12\x15\n\rnum_unmap_ops\x18\x0e \x01(\x04\x12\x1a\n\x12read_latency_ticks\x18\x0f \x01(\x04\x12\x1e\n\x16max_read_latency_ticks\x18\x10 \x01(\x04\x12\x1e\n\x16min_read_latency_ticks\x18\x11 \x01(\x04\x12\x1b\n\x13write_latency_ticks\x18\x12 \x01(\x04\x12\x1f\n\x17max_write_latency_ticks\x18\x13 \x01(\x04\x12\x1f\n\x17min_write_latency_ticks\x18\x14 \x01(\x04\x12\x1b\n\x13unmap_latency_ticks\x18\x15 \x01(\x04\x12\x1f\n\x17max_unmap_latency_ticks\x18\x16 \x01(\x04\x12\x1f\n\x17min_unmap_latency_ticks\x18\x17 \x01(\x04\x12\x1a\n\x12\x63opy_latency_ticks\x18\x18 \x01(\x04\x12\x1e\n\x16max_copy_latency_ticks\x18\x19 \x01(\x04\x12\x1e\n\x16min_copy_latency_ticks\x18\x1a \x01(\x04\x12%\n\x08io_error\x18\x1b \x03(\x0b\x32\x13.namespace_io_errorB\x07\n\x05_uuid\"3\n\x12spdk_log_flag_info\x12\x0c\n\x04name\x18\x01 \x01(\t\x12\x0f\n\x07\x65nabled\x18\x02 \x01(\x08\"\xba\x01\n\"spdk_nvmf_log_flags_and_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12+\n\x0envmf_log_flags\x18\x03 \x03(\x0b\x32\x13.spdk_log_flag_info\x12\x1c\n\tlog_level\x18\x04 \x01(\x0e\x32\t.LogLevel\x12\"\n\x0flog_print_level\x18\x05 \x01(\x0e\x32\t.LogLevel\"_\n\x16gateway_log_level_info\x12\x0e\n\x06status\x18\x01 \x01(\x05\x12\x15\n\rerror_message\x18\x02 \x01(\t\x12\x1e\n\tlog_level\x18\x03 \x01(\x0e\x32\x0b.GwLogLevel*#\n\rAddressFamily\x12\x08\n\x04ipv4\x10\x00\x12\x08\n\x04ipv6\x10\x01*C\n\x08LogLevel\x12\t\n\x05\x45RROR\x10\x00\x12\x0b\n\x07WARNING\x10\x01\x12\n\n\x06NOTICE\x10\x02\x12\x08\n\x04INFO\x10\x03\x12\t\n\x05\x44\x45\x42UG\x10\x04*S\n\nGwLogLevel\x12\n\n\x06notset\x10\x00\x12\t\n\x05\x64\x65\x62ug\x10\n\x12\x08\n\x04info\x10\x14\x12\x0b\n\x07warning\x10\x1e\x12\t\n\x05\x65rror\x10(\x12\x0c\n\x08\x63ritical\x10\x32*J\n\tana_state\x12\t\n\x05UNSET\x10\x00\x12\r\n\tOPTIMIZED\x10\x01\x12\x11\n\rNON_OPTIMIZED\x10\x02\x12\x10\n\x0cINACCESSIBLE\x10\x03\x32\xcd\x11\n\x07Gateway\x12\x33\n\rnamespace_add\x12\x12.namespace_add_req\x1a\x0c.nsid_status\"\x00\x12;\n\x10\x63reate_subsystem\x12\x15.create_subsystem_req\x1a\x0e.subsys_status\"\x00\x12\x38\n\x10\x64\x65lete_subsystem\x12\x15.delete_subsystem_req\x1a\x0b.req_status\"\x00\x12@\n\x14\x63hange_subsystem_key\x12\x19.change_subsystem_key_req\x1a\x0b.req_status\"\x00\x12;\n\x0flist_namespaces\x12\x14.list_namespaces_req\x1a\x10.namespaces_info\"\x00\x12\x38\n\x10namespace_resize\x12\x15.namespace_resize_req\x1a\x0b.req_status\"\x00\x12Q\n\x16namespace_get_io_stats\x12\x1b.namespace_get_io_stats_req\x1a\x18.namespace_io_stats_info\"\x00\x12\x41\n\x18namespace_set_qos_limits\x12\x16.namespace_set_qos_req\x1a\x0b.req_status\"\x00\x12\x62\n%namespace_change_load_balancing_group\x12*.namespace_change_load_balancing_group_req\x1a\x0b.req_status\"\x00\x12N\n\x1bnamespace_change_visibility\x12 .namespace_change_visibility_req\x1a\x0b.req_status\"\x00\x12R\n\x1dnamespace_set_rbd_trash_image\x12\".namespace_set_rbd_trash_image_req\x1a\x0b.req_status\"\x00\x12J\n\x19namespace_set_auto_resize\x12\x1e.namespace_set_auto_resize_req\x1a\x0b.req_status\"\x00\x12\x38\n\x10namespace_delete\x12\x15.namespace_delete_req\x1a\x0b.req_status\"\x00\x12<\n\x12namespace_add_host\x12\x17.namespace_add_host_req\x1a\x0b.req_status\"\x00\x12\x42\n\x15namespace_delete_host\x12\x1a.namespace_delete_host_req\x1a\x0b.req_status\"\x00\x12(\n\x08\x61\x64\x64_host\x12\r.add_host_req\x1a\x0b.req_status\"\x00\x12.\n\x0bremove_host\x12\x10.remove_host_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x63hange_host_key\x12\x14.change_host_key_req\x1a\x0b.req_status\"\x00\x12,\n\nlist_hosts\x12\x0f.list_hosts_req\x1a\x0b.hosts_info\"\x00\x12>\n\x10list_connections\x12\x15.list_connections_req\x1a\x11.connections_info\"\x00\x12\x36\n\x0f\x63reate_listener\x12\x14.create_listener_req\x1a\x0b.req_status\"\x00\x12\x36\n\x0f\x64\x65lete_listener\x12\x14.delete_listener_req\x1a\x0b.req_status\"\x00\x12\x38\n\x0elist_listeners\x12\x13.list_listeners_req\x1a\x0f.listeners_info\"\x00\x12?\n\x0flist_subsystems\x12\x14.list_subsystems_req\x1a\x14.subsystems_info_cli\"\x00\x12\x39\n\x0eget_subsystems\x12\x13.get_subsystems_req\x1a\x10.subsystems_info\"\x00\x12)\n\rset_ana_state\x12\t.ana_info\x1a\x0b.req_status\"\x00\x12r\n!get_spdk_nvmf_log_flags_and_level\x12&.get_spdk_nvmf_log_flags_and_level_req\x1a#.spdk_nvmf_log_flags_and_level_info\"\x00\x12\x44\n\x16\x64isable_spdk_nvmf_logs\x12\x1b.disable_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12<\n\x12set_spdk_nvmf_logs\x12\x17.set_spdk_nvmf_logs_req\x1a\x0b.req_status\"\x00\x12:\n\x10get_gateway_info\x12\x15.get_gateway_info_req\x1a\r.gateway_info\"\x00\x12N\n\x15get_gateway_log_level\x12\x1a.get_gateway_log_level_req\x1a\x17.gateway_log_level_info\"\x00\x12\x42\n\x15set_gateway_log_level\x12\x1a.set_gateway_log_level_req\x1a\x0b.req_status\"\x00\x12Z\n\x1bshow_gateway_listeners_info\x12 .show_gateway_listeners_info_req\x1a\x17.gateway_listeners_info\"\x00\x12\x42\n\x11get_gateway_stats\x12\x16.get_gateway_stats_req\x1a\x13.gateway_stats_info\"\x00\x62\x06proto3'
 )
 
 _ADDRESSFAMILY = _descriptor.EnumDescriptor(
-  name='AddressFamily',
-  full_name='AddressFamily',
-  filename=None,
-  file=DESCRIPTOR,
-  create_key=_descriptor._internal_create_key,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='ipv4', index=0, number=0,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='ipv6', index=1, number=1,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=10223,
-  serialized_end=10258,
+    name='AddressFamily',
+    full_name='AddressFamily',
+    filename=None,
+    file=DESCRIPTOR,
+    create_key=_descriptor._internal_create_key,
+    values=[
+        _descriptor.EnumValueDescriptor(
+            name='ipv4', index=0, number=0,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='ipv6', index=1, number=1,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+    ],
+    containing_type=None,
+    serialized_options=None,
+    serialized_start=10223,
+    serialized_end=10258,
 )
 _sym_db.RegisterEnumDescriptor(_ADDRESSFAMILY)
 
 AddressFamily = enum_type_wrapper.EnumTypeWrapper(_ADDRESSFAMILY)
 _LOGLEVEL = _descriptor.EnumDescriptor(
-  name='LogLevel',
-  full_name='LogLevel',
-  filename=None,
-  file=DESCRIPTOR,
-  create_key=_descriptor._internal_create_key,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='ERROR', index=0, number=0,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='WARNING', index=1, number=1,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='NOTICE', index=2, number=2,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='INFO', index=3, number=3,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='DEBUG', index=4, number=4,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=10260,
-  serialized_end=10327,
+    name='LogLevel',
+    full_name='LogLevel',
+    filename=None,
+    file=DESCRIPTOR,
+    create_key=_descriptor._internal_create_key,
+    values=[
+        _descriptor.EnumValueDescriptor(
+            name='ERROR', index=0, number=0,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='WARNING', index=1, number=1,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='NOTICE', index=2, number=2,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='INFO', index=3, number=3,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='DEBUG', index=4, number=4,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+    ],
+    containing_type=None,
+    serialized_options=None,
+    serialized_start=10260,
+    serialized_end=10327,
 )
 _sym_db.RegisterEnumDescriptor(_LOGLEVEL)
 
 LogLevel = enum_type_wrapper.EnumTypeWrapper(_LOGLEVEL)
 _GWLOGLEVEL = _descriptor.EnumDescriptor(
-  name='GwLogLevel',
-  full_name='GwLogLevel',
-  filename=None,
-  file=DESCRIPTOR,
-  create_key=_descriptor._internal_create_key,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='notset', index=0, number=0,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='debug', index=1, number=10,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='info', index=2, number=20,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='warning', index=3, number=30,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='error', index=4, number=40,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='critical', index=5, number=50,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=10329,
-  serialized_end=10412,
+    name='GwLogLevel',
+    full_name='GwLogLevel',
+    filename=None,
+    file=DESCRIPTOR,
+    create_key=_descriptor._internal_create_key,
+    values=[
+        _descriptor.EnumValueDescriptor(
+            name='notset', index=0, number=0,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='debug', index=1, number=10,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='info', index=2, number=20,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='warning', index=3, number=30,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='error', index=4, number=40,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='critical', index=5, number=50,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+    ],
+    containing_type=None,
+    serialized_options=None,
+    serialized_start=10329,
+    serialized_end=10412,
 )
 _sym_db.RegisterEnumDescriptor(_GWLOGLEVEL)
 
 GwLogLevel = enum_type_wrapper.EnumTypeWrapper(_GWLOGLEVEL)
 _ANA_STATE = _descriptor.EnumDescriptor(
-  name='ana_state',
-  full_name='ana_state',
-  filename=None,
-  file=DESCRIPTOR,
-  create_key=_descriptor._internal_create_key,
-  values=[
-    _descriptor.EnumValueDescriptor(
-      name='UNSET', index=0, number=0,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='OPTIMIZED', index=1, number=1,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='NON_OPTIMIZED', index=2, number=2,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-    _descriptor.EnumValueDescriptor(
-      name='INACCESSIBLE', index=3, number=3,
-      serialized_options=None,
-      type=None,
-      create_key=_descriptor._internal_create_key),
-  ],
-  containing_type=None,
-  serialized_options=None,
-  serialized_start=10414,
-  serialized_end=10488,
+    name='ana_state',
+    full_name='ana_state',
+    filename=None,
+    file=DESCRIPTOR,
+    create_key=_descriptor._internal_create_key,
+    values=[
+        _descriptor.EnumValueDescriptor(
+            name='UNSET', index=0, number=0,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='OPTIMIZED', index=1, number=1,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='NON_OPTIMIZED', index=2, number=2,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+        _descriptor.EnumValueDescriptor(
+            name='INACCESSIBLE', index=3, number=3,
+            serialized_options=None,
+            type=None,
+            create_key=_descriptor._internal_create_key),
+    ],
+    containing_type=None,
+    serialized_options=None,
+    serialized_start=10414,
+    serialized_end=10488,
 )
 _sym_db.RegisterEnumDescriptor(_ANA_STATE)
 
@@ -191,4400 +189,4402 @@ NON_OPTIMIZED = 2
 INACCESSIBLE = 3
 
 
-
 _NAMESPACE_ADD_REQ = _descriptor.Descriptor(
-  name='namespace_add_req',
-  full_name='namespace_add_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='rbd_pool_name', full_name='namespace_add_req.rbd_pool_name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rbd_image_name', full_name='namespace_add_req.rbd_image_name', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_add_req.subsystem_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_add_req.nsid', index=3,
-      number=4, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='block_size', full_name='namespace_add_req.block_size', index=4,
-      number=5, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='uuid', full_name='namespace_add_req.uuid', index=5,
-      number=6, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='anagrpid', full_name='namespace_add_req.anagrpid', index=6,
-      number=7, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='create_image', full_name='namespace_add_req.create_image', index=7,
-      number=8, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='size', full_name='namespace_add_req.size', index=8,
-      number=9, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='namespace_add_req.force', index=9,
-      number=10, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='no_auto_visible', full_name='namespace_add_req.no_auto_visible', index=10,
-      number=11, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trash_image', full_name='namespace_add_req.trash_image', index=11,
-      number=12, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='disable_auto_resize', full_name='namespace_add_req.disable_auto_resize', index=12,
-      number=13, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='read_only', full_name='namespace_add_req.read_only', index=13,
-      number=14, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_nsid', full_name='namespace_add_req._nsid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_uuid', full_name='namespace_add_req._uuid',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_anagrpid', full_name='namespace_add_req._anagrpid',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_create_image', full_name='namespace_add_req._create_image',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_size', full_name='namespace_add_req._size',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='namespace_add_req._force',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_no_auto_visible', full_name='namespace_add_req._no_auto_visible',
-      index=6, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_trash_image', full_name='namespace_add_req._trash_image',
-      index=7, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_disable_auto_resize', full_name='namespace_add_req._disable_auto_resize',
-      index=8, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_read_only', full_name='namespace_add_req._read_only',
-      index=9, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=43,
-  serialized_end=534,
+    name='namespace_add_req',
+    full_name='namespace_add_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='rbd_pool_name', full_name='namespace_add_req.rbd_pool_name', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rbd_image_name', full_name='namespace_add_req.rbd_image_name', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_add_req.subsystem_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_add_req.nsid', index=3,
+            number=4, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='block_size', full_name='namespace_add_req.block_size', index=4,
+            number=5, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='uuid', full_name='namespace_add_req.uuid', index=5,
+            number=6, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='anagrpid', full_name='namespace_add_req.anagrpid', index=6,
+            number=7, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='create_image', full_name='namespace_add_req.create_image', index=7,
+            number=8, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='size', full_name='namespace_add_req.size', index=8,
+            number=9, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='namespace_add_req.force', index=9,
+            number=10, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='no_auto_visible', full_name='namespace_add_req.no_auto_visible', index=10,
+            number=11, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trash_image', full_name='namespace_add_req.trash_image', index=11,
+            number=12, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='disable_auto_resize', full_name='namespace_add_req.disable_auto_resize', index=12,
+            number=13, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='read_only', full_name='namespace_add_req.read_only', index=13,
+            number=14, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_nsid', full_name='namespace_add_req._nsid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_uuid', full_name='namespace_add_req._uuid',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_anagrpid', full_name='namespace_add_req._anagrpid',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_create_image', full_name='namespace_add_req._create_image',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_size', full_name='namespace_add_req._size',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='namespace_add_req._force',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_no_auto_visible', full_name='namespace_add_req._no_auto_visible',
+            index=6, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_trash_image', full_name='namespace_add_req._trash_image',
+            index=7, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_disable_auto_resize', full_name='namespace_add_req._disable_auto_resize',
+            index=8, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_read_only', full_name='namespace_add_req._read_only',
+            index=9, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=43,
+    serialized_end=534,
 )
 
 
 _NAMESPACE_RESIZE_REQ = _descriptor.Descriptor(
-  name='namespace_resize_req',
-  full_name='namespace_resize_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_resize_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_resize_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='OBSOLETE_uuid', full_name='namespace_resize_req.OBSOLETE_uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='new_size', full_name='namespace_resize_req.new_size', index=3,
-      number=4, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_OBSOLETE_uuid', full_name='namespace_resize_req._OBSOLETE_uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=536,
-  serialized_end=659,
+    name='namespace_resize_req',
+    full_name='namespace_resize_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_resize_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_resize_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='OBSOLETE_uuid', full_name='namespace_resize_req.OBSOLETE_uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='new_size', full_name='namespace_resize_req.new_size', index=3,
+            number=4, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_OBSOLETE_uuid', full_name='namespace_resize_req._OBSOLETE_uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=536,
+    serialized_end=659,
 )
 
 
 _NAMESPACE_GET_IO_STATS_REQ = _descriptor.Descriptor(
-  name='namespace_get_io_stats_req',
-  full_name='namespace_get_io_stats_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_get_io_stats_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_get_io_stats_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='OBSOLETE_uuid', full_name='namespace_get_io_stats_req.OBSOLETE_uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_OBSOLETE_uuid', full_name='namespace_get_io_stats_req._OBSOLETE_uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=661,
-  serialized_end=772,
+    name='namespace_get_io_stats_req',
+    full_name='namespace_get_io_stats_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_get_io_stats_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_get_io_stats_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='OBSOLETE_uuid', full_name='namespace_get_io_stats_req.OBSOLETE_uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_OBSOLETE_uuid', full_name='namespace_get_io_stats_req._OBSOLETE_uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=661,
+    serialized_end=772,
 )
 
 
 _NAMESPACE_SET_QOS_REQ = _descriptor.Descriptor(
-  name='namespace_set_qos_req',
-  full_name='namespace_set_qos_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_set_qos_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_set_qos_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='OBSOLETE_uuid', full_name='namespace_set_qos_req.OBSOLETE_uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rw_ios_per_second', full_name='namespace_set_qos_req.rw_ios_per_second', index=3,
-      number=4, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rw_mbytes_per_second', full_name='namespace_set_qos_req.rw_mbytes_per_second', index=4,
-      number=5, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='r_mbytes_per_second', full_name='namespace_set_qos_req.r_mbytes_per_second', index=5,
-      number=6, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='w_mbytes_per_second', full_name='namespace_set_qos_req.w_mbytes_per_second', index=6,
-      number=7, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='namespace_set_qos_req.force', index=7,
-      number=8, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_OBSOLETE_uuid', full_name='namespace_set_qos_req._OBSOLETE_uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_rw_ios_per_second', full_name='namespace_set_qos_req._rw_ios_per_second',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_rw_mbytes_per_second', full_name='namespace_set_qos_req._rw_mbytes_per_second',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_r_mbytes_per_second', full_name='namespace_set_qos_req._r_mbytes_per_second',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_w_mbytes_per_second', full_name='namespace_set_qos_req._w_mbytes_per_second',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='namespace_set_qos_req._force',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=775,
-  serialized_end=1141,
+    name='namespace_set_qos_req',
+    full_name='namespace_set_qos_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_set_qos_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_set_qos_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='OBSOLETE_uuid', full_name='namespace_set_qos_req.OBSOLETE_uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rw_ios_per_second', full_name='namespace_set_qos_req.rw_ios_per_second', index=3,
+            number=4, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rw_mbytes_per_second', full_name='namespace_set_qos_req.rw_mbytes_per_second', index=4,
+            number=5, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='r_mbytes_per_second', full_name='namespace_set_qos_req.r_mbytes_per_second', index=5,
+            number=6, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='w_mbytes_per_second', full_name='namespace_set_qos_req.w_mbytes_per_second', index=6,
+            number=7, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='namespace_set_qos_req.force', index=7,
+            number=8, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_OBSOLETE_uuid', full_name='namespace_set_qos_req._OBSOLETE_uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_rw_ios_per_second', full_name='namespace_set_qos_req._rw_ios_per_second',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_rw_mbytes_per_second', full_name='namespace_set_qos_req._rw_mbytes_per_second',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_r_mbytes_per_second', full_name='namespace_set_qos_req._r_mbytes_per_second',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_w_mbytes_per_second', full_name='namespace_set_qos_req._w_mbytes_per_second',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='namespace_set_qos_req._force',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=775,
+    serialized_end=1141,
 )
 
 
 _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ = _descriptor.Descriptor(
-  name='namespace_change_load_balancing_group_req',
-  full_name='namespace_change_load_balancing_group_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_change_load_balancing_group_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_change_load_balancing_group_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='OBSOLETE_uuid', full_name='namespace_change_load_balancing_group_req.OBSOLETE_uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='anagrpid', full_name='namespace_change_load_balancing_group_req.anagrpid', index=3,
-      number=4, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='auto_lb_logic', full_name='namespace_change_load_balancing_group_req.auto_lb_logic', index=4,
-      number=5, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_OBSOLETE_uuid', full_name='namespace_change_load_balancing_group_req._OBSOLETE_uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_auto_lb_logic', full_name='namespace_change_load_balancing_group_req._auto_lb_logic',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=1144,
-  serialized_end=1334,
+    name='namespace_change_load_balancing_group_req',
+    full_name='namespace_change_load_balancing_group_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_change_load_balancing_group_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_change_load_balancing_group_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='OBSOLETE_uuid', full_name='namespace_change_load_balancing_group_req.OBSOLETE_uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='anagrpid', full_name='namespace_change_load_balancing_group_req.anagrpid', index=3,
+            number=4, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='auto_lb_logic', full_name='namespace_change_load_balancing_group_req.auto_lb_logic', index=4,
+            number=5, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_OBSOLETE_uuid', full_name='namespace_change_load_balancing_group_req._OBSOLETE_uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_auto_lb_logic', full_name='namespace_change_load_balancing_group_req._auto_lb_logic',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=1144,
+    serialized_end=1334,
 )
 
 
 _NAMESPACE_CHANGE_VISIBILITY_REQ = _descriptor.Descriptor(
-  name='namespace_change_visibility_req',
-  full_name='namespace_change_visibility_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_change_visibility_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_change_visibility_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='auto_visible', full_name='namespace_change_visibility_req.auto_visible', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='namespace_change_visibility_req.force', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='namespace_change_visibility_req._force',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=1336,
-  serialized_end=1458,
+    name='namespace_change_visibility_req',
+    full_name='namespace_change_visibility_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_change_visibility_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_change_visibility_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='auto_visible', full_name='namespace_change_visibility_req.auto_visible', index=2,
+            number=3, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='namespace_change_visibility_req.force', index=3,
+            number=4, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='namespace_change_visibility_req._force',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=1336,
+    serialized_end=1458,
 )
 
 
 _NAMESPACE_SET_RBD_TRASH_IMAGE_REQ = _descriptor.Descriptor(
-  name='namespace_set_rbd_trash_image_req',
-  full_name='namespace_set_rbd_trash_image_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_set_rbd_trash_image_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_set_rbd_trash_image_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trash_image', full_name='namespace_set_rbd_trash_image_req.trash_image', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=1460,
-  serialized_end=1553,
+    name='namespace_set_rbd_trash_image_req',
+    full_name='namespace_set_rbd_trash_image_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_set_rbd_trash_image_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_set_rbd_trash_image_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trash_image', full_name='namespace_set_rbd_trash_image_req.trash_image', index=2,
+            number=3, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=1460,
+    serialized_end=1553,
 )
 
 
 _NAMESPACE_SET_AUTO_RESIZE_REQ = _descriptor.Descriptor(
-  name='namespace_set_auto_resize_req',
-  full_name='namespace_set_auto_resize_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_set_auto_resize_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_set_auto_resize_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='auto_resize', full_name='namespace_set_auto_resize_req.auto_resize', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=1555,
-  serialized_end=1644,
+    name='namespace_set_auto_resize_req',
+    full_name='namespace_set_auto_resize_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_set_auto_resize_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_set_auto_resize_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='auto_resize', full_name='namespace_set_auto_resize_req.auto_resize', index=2,
+            number=3, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=1555,
+    serialized_end=1644,
 )
 
 
 _NAMESPACE_DELETE_REQ = _descriptor.Descriptor(
-  name='namespace_delete_req',
-  full_name='namespace_delete_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_delete_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_delete_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='OBSOLETE_uuid', full_name='namespace_delete_req.OBSOLETE_uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='i_am_sure', full_name='namespace_delete_req.i_am_sure', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_OBSOLETE_uuid', full_name='namespace_delete_req._OBSOLETE_uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_i_am_sure', full_name='namespace_delete_req._i_am_sure',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=1647,
-  serialized_end=1790,
+    name='namespace_delete_req',
+    full_name='namespace_delete_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_delete_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_delete_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='OBSOLETE_uuid', full_name='namespace_delete_req.OBSOLETE_uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='i_am_sure', full_name='namespace_delete_req.i_am_sure', index=3,
+            number=4, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_OBSOLETE_uuid', full_name='namespace_delete_req._OBSOLETE_uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_i_am_sure', full_name='namespace_delete_req._i_am_sure',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=1647,
+    serialized_end=1790,
 )
 
 
 _NAMESPACE_ADD_HOST_REQ = _descriptor.Descriptor(
-  name='namespace_add_host_req',
-  full_name='namespace_add_host_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_add_host_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_add_host_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_nqn', full_name='namespace_add_host_req.host_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='namespace_add_host_req.force', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='namespace_add_host_req._force',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=1792,
-  serialized_end=1901,
+    name='namespace_add_host_req',
+    full_name='namespace_add_host_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_add_host_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_add_host_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_nqn', full_name='namespace_add_host_req.host_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='namespace_add_host_req.force', index=3,
+            number=4, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='namespace_add_host_req._force',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=1792,
+    serialized_end=1901,
 )
 
 
 _NAMESPACE_DELETE_HOST_REQ = _descriptor.Descriptor(
-  name='namespace_delete_host_req',
-  full_name='namespace_delete_host_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_delete_host_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_delete_host_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_nqn', full_name='namespace_delete_host_req.host_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=1903,
-  serialized_end=1985,
+    name='namespace_delete_host_req',
+    full_name='namespace_delete_host_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_delete_host_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_delete_host_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_nqn', full_name='namespace_delete_host_req.host_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=1903,
+    serialized_end=1985,
 )
 
 
 _CREATE_SUBSYSTEM_REQ = _descriptor.Descriptor(
-  name='create_subsystem_req',
-  full_name='create_subsystem_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='create_subsystem_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='serial_number', full_name='create_subsystem_req.serial_number', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_namespaces', full_name='create_subsystem_req.max_namespaces', index=2,
-      number=3, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='enable_ha', full_name='create_subsystem_req.enable_ha', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='no_group_append', full_name='create_subsystem_req.no_group_append', index=4,
-      number=5, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='dhchap_key', full_name='create_subsystem_req.dhchap_key', index=5,
-      number=6, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='key_encrypted', full_name='create_subsystem_req.key_encrypted', index=6,
-      number=7, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_max_namespaces', full_name='create_subsystem_req._max_namespaces',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_no_group_append', full_name='create_subsystem_req._no_group_append',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_dhchap_key', full_name='create_subsystem_req._dhchap_key',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_key_encrypted', full_name='create_subsystem_req._key_encrypted',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=1988,
-  serialized_end=2259,
+    name='create_subsystem_req',
+    full_name='create_subsystem_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='create_subsystem_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='serial_number', full_name='create_subsystem_req.serial_number', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_namespaces', full_name='create_subsystem_req.max_namespaces', index=2,
+            number=3, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='enable_ha', full_name='create_subsystem_req.enable_ha', index=3,
+            number=4, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='no_group_append', full_name='create_subsystem_req.no_group_append', index=4,
+            number=5, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='dhchap_key', full_name='create_subsystem_req.dhchap_key', index=5,
+            number=6, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='key_encrypted', full_name='create_subsystem_req.key_encrypted', index=6,
+            number=7, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_max_namespaces', full_name='create_subsystem_req._max_namespaces',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_no_group_append', full_name='create_subsystem_req._no_group_append',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_dhchap_key', full_name='create_subsystem_req._dhchap_key',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_key_encrypted', full_name='create_subsystem_req._key_encrypted',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=1988,
+    serialized_end=2259,
 )
 
 
 _DELETE_SUBSYSTEM_REQ = _descriptor.Descriptor(
-  name='delete_subsystem_req',
-  full_name='delete_subsystem_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='delete_subsystem_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='delete_subsystem_req.force', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='delete_subsystem_req._force',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2261,
-  serialized_end=2336,
+    name='delete_subsystem_req',
+    full_name='delete_subsystem_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='delete_subsystem_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='delete_subsystem_req.force', index=1,
+            number=2, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='delete_subsystem_req._force',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2261,
+    serialized_end=2336,
 )
 
 
 _CHANGE_SUBSYSTEM_KEY_REQ = _descriptor.Descriptor(
-  name='change_subsystem_key_req',
-  full_name='change_subsystem_key_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='change_subsystem_key_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='dhchap_key', full_name='change_subsystem_key_req.dhchap_key', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_dhchap_key', full_name='change_subsystem_key_req._dhchap_key',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2338,
-  serialized_end=2427,
+    name='change_subsystem_key_req',
+    full_name='change_subsystem_key_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='change_subsystem_key_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='dhchap_key', full_name='change_subsystem_key_req.dhchap_key', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_dhchap_key', full_name='change_subsystem_key_req._dhchap_key',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2338,
+    serialized_end=2427,
 )
 
 
 _LIST_NAMESPACES_REQ = _descriptor.Descriptor(
-  name='list_namespaces_req',
-  full_name='list_namespaces_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem', full_name='list_namespaces_req.subsystem', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='list_namespaces_req.nsid', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='uuid', full_name='list_namespaces_req.uuid', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_nsid', full_name='list_namespaces_req._nsid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_uuid', full_name='list_namespaces_req._uuid',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2429,
-  serialized_end=2525,
+    name='list_namespaces_req',
+    full_name='list_namespaces_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem', full_name='list_namespaces_req.subsystem', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='list_namespaces_req.nsid', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='uuid', full_name='list_namespaces_req.uuid', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_nsid', full_name='list_namespaces_req._nsid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_uuid', full_name='list_namespaces_req._uuid',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2429,
+    serialized_end=2525,
 )
 
 
 _ADD_HOST_REQ = _descriptor.Descriptor(
-  name='add_host_req',
-  full_name='add_host_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='add_host_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_nqn', full_name='add_host_req.host_nqn', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='psk', full_name='add_host_req.psk', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='dhchap_key', full_name='add_host_req.dhchap_key', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='psk_encrypted', full_name='add_host_req.psk_encrypted', index=4,
-      number=5, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='key_encrypted', full_name='add_host_req.key_encrypted', index=5,
-      number=6, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_psk', full_name='add_host_req._psk',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_dhchap_key', full_name='add_host_req._dhchap_key',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_psk_encrypted', full_name='add_host_req._psk_encrypted',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_key_encrypted', full_name='add_host_req._key_encrypted',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2528,
-  serialized_end=2741,
+    name='add_host_req',
+    full_name='add_host_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='add_host_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_nqn', full_name='add_host_req.host_nqn', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='psk', full_name='add_host_req.psk', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='dhchap_key', full_name='add_host_req.dhchap_key', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='psk_encrypted', full_name='add_host_req.psk_encrypted', index=4,
+            number=5, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='key_encrypted', full_name='add_host_req.key_encrypted', index=5,
+            number=6, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_psk', full_name='add_host_req._psk',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_dhchap_key', full_name='add_host_req._dhchap_key',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_psk_encrypted', full_name='add_host_req._psk_encrypted',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_key_encrypted', full_name='add_host_req._key_encrypted',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2528,
+    serialized_end=2741,
 )
 
 
 _CHANGE_HOST_KEY_REQ = _descriptor.Descriptor(
-  name='change_host_key_req',
-  full_name='change_host_key_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='change_host_key_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_nqn', full_name='change_host_key_req.host_nqn', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='dhchap_key', full_name='change_host_key_req.dhchap_key', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_dhchap_key', full_name='change_host_key_req._dhchap_key',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2743,
-  serialized_end=2845,
+    name='change_host_key_req',
+    full_name='change_host_key_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='change_host_key_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_nqn', full_name='change_host_key_req.host_nqn', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='dhchap_key', full_name='change_host_key_req.dhchap_key', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_dhchap_key', full_name='change_host_key_req._dhchap_key',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2743,
+    serialized_end=2845,
 )
 
 
 _REMOVE_HOST_REQ = _descriptor.Descriptor(
-  name='remove_host_req',
-  full_name='remove_host_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='remove_host_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_nqn', full_name='remove_host_req.host_nqn', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=2847,
-  serialized_end=2905,
+    name='remove_host_req',
+    full_name='remove_host_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='remove_host_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_nqn', full_name='remove_host_req.host_nqn', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=2847,
+    serialized_end=2905,
 )
 
 
 _LIST_HOSTS_REQ = _descriptor.Descriptor(
-  name='list_hosts_req',
-  full_name='list_hosts_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem', full_name='list_hosts_req.subsystem', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='clear_alerts', full_name='list_hosts_req.clear_alerts', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_clear_alerts', full_name='list_hosts_req._clear_alerts',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=2907,
-  serialized_end=2986,
+    name='list_hosts_req',
+    full_name='list_hosts_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem', full_name='list_hosts_req.subsystem', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='clear_alerts', full_name='list_hosts_req.clear_alerts', index=1,
+            number=2, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_clear_alerts', full_name='list_hosts_req._clear_alerts',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=2907,
+    serialized_end=2986,
 )
 
 
 _LIST_CONNECTIONS_REQ = _descriptor.Descriptor(
-  name='list_connections_req',
-  full_name='list_connections_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem', full_name='list_connections_req.subsystem', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=2988,
-  serialized_end=3029,
+    name='list_connections_req',
+    full_name='list_connections_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem', full_name='list_connections_req.subsystem', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=2988,
+    serialized_end=3029,
 )
 
 
 _CREATE_LISTENER_REQ = _descriptor.Descriptor(
-  name='create_listener_req',
-  full_name='create_listener_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='create_listener_req.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_name', full_name='create_listener_req.host_name', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='traddr', full_name='create_listener_req.traddr', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='adrfam', full_name='create_listener_req.adrfam', index=3,
-      number=5, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trsvcid', full_name='create_listener_req.trsvcid', index=4,
-      number=6, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='secure', full_name='create_listener_req.secure', index=5,
-      number=7, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='verify_host_name', full_name='create_listener_req.verify_host_name', index=6,
-      number=8, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_adrfam', full_name='create_listener_req._adrfam',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_trsvcid', full_name='create_listener_req._trsvcid',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_secure', full_name='create_listener_req._secure',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_verify_host_name', full_name='create_listener_req._verify_host_name',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3032,
-  serialized_end=3267,
+    name='create_listener_req',
+    full_name='create_listener_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='create_listener_req.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_name', full_name='create_listener_req.host_name', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='traddr', full_name='create_listener_req.traddr', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='adrfam', full_name='create_listener_req.adrfam', index=3,
+            number=5, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trsvcid', full_name='create_listener_req.trsvcid', index=4,
+            number=6, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='secure', full_name='create_listener_req.secure', index=5,
+            number=7, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='verify_host_name', full_name='create_listener_req.verify_host_name', index=6,
+            number=8, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_adrfam', full_name='create_listener_req._adrfam',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_trsvcid', full_name='create_listener_req._trsvcid',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_secure', full_name='create_listener_req._secure',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_verify_host_name', full_name='create_listener_req._verify_host_name',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3032,
+    serialized_end=3267,
 )
 
 
 _DELETE_LISTENER_REQ = _descriptor.Descriptor(
-  name='delete_listener_req',
-  full_name='delete_listener_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='delete_listener_req.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='host_name', full_name='delete_listener_req.host_name', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='traddr', full_name='delete_listener_req.traddr', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='adrfam', full_name='delete_listener_req.adrfam', index=3,
-      number=5, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trsvcid', full_name='delete_listener_req.trsvcid', index=4,
-      number=6, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='force', full_name='delete_listener_req.force', index=5,
-      number=7, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_adrfam', full_name='delete_listener_req._adrfam',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_trsvcid', full_name='delete_listener_req._trsvcid',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_force', full_name='delete_listener_req._force',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3270,
-  serialized_end=3451,
+    name='delete_listener_req',
+    full_name='delete_listener_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='delete_listener_req.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='host_name', full_name='delete_listener_req.host_name', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='traddr', full_name='delete_listener_req.traddr', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='adrfam', full_name='delete_listener_req.adrfam', index=3,
+            number=5, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trsvcid', full_name='delete_listener_req.trsvcid', index=4,
+            number=6, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='force', full_name='delete_listener_req.force', index=5,
+            number=7, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_adrfam', full_name='delete_listener_req._adrfam',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_trsvcid', full_name='delete_listener_req._trsvcid',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_force', full_name='delete_listener_req._force',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3270,
+    serialized_end=3451,
 )
 
 
 _LIST_LISTENERS_REQ = _descriptor.Descriptor(
-  name='list_listeners_req',
-  full_name='list_listeners_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem', full_name='list_listeners_req.subsystem', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=3453,
-  serialized_end=3492,
+    name='list_listeners_req',
+    full_name='list_listeners_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem', full_name='list_listeners_req.subsystem', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=3453,
+    serialized_end=3492,
 )
 
 
 _LIST_SUBSYSTEMS_REQ = _descriptor.Descriptor(
-  name='list_subsystems_req',
-  full_name='list_subsystems_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='list_subsystems_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='serial_number', full_name='list_subsystems_req.serial_number', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_subsystem_nqn', full_name='list_subsystems_req._subsystem_nqn',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_serial_number', full_name='list_subsystems_req._serial_number',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3494,
-  serialized_end=3607,
+    name='list_subsystems_req',
+    full_name='list_subsystems_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='list_subsystems_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='serial_number', full_name='list_subsystems_req.serial_number', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_subsystem_nqn', full_name='list_subsystems_req._subsystem_nqn',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_serial_number', full_name='list_subsystems_req._serial_number',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3494,
+    serialized_end=3607,
 )
 
 
 _GET_SUBSYSTEMS_REQ = _descriptor.Descriptor(
-  name='get_subsystems_req',
-  full_name='get_subsystems_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=3609,
-  serialized_end=3629,
+    name='get_subsystems_req',
+    full_name='get_subsystems_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=3609,
+    serialized_end=3629,
 )
 
 
 _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ = _descriptor.Descriptor(
-  name='get_spdk_nvmf_log_flags_and_level_req',
-  full_name='get_spdk_nvmf_log_flags_and_level_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='all_log_flags', full_name='get_spdk_nvmf_log_flags_and_level_req.all_log_flags', index=0,
-      number=1, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_all_log_flags', full_name='get_spdk_nvmf_log_flags_and_level_req._all_log_flags',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3631,
-  serialized_end=3716,
+    name='get_spdk_nvmf_log_flags_and_level_req',
+    full_name='get_spdk_nvmf_log_flags_and_level_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='all_log_flags', full_name='get_spdk_nvmf_log_flags_and_level_req.all_log_flags', index=0,
+            number=1, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_all_log_flags', full_name='get_spdk_nvmf_log_flags_and_level_req._all_log_flags',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3631,
+    serialized_end=3716,
 )
 
 
 _DISABLE_SPDK_NVMF_LOGS_REQ = _descriptor.Descriptor(
-  name='disable_spdk_nvmf_logs_req',
-  full_name='disable_spdk_nvmf_logs_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='extra_log_flags', full_name='disable_spdk_nvmf_logs_req.extra_log_flags', index=0,
-      number=1, type=9, cpp_type=9, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=3718,
-  serialized_end=3771,
+    name='disable_spdk_nvmf_logs_req',
+    full_name='disable_spdk_nvmf_logs_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='extra_log_flags', full_name='disable_spdk_nvmf_logs_req.extra_log_flags', index=0,
+            number=1, type=9, cpp_type=9, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=3718,
+    serialized_end=3771,
 )
 
 
 _SET_SPDK_NVMF_LOGS_REQ = _descriptor.Descriptor(
-  name='set_spdk_nvmf_logs_req',
-  full_name='set_spdk_nvmf_logs_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='log_level', full_name='set_spdk_nvmf_logs_req.log_level', index=0,
-      number=1, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='print_level', full_name='set_spdk_nvmf_logs_req.print_level', index=1,
-      number=2, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='extra_log_flags', full_name='set_spdk_nvmf_logs_req.extra_log_flags', index=2,
-      number=3, type=9, cpp_type=9, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_log_level', full_name='set_spdk_nvmf_logs_req._log_level',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_print_level', full_name='set_spdk_nvmf_logs_req._print_level',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3774,
-  serialized_end=3925,
+    name='set_spdk_nvmf_logs_req',
+    full_name='set_spdk_nvmf_logs_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='log_level', full_name='set_spdk_nvmf_logs_req.log_level', index=0,
+            number=1, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='print_level', full_name='set_spdk_nvmf_logs_req.print_level', index=1,
+            number=2, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='extra_log_flags', full_name='set_spdk_nvmf_logs_req.extra_log_flags', index=2,
+            number=3, type=9, cpp_type=9, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_log_level', full_name='set_spdk_nvmf_logs_req._log_level',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_print_level', full_name='set_spdk_nvmf_logs_req._print_level',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3774,
+    serialized_end=3925,
 )
 
 
 _GET_GATEWAY_INFO_REQ = _descriptor.Descriptor(
-  name='get_gateway_info_req',
-  full_name='get_gateway_info_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cli_version', full_name='get_gateway_info_req.cli_version', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_cli_version', full_name='get_gateway_info_req._cli_version',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=3927,
-  serialized_end=3991,
+    name='get_gateway_info_req',
+    full_name='get_gateway_info_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='cli_version', full_name='get_gateway_info_req.cli_version', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_cli_version', full_name='get_gateway_info_req._cli_version',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=3927,
+    serialized_end=3991,
 )
 
 
 _GET_GATEWAY_LOG_LEVEL_REQ = _descriptor.Descriptor(
-  name='get_gateway_log_level_req',
-  full_name='get_gateway_log_level_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=3993,
-  serialized_end=4020,
+    name='get_gateway_log_level_req',
+    full_name='get_gateway_log_level_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=3993,
+    serialized_end=4020,
 )
 
 
 _SET_GATEWAY_LOG_LEVEL_REQ = _descriptor.Descriptor(
-  name='set_gateway_log_level_req',
-  full_name='set_gateway_log_level_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='log_level', full_name='set_gateway_log_level_req.log_level', index=0,
-      number=1, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4022,
-  serialized_end=4081,
+    name='set_gateway_log_level_req',
+    full_name='set_gateway_log_level_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='log_level', full_name='set_gateway_log_level_req.log_level', index=0,
+            number=1, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4022,
+    serialized_end=4081,
 )
 
 
 _SHOW_GATEWAY_LISTENERS_INFO_REQ = _descriptor.Descriptor(
-  name='show_gateway_listeners_info_req',
-  full_name='show_gateway_listeners_info_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='show_gateway_listeners_info_req.subsystem_nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4083,
-  serialized_end=4139,
+    name='show_gateway_listeners_info_req',
+    full_name='show_gateway_listeners_info_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='show_gateway_listeners_info_req.subsystem_nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4083,
+    serialized_end=4139,
 )
 
 
 _GET_GATEWAY_STATS_REQ = _descriptor.Descriptor(
-  name='get_gateway_stats_req',
-  full_name='get_gateway_stats_req',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4141,
-  serialized_end=4164,
+    name='get_gateway_stats_req',
+    full_name='get_gateway_stats_req',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4141,
+    serialized_end=4164,
 )
 
 
 _ANA_GROUP_STATE = _descriptor.Descriptor(
-  name='ana_group_state',
-  full_name='ana_group_state',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='grp_id', full_name='ana_group_state.grp_id', index=0,
-      number=1, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='state', full_name='ana_group_state.state', index=1,
-      number=2, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4166,
-  serialized_end=4226,
+    name='ana_group_state',
+    full_name='ana_group_state',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='grp_id', full_name='ana_group_state.grp_id', index=0,
+            number=1, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='state', full_name='ana_group_state.state', index=1,
+            number=2, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4166,
+    serialized_end=4226,
 )
 
 
 _NQN_ANA_STATES = _descriptor.Descriptor(
-  name='nqn_ana_states',
-  full_name='nqn_ana_states',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='nqn_ana_states.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='states', full_name='nqn_ana_states.states', index=1,
-      number=2, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4228,
-  serialized_end=4291,
+    name='nqn_ana_states',
+    full_name='nqn_ana_states',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='nqn_ana_states.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='states', full_name='nqn_ana_states.states', index=1,
+            number=2, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4228,
+    serialized_end=4291,
 )
 
 
 _ANA_INFO = _descriptor.Descriptor(
-  name='ana_info',
-  full_name='ana_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='states', full_name='ana_info.states', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4293,
-  serialized_end=4336,
+    name='ana_info',
+    full_name='ana_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='states', full_name='ana_info.states', index=0,
+            number=1, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4293,
+    serialized_end=4336,
 )
 
 
 _REQ_STATUS = _descriptor.Descriptor(
-  name='req_status',
-  full_name='req_status',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='req_status.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='req_status.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4338,
-  serialized_end=4389,
+    name='req_status',
+    full_name='req_status',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='req_status.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='req_status.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4338,
+    serialized_end=4389,
 )
 
 
 _SUBSYS_STATUS = _descriptor.Descriptor(
-  name='subsys_status',
-  full_name='subsys_status',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='subsys_status.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='subsys_status.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='subsys_status.nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4391,
-  serialized_end=4458,
+    name='subsys_status',
+    full_name='subsys_status',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='subsys_status.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='subsys_status.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='subsys_status.nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4391,
+    serialized_end=4458,
 )
 
 
 _NSID_STATUS = _descriptor.Descriptor(
-  name='nsid_status',
-  full_name='nsid_status',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='nsid_status.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='nsid_status.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='nsid_status.nsid', index=2,
-      number=3, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4460,
-  serialized_end=4526,
+    name='nsid_status',
+    full_name='nsid_status',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='nsid_status.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='nsid_status.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='nsid_status.nsid', index=2,
+            number=3, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4460,
+    serialized_end=4526,
 )
 
 
 _SUBSYSTEMS_INFO = _descriptor.Descriptor(
-  name='subsystems_info',
-  full_name='subsystems_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='subsystems', full_name='subsystems_info.subsystems', index=0,
-      number=1, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=4528,
-  serialized_end=4577,
+    name='subsystems_info',
+    full_name='subsystems_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='subsystems', full_name='subsystems_info.subsystems', index=0,
+            number=1, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=4528,
+    serialized_end=4577,
 )
 
 
 _SUBSYSTEM = _descriptor.Descriptor(
-  name='subsystem',
-  full_name='subsystem',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='subsystem.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subtype', full_name='subsystem.subtype', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='listen_addresses', full_name='subsystem.listen_addresses', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='hosts', full_name='subsystem.hosts', index=3,
-      number=4, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='allow_any_host', full_name='subsystem.allow_any_host', index=4,
-      number=5, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='serial_number', full_name='subsystem.serial_number', index=5,
-      number=6, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='model_number', full_name='subsystem.model_number', index=6,
-      number=7, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_namespaces', full_name='subsystem.max_namespaces', index=7,
-      number=8, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_cntlid', full_name='subsystem.min_cntlid', index=8,
-      number=9, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_cntlid', full_name='subsystem.max_cntlid', index=9,
-      number=10, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='namespaces', full_name='subsystem.namespaces', index=10,
-      number=11, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='has_dhchap_key', full_name='subsystem.has_dhchap_key', index=11,
-      number=12, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_serial_number', full_name='subsystem._serial_number',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_model_number', full_name='subsystem._model_number',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_namespaces', full_name='subsystem._max_namespaces',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_min_cntlid', full_name='subsystem._min_cntlid',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_cntlid', full_name='subsystem._max_cntlid',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_has_dhchap_key', full_name='subsystem._has_dhchap_key',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=4580,
-  serialized_end=5008,
+    name='subsystem',
+    full_name='subsystem',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='subsystem.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subtype', full_name='subsystem.subtype', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='listen_addresses', full_name='subsystem.listen_addresses', index=2,
+            number=3, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='hosts', full_name='subsystem.hosts', index=3,
+            number=4, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='allow_any_host', full_name='subsystem.allow_any_host', index=4,
+            number=5, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='serial_number', full_name='subsystem.serial_number', index=5,
+            number=6, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='model_number', full_name='subsystem.model_number', index=6,
+            number=7, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_namespaces', full_name='subsystem.max_namespaces', index=7,
+            number=8, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_cntlid', full_name='subsystem.min_cntlid', index=8,
+            number=9, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_cntlid', full_name='subsystem.max_cntlid', index=9,
+            number=10, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='namespaces', full_name='subsystem.namespaces', index=10,
+            number=11, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='has_dhchap_key', full_name='subsystem.has_dhchap_key', index=11,
+            number=12, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_serial_number', full_name='subsystem._serial_number',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_model_number', full_name='subsystem._model_number',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_namespaces', full_name='subsystem._max_namespaces',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_min_cntlid', full_name='subsystem._min_cntlid',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_cntlid', full_name='subsystem._max_cntlid',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_has_dhchap_key', full_name='subsystem._has_dhchap_key',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=4580,
+    serialized_end=5008,
 )
 
 
 _LISTEN_ADDRESS = _descriptor.Descriptor(
-  name='listen_address',
-  full_name='listen_address',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='trtype', full_name='listen_address.trtype', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='adrfam', full_name='listen_address.adrfam', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='traddr', full_name='listen_address.traddr', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trsvcid', full_name='listen_address.trsvcid', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='transport', full_name='listen_address.transport', index=4,
-      number=5, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='secure', full_name='listen_address.secure', index=5,
-      number=6, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_transport', full_name='listen_address._transport',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_secure', full_name='listen_address._secure',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=5011,
-  serialized_end=5162,
+    name='listen_address',
+    full_name='listen_address',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='trtype', full_name='listen_address.trtype', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='adrfam', full_name='listen_address.adrfam', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='traddr', full_name='listen_address.traddr', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trsvcid', full_name='listen_address.trsvcid', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='transport', full_name='listen_address.transport', index=4,
+            number=5, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='secure', full_name='listen_address.secure', index=5,
+            number=6, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_transport', full_name='listen_address._transport',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_secure', full_name='listen_address._secure',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=5011,
+    serialized_end=5162,
 )
 
 
 _NAMESPACE = _descriptor.Descriptor(
-  name='namespace',
-  full_name='namespace',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace.nsid', index=0,
-      number=1, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='name', full_name='namespace.name', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bdev_name', full_name='namespace.bdev_name', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nguid', full_name='namespace.nguid', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='uuid', full_name='namespace.uuid', index=4,
-      number=5, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='anagrpid', full_name='namespace.anagrpid', index=5,
-      number=6, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nonce', full_name='namespace.nonce', index=6,
-      number=7, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='auto_visible', full_name='namespace.auto_visible', index=7,
-      number=8, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='hosts', full_name='namespace.hosts', index=8,
-      number=9, type=9, cpp_type=9, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_bdev_name', full_name='namespace._bdev_name',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_nguid', full_name='namespace._nguid',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_uuid', full_name='namespace._uuid',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_anagrpid', full_name='namespace._anagrpid',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_nonce', full_name='namespace._nonce',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_auto_visible', full_name='namespace._auto_visible',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=5165,
-  serialized_end=5425,
+    name='namespace',
+    full_name='namespace',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace.nsid', index=0,
+            number=1, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='name', full_name='namespace.name', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bdev_name', full_name='namespace.bdev_name', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nguid', full_name='namespace.nguid', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='uuid', full_name='namespace.uuid', index=4,
+            number=5, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='anagrpid', full_name='namespace.anagrpid', index=5,
+            number=6, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nonce', full_name='namespace.nonce', index=6,
+            number=7, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='auto_visible', full_name='namespace.auto_visible', index=7,
+            number=8, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='hosts', full_name='namespace.hosts', index=8,
+            number=9, type=9, cpp_type=9, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_bdev_name', full_name='namespace._bdev_name',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_nguid', full_name='namespace._nguid',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_uuid', full_name='namespace._uuid',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_anagrpid', full_name='namespace._anagrpid',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_nonce', full_name='namespace._nonce',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_auto_visible', full_name='namespace._auto_visible',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=5165,
+    serialized_end=5425,
 )
 
 
 _SUBSYSTEMS_INFO_CLI = _descriptor.Descriptor(
-  name='subsystems_info_cli',
-  full_name='subsystems_info_cli',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='subsystems_info_cli.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='subsystems_info_cli.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystems', full_name='subsystems_info_cli.subsystems', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=5427,
-  serialized_end=5523,
+    name='subsystems_info_cli',
+    full_name='subsystems_info_cli',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='subsystems_info_cli.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='subsystems_info_cli.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystems', full_name='subsystems_info_cli.subsystems', index=2,
+            number=3, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=5427,
+    serialized_end=5523,
 )
 
 
 _SUBSYSTEM_CLI = _descriptor.Descriptor(
-  name='subsystem_cli',
-  full_name='subsystem_cli',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='subsystem_cli.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='enable_ha', full_name='subsystem_cli.enable_ha', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='serial_number', full_name='subsystem_cli.serial_number', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='model_number', full_name='subsystem_cli.model_number', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_cntlid', full_name='subsystem_cli.min_cntlid', index=4,
-      number=5, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_cntlid', full_name='subsystem_cli.max_cntlid', index=5,
-      number=6, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='namespace_count', full_name='subsystem_cli.namespace_count', index=6,
-      number=7, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subtype', full_name='subsystem_cli.subtype', index=7,
-      number=8, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_namespaces', full_name='subsystem_cli.max_namespaces', index=8,
-      number=9, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='has_dhchap_key', full_name='subsystem_cli.has_dhchap_key', index=9,
-      number=10, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='allow_any_host', full_name='subsystem_cli.allow_any_host', index=10,
-      number=11, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='created_without_key', full_name='subsystem_cli.created_without_key', index=11,
-      number=12, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_has_dhchap_key', full_name='subsystem_cli._has_dhchap_key',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_allow_any_host', full_name='subsystem_cli._allow_any_host',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_created_without_key', full_name='subsystem_cli._created_without_key',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=5526,
-  serialized_end=5878,
+    name='subsystem_cli',
+    full_name='subsystem_cli',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='subsystem_cli.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='enable_ha', full_name='subsystem_cli.enable_ha', index=1,
+            number=2, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='serial_number', full_name='subsystem_cli.serial_number', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='model_number', full_name='subsystem_cli.model_number', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_cntlid', full_name='subsystem_cli.min_cntlid', index=4,
+            number=5, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_cntlid', full_name='subsystem_cli.max_cntlid', index=5,
+            number=6, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='namespace_count', full_name='subsystem_cli.namespace_count', index=6,
+            number=7, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subtype', full_name='subsystem_cli.subtype', index=7,
+            number=8, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_namespaces', full_name='subsystem_cli.max_namespaces', index=8,
+            number=9, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='has_dhchap_key', full_name='subsystem_cli.has_dhchap_key', index=9,
+            number=10, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='allow_any_host', full_name='subsystem_cli.allow_any_host', index=10,
+            number=11, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='created_without_key', full_name='subsystem_cli.created_without_key', index=11,
+            number=12, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_has_dhchap_key', full_name='subsystem_cli._has_dhchap_key',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_allow_any_host', full_name='subsystem_cli._allow_any_host',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_created_without_key', full_name='subsystem_cli._created_without_key',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=5526,
+    serialized_end=5878,
 )
 
 
 _GATEWAY_INFO = _descriptor.Descriptor(
-  name='gateway_info',
-  full_name='gateway_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='cli_version', full_name='gateway_info.cli_version', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='version', full_name='gateway_info.version', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='name', full_name='gateway_info.name', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='group', full_name='gateway_info.group', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='addr', full_name='gateway_info.addr', index=4,
-      number=5, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='port', full_name='gateway_info.port', index=5,
-      number=6, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bool_status', full_name='gateway_info.bool_status', index=6,
-      number=7, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='status', full_name='gateway_info.status', index=7,
-      number=8, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='gateway_info.error_message', index=8,
-      number=9, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='spdk_version', full_name='gateway_info.spdk_version', index=9,
-      number=10, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='load_balancing_group', full_name='gateway_info.load_balancing_group', index=10,
-      number=11, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='hostname', full_name='gateway_info.hostname', index=11,
-      number=12, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_subsystems', full_name='gateway_info.max_subsystems', index=12,
-      number=13, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_namespaces', full_name='gateway_info.max_namespaces', index=13,
-      number=14, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_hosts_per_subsystem', full_name='gateway_info.max_hosts_per_subsystem', index=14,
-      number=15, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_namespaces_per_subsystem', full_name='gateway_info.max_namespaces_per_subsystem', index=15,
-      number=16, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_hosts', full_name='gateway_info.max_hosts', index=16,
-      number=17, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_spdk_version', full_name='gateway_info._spdk_version',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_subsystems', full_name='gateway_info._max_subsystems',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_namespaces', full_name='gateway_info._max_namespaces',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_hosts_per_subsystem', full_name='gateway_info._max_hosts_per_subsystem',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_namespaces_per_subsystem', full_name='gateway_info._max_namespaces_per_subsystem',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_max_hosts', full_name='gateway_info._max_hosts',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=5881,
-  serialized_end=6418,
+    name='gateway_info',
+    full_name='gateway_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='cli_version', full_name='gateway_info.cli_version', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='version', full_name='gateway_info.version', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='name', full_name='gateway_info.name', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='group', full_name='gateway_info.group', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='addr', full_name='gateway_info.addr', index=4,
+            number=5, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='port', full_name='gateway_info.port', index=5,
+            number=6, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bool_status', full_name='gateway_info.bool_status', index=6,
+            number=7, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='status', full_name='gateway_info.status', index=7,
+            number=8, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='gateway_info.error_message', index=8,
+            number=9, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='spdk_version', full_name='gateway_info.spdk_version', index=9,
+            number=10, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='load_balancing_group', full_name='gateway_info.load_balancing_group', index=10,
+            number=11, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='hostname', full_name='gateway_info.hostname', index=11,
+            number=12, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_subsystems', full_name='gateway_info.max_subsystems', index=12,
+            number=13, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_namespaces', full_name='gateway_info.max_namespaces', index=13,
+            number=14, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_hosts_per_subsystem', full_name='gateway_info.max_hosts_per_subsystem', index=14,
+            number=15, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_namespaces_per_subsystem', full_name='gateway_info.max_namespaces_per_subsystem', index=15,
+            number=16, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_hosts', full_name='gateway_info.max_hosts', index=16,
+            number=17, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_spdk_version', full_name='gateway_info._spdk_version',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_subsystems', full_name='gateway_info._max_subsystems',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_namespaces', full_name='gateway_info._max_namespaces',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_hosts_per_subsystem', full_name='gateway_info._max_hosts_per_subsystem',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_namespaces_per_subsystem', full_name='gateway_info._max_namespaces_per_subsystem',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_max_hosts', full_name='gateway_info._max_hosts',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=5881,
+    serialized_end=6418,
 )
 
 
 _CLI_VERSION = _descriptor.Descriptor(
-  name='cli_version',
-  full_name='cli_version',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='cli_version.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='cli_version.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='version', full_name='cli_version.version', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=6420,
-  serialized_end=6489,
+    name='cli_version',
+    full_name='cli_version',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='cli_version.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='cli_version.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='version', full_name='cli_version.version', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=6420,
+    serialized_end=6489,
 )
 
 
 _GW_VERSION = _descriptor.Descriptor(
-  name='gw_version',
-  full_name='gw_version',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='gw_version.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='gw_version.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='version', full_name='gw_version.version', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=6491,
-  serialized_end=6559,
+    name='gw_version',
+    full_name='gw_version',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='gw_version.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='gw_version.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='version', full_name='gw_version.version', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=6491,
+    serialized_end=6559,
 )
 
 
 _POLL_GROUP_TRANSPORT_INFO = _descriptor.Descriptor(
-  name='poll_group_transport_info',
-  full_name='poll_group_transport_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='trtype', full_name='poll_group_transport_info.trtype', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=6561,
-  serialized_end=6604,
+    name='poll_group_transport_info',
+    full_name='poll_group_transport_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='trtype', full_name='poll_group_transport_info.trtype', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=6561,
+    serialized_end=6604,
 )
 
 
 _POLL_GROUP_INFO = _descriptor.Descriptor(
-  name='poll_group_info',
-  full_name='poll_group_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='name', full_name='poll_group_info.name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='admin_qpairs', full_name='poll_group_info.admin_qpairs', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='io_qpairs', full_name='poll_group_info.io_qpairs', index=2,
-      number=3, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='current_admin_qpairs', full_name='poll_group_info.current_admin_qpairs', index=3,
-      number=4, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='current_io_qpairs', full_name='poll_group_info.current_io_qpairs', index=4,
-      number=5, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='pending_bdev_io', full_name='poll_group_info.pending_bdev_io', index=5,
-      number=6, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='completed_nvme_io', full_name='poll_group_info.completed_nvme_io', index=6,
-      number=7, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='transports', full_name='poll_group_info.transports', index=7,
-      number=8, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=6607,
-  serialized_end=6836,
+    name='poll_group_info',
+    full_name='poll_group_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='name', full_name='poll_group_info.name', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='admin_qpairs', full_name='poll_group_info.admin_qpairs', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='io_qpairs', full_name='poll_group_info.io_qpairs', index=2,
+            number=3, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='current_admin_qpairs', full_name='poll_group_info.current_admin_qpairs', index=3,
+            number=4, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='current_io_qpairs', full_name='poll_group_info.current_io_qpairs', index=4,
+            number=5, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='pending_bdev_io', full_name='poll_group_info.pending_bdev_io', index=5,
+            number=6, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='completed_nvme_io', full_name='poll_group_info.completed_nvme_io', index=6,
+            number=7, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='transports', full_name='poll_group_info.transports', index=7,
+            number=8, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=6607,
+    serialized_end=6836,
 )
 
 
 _GATEWAY_STATS_INFO = _descriptor.Descriptor(
-  name='gateway_stats_info',
-  full_name='gateway_stats_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='gateway_stats_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='gateway_stats_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='tick_rate', full_name='gateway_stats_info.tick_rate', index=2,
-      number=3, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='poll_groups', full_name='gateway_stats_info.poll_groups', index=3,
-      number=4, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=6838,
-  serialized_end=6955,
+    name='gateway_stats_info',
+    full_name='gateway_stats_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='gateway_stats_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='gateway_stats_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='tick_rate', full_name='gateway_stats_info.tick_rate', index=2,
+            number=3, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='poll_groups', full_name='gateway_stats_info.poll_groups', index=3,
+            number=4, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=6838,
+    serialized_end=6955,
 )
 
 
 _LISTENER_INFO = _descriptor.Descriptor(
-  name='listener_info',
-  full_name='listener_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='host_name', full_name='listener_info.host_name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trtype', full_name='listener_info.trtype', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='adrfam', full_name='listener_info.adrfam', index=2,
-      number=3, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='traddr', full_name='listener_info.traddr', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trsvcid', full_name='listener_info.trsvcid', index=4,
-      number=5, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='secure', full_name='listener_info.secure', index=5,
-      number=6, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='active', full_name='listener_info.active', index=6,
-      number=7, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_secure', full_name='listener_info._secure',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_active', full_name='listener_info._active',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=6958,
-  serialized_end=7137,
+    name='listener_info',
+    full_name='listener_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='host_name', full_name='listener_info.host_name', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trtype', full_name='listener_info.trtype', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='adrfam', full_name='listener_info.adrfam', index=2,
+            number=3, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='traddr', full_name='listener_info.traddr', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trsvcid', full_name='listener_info.trsvcid', index=4,
+            number=5, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='secure', full_name='listener_info.secure', index=5,
+            number=6, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='active', full_name='listener_info.active', index=6,
+            number=7, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_secure', full_name='listener_info._secure',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_active', full_name='listener_info._active',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=6958,
+    serialized_end=7137,
 )
 
 
 _LISTENERS_INFO = _descriptor.Descriptor(
-  name='listeners_info',
-  full_name='listeners_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='listeners_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='listeners_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='listeners', full_name='listeners_info.listeners', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=7139,
-  serialized_end=7229,
+    name='listeners_info',
+    full_name='listeners_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='listeners_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='listeners_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='listeners', full_name='listeners_info.listeners', index=2,
+            number=3, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=7139,
+    serialized_end=7229,
 )
 
 
 _GATEWAY_LISTENER_INFO = _descriptor.Descriptor(
-  name='gateway_listener_info',
-  full_name='gateway_listener_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='listener', full_name='gateway_listener_info.listener', index=0,
-      number=1, type=11, cpp_type=10, label=1,
-      has_default_value=False, default_value=None,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='lb_states', full_name='gateway_listener_info.lb_states', index=1,
-      number=2, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=7231,
-  serialized_end=7325,
+    name='gateway_listener_info',
+    full_name='gateway_listener_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='listener', full_name='gateway_listener_info.listener', index=0,
+            number=1, type=11, cpp_type=10, label=1,
+            has_default_value=False, default_value=None,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='lb_states', full_name='gateway_listener_info.lb_states', index=1,
+            number=2, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=7231,
+    serialized_end=7325,
 )
 
 
 _GATEWAY_LISTENERS_INFO = _descriptor.Descriptor(
-  name='gateway_listeners_info',
-  full_name='gateway_listeners_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='gateway_listeners_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='gateway_listeners_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='gw_listeners', full_name='gateway_listeners_info.gw_listeners', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=7327,
-  serialized_end=7436,
+    name='gateway_listeners_info',
+    full_name='gateway_listeners_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='gateway_listeners_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='gateway_listeners_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='gw_listeners', full_name='gateway_listeners_info.gw_listeners', index=2,
+            number=3, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=7327,
+    serialized_end=7436,
 )
 
 
 _HOST = _descriptor.Descriptor(
-  name='host',
-  full_name='host',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='host.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='use_psk', full_name='host.use_psk', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='use_dhchap', full_name='host.use_dhchap', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='disconnected_due_to_keepalive_timeout', full_name='host.disconnected_due_to_keepalive_timeout', index=3,
-      number=4, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_use_psk', full_name='host._use_psk',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_use_dhchap', full_name='host._use_dhchap',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_disconnected_due_to_keepalive_timeout', full_name='host._disconnected_due_to_keepalive_timeout',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=7439,
-  serialized_end=7626,
+    name='host',
+    full_name='host',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='host.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='use_psk', full_name='host.use_psk', index=1,
+            number=2, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='use_dhchap', full_name='host.use_dhchap', index=2,
+            number=3, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='disconnected_due_to_keepalive_timeout', full_name='host.disconnected_due_to_keepalive_timeout', index=3,
+            number=4, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_use_psk', full_name='host._use_psk',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_use_dhchap', full_name='host._use_dhchap',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_disconnected_due_to_keepalive_timeout', full_name='host._disconnected_due_to_keepalive_timeout',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=7439,
+    serialized_end=7626,
 )
 
 
 _HOSTS_INFO = _descriptor.Descriptor(
-  name='hosts_info',
-  full_name='hosts_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='hosts_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='hosts_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='allow_any_host', full_name='hosts_info.allow_any_host', index=2,
-      number=3, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='hosts_info.subsystem_nqn', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='hosts', full_name='hosts_info.hosts', index=4,
-      number=5, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=7628,
-  serialized_end=7748,
+    name='hosts_info',
+    full_name='hosts_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='hosts_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='hosts_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='allow_any_host', full_name='hosts_info.allow_any_host', index=2,
+            number=3, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='hosts_info.subsystem_nqn', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='hosts', full_name='hosts_info.hosts', index=4,
+            number=5, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=7628,
+    serialized_end=7748,
 )
 
 
 _CONNECTION = _descriptor.Descriptor(
-  name='connection',
-  full_name='connection',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nqn', full_name='connection.nqn', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='traddr', full_name='connection.traddr', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trsvcid', full_name='connection.trsvcid', index=2,
-      number=3, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trtype', full_name='connection.trtype', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='adrfam', full_name='connection.adrfam', index=4,
-      number=5, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='connected', full_name='connection.connected', index=5,
-      number=6, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='qpairs_count', full_name='connection.qpairs_count', index=6,
-      number=7, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='controller_id', full_name='connection.controller_id', index=7,
-      number=8, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='secure', full_name='connection.secure', index=8,
-      number=9, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='use_psk', full_name='connection.use_psk', index=9,
-      number=10, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='use_dhchap', full_name='connection.use_dhchap', index=10,
-      number=11, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem', full_name='connection.subsystem', index=11,
-      number=12, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='disconnected_due_to_keepalive_timeout', full_name='connection.disconnected_due_to_keepalive_timeout', index=12,
-      number=13, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_secure', full_name='connection._secure',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_use_psk', full_name='connection._use_psk',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_use_dhchap', full_name='connection._use_dhchap',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_subsystem', full_name='connection._subsystem',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_disconnected_due_to_keepalive_timeout', full_name='connection._disconnected_due_to_keepalive_timeout',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=7751,
-  serialized_end=8159,
+    name='connection',
+    full_name='connection',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nqn', full_name='connection.nqn', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='traddr', full_name='connection.traddr', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trsvcid', full_name='connection.trsvcid', index=2,
+            number=3, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trtype', full_name='connection.trtype', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='adrfam', full_name='connection.adrfam', index=4,
+            number=5, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='connected', full_name='connection.connected', index=5,
+            number=6, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='qpairs_count', full_name='connection.qpairs_count', index=6,
+            number=7, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='controller_id', full_name='connection.controller_id', index=7,
+            number=8, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='secure', full_name='connection.secure', index=8,
+            number=9, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='use_psk', full_name='connection.use_psk', index=9,
+            number=10, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='use_dhchap', full_name='connection.use_dhchap', index=10,
+            number=11, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem', full_name='connection.subsystem', index=11,
+            number=12, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='disconnected_due_to_keepalive_timeout', full_name='connection.disconnected_due_to_keepalive_timeout', index=12,
+            number=13, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_secure', full_name='connection._secure',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_use_psk', full_name='connection._use_psk',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_use_dhchap', full_name='connection._use_dhchap',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_subsystem', full_name='connection._subsystem',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_disconnected_due_to_keepalive_timeout', full_name='connection._disconnected_due_to_keepalive_timeout',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=7751,
+    serialized_end=8159,
 )
 
 
 _CONNECTIONS_INFO = _descriptor.Descriptor(
-  name='connections_info',
-  full_name='connections_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='connections_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='connections_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='connections_info.subsystem_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='connections', full_name='connections_info.connections', index=3,
-      number=4, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=8161,
-  serialized_end=8275,
+    name='connections_info',
+    full_name='connections_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='connections_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='connections_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='connections_info.subsystem_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='connections', full_name='connections_info.connections', index=3,
+            number=4, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=8161,
+    serialized_end=8275,
 )
 
 
 _NAMESPACE_CLI = _descriptor.Descriptor(
-  name='namespace_cli',
-  full_name='namespace_cli',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_cli.nsid', index=0,
-      number=1, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bdev_name', full_name='namespace_cli.bdev_name', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rbd_image_name', full_name='namespace_cli.rbd_image_name', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rbd_pool_name', full_name='namespace_cli.rbd_pool_name', index=3,
-      number=4, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='load_balancing_group', full_name='namespace_cli.load_balancing_group', index=4,
-      number=5, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='block_size', full_name='namespace_cli.block_size', index=5,
-      number=6, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rbd_image_size', full_name='namespace_cli.rbd_image_size', index=6,
-      number=7, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='uuid', full_name='namespace_cli.uuid', index=7,
-      number=8, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rw_ios_per_second', full_name='namespace_cli.rw_ios_per_second', index=8,
-      number=9, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='rw_mbytes_per_second', full_name='namespace_cli.rw_mbytes_per_second', index=9,
-      number=10, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='r_mbytes_per_second', full_name='namespace_cli.r_mbytes_per_second', index=10,
-      number=11, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='w_mbytes_per_second', full_name='namespace_cli.w_mbytes_per_second', index=11,
-      number=12, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='auto_visible', full_name='namespace_cli.auto_visible', index=12,
-      number=13, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='hosts', full_name='namespace_cli.hosts', index=13,
-      number=14, type=9, cpp_type=9, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='ns_subsystem_nqn', full_name='namespace_cli.ns_subsystem_nqn', index=14,
-      number=15, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='trash_image', full_name='namespace_cli.trash_image', index=15,
-      number=16, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='disable_auto_resize', full_name='namespace_cli.disable_auto_resize', index=16,
-      number=17, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='read_only', full_name='namespace_cli.read_only', index=17,
-      number=18, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='cluster_name', full_name='namespace_cli.cluster_name', index=18,
-      number=19, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='configured_load_balancing_group', full_name='namespace_cli.configured_load_balancing_group', index=19,
-      number=20, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='image_was_shrunk', full_name='namespace_cli.image_was_shrunk', index=20,
-      number=21, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_ns_subsystem_nqn', full_name='namespace_cli._ns_subsystem_nqn',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_trash_image', full_name='namespace_cli._trash_image',
-      index=1, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_disable_auto_resize', full_name='namespace_cli._disable_auto_resize',
-      index=2, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_read_only', full_name='namespace_cli._read_only',
-      index=3, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_cluster_name', full_name='namespace_cli._cluster_name',
-      index=4, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_configured_load_balancing_group', full_name='namespace_cli._configured_load_balancing_group',
-      index=5, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-    _descriptor.OneofDescriptor(
-      name='_image_was_shrunk', full_name='namespace_cli._image_was_shrunk',
-      index=6, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=8278,
-  serialized_end=8981,
+    name='namespace_cli',
+    full_name='namespace_cli',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_cli.nsid', index=0,
+            number=1, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bdev_name', full_name='namespace_cli.bdev_name', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rbd_image_name', full_name='namespace_cli.rbd_image_name', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rbd_pool_name', full_name='namespace_cli.rbd_pool_name', index=3,
+            number=4, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='load_balancing_group', full_name='namespace_cli.load_balancing_group', index=4,
+            number=5, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='block_size', full_name='namespace_cli.block_size', index=5,
+            number=6, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rbd_image_size', full_name='namespace_cli.rbd_image_size', index=6,
+            number=7, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='uuid', full_name='namespace_cli.uuid', index=7,
+            number=8, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rw_ios_per_second', full_name='namespace_cli.rw_ios_per_second', index=8,
+            number=9, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='rw_mbytes_per_second', full_name='namespace_cli.rw_mbytes_per_second', index=9,
+            number=10, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='r_mbytes_per_second', full_name='namespace_cli.r_mbytes_per_second', index=10,
+            number=11, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='w_mbytes_per_second', full_name='namespace_cli.w_mbytes_per_second', index=11,
+            number=12, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='auto_visible', full_name='namespace_cli.auto_visible', index=12,
+            number=13, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='hosts', full_name='namespace_cli.hosts', index=13,
+            number=14, type=9, cpp_type=9, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='ns_subsystem_nqn', full_name='namespace_cli.ns_subsystem_nqn', index=14,
+            number=15, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='trash_image', full_name='namespace_cli.trash_image', index=15,
+            number=16, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='disable_auto_resize', full_name='namespace_cli.disable_auto_resize', index=16,
+            number=17, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='read_only', full_name='namespace_cli.read_only', index=17,
+            number=18, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='cluster_name', full_name='namespace_cli.cluster_name', index=18,
+            number=19, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='configured_load_balancing_group', full_name='namespace_cli.configured_load_balancing_group', index=19,
+            number=20, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='image_was_shrunk', full_name='namespace_cli.image_was_shrunk', index=20,
+            number=21, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_ns_subsystem_nqn', full_name='namespace_cli._ns_subsystem_nqn',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_trash_image', full_name='namespace_cli._trash_image',
+            index=1, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_disable_auto_resize', full_name='namespace_cli._disable_auto_resize',
+            index=2, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_read_only', full_name='namespace_cli._read_only',
+            index=3, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_cluster_name', full_name='namespace_cli._cluster_name',
+            index=4, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_configured_load_balancing_group', full_name='namespace_cli._configured_load_balancing_group',
+            index=5, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+        _descriptor.OneofDescriptor(
+            name='_image_was_shrunk', full_name='namespace_cli._image_was_shrunk',
+            index=6, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=8278,
+    serialized_end=8981,
 )
 
 
 _NAMESPACES_INFO = _descriptor.Descriptor(
-  name='namespaces_info',
-  full_name='namespaces_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='namespaces_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='namespaces_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespaces_info.subsystem_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='namespaces', full_name='namespaces_info.namespaces', index=3,
-      number=4, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=8983,
-  serialized_end=9098,
+    name='namespaces_info',
+    full_name='namespaces_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='namespaces_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='namespaces_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespaces_info.subsystem_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='namespaces', full_name='namespaces_info.namespaces', index=3,
+            number=4, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=8983,
+    serialized_end=9098,
 )
 
 
 _NAMESPACE_IO_ERROR = _descriptor.Descriptor(
-  name='namespace_io_error',
-  full_name='namespace_io_error',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='name', full_name='namespace_io_error.name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='value', full_name='namespace_io_error.value', index=1,
-      number=2, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=9100,
-  serialized_end=9149,
+    name='namespace_io_error',
+    full_name='namespace_io_error',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='name', full_name='namespace_io_error.name', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='value', full_name='namespace_io_error.value', index=1,
+            number=2, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=9100,
+    serialized_end=9149,
 )
 
 
 _NAMESPACE_IO_STATS_INFO = _descriptor.Descriptor(
-  name='namespace_io_stats_info',
-  full_name='namespace_io_stats_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='namespace_io_stats_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='namespace_io_stats_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='subsystem_nqn', full_name='namespace_io_stats_info.subsystem_nqn', index=2,
-      number=3, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nsid', full_name='namespace_io_stats_info.nsid', index=3,
-      number=4, type=13, cpp_type=3, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='uuid', full_name='namespace_io_stats_info.uuid', index=4,
-      number=5, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bdev_name', full_name='namespace_io_stats_info.bdev_name', index=5,
-      number=6, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='tick_rate', full_name='namespace_io_stats_info.tick_rate', index=6,
-      number=7, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='ticks', full_name='namespace_io_stats_info.ticks', index=7,
-      number=8, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bytes_read', full_name='namespace_io_stats_info.bytes_read', index=8,
-      number=9, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='num_read_ops', full_name='namespace_io_stats_info.num_read_ops', index=9,
-      number=10, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bytes_written', full_name='namespace_io_stats_info.bytes_written', index=10,
-      number=11, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='num_write_ops', full_name='namespace_io_stats_info.num_write_ops', index=11,
-      number=12, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='bytes_unmapped', full_name='namespace_io_stats_info.bytes_unmapped', index=12,
-      number=13, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='num_unmap_ops', full_name='namespace_io_stats_info.num_unmap_ops', index=13,
-      number=14, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='read_latency_ticks', full_name='namespace_io_stats_info.read_latency_ticks', index=14,
-      number=15, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_read_latency_ticks', full_name='namespace_io_stats_info.max_read_latency_ticks', index=15,
-      number=16, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_read_latency_ticks', full_name='namespace_io_stats_info.min_read_latency_ticks', index=16,
-      number=17, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='write_latency_ticks', full_name='namespace_io_stats_info.write_latency_ticks', index=17,
-      number=18, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_write_latency_ticks', full_name='namespace_io_stats_info.max_write_latency_ticks', index=18,
-      number=19, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_write_latency_ticks', full_name='namespace_io_stats_info.min_write_latency_ticks', index=19,
-      number=20, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='unmap_latency_ticks', full_name='namespace_io_stats_info.unmap_latency_ticks', index=20,
-      number=21, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_unmap_latency_ticks', full_name='namespace_io_stats_info.max_unmap_latency_ticks', index=21,
-      number=22, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_unmap_latency_ticks', full_name='namespace_io_stats_info.min_unmap_latency_ticks', index=22,
-      number=23, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='copy_latency_ticks', full_name='namespace_io_stats_info.copy_latency_ticks', index=23,
-      number=24, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='max_copy_latency_ticks', full_name='namespace_io_stats_info.max_copy_latency_ticks', index=24,
-      number=25, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='min_copy_latency_ticks', full_name='namespace_io_stats_info.min_copy_latency_ticks', index=25,
-      number=26, type=4, cpp_type=4, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='io_error', full_name='namespace_io_stats_info.io_error', index=26,
-      number=27, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-    _descriptor.OneofDescriptor(
-      name='_uuid', full_name='namespace_io_stats_info._uuid',
-      index=0, containing_type=None,
-      create_key=_descriptor._internal_create_key,
-    fields=[]),
-  ],
-  serialized_start=9152,
-  serialized_end=9882,
+    name='namespace_io_stats_info',
+    full_name='namespace_io_stats_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='namespace_io_stats_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='namespace_io_stats_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='subsystem_nqn', full_name='namespace_io_stats_info.subsystem_nqn', index=2,
+            number=3, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nsid', full_name='namespace_io_stats_info.nsid', index=3,
+            number=4, type=13, cpp_type=3, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='uuid', full_name='namespace_io_stats_info.uuid', index=4,
+            number=5, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bdev_name', full_name='namespace_io_stats_info.bdev_name', index=5,
+            number=6, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='tick_rate', full_name='namespace_io_stats_info.tick_rate', index=6,
+            number=7, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='ticks', full_name='namespace_io_stats_info.ticks', index=7,
+            number=8, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bytes_read', full_name='namespace_io_stats_info.bytes_read', index=8,
+            number=9, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='num_read_ops', full_name='namespace_io_stats_info.num_read_ops', index=9,
+            number=10, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bytes_written', full_name='namespace_io_stats_info.bytes_written', index=10,
+            number=11, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='num_write_ops', full_name='namespace_io_stats_info.num_write_ops', index=11,
+            number=12, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='bytes_unmapped', full_name='namespace_io_stats_info.bytes_unmapped', index=12,
+            number=13, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='num_unmap_ops', full_name='namespace_io_stats_info.num_unmap_ops', index=13,
+            number=14, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='read_latency_ticks', full_name='namespace_io_stats_info.read_latency_ticks', index=14,
+            number=15, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_read_latency_ticks', full_name='namespace_io_stats_info.max_read_latency_ticks', index=15,
+            number=16, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_read_latency_ticks', full_name='namespace_io_stats_info.min_read_latency_ticks', index=16,
+            number=17, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='write_latency_ticks', full_name='namespace_io_stats_info.write_latency_ticks', index=17,
+            number=18, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_write_latency_ticks', full_name='namespace_io_stats_info.max_write_latency_ticks', index=18,
+            number=19, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_write_latency_ticks', full_name='namespace_io_stats_info.min_write_latency_ticks', index=19,
+            number=20, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='unmap_latency_ticks', full_name='namespace_io_stats_info.unmap_latency_ticks', index=20,
+            number=21, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_unmap_latency_ticks', full_name='namespace_io_stats_info.max_unmap_latency_ticks', index=21,
+            number=22, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_unmap_latency_ticks', full_name='namespace_io_stats_info.min_unmap_latency_ticks', index=22,
+            number=23, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='copy_latency_ticks', full_name='namespace_io_stats_info.copy_latency_ticks', index=23,
+            number=24, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='max_copy_latency_ticks', full_name='namespace_io_stats_info.max_copy_latency_ticks', index=24,
+            number=25, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='min_copy_latency_ticks', full_name='namespace_io_stats_info.min_copy_latency_ticks', index=25,
+            number=26, type=4, cpp_type=4, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='io_error', full_name='namespace_io_stats_info.io_error', index=26,
+            number=27, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+        _descriptor.OneofDescriptor(
+            name='_uuid', full_name='namespace_io_stats_info._uuid',
+            index=0, containing_type=None,
+            create_key=_descriptor._internal_create_key,
+            fields=[]),
+    ],
+    serialized_start=9152,
+    serialized_end=9882,
 )
 
 
 _SPDK_LOG_FLAG_INFO = _descriptor.Descriptor(
-  name='spdk_log_flag_info',
-  full_name='spdk_log_flag_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='name', full_name='spdk_log_flag_info.name', index=0,
-      number=1, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='enabled', full_name='spdk_log_flag_info.enabled', index=1,
-      number=2, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=9884,
-  serialized_end=9935,
+    name='spdk_log_flag_info',
+    full_name='spdk_log_flag_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='name', full_name='spdk_log_flag_info.name', index=0,
+            number=1, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='enabled', full_name='spdk_log_flag_info.enabled', index=1,
+            number=2, type=8, cpp_type=7, label=1,
+            has_default_value=False, default_value=False,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=9884,
+    serialized_end=9935,
 )
 
 
 _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO = _descriptor.Descriptor(
-  name='spdk_nvmf_log_flags_and_level_info',
-  full_name='spdk_nvmf_log_flags_and_level_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='spdk_nvmf_log_flags_and_level_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='spdk_nvmf_log_flags_and_level_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='nvmf_log_flags', full_name='spdk_nvmf_log_flags_and_level_info.nvmf_log_flags', index=2,
-      number=3, type=11, cpp_type=10, label=3,
-      has_default_value=False, default_value=[],
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='log_level', full_name='spdk_nvmf_log_flags_and_level_info.log_level', index=3,
-      number=4, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='log_print_level', full_name='spdk_nvmf_log_flags_and_level_info.log_print_level', index=4,
-      number=5, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=9938,
-  serialized_end=10124,
+    name='spdk_nvmf_log_flags_and_level_info',
+    full_name='spdk_nvmf_log_flags_and_level_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='spdk_nvmf_log_flags_and_level_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='spdk_nvmf_log_flags_and_level_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='nvmf_log_flags', full_name='spdk_nvmf_log_flags_and_level_info.nvmf_log_flags', index=2,
+            number=3, type=11, cpp_type=10, label=3,
+            has_default_value=False, default_value=[],
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='log_level', full_name='spdk_nvmf_log_flags_and_level_info.log_level', index=3,
+            number=4, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='log_print_level', full_name='spdk_nvmf_log_flags_and_level_info.log_print_level', index=4,
+            number=5, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=9938,
+    serialized_end=10124,
 )
 
 
 _GATEWAY_LOG_LEVEL_INFO = _descriptor.Descriptor(
-  name='gateway_log_level_info',
-  full_name='gateway_log_level_info',
-  filename=None,
-  file=DESCRIPTOR,
-  containing_type=None,
-  create_key=_descriptor._internal_create_key,
-  fields=[
-    _descriptor.FieldDescriptor(
-      name='status', full_name='gateway_log_level_info.status', index=0,
-      number=1, type=5, cpp_type=1, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='error_message', full_name='gateway_log_level_info.error_message', index=1,
-      number=2, type=9, cpp_type=9, label=1,
-      has_default_value=False, default_value=b"".decode('utf-8'),
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-    _descriptor.FieldDescriptor(
-      name='log_level', full_name='gateway_log_level_info.log_level', index=2,
-      number=3, type=14, cpp_type=8, label=1,
-      has_default_value=False, default_value=0,
-      message_type=None, enum_type=None, containing_type=None,
-      is_extension=False, extension_scope=None,
-      serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
-  ],
-  extensions=[
-  ],
-  nested_types=[],
-  enum_types=[
-  ],
-  serialized_options=None,
-  is_extendable=False,
-  syntax='proto3',
-  extension_ranges=[],
-  oneofs=[
-  ],
-  serialized_start=10126,
-  serialized_end=10221,
+    name='gateway_log_level_info',
+    full_name='gateway_log_level_info',
+    filename=None,
+    file=DESCRIPTOR,
+    containing_type=None,
+    create_key=_descriptor._internal_create_key,
+    fields=[
+        _descriptor.FieldDescriptor(
+            name='status', full_name='gateway_log_level_info.status', index=0,
+            number=1, type=5, cpp_type=1, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='error_message', full_name='gateway_log_level_info.error_message', index=1,
+            number=2, type=9, cpp_type=9, label=1,
+            has_default_value=False, default_value=b"".decode('utf-8'),
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+        _descriptor.FieldDescriptor(
+            name='log_level', full_name='gateway_log_level_info.log_level', index=2,
+            number=3, type=14, cpp_type=8, label=1,
+            has_default_value=False, default_value=0,
+            message_type=None, enum_type=None, containing_type=None,
+            is_extension=False, extension_scope=None,
+            serialized_options=None, file=DESCRIPTOR,  create_key=_descriptor._internal_create_key),
+    ],
+    extensions=[
+    ],
+    nested_types=[],
+    enum_types=[
+    ],
+    serialized_options=None,
+    is_extendable=False,
+    syntax='proto3',
+    extension_ranges=[],
+    oneofs=[
+    ],
+    serialized_start=10126,
+    serialized_end=10221,
 )
 
 _NAMESPACE_ADD_REQ.oneofs_by_name['_nsid'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['nsid'])
+    _NAMESPACE_ADD_REQ.fields_by_name['nsid'])
 _NAMESPACE_ADD_REQ.fields_by_name['nsid'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_nsid']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_uuid'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['uuid'])
+    _NAMESPACE_ADD_REQ.fields_by_name['uuid'])
 _NAMESPACE_ADD_REQ.fields_by_name['uuid'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_uuid']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_anagrpid'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['anagrpid'])
+    _NAMESPACE_ADD_REQ.fields_by_name['anagrpid'])
 _NAMESPACE_ADD_REQ.fields_by_name['anagrpid'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_anagrpid']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_create_image'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['create_image'])
+    _NAMESPACE_ADD_REQ.fields_by_name['create_image'])
 _NAMESPACE_ADD_REQ.fields_by_name['create_image'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_create_image']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_size'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['size'])
+    _NAMESPACE_ADD_REQ.fields_by_name['size'])
 _NAMESPACE_ADD_REQ.fields_by_name['size'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_size']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_force'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['force'])
+    _NAMESPACE_ADD_REQ.fields_by_name['force'])
 _NAMESPACE_ADD_REQ.fields_by_name['force'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_force']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_no_auto_visible'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['no_auto_visible'])
+    _NAMESPACE_ADD_REQ.fields_by_name['no_auto_visible'])
 _NAMESPACE_ADD_REQ.fields_by_name['no_auto_visible'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_no_auto_visible']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_trash_image'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['trash_image'])
+    _NAMESPACE_ADD_REQ.fields_by_name['trash_image'])
 _NAMESPACE_ADD_REQ.fields_by_name['trash_image'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_trash_image']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_disable_auto_resize'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['disable_auto_resize'])
+    _NAMESPACE_ADD_REQ.fields_by_name['disable_auto_resize'])
 _NAMESPACE_ADD_REQ.fields_by_name['disable_auto_resize'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_disable_auto_resize']
 _NAMESPACE_ADD_REQ.oneofs_by_name['_read_only'].fields.append(
-  _NAMESPACE_ADD_REQ.fields_by_name['read_only'])
+    _NAMESPACE_ADD_REQ.fields_by_name['read_only'])
 _NAMESPACE_ADD_REQ.fields_by_name['read_only'].containing_oneof = _NAMESPACE_ADD_REQ.oneofs_by_name['_read_only']
 _NAMESPACE_RESIZE_REQ.oneofs_by_name['_OBSOLETE_uuid'].fields.append(
-  _NAMESPACE_RESIZE_REQ.fields_by_name['OBSOLETE_uuid'])
+    _NAMESPACE_RESIZE_REQ.fields_by_name['OBSOLETE_uuid'])
 _NAMESPACE_RESIZE_REQ.fields_by_name['OBSOLETE_uuid'].containing_oneof = _NAMESPACE_RESIZE_REQ.oneofs_by_name['_OBSOLETE_uuid']
 _NAMESPACE_GET_IO_STATS_REQ.oneofs_by_name['_OBSOLETE_uuid'].fields.append(
-  _NAMESPACE_GET_IO_STATS_REQ.fields_by_name['OBSOLETE_uuid'])
+    _NAMESPACE_GET_IO_STATS_REQ.fields_by_name['OBSOLETE_uuid'])
 _NAMESPACE_GET_IO_STATS_REQ.fields_by_name['OBSOLETE_uuid'].containing_oneof = _NAMESPACE_GET_IO_STATS_REQ.oneofs_by_name['_OBSOLETE_uuid']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_OBSOLETE_uuid'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['OBSOLETE_uuid'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['OBSOLETE_uuid'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['OBSOLETE_uuid'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_OBSOLETE_uuid']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_rw_ios_per_second'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_ios_per_second'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_ios_per_second'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_ios_per_second'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_rw_ios_per_second']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_rw_mbytes_per_second'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_mbytes_per_second'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_mbytes_per_second'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['rw_mbytes_per_second'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_rw_mbytes_per_second']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_r_mbytes_per_second'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['r_mbytes_per_second'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['r_mbytes_per_second'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['r_mbytes_per_second'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_r_mbytes_per_second']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_w_mbytes_per_second'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['w_mbytes_per_second'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['w_mbytes_per_second'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['w_mbytes_per_second'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_w_mbytes_per_second']
 _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_force'].fields.append(
-  _NAMESPACE_SET_QOS_REQ.fields_by_name['force'])
+    _NAMESPACE_SET_QOS_REQ.fields_by_name['force'])
 _NAMESPACE_SET_QOS_REQ.fields_by_name['force'].containing_oneof = _NAMESPACE_SET_QOS_REQ.oneofs_by_name['_force']
 _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_OBSOLETE_uuid'].fields.append(
-  _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['OBSOLETE_uuid'])
-_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['OBSOLETE_uuid'].containing_oneof = _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_OBSOLETE_uuid']
+    _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['OBSOLETE_uuid'])
+_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name[
+    'OBSOLETE_uuid'].containing_oneof = _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_OBSOLETE_uuid']
 _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_auto_lb_logic'].fields.append(
-  _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['auto_lb_logic'])
-_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['auto_lb_logic'].containing_oneof = _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_auto_lb_logic']
+    _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name['auto_lb_logic'])
+_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.fields_by_name[
+    'auto_lb_logic'].containing_oneof = _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ.oneofs_by_name['_auto_lb_logic']
 _NAMESPACE_CHANGE_VISIBILITY_REQ.oneofs_by_name['_force'].fields.append(
-  _NAMESPACE_CHANGE_VISIBILITY_REQ.fields_by_name['force'])
+    _NAMESPACE_CHANGE_VISIBILITY_REQ.fields_by_name['force'])
 _NAMESPACE_CHANGE_VISIBILITY_REQ.fields_by_name['force'].containing_oneof = _NAMESPACE_CHANGE_VISIBILITY_REQ.oneofs_by_name['_force']
 _NAMESPACE_DELETE_REQ.oneofs_by_name['_OBSOLETE_uuid'].fields.append(
-  _NAMESPACE_DELETE_REQ.fields_by_name['OBSOLETE_uuid'])
+    _NAMESPACE_DELETE_REQ.fields_by_name['OBSOLETE_uuid'])
 _NAMESPACE_DELETE_REQ.fields_by_name['OBSOLETE_uuid'].containing_oneof = _NAMESPACE_DELETE_REQ.oneofs_by_name['_OBSOLETE_uuid']
 _NAMESPACE_DELETE_REQ.oneofs_by_name['_i_am_sure'].fields.append(
-  _NAMESPACE_DELETE_REQ.fields_by_name['i_am_sure'])
+    _NAMESPACE_DELETE_REQ.fields_by_name['i_am_sure'])
 _NAMESPACE_DELETE_REQ.fields_by_name['i_am_sure'].containing_oneof = _NAMESPACE_DELETE_REQ.oneofs_by_name['_i_am_sure']
 _NAMESPACE_ADD_HOST_REQ.oneofs_by_name['_force'].fields.append(
-  _NAMESPACE_ADD_HOST_REQ.fields_by_name['force'])
+    _NAMESPACE_ADD_HOST_REQ.fields_by_name['force'])
 _NAMESPACE_ADD_HOST_REQ.fields_by_name['force'].containing_oneof = _NAMESPACE_ADD_HOST_REQ.oneofs_by_name['_force']
 _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_max_namespaces'].fields.append(
-  _CREATE_SUBSYSTEM_REQ.fields_by_name['max_namespaces'])
+    _CREATE_SUBSYSTEM_REQ.fields_by_name['max_namespaces'])
 _CREATE_SUBSYSTEM_REQ.fields_by_name['max_namespaces'].containing_oneof = _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_max_namespaces']
 _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_no_group_append'].fields.append(
-  _CREATE_SUBSYSTEM_REQ.fields_by_name['no_group_append'])
+    _CREATE_SUBSYSTEM_REQ.fields_by_name['no_group_append'])
 _CREATE_SUBSYSTEM_REQ.fields_by_name['no_group_append'].containing_oneof = _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_no_group_append']
 _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_dhchap_key'].fields.append(
-  _CREATE_SUBSYSTEM_REQ.fields_by_name['dhchap_key'])
+    _CREATE_SUBSYSTEM_REQ.fields_by_name['dhchap_key'])
 _CREATE_SUBSYSTEM_REQ.fields_by_name['dhchap_key'].containing_oneof = _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_dhchap_key']
 _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_key_encrypted'].fields.append(
-  _CREATE_SUBSYSTEM_REQ.fields_by_name['key_encrypted'])
+    _CREATE_SUBSYSTEM_REQ.fields_by_name['key_encrypted'])
 _CREATE_SUBSYSTEM_REQ.fields_by_name['key_encrypted'].containing_oneof = _CREATE_SUBSYSTEM_REQ.oneofs_by_name['_key_encrypted']
 _DELETE_SUBSYSTEM_REQ.oneofs_by_name['_force'].fields.append(
-  _DELETE_SUBSYSTEM_REQ.fields_by_name['force'])
+    _DELETE_SUBSYSTEM_REQ.fields_by_name['force'])
 _DELETE_SUBSYSTEM_REQ.fields_by_name['force'].containing_oneof = _DELETE_SUBSYSTEM_REQ.oneofs_by_name['_force']
 _CHANGE_SUBSYSTEM_KEY_REQ.oneofs_by_name['_dhchap_key'].fields.append(
-  _CHANGE_SUBSYSTEM_KEY_REQ.fields_by_name['dhchap_key'])
+    _CHANGE_SUBSYSTEM_KEY_REQ.fields_by_name['dhchap_key'])
 _CHANGE_SUBSYSTEM_KEY_REQ.fields_by_name['dhchap_key'].containing_oneof = _CHANGE_SUBSYSTEM_KEY_REQ.oneofs_by_name['_dhchap_key']
 _LIST_NAMESPACES_REQ.oneofs_by_name['_nsid'].fields.append(
-  _LIST_NAMESPACES_REQ.fields_by_name['nsid'])
+    _LIST_NAMESPACES_REQ.fields_by_name['nsid'])
 _LIST_NAMESPACES_REQ.fields_by_name['nsid'].containing_oneof = _LIST_NAMESPACES_REQ.oneofs_by_name['_nsid']
 _LIST_NAMESPACES_REQ.oneofs_by_name['_uuid'].fields.append(
-  _LIST_NAMESPACES_REQ.fields_by_name['uuid'])
+    _LIST_NAMESPACES_REQ.fields_by_name['uuid'])
 _LIST_NAMESPACES_REQ.fields_by_name['uuid'].containing_oneof = _LIST_NAMESPACES_REQ.oneofs_by_name['_uuid']
 _ADD_HOST_REQ.oneofs_by_name['_psk'].fields.append(
-  _ADD_HOST_REQ.fields_by_name['psk'])
+    _ADD_HOST_REQ.fields_by_name['psk'])
 _ADD_HOST_REQ.fields_by_name['psk'].containing_oneof = _ADD_HOST_REQ.oneofs_by_name['_psk']
 _ADD_HOST_REQ.oneofs_by_name['_dhchap_key'].fields.append(
-  _ADD_HOST_REQ.fields_by_name['dhchap_key'])
+    _ADD_HOST_REQ.fields_by_name['dhchap_key'])
 _ADD_HOST_REQ.fields_by_name['dhchap_key'].containing_oneof = _ADD_HOST_REQ.oneofs_by_name['_dhchap_key']
 _ADD_HOST_REQ.oneofs_by_name['_psk_encrypted'].fields.append(
-  _ADD_HOST_REQ.fields_by_name['psk_encrypted'])
+    _ADD_HOST_REQ.fields_by_name['psk_encrypted'])
 _ADD_HOST_REQ.fields_by_name['psk_encrypted'].containing_oneof = _ADD_HOST_REQ.oneofs_by_name['_psk_encrypted']
 _ADD_HOST_REQ.oneofs_by_name['_key_encrypted'].fields.append(
-  _ADD_HOST_REQ.fields_by_name['key_encrypted'])
+    _ADD_HOST_REQ.fields_by_name['key_encrypted'])
 _ADD_HOST_REQ.fields_by_name['key_encrypted'].containing_oneof = _ADD_HOST_REQ.oneofs_by_name['_key_encrypted']
 _CHANGE_HOST_KEY_REQ.oneofs_by_name['_dhchap_key'].fields.append(
-  _CHANGE_HOST_KEY_REQ.fields_by_name['dhchap_key'])
+    _CHANGE_HOST_KEY_REQ.fields_by_name['dhchap_key'])
 _CHANGE_HOST_KEY_REQ.fields_by_name['dhchap_key'].containing_oneof = _CHANGE_HOST_KEY_REQ.oneofs_by_name['_dhchap_key']
 _LIST_HOSTS_REQ.oneofs_by_name['_clear_alerts'].fields.append(
-  _LIST_HOSTS_REQ.fields_by_name['clear_alerts'])
+    _LIST_HOSTS_REQ.fields_by_name['clear_alerts'])
 _LIST_HOSTS_REQ.fields_by_name['clear_alerts'].containing_oneof = _LIST_HOSTS_REQ.oneofs_by_name['_clear_alerts']
 _CREATE_LISTENER_REQ.fields_by_name['adrfam'].enum_type = _ADDRESSFAMILY
 _CREATE_LISTENER_REQ.oneofs_by_name['_adrfam'].fields.append(
-  _CREATE_LISTENER_REQ.fields_by_name['adrfam'])
+    _CREATE_LISTENER_REQ.fields_by_name['adrfam'])
 _CREATE_LISTENER_REQ.fields_by_name['adrfam'].containing_oneof = _CREATE_LISTENER_REQ.oneofs_by_name['_adrfam']
 _CREATE_LISTENER_REQ.oneofs_by_name['_trsvcid'].fields.append(
-  _CREATE_LISTENER_REQ.fields_by_name['trsvcid'])
+    _CREATE_LISTENER_REQ.fields_by_name['trsvcid'])
 _CREATE_LISTENER_REQ.fields_by_name['trsvcid'].containing_oneof = _CREATE_LISTENER_REQ.oneofs_by_name['_trsvcid']
 _CREATE_LISTENER_REQ.oneofs_by_name['_secure'].fields.append(
-  _CREATE_LISTENER_REQ.fields_by_name['secure'])
+    _CREATE_LISTENER_REQ.fields_by_name['secure'])
 _CREATE_LISTENER_REQ.fields_by_name['secure'].containing_oneof = _CREATE_LISTENER_REQ.oneofs_by_name['_secure']
 _CREATE_LISTENER_REQ.oneofs_by_name['_verify_host_name'].fields.append(
-  _CREATE_LISTENER_REQ.fields_by_name['verify_host_name'])
+    _CREATE_LISTENER_REQ.fields_by_name['verify_host_name'])
 _CREATE_LISTENER_REQ.fields_by_name['verify_host_name'].containing_oneof = _CREATE_LISTENER_REQ.oneofs_by_name['_verify_host_name']
 _DELETE_LISTENER_REQ.fields_by_name['adrfam'].enum_type = _ADDRESSFAMILY
 _DELETE_LISTENER_REQ.oneofs_by_name['_adrfam'].fields.append(
-  _DELETE_LISTENER_REQ.fields_by_name['adrfam'])
+    _DELETE_LISTENER_REQ.fields_by_name['adrfam'])
 _DELETE_LISTENER_REQ.fields_by_name['adrfam'].containing_oneof = _DELETE_LISTENER_REQ.oneofs_by_name['_adrfam']
 _DELETE_LISTENER_REQ.oneofs_by_name['_trsvcid'].fields.append(
-  _DELETE_LISTENER_REQ.fields_by_name['trsvcid'])
+    _DELETE_LISTENER_REQ.fields_by_name['trsvcid'])
 _DELETE_LISTENER_REQ.fields_by_name['trsvcid'].containing_oneof = _DELETE_LISTENER_REQ.oneofs_by_name['_trsvcid']
 _DELETE_LISTENER_REQ.oneofs_by_name['_force'].fields.append(
-  _DELETE_LISTENER_REQ.fields_by_name['force'])
+    _DELETE_LISTENER_REQ.fields_by_name['force'])
 _DELETE_LISTENER_REQ.fields_by_name['force'].containing_oneof = _DELETE_LISTENER_REQ.oneofs_by_name['_force']
 _LIST_SUBSYSTEMS_REQ.oneofs_by_name['_subsystem_nqn'].fields.append(
-  _LIST_SUBSYSTEMS_REQ.fields_by_name['subsystem_nqn'])
+    _LIST_SUBSYSTEMS_REQ.fields_by_name['subsystem_nqn'])
 _LIST_SUBSYSTEMS_REQ.fields_by_name['subsystem_nqn'].containing_oneof = _LIST_SUBSYSTEMS_REQ.oneofs_by_name['_subsystem_nqn']
 _LIST_SUBSYSTEMS_REQ.oneofs_by_name['_serial_number'].fields.append(
-  _LIST_SUBSYSTEMS_REQ.fields_by_name['serial_number'])
+    _LIST_SUBSYSTEMS_REQ.fields_by_name['serial_number'])
 _LIST_SUBSYSTEMS_REQ.fields_by_name['serial_number'].containing_oneof = _LIST_SUBSYSTEMS_REQ.oneofs_by_name['_serial_number']
 _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.oneofs_by_name['_all_log_flags'].fields.append(
-  _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.fields_by_name['all_log_flags'])
-_GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.fields_by_name['all_log_flags'].containing_oneof = _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.oneofs_by_name['_all_log_flags']
+    _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.fields_by_name['all_log_flags'])
+_GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.fields_by_name[
+    'all_log_flags'].containing_oneof = _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ.oneofs_by_name['_all_log_flags']
 _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['log_level'].enum_type = _LOGLEVEL
 _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['print_level'].enum_type = _LOGLEVEL
 _SET_SPDK_NVMF_LOGS_REQ.oneofs_by_name['_log_level'].fields.append(
-  _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['log_level'])
+    _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['log_level'])
 _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['log_level'].containing_oneof = _SET_SPDK_NVMF_LOGS_REQ.oneofs_by_name['_log_level']
 _SET_SPDK_NVMF_LOGS_REQ.oneofs_by_name['_print_level'].fields.append(
-  _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['print_level'])
+    _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['print_level'])
 _SET_SPDK_NVMF_LOGS_REQ.fields_by_name['print_level'].containing_oneof = _SET_SPDK_NVMF_LOGS_REQ.oneofs_by_name['_print_level']
 _GET_GATEWAY_INFO_REQ.oneofs_by_name['_cli_version'].fields.append(
-  _GET_GATEWAY_INFO_REQ.fields_by_name['cli_version'])
+    _GET_GATEWAY_INFO_REQ.fields_by_name['cli_version'])
 _GET_GATEWAY_INFO_REQ.fields_by_name['cli_version'].containing_oneof = _GET_GATEWAY_INFO_REQ.oneofs_by_name['_cli_version']
 _SET_GATEWAY_LOG_LEVEL_REQ.fields_by_name['log_level'].enum_type = _GWLOGLEVEL
 _ANA_GROUP_STATE.fields_by_name['state'].enum_type = _ANA_STATE
@@ -4595,140 +4595,140 @@ _SUBSYSTEM.fields_by_name['listen_addresses'].message_type = _LISTEN_ADDRESS
 _SUBSYSTEM.fields_by_name['hosts'].message_type = _HOST
 _SUBSYSTEM.fields_by_name['namespaces'].message_type = _NAMESPACE
 _SUBSYSTEM.oneofs_by_name['_serial_number'].fields.append(
-  _SUBSYSTEM.fields_by_name['serial_number'])
+    _SUBSYSTEM.fields_by_name['serial_number'])
 _SUBSYSTEM.fields_by_name['serial_number'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_serial_number']
 _SUBSYSTEM.oneofs_by_name['_model_number'].fields.append(
-  _SUBSYSTEM.fields_by_name['model_number'])
+    _SUBSYSTEM.fields_by_name['model_number'])
 _SUBSYSTEM.fields_by_name['model_number'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_model_number']
 _SUBSYSTEM.oneofs_by_name['_max_namespaces'].fields.append(
-  _SUBSYSTEM.fields_by_name['max_namespaces'])
+    _SUBSYSTEM.fields_by_name['max_namespaces'])
 _SUBSYSTEM.fields_by_name['max_namespaces'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_max_namespaces']
 _SUBSYSTEM.oneofs_by_name['_min_cntlid'].fields.append(
-  _SUBSYSTEM.fields_by_name['min_cntlid'])
+    _SUBSYSTEM.fields_by_name['min_cntlid'])
 _SUBSYSTEM.fields_by_name['min_cntlid'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_min_cntlid']
 _SUBSYSTEM.oneofs_by_name['_max_cntlid'].fields.append(
-  _SUBSYSTEM.fields_by_name['max_cntlid'])
+    _SUBSYSTEM.fields_by_name['max_cntlid'])
 _SUBSYSTEM.fields_by_name['max_cntlid'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_max_cntlid']
 _SUBSYSTEM.oneofs_by_name['_has_dhchap_key'].fields.append(
-  _SUBSYSTEM.fields_by_name['has_dhchap_key'])
+    _SUBSYSTEM.fields_by_name['has_dhchap_key'])
 _SUBSYSTEM.fields_by_name['has_dhchap_key'].containing_oneof = _SUBSYSTEM.oneofs_by_name['_has_dhchap_key']
 _LISTEN_ADDRESS.oneofs_by_name['_transport'].fields.append(
-  _LISTEN_ADDRESS.fields_by_name['transport'])
+    _LISTEN_ADDRESS.fields_by_name['transport'])
 _LISTEN_ADDRESS.fields_by_name['transport'].containing_oneof = _LISTEN_ADDRESS.oneofs_by_name['_transport']
 _LISTEN_ADDRESS.oneofs_by_name['_secure'].fields.append(
-  _LISTEN_ADDRESS.fields_by_name['secure'])
+    _LISTEN_ADDRESS.fields_by_name['secure'])
 _LISTEN_ADDRESS.fields_by_name['secure'].containing_oneof = _LISTEN_ADDRESS.oneofs_by_name['_secure']
 _NAMESPACE.oneofs_by_name['_bdev_name'].fields.append(
-  _NAMESPACE.fields_by_name['bdev_name'])
+    _NAMESPACE.fields_by_name['bdev_name'])
 _NAMESPACE.fields_by_name['bdev_name'].containing_oneof = _NAMESPACE.oneofs_by_name['_bdev_name']
 _NAMESPACE.oneofs_by_name['_nguid'].fields.append(
-  _NAMESPACE.fields_by_name['nguid'])
+    _NAMESPACE.fields_by_name['nguid'])
 _NAMESPACE.fields_by_name['nguid'].containing_oneof = _NAMESPACE.oneofs_by_name['_nguid']
 _NAMESPACE.oneofs_by_name['_uuid'].fields.append(
-  _NAMESPACE.fields_by_name['uuid'])
+    _NAMESPACE.fields_by_name['uuid'])
 _NAMESPACE.fields_by_name['uuid'].containing_oneof = _NAMESPACE.oneofs_by_name['_uuid']
 _NAMESPACE.oneofs_by_name['_anagrpid'].fields.append(
-  _NAMESPACE.fields_by_name['anagrpid'])
+    _NAMESPACE.fields_by_name['anagrpid'])
 _NAMESPACE.fields_by_name['anagrpid'].containing_oneof = _NAMESPACE.oneofs_by_name['_anagrpid']
 _NAMESPACE.oneofs_by_name['_nonce'].fields.append(
-  _NAMESPACE.fields_by_name['nonce'])
+    _NAMESPACE.fields_by_name['nonce'])
 _NAMESPACE.fields_by_name['nonce'].containing_oneof = _NAMESPACE.oneofs_by_name['_nonce']
 _NAMESPACE.oneofs_by_name['_auto_visible'].fields.append(
-  _NAMESPACE.fields_by_name['auto_visible'])
+    _NAMESPACE.fields_by_name['auto_visible'])
 _NAMESPACE.fields_by_name['auto_visible'].containing_oneof = _NAMESPACE.oneofs_by_name['_auto_visible']
 _SUBSYSTEMS_INFO_CLI.fields_by_name['subsystems'].message_type = _SUBSYSTEM_CLI
 _SUBSYSTEM_CLI.oneofs_by_name['_has_dhchap_key'].fields.append(
-  _SUBSYSTEM_CLI.fields_by_name['has_dhchap_key'])
+    _SUBSYSTEM_CLI.fields_by_name['has_dhchap_key'])
 _SUBSYSTEM_CLI.fields_by_name['has_dhchap_key'].containing_oneof = _SUBSYSTEM_CLI.oneofs_by_name['_has_dhchap_key']
 _SUBSYSTEM_CLI.oneofs_by_name['_allow_any_host'].fields.append(
-  _SUBSYSTEM_CLI.fields_by_name['allow_any_host'])
+    _SUBSYSTEM_CLI.fields_by_name['allow_any_host'])
 _SUBSYSTEM_CLI.fields_by_name['allow_any_host'].containing_oneof = _SUBSYSTEM_CLI.oneofs_by_name['_allow_any_host']
 _SUBSYSTEM_CLI.oneofs_by_name['_created_without_key'].fields.append(
-  _SUBSYSTEM_CLI.fields_by_name['created_without_key'])
+    _SUBSYSTEM_CLI.fields_by_name['created_without_key'])
 _SUBSYSTEM_CLI.fields_by_name['created_without_key'].containing_oneof = _SUBSYSTEM_CLI.oneofs_by_name['_created_without_key']
 _GATEWAY_INFO.oneofs_by_name['_spdk_version'].fields.append(
-  _GATEWAY_INFO.fields_by_name['spdk_version'])
+    _GATEWAY_INFO.fields_by_name['spdk_version'])
 _GATEWAY_INFO.fields_by_name['spdk_version'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_spdk_version']
 _GATEWAY_INFO.oneofs_by_name['_max_subsystems'].fields.append(
-  _GATEWAY_INFO.fields_by_name['max_subsystems'])
+    _GATEWAY_INFO.fields_by_name['max_subsystems'])
 _GATEWAY_INFO.fields_by_name['max_subsystems'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_max_subsystems']
 _GATEWAY_INFO.oneofs_by_name['_max_namespaces'].fields.append(
-  _GATEWAY_INFO.fields_by_name['max_namespaces'])
+    _GATEWAY_INFO.fields_by_name['max_namespaces'])
 _GATEWAY_INFO.fields_by_name['max_namespaces'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_max_namespaces']
 _GATEWAY_INFO.oneofs_by_name['_max_hosts_per_subsystem'].fields.append(
-  _GATEWAY_INFO.fields_by_name['max_hosts_per_subsystem'])
+    _GATEWAY_INFO.fields_by_name['max_hosts_per_subsystem'])
 _GATEWAY_INFO.fields_by_name['max_hosts_per_subsystem'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_max_hosts_per_subsystem']
 _GATEWAY_INFO.oneofs_by_name['_max_namespaces_per_subsystem'].fields.append(
-  _GATEWAY_INFO.fields_by_name['max_namespaces_per_subsystem'])
+    _GATEWAY_INFO.fields_by_name['max_namespaces_per_subsystem'])
 _GATEWAY_INFO.fields_by_name['max_namespaces_per_subsystem'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_max_namespaces_per_subsystem']
 _GATEWAY_INFO.oneofs_by_name['_max_hosts'].fields.append(
-  _GATEWAY_INFO.fields_by_name['max_hosts'])
+    _GATEWAY_INFO.fields_by_name['max_hosts'])
 _GATEWAY_INFO.fields_by_name['max_hosts'].containing_oneof = _GATEWAY_INFO.oneofs_by_name['_max_hosts']
 _POLL_GROUP_INFO.fields_by_name['transports'].message_type = _POLL_GROUP_TRANSPORT_INFO
 _GATEWAY_STATS_INFO.fields_by_name['poll_groups'].message_type = _POLL_GROUP_INFO
 _LISTENER_INFO.fields_by_name['adrfam'].enum_type = _ADDRESSFAMILY
 _LISTENER_INFO.oneofs_by_name['_secure'].fields.append(
-  _LISTENER_INFO.fields_by_name['secure'])
+    _LISTENER_INFO.fields_by_name['secure'])
 _LISTENER_INFO.fields_by_name['secure'].containing_oneof = _LISTENER_INFO.oneofs_by_name['_secure']
 _LISTENER_INFO.oneofs_by_name['_active'].fields.append(
-  _LISTENER_INFO.fields_by_name['active'])
+    _LISTENER_INFO.fields_by_name['active'])
 _LISTENER_INFO.fields_by_name['active'].containing_oneof = _LISTENER_INFO.oneofs_by_name['_active']
 _LISTENERS_INFO.fields_by_name['listeners'].message_type = _LISTENER_INFO
 _GATEWAY_LISTENER_INFO.fields_by_name['listener'].message_type = _LISTENER_INFO
 _GATEWAY_LISTENER_INFO.fields_by_name['lb_states'].message_type = _ANA_GROUP_STATE
 _GATEWAY_LISTENERS_INFO.fields_by_name['gw_listeners'].message_type = _GATEWAY_LISTENER_INFO
 _HOST.oneofs_by_name['_use_psk'].fields.append(
-  _HOST.fields_by_name['use_psk'])
+    _HOST.fields_by_name['use_psk'])
 _HOST.fields_by_name['use_psk'].containing_oneof = _HOST.oneofs_by_name['_use_psk']
 _HOST.oneofs_by_name['_use_dhchap'].fields.append(
-  _HOST.fields_by_name['use_dhchap'])
+    _HOST.fields_by_name['use_dhchap'])
 _HOST.fields_by_name['use_dhchap'].containing_oneof = _HOST.oneofs_by_name['_use_dhchap']
 _HOST.oneofs_by_name['_disconnected_due_to_keepalive_timeout'].fields.append(
-  _HOST.fields_by_name['disconnected_due_to_keepalive_timeout'])
+    _HOST.fields_by_name['disconnected_due_to_keepalive_timeout'])
 _HOST.fields_by_name['disconnected_due_to_keepalive_timeout'].containing_oneof = _HOST.oneofs_by_name['_disconnected_due_to_keepalive_timeout']
 _HOSTS_INFO.fields_by_name['hosts'].message_type = _HOST
 _CONNECTION.fields_by_name['adrfam'].enum_type = _ADDRESSFAMILY
 _CONNECTION.oneofs_by_name['_secure'].fields.append(
-  _CONNECTION.fields_by_name['secure'])
+    _CONNECTION.fields_by_name['secure'])
 _CONNECTION.fields_by_name['secure'].containing_oneof = _CONNECTION.oneofs_by_name['_secure']
 _CONNECTION.oneofs_by_name['_use_psk'].fields.append(
-  _CONNECTION.fields_by_name['use_psk'])
+    _CONNECTION.fields_by_name['use_psk'])
 _CONNECTION.fields_by_name['use_psk'].containing_oneof = _CONNECTION.oneofs_by_name['_use_psk']
 _CONNECTION.oneofs_by_name['_use_dhchap'].fields.append(
-  _CONNECTION.fields_by_name['use_dhchap'])
+    _CONNECTION.fields_by_name['use_dhchap'])
 _CONNECTION.fields_by_name['use_dhchap'].containing_oneof = _CONNECTION.oneofs_by_name['_use_dhchap']
 _CONNECTION.oneofs_by_name['_subsystem'].fields.append(
-  _CONNECTION.fields_by_name['subsystem'])
+    _CONNECTION.fields_by_name['subsystem'])
 _CONNECTION.fields_by_name['subsystem'].containing_oneof = _CONNECTION.oneofs_by_name['_subsystem']
 _CONNECTION.oneofs_by_name['_disconnected_due_to_keepalive_timeout'].fields.append(
-  _CONNECTION.fields_by_name['disconnected_due_to_keepalive_timeout'])
+    _CONNECTION.fields_by_name['disconnected_due_to_keepalive_timeout'])
 _CONNECTION.fields_by_name['disconnected_due_to_keepalive_timeout'].containing_oneof = _CONNECTION.oneofs_by_name['_disconnected_due_to_keepalive_timeout']
 _CONNECTIONS_INFO.fields_by_name['connections'].message_type = _CONNECTION
 _NAMESPACE_CLI.oneofs_by_name['_ns_subsystem_nqn'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['ns_subsystem_nqn'])
+    _NAMESPACE_CLI.fields_by_name['ns_subsystem_nqn'])
 _NAMESPACE_CLI.fields_by_name['ns_subsystem_nqn'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_ns_subsystem_nqn']
 _NAMESPACE_CLI.oneofs_by_name['_trash_image'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['trash_image'])
+    _NAMESPACE_CLI.fields_by_name['trash_image'])
 _NAMESPACE_CLI.fields_by_name['trash_image'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_trash_image']
 _NAMESPACE_CLI.oneofs_by_name['_disable_auto_resize'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['disable_auto_resize'])
+    _NAMESPACE_CLI.fields_by_name['disable_auto_resize'])
 _NAMESPACE_CLI.fields_by_name['disable_auto_resize'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_disable_auto_resize']
 _NAMESPACE_CLI.oneofs_by_name['_read_only'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['read_only'])
+    _NAMESPACE_CLI.fields_by_name['read_only'])
 _NAMESPACE_CLI.fields_by_name['read_only'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_read_only']
 _NAMESPACE_CLI.oneofs_by_name['_cluster_name'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['cluster_name'])
+    _NAMESPACE_CLI.fields_by_name['cluster_name'])
 _NAMESPACE_CLI.fields_by_name['cluster_name'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_cluster_name']
 _NAMESPACE_CLI.oneofs_by_name['_configured_load_balancing_group'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['configured_load_balancing_group'])
+    _NAMESPACE_CLI.fields_by_name['configured_load_balancing_group'])
 _NAMESPACE_CLI.fields_by_name['configured_load_balancing_group'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_configured_load_balancing_group']
 _NAMESPACE_CLI.oneofs_by_name['_image_was_shrunk'].fields.append(
-  _NAMESPACE_CLI.fields_by_name['image_was_shrunk'])
+    _NAMESPACE_CLI.fields_by_name['image_was_shrunk'])
 _NAMESPACE_CLI.fields_by_name['image_was_shrunk'].containing_oneof = _NAMESPACE_CLI.oneofs_by_name['_image_was_shrunk']
 _NAMESPACES_INFO.fields_by_name['namespaces'].message_type = _NAMESPACE_CLI
 _NAMESPACE_IO_STATS_INFO.fields_by_name['io_error'].message_type = _NAMESPACE_IO_ERROR
 _NAMESPACE_IO_STATS_INFO.oneofs_by_name['_uuid'].fields.append(
-  _NAMESPACE_IO_STATS_INFO.fields_by_name['uuid'])
+    _NAMESPACE_IO_STATS_INFO.fields_by_name['uuid'])
 _NAMESPACE_IO_STATS_INFO.fields_by_name['uuid'].containing_oneof = _NAMESPACE_IO_STATS_INFO.oneofs_by_name['_uuid']
 _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO.fields_by_name['nvmf_log_flags'].message_type = _SPDK_LOG_FLAG_INFO
 _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO.fields_by_name['log_level'].enum_type = _LOGLEVEL
@@ -4807,820 +4807,819 @@ DESCRIPTOR.enum_types_by_name['ana_state'] = _ANA_STATE
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
 namespace_add_req = _reflection.GeneratedProtocolMessageType('namespace_add_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_ADD_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_add_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_ADD_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_add_req)
+})
 _sym_db.RegisterMessage(namespace_add_req)
 
 namespace_resize_req = _reflection.GeneratedProtocolMessageType('namespace_resize_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_RESIZE_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_resize_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_RESIZE_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_resize_req)
+})
 _sym_db.RegisterMessage(namespace_resize_req)
 
 namespace_get_io_stats_req = _reflection.GeneratedProtocolMessageType('namespace_get_io_stats_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_GET_IO_STATS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_get_io_stats_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_GET_IO_STATS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_get_io_stats_req)
+})
 _sym_db.RegisterMessage(namespace_get_io_stats_req)
 
 namespace_set_qos_req = _reflection.GeneratedProtocolMessageType('namespace_set_qos_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_SET_QOS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_set_qos_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_SET_QOS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_set_qos_req)
+})
 _sym_db.RegisterMessage(namespace_set_qos_req)
 
 namespace_change_load_balancing_group_req = _reflection.GeneratedProtocolMessageType('namespace_change_load_balancing_group_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_change_load_balancing_group_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_change_load_balancing_group_req)
+})
 _sym_db.RegisterMessage(namespace_change_load_balancing_group_req)
 
 namespace_change_visibility_req = _reflection.GeneratedProtocolMessageType('namespace_change_visibility_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_CHANGE_VISIBILITY_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_change_visibility_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_CHANGE_VISIBILITY_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_change_visibility_req)
+})
 _sym_db.RegisterMessage(namespace_change_visibility_req)
 
 namespace_set_rbd_trash_image_req = _reflection.GeneratedProtocolMessageType('namespace_set_rbd_trash_image_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_SET_RBD_TRASH_IMAGE_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_set_rbd_trash_image_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_SET_RBD_TRASH_IMAGE_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_set_rbd_trash_image_req)
+})
 _sym_db.RegisterMessage(namespace_set_rbd_trash_image_req)
 
 namespace_set_auto_resize_req = _reflection.GeneratedProtocolMessageType('namespace_set_auto_resize_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_SET_AUTO_RESIZE_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_set_auto_resize_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_SET_AUTO_RESIZE_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_set_auto_resize_req)
+})
 _sym_db.RegisterMessage(namespace_set_auto_resize_req)
 
 namespace_delete_req = _reflection.GeneratedProtocolMessageType('namespace_delete_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_DELETE_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_delete_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_DELETE_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_delete_req)
+})
 _sym_db.RegisterMessage(namespace_delete_req)
 
 namespace_add_host_req = _reflection.GeneratedProtocolMessageType('namespace_add_host_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_ADD_HOST_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_add_host_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_ADD_HOST_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_add_host_req)
+})
 _sym_db.RegisterMessage(namespace_add_host_req)
 
 namespace_delete_host_req = _reflection.GeneratedProtocolMessageType('namespace_delete_host_req', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_DELETE_HOST_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_delete_host_req)
-  })
+    'DESCRIPTOR': _NAMESPACE_DELETE_HOST_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_delete_host_req)
+})
 _sym_db.RegisterMessage(namespace_delete_host_req)
 
 create_subsystem_req = _reflection.GeneratedProtocolMessageType('create_subsystem_req', (_message.Message,), {
-  'DESCRIPTOR' : _CREATE_SUBSYSTEM_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:create_subsystem_req)
-  })
+    'DESCRIPTOR': _CREATE_SUBSYSTEM_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:create_subsystem_req)
+})
 _sym_db.RegisterMessage(create_subsystem_req)
 
 delete_subsystem_req = _reflection.GeneratedProtocolMessageType('delete_subsystem_req', (_message.Message,), {
-  'DESCRIPTOR' : _DELETE_SUBSYSTEM_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:delete_subsystem_req)
-  })
+    'DESCRIPTOR': _DELETE_SUBSYSTEM_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:delete_subsystem_req)
+})
 _sym_db.RegisterMessage(delete_subsystem_req)
 
 change_subsystem_key_req = _reflection.GeneratedProtocolMessageType('change_subsystem_key_req', (_message.Message,), {
-  'DESCRIPTOR' : _CHANGE_SUBSYSTEM_KEY_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:change_subsystem_key_req)
-  })
+    'DESCRIPTOR': _CHANGE_SUBSYSTEM_KEY_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:change_subsystem_key_req)
+})
 _sym_db.RegisterMessage(change_subsystem_key_req)
 
 list_namespaces_req = _reflection.GeneratedProtocolMessageType('list_namespaces_req', (_message.Message,), {
-  'DESCRIPTOR' : _LIST_NAMESPACES_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:list_namespaces_req)
-  })
+    'DESCRIPTOR': _LIST_NAMESPACES_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:list_namespaces_req)
+})
 _sym_db.RegisterMessage(list_namespaces_req)
 
 add_host_req = _reflection.GeneratedProtocolMessageType('add_host_req', (_message.Message,), {
-  'DESCRIPTOR' : _ADD_HOST_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:add_host_req)
-  })
+    'DESCRIPTOR': _ADD_HOST_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:add_host_req)
+})
 _sym_db.RegisterMessage(add_host_req)
 
 change_host_key_req = _reflection.GeneratedProtocolMessageType('change_host_key_req', (_message.Message,), {
-  'DESCRIPTOR' : _CHANGE_HOST_KEY_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:change_host_key_req)
-  })
+    'DESCRIPTOR': _CHANGE_HOST_KEY_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:change_host_key_req)
+})
 _sym_db.RegisterMessage(change_host_key_req)
 
 remove_host_req = _reflection.GeneratedProtocolMessageType('remove_host_req', (_message.Message,), {
-  'DESCRIPTOR' : _REMOVE_HOST_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:remove_host_req)
-  })
+    'DESCRIPTOR': _REMOVE_HOST_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:remove_host_req)
+})
 _sym_db.RegisterMessage(remove_host_req)
 
 list_hosts_req = _reflection.GeneratedProtocolMessageType('list_hosts_req', (_message.Message,), {
-  'DESCRIPTOR' : _LIST_HOSTS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:list_hosts_req)
-  })
+    'DESCRIPTOR': _LIST_HOSTS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:list_hosts_req)
+})
 _sym_db.RegisterMessage(list_hosts_req)
 
 list_connections_req = _reflection.GeneratedProtocolMessageType('list_connections_req', (_message.Message,), {
-  'DESCRIPTOR' : _LIST_CONNECTIONS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:list_connections_req)
-  })
+    'DESCRIPTOR': _LIST_CONNECTIONS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:list_connections_req)
+})
 _sym_db.RegisterMessage(list_connections_req)
 
 create_listener_req = _reflection.GeneratedProtocolMessageType('create_listener_req', (_message.Message,), {
-  'DESCRIPTOR' : _CREATE_LISTENER_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:create_listener_req)
-  })
+    'DESCRIPTOR': _CREATE_LISTENER_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:create_listener_req)
+})
 _sym_db.RegisterMessage(create_listener_req)
 
 delete_listener_req = _reflection.GeneratedProtocolMessageType('delete_listener_req', (_message.Message,), {
-  'DESCRIPTOR' : _DELETE_LISTENER_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:delete_listener_req)
-  })
+    'DESCRIPTOR': _DELETE_LISTENER_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:delete_listener_req)
+})
 _sym_db.RegisterMessage(delete_listener_req)
 
 list_listeners_req = _reflection.GeneratedProtocolMessageType('list_listeners_req', (_message.Message,), {
-  'DESCRIPTOR' : _LIST_LISTENERS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:list_listeners_req)
-  })
+    'DESCRIPTOR': _LIST_LISTENERS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:list_listeners_req)
+})
 _sym_db.RegisterMessage(list_listeners_req)
 
 list_subsystems_req = _reflection.GeneratedProtocolMessageType('list_subsystems_req', (_message.Message,), {
-  'DESCRIPTOR' : _LIST_SUBSYSTEMS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:list_subsystems_req)
-  })
+    'DESCRIPTOR': _LIST_SUBSYSTEMS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:list_subsystems_req)
+})
 _sym_db.RegisterMessage(list_subsystems_req)
 
 get_subsystems_req = _reflection.GeneratedProtocolMessageType('get_subsystems_req', (_message.Message,), {
-  'DESCRIPTOR' : _GET_SUBSYSTEMS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:get_subsystems_req)
-  })
+    'DESCRIPTOR': _GET_SUBSYSTEMS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:get_subsystems_req)
+})
 _sym_db.RegisterMessage(get_subsystems_req)
 
 get_spdk_nvmf_log_flags_and_level_req = _reflection.GeneratedProtocolMessageType('get_spdk_nvmf_log_flags_and_level_req', (_message.Message,), {
-  'DESCRIPTOR' : _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:get_spdk_nvmf_log_flags_and_level_req)
-  })
+    'DESCRIPTOR': _GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:get_spdk_nvmf_log_flags_and_level_req)
+})
 _sym_db.RegisterMessage(get_spdk_nvmf_log_flags_and_level_req)
 
 disable_spdk_nvmf_logs_req = _reflection.GeneratedProtocolMessageType('disable_spdk_nvmf_logs_req', (_message.Message,), {
-  'DESCRIPTOR' : _DISABLE_SPDK_NVMF_LOGS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:disable_spdk_nvmf_logs_req)
-  })
+    'DESCRIPTOR': _DISABLE_SPDK_NVMF_LOGS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:disable_spdk_nvmf_logs_req)
+})
 _sym_db.RegisterMessage(disable_spdk_nvmf_logs_req)
 
 set_spdk_nvmf_logs_req = _reflection.GeneratedProtocolMessageType('set_spdk_nvmf_logs_req', (_message.Message,), {
-  'DESCRIPTOR' : _SET_SPDK_NVMF_LOGS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:set_spdk_nvmf_logs_req)
-  })
+    'DESCRIPTOR': _SET_SPDK_NVMF_LOGS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:set_spdk_nvmf_logs_req)
+})
 _sym_db.RegisterMessage(set_spdk_nvmf_logs_req)
 
 get_gateway_info_req = _reflection.GeneratedProtocolMessageType('get_gateway_info_req', (_message.Message,), {
-  'DESCRIPTOR' : _GET_GATEWAY_INFO_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:get_gateway_info_req)
-  })
+    'DESCRIPTOR': _GET_GATEWAY_INFO_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:get_gateway_info_req)
+})
 _sym_db.RegisterMessage(get_gateway_info_req)
 
 get_gateway_log_level_req = _reflection.GeneratedProtocolMessageType('get_gateway_log_level_req', (_message.Message,), {
-  'DESCRIPTOR' : _GET_GATEWAY_LOG_LEVEL_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:get_gateway_log_level_req)
-  })
+    'DESCRIPTOR': _GET_GATEWAY_LOG_LEVEL_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:get_gateway_log_level_req)
+})
 _sym_db.RegisterMessage(get_gateway_log_level_req)
 
 set_gateway_log_level_req = _reflection.GeneratedProtocolMessageType('set_gateway_log_level_req', (_message.Message,), {
-  'DESCRIPTOR' : _SET_GATEWAY_LOG_LEVEL_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:set_gateway_log_level_req)
-  })
+    'DESCRIPTOR': _SET_GATEWAY_LOG_LEVEL_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:set_gateway_log_level_req)
+})
 _sym_db.RegisterMessage(set_gateway_log_level_req)
 
 show_gateway_listeners_info_req = _reflection.GeneratedProtocolMessageType('show_gateway_listeners_info_req', (_message.Message,), {
-  'DESCRIPTOR' : _SHOW_GATEWAY_LISTENERS_INFO_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:show_gateway_listeners_info_req)
-  })
+    'DESCRIPTOR': _SHOW_GATEWAY_LISTENERS_INFO_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:show_gateway_listeners_info_req)
+})
 _sym_db.RegisterMessage(show_gateway_listeners_info_req)
 
 get_gateway_stats_req = _reflection.GeneratedProtocolMessageType('get_gateway_stats_req', (_message.Message,), {
-  'DESCRIPTOR' : _GET_GATEWAY_STATS_REQ,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:get_gateway_stats_req)
-  })
+    'DESCRIPTOR': _GET_GATEWAY_STATS_REQ,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:get_gateway_stats_req)
+})
 _sym_db.RegisterMessage(get_gateway_stats_req)
 
 ana_group_state = _reflection.GeneratedProtocolMessageType('ana_group_state', (_message.Message,), {
-  'DESCRIPTOR' : _ANA_GROUP_STATE,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:ana_group_state)
-  })
+    'DESCRIPTOR': _ANA_GROUP_STATE,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:ana_group_state)
+})
 _sym_db.RegisterMessage(ana_group_state)
 
 nqn_ana_states = _reflection.GeneratedProtocolMessageType('nqn_ana_states', (_message.Message,), {
-  'DESCRIPTOR' : _NQN_ANA_STATES,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:nqn_ana_states)
-  })
+    'DESCRIPTOR': _NQN_ANA_STATES,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:nqn_ana_states)
+})
 _sym_db.RegisterMessage(nqn_ana_states)
 
 ana_info = _reflection.GeneratedProtocolMessageType('ana_info', (_message.Message,), {
-  'DESCRIPTOR' : _ANA_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:ana_info)
-  })
+    'DESCRIPTOR': _ANA_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:ana_info)
+})
 _sym_db.RegisterMessage(ana_info)
 
 req_status = _reflection.GeneratedProtocolMessageType('req_status', (_message.Message,), {
-  'DESCRIPTOR' : _REQ_STATUS,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:req_status)
-  })
+    'DESCRIPTOR': _REQ_STATUS,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:req_status)
+})
 _sym_db.RegisterMessage(req_status)
 
 subsys_status = _reflection.GeneratedProtocolMessageType('subsys_status', (_message.Message,), {
-  'DESCRIPTOR' : _SUBSYS_STATUS,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:subsys_status)
-  })
+    'DESCRIPTOR': _SUBSYS_STATUS,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:subsys_status)
+})
 _sym_db.RegisterMessage(subsys_status)
 
 nsid_status = _reflection.GeneratedProtocolMessageType('nsid_status', (_message.Message,), {
-  'DESCRIPTOR' : _NSID_STATUS,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:nsid_status)
-  })
+    'DESCRIPTOR': _NSID_STATUS,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:nsid_status)
+})
 _sym_db.RegisterMessage(nsid_status)
 
 subsystems_info = _reflection.GeneratedProtocolMessageType('subsystems_info', (_message.Message,), {
-  'DESCRIPTOR' : _SUBSYSTEMS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:subsystems_info)
-  })
+    'DESCRIPTOR': _SUBSYSTEMS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:subsystems_info)
+})
 _sym_db.RegisterMessage(subsystems_info)
 
 subsystem = _reflection.GeneratedProtocolMessageType('subsystem', (_message.Message,), {
-  'DESCRIPTOR' : _SUBSYSTEM,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:subsystem)
-  })
+    'DESCRIPTOR': _SUBSYSTEM,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:subsystem)
+})
 _sym_db.RegisterMessage(subsystem)
 
 listen_address = _reflection.GeneratedProtocolMessageType('listen_address', (_message.Message,), {
-  'DESCRIPTOR' : _LISTEN_ADDRESS,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:listen_address)
-  })
+    'DESCRIPTOR': _LISTEN_ADDRESS,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:listen_address)
+})
 _sym_db.RegisterMessage(listen_address)
 
 namespace = _reflection.GeneratedProtocolMessageType('namespace', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace)
-  })
+    'DESCRIPTOR': _NAMESPACE,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace)
+})
 _sym_db.RegisterMessage(namespace)
 
 subsystems_info_cli = _reflection.GeneratedProtocolMessageType('subsystems_info_cli', (_message.Message,), {
-  'DESCRIPTOR' : _SUBSYSTEMS_INFO_CLI,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:subsystems_info_cli)
-  })
+    'DESCRIPTOR': _SUBSYSTEMS_INFO_CLI,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:subsystems_info_cli)
+})
 _sym_db.RegisterMessage(subsystems_info_cli)
 
 subsystem_cli = _reflection.GeneratedProtocolMessageType('subsystem_cli', (_message.Message,), {
-  'DESCRIPTOR' : _SUBSYSTEM_CLI,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:subsystem_cli)
-  })
+    'DESCRIPTOR': _SUBSYSTEM_CLI,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:subsystem_cli)
+})
 _sym_db.RegisterMessage(subsystem_cli)
 
 gateway_info = _reflection.GeneratedProtocolMessageType('gateway_info', (_message.Message,), {
-  'DESCRIPTOR' : _GATEWAY_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gateway_info)
-  })
+    'DESCRIPTOR': _GATEWAY_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gateway_info)
+})
 _sym_db.RegisterMessage(gateway_info)
 
 cli_version = _reflection.GeneratedProtocolMessageType('cli_version', (_message.Message,), {
-  'DESCRIPTOR' : _CLI_VERSION,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:cli_version)
-  })
+    'DESCRIPTOR': _CLI_VERSION,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:cli_version)
+})
 _sym_db.RegisterMessage(cli_version)
 
 gw_version = _reflection.GeneratedProtocolMessageType('gw_version', (_message.Message,), {
-  'DESCRIPTOR' : _GW_VERSION,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gw_version)
-  })
+    'DESCRIPTOR': _GW_VERSION,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gw_version)
+})
 _sym_db.RegisterMessage(gw_version)
 
 poll_group_transport_info = _reflection.GeneratedProtocolMessageType('poll_group_transport_info', (_message.Message,), {
-  'DESCRIPTOR' : _POLL_GROUP_TRANSPORT_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:poll_group_transport_info)
-  })
+    'DESCRIPTOR': _POLL_GROUP_TRANSPORT_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:poll_group_transport_info)
+})
 _sym_db.RegisterMessage(poll_group_transport_info)
 
 poll_group_info = _reflection.GeneratedProtocolMessageType('poll_group_info', (_message.Message,), {
-  'DESCRIPTOR' : _POLL_GROUP_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:poll_group_info)
-  })
+    'DESCRIPTOR': _POLL_GROUP_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:poll_group_info)
+})
 _sym_db.RegisterMessage(poll_group_info)
 
 gateway_stats_info = _reflection.GeneratedProtocolMessageType('gateway_stats_info', (_message.Message,), {
-  'DESCRIPTOR' : _GATEWAY_STATS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gateway_stats_info)
-  })
+    'DESCRIPTOR': _GATEWAY_STATS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gateway_stats_info)
+})
 _sym_db.RegisterMessage(gateway_stats_info)
 
 listener_info = _reflection.GeneratedProtocolMessageType('listener_info', (_message.Message,), {
-  'DESCRIPTOR' : _LISTENER_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:listener_info)
-  })
+    'DESCRIPTOR': _LISTENER_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:listener_info)
+})
 _sym_db.RegisterMessage(listener_info)
 
 listeners_info = _reflection.GeneratedProtocolMessageType('listeners_info', (_message.Message,), {
-  'DESCRIPTOR' : _LISTENERS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:listeners_info)
-  })
+    'DESCRIPTOR': _LISTENERS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:listeners_info)
+})
 _sym_db.RegisterMessage(listeners_info)
 
 gateway_listener_info = _reflection.GeneratedProtocolMessageType('gateway_listener_info', (_message.Message,), {
-  'DESCRIPTOR' : _GATEWAY_LISTENER_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gateway_listener_info)
-  })
+    'DESCRIPTOR': _GATEWAY_LISTENER_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gateway_listener_info)
+})
 _sym_db.RegisterMessage(gateway_listener_info)
 
 gateway_listeners_info = _reflection.GeneratedProtocolMessageType('gateway_listeners_info', (_message.Message,), {
-  'DESCRIPTOR' : _GATEWAY_LISTENERS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gateway_listeners_info)
-  })
+    'DESCRIPTOR': _GATEWAY_LISTENERS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gateway_listeners_info)
+})
 _sym_db.RegisterMessage(gateway_listeners_info)
 
 host = _reflection.GeneratedProtocolMessageType('host', (_message.Message,), {
-  'DESCRIPTOR' : _HOST,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:host)
-  })
+    'DESCRIPTOR': _HOST,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:host)
+})
 _sym_db.RegisterMessage(host)
 
 hosts_info = _reflection.GeneratedProtocolMessageType('hosts_info', (_message.Message,), {
-  'DESCRIPTOR' : _HOSTS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:hosts_info)
-  })
+    'DESCRIPTOR': _HOSTS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:hosts_info)
+})
 _sym_db.RegisterMessage(hosts_info)
 
 connection = _reflection.GeneratedProtocolMessageType('connection', (_message.Message,), {
-  'DESCRIPTOR' : _CONNECTION,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:connection)
-  })
+    'DESCRIPTOR': _CONNECTION,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:connection)
+})
 _sym_db.RegisterMessage(connection)
 
 connections_info = _reflection.GeneratedProtocolMessageType('connections_info', (_message.Message,), {
-  'DESCRIPTOR' : _CONNECTIONS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:connections_info)
-  })
+    'DESCRIPTOR': _CONNECTIONS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:connections_info)
+})
 _sym_db.RegisterMessage(connections_info)
 
 namespace_cli = _reflection.GeneratedProtocolMessageType('namespace_cli', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_CLI,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_cli)
-  })
+    'DESCRIPTOR': _NAMESPACE_CLI,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_cli)
+})
 _sym_db.RegisterMessage(namespace_cli)
 
 namespaces_info = _reflection.GeneratedProtocolMessageType('namespaces_info', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACES_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespaces_info)
-  })
+    'DESCRIPTOR': _NAMESPACES_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespaces_info)
+})
 _sym_db.RegisterMessage(namespaces_info)
 
 namespace_io_error = _reflection.GeneratedProtocolMessageType('namespace_io_error', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_IO_ERROR,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_io_error)
-  })
+    'DESCRIPTOR': _NAMESPACE_IO_ERROR,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_io_error)
+})
 _sym_db.RegisterMessage(namespace_io_error)
 
 namespace_io_stats_info = _reflection.GeneratedProtocolMessageType('namespace_io_stats_info', (_message.Message,), {
-  'DESCRIPTOR' : _NAMESPACE_IO_STATS_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:namespace_io_stats_info)
-  })
+    'DESCRIPTOR': _NAMESPACE_IO_STATS_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:namespace_io_stats_info)
+})
 _sym_db.RegisterMessage(namespace_io_stats_info)
 
 spdk_log_flag_info = _reflection.GeneratedProtocolMessageType('spdk_log_flag_info', (_message.Message,), {
-  'DESCRIPTOR' : _SPDK_LOG_FLAG_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:spdk_log_flag_info)
-  })
+    'DESCRIPTOR': _SPDK_LOG_FLAG_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:spdk_log_flag_info)
+})
 _sym_db.RegisterMessage(spdk_log_flag_info)
 
 spdk_nvmf_log_flags_and_level_info = _reflection.GeneratedProtocolMessageType('spdk_nvmf_log_flags_and_level_info', (_message.Message,), {
-  'DESCRIPTOR' : _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:spdk_nvmf_log_flags_and_level_info)
-  })
+    'DESCRIPTOR': _SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:spdk_nvmf_log_flags_and_level_info)
+})
 _sym_db.RegisterMessage(spdk_nvmf_log_flags_and_level_info)
 
 gateway_log_level_info = _reflection.GeneratedProtocolMessageType('gateway_log_level_info', (_message.Message,), {
-  'DESCRIPTOR' : _GATEWAY_LOG_LEVEL_INFO,
-  '__module__' : 'dashboard.services.proto.gateway_pb2'
-  # @@protoc_insertion_point(class_scope:gateway_log_level_info)
-  })
+    'DESCRIPTOR': _GATEWAY_LOG_LEVEL_INFO,
+    '__module__': 'dashboard.services.proto.gateway_pb2'
+    # @@protoc_insertion_point(class_scope:gateway_log_level_info)
+})
 _sym_db.RegisterMessage(gateway_log_level_info)
 
 
-
 _GATEWAY = _descriptor.ServiceDescriptor(
-  name='Gateway',
-  full_name='Gateway',
-  file=DESCRIPTOR,
-  index=0,
-  serialized_options=None,
-  create_key=_descriptor._internal_create_key,
-  serialized_start=10491,
-  serialized_end=12744,
-  methods=[
-  _descriptor.MethodDescriptor(
-    name='namespace_add',
-    full_name='Gateway.namespace_add',
+    name='Gateway',
+    full_name='Gateway',
+    file=DESCRIPTOR,
     index=0,
-    containing_service=None,
-    input_type=_NAMESPACE_ADD_REQ,
-    output_type=_NSID_STATUS,
     serialized_options=None,
     create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='create_subsystem',
-    full_name='Gateway.create_subsystem',
-    index=1,
-    containing_service=None,
-    input_type=_CREATE_SUBSYSTEM_REQ,
-    output_type=_SUBSYS_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='delete_subsystem',
-    full_name='Gateway.delete_subsystem',
-    index=2,
-    containing_service=None,
-    input_type=_DELETE_SUBSYSTEM_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='change_subsystem_key',
-    full_name='Gateway.change_subsystem_key',
-    index=3,
-    containing_service=None,
-    input_type=_CHANGE_SUBSYSTEM_KEY_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='list_namespaces',
-    full_name='Gateway.list_namespaces',
-    index=4,
-    containing_service=None,
-    input_type=_LIST_NAMESPACES_REQ,
-    output_type=_NAMESPACES_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_resize',
-    full_name='Gateway.namespace_resize',
-    index=5,
-    containing_service=None,
-    input_type=_NAMESPACE_RESIZE_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_get_io_stats',
-    full_name='Gateway.namespace_get_io_stats',
-    index=6,
-    containing_service=None,
-    input_type=_NAMESPACE_GET_IO_STATS_REQ,
-    output_type=_NAMESPACE_IO_STATS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_set_qos_limits',
-    full_name='Gateway.namespace_set_qos_limits',
-    index=7,
-    containing_service=None,
-    input_type=_NAMESPACE_SET_QOS_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_change_load_balancing_group',
-    full_name='Gateway.namespace_change_load_balancing_group',
-    index=8,
-    containing_service=None,
-    input_type=_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_change_visibility',
-    full_name='Gateway.namespace_change_visibility',
-    index=9,
-    containing_service=None,
-    input_type=_NAMESPACE_CHANGE_VISIBILITY_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_set_rbd_trash_image',
-    full_name='Gateway.namespace_set_rbd_trash_image',
-    index=10,
-    containing_service=None,
-    input_type=_NAMESPACE_SET_RBD_TRASH_IMAGE_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_set_auto_resize',
-    full_name='Gateway.namespace_set_auto_resize',
-    index=11,
-    containing_service=None,
-    input_type=_NAMESPACE_SET_AUTO_RESIZE_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_delete',
-    full_name='Gateway.namespace_delete',
-    index=12,
-    containing_service=None,
-    input_type=_NAMESPACE_DELETE_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_add_host',
-    full_name='Gateway.namespace_add_host',
-    index=13,
-    containing_service=None,
-    input_type=_NAMESPACE_ADD_HOST_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='namespace_delete_host',
-    full_name='Gateway.namespace_delete_host',
-    index=14,
-    containing_service=None,
-    input_type=_NAMESPACE_DELETE_HOST_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='add_host',
-    full_name='Gateway.add_host',
-    index=15,
-    containing_service=None,
-    input_type=_ADD_HOST_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='remove_host',
-    full_name='Gateway.remove_host',
-    index=16,
-    containing_service=None,
-    input_type=_REMOVE_HOST_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='change_host_key',
-    full_name='Gateway.change_host_key',
-    index=17,
-    containing_service=None,
-    input_type=_CHANGE_HOST_KEY_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='list_hosts',
-    full_name='Gateway.list_hosts',
-    index=18,
-    containing_service=None,
-    input_type=_LIST_HOSTS_REQ,
-    output_type=_HOSTS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='list_connections',
-    full_name='Gateway.list_connections',
-    index=19,
-    containing_service=None,
-    input_type=_LIST_CONNECTIONS_REQ,
-    output_type=_CONNECTIONS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='create_listener',
-    full_name='Gateway.create_listener',
-    index=20,
-    containing_service=None,
-    input_type=_CREATE_LISTENER_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='delete_listener',
-    full_name='Gateway.delete_listener',
-    index=21,
-    containing_service=None,
-    input_type=_DELETE_LISTENER_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='list_listeners',
-    full_name='Gateway.list_listeners',
-    index=22,
-    containing_service=None,
-    input_type=_LIST_LISTENERS_REQ,
-    output_type=_LISTENERS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='list_subsystems',
-    full_name='Gateway.list_subsystems',
-    index=23,
-    containing_service=None,
-    input_type=_LIST_SUBSYSTEMS_REQ,
-    output_type=_SUBSYSTEMS_INFO_CLI,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='get_subsystems',
-    full_name='Gateway.get_subsystems',
-    index=24,
-    containing_service=None,
-    input_type=_GET_SUBSYSTEMS_REQ,
-    output_type=_SUBSYSTEMS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='set_ana_state',
-    full_name='Gateway.set_ana_state',
-    index=25,
-    containing_service=None,
-    input_type=_ANA_INFO,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='get_spdk_nvmf_log_flags_and_level',
-    full_name='Gateway.get_spdk_nvmf_log_flags_and_level',
-    index=26,
-    containing_service=None,
-    input_type=_GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ,
-    output_type=_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='disable_spdk_nvmf_logs',
-    full_name='Gateway.disable_spdk_nvmf_logs',
-    index=27,
-    containing_service=None,
-    input_type=_DISABLE_SPDK_NVMF_LOGS_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='set_spdk_nvmf_logs',
-    full_name='Gateway.set_spdk_nvmf_logs',
-    index=28,
-    containing_service=None,
-    input_type=_SET_SPDK_NVMF_LOGS_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='get_gateway_info',
-    full_name='Gateway.get_gateway_info',
-    index=29,
-    containing_service=None,
-    input_type=_GET_GATEWAY_INFO_REQ,
-    output_type=_GATEWAY_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='get_gateway_log_level',
-    full_name='Gateway.get_gateway_log_level',
-    index=30,
-    containing_service=None,
-    input_type=_GET_GATEWAY_LOG_LEVEL_REQ,
-    output_type=_GATEWAY_LOG_LEVEL_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='set_gateway_log_level',
-    full_name='Gateway.set_gateway_log_level',
-    index=31,
-    containing_service=None,
-    input_type=_SET_GATEWAY_LOG_LEVEL_REQ,
-    output_type=_REQ_STATUS,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='show_gateway_listeners_info',
-    full_name='Gateway.show_gateway_listeners_info',
-    index=32,
-    containing_service=None,
-    input_type=_SHOW_GATEWAY_LISTENERS_INFO_REQ,
-    output_type=_GATEWAY_LISTENERS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-  _descriptor.MethodDescriptor(
-    name='get_gateway_stats',
-    full_name='Gateway.get_gateway_stats',
-    index=33,
-    containing_service=None,
-    input_type=_GET_GATEWAY_STATS_REQ,
-    output_type=_GATEWAY_STATS_INFO,
-    serialized_options=None,
-    create_key=_descriptor._internal_create_key,
-  ),
-])
+    serialized_start=10491,
+    serialized_end=12744,
+    methods=[
+        _descriptor.MethodDescriptor(
+            name='namespace_add',
+            full_name='Gateway.namespace_add',
+            index=0,
+            containing_service=None,
+            input_type=_NAMESPACE_ADD_REQ,
+            output_type=_NSID_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='create_subsystem',
+            full_name='Gateway.create_subsystem',
+            index=1,
+            containing_service=None,
+            input_type=_CREATE_SUBSYSTEM_REQ,
+            output_type=_SUBSYS_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='delete_subsystem',
+            full_name='Gateway.delete_subsystem',
+            index=2,
+            containing_service=None,
+            input_type=_DELETE_SUBSYSTEM_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='change_subsystem_key',
+            full_name='Gateway.change_subsystem_key',
+            index=3,
+            containing_service=None,
+            input_type=_CHANGE_SUBSYSTEM_KEY_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='list_namespaces',
+            full_name='Gateway.list_namespaces',
+            index=4,
+            containing_service=None,
+            input_type=_LIST_NAMESPACES_REQ,
+            output_type=_NAMESPACES_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_resize',
+            full_name='Gateway.namespace_resize',
+            index=5,
+            containing_service=None,
+            input_type=_NAMESPACE_RESIZE_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_get_io_stats',
+            full_name='Gateway.namespace_get_io_stats',
+            index=6,
+            containing_service=None,
+            input_type=_NAMESPACE_GET_IO_STATS_REQ,
+            output_type=_NAMESPACE_IO_STATS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_set_qos_limits',
+            full_name='Gateway.namespace_set_qos_limits',
+            index=7,
+            containing_service=None,
+            input_type=_NAMESPACE_SET_QOS_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_change_load_balancing_group',
+            full_name='Gateway.namespace_change_load_balancing_group',
+            index=8,
+            containing_service=None,
+            input_type=_NAMESPACE_CHANGE_LOAD_BALANCING_GROUP_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_change_visibility',
+            full_name='Gateway.namespace_change_visibility',
+            index=9,
+            containing_service=None,
+            input_type=_NAMESPACE_CHANGE_VISIBILITY_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_set_rbd_trash_image',
+            full_name='Gateway.namespace_set_rbd_trash_image',
+            index=10,
+            containing_service=None,
+            input_type=_NAMESPACE_SET_RBD_TRASH_IMAGE_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_set_auto_resize',
+            full_name='Gateway.namespace_set_auto_resize',
+            index=11,
+            containing_service=None,
+            input_type=_NAMESPACE_SET_AUTO_RESIZE_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_delete',
+            full_name='Gateway.namespace_delete',
+            index=12,
+            containing_service=None,
+            input_type=_NAMESPACE_DELETE_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_add_host',
+            full_name='Gateway.namespace_add_host',
+            index=13,
+            containing_service=None,
+            input_type=_NAMESPACE_ADD_HOST_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='namespace_delete_host',
+            full_name='Gateway.namespace_delete_host',
+            index=14,
+            containing_service=None,
+            input_type=_NAMESPACE_DELETE_HOST_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='add_host',
+            full_name='Gateway.add_host',
+            index=15,
+            containing_service=None,
+            input_type=_ADD_HOST_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='remove_host',
+            full_name='Gateway.remove_host',
+            index=16,
+            containing_service=None,
+            input_type=_REMOVE_HOST_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='change_host_key',
+            full_name='Gateway.change_host_key',
+            index=17,
+            containing_service=None,
+            input_type=_CHANGE_HOST_KEY_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='list_hosts',
+            full_name='Gateway.list_hosts',
+            index=18,
+            containing_service=None,
+            input_type=_LIST_HOSTS_REQ,
+            output_type=_HOSTS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='list_connections',
+            full_name='Gateway.list_connections',
+            index=19,
+            containing_service=None,
+            input_type=_LIST_CONNECTIONS_REQ,
+            output_type=_CONNECTIONS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='create_listener',
+            full_name='Gateway.create_listener',
+            index=20,
+            containing_service=None,
+            input_type=_CREATE_LISTENER_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='delete_listener',
+            full_name='Gateway.delete_listener',
+            index=21,
+            containing_service=None,
+            input_type=_DELETE_LISTENER_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='list_listeners',
+            full_name='Gateway.list_listeners',
+            index=22,
+            containing_service=None,
+            input_type=_LIST_LISTENERS_REQ,
+            output_type=_LISTENERS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='list_subsystems',
+            full_name='Gateway.list_subsystems',
+            index=23,
+            containing_service=None,
+            input_type=_LIST_SUBSYSTEMS_REQ,
+            output_type=_SUBSYSTEMS_INFO_CLI,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='get_subsystems',
+            full_name='Gateway.get_subsystems',
+            index=24,
+            containing_service=None,
+            input_type=_GET_SUBSYSTEMS_REQ,
+            output_type=_SUBSYSTEMS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='set_ana_state',
+            full_name='Gateway.set_ana_state',
+            index=25,
+            containing_service=None,
+            input_type=_ANA_INFO,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='get_spdk_nvmf_log_flags_and_level',
+            full_name='Gateway.get_spdk_nvmf_log_flags_and_level',
+            index=26,
+            containing_service=None,
+            input_type=_GET_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_REQ,
+            output_type=_SPDK_NVMF_LOG_FLAGS_AND_LEVEL_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='disable_spdk_nvmf_logs',
+            full_name='Gateway.disable_spdk_nvmf_logs',
+            index=27,
+            containing_service=None,
+            input_type=_DISABLE_SPDK_NVMF_LOGS_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='set_spdk_nvmf_logs',
+            full_name='Gateway.set_spdk_nvmf_logs',
+            index=28,
+            containing_service=None,
+            input_type=_SET_SPDK_NVMF_LOGS_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='get_gateway_info',
+            full_name='Gateway.get_gateway_info',
+            index=29,
+            containing_service=None,
+            input_type=_GET_GATEWAY_INFO_REQ,
+            output_type=_GATEWAY_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='get_gateway_log_level',
+            full_name='Gateway.get_gateway_log_level',
+            index=30,
+            containing_service=None,
+            input_type=_GET_GATEWAY_LOG_LEVEL_REQ,
+            output_type=_GATEWAY_LOG_LEVEL_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='set_gateway_log_level',
+            full_name='Gateway.set_gateway_log_level',
+            index=31,
+            containing_service=None,
+            input_type=_SET_GATEWAY_LOG_LEVEL_REQ,
+            output_type=_REQ_STATUS,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='show_gateway_listeners_info',
+            full_name='Gateway.show_gateway_listeners_info',
+            index=32,
+            containing_service=None,
+            input_type=_SHOW_GATEWAY_LISTENERS_INFO_REQ,
+            output_type=_GATEWAY_LISTENERS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+        _descriptor.MethodDescriptor(
+            name='get_gateway_stats',
+            full_name='Gateway.get_gateway_stats',
+            index=33,
+            containing_service=None,
+            input_type=_GET_GATEWAY_STATS_REQ,
+            output_type=_GATEWAY_STATS_INFO,
+            serialized_options=None,
+            create_key=_descriptor._internal_create_key,
+        ),
+    ])
 _sym_db.RegisterServiceDescriptor(_GATEWAY)
 
 DESCRIPTOR.services_by_name['Gateway'] = _GATEWAY
