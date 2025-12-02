@@ -19,6 +19,7 @@ class Scope(object):
     RBD_MIRRORING = "rbd-mirroring"
     RGW = "rgw"
     CEPHFS = "cephfs"
+    CEPHFS_MIRROR = "cephfs-mirror"
     MANAGER = "manager"
     LOG = "log"
     GRAFANA = "grafana"

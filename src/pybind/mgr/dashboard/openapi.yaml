@@ -2063,6 +2063,154 @@ paths:
         given path
       tags:
       - Cephfs
+  /api/cephfs/mirror:
+    get:
+      parameters:
+      - description: File system name
+        in: query
+        name: fs_name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    uuid:
+                      description: Peer ID
+                      properties:
+                        client_name:
+                          description: Ceph client name
+                          type: string
+                        fs_name:
+                          description: File system name
+                          type: string
+                        site_name:
+                          description: Remote site name
+                          type: string
+                      required:
+                      - client_name
+                      - site_name
+                      - fs_name
+                      type: object
+                  type: object
+                required:
+                - uuid
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get peers
+      tags:
+      - CephfsMirror
+  /api/cephfs/mirror/daemon-status:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              schema:
+                items:
+                  properties:
+                    daemon_id:
+                      description: Daemon ID
+                      type: integer
+                    filesystems:
+                      description: List of filesystems on daemon
+                      items:
+                        properties:
+                          directory_count:
+                            description: Directory count
+                            type: integer
+                          filesystem_id:
+                            description: Filesystem ID
+                            type: integer
+                          name:
+                            description: Filesystem name
+                            type: string
+                          peers:
+                            description: List of peer objects
+                            items:
+                              properties:
+                                remote:
+                                  description: Remote peer information
+                                  properties:
+                                    client_name:
+                                      description: Ceph client name
+                                      type: string
+                                    cluster_name:
+                                      description: Remote cluster name
+                                      type: string
+                                    fs_name:
+                                      description: Remote filesystem name
+                                      type: string
+                                  required:
+                                  - client_name
+                                  - cluster_name
+                                  - fs_name
+                                  type: object
+                                stats:
+                                  description: Peer statistics
+                                  properties:
+                                    failure_count:
+                                      description: Number of sync failures
+                                      type: integer
+                                    recovery_count:
+                                      description: Number of peer recoveries
+                                      type: integer
+                                  required:
+                                  - failure_count
+                                  - recovery_count
+                                  type: object
+                                uuid:
+                                  description: Peer UUID
+                                  type: string
+                              required:
+                              - uuid
+                              - remote
+                              - stats
+                              type: object
+                            type: array
+                        required:
+                        - filesystem_id
+                        - name
+                        - directory_count
+                        - peers
+                        type: object
+                      type: array
+                  type: object
+                required:
+                - daemon_id
+                - filesystems
+                type: array
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Get mirror daemon and peers information
+      tags:
+      - CephfsMirror
   /api/cephfs/remove/{name}:
     delete:
       parameters:
@@ -19478,6 +19626,8 @@ tags:
   name: CephFSSubvolume
 - description: Cephfs Management API
   name: Cephfs
+- description: Cephfs Mirror Management API
+  name: CephfsMirror
 - description: Cephfs Snapshot Clone Management API
   name: CephfsSnapshotClone
 - description: Cephfs Subvolume Group Management API
