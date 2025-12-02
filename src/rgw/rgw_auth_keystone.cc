@@ -16,6 +16,7 @@
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
+#include "rgw_keystone_scope.h"
 #include "rgw_auth_keystone.h"
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
@@ -153,6 +154,9 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     }
   }
 
+  /* Build keystone scope info if ops logging is enabled */
+  auto keystone_scope = rgw::keystone::build_scope_info(cct, token);
+
   return auth_info_t {
     /* Suggested account name for the authenticated user. */
     rgw_user(token.get_project_id()),
@@ -164,7 +168,9 @@ TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
     level,
     rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
-    TYPE_KEYSTONE
+    token.get_user_name(),
+    TYPE_KEYSTONE,
+    std::move(keystone_scope)
 };
 }
 
@@ -659,6 +665,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     }
   }
 
+  /* Build keystone scope info if ops logging is enabled */
+  auto keystone_scope = rgw::keystone::build_scope_info(cct, token);
+
   return auth_info_t {
     /* Suggested account name for the authenticated user. */
     rgw_user(token.get_project_id()),
@@ -670,7 +679,9 @@ EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
     level,
     access_key_id,
     rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER,
-    TYPE_KEYSTONE
+    token.get_user_name(),
+    TYPE_KEYSTONE,
+    std::move(keystone_scope)
   };
 }
 
