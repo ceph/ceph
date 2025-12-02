@@ -105,6 +105,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   smbFeaturesList = ['domain'];
   currentURL: string;
   port: number = 443;
+  secondary_port: number = 8080;
   sslProtocolsItems: Array<ListItem> = Object.values(SSL_PROTOCOLS).map((protocol) => ({
     content: protocol,
     selected: true
@@ -151,516 +152,525 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   createForm() {
-    this.serviceForm = this.formBuilder.group({
-      // Global
-      service_type: [null, [Validators.required]],
-      service_id: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'mds'
-            },
-            [
-              Validators.required,
-              CdValidators.custom('mdsPattern', (value: string) => {
-                if (_.isEmpty(value)) {
-                  return false;
-                }
-                return !this.MDS_SVC_ID_PATTERN.test(value);
-              })
-            ]
-          ),
-          CdValidators.requiredIf({
-            service_type: 'nfs'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'iscsi'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'nvmeof'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'ingress'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'smb'
-          }),
-          CdValidators.composeIf(
-            {
-              service_type: 'rgw'
-            },
-            [Validators.required]
-          ),
-          CdValidators.custom('uniqueName', (service_id: string) => {
-            return this.serviceIds && this.serviceIds.includes(service_id);
-          })
-        ]
-      ],
-      placement: ['hosts'],
-      label: [
-        null,
-        [
-          CdValidators.requiredIf({
-            placement: 'label',
-            unmanaged: false
-          })
-        ]
-      ],
-      hosts: [[]],
-      count: [null, [CdValidators.number(false), Validators.min(1)]],
-      unmanaged: [false],
-      // iSCSI
-      // NVMe/TCP
-      pool: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'iscsi'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'nvmeof'
-          })
-        ]
-      ],
-      group: [
-        'default',
-        CdValidators.requiredIf({
-          service_type: 'nvmeof'
-        })
-      ],
-      enable_mtls: [false],
-      root_ca_cert: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nvmeof',
-              enable_mtls: true
-            },
-            [Validators.required]
-          )
-        ]
-      ],
-      client_cert: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nvmeof',
-              enable_mtls: true
-            },
-            [Validators.required]
-          )
-        ]
-      ],
-      client_key: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nvmeof',
-              enable_mtls: true
-            },
-            [Validators.required]
-          )
-        ]
-      ],
-      server_cert: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nvmeof',
-              enable_mtls: true
-            },
-            [Validators.required]
-          )
-        ]
-      ],
-      server_key: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nvmeof',
-              enable_mtls: true
-            },
-            [Validators.required]
-          )
-        ]
-      ],
-      // RGW
-      rgw_frontend_port: [
-        null,
-        [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
-      ],
-      realm_name: [null],
-      zonegroup_name: [null],
-      zone_name: [null],
-      qat: new CdFormGroup({
-        compression: new UntypedFormControl(QatOptions.none)
-      }),
-      // iSCSI
-      trusted_ip_list: [null],
-      api_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
-      api_user: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'iscsi',
-            unmanaged: false
-          })
-        ]
-      ],
-      api_password: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'iscsi',
-            unmanaged: false
-          })
-        ]
-      ],
-      // smb
-      cluster_id: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'smb'
-          })
-        ]
-      ],
-      features: new CdFormGroup(
-        this.smbFeaturesList.reduce((acc: object, e) => {
-          acc[e] = new UntypedFormControl(false);
-          return acc;
-        }, {})
-      ),
-      config_uri: [
-        null,
-        [
-          CdValidators.composeIf(
-            {
+    this.serviceForm = this.formBuilder.group(
+      {
+        // Global
+        service_type: [null, [Validators.required]],
+        service_id: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'mds'
+              },
+              [
+                Validators.required,
+                CdValidators.custom('mdsPattern', (value: string) => {
+                  if (_.isEmpty(value)) {
+                    return false;
+                  }
+                  return !this.MDS_SVC_ID_PATTERN.test(value);
+                })
+              ]
+            ),
+            CdValidators.requiredIf({
+              service_type: 'nfs'
+            }),
+            CdValidators.requiredIf({
+              service_type: 'iscsi'
+            }),
+            CdValidators.requiredIf({
+              service_type: 'nvmeof'
+            }),
+            CdValidators.requiredIf({
+              service_type: 'ingress'
+            }),
+            CdValidators.requiredIf({
               service_type: 'smb'
-            },
-            [
-              Validators.required,
-              CdValidators.custom('configUriPattern', (value: string) => {
-                if (_.isEmpty(value)) {
-                  return false;
-                }
-                return !this.SMB_CONFIG_URI_PATTERN.test(value);
-              })
-            ]
-          )
-        ]
-      ],
-      custom_dns: [null],
-      join_sources: [null],
-      user_sources: [null],
-      include_ceph_users: [null],
-      // Ingress
-      backend_service: [
-        null,
-        [
+            }),
+            CdValidators.composeIf(
+              {
+                service_type: 'rgw'
+              },
+              [Validators.required]
+            ),
+            CdValidators.custom('uniqueName', (service_id: string) => {
+              return this.serviceIds && this.serviceIds.includes(service_id);
+            })
+          ]
+        ],
+        placement: ['hosts'],
+        label: [
+          null,
+          [
+            CdValidators.requiredIf({
+              placement: 'label',
+              unmanaged: false
+            })
+          ]
+        ],
+        hosts: [[]],
+        count: [null, [CdValidators.number(false), Validators.min(1)]],
+        unmanaged: [false],
+        // iSCSI
+        // NVMe/TCP
+        pool: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'iscsi'
+            }),
+            CdValidators.requiredIf({
+              service_type: 'nvmeof'
+            })
+          ]
+        ],
+        group: [
+          'default',
           CdValidators.requiredIf({
-            service_type: 'ingress'
+            service_type: 'nvmeof'
           })
-        ]
-      ],
-      virtual_ip: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'ingress'
-          })
-        ]
-      ],
-      frontend_port: [
-        null,
-        [
-          CdValidators.number(false),
-          CdValidators.requiredIf({
-            service_type: 'ingress'
-          }),
-          Validators.min(1),
-          Validators.max(65535)
-        ]
-      ],
-      monitor_port: [
-        null,
-        [
-          CdValidators.number(false),
-          CdValidators.requiredIf({
-            service_type: 'ingress'
-          }),
-          Validators.min(1),
-          Validators.max(65535)
-        ]
-      ],
-      virtual_interface_networks: [null],
-      ssl_protocols: [this.DEFAULT_SSL_PROTOCOL_ITEM],
-      ssl_ciphers: [
-        null,
-        [
-          CdValidators.custom('invalidPattern', (ciphers: string) => {
-            if (_.isEmpty(ciphers)) {
-              return false;
-            }
-            return !this.SSL_CIPHERS_PATTERN.test(ciphers);
-          })
-        ]
-      ],
-      // RGW, Ingress & iSCSI
-      ssl: [false],
-      ssl_cert: [
-        '',
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'rgw',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.pemCert()]
-          ),
-          CdValidators.composeIf(
-            {
+        ],
+        enable_mtls: [false],
+        root_ca_cert: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nvmeof',
+                enable_mtls: true
+              },
+              [Validators.required]
+            )
+          ]
+        ],
+        client_cert: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nvmeof',
+                enable_mtls: true
+              },
+              [Validators.required]
+            )
+          ]
+        ],
+        client_key: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nvmeof',
+                enable_mtls: true
+              },
+              [Validators.required]
+            )
+          ]
+        ],
+        server_cert: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nvmeof',
+                enable_mtls: true
+              },
+              [Validators.required]
+            )
+          ]
+        ],
+        server_key: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nvmeof',
+                enable_mtls: true
+              },
+              [Validators.required]
+            )
+          ]
+        ],
+        // RGW
+        rgw_frontend_port: [
+          null,
+          [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
+        ],
+        rgw_frontend_secondary_port: [
+          null,
+          [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
+        ],
+        realm_name: [null],
+        zonegroup_name: [null],
+        zone_name: [null],
+        qat: new CdFormGroup({
+          compression: new UntypedFormControl(QatOptions.none)
+        }),
+        // iSCSI
+        trusted_ip_list: [null],
+        api_port: [null, [CdValidators.number(false), Validators.min(1), Validators.max(65535)]],
+        api_user: [
+          null,
+          [
+            CdValidators.requiredIf({
               service_type: 'iscsi',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslCert()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'ingress',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.pemCert()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'oauth2-proxy',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslCert()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'mgmt-gateway',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslCert()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'nfs',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.pemCert()]
-          )
-        ]
-      ],
-      ssl_key: [
-        '',
-        [
-          CdValidators.composeIf(
-            {
+              unmanaged: false
+            })
+          ]
+        ],
+        api_password: [
+          null,
+          [
+            CdValidators.requiredIf({
               service_type: 'iscsi',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'oauth2-proxy',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'mgmt-gateway',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          ),
-          CdValidators.composeIf(
-            {
-              service_type: 'nfs',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.sslPrivKey()]
-          )
-        ]
-      ],
-      certificateType: ['internal'],
-      custom_sans: [null],
-      ssl_ca_cert: [
-        '',
-        [
-          CdValidators.composeIf(
-            {
-              service_type: 'nfs',
-              unmanaged: false,
-              ssl: true,
-              certificateType: 'external'
-            },
-            [Validators.required, CdValidators.pemCert()]
-          )
-        ]
-      ],
-      // mgmt-gateway
-      enable_auth: [null],
-      port: [443, [CdValidators.number(false)]],
-      // snmp-gateway
-      snmp_version: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'snmp-gateway'
-          })
-        ]
-      ],
-      snmp_destination: [
-        null,
-        {
-          validators: [
+              unmanaged: false
+            })
+          ]
+        ],
+        // smb
+        cluster_id: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'smb'
+            })
+          ]
+        ],
+        features: new CdFormGroup(
+          this.smbFeaturesList.reduce((acc: object, e) => {
+            acc[e] = new UntypedFormControl(false);
+            return acc;
+          }, {})
+        ),
+        config_uri: [
+          null,
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'smb'
+              },
+              [
+                Validators.required,
+                CdValidators.custom('configUriPattern', (value: string) => {
+                  if (_.isEmpty(value)) {
+                    return false;
+                  }
+                  return !this.SMB_CONFIG_URI_PATTERN.test(value);
+                })
+              ]
+            )
+          ]
+        ],
+        custom_dns: [null],
+        join_sources: [null],
+        user_sources: [null],
+        include_ceph_users: [null],
+        // Ingress
+        backend_service: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'ingress'
+            })
+          ]
+        ],
+        virtual_ip: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'ingress'
+            })
+          ]
+        ],
+        frontend_port: [
+          null,
+          [
+            CdValidators.number(false),
+            CdValidators.requiredIf({
+              service_type: 'ingress'
+            }),
+            Validators.min(1),
+            Validators.max(65535)
+          ]
+        ],
+        monitor_port: [
+          null,
+          [
+            CdValidators.number(false),
+            CdValidators.requiredIf({
+              service_type: 'ingress'
+            }),
+            Validators.min(1),
+            Validators.max(65535)
+          ]
+        ],
+        virtual_interface_networks: [null],
+        ssl_protocols: [this.DEFAULT_SSL_PROTOCOL_ITEM],
+        ssl_ciphers: [
+          null,
+          [
+            CdValidators.custom('invalidPattern', (ciphers: string) => {
+              if (_.isEmpty(ciphers)) {
+                return false;
+              }
+              return !this.SSL_CIPHERS_PATTERN.test(ciphers);
+            })
+          ]
+        ],
+        // RGW, Ingress & iSCSI
+        ssl: [false],
+        ssl_cert: [
+          '',
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'rgw',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.pemCert()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'iscsi',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslCert()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'ingress',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.pemCert()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'oauth2-proxy',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslCert()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'mgmt-gateway',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslCert()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'nfs',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.pemCert()]
+            )
+          ]
+        ],
+        ssl_key: [
+          '',
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'iscsi',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslPrivKey()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'oauth2-proxy',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslPrivKey()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'mgmt-gateway',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslPrivKey()]
+            ),
+            CdValidators.composeIf(
+              {
+                service_type: 'nfs',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.sslPrivKey()]
+            )
+          ]
+        ],
+        certificateType: ['internal'],
+        custom_sans: [null],
+        ssl_ca_cert: [
+          '',
+          [
+            CdValidators.composeIf(
+              {
+                service_type: 'nfs',
+                unmanaged: false,
+                ssl: true,
+                certificateType: 'external'
+              },
+              [Validators.required, CdValidators.pemCert()]
+            )
+          ]
+        ],
+        // mgmt-gateway
+        enable_auth: [null],
+        port: [443, [CdValidators.number(false)]],
+        // snmp-gateway
+        snmp_version: [
+          null,
+          [
             CdValidators.requiredIf({
               service_type: 'snmp-gateway'
+            })
+          ]
+        ],
+        snmp_destination: [
+          null,
+          {
+            validators: [
+              CdValidators.requiredIf({
+                service_type: 'snmp-gateway'
+              }),
+              CdValidators.custom('snmpDestinationPattern', (value: string) => {
+                if (_.isEmpty(value)) {
+                  return false;
+                }
+                return !this.SNMP_DESTINATION_PATTERN.test(value);
+              })
+            ]
+          }
+        ],
+        engine_id: [
+          null,
+          [
+            CdValidators.requiredIf({
+              snmp_version: 'V3'
             }),
-            CdValidators.custom('snmpDestinationPattern', (value: string) => {
+            CdValidators.custom('snmpEngineIdPattern', (value: string) => {
               if (_.isEmpty(value)) {
                 return false;
               }
-              return !this.SNMP_DESTINATION_PATTERN.test(value);
+              return !this.SNMP_ENGINE_ID_PATTERN.test(value);
             })
           ]
-        }
-      ],
-      engine_id: [
-        null,
-        [
-          CdValidators.requiredIf({
-            snmp_version: 'V3'
-          }),
-          CdValidators.custom('snmpEngineIdPattern', (value: string) => {
-            if (_.isEmpty(value)) {
-              return false;
-            }
-            return !this.SNMP_ENGINE_ID_PATTERN.test(value);
-          })
-        ]
-      ],
-      auth_protocol: [
-        'SHA',
-        [
-          CdValidators.requiredIf({
-            snmp_version: 'V3'
-          })
-        ]
-      ],
-      privacy_protocol: [null],
-      snmp_community: [
-        null,
-        [
-          CdValidators.requiredIf({
-            snmp_version: 'V2c'
-          })
-        ]
-      ],
-      snmp_v3_auth_username: [
-        null,
-        [
-          CdValidators.requiredIf({
-            snmp_version: 'V3'
-          })
-        ]
-      ],
-      snmp_v3_auth_password: [
-        null,
-        [
-          CdValidators.requiredIf({
-            snmp_version: 'V3'
-          })
-        ]
-      ],
-      snmp_v3_priv_password: [
-        null,
-        [
-          CdValidators.requiredIf({
-            privacy_protocol: { op: '!empty' }
-          })
-        ]
-      ],
-      grafana_port: [null, [CdValidators.number(false)]],
-      grafana_admin_password: [null],
-      // oauth2-proxy
-      provider_display_name: [
-        'My OIDC provider',
-        [
-          CdValidators.requiredIf({
-            service_type: 'oauth2-proxy'
-          })
-        ]
-      ],
-      client_id: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'oauth2-proxy'
-          })
-        ]
-      ],
-      client_secret: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'oauth2-proxy'
-          })
-        ]
-      ],
-      oidc_issuer_url: [
-        null,
-        [
-          CdValidators.requiredIf({
-            service_type: 'oauth2-proxy'
-          }),
-          CdValidators.custom('validUrl', (url: string) => {
-            if (_.isEmpty(url)) {
-              return false;
-            }
-            return !this.OAUTH2_ISSUER_URL_PATTERN.test(url);
-          })
-        ]
-      ],
-      https_address: [null, [CdValidators.oauthAddressTest()]],
-      redirect_url: [null],
-      scope: [null],
-      email_domains: [null],
-      allowlist_domains: [null],
-      ssl_insecure_skip_verify: [false]
-    });
+        ],
+        auth_protocol: [
+          'SHA',
+          [
+            CdValidators.requiredIf({
+              snmp_version: 'V3'
+            })
+          ]
+        ],
+        privacy_protocol: [null],
+        snmp_community: [
+          null,
+          [
+            CdValidators.requiredIf({
+              snmp_version: 'V2c'
+            })
+          ]
+        ],
+        snmp_v3_auth_username: [
+          null,
+          [
+            CdValidators.requiredIf({
+              snmp_version: 'V3'
+            })
+          ]
+        ],
+        snmp_v3_auth_password: [
+          null,
+          [
+            CdValidators.requiredIf({
+              snmp_version: 'V3'
+            })
+          ]
+        ],
+        snmp_v3_priv_password: [
+          null,
+          [
+            CdValidators.requiredIf({
+              privacy_protocol: { op: '!empty' }
+            })
+          ]
+        ],
+        grafana_port: [null, [CdValidators.number(false)]],
+        grafana_admin_password: [null],
+        // oauth2-proxy
+        provider_display_name: [
+          'My OIDC provider',
+          [
+            CdValidators.requiredIf({
+              service_type: 'oauth2-proxy'
+            })
+          ]
+        ],
+        client_id: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'oauth2-proxy'
+            })
+          ]
+        ],
+        client_secret: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'oauth2-proxy'
+            })
+          ]
+        ],
+        oidc_issuer_url: [
+          null,
+          [
+            CdValidators.requiredIf({
+              service_type: 'oauth2-proxy'
+            }),
+            CdValidators.custom('validUrl', (url: string) => {
+              if (_.isEmpty(url)) {
+                return false;
+              }
+              return !this.OAUTH2_ISSUER_URL_PATTERN.test(url);
+            })
+          ]
+        ],
+        https_address: [null, [CdValidators.oauthAddressTest()]],
+        redirect_url: [null],
+        scope: [null],
+        email_domains: [null],
+        allowlist_domains: [null],
+        ssl_insecure_skip_verify: [false]
+      },
+      {
+        validators: [CdValidators.donotmatch('rgw_frontend_port', 'rgw_frontend_secondary_port')]
+      }
+    );
   }
 
   resolveRoute() {
@@ -785,6 +795,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm
                 .get('rgw_frontend_port')
                 .setValue(response[0].spec?.rgw_frontend_port);
+              this.serviceForm
+                .get('rgw_frontend_secondary_port')
+                .setValue(response[0].spec?.rgw_frontend_secondary_port);
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
@@ -1384,6 +1397,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
+          }
+          if (
+            _.isNumber(values['rgw_frontend_secondary_port']) &&
+            values['rgw_frontend_secondary_port'] > 0
+          ) {
+            serviceSpec['rgw_frontend_secondary_port'] = values['rgw_frontend_secondary_port'];
           }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
