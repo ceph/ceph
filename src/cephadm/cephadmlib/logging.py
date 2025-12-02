@@ -242,10 +242,15 @@ def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
 
 
 def _get_systemd_run_path() -> str:
+    # Resolve the path to systemd-run once and avoid hardcoding it in templates.
+    # If it's not detected, use the common default path for consistency.
     return shutil.which('systemd-run') or '/usr/bin/systemd-run'
 
 
 def _get_container_runtime_path(ctx: CephadmContext) -> str:
+    # Use the container engine path that Cephadm is already configured with.
+    # If that's not available, fall back to podman/docker from $PATH.
+    # The logrotate helper will use this resolved path when sending SIGHUP.
     engine = getattr(ctx, 'container_engine', None)
     if engine and getattr(engine, 'path', None):
         return engine.path
@@ -257,6 +262,14 @@ def _get_container_runtime_path(ctx: CephadmContext) -> str:
 
 
 def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
+    """
+    Recreate the per-cluster logrotate config and helper script for this FSID.
+
+    The helper script is a simple shell wrapper that uses podman/docker to send
+    SIGHUP to all Ceph containers in the cluster. Logrotate calls this script via
+    systemd-run so the SIGHUP is sent from systemd_t (not logrotate_t), which avoids
+    the SELinux denials.
+    """
     helper_dir = os.path.join(ctx.data_dir, fsid)
     os.makedirs(helper_dir, exist_ok=True)
     helper_script = os.path.join(helper_dir, 'logrotate-reopen-logs.sh')
