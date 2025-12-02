@@ -1,0 +1,15 @@
+
+Linting "ceph-dashboard"...
+[0m[0m
+[0m[4m/home/afreenmisbah/repos/forks/dev/ceph/src/pybind/mgr/dashboard/frontend/src/app/ceph/block/nvmeof/subsystem/subsystem-form/nvme-subsystem-create-form/nvme-subsystem-create-form.component.ts[24m[0m
+[0m   [2m5:13[22m  [31merror[39m    The selector should start with one of these prefixes: "cd" (https://angular.dev/style-guide#style-02-07)                       [2m@angular-eslint/component-selector[22m[0m
+[0m  [2m44:2[22m   [33mwarning[39m  Lifecycle interface 'OnInit' should be implemented for method 'ngOnInit'. (https://angular.dev/style-guide#style-09-01)        [2m@angular-eslint/use-lifecycle-interface[22m[0m
+[0m  [2m56:2[22m   [33mwarning[39m  Lifecycle interface 'OnDestroy' should be implemented for method 'ngOnDestroy'. (https://angular.dev/style-guide#style-09-01)  [2m@angular-eslint/use-lifecycle-interface[22m[0m
+[0m[0m
+[0m[31m[1m✖ 3 problems (1 error, 2 warnings)[22m[39m[0m
+[0m[31m[1m[22m[39m[31m[1m  0 errors and 2 warnings potentially fixable with the `--fix` option.[22m[39m[0m
+[0m[31m[1m[22m[39m[0m
+Lint warnings found in the listed files.
+
+Lint errors found in the listed files.
+
