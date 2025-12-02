@@ -21050,6 +21050,9 @@ paths:
                     port:
                       description: Port
                       type: integer
+                    secondary_port:
+                      description: Secondary Port
+                      type: integer
                     server_hostname:
                       description: ''
                       type: string
@@ -21070,6 +21073,7 @@ paths:
                 - zonegroup_name
                 - zone_name
                 - port
+                - secondary_port
                 type: array
             application/vnd.ceph.api.v1.0+json:
               schema:
@@ -21080,6 +21084,9 @@ paths:
                       type: string
                     port:
                       description: Port
+                      type: integer
+                    secondary_port:
+                      description: Secondary Port
                       type: integer
                     server_hostname:
                       description: ''

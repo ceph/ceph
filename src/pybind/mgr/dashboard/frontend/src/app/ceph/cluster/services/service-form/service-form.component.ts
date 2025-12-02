@@ -307,6 +307,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         null,
         [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
       ],
+      rgw_frontend_secondary_port: [
+        null,
+        [CdValidators.number(false), Validators.min(1), Validators.max(65535)]
+      ],
       realm_name: [null],
       zonegroup_name: [null],
       zone_name: [null],
@@ -676,6 +680,14 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       allowlist_domains: [null],
       ssl_insecure_skip_verify: [false]
     });
+    this.serviceForm.addValidators(
+      CdValidators.donotmatch(
+        'rgw_frontend_port',
+        'rgw_frontend_secondary_port',
+        (form: AbstractControl) =>
+          form.get('service_type')?.value === 'rgw' && !!form.get('ssl')?.value
+      )
+    );
   }
 
   resolveRoute() {
@@ -820,6 +832,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm
                 .get('rgw_frontend_port')
                 .setValue(response[0].spec?.rgw_frontend_port);
+              this.serviceForm
+                .get('rgw_frontend_secondary_port')
+                .setValue(response[0].spec?.rgw_frontend_secondary_port);
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
@@ -1638,6 +1653,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         case 'rgw':
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
+          }
+          if (
+            _.isNumber(values['rgw_frontend_secondary_port']) &&
+            values['rgw_frontend_secondary_port'] > 0
+          ) {
+            serviceSpec['rgw_frontend_secondary_port'] = values['rgw_frontend_secondary_port'];
           }
           serviceSpec['ssl'] = values['ssl'];
           if (values['virtual_host_enabled'] && values['zonegroup_hostnames']?.length > 0) {
