@@ -360,6 +360,18 @@ def workunit(ctx, config):
 
     _config['clients'] = clients
     _config['env'] = env
+    # annoyingly the stock workunit helper script command uses a tool (from the
+    # ceph/teuthology repo) called adjust-ulimits *and* a tool (from packages)
+    # called ceph-coverage. They're glued together under the
+    # no_coverage_and_limits option that defaults to false for the stock
+    # workunit task. Since, for SMB on Ceph, we are using containers and NOT
+    # using packages the latter tool is not available even if we invoke other
+    # teuthology tasks that installs adjust-ulimits. Just skip the whole thing
+    # for now and we can set ulimits via pytest if we really want to set
+    # ulimits. Allow the yaml to override our default, however unlikely.
+    _config['no_coverage_and_limits'] = config.get(
+        'no_coverage_and_limits', True
+    )
     log.info('Passing workunit config: %r', _config)
     with write_metadata_file(ctx, _config):
         return workunit.task(ctx, _config)
