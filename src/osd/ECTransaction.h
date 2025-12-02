@@ -21,6 +21,7 @@
 #include "os/Transaction.h"
 #include "OSDMap.h"
 #include "PGTransaction.h"
+#include "osd/ECOmapJournal.h"
 
 namespace ECTransaction {
 class WritePlanObj {

@@ -3,24 +3,12 @@
 
 #include "ECOmapJournal.h"
 
-uint64_t ECOmapJournalEntry::global_id_counter = 0;
-
-ECOmapJournalEntry::ECOmapJournalEntry(bool clear_omap, std::optional<ceph::buffer::list> omap_header,
+ECOmapJournalEntry::ECOmapJournalEntry(eversion_t version, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
   std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates) : 
-  clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {
-    id = get_new_id();
-}
-
-ECOmapJournalEntry::ECOmapJournalEntry(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header,
-  std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> omap_updates) : 
-  id(id), clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {}
-
-int ECOmapJournalEntry::get_new_id() {
-  return ++global_id_counter;
-}
+  version(version), clear_omap(clear_omap), omap_header(omap_header), omap_updates(std::move(omap_updates)) {}
 
 bool ECOmapJournalEntry::operator==(const ECOmapJournalEntry& other) const {
-  return this->id == other.id;
+  return this->version == other.version;
 }
 
 
@@ -32,9 +20,9 @@ bool ECOmapJournal::remove_entry(const ECOmapJournalEntry &entry) {
   return entries.remove(entry);
 }
 
-bool ECOmapJournal::remove_entry_by_id(const uint64_t id) {
+bool ECOmapJournal::remove_entry_by_version(const eversion_t version) {
   for (const auto &journal_entry : entries) {
-    if (journal_entry.id == id) {
+    if (journal_entry.version == version) {
       return entries.remove(journal_entry);
     }
   }

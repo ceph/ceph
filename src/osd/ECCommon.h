@@ -29,6 +29,7 @@
 #include "os/Transaction.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
+#include "osd/ECOmapJournal.h"
 
 struct ECTransaction {
   struct WritePlan {

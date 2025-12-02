@@ -341,11 +341,12 @@ struct Trimmer : public ObjectModDesc::Visitor {
   const hobject_t &soid;
   PGBackend *pg;
   ObjectStore::Transaction *t;
+  const pg_log_entry_t &entry;
   Trimmer(
-    const hobject_t &soid,
     PGBackend *pg,
-    ObjectStore::Transaction *t)
-    : soid(soid), pg(pg), t(t) {}
+    ObjectStore::Transaction *t,
+    const pg_log_entry_t &entry)
+    : soid(entry.soid), pg(pg), t(t), entry(entry) {}
   void rmobject(version_t old_version) override {
     pg->trim_rollback_object(
       soid,
@@ -378,7 +379,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
     }
   }
 
-  void ec_omap(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) override {
 
     auto shard = pg->get_parent()->whoami_shard().shard;
@@ -433,7 +434,7 @@ struct Trimmer : public ObjectModDesc::Visitor {
           break;
       }
     }
-    pg->remove_ec_omap_journal_entry(id);
+    pg->remove_ec_omap_journal_entry(entry.version);
   }
 };
 
@@ -445,7 +446,7 @@ void PGBackend::rollforward(
   ldpp_dout(dpp, 20) << __func__ << ": entry=" << entry << dendl;
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  Trimmer trimmer(this, t, entry);
   entry.mod_desc.visit(&trimmer);
 }
 
@@ -455,7 +456,7 @@ void PGBackend::trim(
 {
   if (!entry.can_rollback())
     return;
-  Trimmer trimmer(entry.soid, this, t);
+  Trimmer trimmer(this, t, entry);
   entry.mod_desc.visit(&trimmer);
 }
 

@@ -56,7 +56,6 @@
 #include "librados/ListObjectImpl.h"
 #include "pg_features.h"
 #include "ECTypes.h"
-#include "ECOmapJournal.h"
 
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
@@ -153,6 +152,8 @@ typedef interval_set<
 
 using shard_id_set = bitset_set<128, shard_id_t>;
 WRITE_CLASS_DENC(shard_id_set)
+
+enum class OmapUpdateType : uint8_t {Remove, Insert, RemoveRange};
 
 /**
  * osd request identifier
@@ -4084,7 +4085,7 @@ public:
   public:
     virtual void append(uint64_t old_offset) {}
     virtual void setattrs(std::map<std::string, std::optional<ceph::buffer::list>> &attrs) {}
-    virtual void ec_omap(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+    virtual void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
       std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {}
     virtual void rmobject(version_t old_version) {}
     /**
@@ -4167,14 +4168,13 @@ public:
     encode(old_attrs, bl);
     ENCODE_FINISH(bl);
   }
-  void ec_omap(uint64_t id, bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
+  void ec_omap(bool clear_omap, std::optional<ceph::buffer::list> omap_header, 
     std::vector<std::pair<OmapUpdateType, ceph::buffer::list>> &omap_updates) {
     if(!can_local_rollback) {
       return;
     }
     ENCODE_START(1, 1, bl);
     append_id(EC_OMAP);
-    encode(id, bl);
     encode(clear_omap, bl);
     encode(omap_header, bl);
     encode(omap_updates, bl);

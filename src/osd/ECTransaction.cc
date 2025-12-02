@@ -607,9 +607,8 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   }
 
   if (!op.omap_updates.empty() || op.clear_omap || op.omap_header) {
-    ECOmapJournalEntry new_entry(op.clear_omap, op.omap_header, op.omap_updates);
+    ECOmapJournalEntry new_entry(entry->version, op.clear_omap, op.omap_header, op.omap_updates);
     entry->mod_desc.ec_omap(
-      new_entry.id,
       op.clear_omap,
       op.omap_header,
       op.omap_updates);

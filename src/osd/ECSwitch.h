@@ -420,9 +420,9 @@ public:
   bool get_is_ec_optimized() const final {
     return is_optimized();
   }
-  bool remove_ec_omap_journal_entry(const uint64_t id) override {
+  bool remove_ec_omap_journal_entry(const eversion_t version) override {
     ceph_assert(is_optimized());
-    return optimized.ec_omap_journal.remove_entry_by_id(id);
+    return optimized.ec_omap_journal.remove_entry_by_version(version);
   }
 
   void get_journal_updates(std::map<std::string, std::optional<ceph::buffer::list>> &update_map, 

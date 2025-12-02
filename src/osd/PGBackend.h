@@ -447,7 +447,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual shard_id_map<bufferlist> ec_decode_acting_set(
        const shard_id_map<bufferlist> &shard_map, int chunk_size) const = 0;
    virtual ECUtil::stripe_info_t ec_get_sinfo() const = 0;
-   virtual bool remove_ec_omap_journal_entry(const uint64_t id) {
+   virtual bool remove_ec_omap_journal_entry(const eversion_t version) {
      return false; // Only EC uses ec_omap_journal
    };
    virtual void get_journal_updates(std::map<std::string, std::optional<ceph::buffer::list>> &update_map, 
