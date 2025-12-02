@@ -212,12 +212,12 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     return;
   }
 
-  uint64_t kReplicaMinShardReadSize
-    = g_conf().get_val<uint64_t>("osd_min_split_replica_read_size");
+  uint64_t replica_min_shard_read_size
+    = objecter.get_min_split_replica_read_size();
 
   uint64_t offset = op.op.extent.offset;
   uint64_t length = op.op.extent.length;
-  uint64_t slice_count = std::min(length / kReplicaMinShardReadSize, osds.size());
+  uint64_t slice_count = std::min(length / replica_min_shard_read_size, osds.size());
   uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
 
   for (unsigned i = 0; i < osds.size() && length > 0; i++) {
@@ -488,7 +488,8 @@ std::pair<bool, bool> is_single_chunk(const pg_pool_t *pi, uint64_t offset, uint
   return {true, offset % stripe_width < chunk_size};
 }
 
-std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContext *cct) {
+std::pair<bool, bool> validate(Objecter::Op *op, Objecter &objecter,
+                               const pg_pool_t *pi, CephContext *cct) {
 
   bool is_erasure = pi->is_erasure();
 
@@ -508,9 +509,11 @@ std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContex
   bool single_direct_op = is_erasure;
   bool is_first_chunk = true;
 
-  uint64_t kReplicaMinShardReadSize
-    = g_conf().get_val<uint64_t>("osd_min_split_replica_read_size");
-  uint64_t kReplicaMinReadSize = kReplicaMinShardReadSize * kReplicaMinShardReads;
+  uint64_t replica_min_shard_read_size
+    = objecter.get_min_split_replica_read_size();
+
+  uint64_t replica_min_read_size
+    = replica_min_shard_read_size * kReplicaMinShardReads;
 
   uint64_t suitable_read_found = false;
   for (auto & o : op->ops) {
@@ -525,7 +528,7 @@ std::pair<bool, bool> validate(Objecter::Op *op, const pg_pool_t *pi, CephContex
           return {false, false};
         }
         if ((is_erasure && length > 0) ||
-            (!is_erasure && length >= kReplicaMinReadSize)) {
+            (!is_erasure && length >= replica_min_read_size)) {
           suitable_read_found = true;
         }
         if (single_direct_op) {
@@ -630,7 +633,7 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
-  auto [validated, single_op] = validate(op, pi, cct);
+  auto [validated, single_op] = validate(op, objecter, pi, cct);
 
   if (!validated) {
     return false;
