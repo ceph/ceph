@@ -590,7 +590,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
   } else {
     // All primary shards must always be written, regardless of the write plan.
     shards_written(sinfo.get_parity_shards());
-    shard_written(shard_id_t(0));
+    shard_written(sinfo.get_shard(raw_shard_id_t(0)));
   }
 
   written_shards();
