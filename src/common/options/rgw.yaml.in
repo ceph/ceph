@@ -4572,3 +4572,27 @@ options:
   see_also:
   - rgw_enable_usage_log
   with_legacy: true
+- name: rgw_gcors_allow_origins
+  type: str
+  level: advanced
+  desc: RGW global CORS allowed origins configuration
+  services:
+  - rgw
+- name: rgw_gcors_allow_headers
+  type: str
+  level: advanced
+  desc: RGW global CORS allowed headers configuration
+  services:
+  - rgw
+- name: rgw_gcors_allow_methods
+  type: str
+  level: advanced
+  desc: RGW global CORS allowed methods configuration
+  services:
+  - rgw
+- name: rgw_gcors_expose_headers
+  type: str
+  level: advanced
+  desc: RGW global CORS exposed headers configuration
+  services:
+  - rgw

@@ -30,54 +30,11 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
     ~RGWCORSConfiguration_SWIFT() {}
     int create_update(const char *allow_origins, const char *allow_headers, 
                   const char *expose_headers, const char *max_age) {
-      std::set<std::string> o, h;
-      std::list<std::string> e;
-      unsigned long a = CORS_MAX_AGE_INVALID;
-      uint8_t flags = RGW_CORS_ALL;
-
-      int nr_invalid_names = 0;
-      auto add_host = [&nr_invalid_names, &o] (auto host) {
-        if (validate_name_string(host) == 0) {
-          o.emplace(std::string{host});
-        } else {
-          nr_invalid_names++;
-        }
-      };
-      for_each_substr(allow_origins, ";,= \t", add_host);
-      if (o.empty() || nr_invalid_names > 0) {
+      std::optional<RGWCORSRule> optional_rule;
+      if (RGWCORSRule::create_rule(allow_origins, allow_headers, expose_headers, "*", optional_rule, max_age) < 0) {
         return -EINVAL;
       }
-
-      if (allow_headers) {
-        int nr_invalid_headers = 0;
-        auto add_header = [&nr_invalid_headers, &h] (auto allow_header) {
-          if (validate_name_string(allow_header) == 0) {
-            h.emplace(std::string{allow_header});
-          } else {
-            nr_invalid_headers++;
-          }
-        };
-        for_each_substr(allow_headers, ";,= \t", add_header);
-        if (h.empty() || nr_invalid_headers > 0) {
-          return -EINVAL;
-        }
-      }
-
-      if (expose_headers) {
-        for_each_substr(expose_headers, ";,= \t",
-            [&e] (auto expose_header) {
-              e.emplace_back(std::string(expose_header));
-            });
-      }
-      if (max_age) {
-        char *end = NULL;
-        a = strtoul(max_age, &end, 10);
-        if (a == ULONG_MAX)
-          a = CORS_MAX_AGE_INVALID;
-      }
-
-      RGWCORSRule rule(o, h, e, flags, a);
-      stack_rule(rule);
+      stack_rule(optional_rule.value());
       return 0;
     }
 };
