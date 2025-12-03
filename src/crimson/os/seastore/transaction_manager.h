@@ -1475,30 +1475,7 @@ private:
       }
     ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
       if (ref->is_fully_loaded()) {
-        auto crc = ref->calc_crc32c();
-        SUBTRACET(
-	  seastore_tm,
-	  "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	  t,
-	  *ref,
-	  pin.get_checksum(),
-	  crc);
-        bool inconsistent = false;
-        if (full_extent_integrity_check) {
-	  inconsistent = (pin.get_checksum() != crc);
-        } else { // !full_extent_integrity_check: remapped extent may be skipped
-	  inconsistent = !(pin.get_checksum() == 0 ||
-                           pin.get_checksum() == crc);
-        }
-        if (unlikely(inconsistent)) {
-	  SUBERRORT(seastore_tm,
-	    "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	    t,
-	    pin.get_checksum(),
-	    crc,
-	    *ref);
-	  ceph_abort();
-        }
+        check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
       } else {
         assert(!full_extent_integrity_check);
       }
@@ -1507,6 +1484,9 @@ private:
 	std::move(ref));
     });
   }
+
+  void check_full_extent_integrity(
+    Transaction &t, uint32_t ref_crc, uint32_t pin_crc);
 
   /**
    * pin_to_extent_by_type
@@ -1557,22 +1537,7 @@ private:
 	pin.get_checksum(),
 	crc);
       assert(ref->is_fully_loaded());
-      bool inconsistent = false;
-      if (full_extent_integrity_check) {
-	inconsistent = (pin.get_checksum() != crc);
-      } else { // !full_extent_integrity_check: remapped extent may be skipped
-	inconsistent = !(pin.get_checksum() == 0 ||
-			 pin.get_checksum() == crc);
-      }
-      if (unlikely(inconsistent)) {
-	SUBERRORT(seastore_tm,
-	  "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	  t,
-	  pin.get_checksum(),
-	  crc,
-	  *ref);
-	ceph_abort();
-      }
+      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
       return pin_to_extent_by_type_ret(
 	interruptible::ready_future_marker{},
 	std::move(ref->template cast<LogicalChildNode>()));
