@@ -625,6 +625,32 @@ TransactionManager::do_submit_transaction(
   );
 }
 
+void TransactionManager::check_full_extent_integrity(
+  Transaction &t, uint32_t ref_crc, uint32_t pin_crc)
+{
+  LOG_PREFIX(TransactionManager::check_full_extent_integrity);;
+  SUBDEBUGT(seastore_tm,
+    "checksum in the lba tree: 0x{:x}, actual checksum: 0x{:x}",
+    t,
+    pin_crc,
+    ref_crc);
+  bool inconsistent = false;
+  if (full_extent_integrity_check) {
+    inconsistent = (pin_crc != ref_crc);
+  } else { // !full_extent_integrity_check: remapped extent may be skipped
+    inconsistent = !(pin_crc == 0 ||
+                     pin_crc == ref_crc);
+  }
+  if (unlikely(inconsistent)) {
+    SUBERRORT(seastore_tm,
+      "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}",
+      t,
+      pin_crc,
+      ref_crc);
+      ceph_abort_msg("extent checksum inconsistent");
+  }
+}
+
 seastar::future<> TransactionManager::flush(OrderingHandle &handle)
 {
   LOG_PREFIX(TransactionManager::flush);
