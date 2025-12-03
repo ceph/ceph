@@ -59,6 +59,7 @@ public:
   std::string& get_id() { return id; }
   uint32_t get_max_age() { return max_age; }
   uint8_t get_allowed_methods() { return allowed_methods; }
+  bool has_origin(const std::string& s) const { return allowed_origins.contains(s); }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -81,11 +82,13 @@ public:
     DECODE_FINISH(bl);
   }
   static std::list<RGWCORSRule> generate_test_instances();
+  static int create_rule(const char *allow_origins, const char *allow_headers,
+                  const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age="");
   bool has_wildcard_origin();
   bool is_origin_present(const char *o);
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);
-  void dump_origins(); 
+  void dump_origins();
   void dump(Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len);
 };
@@ -142,6 +145,28 @@ static inline uint8_t get_cors_method_flags(const char *req_meth) {
   else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
   else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
   else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
+  else if (strcmp(req_meth, "COPY") == 0) flags = RGW_CORS_COPY;
+
+  return flags;
+}
+
+static inline uint8_t get_multi_cors_method_flags(const char *req_meth) {
+  uint8_t flags = 0;
+  const std::string allowed_methods(req_meth);
+  std::set<std::string_view> unique_methods;
+  auto apply_flag = [&flags, &unique_methods] (std::string_view method) {
+    if (unique_methods.contains(method)) {
+      return ;
+    }
+    unique_methods.insert(method);
+    if (method == "GET") flags |= RGW_CORS_GET;
+    else if (method == "POST") flags |= RGW_CORS_POST;
+    else if (method == "PUT") flags |= RGW_CORS_PUT;
+    else if (method == "DELETE") flags |= RGW_CORS_DELETE;
+    else if (method == "HEAD") flags |= RGW_CORS_HEAD;
+    else if (method == "COPY") flags |= RGW_CORS_COPY;
+  };
+  for_each_substr(allowed_methods, ";,= \t", apply_flag);
 
   return flags;
 }
