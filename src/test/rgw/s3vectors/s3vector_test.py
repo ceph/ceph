@@ -293,6 +293,9 @@ def test_create_index():
     index_name = 'test-index'
     result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # create an index on bucket that does not exist
+    invalid_bucket_name = bucket_name + '-invalid'
+    pytest.raises(conn.exceptions.ClientError, conn.create_index, vectorBucketName=invalid_bucket_name, indexName=index_name, dataType='float32', dimension=128, distanceMetric='euclidean')
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
@@ -308,6 +311,9 @@ def test_get_index():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # get an index from bucket that does not exist
+    invalid_bucket_name = bucket_name + '-invalid'
+    pytest.raises(conn.exceptions.ClientError, conn.get_index, vectorBucketName=invalid_bucket_name, indexName=index_name)
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
@@ -323,6 +329,10 @@ def test_delete_index():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # delete an index from bucket that does not exist
+    invalid_bucket_name = bucket_name + '-invalid'
+    pytest.raises(conn.exceptions.ClientError, conn.delete_index, vectorBucketName=invalid_bucket_name, indexName=index_name)
+    # delete the index from the right bucket
     result = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # not implemented yet
@@ -346,6 +356,9 @@ def test_list_indexes():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     result = conn.list_indexes(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # list indexs from bucket that does not exist
+    invalid_bucket_name = bucket_name + '-invalid'
+    pytest.raises(conn.exceptions.ClientError, conn.list_indexes, vectorBucketName=invalid_bucket_name)
     # not implemented yet
     #index_names = [i['IndexName'] for i in result['Indexes']]
     #assert index_name1 in index_names
