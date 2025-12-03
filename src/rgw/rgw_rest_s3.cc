@@ -1661,7 +1661,7 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
   dump_start(s);
   // Explicitly use chunked transfer encoding so that we can stream the result
   // to the user without having to wait for the full length of it.
-  end_header(s, NULL, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
+  end_header(s, this, to_mime_type(s->format), CHUNKED_TRANSFER_ENCODING);
 
   if (! op_ret) {
     list_all_buckets_start(s);
@@ -5263,6 +5263,11 @@ RGWOp *RGWHandler_REST_Service_S3::op_get()
   } else {
     return new RGWListBuckets_ObjStore_S3;
   }
+}
+
+RGWOp *RGWHandler_REST_Service_S3::op_options()
+{
+  return new RGWOptionsCORS_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Service_S3::op_head()
