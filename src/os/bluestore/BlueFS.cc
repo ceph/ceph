@@ -1411,7 +1411,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
   FileReader *log_reader = new FileReader(
     log_file, cct->_conf->bluefs_max_prefetch,
-    true);  // ignore eof
+    true,   // ignore eof
+    false); // non-buffered
 
   bool seen_recs = false;
 
@@ -2433,10 +2434,10 @@ int64_t BlueFS::_read_random(
       int r;
       if (!cct->_conf->bluefs_check_for_zeros) {
 	r = _bdev_read_random(p->bdev, p->offset + x_off, l, out,
-			      cct->_conf->bluefs_buffered_io);
+			      h->buffered);
       } else {
 	r = _read_random_and_check(p->bdev, p->offset + x_off, l, out,
-			cct->_conf->bluefs_buffered_io);
+			           h->buffered);
       }
       ceph_assert(r == 0);
       off += l;
@@ -2511,7 +2512,7 @@ void BlueFS::_envmode_index_file(
   File::envelope_t flush;
   bool envelope_good;
   uint64_t file_size = file->fnode.size;
-  FileReader *h = new FileReader(file, 4096, true);
+  FileReader *h = new FileReader(file, 4096, true, false);
   ceph_assert(h);
   while(scan_ofs < file->fnode.allocated) {
     envelope_good = _read_envelope(h, scan_ofs, env_ofs, &flush);
@@ -2538,6 +2539,8 @@ void BlueFS::_envmode_index_file(
       if (scan_ofs < file_size) {
         // we want to accept failed envelope if we are below confirmed wal size
         h->file->envelopes.push_back(flush);
+        derr << __func__ << " we are below confirmed wal size:" << scan_ofs << " < " << file_size
+             << dendl;
       }
       break;
     }
@@ -2744,14 +2747,13 @@ int64_t BlueFS::_read(
 	int r;
 	// when reading BlueFS log (only happens on startup) use non-buffered io
 	// it makes it in sync with logic in _flush_range()
-	bool use_buffered_io = h->file->fnode.ino == 1 ? false : cct->_conf->bluefs_buffered_io;
 	if (!cct->_conf->bluefs_check_for_zeros) {
 	  r = _bdev_read(p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-			 use_buffered_io);
+			 h->buffered);
 	} else {
 	  r = _read_and_check(
 	    p->bdev, p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-	    use_buffered_io);
+	    h->buffered);
 	}
 	logger->inc(l_bluefs_read_disk_count, 1);
 	logger->inc(l_bluefs_read_disk_bytes, l);
@@ -3802,26 +3804,22 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
 {
   ceph_assert(ceph_mutex_is_locked(this->lock) || file->fnode.ino <= 1);
   ceph::bufferlist bl;
-  if (partial) {
-    tail_block.splice(0, tail_block.length(), &bl);
-  }
-  dout(20) << __func__ << " tail is" << std::hex << bl.length() << dendl;
-  ceph_assert(length >= bl.length());
-  const auto remaining_len = length - bl.length();
-  buffer.splice(0, remaining_len, &bl);
+  dout(20) << __func__ << " tail is 0x" << std::hex << remaining_tail
+           << " partial:" << partial
+           << " length: 0x" << length
+           << " buf_len: 0x" << buffer.length()
+           << std::dec << dendl;
+  ceph_assert(partial || (!partial && remaining_tail == 0));
+  buffer.splice(0, length, &bl);
+  remaining_tail = bl.length() & ~super.block_mask();
   if (buffer.length()) {
     dout(20) << " leaving 0x" << std::hex << buffer.length() << std::dec
              << " unflushed" << dendl;
+    ceph_assert(remaining_tail == 0);
   }
   // Append padding to fill block
-  unsigned tail = bl.length() & ~super.block_mask();
-  if (tail) {
-    unsigned padding_len = super.block_size - tail;
-    dout(20) << __func__ << " caching tail of 0x"
-             << std::hex << tail
-             << " and padding block with 0x" << padding_len
-             << " buffer.length() " << buffer.length()
-             << std::dec << dendl;
+  if (remaining_tail) {
+    unsigned padding_len = super.block_size - remaining_tail;
     // We need to go through the `buffer_appender` to get a chance to
     // preserve in-memory contiguity and not mess with the alignment.
     // Otherwise a costly rebuild could happen in e.g. `KernelDevice`.
@@ -3833,10 +3831,21 @@ ceph::bufferlist BlueFS::FileWriter::flush_buffer(
     // The alternative approach would be to place the entire tail and
     // padding on a dedicated, 4 KB long memory chunk. This shouldn't
     // trigger the rebuild while still being less expensive.
-    buffer_appender.substr_of(bl, bl.length() - padding_len - tail, tail);
-    buffer.splice(buffer.length() - tail, tail, &tail_block);
-  } else {
-    tail_block.clear();
+    ceph_assert(buffer.length() == 0);
+    buffer.clear(); // This will cause reallocation for the following
+                    // appender's call. But we need this to avoid a
+                    // case where buffer is almost exhausted
+                    // after adding the tail. WAL v2 envelope header
+                    // needs splitting then which in turn isn't properly
+                    // handled by contiguous_filler and causes unexpected
+                    // gap before that header.
+    buffer_appender.substr_of(bl, bl.length() - padding_len - remaining_tail,
+      remaining_tail);
+    dout(20) << __func__ << " caching tail of 0x"
+             << std::hex << remaining_tail
+             << " and padding block with 0x" << padding_len
+             << ", buf_len 0x" << buffer.length()
+             << std::dec << dendl;
   }
   return bl;
 }
@@ -3883,7 +3892,8 @@ void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length)/*_WF*/
     // For envelope files disregard offset and length and just flush current envelope.
     _flush_envelope_F(h);
   } else {
-    _flush_range_F(h, offset, length);
+    bool buffered = cct->_conf->bluefs_buffered_io;
+    _flush_range_F(h, offset, length, buffered);
   }
 }
 
@@ -3891,7 +3901,7 @@ int BlueFS::_flush_envelope_F(FileWriter *h)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
   ceph_assert(h->file->envelope_mode());
-  uint64_t content_length = h->get_buffer_length() - File::envelope_t::head_size();
+  uint64_t content_length = h->get_fresh_buffer_length() - File::envelope_t::head_size();
   h->append((char*)&h->file->stamp.v[0], File::envelope_t::tail_size());
   uint64_t offset = h->pos;
 
@@ -3899,10 +3909,10 @@ int BlueFS::_flush_envelope_F(FileWriter *h)
   ceph_le64 flush_length_le(content_length);
   h->envelope_head_filler.copy_in(File::envelope_t::head_size(), (char*)&flush_length_le);
   uint64_t length = File::envelope_t::head_size() + content_length + File::envelope_t::tail_size();
-  return _flush_range_F(h, offset, length);
+  return _flush_range_F(h, offset, length, false);
 }
 
-int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
+int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
 {
   auto t0 = mono_clock::now();
   ceph_assert(ceph_mutex_is_locked(h->lock));
@@ -3916,8 +3926,6 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " to " << h->file->fnode
 	   << " hint " << h->file->vselector_hint
            << dendl;
-
-  bool buffered = cct->_conf->bluefs_buffered_io;
 
   if (end <= h->pos)
     return 0;
@@ -3959,23 +3967,24 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
     }
     h->file->is_dirty = true;
   }
-  if (h->file->fnode.size < end) {
-    vselector->add_usage(h->file->vselector_hint, end - h->file->fnode.size);
-    h->file->fnode.size = end;
+  dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
+  auto new_data = _flush_data(h, offset, length, buffered);
+  if (new_data > 0) {
+    vselector->add_usage(h->file->vselector_hint, new_data);
     // Don't mark regular appends as dirty on envelope files.
     // Note that allocations are marked as dirty.
     if (!h->file->envelope_mode()) {
       h->file->is_dirty = true;
     }
   }
-  dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
-  int res = _flush_data(h, offset, length, buffered);
   logger->tinc(l_bluefs_flush_lat, mono_clock::now() - t0);
-  return res;
+  return 0;
 }
 
-int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
+uint64_t BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered)
 {
+  uint64_t new_data = 0;
+
   if (h->file->fnode.ino > 1) {
     ceph_assert(ceph_mutex_is_locked(h->lock));
     ceph_assert(ceph_mutex_is_locked(h->file->lock));
@@ -4001,9 +4010,15 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
     }
   }
 
+  auto end = offset + length;
+  if (h->file->fnode.size < end) {
+    new_data = end - h->file->fnode.size;
+    h->file->fnode.size = end;
+  }
+
   auto bl = h->flush_buffer(cct, partial, length, super);
   ceph_assert(bl.length() >= length);
-  h->pos = offset + length;
+  h->pos = end;
   length = bl.length();
 
   logger->inc(l_bluefs_write_count, 1);
@@ -4060,7 +4075,7 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
 
   dout(20) << __func__ << " h " << h << " pos now 0x"
            << std::hex << h->pos << std::dec << dendl;
-  return 0;
+  return new_data;
 }
 
 #ifdef HAVE_LIBAIO
@@ -4098,19 +4113,19 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
   bool flushed_sum = false;
   {
     std::unique_lock hl(h->lock);
-    if (h->file->envelope_mode() && h->get_buffer_length() == 0) {
+    if (h->file->envelope_mode() && h->get_fresh_buffer_length() == 0) {
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
     }
     size_t max_size = 1ull << 30; // cap to 1GB
     while (len > 0) {
       bool need_flush = true;
-      auto l0 = h->get_buffer_length();
+      auto l0 = h->get_fresh_buffer_length();
       if (l0 < max_size) {
 	size_t l = std::min(len, max_size - l0);
 	h->append(buf, l);
 	buf += l;
 	len -= l;
-	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
+	need_flush = h->get_fresh_buffer_length() >= cct->_conf->bluefs_min_flush_size;
       }
       if (need_flush) {
 	bool flushed = false;
@@ -4119,7 +4134,7 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
 	flushed_sum |= flushed;
 	// make sure we've made any progress with flush hence the
 	// loop doesn't iterate forever
-	ceph_assert(h->get_buffer_length() < max_size);
+	ceph_assert(h->get_fresh_buffer_length() < max_size);
       }
     }
   }
@@ -4145,7 +4160,7 @@ void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
 int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
-  uint64_t length = h->get_buffer_length();
+  uint64_t length = h->get_fresh_buffer_length();
   uint64_t offset = h->pos;
   if (flushed) {
     *flushed = false;
@@ -4170,7 +4185,8 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
   if (h->file->envelope_mode()) {
     r = _flush_envelope_F(h);
   } else {
-    r = _flush_range_F(h, offset, length);
+    bool buffered = cct->_conf->bluefs_buffered_io;
+    r = _flush_range_F(h, offset, length, buffered);
   }
   if (flushed) {
     *flushed = true;
@@ -4187,15 +4203,10 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
 uint64_t BlueFS::_flush_special(FileWriter *h)
 {
   ceph_assert(h->file->fnode.ino <= 1);
-  uint64_t length = h->get_buffer_length();
+  uint64_t length = h->get_fresh_buffer_length();
   uint64_t offset = h->pos;
-  uint64_t new_data = 0;
   ceph_assert(length + offset <= h->file->fnode.get_allocated());
-  if (h->file->fnode.size < offset + length) {
-    new_data = offset + length - h->file->fnode.size;
-    h->file->fnode.size = offset + length;
-  }
-  _flush_data(h, offset, length, false);
+  uint64_t new_data = _flush_data(h, offset, length, false);
   return new_data;
 }
 
@@ -4213,12 +4224,12 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 
   // truncate off unflushed data?
   if (h->pos < offset &&
-      h->pos + h->get_buffer_length() > offset) {
+      h->pos + h->get_fresh_buffer_length() > offset) {
     dout(20) << __func__ << " tossing out last " << offset - h->pos
 	     << " unflushed bytes" << dendl;
     ceph_abort_msg("actually this shouldn't happen");
   }
-  if (h->get_buffer_length()) {
+  if (h->get_fresh_buffer_length()) {
     int r = _flush_F(h, true);
     if (r < 0)
       return r;
@@ -4800,11 +4811,13 @@ int BlueFS::open_for_read(
     return -ENOENT;
   }
   File *file = q->second.get();
-  if (file->envelope_mode() && !file->envelopes_indexed) {
+  bool envelope = file->envelope_mode();
+  if (envelope && !file->envelopes_indexed) {
     _envmode_index_file(file);
   }
   *h = new FileReader(file, random ? 4096 : cct->_conf->bluefs_max_prefetch,
-                      file->envelope_mode());
+                      envelope,
+                      envelope ? false : cct->_conf->bluefs_buffered_io);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
 }

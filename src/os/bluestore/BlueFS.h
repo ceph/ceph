@@ -406,10 +406,27 @@ public:
     uint64_t pos = 0;       ///< start offset for buffer
   private:
     ceph::buffer::list buffer;      ///< new data to write (at end of file)
-    ceph::buffer::list tail_block;  ///< existing partial block at end of file, if any
+    size_t remaining_tail = 0;
+
+    size_t get_appender_page_count() const {
+      // Forbid less than 2 pages setup as it might result
+      // in improper location of WAL v2 envelope header after
+      // a close-to-page-size tail. Failing to fit the header
+      // after such a tail within a single page buffer would put
+      // the whole header into the next page leaving inappropriate gap
+      // when writing WAL to disk.
+      return std::max<size_t>(
+        g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE, 2);
+    }
   public:
     unsigned get_buffer_length() const {
       return buffer.length();
+    }
+    unsigned get_fresh_buffer_length() const {
+      // This to return the amount of new data in buffer only.
+      // Previous tail part to be omitted..
+      ceph_assert(buffer.length() >= remaining_tail);
+      return buffer.length() - remaining_tail;
     }
     ceph::bufferlist flush_buffer(
       CephContext* cct,
@@ -429,7 +446,8 @@ public:
     FileWriter(FileRef f)
       : file(std::move(f)),
        buffer_appender(buffer.get_page_aligned_appender(
-                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+                         get_appender_page_count())),
+                       envelope_head_filler() {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -473,7 +491,7 @@ public:
     }
 
     bufferlist::contiguous_filler append_hole(uint64_t len) {
-      return buffer.append_hole(len);
+      return buffer_appender.append_hole(len);
     }
 
     uint64_t get_effective_write_pos() {
@@ -522,15 +540,17 @@ public:
     FileRef file;
     FileReaderBuffer buf;
     bool ignore_eof;        ///< used when reading our log file
+    bool buffered;
     ceph::shared_mutex lock {
      ceph::make_shared_mutex(std::string(), false, false, false)
     };
 
 
-    FileReader(FileRef f, uint64_t mpf, bool ie)
+    FileReader(FileRef f, uint64_t mpf, bool ie, bool _buffered)
       : file(f),
 	buf(mpf),
-	ignore_eof(ie) {
+	ignore_eof(ie),
+        buffered(_buffered) {
       ++file->num_readers;
     }
     ~FileReader() {
@@ -661,8 +681,8 @@ private:
 
   /* signal replay log to include h->file in nearest log flush */
   int _signal_dirty_to_log_D(FileWriter *h);
-  int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length);
-  int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
+  int _flush_range_F(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
+  uint64_t _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_envelope_F(FileWriter *h);
   int _fsync(FileWriter *h, bool force_dirty);

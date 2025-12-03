@@ -2431,6 +2431,27 @@ TEST(BufferList, splice) {
   }
 }
 
+TEST(BufferList, page_aligned_append_hole) {
+  // This technically simulates BlueFS WAL v2 use scenario
+  bufferlist buffer;
+  bufferlist::page_aligned_appender buffer_appender(
+    buffer.get_page_aligned_appender(16));
+
+  std::string s(1024, 'a');
+  buffer_appender.append_hole(8);
+  buffer_appender.append(s.c_str(), s.length());
+  EXPECT_EQ(1u, buffer.get_num_buffers());
+  buffer_appender.append_zero(8);
+  EXPECT_EQ(1u, buffer.get_num_buffers());
+  size_t pad = 4096 - buffer.length();
+  buffer.splice(0, buffer.length());
+  EXPECT_EQ(1, buffer.get_num_buffers());
+  EXPECT_EQ(0, buffer.length());
+  buffer_appender.append_zero(pad);
+  EXPECT_EQ(pad, buffer.length());
+  EXPECT_EQ(1u, buffer.get_num_buffers());
+}
+
 TEST(BufferList, write) {
   std::ostringstream stream;
   bufferlist bl;

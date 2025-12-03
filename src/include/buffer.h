@@ -903,6 +903,13 @@ struct error_code;
 	  bl.append_zero(chunk_len);
 	});
       }
+      contiguous_filler append_hole(unsigned len) {
+        contiguous_filler ret;
+	_append_common(len, [&] (const size_t chunk_len) {
+	  ret = bl.append_hole(chunk_len);
+	});
+        return ret;
+      }
 
       void substr_of(const list& bl, unsigned off, unsigned len) {
 	for (const auto& bptr : bl.buffers()) {

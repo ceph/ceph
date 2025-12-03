@@ -1176,6 +1176,55 @@ TEST_F(BlueFS_wal, wal_v2_check)
   fs.umount();
 }
 
+TEST_F(BlueFS_wal, wal_v2_check_split_header)
+{
+  // Check if wal v2 envelope header is properly located
+  // when FileWrite'r buffer is exhausted.
+  //
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_alloc_size", "8192");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 4076 + 4077, 4076, 4077);
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 4076 + 4077, 4076, 4077);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
+TEST_F(BlueFS_wal, wal_v2_check_split_header_small_alloc)
+{
+  // Check if wal v2 envelope header is properly located
+  // when FileWrite'r buffer is exhausted.
+  // Case for single 4K page buffer.
+  //
+  ConfSaver conf(g_ceph_context->_conf);
+  conf.SetVal("bluefs_min_flush_size", "65536");
+  conf.SetVal("bluefs_wal_envelope_mode", "true");
+  conf.SetVal("bluefs_alloc_size", "4096");
+  conf.ApplyChanges();
+
+  Create(1048576 * 256, 1048576 * 128, 1048576 * 64);
+  ASSERT_EQ(0, fs.mount());
+
+  bufferlist content;
+  many_small_writes("db.wal", "wal1.log", content, 4076 + 4077, 4076, 4077);
+  fs.umount();
+  fs.mount();
+  bufferlist read_content;
+  many_small_reads("db.wal", "wal1.log", read_content, 4076 + 4077, 4076, 4077);
+  ASSERT_EQ(content, read_content);
+  fs.umount();
+}
+
 TEST_F(BlueFS_wal, wal_v2_check_feature)
 {
   SKIP_JENKINS();
