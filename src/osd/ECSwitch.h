@@ -23,8 +23,13 @@
 #include "PGBackend.h"
 #include "ECBackendL.h"
 #include "ECBackend.h"
+#include "common/debug.h"
+#include "common/dout.h"
 
 #include <optional>
+
+#define dout_context cct
+#define dout_subsys ceph_subsys_osd
 
 class ECSwitch : public PGBackend
 {
@@ -421,112 +426,27 @@ public:
     return is_optimized();
   }
   bool remove_ec_omap_journal_entry(const eversion_t version) override {
-    ceph_assert(is_optimized());
-    return optimized.ec_omap_journal.remove_entry_by_version(version);
+    if (is_optimized()) {
+      return optimized.remove_ec_omap_journal_entry(version);
+    }
+    dout(10) << "ECSwitch::remove_ec_omap_journal_entry called on legacy EC backend" << dendl;
+    return false;
   }
 
-  void get_journal_updates(std::map<std::string, std::optional<ceph::buffer::list>> &update_map, 
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> &remove_ranges) override {
-    ceph_assert(is_optimized());
-    auto journal = optimized.ec_omap_journal;
-    for (auto &entry : journal) {
-      if (entry.clear_omap) {
-        // Clear all previous updates
-        update_map.clear();
-        // Mark entire range as removed
-        remove_ranges.clear();
-        remove_ranges.push_back({std::nullopt, std::nullopt});
-      }
-
-      for (auto &&update : entry.omap_updates) {
-        OmapUpdateType type = update.first;
-        auto iter = update.second.cbegin();
-        switch (type) {
-          case OmapUpdateType::Insert: {
-            std::map<std::string, ceph::buffer::list> vals;
-            decode(vals, iter);
-            // Insert key value pairs into update_map
-            for (auto it = vals.begin(); it != vals.end(); ++it) {
-              const auto &key = it->first;
-              const auto &val = it->second;
-              update_map[key] = val;
-            }
-            break;
-          }
-          case OmapUpdateType::Remove: {
-            std::set<std::string> keys;
-            decode(keys, iter);
-            // Mark keys in update_map as removed
-            for (const auto &key : keys) {
-              update_map[key] = std::nullopt;
-            }
-            break;
-          }
-          case OmapUpdateType::RemoveRange: {
-            std::string key_begin, key_end;
-            decode(key_begin, iter);
-            decode(key_end, iter);
-            
-            // Add range to remove_ranges, merging overlapping ranges
-            std::optional<std::string> start = key_begin;
-            std::optional<std::string> end = key_end;
-            auto it = remove_ranges.begin();
-            bool inserted = false;
-            while (it != remove_ranges.end()) {
-              // Current range is to the left of new range
-              if (it->second && *it->second < *start) {
-                it++;
-                continue;
-              }
-              // Current range is to the right of new range
-              if (it->first && (!end || *end < *it->first)) {
-                remove_ranges.insert(it, {start, end});
-                inserted = true;
-                break;
-              }
-              // Ranges overlap, merge them
-              if (!it->first || (start && *it->first < *start)) {
-                start = it->first;
-              }
-              if (!it->second) {
-                end = std::nullopt;
-              } else if (end && *it->second > *end) {
-                end = it->second;
-              }
-              it = remove_ranges.erase(it);
-            }
-            if (!inserted) {
-              remove_ranges.emplace_back(start, end);
-            }
-
-            // Erase keys in update_map that fall within the removed range
-            auto map_it = update_map.lower_bound(key_begin);
-            while (map_it != update_map.end()) {
-              if (map_it->first >= key_end) {
-                break;
-              }
-              map_it = update_map.erase(map_it);
-            }
-            break;
-          }
-          default:
-            ceph_abort_msg("Unknown OmapUpdateType");
-        }
-      }
+  std::tuple<UpdateMapType, RangeListType> get_journal_updates() override {
+    if (is_optimized()) {
+      return optimized.get_journal_updates();
     }
-    return;
+    dout(10) << "ECSwitch::get_journal_updates called on legacy EC backend" << dendl;
+    return {};
   }
   
   std::optional<ceph::buffer::list> get_header_from_journal() override {
-    ceph_assert(is_optimized());
-    std::optional<ceph::buffer::list> updated_header = std::nullopt;
-    auto journal = optimized.ec_omap_journal;
-    for (auto &entry : journal) {
-      if (entry.omap_header) {
-        updated_header = entry.omap_header;
-      }
+    if (is_optimized()) {
+      return optimized.get_header_from_journal();
     }
-    return updated_header;
+    dout(10) << "ECSwitch::get_header_from_journal called on legacy EC backend" << dendl;
+    return std::nullopt;
   }
 
   int omap_iterate (
@@ -535,80 +455,10 @@ public:
     ObjectStore::omap_iter_seek_t start_from, ///< [in] where the iterator should point to at the beginning
     OmapIterFunction f ///< [in] function to call for each key/value pair
   ) override {
-    // Updates in update_map take priority over removed_ranges
-    std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
-    get_journal_updates(update_map, removed_ranges);
-
-    auto map_it = update_map.begin();
-    if (!start_from.seek_position.empty()) {
-      map_it = update_map.lower_bound(start_from.seek_position);
+    if (is_optimized()) {
+      return optimized.omap_iterate(c_, oid, start_from, f, store);
     }
-
-    auto wrapper = [&](std::string_view store_key, std::string_view store_value) {
-      while (map_it != update_map.end() && map_it->first < store_key) {
-        if (map_it->second.has_value()) {
-          ObjectStore::omap_iter_ret_t r = f(map_it->first, std::string_view(map_it->second->c_str(), map_it->second->length()));
-          if (r == ObjectStore::omap_iter_ret_t::STOP) return r;
-        }
-        map_it++;
-      }
-
-      if (map_it != update_map.end() && map_it->first == store_key) {
-        ObjectStore::omap_iter_ret_t ret = ObjectStore::omap_iter_ret_t::NEXT;
-        if (map_it->second.has_value()) {
-          ret = f(store_key, std::string_view(map_it->second->c_str(), map_it->second->length()));
-        }
-        ++map_it;
-        return ret;
-      }
-
-      if (should_be_removed(removed_ranges, store_key)) {
-        return ObjectStore::omap_iter_ret_t::NEXT;
-      }
-
-      return f(store_key, store_value);
-    };
-
-	  const auto result = store->omap_iterate(c_, oid, start_from, wrapper);
-	  if (result < 0) {
-	    return result;
-	  }
-
-    ObjectStore::omap_iter_ret_t ret = ObjectStore::omap_iter_ret_t::NEXT;
-    while (map_it != update_map.end()) {
-      if (map_it->second.has_value()) {
-        ret = f(map_it->first, std::string_view(map_it->second->c_str(), map_it->second->length()));
-        if (ret == ObjectStore::omap_iter_ret_t::STOP) break;
-      }
-      map_it++;
-    }
-
-    return ret == ObjectStore::omap_iter_ret_t::STOP ? 0 : 1;
+    dout(10) << "ECSwitch::omap_iterate called on legacy EC backend" << dendl;
+    return 0;
   }
-
-  bool should_be_removed(
-  const std::list<std::pair<std::optional<std::string>,
-                            std::optional<std::string>>>& removed_ranges,
-        std::string_view key) {
-  for (const auto& range : removed_ranges) {
-    const auto& start_opt = range.first;
-    const auto& end_opt = range.second;
-
-    bool start_ok = true;
-    bool end_ok = true;
-
-    if (start_opt.has_value()) {
-      start_ok = key >= start_opt.value();
-    }
-    if (end_opt.has_value()) {
-      end_ok = key < end_opt.value();
-    }
-
-    if (start_ok && end_ok) {
-      return true;
-    }
-  }
-  return false;
-}
 };

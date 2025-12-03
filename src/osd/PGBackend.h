@@ -450,8 +450,11 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
    virtual bool remove_ec_omap_journal_entry(const eversion_t version) {
      return false; // Only EC uses ec_omap_journal
    };
-   virtual void get_journal_updates(std::map<std::string, std::optional<ceph::buffer::list>> &update_map, 
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> &remove_ranges) {};
+   using UpdateMapType = std::map<std::string, std::optional<ceph::buffer::list>>;
+   using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
+   virtual std::tuple<UpdateMapType, RangeListType> get_journal_updates() {
+    return {};
+   };
    virtual std::optional<ceph::buffer::list> get_header_from_journal() {
     return std::nullopt; // Only EC uses ec_omap_journal
    };

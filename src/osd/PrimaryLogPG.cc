@@ -7874,9 +7874,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   map<string, bufferlist> out;
 	if (oi.is_omap()) {
     // Updates in update_map take priority over removed_ranges
-    std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
-    get_pgbackend()->get_journal_updates(update_map, removed_ranges);
+    auto [update_map, removed_ranges] = get_pgbackend()->get_journal_updates();
     
     set<string> keys_still_to_get;
     for (auto &key : keys_to_get) {
@@ -7928,9 +7926,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	       ++i)
 	    to_get.insert(i->first);
     // Updates in update_map take priority over removed_ranges
-    std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-    std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> removed_ranges;
-    get_pgbackend()->get_journal_updates(update_map, removed_ranges);
+    auto [update_map, removed_ranges] = get_pgbackend()->get_journal_updates();
     set<string> still_to_get;
     for (auto &key : to_get) {
       if (update_map.find(key) != update_map.end()) {
