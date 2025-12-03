@@ -22,6 +22,7 @@ public:
 		     bool track_lock=true,
 		     bool enable_lock_dep=true,
 		     bool prioritize_write=false);
+  ~shared_mutex_debug();
   // exclusive locking
   void lock();
   bool try_lock();
