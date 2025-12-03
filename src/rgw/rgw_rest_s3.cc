@@ -4815,8 +4815,13 @@ void RGWListMultipart_ObjStore_S3::send_response()
     /* TODO: missing initiator:
        Container element that identifies who initiated the multipart upload. If the initiator is an AWS account, this element provides the same information as the Owner element. If the initiator is an IAM User, this element provides the user ARN and display name, see https://docs.aws.amazon.com/AmazonS3/latest/API/API_ListParts.html */
 
-    if (cksum && cksum->aws()) {
-      s->formatter->dump_string("ChecksumAlgorithm", cksum->uc_type_string());
+    if (upload->cksum_type != rgw::cksum::Type::none) {
+      s->formatter->dump_string("ChecksumAlgorithm", to_uc_string(upload->cksum_type));
+      if (upload->cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+        s->formatter->dump_string("ChecksumType", "COMPOSITE");
+      } else {
+        s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+      }
     }
 
     for (; iter != upload->get_parts().end(); ++iter) {
