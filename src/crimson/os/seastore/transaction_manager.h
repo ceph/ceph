@@ -1440,72 +1440,71 @@ private:
     extent_len_t direct_partial_off,
     extent_len_t partial_len,
     lextent_init_func_t<T> &&maybe_init) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
     assert(pin.is_viewable());
-    using ret = pin_to_extent_ret<T>;
     auto direct_length = pin.get_intermediate_length();
     if (full_extent_integrity_check) {
       direct_partial_off = 0;
       partial_len = direct_length;
     }
-    LOG_PREFIX(TransactionManager::pin_to_extent);
     SUBTRACET(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
               t, pin, direct_partial_off, partial_len);
-    return cache->get_absent_extent<T>(
+
+    auto ref = co_await cache->get_absent_extent<T>(
       t,
       pin.get_val(),
       direct_length,
       direct_partial_off,
       partial_len,
-      [laddr=pin.get_intermediate_base(),
-       maybe_init=std::move(maybe_init),
-       child_pos=std::move(child_pos),
-       &t, this]
-      (T &extent) mutable {
-	assert(extent.is_logical());
-	assert(!extent.has_laddr());
-	assert(!extent.has_been_invalidated());
-	child_pos.link_child(&extent);
-	child_pos.invalidate_retired_placeholder(t, *cache, extent);
-	extent.set_laddr(laddr);
-	maybe_init(extent);
-	extent.set_seen_by_users();
+      // extent_init_func
+      seastar::coroutine::lambda(
+        [laddr=pin.get_intermediate_base(),
+        maybe_init=std::move(maybe_init),
+        child_pos=std::move(child_pos),
+        &t, this] (T &extent) mutable {
+          assert(extent.is_logical());
+          assert(!extent.has_laddr());
+          assert(!extent.has_been_invalidated());
+          child_pos.link_child(&extent);
+          child_pos.invalidate_retired_placeholder(t, *cache, extent);
+          extent.set_laddr(laddr);
+          maybe_init(extent);
+          extent.set_seen_by_users();
+      })
+    );
+
+    if (ref->is_fully_loaded()) {
+      auto crc = ref->calc_crc32c();
+      SUBTRACET(
+        seastore_tm,
+        "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
+        t,
+        *ref,
+        pin.get_checksum(),
+        crc);
+      bool inconsistent = false;
+      if (full_extent_integrity_check) {
+        inconsistent = (pin.get_checksum() != crc);
+      } else { // !full_extent_integrity_check: remapped extent may be skipped
+        inconsistent = !(pin.get_checksum() == 0 ||
+                         pin.get_checksum() == crc);
       }
-    ).si_then([FNAME, &t, pin=pin, this](auto ref) mutable -> ret {
-      if (ref->is_fully_loaded()) {
-        auto crc = ref->calc_crc32c();
-        SUBTRACET(
-	  seastore_tm,
-	  "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-	  t,
-	  *ref,
-	  pin.get_checksum(),
-	  crc);
-        bool inconsistent = false;
-        if (full_extent_integrity_check) {
-	  inconsistent = (pin.get_checksum() != crc);
-        } else { // !full_extent_integrity_check: remapped extent may be skipped
-	  inconsistent = !(pin.get_checksum() == 0 ||
-                           pin.get_checksum() == crc);
-        }
-        if (unlikely(inconsistent)) {
-	  SUBERRORT(seastore_tm,
-	    "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-	    t,
-	    pin.get_checksum(),
-	    crc,
-	    *ref);
-	  ceph_abort();
-        }
-      } else {
-        assert(!full_extent_integrity_check);
+      if (unlikely(inconsistent)) {
+        SUBERRORT(seastore_tm,
+          "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
+          t,
+          pin.get_checksum(),
+          crc,
+          *ref);
+        ceph_abort();
       }
-      return pin_to_extent_ret<T>(
-	interruptible::ready_future_marker{},
-	std::move(ref));
-    });
+    } else {
+      assert(!full_extent_integrity_check);
+    }
+    co_return std::move(ref);
   }
 
   /**
