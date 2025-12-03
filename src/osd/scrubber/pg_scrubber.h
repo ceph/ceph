@@ -150,6 +150,8 @@ static inline constexpr ScrubCounterSet io_counters_replicated{
   .successful_elapsed = l_osd_scrub_rppool_successful_elapsed,
   .failed_cnt = l_osd_scrub_rppool_failed,
   .failed_elapsed = l_osd_scrub_rppool_failed_elapsed,
+  .write_intersects = l_osd_scrub_rppool_write_intersects,
+  .write_blocked = l_osd_scrub_rppool_write_blocked,
   // replica-reservation-related:
   .rsv_successful_cnt = l_osd_scrub_rppool_reserv_success,
   .rsv_successful_elapsed = l_osd_scrub_rppool_reserv_successful_elapsed,
@@ -175,6 +177,8 @@ static inline constexpr ScrubCounterSet io_counters_ec{
   .successful_elapsed = l_osd_scrub_ec_successful_elapsed,
   .failed_cnt = l_osd_scrub_ec_failed,
   .failed_elapsed = l_osd_scrub_ec_failed_elapsed,
+  .write_intersects = l_osd_scrub_ec_write_intersects,
+  .write_blocked = l_osd_scrub_ec_write_blocked,
   // replica-reservation-related:
   .rsv_successful_cnt = l_osd_scrub_ec_reserv_success,
   .rsv_successful_elapsed = l_osd_scrub_ec_reserv_successful_elapsed,
