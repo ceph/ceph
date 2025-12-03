@@ -2427,7 +2427,7 @@ OSD::OSD(CephContext *cct_,
 				  "osd_pg_epoch_max_lag_factor")),
   osd_compat(get_osd_compat_set()),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
-	    get_num_op_threads()),
+	    get_num_op_threads(), get_num_op_shards()),
   heartbeat_stop(false),
   heartbeat_need_update(true),
   hb_front_client_messenger(hb_client_front),
@@ -11069,9 +11069,8 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->whoami << " op_wq(" << shard_index << ") "
 
-void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
+void OSD::ShardedOpWQ::_process(uint32_t thread_index, uint32_t shard_index, heartbeat_handle_d *hb)
 {
-  uint32_t shard_index = thread_index % osd->num_shards;
   auto& sdata = osd->shards[shard_index];
   ceph_assert(sdata);
 
@@ -11261,7 +11260,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	   << " waiting_peering " << slot->waiting_peering << dendl;
 
   ThreadPool::TPHandle tp_handle(osd->cct, hb, timeout_interval.load(),
-				 suicide_interval.load());
+				 suicide_interval.load(), &osd->osd_op_tp);
 
   // take next item
   auto qi = std::move(slot->to_process.front());
