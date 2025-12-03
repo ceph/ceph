@@ -144,7 +144,7 @@ where::
     service_ticket_info {
       u32 service_id       # CEPH_ENTITY_TYPE_{MON,MGR,OSD,MDS}
       u8 msg_version (1)
-      {CephXServiceTicket service_ticket}^session_key
+      {CephxServiceTicket service_ticket}^session_key
       CephxTicketBlob ticket_blob
     }
 
