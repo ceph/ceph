@@ -567,6 +567,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 	return ret;
       }
       s->bucket_exists = false;
+      if (s->op_type == RGW_OP_OPTIONS_CORS) {
+        ldpp_dout(dpp, 0) << "NOTICE: RGW_OP_OPTIONS_CORS shouldn't return -ERR_NO_SUCH_BUCKET in case we have a global CORS!" << dendl;
+        return 0;
+      }
       return -ERR_NO_SUCH_BUCKET;
     }
     if (!rgw::sal::Object::empty(s->object.get())) {
@@ -1697,7 +1701,6 @@ int RGWOp::read_bucket_cors()
   map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_CORS);
   if (aiter == s->bucket_attrs.end()) {
     ldpp_dout(this, 20) << "no CORS configuration attr found" << dendl;
-    cors_exist = false;
     return 0; /* no CORS configuration found */
   }
 
@@ -1721,6 +1724,40 @@ int RGWOp::read_bucket_cors()
   return 0;
 }
 
+int RGWOp::read_global_cors()
+{
+  string allow_origins, allow_headers, allow_methods, expose_headers;
+  int ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
+  if (ret < 0 || allow_origins.empty()) {
+    return -EINVAL;
+  }
+  ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
+  if (ret < 0 || allow_headers.empty()) {
+    return -EINVAL;
+  }
+  ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
+  if (ret < 0 || allow_methods.empty()) {
+    return -EINVAL;
+  }
+  g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
+  if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(), expose_headers.c_str(), allow_methods.c_str(),
+                               optional_global_cors) < 0) {
+    return -EINVAL;
+  }
+
+  cors_exist = true;
+
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
+    XMLFormatter f;
+    RGWCORSRule_S3 *s3cors = static_cast<RGWCORSRule_S3 *>(&(*optional_global_cors));
+    ldpp_dout(this, 15) << "Read global RGWCORSRule";
+    s3cors->to_xml(f);
+    f.flush(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
+}
+
 /** CORS 6.2.6.
  * If any of the header field-names is not a ASCII case-insensitive match for
  * any of the values in list of headers do not set any additional headers and
@@ -1734,6 +1771,7 @@ static void get_cors_response_headers(const DoutPrefixProvider *dpp, RGWCORSRule
       if (!rule->is_header_allowed((*it).c_str(), (*it).length())) {
         ldpp_dout(dpp, 5) << "Header " << (*it) << " is not registered in this rule" << dendl;
       } else {
+        ldpp_dout(dpp, 20) << "Header " << (*it) << " is registered in this rule" << dendl;
         if (hdrs.length() > 0) hdrs.append(",");
         hdrs.append((*it));
       }
@@ -1757,15 +1795,14 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   }
 
   /* Custom: */
+  cors_exist = false;
   origin = orig;
-  int temp_op_ret = read_bucket_cors();
-  if (temp_op_ret < 0) {
-    op_ret = temp_op_ret;
-    return false;
-  }
 
+  const int read_global_cors_ret = read_global_cors();
+  const int temp_op_ret = read_bucket_cors();
   if (!cors_exist) {
-    ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket" << dendl;
+    ldpp_dout(this, 2) << "No global CORS or bucket CORS configuration set yet" << dendl;
+    op_ret = std::min(temp_op_ret, read_global_cors_ret);
     return false;
   }
 
@@ -1805,6 +1842,12 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   };
 
   if (is_allowed_to_generate_rule_cors_header(rule)) {
+    return true;
+  }
+
+  if (optional_global_cors.has_value() &&
+      optional_global_cors->matches(orig, req_meth, req_hdrs) &&
+      is_allowed_to_generate_rule_cors_header(&(*optional_global_cors))) {
     return true;
   }
 
@@ -6814,11 +6857,30 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   return 0;
 }
 
+int RGWOptionsCORS::validate_global_cors_request(RGWCORSRule *global_cors_rule) {
+  ldpp_dout(this, 20) << "Validating request with global CORS" << dendl;
+  rule = global_cors_rule;
+  if (!rule) {
+    ldpp_dout(this, 10) << "There is no global cors rule present" << dendl;
+    return -ENOENT;
+  }
+
+  if (!rule->matches(origin, req_meth, req_hdrs)) {
+    ldpp_dout(this, 10) << "Global CORS rule does not match origin " << origin << dendl;
+    return -ENOENT;
+  }
+
+  return 0;
+}
+
 void RGWOptionsCORS::execute(optional_yield y)
 {
   op_ret = read_bucket_cors();
-  if (op_ret < 0)
-    return;
+  int ret = read_global_cors();
+  if (ret < 0 && op_ret < 0) {
+      ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket nor globally" << dendl;
+      return;
+  }
 
   origin = s->info.env->get("HTTP_ORIGIN");
   if (!origin) {
@@ -6839,11 +6901,13 @@ void RGWOptionsCORS::execute(optional_yield y)
   }
   req_hdrs = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_HEADERS");
   op_ret = validate_cors_request(&bucket_cors);
-  if (!rule) {
+  if ((op_ret < 0 || !rule) && optional_global_cors.has_value()) {
+    op_ret = validate_global_cors_request(&(*optional_global_cors)) ;
+  }
+  if (op_ret < 0 || !rule) {
     origin = req_meth = NULL;
     return;
   }
-  return;
 }
 
 int RGWGetRequestPayment::verify_permission(optional_yield y)
@@ -8945,7 +9009,7 @@ void RGWPutBucketPolicy::send_response()
     set_req_state_err(s, op_ret);
   }
   dump_errno(s);
-  end_header(s);
+  end_header(s, this);
 }
 
 int RGWPutBucketPolicy::verify_permission(optional_yield y)

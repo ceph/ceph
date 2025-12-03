@@ -294,7 +294,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user_acl);
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
-    end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
+    end_header(s, this, NULL, NO_CONTENT_LENGTH, true);
   }
 
   if (! op_ret) {
@@ -393,7 +393,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_max_buckets(),
             s->user_acl);
     dump_errno(s);
-    end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
+    end_header(s, this, nullptr, s->formatter->get_len(), true);
   }
 
   if (sent_data || s->cct->_conf->rgw_swift_enforce_content_length) {

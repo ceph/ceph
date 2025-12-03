@@ -60,6 +60,7 @@ public:
   std::string& get_id() { return id; }
   uint32_t get_max_age() { return max_age; }
   uint8_t get_allowed_methods() { return allowed_methods; }
+  bool has_origin(const std::string& s) const { return allowed_origins.contains(s); }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -82,11 +83,13 @@ public:
     DECODE_FINISH(bl);
   }
   static void generate_test_instances(std::list<RGWCORSRule*>& o);
+  static int create_rule(const char *allow_origins, const char *allow_headers,
+                  const char *expose_headers, const char* allowed_methods, std::optional<RGWCORSRule>& rule, const char *max_age="");
   bool has_wildcard_origin();
   bool is_origin_present(const char *o);
   void format_exp_headers(std::string& s);
   void erase_origin_if_present(std::string& origin, bool *rule_empty);
-  void dump_origins(); 
+  void dump_origins();
   void dump(Formatter *f) const;
   bool is_header_allowed(const char *hdr, size_t len);
   bool matches_method(const char *req_meth);

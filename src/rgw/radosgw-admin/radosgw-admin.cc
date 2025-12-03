@@ -14,6 +14,8 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include "rgw_cors_s3.h"
+
 extern "C" {
 #include <liboath/oath.h>
 }
@@ -927,6 +929,7 @@ enum class OPT {
   ACCOUNT_STATS,
   ACCOUNT_RM,
   ACCOUNT_LIST,
+  GLOBAL_CORS_GET,
 };
 
 }
@@ -1193,6 +1196,7 @@ static SimpleCmd::Commands all_cmds = {
   { "account stats", OPT::ACCOUNT_STATS },
   { "account rm", OPT::ACCOUNT_RM },
   { "account list", OPT::ACCOUNT_LIST },
+  { "global-cors get", OPT::GLOBAL_CORS_GET},
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3829,6 +3833,12 @@ int main(int argc, const char **argv)
 
   std::optional<std::string> rgw_obj_fs; // radoslist field separator
 
+  // global CORS settings
+  std::optional<std::string> gcors_allow_origins;
+  std::optional<std::string> gcors_allow_methods;
+  std::optional<std::string> gcors_allow_headers;
+  std::optional<std::string> gcors_expose_headers;
+
   init_realm_param(cct.get(), realm_id, opt_realm_id, "rgw_realm_id");
   init_realm_param(cct.get(), zonegroup_id, opt_zonegroup_id, "rgw_zonegroup_id");
   init_realm_param(cct.get(), zone_id, opt_zone_id, "rgw_zone_id");
@@ -4395,6 +4405,14 @@ int main(int argc, const char **argv)
       enable_features.insert(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--disable-feature", (char*)NULL)) {
       disable_features.insert(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-origin", (char*)NULL)) {
+      gcors_allow_origins = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-methods", (char*)NULL)) {
+      gcors_allow_methods = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--allow-headers", (char*)NULL)) {
+      gcors_allow_headers = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--expose-headers", (char*)NULL)) {
+      gcors_expose_headers = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -12344,6 +12362,36 @@ next:
     }
   }
 
+  if (opt_cmd == OPT::GLOBAL_CORS_GET) {
+    string allow_origins, allow_headers, allow_methods, expose_headers;
+    ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
+    if (ret < 0 || allow_origins.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_origins config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
+    if (ret < 0 || allow_headers.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_headers config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
+    if (ret < 0 || allow_methods.empty()) {
+      cerr << "ERROR in OPT::GLOBAL_CORS_GET, no rgw_gcors_allow_methods config found or empty, ret=" << ret << std::endl;
+      return -EINVAL;
+    }
+    ret = g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
+    std::optional<RGWCORSRule> optional_global_cors;
+    if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(),
+          expose_headers.c_str(), allow_methods.c_str(), optional_global_cors) < 0) {
+      cerr << "ERROR: couldn't create RGWCORSRule from rgw_gcors_allow_origins=" << allow_origins <<
+		  ", rgw_gcors_allow_headers=" << allow_headers << ", rgw_gcors_allow_methods=" << allow_methods <<
+		  ", rgw_gcors_expose_headers=" << expose_headers << std::endl;
+      return -EINVAL;
+    }
+
+    optional_global_cors->dump(formatter.get());
+    formatter->flush(cout);
+  }
   return 0;
 }
 
