@@ -255,9 +255,7 @@ def _get_container_runtime_path(ctx: CephadmContext) -> str:
     if engine and getattr(engine, 'path', None):
         return engine.path
     return (
-        shutil.which('podman')
-        or shutil.which('docker')
-        or '/usr/bin/podman'
+        shutil.which('podman') or shutil.which('docker') or '/usr/bin/podman'
     )
 
 
