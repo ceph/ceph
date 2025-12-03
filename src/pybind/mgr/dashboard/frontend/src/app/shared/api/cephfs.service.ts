@@ -7,7 +7,6 @@ import { Observable } from 'rxjs';
 import { cdEncode } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
-import { Daemon } from '~/app/ceph/cephfs-mirroring/cephfs-mirroring.model';
 
 @cdEncode
 @Injectable({
@@ -128,7 +127,7 @@ export class CephfsService {
     return this.http.get<number[]>(`${this.baseUiURL}/used-pools`);
   }
 
-  listDaemonStatus(): Observable<Daemon[]> {
-    return this.http.get<Daemon[]>(`${this.baseURL}/mirror/daemon-status`);
+  listPeersStatus(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.baseUiURL}/mirror/peers-status`);
   }
 }

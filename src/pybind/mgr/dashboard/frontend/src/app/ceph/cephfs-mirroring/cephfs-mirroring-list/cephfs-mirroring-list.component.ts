@@ -6,7 +6,7 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
-import { Daemon, MirroringRow } from '../cephfs-mirroring.model';
+import { MirroringRow, Peer } from '../cephfs-mirroring.model';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -25,7 +25,7 @@ export class CephfsMirroringListComponent implements OnInit {
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   subject$ = new BehaviorSubject<MirroringRow[]>([]);
-  daemonStatus$: Observable<MirroringRow[]>;
+  daemonStatus$: Observable<Peer[]>;
   context: CdTableFetchDataContext;
   tableActions: CdTableAction[];
 
@@ -44,47 +44,13 @@ export class CephfsMirroringListComponent implements OnInit {
       { name: $localize`Snapshot directories`, prop: 'directory_count', flexGrow: 1 }
     ];
 
-    this.daemonStatus$ = this.subject$.pipe(
-      switchMap(() =>
-        this.cephfsService.listDaemonStatus()?.pipe(
-          switchMap((daemons: Daemon[]) => {
-            const result: MirroringRow[] = [];
-
-            daemons.forEach((d) => {
-              d.filesystems.forEach((fs) => {
-                if (!fs.peers || fs.peers.length === 0) {
-                  result.push({
-                    remote_cluster_name: '-',
-                    fs_name: fs.name,
-                    client_name: '-',
-                    directory_count: fs.directory_count,
-                    peerId: '-',
-                    id: `${d.daemon_id}-${fs.filesystem_id}`
-                  });
-                } else {
-                  fs.peers.forEach((peer) => {
-                    result.push({
-                      remote_cluster_name: peer.remote.cluster_name,
-                      fs_name: peer.remote.fs_name,
-                      client_name: peer.remote.client_name,
-                      directory_count: fs.directory_count,
-                      peerId: peer.uuid,
-                      id: `${d.daemon_id}-${fs.filesystem_id}`
-                    });
-                  });
-                }
-              });
-            });
-
-            return of(result);
-          }),
-          catchError(() => {
-            this.context?.error();
-            return of(null);
-          })
-        )
-      )
-    );
+    this.daemonStatus$ = this.subject$?.pipe(
+      switchMap(() => this.cephfsService.listPeersStatus()?.pipe(
+      catchError(() => {
+        this.context.error();
+        return of(null);
+      })
+    )));
 
     this.loadDaemonStatus();
   }
