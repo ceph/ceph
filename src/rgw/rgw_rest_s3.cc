@@ -4663,6 +4663,11 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
   if (cksum_algo != rgw::cksum::Type::none) {
     dump_header(s, "x-amz-checksum-algorithm", to_uc_string(cksum_algo));
+    if (cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+      dump_header(s, "x-amz-checksum-type", "COMPOSITE");
+    } else {
+      dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
+    }
   }
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
