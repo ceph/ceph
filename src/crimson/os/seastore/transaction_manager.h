@@ -1441,6 +1441,9 @@ private:
     extent_len_t partial_len,
     lextent_init_func_t<T> &&maybe_init) {
     LOG_PREFIX(TransactionManager::pin_to_extent);
+    SUBDEBUGT(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
+              t, pin, direct_partial_off, partial_len);
+
     static_assert(is_logical_type(T::TYPE));
     // must be user-oriented required by maybe_init
     assert(is_user_transaction(t.get_src()));
@@ -1450,8 +1453,13 @@ private:
       direct_partial_off = 0;
       partial_len = direct_length;
     }
-    SUBTRACET(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} ...",
-              t, pin, direct_partial_off, partial_len);
+    
+    // are we reading the entire extent?
+    bool is_full_extent = (direct_partial_off == 0 &&
+                           partial_len == direct_length);
+
+    SUBDEBUGT(seastore_tm, "getting absent extent from pin {}, 0x{:x}~0x{:x} full extent: {}...",
+              t, pin, direct_partial_off, partial_len, is_full_extent);
 
     auto ref = co_await cache->get_absent_extent<T>(
       t,
@@ -1476,36 +1484,23 @@ private:
       })
     );
 
-    if (ref->is_fully_loaded()) {
-      auto crc = ref->calc_crc32c();
-      SUBTRACET(
-        seastore_tm,
-        "got extent -- {}, chksum in the lba tree: 0x{:x}, actual chksum: 0x{:x}",
-        t,
-        *ref,
-        pin.get_checksum(),
-        crc);
-      bool inconsistent = false;
-      if (full_extent_integrity_check) {
-        inconsistent = (pin.get_checksum() != crc);
-      } else { // !full_extent_integrity_check: remapped extent may be skipped
-        inconsistent = !(pin.get_checksum() == 0 ||
-                         pin.get_checksum() == crc);
-      }
-      if (unlikely(inconsistent)) {
-        SUBERRORT(seastore_tm,
-          "extent checksum inconsistent, recorded: 0x{:x}, actual: 0x{:x}, {}",
-          t,
-          pin.get_checksum(),
-          crc,
-          *ref);
-        ceph_abort();
-      }
-    } else {
-      assert(!full_extent_integrity_check);
+    SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
+              t, *ref, ref->is_fully_loaded());
+
+    // Check integrity for full extent reads only.
+    // Avoid if this extent was fully loaded
+    // by another transaction.
+    // See: https://tracker.ceph.com/issues/73790
+    if (is_full_extent) {
+      assert(ref->is_fully_loaded());
+      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
     }
+
     co_return std::move(ref);
   }
+
+  void check_full_extent_integrity(
+    Transaction &t, uint32_t ref_crc, uint32_t pin_crc);
 
   /**
    * pin_to_extent_by_type
