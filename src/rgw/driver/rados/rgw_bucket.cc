@@ -2773,6 +2773,13 @@ class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
   }
 };
 
+class RGWVectorBucketMetadataHandler : public RGWBucketMetadataHandler {
+ public:
+  using RGWBucketMetadataHandler::RGWBucketMetadataHandler;
+
+  string get_type() override { return "vectorbucket"; }
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
   rgw::sal::Driver* driver;
   RGWSI_Zone* svc_zone{nullptr};
@@ -3127,6 +3134,13 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
     ldpp_dout(dpp, 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
     return 0;
   }
+};
+
+class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+ public:
+  using RGWBucketInstanceMetadataHandler::RGWBucketInstanceMetadataHandler;
+
+  string get_type() override { return "vectorbucket.instance"; }
 };
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -3661,6 +3675,27 @@ auto create_archive_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
   return std::make_unique<RGWArchiveBucketInstanceMetadataHandler>(driver, svc_zone,
                                                                    svc_bucket, svc_bi,
                                                                    svc_datalog);
+}
+
+auto create_vector_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketMetadataHandler>(
+      rados, svc_bucket, ctl_bucket);
+}
+
+auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
+                                             RGWSI_Zone* svc_zone,
+                                             RGWSI_Bucket* svc_bucket,
+                                             RGWSI_BucketIndex* svc_bi,
+                                             RGWDataChangesLog *svc_datalog)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
+                                                            svc_bucket, svc_bi,
+                                                            svc_datalog);
 }
 
 list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()

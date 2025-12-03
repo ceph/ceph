@@ -626,6 +626,5 @@ std::string RGWSI_VectorBucket_SObj::get_cache_key(const std::string& key) const
 int RGWSI_VectorBucket_SObj::complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
                      const std::string& section, const std::string& key,
                      const RGWObjVersionTracker* objv) {
-  // TODO: implement metadata sync for vector buckets
-  return 0;
+  return svc.mdlog->complete_entry(dpp, y, "vector"+section, key, objv);
 }

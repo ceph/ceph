@@ -175,7 +175,6 @@ class RGWMetadataManager;
 class RGWMetadataHandler;
 class RGWUserCtl;
 class RGWBucketCtl;
-class RGWVectorBucketCtl;
 
 template <class T>
 class RGWChainedCacheImpl;
@@ -185,6 +184,8 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataManager> mgr;
     std::unique_ptr<RGWMetadataHandler> bucket;
     std::unique_ptr<RGWMetadataHandler> bucket_instance;
+    std::unique_ptr<RGWMetadataHandler> vector_bucket;
+    std::unique_ptr<RGWMetadataHandler> vector_bucket_instance;
     std::unique_ptr<RGWMetadataHandler> user;
     std::unique_ptr<RGWMetadataHandler> otp;
     std::unique_ptr<RGWMetadataHandler> role;
@@ -219,8 +220,9 @@ struct RGWCtl {
     RGWMetadataManager *mgr{nullptr};
 
     RGWMetadataHandler *bucket{nullptr};
-    // TODO: do we need RGWMetadataHandler for vector buckets
     RGWMetadataHandler *bucket_instance{nullptr};
+    RGWMetadataHandler *vector_bucket{nullptr};
+    RGWMetadataHandler *vector_bucket_instance{nullptr};
     RGWMetadataHandler *user{nullptr};
     RGWMetadataHandler *otp{nullptr};
     RGWMetadataHandler *role{nullptr};
