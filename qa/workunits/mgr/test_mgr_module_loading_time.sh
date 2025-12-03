@@ -164,7 +164,7 @@ if [[ "$stat" != *"active, since"* ]]; then
 fi
 
 echo "Check mgr_status to ensure 'pending_modules' is populated with modules we expect..."
-expected='["balancer","cephadm","crash","dashboard","devicehealth","iostat","nfs","orchestrator","pg_autoscaler","progress","rbd_support","status","telemetry","volumes"]'
+expected='["balancer","cephadm","crash","devicehealth","iostat","nfs","orchestrator","pg_autoscaler","progress","rbd_support","status","telemetry","volumes"]'
 mgr_status=$("$ceph" tell mgr mgr_status | jq -c '.pending_modules')
 if [[ "$mgr_status" == "$expected" ]]; then
     echo "PASS: Expected modules are pending."
