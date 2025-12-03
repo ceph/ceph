@@ -210,6 +210,10 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 
   ldpp_dout(op, 2) << "init op" << dendl;
   ret = op->init_processing(y);
+  if (op->get_type() == RGW_OP_OPTIONS_CORS && ret == -EINVAL) {
+    ldpp_dout(op, 0) << "NOTICE: RGW_OP_OPTIONS_CORS shouldn't return -EINVAL in case we have a global CORS!" << dendl;
+    ret = 0;
+  }
   if (ret < 0) {
     return ret;
   }
@@ -351,7 +355,6 @@ int process_request(const RGWProcessEnv& penv,
   req->op = op;
   ldpp_dout(op, 10) << "op=" << typeid(*op).name() << " " << dendl;
   s->op_type = op->get_type();
-
   try {
     ldpp_dout(op, 2) << "verifying requester" << dendl;
     ret = op->verify_requester(*penv.auth_registry, yield);

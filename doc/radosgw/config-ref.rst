@@ -365,3 +365,16 @@ Cloud Restore feature currently enables the restoration of objects transitioned 
 .. confval:: rgw_restore_processor_period
 
 These values can be tuned based upon your specific workload to further increase the aggressiveness of restore processing. 
+
+Global CORS
+===========
+
+Configuration options that allows administrators to define a global CORS policy applied at the gateway level, affecting all buckets served by RGW.
+Previously, CORS (Cross-Origin Resource Sharing) support in RGW is limited to per-bucket configuration using the Get/PutBucketCors API, following the standard AWS S3 behavior.
+While this suffices for most use cases, it becomes a blocker when using browser-based tools that require interaction with gateway-wide resources, such as listing all buckets accessible to a user.
+These configuration options are necessary to enable CORS-based access for tools like S3 Browser, which need to list and create buckets across the gateway from a browser client.
+
+.. confval:: rgw_gcors_allow_origins
+.. confval:: rgw_gcors_allow_headers
+.. confval:: rgw_gcors_allow_methods
+.. confval:: rgw_gcors_expose_headers
