@@ -17487,6 +17487,9 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 
   Inode *in = fh->inode.get();
 
+  if (in->is_fscrypt_enabled())
+    return -EOPNOTSUPP;
+
   if (objecter->osdmap_pool_full(in->layout.pool_id) &&
       !(mode & FALLOC_FL_PUNCH_HOLE)) {
     return -ENOSPC;
