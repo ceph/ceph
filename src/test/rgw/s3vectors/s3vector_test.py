@@ -18,7 +18,9 @@ from . import(
     get_config_host,
     get_config_port,
     get_access_key,
-    get_secret_key
+    get_secret_key,
+    get_config_host2,
+    get_config_port2
     )
 
 
@@ -54,6 +56,35 @@ def gen_bucket_name():
 def connection(service_name='s3vectors'):
     hostname = get_config_host()
     port_no = get_config_port()
+    access_key = get_access_key()
+    secret_key = get_secret_key()
+    if port_no == 443 or port_no == 8443:
+        scheme = 'https://'
+    else:
+        scheme = 'http://'
+
+    if service_name == 's3vectors':
+        config = Config(signature_version='s3')
+    else:
+        config = None
+
+    client = boto3.client(service_name,
+            endpoint_url=scheme+hostname+':'+str(port_no),
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=config)
+
+    return client
+
+def connection2(service_name='s3vectors'):
+    hostname = get_config_host2()
+    if not hostname:
+        log.info("No second host configured")
+        return None
+    port_no = get_config_port2()
+    if not port_no:
+        log.info("No second port configured")
+        return None
     access_key = get_access_key()
     secret_key = get_secret_key()
     if port_no == 443 or port_no == 8443:
@@ -157,7 +188,7 @@ def test_delete_vector_bucket():
 
 
 @pytest.mark.vector_bucket_test
-def test_list_vector_bucket():
+def test_list_vector_buckets():
     conn = connection()
     bucket_name1 = gen_bucket_name()
     bucket_name2 = gen_bucket_name()
@@ -171,6 +202,64 @@ def test_list_vector_bucket():
     bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
     assert bucket_name1 in bucket_names
     assert bucket_name2 in bucket_names
+    # cleanup
+    _delete_all_vector_buckets(conn)
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_buckets_sync():
+    conn = connection()
+    conn2 = connection2()
+    if not conn2:
+        log.info("Skipping test_vector_buckets_sync since second connection is not configured")
+        return
+
+    # create buckets from the first connection
+    bucket_name1 = gen_bucket_name()
+    bucket_name2 = gen_bucket_name()
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name2)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in bucket_names
+    assert bucket_name2 in bucket_names
+    time.sleep(5)
+
+    # now check from the second connection
+    result = conn2.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets from conn2 result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in bucket_names
+    assert bucket_name2 in bucket_names
+
+    # create buckets from the 2nd connection
+    bucket_name3 = gen_bucket_name()
+    bucket_name4 = gen_bucket_name()
+    result = conn2.create_vector_bucket(vectorBucketName=bucket_name3)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn2.create_vector_bucket(vectorBucketName=bucket_name4)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn2.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets from conn2 result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name3 in bucket_names
+    assert bucket_name4 in bucket_names
+    time.sleep(5)
+
+    # now check from the first connection
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name3 in bucket_names
+    assert bucket_name4 in bucket_names
+
     # cleanup
     _delete_all_vector_buckets(conn)
 
