@@ -239,7 +239,7 @@ class SpecDescription(NamedTuple):
     spec: ServiceSpec
     rank_map: Optional[Dict[int, Dict[int, Optional[str]]]]
     created: datetime.datetime
-    deleted: Optional[datetime.datetime]
+    deleted: Optional[Tuple[datetime.datetime, bool]]
 
 
 class SpecStore():
@@ -250,7 +250,7 @@ class SpecStore():
         # service_name -> rank -> gen -> daemon_id
         self._rank_maps = {}    # type: Dict[str, Dict[int, Dict[int, Optional[str]]]]
         self.spec_created = {}  # type: Dict[str, datetime.datetime]
-        self.spec_deleted = {}  # type: Dict[str, datetime.datetime]
+        self.spec_deleted = {}  # type: Dict[str, Tuple[datetime.datetime, bool]]
         self.spec_preview = {}  # type: Dict[str, ServiceSpec]
         self._needs_configuration: Dict[str, bool] = {}
 
@@ -315,8 +315,11 @@ class SpecStore():
                 self.spec_created[service_name] = created
 
                 if 'deleted' in j:
-                    deleted = str_to_datetime(cast(str, j['deleted']))
-                    self.spec_deleted[service_name] = deleted
+                    deleted_ts = str_to_datetime(cast(str, j['deleted']))
+                    force_delete_data = cast(
+                        bool, j.get('force_delete_data', False)
+                    )
+                    self.spec_deleted[service_name] = (deleted_ts, force_delete_data)
 
                 if 'needs_configuration' in j:
                     self._needs_configuration[service_name] = cast(bool, j['needs_configuration'])
@@ -378,7 +381,9 @@ class SpecStore():
         if name in self._rank_maps:
             data['rank_map'] = self._rank_maps[name]
         if name in self.spec_deleted:
-            data['deleted'] = datetime_to_str(self.spec_deleted[name])
+            deleted_time, force_delete_data = self.spec_deleted[name]
+            data['deleted'] = datetime_to_str(deleted_time)
+            data['force_delete_data'] = force_delete_data
         if name in self._needs_configuration:
             data['needs_configuration'] = self._needs_configuration[name]
 
@@ -469,7 +474,7 @@ class SpecStore():
                         service_name=nvmeof_spec.service_name(),
                         user_made=True)
 
-    def rm(self, service_name: str) -> bool:
+    def rm(self, service_name: str, force_delete_data: bool = False) -> bool:
         if service_name not in self._specs:
             return False
 
@@ -477,7 +482,7 @@ class SpecStore():
             self.finally_rm(service_name)
             return True
 
-        self.spec_deleted[service_name] = datetime_now()
+        self.spec_deleted[service_name] = (datetime_now(), force_delete_data)
         self.save(self._specs[service_name], update_create=False)
         return True
 

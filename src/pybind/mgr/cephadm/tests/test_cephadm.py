@@ -1597,6 +1597,50 @@ class TestCephadm(object):
             out = wait(cephadm_module, c)
             assert out == ["Removed rgw.myrgw.myhost.myid from host 'test'"]
 
+    @pytest.mark.parametrize(
+        "daemon_name",
+        ["osd.424242", "prometheus.force_delete_data_regression"]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_remove_daemon_force_delete_data_passes_cephadm_flag(self, _run_cephadm, cephadm_module, daemon_name):
+        """Regression: force_delete_data must be passed as a keyword to _remove_daemon.
+
+        Otherwise the third positional arg is bound to no_post_remove and cephadm
+        never receives --force-delete-data (see _remove_daemon parameter order).
+        """
+        ls_json = json.dumps([
+            dict(
+                name=daemon_name,
+                style='cephadm',
+                fsid='fsid',
+                container_id='container_id',
+                version='version',
+                state='running',
+            )
+        ])
+
+        async def side_effect(host, entity, command, args, **kwargs):
+            if command == 'ls':
+                return [ls_json], '', 0
+            return ['{}'], '', 0
+
+        _run_cephadm.side_effect = side_effect
+
+        with with_host(cephadm_module, 'test'):
+            CephadmServe(cephadm_module)._refresh_host_daemons('test')
+            c = cephadm_module.list_daemons()
+            wait(cephadm_module, c)
+            c = cephadm_module.remove_daemons([daemon_name], force_delete_data=True)
+            wait(cephadm_module, c)
+
+        rm_daemon_calls = [
+            call for call in _run_cephadm.call_args_list
+            if len(call[0]) >= 4 and call[0][2] == 'rm-daemon'
+        ]
+        assert len(rm_daemon_calls) == 1
+        rm_args = rm_daemon_calls[0][0][3]
+        assert '--force-delete-data' in rm_args
+
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_remove_duplicate_osds(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))

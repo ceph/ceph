@@ -2494,13 +2494,14 @@ Then run the following:
             else:
                 size = spec.placement.get_target_count(self.cache.get_schedulable_hosts())
 
+            deleted_ts = self.spec_store.spec_deleted.get(nm)
             svc_desc = orchestrator.ServiceDescription(
                 spec=spec,
                 size=size,
                 running=0,
                 events=self.events.get_for_service(spec.service_name()),
                 created=self.spec_store.spec_created[nm],
-                deleted=self.spec_store.spec_deleted.get(nm, None),
+                deleted=deleted_ts[0] if deleted_ts else None,
                 virtual_ip=spec.get_virtual_ip(),
                 ports=spec.get_port_start(),
             )
@@ -2786,28 +2787,61 @@ Then run the following:
         return msg
 
     @handle_orch_error
-    def remove_daemons(self, names):
-        # type: (List[str]) -> List[str]
+    def remove_daemons(self,
+                       names: List[str],
+                       force_delete_data: bool = False) -> List[str]:
+        """
+        Remove specific daemon(s).
+
+        :param names: daemon names to remove
+        :param force: skip safety checks (PRECIOUS DATA warning)
+        :param force_delete_data: if True, request that cephadm delete the
+                                  daemon data instead of moving it under
+                                  <fsid>/removed/.
+        """
         args = []
         for host, dm in self.cache.daemons.items():
             for name in names:
                 if name in dm:
-                    args.append((name, host))
+                    args.append((name, host, force_delete_data))
         if not args:
             raise OrchestratorError('Unable to find daemon(s) %s' % (names), errno=errno.EINVAL)
         self.log.info('Remove daemons %s' % ' '.join([a[0] for a in args]))
         return self._remove_daemons(args)
 
     @handle_orch_error
-    def remove_service(self, service_name: str, force: bool = False) -> str:
-        self.log.info('Remove service %s' % service_name)
+    def remove_service(
+        self,
+        service_name: str,
+        force: bool = False,
+        force_delete_data: bool = False
+    ) -> str:
+        """
+        Remove a service.
+
+        :param service_name: service to remove
+        :param force: skip safety checks (e.g., leftover OSDs)
+        :param force_delete_data: intent to delete backing daemon data instead
+                                  of moving it under <fsid>/removed/.
+                                  (actual effect depends on lower layers)
+        """
+        self.log.info(
+            'Remove service %s (force=%s, force_delete_data=%s)' %
+            (service_name, force, force_delete_data)
+        )
         self._trigger_preview_refresh(service_name=service_name)
         if service_name in self.spec_store:
             if self.spec_store[service_name].spec.service_type in ('mon', 'mgr'):
-                return f'Unable to remove {service_name} service.\n' \
-                       f'Note, you might want to mark the {service_name} service as "unmanaged"'
+                return (
+                    f'Unable to remove {service_name} service.\n'
+                    f'Note, you might want to mark the {service_name} '
+                    f'service as "unmanaged"'
+                )
         else:
-            return f"Invalid service '{service_name}'. Use 'ceph orch ls' to list available services.\n"
+            return (
+                f"Invalid service '{service_name}'. Use 'ceph orch ls' to "
+                f"list available services.\n"
+            )
 
         # Report list of affected OSDs?
         if not force and service_name.startswith('osd.'):
@@ -2824,9 +2858,11 @@ Then run the following:
                 for h, ls in osds_msg.items():
                     msg += f'\thost {h}: {" ".join([f"osd.{id}" for id in ls])}'
                 raise OrchestratorError(
-                    f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
+                    f'If {service_name} is removed then the following OSDs '
+                    f'will remain, --force to proceed anyway\n{msg}'
+                )
 
-        found = self.spec_store.rm(service_name)
+        found = self.spec_store.rm(service_name, force_delete_data)
         if found and service_name.startswith('osd.'):
             self.spec_store.finally_rm(service_name)
         self._kick_serve_loop()
@@ -3244,8 +3280,10 @@ Then run the following:
         return previews_for_specs
 
     @forall_hosts
-    def _remove_daemons(self, name: str, host: str) -> str:
-        return CephadmServe(self)._remove_daemon(name, host)
+    def _remove_daemons(self, name: str, host: str, force_delete_data: bool = False) -> str:
+        # pass force_delete_data by keyword: third positional arg is no_post_remove
+        return CephadmServe(self)._remove_daemon(
+            name, host, force_delete_data=force_delete_data)
 
     def _check_pool_exists(self, pool: str, service_name: str) -> None:
         logger.info(f'Checking pool "{pool}" exists for service {service_name}')
