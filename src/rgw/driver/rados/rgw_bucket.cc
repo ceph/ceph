@@ -3138,7 +3138,10 @@ class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadata
 
 class RGWVectorBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
  public:
-  using RGWBucketInstanceMetadataHandler::RGWBucketInstanceMetadataHandler;
+   RGWVectorBucketInstanceMetadataHandler(rgw::sal::Driver* driver,
+                                   RGWSI_Zone* svc_zone,
+                                   RGWSI_Bucket* svc_bucket) :
+     RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
 
   string get_type() override { return "vectorbucket.instance"; }
 };
@@ -3688,14 +3691,11 @@ auto create_vector_bucket_metadata_handler(librados::Rados& rados,
 
 auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                              RGWSI_Zone* svc_zone,
-                                             RGWSI_Bucket* svc_bucket,
-                                             RGWSI_BucketIndex* svc_bi,
-                                             RGWDataChangesLog *svc_datalog)
+                                             RGWSI_Bucket* svc_bucket)
     -> std::unique_ptr<RGWMetadataHandler>
 {
   return std::make_unique<RGWVectorBucketInstanceMetadataHandler>(driver, svc_zone,
-                                                            svc_bucket, svc_bi,
-                                                            svc_datalog);
+                                                            svc_bucket);
 }
 
 list<RGWBucketEntryPoint> RGWBucketEntryPoint::generate_test_instances()

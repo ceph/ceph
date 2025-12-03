@@ -208,9 +208,7 @@ auto create_vector_bucket_metadata_handler(librados::Rados& rados,
 // vector bucket instance metadata handler factory
 auto create_vector_bucket_instance_metadata_handler(rgw::sal::Driver* driver,
                                              RGWSI_Zone* svc_zone,
-                                             RGWSI_Bucket* svc_bucket,
-                                             RGWSI_BucketIndex* svc_bi,
-                                             RGWDataChangesLog *svc_datalog)
+                                             RGWSI_Bucket* svc_bucket)
     -> std::unique_ptr<RGWMetadataHandler>;
 
 extern int rgw_remove_object(const DoutPrefixProvider* dpp,

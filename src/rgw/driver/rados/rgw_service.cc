@@ -370,14 +370,14 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
         driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
     meta.vector_bucket = sync_module->alloc_vector_bucket_meta_handler(rados, svc.vector_bucket, vector_bucket.get());
     meta.vector_bucket_instance = sync_module->alloc_vector_bucket_instance_meta_handler(
-        driver, svc.zone, svc.vector_bucket, svc.bi, svc.datalog_rados);
+        driver, svc.zone, svc.vector_bucket);
   } else {
     meta.bucket = create_bucket_metadata_handler(rados, svc.bucket, bucket.get());
     meta.bucket_instance = create_bucket_instance_metadata_handler(
         driver, svc.zone, svc.bucket, svc.bi, svc.datalog_rados);
     meta.vector_bucket = create_vector_bucket_metadata_handler(rados, svc.vector_bucket, vector_bucket.get());
     meta.vector_bucket_instance = create_vector_bucket_instance_metadata_handler(
-        driver, svc.zone, svc.vector_bucket, svc.bi, svc.datalog_rados);
+        driver, svc.zone, svc.vector_bucket);
   }
 
   meta.otp = rgwrados::otp::create_metadata_handler(

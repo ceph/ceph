@@ -77,9 +77,7 @@ public:
       -> std::unique_ptr<RGWMetadataHandler>;
   virtual auto alloc_vector_bucket_instance_meta_handler(rgw::sal::Driver* driver,
                                                   RGWSI_Zone* svc_zone,
-                                                  RGWSI_Bucket* svc_bucket,
-                                                  RGWSI_BucketIndex* svc_bi,
-                                                  RGWDataChangesLog *svc_datalog)
+                                                  RGWSI_Bucket* svc_bucket)
       -> std::unique_ptr<RGWMetadataHandler>;
 
   // indication whether the sync module start with full sync (default behavior)
