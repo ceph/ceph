@@ -3827,7 +3827,7 @@ class SMBSpec(ServiceSpec):
                 raise ValueError(f'{key} is not a valid service name')
 
     def _derive_cluster_uri(self, uri: str, objname: str) -> str:
-        if not uri.startswith('rados://'):
+        if not uri.startswith(('rados://', 'mem:')):
             raise ValueError('invalid uri scheme for cluster metadata')
         parts = uri[8:].split('/')
         parts[-1] = objname
