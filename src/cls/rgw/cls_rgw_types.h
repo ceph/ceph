@@ -211,9 +211,11 @@ struct rgw_bucket_dir_entry_meta {
   std::string user_data;
   std::string storage_class;
   bool appendable = false;
+  uint16_t cksum_algo;
+  uint8_t cksum_flags;
 
   void encode(ceph::buffer::list &bl) const {
-    ENCODE_START(7, 3, bl);
+    ENCODE_START(8, 3, bl);
     encode(category, bl);
     encode(size, bl);
     encode(mtime, bl);
@@ -225,6 +227,8 @@ struct rgw_bucket_dir_entry_meta {
     encode(user_data, bl);
     encode(storage_class, bl);
     encode(appendable, bl);
+    encode(cksum_algo, bl);
+    encode(cksum_flags, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -248,6 +252,10 @@ struct rgw_bucket_dir_entry_meta {
       decode(storage_class, bl);
     if (struct_v >= 7)
       decode(appendable, bl);
+    if (struct_v >= 8) {
+      decode(cksum_algo, bl);
+      decode(cksum_flags, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;

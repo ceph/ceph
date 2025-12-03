@@ -112,6 +112,8 @@ namespace rgw { namespace cksum {
       (FLAG_COMBINED|FLAG_COMPOSITE);
     static constexpr uint16_t FULL_OBJECT_MASK =
       (FLAG_COMBINED|FLAG_FULL_OBJECT);
+    static constexpr uint16_t CKSUM_TYPE_MASK =
+      (FLAG_COMPOSITE|FLAG_FULL_OBJECT);
 
     Type type;
     value_type digest;

@@ -2100,6 +2100,15 @@ void RGWListBucket_ObjStore_S3::send_response()
 	} else {
 	s->formatter->dump_string("Type", "Normal");
       }
+      rgw::cksum::Type cksum_algo{iter->meta.cksum_algo};
+      if (cksum_algo != rgw::cksum::Type::none) {
+        s->formatter->dump_string("ChecksumAlgorithm", rgw::cksum::to_uc_string(cksum_algo));
+        if (iter->meta.cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+          s->formatter->dump_string("ChecksumType", "COMPOSITE");
+        } else {
+          s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+        }
+      }
       // JSON has one extra section per element
       s->formatter->close_section();
     } // foreach obj
@@ -2245,6 +2254,15 @@ void RGWListBucket_ObjStore_S3v2::send_response()
         s->formatter->dump_string("Type", "Appendable");
       } else {
         s->formatter->dump_string("Type", "Normal");
+      }
+      rgw::cksum::Type cksum_algo{iter->meta.cksum_algo};
+      if (cksum_algo != rgw::cksum::Type::none) {
+        s->formatter->dump_string("ChecksumAlgorithm", rgw::cksum::to_uc_string(cksum_algo));
+        if (iter->meta.cksum_flags & rgw::cksum::Cksum::FLAG_COMPOSITE) {
+          s->formatter->dump_string("ChecksumType", "COMPOSITE");
+        } else {
+          s->formatter->dump_string("ChecksumType", "FULL_OBJECT");
+        }
       }
       s->formatter->close_section();
     }
