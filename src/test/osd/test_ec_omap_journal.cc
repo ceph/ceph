@@ -68,105 +68,129 @@ TEST(ecomapjournalentry, attributes_retained)
 TEST(ecomapjournal, new_journal_starts_empty)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   // A new journal should start empty
-  ASSERT_EQ(0u, journal.size());
+  ASSERT_EQ(0u, journal.size(test_hoid));
 }
 
 TEST(ecomapjournal, add_entry)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key2", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
-  journal.add_entry(entry1);
+  journal.add_entry(test_hoid, entry1);
 
   // The journal should contain the added entry
-  ASSERT_EQ(1u, journal.size());
-  ASSERT_TRUE(journal.begin()->version == entry1.version);
+  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_entry)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key3", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
   ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
   ECOmapJournalEntry entry3(eversion_t(1, 3), false, std::nullopt, {});
-  journal.add_entry(entry1);
-  journal.add_entry(entry2);
-  journal.add_entry(entry3);
-  bool res = journal.remove_entry(entry1);
+  journal.add_entry(test_hoid, entry1);
+  journal.add_entry(test_hoid, entry2);
+  journal.add_entry(test_hoid, entry3);
+  bool res = journal.remove_entry(test_hoid, entry1);
   ASSERT_TRUE(res);
 
   // The journal should have 2 entries in it after removal
-  ASSERT_EQ(2u, journal.size());
-  ASSERT_TRUE(journal.begin()->version == entry2.version);
-  ASSERT_TRUE((++journal.begin())->version == entry3.version);
+  ASSERT_EQ(2u, journal.size(test_hoid));
+  ASSERT_TRUE(journal.begin(test_hoid)->version == entry2.version);
+  ASSERT_TRUE((++journal.begin(test_hoid))->version == entry3.version);
 }
 
 TEST(ecomapjournal, remove_entry_by_version)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key4", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
   ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
   ECOmapJournalEntry entry3(eversion_t(1, 3), false, std::nullopt, {});
-  journal.add_entry(entry1);
-  journal.add_entry(entry2);
-  journal.add_entry(entry3);
-  bool res = journal.remove_entry_by_version(entry2.version);
+  journal.add_entry(test_hoid, entry1);
+  journal.add_entry(test_hoid, entry2);
+  journal.add_entry(test_hoid, entry3);
+  bool res = journal.remove_entry_by_version(test_hoid, entry2.version);
   ASSERT_TRUE(res);
 
   // The journal should have 2 entries in it after removal
-  ASSERT_EQ(2u, journal.size());
-  ASSERT_TRUE(journal.begin()->version == entry1.version);
-  ASSERT_TRUE((++journal.begin())->version == entry3.version);
+  ASSERT_EQ(2u, journal.size(test_hoid));
+  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
+  ASSERT_TRUE((++journal.begin(test_hoid))->version == entry3.version);
 }
 
-TEST(ecomapjournal, clear_journal)
+TEST(ecomapjournal, clear_one_journal)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key5", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
   ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
-  journal.add_entry(entry1);
-  journal.add_entry(entry2);
-  journal.clear();
+  journal.add_entry(test_hoid, entry1);
+  journal.add_entry(test_hoid, entry2);
+  journal.clear(test_hoid);
 
   // The journal should be empty after clearing
-  ASSERT_EQ(0u, journal.size());
+  ASSERT_EQ(0u, journal.size(test_hoid));
+}
+
+TEST(ecomapjournal, clear_all_journals)
+{
+  ECOmapJournal journal;
+  const hobject_t test_hoid1("test_key6", CEPH_NOSNAP, 1, 0, "test_namespace");
+  const hobject_t test_hoid2("test_key7", CEPH_NOSNAP, 1, 0, "test_namespace");
+
+  ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
+  ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
+  journal.add_entry(test_hoid1, entry1);
+  journal.add_entry(test_hoid2, entry2);
+  journal.clear_all();
+
+  // Both journals should be empty after clearing all
+  ASSERT_EQ(0u, journal.size(test_hoid1));
+  ASSERT_EQ(0u, journal.size(test_hoid2));
 }
 
 TEST(ecomapjournal, remove_bad_entry)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key6", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
   ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
-  journal.add_entry(entry1);
+  journal.add_entry(test_hoid, entry1);
 
   // Attempting to remove an entry not in the journal should fail
-  bool res = journal.remove_entry(entry2);
+  bool res = journal.remove_entry(test_hoid, entry2);
   ASSERT_FALSE(res);
 
   // The journal should still have 1 entry in it after failed removal
-  ASSERT_EQ(1u, journal.size());
-  ASSERT_TRUE(journal.begin()->version == entry1.version);
+  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
 }
 
 TEST(ecomapjournal, remove_bad_entry_by_version)
 {
   ECOmapJournal journal;
+  const hobject_t test_hoid("test_key7", CEPH_NOSNAP, 1, 0, "test_namespace");
 
   ECOmapJournalEntry entry1(eversion_t(1, 1), false, std::nullopt, {});
   ECOmapJournalEntry entry2(eversion_t(1, 2), false, std::nullopt, {});
-  journal.add_entry(entry1);
+  journal.add_entry(test_hoid, entry1);
 
   // Attempting to remove an entry not in the journal should fail
-  bool res = journal.remove_entry_by_version(entry2.version);
+  bool res = journal.remove_entry_by_version(test_hoid, entry2.version);
   ASSERT_FALSE(res);
 
   // The journal should still have 1 entry in it after failed removal
-  ASSERT_EQ(1u, journal.size());
-  ASSERT_TRUE(journal.begin()->version == entry1.version);
+  ASSERT_EQ(1u, journal.size(test_hoid));
+  ASSERT_TRUE(journal.begin(test_hoid)->version == entry1.version);
 }

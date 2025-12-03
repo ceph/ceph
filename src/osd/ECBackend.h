@@ -383,18 +383,19 @@ public:
     return object_size_to_shard_size(logical_size, shard_id);
   }
 
-  bool remove_ec_omap_journal_entry(const eversion_t version) {
-    return ec_omap_journal.remove_entry_by_version(version);
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version) {
+    return ec_omap_journal.remove_entry_by_version(hoid, version);
   }
 
   using UpdateMapType = std::map<std::string, std::optional<ceph::buffer::list>>;
   using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
 
-  std::tuple<UpdateMapType, RangeListType> get_journal_updates() {
+  std::tuple<UpdateMapType, RangeListType> get_journal_updates(const hobject_t &hoid) {
     std::map<std::string, std::optional<ceph::buffer::list>> update_map;
     std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> remove_ranges;
-    for (auto &entry : ec_omap_journal) {
-      if (entry.clear_omap) {
+    for (auto entry_iter = ec_omap_journal.begin(hoid);
+         entry_iter != ec_omap_journal.end(hoid); ++entry_iter) {
+      if (entry_iter->clear_omap) {
         // Clear all previous updates
         update_map.clear();
         // Mark entire range as removed
@@ -402,7 +403,7 @@ public:
         remove_ranges.push_back({std::nullopt, std::nullopt});
       }
 
-      for (auto &&update : entry.omap_updates) {
+      for (auto &&update : entry_iter->omap_updates) {
         OmapUpdateType type = update.first;
         auto iter = update.second.cbegin();
         switch (type) {
@@ -481,11 +482,12 @@ public:
     return {update_map, remove_ranges};
   }
   
-  std::optional<ceph::buffer::list> get_header_from_journal() {
+  std::optional<ceph::buffer::list> get_header_from_journal(const hobject_t &hoid) {
     std::optional<ceph::buffer::list> updated_header = std::nullopt;
-    for (auto &entry : ec_omap_journal) {
-      if (entry.omap_header) {
-        updated_header = entry.omap_header;
+    for (auto journal_it = ec_omap_journal.begin(hoid);
+         journal_it != ec_omap_journal.end(hoid); ++journal_it) {
+      if (journal_it->omap_header.has_value()) {
+        updated_header = journal_it->omap_header;
       }
     }
     return updated_header;
@@ -501,7 +503,7 @@ public:
     ObjectStore *store
   ) {
     // Updates in update_map take priority over removed_ranges
-    auto [update_map, removed_ranges] = get_journal_updates();
+    auto [update_map, removed_ranges] = get_journal_updates(oid.hobj);
 
     auto journal_it = update_map.begin();
     if (!start_from.seek_position.empty()) {

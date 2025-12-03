@@ -612,7 +612,7 @@ ECTransaction::Generate::Generate(PGTransaction &t,
       op.clear_omap,
       op.omap_header,
       op.omap_updates);
-    ec_omap_journal.add_entry(new_entry);
+    ec_omap_journal.add_entry(plan.hoid, new_entry);
   }
 
   /* It is essential for rollback that every shard with a non-empty transaction

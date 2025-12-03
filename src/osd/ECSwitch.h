@@ -425,25 +425,25 @@ public:
   bool get_is_ec_optimized() const final {
     return is_optimized();
   }
-  bool remove_ec_omap_journal_entry(const eversion_t version) override {
+  bool remove_ec_omap_journal_entry(const hobject_t &hoid, const eversion_t version) override {
     if (is_optimized()) {
-      return optimized.remove_ec_omap_journal_entry(version);
+      return optimized.remove_ec_omap_journal_entry(hoid, version);
     }
     dout(10) << "ECSwitch::remove_ec_omap_journal_entry called on legacy EC backend" << dendl;
     return false;
   }
 
-  std::tuple<UpdateMapType, RangeListType> get_journal_updates() override {
+  std::tuple<UpdateMapType, RangeListType> get_journal_updates(const hobject_t &hoid) override {
     if (is_optimized()) {
-      return optimized.get_journal_updates();
+      return optimized.get_journal_updates(hoid);
     }
     dout(10) << "ECSwitch::get_journal_updates called on legacy EC backend" << dendl;
     return {};
   }
   
-  std::optional<ceph::buffer::list> get_header_from_journal() override {
+  std::optional<ceph::buffer::list> get_header_from_journal(const hobject_t &hoid) override {
     if (is_optimized()) {
-      return optimized.get_header_from_journal();
+      return optimized.get_header_from_journal(hoid);
     }
     dout(10) << "ECSwitch::get_header_from_journal called on legacy EC backend" << dendl;
     return std::nullopt;

@@ -5,6 +5,7 @@
 #include <optional>
 #include <utility>
 #include <vector>
+#include <map>
 
 #include "include/buffer.h"
 #include "osd_types.h"
@@ -25,14 +26,27 @@ class ECOmapJournalEntry {
 
 class ECOmapJournal {
  private:
-  std::list<ECOmapJournalEntry> entries;
+  std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
+
+  // Function to get specific object's entries
+  std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
+
+  std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
+
  public:
   using const_iterator = std::list<ECOmapJournalEntry>::const_iterator;
-  void add_entry(const ECOmapJournalEntry &entry);
-  bool remove_entry(const ECOmapJournalEntry &entry);
-  bool remove_entry_by_version(const eversion_t version);
-  void clear();
-  int size() const;
-  const_iterator begin() const;
-  const_iterator end() const;
+
+  // Specific object operations
+  void add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+  bool remove_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry);
+  bool remove_entry_by_version(const hobject_t &hoid, const eversion_t version);
+  // Clear entries for a specific object
+  void clear(const hobject_t &hoid);
+  // Clear all entries
+  void clear_all();
+  // Entries for a specific object
+  int size(const hobject_t &hoid) const;
+  
+  const_iterator begin(const hobject_t &hoid);
+  const_iterator end(const hobject_t &hoid);
 };

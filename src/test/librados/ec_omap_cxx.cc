@@ -616,14 +616,17 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
 
   // 1. Freeze journal
   freeze_omap_journal();
+
   // 2. Insert keys to omap
   std::set<std::string> expected_keys;
+  std::set<std::string> returned_keys;
+
   write_omap_keys("frozen_journal_reads", 1, 50, expected_keys);
 
-  std::set<std::string> returned_keys;
   read_omap_keys("frozen_journal_reads", returned_keys);
 
   EXPECT_EQ(returned_keys, expected_keys);
+  std::cout << "Size of Returned Keys: " << returned_keys.size() << std::endl;
   
   // 3. Remove specific keys and remove a range
   ObjectWriteOperation write;
