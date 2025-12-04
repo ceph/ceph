@@ -653,8 +653,15 @@ TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
 
   EXPECT_EQ(returned_keys, expected_keys);
 
-  // 2. Wait for Journal to trim then Freeze journal
-  sleep(2);
+  // 2. Wait for Journal to trim then Freeze journal (Write should force a trim and garentee other shards have the data)
+  bufferlist bl_write;
+
+  bl_write.append("ceph");
+  ObjectWriteOperation write;
+  write.write(0, bl_write);
+  int ret = ioctx.operate("mixed_bluestore_journal_reads", &write);
+  EXPECT_EQ(ret, 0);
+
   freeze_omap_journal();
   
   // 3. Add some more keys (now some exist in Bluestore, some in journal)
@@ -669,10 +676,9 @@ TEST_P(LibRadosOmapECPP, MixedBluestoreJournalReads) {
   // 4. Remove keys that exist in Bluestore
   std::set<std::string> keys_to_remove;
 
-  ObjectWriteOperation write;
   write.omap_rm_range("key_011", "key_016");
 
-  int ret = ioctx.operate("mixed_bluestore_journal_reads", &write);
+  ret = ioctx.operate("mixed_bluestore_journal_reads", &write);
   EXPECT_EQ(ret, 0);
 
   auto it_start = expected_keys.lower_bound("key_011");
