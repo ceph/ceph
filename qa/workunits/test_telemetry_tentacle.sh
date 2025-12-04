@@ -30,8 +30,8 @@ ceph -s
 REPORTED_COLLECTIONS=$(ceph telemetry collection ls)
 NUM_REPORTED_COLLECTIONS=$(echo "$REPORTED_COLLECTIONS" | awk '/^NAME/ {flag=1; next} flag' | wc -l)
 KNOWN_COLLECTIONS=("basic_base" "basic_mds_metadata" "basic_pool_flags" "basic_pool_options_bluestore"
-                   "basic_pool_usage" "basic_rook_v01" "basic_usage_by_class" "crash_base"
-                   "device_base" "ident_base" "perf_memory_metrics" "perf_perf" "basic_stretch_cluster")
+	           "basic_pool_usage" "basic_rook_v01" "basic_usage_by_class" "crash_base" "device_base"
+		   "ident_base" "perf_memory_metrics" "perf_perf" "basic_stretch_cluster")
 
 if ! [[ $NUM_REPORTED_COLLECTIONS == "${#KNOWN_COLLECTIONS[@]}" ]];
 then
@@ -56,5 +56,8 @@ ceph telemetry preview-all
 ceph telemetry show
 ceph telemetry show-device
 ceph telemetry show-all
+
+# Opt out
+ceph telemetry off
 
 echo OK
