@@ -85,7 +85,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -315,7 +315,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -1016,7 +1016,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -1227,7 +1227,8 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview"
    ],
    "templating": {
       "list": [

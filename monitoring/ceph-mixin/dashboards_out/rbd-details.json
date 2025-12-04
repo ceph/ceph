@@ -362,7 +362,8 @@
    "schemaVersion": 16,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "protocol"
    ],
    "templating": {
       "list": [

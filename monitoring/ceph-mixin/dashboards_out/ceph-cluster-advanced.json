@@ -1366,7 +1366,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 5,
                   "scaleDistribution": {
                      "type": "linear"

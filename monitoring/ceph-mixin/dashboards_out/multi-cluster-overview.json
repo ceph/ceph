@@ -2006,7 +2006,8 @@
    "schemaVersion": 22,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview"
    ],
    "templating": {
       "list": [

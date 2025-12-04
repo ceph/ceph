@@ -876,7 +876,7 @@
                      }
                   ]
                },
-               "unit": "percentunit"
+               "unit": "percent"
             }
          },
          "gridPos": {
@@ -1038,7 +1038,7 @@
                      }
                   ]
                },
-               "unit": "percentunit"
+               "unit": "percent"
             }
          },
          "gridPos": {
@@ -4254,7 +4254,9 @@
    "schemaVersion": 38,
    "style": "dark",
    "tags": [
-      "ceph-mixin"
+      "ceph-mixin",
+      "overview",
+      "protocol"
    ],
    "templating": {
       "list": [
@@ -4312,7 +4314,7 @@
             },
             "hide": 2,
             "includeAll": true,
-            "label": "Name",
+            "label": "Filesystem",
             "multi": false,
             "name": "name",
             "options": [ ],

@@ -9,7 +9,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       'now-6h',
       '30s',
       38,
-      $._config.dashboardTags,
+      $._config.dashboardTags + ['overview', 'protocol'],
       ''
     )
     .addAnnotation(
@@ -37,7 +37,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         refresh=1,
         includeAll=true,
         sort=0,
-        label='Name',
+        label='Filesystem',
         regex='',
         hide=0,
         current={ selected: false, text: 'a', value: 'a' },
@@ -382,7 +382,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addGaugePanel(
         title='Metadata used (%)',
         datasource={ type: 'prometheus', uid: '${datasource}' },
-        unit='percentunit',
+        unit='percent',
         max=100,
         min=0,
         decimals=2,
@@ -441,7 +441,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addGaugePanel(
         title='Data used (%)',
         datasource={ type: 'prometheus', uid: '${datasource}' },
-        unit='percentunit',
+        unit='percent',
         max=100,
         min=0,
         decimals=2,

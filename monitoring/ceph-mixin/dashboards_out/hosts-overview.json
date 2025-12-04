@@ -576,7 +576,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -657,7 +657,7 @@
                      "viz": false
                   },
                   "lineInterpolation": "linear",
-                  "lineWidth": 0,
+                  "lineWidth": 1,
                   "pointSize": 0,
                   "scaleDistribution": {
                      "type": "linear"
@@ -809,7 +809,7 @@
             "multi": false,
             "name": "mds_hosts",
             "options": [ ],
-            "query": "label_values(ceph_mds_inodes{hostname, cluster=~\"$cluster\", })",
+            "query": "label_values(ceph_mds_inodes{cluster=~\"$cluster\", }, hostname)",
             "refresh": 1,
             "regex": "mds.(.*)",
             "sort": 1,
@@ -829,7 +829,7 @@
             "multi": false,
             "name": "rgw_hosts",
             "options": [ ],
-            "query": "label_values(ceph_rgw_metadata{hostname, cluster=~\"$cluster\", })",
+            "query": "label_values(ceph_rgw_metadata{cluster=~\"$cluster\", }, hostname)",
             "refresh": 1,
             "regex": "rgw.(.*)",
             "sort": 1,

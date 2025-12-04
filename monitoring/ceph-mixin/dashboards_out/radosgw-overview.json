@@ -1424,7 +1424,8 @@
    "style": "dark",
    "tags": [
       "ceph-mixin",
-      "overview"
+      "overview",
+      "protocol"
    ],
    "templating": {
       "list": [
