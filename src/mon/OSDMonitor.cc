@@ -4300,6 +4300,12 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   dout(0) << "finished migration of PG " << pg_t(pgid.ps(), pgid.pool()) << dendl;
   if (source_p.lowest_migrated_pg == 0 && source_p.migrating_pgs.empty()) {
     dout(0) << "Migration finished for pool " << pgid.pool() << dendl;
+    pg_pool_t target_p = *osdmap.get_pg_pool(source_p.migration_target.value()); //TODO need to check pending_inc first?
+    //If the default flag is not set and its not on crimson then reset the pool flag for nopgchange
+    if (!(g_conf()->osd_pool_default_flag_nopgchange) && !(target_p.has_flag(pg_pool_t::FLAG_CRIMSON))) {
+      target_p.unset_flag(pg_pool_t::FLAG_NOPGCHANGE);
+    }
+    target_p.pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::ON;
     target_p.migration_src.reset();
     target_p.last_change = pending_inc.epoch;
     pending_inc.new_pools[source_p.migration_target.value()] = target_p;
@@ -8493,6 +8499,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     spi->migration_target = pool;
     pi->migration_src = source_pool_id.value();
     pi->migration_target.reset();
+
+    spi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+    pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
+    spi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
+    pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
 
     uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num());
 
@@ -13795,6 +13806,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         err = -EINVAL;
         goto reply_no_propose;
       }
+
+
     }
 
     int64_t default_pg_num = (source_pool) ? source_pool->get_pg_num() : 0;
