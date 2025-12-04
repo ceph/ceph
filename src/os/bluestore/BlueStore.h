@@ -57,7 +57,6 @@
 
 #include "bluestore_types.h"
 #include "bluestore_common.h"
-#include "BlueFSCache.h"
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
@@ -2335,7 +2334,7 @@ public:
   // members
 private:
   BlueFS *bluefs = nullptr;
-  std::shared_ptr<LRUCache> bluefscache = nullptr;
+  std::shared_ptr<BlueFSLRUCache> bluefscache = nullptr;
   bluefs_layout_t bluefs_layout;
   utime_t next_dump_on_bluefs_alloc_failure;
 

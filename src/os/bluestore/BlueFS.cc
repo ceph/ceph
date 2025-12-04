@@ -15,7 +15,6 @@
 #include "boost/algorithm/string.hpp" 
 #include "bluestore_common.h"
 #include "BlueFS.h"
-#include "BlueFSCache.h"
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/debug.h"

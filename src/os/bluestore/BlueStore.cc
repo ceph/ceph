@@ -62,7 +62,6 @@
 #include "Writer.h"
 #include "Compression.h"
 #include "BlueAdmin.h"
-#include "BlueFSCache.h"
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
