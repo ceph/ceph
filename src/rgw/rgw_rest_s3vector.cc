@@ -201,6 +201,7 @@ class RGWS3VectorPutVectors : public RGWS3VectorBase {
 
 class RGWS3VectorGetVectors : public RGWS3VectorBase {
   rgw::s3vector::get_vectors_t configuration;
+  rgw::s3vector::get_vectors_reply_t reply;
 
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector GetVectors" << dendl;
@@ -221,7 +222,23 @@ class RGWS3VectorGetVectors : public RGWS3VectorBase {
   }
 
   void execute(optional_yield y) override {
-    op_ret = rgw::s3vector::get_vectors(configuration, this, y);
+    op_ret = rgw::s3vector::get_vectors(configuration, this, y, reply);
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/json");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    const auto f = s->formatter;
+    reply.dump(f);
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 

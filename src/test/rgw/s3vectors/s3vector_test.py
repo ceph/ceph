@@ -272,8 +272,9 @@ def test_get_vectors():
     vector_ids = ['vec-' + str(i) for i in range(10)]
     result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name, keys=vector_ids)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info('get_vectors result: %s', result)
     # not implemented yet
-    #assert len(result['Vectors']) == 10
+    #assert len(result['vectors']) == 10
     # cleanup
     _ = conn.delete_vector_bucket(vectorBucketName=bucket_name)
 

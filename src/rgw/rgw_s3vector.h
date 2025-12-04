@@ -44,13 +44,29 @@ struct create_index_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    // TODO
+    encode(data_type, bl);
+    encode(dimension, bl);
+    encode(static_cast<uint8_t>(distance_metric), bl);
+    encode(index_name, bl);
+    encode(non_filterable_metadata_keys, bl);
+    encode(vector_bucket_arn, bl);
+    encode(vector_bucket_name, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    // TODO
+    decode(data_type, bl);
+    decode(dimension, bl);
+    {
+      uint8_t dm;
+      decode(dm, bl);
+      distance_metric = static_cast<DistanceMetric>(dm);
+    }
+    decode(index_name, bl);
+    decode(non_filterable_metadata_keys, bl);
+    decode(vector_bucket_arn, bl);
+    decode(vector_bucket_name, bl);
     DECODE_FINISH(bl);
   }
 
@@ -263,6 +279,18 @@ struct get_vectors_t {
   void decode_json(JSONObj* obj);
 };
 WRITE_CLASS_ENCODER(get_vectors_t)
+
+/*
+  {
+    "vectors": [vector_item_t]
+  }
+*/
+struct get_vectors_reply_t {
+  std::vector<vector_item_t> vectors;
+
+  void dump(ceph::Formatter* f) const;
+  void decode_json(JSONObj* obj);
+};
 
 /*
   {
@@ -558,7 +586,7 @@ int delete_index(const delete_index_t& configuration, DoutPrefixProvider* dpp, o
 int delete_vector_bucket(const delete_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int delete_vector_bucket_policy(const delete_vector_bucket_policy_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int put_vectors(const put_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
-int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
+int get_vectors(const get_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply);
 int list_vectors(const list_vectors_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int list_vector_buckets(const list_vector_buckets_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
 int get_vector_bucket(const get_vector_bucket_t& configuration, DoutPrefixProvider* dpp, optional_yield y);
