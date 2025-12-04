@@ -576,8 +576,6 @@ class PgScrubber : public ScrubPgIF,
 
   virtual void _scrub_clear_state() {}
 
-  utime_t m_scrub_reg_stamp;		///< stamp we registered for
-
   /// the sub-object that manages this PG's scheduling parameters.
   /// An Optional instead of a regular member, as we wish to directly
   /// control the order of construction/destruction.
