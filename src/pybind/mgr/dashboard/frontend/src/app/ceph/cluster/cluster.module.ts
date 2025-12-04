@@ -16,7 +16,8 @@ import {
   ListModule,
   ToggletipModule,
   IconModule,
-  TagModule
+  TagModule,
+  SelectModule
 } from 'carbon-components-angular';
 
 import {
@@ -114,7 +115,8 @@ import { MultiClusterDetailsComponent } from './multi-cluster/multi-cluster-deta
     ListModule,
     ToggletipModule,
     IconModule,
-    TagModule
+    TagModule,
+    SelectModule
   ],
   declarations: [
     MonitorComponent,
