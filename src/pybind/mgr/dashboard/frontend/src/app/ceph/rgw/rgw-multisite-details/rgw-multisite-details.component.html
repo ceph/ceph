@@ -80,16 +80,16 @@
                 <i [ngClass]="node?.data?.icon"></i>
                 {{ node?.data?.name }}
               </span>
-              <span class="badge badge-success me-2"
-                    *ngIf="node?.data?.is_default">
+              <cds-tag class="tag-success me-2"
+                       *ngIf="node?.data?.is_default">
                   default
-              </span>
-              <span class="badge badge-warning me-2"
-                    *ngIf="node?.data?.is_master"> master </span>
-              <span class="badge badge-warning me-2"
-                    *ngIf="node?.data?.secondary_zone">
+            </cds-tag>
+              <cds-tag class="tag-warning me-2"
+                       *ngIf="node?.data?.is_master"> master </cds-tag>
+              <cds-tag class="tag-warning me-2"
+                       *ngIf="node?.data?.secondary_zone">
                 secondary-zone
-              </span>
+            </cds-tag>
             </div>
             <div class="btn-group align-inline-btns"
                  [ngStyle]="{'visibility': activeNodeId === node?.data?.id ? 'visible' : 'hidden'}"

@@ -6,8 +6,10 @@
   </h4>
   <h4 *ngIf="cardType === 'zone'"
       class="text-center mt-4 mb-0">
-    <i [ngClass]="icons.deploy"></i>
-    <span class="badge badge-info">{{ cardTitle }}</span>
+    <svg [cdsIcon]="icons.deploy"
+         [size]="icons.size20"
+         ></svg>
+    <cds-tag class="tag-info">{{ cardTitle }}</cds-tag>
   </h4>
   <h5 *ngIf="cardType === 'syncCards'"
       class="text-center card-title">

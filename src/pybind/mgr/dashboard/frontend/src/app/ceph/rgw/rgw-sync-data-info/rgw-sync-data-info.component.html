@@ -1,7 +1,8 @@
 <ul class="me-2">
   <ng-template #upToDateTpl>
-    <li class="badge badge-success"
-        i18n>Up to Date</li>
+    <li i18n>
+      <cds-tag class="tag-success">Up to Date</cds-tag>
+    </li>
   </ng-template>
   <cds-toggletip  [dropShadow]="true"
                   [align]="align">
@@ -46,6 +47,9 @@
       i18n>
       Last Synced:
   </li>
-  <li class="badge badge-info"
-      *ngIf="zone.timestamp; else upToDateTpl">{{ zone.timestamp | relativeDate }}</li>
+  <li *ngIf="zone.timestamp; else upToDateTpl">
+    <cds-tag class="tag-info">
+      {{ zone.timestamp | relativeDate }}
+    </cds-tag>
+  </li>
 </ul>

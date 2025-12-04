@@ -11,10 +11,9 @@
       <i [class]="node?.cdIcon"></i>
       <span>{{ node?.name }}</span>
       &nbsp;
-      <span class="badge"
-            [ngClass]="{'badge-success': ['logged_in'].includes(node?.status), 'badge-danger': ['logged_out'].includes(node?.status)}">
+      <cds-tag [class]="{'tag-success': ['logged_in'].includes(node?.status), 'tag-danger': ['logged_out'].includes(node?.status)}">
         {{ node?.status }}
-      </span>
+      </cds-tag>
     </ng-template>
   </div>
 
