@@ -49,6 +49,11 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       this,
       "print compression stats, per collection");
     ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore show sharding ",
+      this,
+      "print RocksDB sharding");
+    ceph_assert(r == 0);
   }
 }
 
@@ -177,6 +182,16 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     return 0;
+  } else if (command == "bluestore show sharding") {
+    int r = 0;
+    std::string sharding;
+    if (store.get_db_sharding(sharding)) {
+      out.append(sharding + '\n');
+    } else {
+      r = -EFAULT;
+      ss << "Failed to get sharding" << std::endl;
+    }
+    return r;
   } else {
     ss << "Invalid command" << std::endl;
     r = -ENOSYS;
