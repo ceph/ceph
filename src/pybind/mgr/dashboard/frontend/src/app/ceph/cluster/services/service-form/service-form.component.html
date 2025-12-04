@@ -1203,6 +1203,28 @@
             </div>
           </div>
         </ng-container>
+
+      <!-- RGW QAT Compression -->
+        @if(serviceForm.controls.service_type.value === 'rgw') {
+        <div class="form-item"
+             formGroupName="qat">
+            @for(property of rgwQatList; track property) {
+            @if(property === 'compression') {
+          <cds-select formControlName="{{property}}"
+                      name="{{property}}"
+                      label="QAT Compression"
+                      id="{{property}}"
+                      helperText="QAT compression is an optional parameter which enables user to set comoression in hardware or software stack. If set to None, the compression will be removed altogether."
+                      i18n-helperText>
+            <option *ngFor="let option of rgwQatOptions"
+                    [value]="option"
+                    i18n>{{ qatDisplayMap[option] }} </option>
+          </cds-select>
+            }
+            }
+          </div>
+        }
+
         <!-- Grafana -->
         <ng-container *ngIf="serviceForm.controls.service_type.value === 'grafana'">
           <div class="form-group row">
