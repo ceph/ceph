@@ -3375,6 +3375,13 @@ public:
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) override;
 
+  virtual int omap_get_values2(
+    CollectionHandle& c,         ///< [in] Collection containing oid
+    const ghobject_t& oid,       ///< [in] Object containing omap
+    InputStrSet& keys,           ///< [in] Keys to get
+    OutputStr2BListMap& out      ///< [out] Returned keys and values
+  ) override;
+
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
     CollectionHandle &c,                ///< [in] Collection containing oid

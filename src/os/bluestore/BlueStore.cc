@@ -13738,7 +13738,19 @@ int BlueStore::omap_get_values(
   map<string, bufferlist> *out ///< [out] Returned keys and values
   )
 {
-  Collection *c = static_cast<Collection *>(c_.get());
+  InputStrSetStlImpl keys_adapter(&keys);
+  OutputStr2BListMapStlImpl out_adapter(out);
+  return omap_get_values2(c_, oid, keys_adapter, out_adapter);
+}
+
+int BlueStore::omap_get_values2(
+  CollectionHandle& c_,        ///< [in] Collection containing oid
+  const ghobject_t& oid,       ///< [in] Object containing omap
+  InputStrSet& keys,           ///< [in] Keys to get
+  OutputStr2BListMap& out      ///< [out] Returned keys and values
+)
+{
+  Collection* c = static_cast<Collection*>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
@@ -13759,15 +13771,17 @@ int BlueStore::omap_get_values(
     const string& prefix = o->get_omap_prefix();
     o->get_omap_key(string(), &final_key);
     size_t base_key_len = final_key.size();
-    for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
+    bool has_more = keys.begin();
+    while (has_more) {
       final_key.resize(base_key_len); // keep prefix
-      final_key += *p;
+      final_key += keys.get_current();
       bufferlist val;
       if (db->get(prefix, final_key, &val) >= 0) {
 	dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
-		 << " -> " << *p << dendl;
-	out->insert(make_pair(*p, val));
+	         << " -> " << keys.get_current() << dendl;
+	out.emplace(keys.get_current(), val);
       }
+      has_more = keys.next();
     }
   }
  out:

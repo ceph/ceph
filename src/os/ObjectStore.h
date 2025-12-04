@@ -25,6 +25,7 @@
 #include "common/RefCountedObj.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
+#include "common/input_output_adapters.h"
 #include "os/Transaction.h"
 
 #include <errno.h>
@@ -728,6 +729,15 @@ public:
     const std::set<std::string> &keys,     ///< [in] Keys to get
     std::map<std::string, ceph::buffer::list> *out ///< [out] Returned keys and values
     ) = 0;
+
+  virtual int omap_get_values2(
+    CollectionHandle& c,         ///< [in] Collection containing oid
+    const ghobject_t& oid,       ///< [in] Object containing omap
+    InputStrSet& keys,           ///< [in] Keys to get
+    OutputStr2BListMap& out      ///< [out] Returned keys and values
+  ) {
+    return -1;
+  }
 
   /// Filters keys into out which are defined on oid
   virtual int omap_check_keys(

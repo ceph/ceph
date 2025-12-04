@@ -5455,13 +5455,15 @@ static string list_keys(const map<string, V>& m) {
 }
 
 template<typename T>
-static string list_entries(const T& m) {
+string list_entries(T& m) {
   string s;
-  for (typename T::const_iterator itr = m.begin(); itr != m.end(); ++itr) {
+  bool has_more = m.begin();
+  while (has_more) {
     if (!s.empty()) {
       s.push_back(',');
     }
-    s.append(*itr);
+    s.append(m.get_current());
+    has_more = m.next();
   }
   return s;
 }
@@ -7855,21 +7857,19 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
       ++ctx->num_read;
       {
-	set<string> keys_to_get;
-	try {
-	  decode(keys_to_get, bp);
-	}
-	catch (ceph::buffer::error& e) {
-	  result = -EINVAL;
-	  tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, "???");
-	  goto fail;
-	}
+	InputStrSetEncodedImpl keys_to_get(bp);
+	OutputStr2BListMapEncodedImpl out_adapter(&osd_op.outdata);
 	tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, list_entries(keys_to_get).c_str());
-	map<string, bufferlist> out;
 	if (oi.is_omap()) {
-	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
+	  osd->store->omap_get_values2(ch, ghobject_t(soid), keys_to_get, out_adapter);
+	  if (keys_to_get.had_decode_error()) {
+	    result = -EINVAL;
+	    tracepoint(osd, do_osd_op_pre_omapgetvalsbykeys, soid.oid.name.c_str(), soid.snap.val, "???");
+	    goto fail;
+	  }
 	} // else return empty omap entries
-	encode(out, osd_op.outdata);
+	dout(0) << __func__ << dendl;
+	out_adapter.finalize();
 	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
