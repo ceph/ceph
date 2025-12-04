@@ -3187,9 +3187,12 @@ public:
   int expand_devices(std::ostream& out);
   std::string get_device_path(unsigned id);
 
+  bool get_db_sharding(std::string& res_sharding);
+
   int dump_bluefs_sizes(std::ostream& out);
   void trim_free_space(const std::string& type, std::ostream& outss);
   static int zap_device(CephContext* cct, const std::string& dev);
+
 
 public:
   int statfs(struct store_statfs_t *buf,
