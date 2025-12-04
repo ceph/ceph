@@ -407,4 +407,13 @@ namespace rgw { namespace cksum {
     return ChecksumTypeResult(Cksum::FLAG_COMPOSITE, "COMPOSITE");
   } /* get_checksum_type */
 
+  static inline ChecksumTypeResult
+  get_part_checksum_type(const Cksum& cksum) {
+    if (cksum.flags & Cksum::FLAG_COMPOSITE) {
+      return ChecksumTypeResult(Cksum::FLAG_COMPOSITE, "COMPOSITE");
+    } else {
+      return ChecksumTypeResult(Cksum::FLAG_CKSUM_NONE, "FULL_OBJECT");
+    }
+  } /* get_part_checksum_type */
+
 }} /* namespace */
