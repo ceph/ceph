@@ -1776,6 +1776,9 @@ int PeerReplayer::RemoteSync::get_entry(std::string *epath, struct ceph_statx *s
                << dendl;
             return r;
           }
+	  //TODO - This is a quick fix to not break the loop early in the caller. If not r = 0 and epath="", the caller breaks the loop.
+          *epath = _epath;
+          *stx = cstx;
 	  return r; // New directory added to stack
         } else {
           push_dataq_entry(SyncEntry(_epath, cstx));
