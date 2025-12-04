@@ -184,7 +184,7 @@ class SplitOp {
   virtual std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) = 0;
   virtual void assemble_buffer_read(bufferlist &bl_out, int ops_index) = 0;
   virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
-  virtual bool is_erasure() = 0;
+  virtual bool version_mismatch() = 0;
   void init(OSDOp &op, int ops_index);
 
   Objecter::Op *orig_op;
@@ -212,9 +212,7 @@ class ECSplitOp : public SplitOp{
   std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) override;
   void assemble_buffer_read(bufferlist &bl_out, int ops_index) override;
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  bool is_erasure() override {
-    return true;
-  }
+  bool version_mismatch() override;
   ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count);
   ~ECSplitOp() {
     complete();
@@ -227,9 +225,7 @@ class ReplicaSplitOp : public SplitOp {
   std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) override;
   void assemble_buffer_read(bufferlist &bl_out, int ops_index) override;
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  bool is_erasure() override {
-    return false;
-  };
+  bool version_mismatch() override;
   ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size);
   ~ReplicaSplitOp() {
     complete();

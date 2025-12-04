@@ -246,13 +246,16 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
 
 int SplitOp::assemble_rc() {
   int rc = 0;
+  bool eagain = false;
 
   // Sub-reads which use a single op should re-use original op.
   ceph_assert(sub_reads.size() > 1);
 
   // Pick the first bad RC, otherwise return 0.
   for (auto & [shard, sub_read] : sub_reads) {
-    if (sub_read.rc < 0) {
+    if (sub_read.rc == -EAGAIN) {
+      eagain = true;
+    } else if (sub_read.rc < 0) {
       return sub_read.rc;
     }
 
@@ -263,10 +266,13 @@ int SplitOp::assemble_rc() {
     }
   }
 
-  if (rc < 0 || !is_erasure()) {
-    return rc;
+  if (eagain || version_mismatch()) {
+    return -EAGAIN;
   }
+  return rc;
+}
 
+bool ECSplitOp::version_mismatch() {
   // First we need to decode the version list from the primary.
   ceph_assert(primary_shard);
   ceph_assert(sub_reads.at(*primary_shard).internal_version.has_value());
@@ -287,22 +293,51 @@ int SplitOp::assemble_rc() {
     if (!ref_vers.contains(shard)) {
       ldout(cct, 20) << __func__ << ": "
          << "Reference shard version missing, failing split op." << dendl;
-      return -EIO;
+      return true;
     }
     if (!shard_vers.contains(shard)) {
       ldout(cct, 20) << __func__ << ": "
          << "Shard version missing, failing split op." << dendl;
-      return -EIO;
+      return true;
     }
     if (ref_vers.at(shard) != shard_vers.at(shard)) {
       ldout(cct, 20) << __func__ << ": "
                << "Primary version (" << ref_vers.at(shard) << ") != "
                << "shard version (" << shard_vers.at(shard) <<") "
                << "for shard " << shard << dendl;
-      return -EIO;
+      return true;
     }
   }
-  return rc;
+  return false;
+}
+
+// On a replica, no shard maintains a list of "reference" versions, so this
+// simply checks that all versions are the same.
+bool ReplicaSplitOp::version_mismatch() {
+  std::optional<eversion_t> ref_version;
+
+  // OSD does not understand shards, so fills in invalid entry.
+  shard_id_t shard(-1);
+
+  for (auto & [_, sub_read] : sub_reads) {
+    ceph_assert(sub_read.internal_version.has_value());
+    std::map<shard_id_t, eversion_t> shard_vers;
+    decode(shard_vers, sub_read.internal_version->bl);
+
+    if (!shard_vers.contains(shard)) {
+      ldout(cct, 20) << __func__ << ": "
+         << "Shard version missing, failing split op." << dendl;
+      return true;
+    }
+
+    if (!ref_version) {
+      ref_version = shard_vers.at(shard);
+    } else if (shard_vers.at(shard) != *ref_version) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 void SplitOp::complete() {
@@ -310,6 +345,9 @@ void SplitOp::complete() {
     return;
   }
   ldout(cct, 20) << __func__ << " entry this=" << this << dendl;
+
+  bool complete = true;
+  boost::system::error_code handler_error;
 
   int rc = assemble_rc();
   if (rc >= 0) {
@@ -385,14 +423,32 @@ void SplitOp::complete() {
       orig_op->outbl = 0;
     }
 
-    objecter.handle_osd_op_reply2(orig_op, out_ops);
-
+    handler_error = objecter.handle_osd_op_reply2(orig_op, out_ops);
     ldout(cct, DBG_LVL) << __func__ << " success this=" << this << " rc=" << rc << dendl;
-    Objecter::Op::complete(std::move(orig_op->onfinish), osdcode(rc), rc, objecter.service.get_executor());
-    objecter._finish_op(orig_op, rc);
-  } else {
+  } else if (rc == -EAGAIN) {
     ldout(cct, DBG_LVL) << __func__ << " retry this=" << this << " rc=" << rc << dendl;
     objecter.op_post_redrive(orig_op);
+    complete = false;
+  }
+
+
+  if (complete) {
+    decltype(orig_op->onfinish) onfinish;
+    if (orig_op->has_completion()) {
+      onfinish = std::move(orig_op->onfinish);
+      orig_op->onfinish = nullptr;
+    }
+
+    objecter._finish_op(orig_op, rc);
+    if (Objecter::Op::has_completion(onfinish)) {
+      if (rc == 0 && handler_error) {
+        Objecter::Op::complete(std::move(onfinish), handler_error, -EIO, objecter.service.get_executor());
+      } else if (handler_error) {
+        Objecter::Op::complete(std::move(onfinish), handler_error, rc, objecter.service.get_executor());
+      } else {
+        Objecter::Op::complete(std::move(onfinish), osdcode(rc), rc, objecter.service.get_executor());
+      }
+    }
   }
 }
 
