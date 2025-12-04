@@ -8,6 +8,8 @@
 * DASHBOARD: Removed the older landing page which was deprecated in Quincy.
   Admins can no longer enable the older, deprecated landing page layout by
   adjusting FEATURE_TOGGLE_DASHBOARD.
+* DASHBOARD: RGW Service form updated to take input regarding QAT compression.
+  - QAT compression is an optional field which can be set to 'Hardware' or 'Software' by selecting options from provided dropdwon. If 'None' is selected, compression is removed altogether.
 * CephFS: The `peer_add` command is deprecated in favor of the `peer_bootstrap` command.
 
 >=20.0.0
