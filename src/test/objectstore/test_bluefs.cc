@@ -2362,6 +2362,155 @@ TEST(BlueFS, test_69481_truncate_asserts) {
   fs.umount();
 }
 
+TEST(FileWriter, get_write_data) {
+  size_t block_size = 32;
+  BlueFS::FileWriter fw(block_size);
+
+  bufferlist bl;
+
+  ASSERT_EQ(fw.get_write_offset(), 0);
+  ASSERT_EQ(fw.get_pos(), 0);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append and flush full page
+  bufferlist bl1;
+  bl1.append(std::string(block_size, 'a'));
+  bl = bl1;
+  fw.append(bl1);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size);
+  ASSERT_EQ(fw.get_pos(), block_size);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append and flush full page once again
+  bufferlist bl2;
+  bl2.append(std::string(block_size, 'b'));
+  bl = bl2;
+  fw.append(bl2);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 2), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 2);
+  ASSERT_EQ(fw.get_pos(), block_size * 2);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append full page and flush it in two pieces
+  bufferlist bl3;
+  bl3.append(std::string(block_size, 'c'));
+  bl = bl3;
+
+  fw.append(bl3);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 2 + 1), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 3); // ?????
+  ASSERT_EQ(fw.get_pos(), block_size * 2 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), block_size - 1);
+
+  bl.clear();
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 3), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 3);
+  ASSERT_EQ(fw.get_pos(), block_size * 3);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append half page, flush 1 byte,
+  // append the remaining half and flush till the end
+  bufferlist bl4;
+  bl4.append(std::string(block_size / 2, 'd'));
+  bl = bl4;
+  bl.append_zero(block_size / 2);
+
+  fw.append(bl4);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 3 + 1), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 3);
+  ASSERT_EQ(fw.get_pos(), block_size * 3 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), block_size /2  - 1);
+
+  bl4.append(std::string(block_size / 2, 'd'));
+  bl.clear();
+  bl.append(std::string(block_size, 'd'));
+
+  fw.append(bl4);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 4), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  // append 10 bytes, flush 2 bytes,
+  // append 12 bytes, flush 2 bytes,
+  // flush 18 bytes
+  // append 12 bytes, flush 9 bytes
+  // flush 2 bytes
+  // flush 1 bytes
+
+  bufferlist bl5;
+  bl5.append(std::string(10, 'e'));
+  bl = bl5;
+  bl.append_zero(block_size - bl5.length());
+
+  fw.append(bl5);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 4 + 2), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 2);
+  ASSERT_EQ(fw.get_buffer_length(), 8);
+
+  bl5.append(std::string(12, 'f'));
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append_zero(block_size - bl.length());
+
+  fw.append(bl5);
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 4 + 4), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 4);
+  ASSERT_EQ(fw.get_buffer_length(), 18);
+
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append_zero(block_size - bl.length());
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 4 + 22), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 4);
+  ASSERT_EQ(fw.get_pos(), block_size * 4 + 22);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+
+  bl5.append(std::string(12, 'g'));
+  fw.append(bl5);
+
+  bl.clear();
+  bl.append(std::string(10, 'e'));
+  bl.append(std::string(12, 'f'));
+  bl.append(std::string(10, 'g'));
+
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 5 - 1), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 - 1);
+  ASSERT_EQ(fw.get_buffer_length(), 3);
+
+  bl.clear();
+  bl.append(std::string(2, 'g'));
+  bl.append_zero(block_size - 2);
+
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 5 + 1), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 + 1);
+  ASSERT_EQ(fw.get_buffer_length(), 1);
+
+  ASSERT_EQ(fw.get_write_data(g_ceph_context, block_size * 5 + 2), bl);
+
+  ASSERT_EQ(fw.get_write_offset(), block_size * 5);
+  ASSERT_EQ(fw.get_pos(), block_size * 5 + 2);
+  ASSERT_EQ(fw.get_buffer_length(), 0);
+}
+
 TEST(bluefs_locked_extents_t, basics) {
   const uint64_t M = 1 << 20;
   {

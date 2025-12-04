@@ -440,6 +440,14 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
+    // Intended for UT only
+    FileWriter(uint32_t super_block_size)
+      : super_block_size(super_block_size),
+        buffer_appender(buffer.get_page_aligned_appender(
+                         g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)), envelope_head_filler() {
+      iocv.fill(nullptr);
+      dirty_devs.fill(false);
+    }
     FileWriter(FileRef f, uint32_t super_block_size)
       : file(std::move(f)),
         super_block_size(super_block_size),
@@ -454,7 +462,9 @@ public:
     }
     // NOTE: caller must call BlueFS::close_writer()
     ~FileWriter() {
-      --file->num_writers;
+      if (file) {
+        --file->num_writers;
+      }
       for (unsigned i = 0; i < MAX_BDEV; ++i) {
         delete iocv[i];
       }
