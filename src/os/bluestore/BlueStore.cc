@@ -8211,6 +8211,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
   }
   dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << kv_dir_fn << " options " << options << dendl;
+  KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
+  if (it) {
+    it->seek_to_first();
+    dout(10) << __func__ << " Listing L start" << dendl;
+    while (it->valid()) {
+      dout(10) << __func__ << " " << pretty_binary_string(it->key()) << dendl;
+      it->next();
+    }
+    dout(10) << __func__ << " Listing L end" << dendl;
+  }
   return 0;
 }
 
