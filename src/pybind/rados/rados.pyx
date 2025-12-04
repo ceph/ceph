@@ -39,7 +39,6 @@ cdef extern from "Python.h":
     PyObject *PyBytes_FromStringAndSize(char *v, Py_ssize_t len) except NULL
     char* PyBytes_AsString(PyObject *string) except NULL
     int _PyBytes_Resize(PyObject **string, Py_ssize_t newsize) except -1
-    void PyEval_InitThreads()
 
 LIBRADOS_OP_FLAG_EXCL = _LIBRADOS_OP_FLAG_EXCL
 LIBRADOS_OP_FLAG_FAILOK = _LIBRADOS_OP_FLAG_FAILOK
@@ -394,7 +393,6 @@ cdef class Rados(object):
     # NOTE(sileht): attributes declared in .pyd
 
     def __init__(self, *args, **kwargs):
-        PyEval_InitThreads()
         self.__setup(*args, **kwargs)
 
     NO_CONF_FILE = -1
