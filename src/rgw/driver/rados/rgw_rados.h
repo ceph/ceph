@@ -173,11 +173,6 @@ class RGWObjectCtx {
   std::map<rgw_obj, RGWObjStateManifest> objs_state;
 public:
   explicit RGWObjectCtx(rgw::sal::Driver* _driver) : driver(_driver) {}
-  RGWObjectCtx(RGWObjectCtx& _o) {
-    std::unique_lock wl{lock};
-    this->driver = _o.driver;
-    this->objs_state = _o.objs_state;
-  }
 
   rgw::sal::Driver* get_driver() {
     return driver;
@@ -191,6 +186,15 @@ public:
   void invalidate(const rgw_obj& obj);
 };
 
+// Enforce at compile time that RGWObjectCtx is neither copyable nor movable
+static_assert(!std::is_copy_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-constructed");
+static_assert(!std::is_copy_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be copy-assigned");
+static_assert(!std::is_move_constructible<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-constructed");
+static_assert(!std::is_move_assignable<RGWObjectCtx>::value,
+              "RGWObjectCtx must not be move-assigned");
 
 struct RGWRawObjState {
   rgw_raw_obj obj;
