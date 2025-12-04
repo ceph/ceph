@@ -33,7 +33,10 @@ Cache::Cache(
   : epm(epm),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
-       "seastore_cachepin_size_pershard")))
+       "seastore_cachepin_size_pershard"))),
+    full_extent_integrity_check(
+      crimson::common::get_conf<bool>(
+        "seastore_full_integrity_check"))
 {
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
@@ -1089,8 +1092,6 @@ void Cache::check_full_extent_integrity(
     pin_crc,
     ref_crc);
 
-  auto full_extent_integrity_check = false; // todo pass
-  //  crimson::common::get_conf<bool>("seastore_full_integrity_check")
   bool inconsistent = false;
   if (full_extent_integrity_check) {
     inconsistent = (pin_crc != ref_crc);

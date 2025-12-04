@@ -1690,6 +1690,8 @@ private:
 
   ExtentPinboardRef pinboard;
 
+  bool full_extent_integrity_check = false;
+
   btree_cursor_stats_t cursor_stats;
   struct invalid_trans_efforts_t {
     io_stat_t read;
@@ -1890,8 +1892,7 @@ private:
   /// Introspect transaction when it is being destructed
   void on_transaction_destruct(Transaction& t);
 
-  static void check_full_extent_integrity(
-    uint32_t ref_crc, uint32_t pin_crc);
+  void check_full_extent_integrity(uint32_t ref_crc, uint32_t pin_crc);
 
   /// Read the extent in range offset~length,
   /// must be called exclusively for an extent,
