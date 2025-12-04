@@ -294,7 +294,7 @@ class DataProcessorFactory {
  * The Driver is the base abstraction of the SAL layer.  It represents a base storage
  * mechanism, or a intermediate stacking layer.  There is a single instance of a given
  * Driver per RGW, and this Driver mediates all access to it's backing.
- *
+ *  
  * A Driver contains, loosely, @a User, @a Bucket, and @a Object entities.  The @a Object
  * contains data, and it's associated metadata.  The @a Bucket contains Objects, and
  * metadata about the bucket.  Both Buckets and Objects are owned by a @a User, which is

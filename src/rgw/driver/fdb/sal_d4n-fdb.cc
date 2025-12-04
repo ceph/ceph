@@ -1,17 +1,16 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 sts=2 expandtab ft=cpp
-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab ft=cpp
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2022 Red Hat, Inc.
- *
+ * Copyright (C) 2025 International Business Machines Corp. (IBM)
+ *      
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
  * License version 2.1, as published by the Free Software
- * Foundation. See file COPYING.
+ * Foundation.  See file COPYING.
  *
- */
+*/
 
 #include "sal_d4n-fdb.h"
 
@@ -19,10 +18,9 @@
 
 extern "C" {
 
-rgw::sal::Driver* newD4N_FDB_Filter(CephContext* cct, rgw::sal::Driver* /*next*/, boost::asio::io_context& /*io_context*/, bool admin)
+rgw::sal::Driver* newD4N_FDB_Filter(CephContext *cct, const DoutPrefixProvider *dpp, rgw::sal::Driver *next_driver)
 {
- // auto *d = new my::type::D4NFilterDriver();
- return nullptr;
+ return new rgw::sal::d4n::FDB_FilterDriver(next_driver);
 }
 
 }

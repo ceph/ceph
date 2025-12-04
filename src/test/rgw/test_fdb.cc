@@ -540,7 +540,7 @@ TEST_CASE("generator filters", "[fdb][rgw]")
                         in_view | std::views::elements<1> 
                        };
                };
- 
+
   auto in_kvs = kvgen() | std::ranges::to<std::vector>();
 
   auto [keys, values] = unzip(in_kvs);
