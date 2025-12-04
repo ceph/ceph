@@ -469,7 +469,7 @@ private:
   bool preprocess_pg_migrated_pool(MonOpRequestRef op);
   bool prepare_pg_migrated_pool(MonOpRequestRef op);
 
-  bool target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_pg,
+  bool target_pg_migrating(const std::set<pg_t> &migrating_pgs, const pg_t &source_pg,
                            int source_pgnum, int target_pgnum);
   uint64_t calculate_migrating_pg_count(int source_pgnum, int target_pgnum);
 

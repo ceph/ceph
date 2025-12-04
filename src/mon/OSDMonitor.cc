@@ -4317,17 +4317,16 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
     if (num_pgs_to_add > source_p.lowest_migrated_pg) {
       num_pgs_to_add = source_p.lowest_migrated_pg;
     }
-    for (int i = 0; i < num_pgs_to_add; i++) {
-      if (target_pg_migrating(source_p.migrating_pgs, pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()),
-                              source_p.get_pg_num(), target_p.get_pg_num())) {
-        dout(0) << "PG" << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) <<
-                " already in target PG set, doing nothing until next PG completes migration" << dendl;
-        break;
-      } else {
-        dout(0) << "Starting migration of PG " << pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()) << dendl;
-        source_p.migrating_pgs.emplace(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
-        source_p.lowest_migrated_pg -= 1;
+    for (unsigned i = 0; i < num_pgs_to_add; i++) {
+      pg_t source_pg(pg_t(source_p.lowest_migrated_pg - 1, pgid.pool()));
+      if (source_p.get_pg_num() > target_p.get_pg_num()) {
+        if (target_pg_migrating(source_p.migrating_pgs, source_pg, source_p.get_pg_num(), target_p.get_pg_num())) {
+          break;
+        }
       }
+      dout(0) << "Starting migration of PG " << source_pg << dendl;
+      source_p.migrating_pgs.emplace(source_pg);
+      source_p.lowest_migrated_pg -= 1;
     }
   }
 
@@ -4338,18 +4337,30 @@ bool OSDMonitor::prepare_pg_migrated_pool(MonOpRequestRef op)
   return true;
 }
 
-bool OSDMonitor::target_pg_migrating(std::set<pg_t> migrating_pgs, pg_t source_pg, int source_pgnum, int target_pgnum)
+bool OSDMonitor::target_pg_migrating(const std::set<pg_t> &migrating_pgs,
+                                     const pg_t &source_pg,
+                                     int source_pgnum,
+                                     int target_pgnum)
 {
-  pg_t new_target(source_pg);
-  source_pg.is_merge_source(source_pgnum, target_pgnum, &new_target);
-
-  for (const auto& pg : migrating_pgs) {
-    pg_t target(pg);
-    pg.is_merge_source(source_pgnum, target_pgnum, &target);
-    if (target.m_seed == new_target.m_seed) return true;
+  bool target_pg_migrating = false;
+  if (!migrating_pgs.empty()) {
+    auto min = migrating_pgs.begin()->m_seed;
+    auto max = migrating_pgs.rbegin()->m_seed;
+    pg_t target_pg(source_pg);
+    source_pg.is_merge_source(source_pgnum, target_pgnum, &target_pg);
+    std::set<pg_t> children;
+    target_pg.is_split(target_pgnum, source_pgnum, &children);
+    for (const auto& child : children) {
+      if (child == source_pg) continue;
+      if ((child.m_seed >= min) && (child.m_seed <= max)) {
+        if (migrating_pgs.count(child)) {
+          target_pg_migrating = true;
+          break;
+        }
+      }
+    }
   }
-
-  return false;
+  return target_pg_migrating;
 }
 
 uint64_t OSDMonitor::calculate_migrating_pg_count(int source_pgnum, int target_pgnum)
@@ -8508,10 +8519,9 @@ int OSDMonitor::prepare_new_pool(string& name,
     uint64_t migrating_pgs_size = calculate_migrating_pg_count(spi->get_pg_num(), pi->get_pg_num());
 
     for (unsigned int i = spi->get_pg_num() - 1; i >= (spi->get_pg_num() - migrating_pgs_size); i--) {
+      pg_t source_pg(pg_t(i, source_pool_id.value()));
       if (spi->get_pg_num() > pi->get_pg_num()) {
-        if (target_pg_migrating(spi->migrating_pgs, pg_t(i, source_pool_id.value()),
-                                spi->get_pg_num(), pi->get_pg_num())) {
-          dout(0) << "PG" << i << " already in target PG set, breaking" << dendl;
+        if (target_pg_migrating(spi->migrating_pgs, source_pg, spi->get_pg_num(), pi->get_pg_num())) {
           break;
         }
       }
