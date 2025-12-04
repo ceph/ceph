@@ -433,22 +433,6 @@ public:
     return false;
   }
 
-  std::tuple<UpdateMapType, RangeListType> get_journal_updates(const hobject_t &hoid) override {
-    if (is_optimized()) {
-      return optimized.get_journal_updates(hoid);
-    }
-    dout(10) << "ECSwitch::get_journal_updates called on legacy EC backend" << dendl;
-    return {};
-  }
-  
-  std::optional<ceph::buffer::list> get_header_from_journal(const hobject_t &hoid) override {
-    if (is_optimized()) {
-      return optimized.get_header_from_journal(hoid);
-    }
-    dout(10) << "ECSwitch::get_header_from_journal called on legacy EC backend" << dendl;
-    return std::nullopt;
-  }
-
   int omap_iterate (
     ObjectStore::CollectionHandle &c_, ///< [in] collection
     const ghobject_t &oid, ///< [in] object
@@ -459,6 +443,55 @@ public:
       return optimized.omap_iterate(c_, oid, start_from, f, store);
     }
     dout(10) << "ECSwitch::omap_iterate called on legacy EC backend" << dendl;
+    return 0;
+  }
+
+  int omap_get_values(
+    ObjectStore::CollectionHandle &c_, ///< [in] collection
+    const ghobject_t &oid,              ///< [in] object
+    const std::set<std::string> &keys,  ///< [in] keys to get
+    std::map<std::string, ceph::buffer::list> *out ///< [out] returned key/values
+  ) override {
+    if (is_optimized()) {
+      return optimized.omap_get_values(c_, oid, keys, out, store);
+    }
+    dout(10) << "ECSwitch::omap_get_values called on legacy EC backend" << dendl;
+    return 0;
+  }
+  int omap_get_header(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    bool allow_eio ///< [in] don't assert on eio
+  ) override {
+    if (is_optimized()) {
+      return optimized.omap_get_header(c_, oid, header, allow_eio, store);
+    }
+    dout(10) << "ECSwitch::omap_get_header called on legacy EC backend" << dendl;
+    return 0;
+  }
+  int omap_get(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    ceph::buffer::list *header,      ///< [out] omap header
+    std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+  ) override {
+    if (is_optimized()) {
+      return optimized.omap_get(c_, oid, header, out, store);
+    }
+    dout(10) << "ECSwitch::omap_get called on legacy EC backend" << dendl;
+    return 0;
+  }
+  int omap_check_keys(
+    ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    const std::set<std::string> &keys, ///< [in] Keys to check
+    std::set<std::string> *out         ///< [out] Subset of keys defined on oid
+  ) override {
+    if (is_optimized()) {
+      return optimized.omap_check_keys(c_, oid, keys, out, store);
+    }
+    dout(10) << "ECSwitch::omap_check_keys called on legacy EC backend" << dendl;
     return 0;
   }
 };

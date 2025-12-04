@@ -284,6 +284,38 @@ int ReplicatedBackend::omap_iterate (
 ) {
   return store->omap_iterate(c_, oid, start_from, f);
 }
+int ReplicatedBackend::omap_get_values(
+  ObjectStore::CollectionHandle &c_, ///< [in] collection
+  const ghobject_t &oid,              ///< [in] object
+  const std::set<std::string> &keys,  ///< [in] keys to get
+  std::map<std::string, ceph::buffer::list> *out ///< [out] returned key/values
+) {
+  return store->omap_get_values(c_, oid, keys, out);
+}
+int ReplicatedBackend::omap_get_header(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  bool allow_eio ///< [in] don't assert on eio
+) {
+  return store->omap_get_header(c_, oid, header, allow_eio);
+}
+int ReplicatedBackend::omap_get(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
+) {
+  return store->omap_get(c_, oid, header, out);
+}
+int ReplicatedBackend::omap_check_keys(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const std::set<std::string> &keys, ///< [in] Keys to check
+  std::set<std::string> *out         ///< [out] Subset of keys defined on oid
+) {
+  return store->omap_check_keys(c_, oid, keys, out);
+}
 
 int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,

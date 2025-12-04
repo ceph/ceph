@@ -1298,109 +1298,6 @@ bool ECBackend::remove_ec_omap_journal_entry(const hobject_t &hoid, const eversi
   return ec_omap_journal.remove_entry_by_version(hoid, version);
 }
 
-std::tuple<ECBackend::UpdateMapType, ECBackend::RangeListType> ECBackend::get_journal_updates(const hobject_t &hoid) {
-  std::map<std::string, std::optional<ceph::buffer::list>> update_map;
-  std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> remove_ranges;
-  for (auto entry_iter = ec_omap_journal.begin(hoid);
-        entry_iter != ec_omap_journal.end(hoid); ++entry_iter) {
-    if (entry_iter->clear_omap) {
-      // Clear all previous updates
-      update_map.clear();
-      // Mark entire range as removed
-      remove_ranges.clear();
-      remove_ranges.push_back({std::nullopt, std::nullopt});
-    }
-
-    for (auto &&update : entry_iter->omap_updates) {
-      OmapUpdateType type = update.first;
-      auto iter = update.second.cbegin();
-      switch (type) {
-        case OmapUpdateType::Insert: {
-          std::map<std::string, ceph::buffer::list> vals;
-          decode(vals, iter);
-          // Insert key value pairs into update_map
-          for (auto it = vals.begin(); it != vals.end(); ++it) {
-            const auto &key = it->first;
-            const auto &val = it->second;
-            update_map[key] = val;
-          }
-          break;
-        }
-        case OmapUpdateType::Remove: {
-          std::set<std::string> keys;
-          decode(keys, iter);
-          // Mark keys in update_map as removed
-          for (const auto &key : keys) {
-            update_map[key] = std::nullopt;
-          }
-          break;
-        }
-        case OmapUpdateType::RemoveRange: {
-          std::string key_begin, key_end;
-          decode(key_begin, iter);
-          decode(key_end, iter);
-          
-          // Add range to remove_ranges, merging overlapping ranges
-          std::optional<std::string> start = key_begin;
-          std::optional<std::string> end = key_end;
-          auto it = remove_ranges.begin();
-          bool inserted = false;
-          while (it != remove_ranges.end()) {
-            // Current range is to the left of new range
-            if (it->second && *it->second < *start) {
-              it++;
-              continue;
-            }
-            // Current range is to the right of new range
-            if (it->first && (!end || *end < *it->first)) {
-              remove_ranges.insert(it, {start, end});
-              inserted = true;
-              break;
-            }
-            // Ranges overlap, merge them
-            if (!it->first || (start && *it->first < *start)) {
-              start = it->first;
-            }
-            if (!it->second) {
-              end = std::nullopt;
-            } else if (end && *it->second > *end) {
-              end = it->second;
-            }
-            it = remove_ranges.erase(it);
-          }
-          if (!inserted) {
-            remove_ranges.emplace_back(start, end);
-          }
-
-          // Erase keys in update_map that fall within the removed range
-          auto map_it = update_map.lower_bound(key_begin);
-          while (map_it != update_map.end()) {
-            if (map_it->first >= key_end) {
-              break;
-            }
-            map_it = update_map.erase(map_it);
-          }
-          break;
-        }
-        default:
-          ceph_abort_msg("Unknown OmapUpdateType");
-      }
-    }
-  }
-  return {update_map, remove_ranges};
-}
-
-std::optional<ceph::buffer::list> ECBackend::get_header_from_journal(const hobject_t &hoid) {
-  std::optional<ceph::buffer::list> updated_header = std::nullopt;
-  for (auto journal_it = ec_omap_journal.begin(hoid);
-      journal_it != ec_omap_journal.end(hoid); ++journal_it) {
-    if (journal_it->omap_header.has_value()) {
-      updated_header = journal_it->omap_header;
-    }
-  }
-  return updated_header;
-}
-
 int ECBackend::omap_iterate (
   ObjectStore::CollectionHandle &c_, ///< [in] collection
   const ghobject_t &oid, ///< [in] object
@@ -1409,7 +1306,7 @@ int ECBackend::omap_iterate (
   ObjectStore *store
 ) {
   // Updates in update_map take priority over removed_ranges
-  auto [update_map, removed_ranges] = get_journal_updates(oid.hobj);
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
 
   auto journal_it = update_map.begin();
   if (!start_from.seek_position.empty()) {
@@ -1462,28 +1359,142 @@ int ECBackend::omap_iterate (
   return ret == ObjectStore::omap_iter_ret_t::STOP ? 0 : 1;
 }
 
-bool ECBackend::should_be_removed(
-    const std::list<std::pair<std::optional<std::string>,
-                              std::optional<std::string>>>& removed_ranges,
-    std::string_view key) 
-  {
-    for (const auto& range : removed_ranges) {
-      const auto& start_opt = range.first;
-      const auto& end_opt = range.second;
-
-      bool start_ok = true;
-      bool end_ok = true;
-
-      if (start_opt.has_value()) {
-        start_ok = key >= start_opt.value();
+int ECBackend::omap_get_values(
+  ObjectStore::CollectionHandle &c_, ///< [in] collection
+  const ghobject_t &oid,              ///< [in] object
+  const std::set<std::string> &keys,  ///< [in] keys to get
+  std::map<std::string, ceph::buffer::list> *out, ///< [out] returned key/values
+  ObjectStore *store
+) {
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  
+  set<string> keys_still_to_get;
+  for (auto &key : keys) {
+    if (update_map.find(key) != update_map.end()) {
+      if (!update_map[key].has_value()) {
+        continue;
       }
-      if (end_opt.has_value()) {
-        end_ok = key < end_opt.value();
-      }
-
-      if (start_ok && end_ok) {
-        return true;
-      }
+      (*out)[key] = *(update_map[key]);
+    } else if (PrimaryLogPG::should_be_removed(removed_ranges, key)) {
+      continue;
+    } else {
+      keys_still_to_get.insert(key);
     }
-    return false;
   }
+  store->omap_get_values(c_, oid, keys_still_to_get, out);
+
+  return 0;
+}
+
+int ECBackend::omap_get_header(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  bool allow_eio, ///< [in] don't assert on eio
+  ObjectStore *store
+) {
+  std::optional<ceph::buffer::list> header_from_journal = ec_omap_journal.get_updated_header(oid.hobj);
+  if (header_from_journal) {
+    *header = *header_from_journal;
+  } else {
+    store->omap_get_header(c_, oid, header, allow_eio);
+  }
+  return 0;
+}
+
+int ECBackend::omap_get(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  ceph::buffer::list *header,      ///< [out] omap header
+  std::map<std::string, ceph::buffer::list> *out, /// < [out] Key to value map
+  ObjectStore *store
+) {
+  // Update map takes priority over removed_ranges
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);
+
+  int r = store->omap_get(c_, oid, header, out);
+  if (r < 0) {
+    return r;
+  }
+
+  // Update header if present
+  if (updated_header) {
+    *header = *updated_header;
+  }
+
+  // Remove keys in removed_ranges
+  for (auto out_it = out->begin(); out_it != out->end(); ++out_it) {
+    if (should_be_removed(removed_ranges, out_it->first)) {
+      out->erase(out_it->first);
+    }
+  }
+
+  // Apply updates in update_map
+  for (const auto &[key, val_opt] : update_map) {
+    if (val_opt.has_value()) {
+      (*out)[key] = *val_opt;
+    } else {
+      out->erase(key);
+    }
+  }
+
+  return 0;
+}
+
+int ECBackend::omap_check_keys(
+  ObjectStore::CollectionHandle &c_,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const std::set<std::string> &keys, ///< [in] Keys to check
+  std::set<std::string> *out,         ///< [out] Subset of keys defined on oid
+  ObjectStore *store
+) {
+  // Update map takes priority over removed_ranges
+  auto [update_map, removed_ranges] = ec_omap_journal.get_value_updates(oid.hobj);
+  auto updated_header = ec_omap_journal.get_updated_header(oid.hobj);
+
+  // First check keys in update_map and removed_ranges
+  set<string> keys_to_check_on_disk;
+  for (const auto &key : keys) {
+    auto it = update_map.find(key);
+    if (it != update_map.end()) {
+      if (it->second.has_value()) {
+        out->insert(key);
+      }
+    } else if (should_be_removed(removed_ranges, key)) {
+      continue;
+    } else {
+      keys_to_check_on_disk.insert(key);
+    }
+  }
+
+  int r = store->omap_check_keys(c_, oid, keys_to_check_on_disk, out);
+
+  return r;
+}
+
+bool ECBackend::should_be_removed(
+  const std::list<std::pair<std::optional<std::string>,
+                            std::optional<std::string>>>& removed_ranges,
+  std::string_view key) 
+{
+  for (const auto& range : removed_ranges) {
+    const auto& start_opt = range.first;
+    const auto& end_opt = range.second;
+
+    bool start_ok = true;
+    bool end_ok = true;
+
+    if (start_opt.has_value()) {
+      start_ok = key >= start_opt.value();
+    }
+    if (end_opt.has_value()) {
+      end_ok = key < end_opt.value();
+    }
+
+    if (start_ok && end_ok) {
+      return true;
+    }
+  }
+  return false;
+}

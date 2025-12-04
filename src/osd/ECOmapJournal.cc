@@ -80,3 +80,105 @@ ECOmapJournal::const_iterator ECOmapJournal::end(const hobject_t &hoid) {
   return entries[hoid].end();
 }
 
+std::optional<ceph::buffer::list> ECOmapJournal::get_updated_header(const hobject_t &hoid) {
+  std::optional<ceph::buffer::list> updated_header = std::nullopt;
+  for (auto journal_it = begin(hoid);
+      journal_it != end(hoid); ++journal_it) {
+    if (journal_it->omap_header.has_value()) {
+      updated_header = journal_it->omap_header;
+    }
+  }
+  return updated_header;
+}
+
+std::tuple<ECOmapJournal::UpdateMapType, ECOmapJournal::RangeListType> ECOmapJournal::get_value_updates(const hobject_t &hoid) {
+  ECOmapJournal::UpdateMapType update_map;
+  ECOmapJournal::RangeListType remove_ranges;
+  for (auto entry_iter = begin(hoid);
+        entry_iter != end(hoid); ++entry_iter) {
+    if (entry_iter->clear_omap) {
+      // Clear all previous updates
+      update_map.clear();
+      // Mark entire range as removed
+      remove_ranges.clear();
+      remove_ranges.push_back({std::nullopt, std::nullopt});
+    }
+
+    for (auto &&update : entry_iter->omap_updates) {
+      OmapUpdateType type = update.first;
+      auto iter = update.second.cbegin();
+      switch (type) {
+        case OmapUpdateType::Insert: {
+          std::map<std::string, ceph::buffer::list> vals;
+          decode(vals, iter);
+          // Insert key value pairs into update_map
+          for (auto it = vals.begin(); it != vals.end(); ++it) {
+            const auto &key = it->first;
+            const auto &val = it->second;
+            update_map[key] = val;
+          }
+          break;
+        }
+        case OmapUpdateType::Remove: {
+          std::set<std::string> keys;
+          decode(keys, iter);
+          // Mark keys in update_map as removed
+          for (const auto &key : keys) {
+            update_map[key] = std::nullopt;
+          }
+          break;
+        }
+        case OmapUpdateType::RemoveRange: {
+          std::string key_begin, key_end;
+          decode(key_begin, iter);
+          decode(key_end, iter);
+          
+          // Add range to remove_ranges, merging overlapping ranges
+          std::optional<std::string> start = key_begin;
+          std::optional<std::string> end = key_end;
+          auto it = remove_ranges.begin();
+          bool inserted = false;
+          while (it != remove_ranges.end()) {
+            // Current range is to the left of new range
+            if (it->second && *it->second < *start) {
+              it++;
+              continue;
+            }
+            // Current range is to the right of new range
+            if (it->first && (!end || *end < *it->first)) {
+              remove_ranges.insert(it, {start, end});
+              inserted = true;
+              break;
+            }
+            // Ranges overlap, merge them
+            if (!it->first || (start && *it->first < *start)) {
+              start = it->first;
+            }
+            if (!it->second) {
+              end = std::nullopt;
+            } else if (end && *it->second > *end) {
+              end = it->second;
+            }
+            it = remove_ranges.erase(it);
+          }
+          if (!inserted) {
+            remove_ranges.emplace_back(start, end);
+          }
+
+          // Erase keys in update_map that fall within the removed range
+          auto map_it = update_map.lower_bound(key_begin);
+          while (map_it != update_map.end()) {
+            if (map_it->first >= key_end) {
+              break;
+            }
+            map_it = update_map.erase(map_it);
+          }
+          break;
+        }
+        default:
+          ceph_abort_msg("Unknown OmapUpdateType");
+      }
+    }
+  }
+  return {update_map, remove_ranges};
+}

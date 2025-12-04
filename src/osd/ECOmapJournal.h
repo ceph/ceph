@@ -49,4 +49,9 @@ class ECOmapJournal {
   
   const_iterator begin(const hobject_t &hoid);
   const_iterator end(const hobject_t &hoid);
+
+  using UpdateMapType = std::map<std::string, std::optional<ceph::buffer::list>>;
+  using RangeListType = std::list<std::pair<std::optional<std::string>, std::optional<std::string>>>;
+  std::tuple<UpdateMapType, RangeListType> get_value_updates(const hobject_t &hoid);;
+  std::optional<ceph::buffer::list> get_updated_header(const hobject_t &hoid);
 };
