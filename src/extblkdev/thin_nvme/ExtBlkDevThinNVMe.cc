@@ -101,10 +101,8 @@ int ExtBlkDevThinNVMe::get_statfs(store_statfs_t& buf)
     uint64_t ncap = ns_data.ncap * lba_size; // Namespace capacity: the actual capacity (in bytes) provided
     uint64_t nuse = ns_data.nuse * lba_size; // Namespace usage: the current capacity utilization (in bytes)
                                              // of the namespace
-
-    buf.total = ns_data.nsze * lba_size;
-    buf.available = (ns_data.ncap - ns_data.nuse) * lba_size;
-    buf.raw_use = ns_data.nuse * lba_size;
+    buf.total = ncap; //ns_data.nsze * lba_size;
+    buf.available = ncap - nuse;
     dout(0) << __func__ << " stats (nsze/ncap/nuse):"
                         << nsze << "/"
                         << ncap << "/"
