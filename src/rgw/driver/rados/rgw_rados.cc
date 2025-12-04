@@ -7803,6 +7803,9 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (boost::algorithm::starts_with(iter.first, RGW_ATTR_CRYPT_PREFIX)) {
         ldpp_dout(dpp, 4) << "get src crypt attr: " << iter.first << dendl;
         src_attrset[iter.first] = iter.second;
+      } else if (iter.first == RGW_ATTR_ETAG) {
+        ldpp_dout(dpp, 4) << "copy src etag attr: " << iter.first << dendl;
+        src_attrset[iter.first] = iter.second;
       }
     }
     int parts_count = 0;
@@ -7833,6 +7836,11 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
       if (astate->attrset.find(iter.first) == astate->attrset.end()) {
         astate->attrset[iter.first] = std::move(iter.second);
       }
+    }
+    auto etag_iter = src_attrset.find(RGW_ATTR_ETAG);
+    if (etag_iter != src_attrset.end()) {
+      ldpp_dout(dpp, 4) << "overwrite etag to " << etag_iter->second << dendl;
+      astate->attrset[RGW_ATTR_ETAG] = etag_iter->second;
     }
   }
 
