@@ -18,7 +18,7 @@ Versions and tags
 - [x] Update CMakeLists.txt VERSION (right at the top to X.0.0)
 - [x] Update src/librbd/CMakeLists.txt VERSION (librbd target at the bottom to 1.X.0)
 - [x] Update src/ceph_release with the new release name, number, and type ('dev')
-- [x] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
+- [ ] Initial tag vX.0.0 so that we can distinguish from (and sort after) the backported (X-1).2.Z versions.
 
 .. note::
 
@@ -42,7 +42,7 @@ Scripts
 ~~~~~~~
 
 - [x] src/script/backport-create-issue (`releases()`)
-- [x] src/script/ceph-release-notes (up to X)
+- [ ] src/script/ceph-release-notes (up to X)
 
 Misc
 ~~~~
@@ -72,7 +72,7 @@ Mon
 
 - [x] src/tools/monmaptool.cc: bump min_mon_release to X for created (new) clusters
 - [x] src/test/cli/monmaptool/8.t: update output for monmaptool to X
-- [x] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
+- [ ] qa/standalone/mon/misc adjust `TEST_mon_features` (add X cases and adjust `--mon-debug-no-require-X`)
 - [x] qa/standalone/mon/misc bump up `jqfilter='.monmap.features.persistent | length == N'` to `N+1`
 - [x] mon/MgrMonitor.cc adjust `always_on_modules`
 - [x] common/options/global.yaml.in define `mon_debug_no_require_X`
@@ -87,39 +87,40 @@ OSDMap
 ------
 
 - [x] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
-- [x] OSDMap::get_min_compat_client: core team evaluate
+- [ ] OSDMap::get_min_compat_client: core team evaluate
 
 Code cleanup
 ------------
 
-- [ ] search code for "after X-1" or "X" for conditional checks
-- [ ] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
+- [x] search code for "after X-1" or "X" for conditional checks
+- [x] search code for X-2 and X-3 (`CEPH_FEATURE_SERVER_*` and
   `ceph_release_t::*`)
 - [ ] search code for `require_osd_release`
 - [ ] search code for `min_mon_release`
-- [ ] check include/denc.h if DENC_START macro still needs reference to squid
+- [x] check include/denc.h if DENC_START macro still needs reference to squid
 
 QA suite
 --------
 
-- [x] create qa/workunits/test_telemetry_(X-1).sh
-- [x] create qa/workunits/test_telemetry_(X-1)_x.sh
-- [x] create qa/suites/upgrade/(X-1)-x
-- [x] remove qa/suites/upgrade/(X-3)-x-*
-- [x] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
-- [x] update qa/ upgrade suites require-osd-release calls to tentacle
+- [ ] create qa/workunits/test_telemetry_(X-1).sh
+- [ ] create qa/workunits/test_telemetry_(X-1)_x.sh
+- [ ] create qa/suites/upgrade/(X-1)-x
+- [ ] remove qa/suites/upgrade/(X-3)-x-*
+- [ ] update qa/fs/upgrade/ to remove (X-3) and add (X-1); check with fs team to confirm / help
+- [ ] update qa/ upgrade suites require-osd-release calls to tentacle
 - [x] create qa/releases/X.yaml
-- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [x] update qa/suites/rados/encoder/1-task.yaml to remove (X-3) and add X
 
 
 ceph-build
 ----------
 In the `ceph/ceph-build.git` repo:
 
-- [x] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
-- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
-- [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
-- [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119 and https://github.com/ceph/ceph-build/pull/2315)
+- [ ] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
+- [ ] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
+- [ ] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
+- [ ] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119 and https://github.com/ceph/ceph-build/pull/2315)
 
 
 After dev freeze
@@ -131,8 +132,8 @@ After dev freeze
 - [ ] remove ``doc/releases/*.rst``. This should leave behind ``doc/releases/releases.yml`` which is used for doc building purposes. See also commit 33d63c3 ("doc: remove release notes for release branch") for details.
 - [ ] cherry-pick 8cf9ad62949516666ad0f2c0bb7726ef68e4d666 ("doc: add releases links to toc"). There will be trivial conflicts.
 - [ ] add redirect for new major release at `RTD <https://readthedocs.org/dashboard/ceph/redirects/>`_.
-- [x] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
-- [x] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
+- [ ] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
+- [ ] add release name to .github/milestone.yml for github actions to automatically add milestone to backports (this commit must be backported to the release branch)
 - [ ] add release branch to nightlies: qa/crontab/teuthology-cronjobs
 
 First release candidate
@@ -151,3 +152,4 @@ First stable release
 - [ ] src/cephadm/cephadmlib/constants.py: update `LATEST_STABLE_RELEASE`
 - [ ] activate latest release in readthedocs, as described in `the readthedocs
   documentation <https://docs.readthedocs.io/en/stable/versions.html>`_ 
+- [ ] add release and supported distros to tables in `doc/start/os-recommendations.rst`

@@ -69,7 +69,7 @@ tasks:
     - cephadm.shell:
         env: [sha1]
         mon.a:
-            - ceph osd require-osd-release tentacle
+            - ceph osd require-osd-release umbrella
 
     - print: "**** done start telemetry x..."
     - workunit:

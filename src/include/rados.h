@@ -209,7 +209,8 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_REEF       18
 #define CEPH_RELEASE_SQUID      19
 #define CEPH_RELEASE_TENTACLE   20
-#define CEPH_RELEASE_MAX        21  /* highest + 1 */
+#define CEPH_RELEASE_UMBRELLA   21
+#define CEPH_RELEASE_MAX        22  /* highest + 1 */
 
 /*
  * The error code to return when an OSD can't handle a write
