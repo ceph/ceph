@@ -9087,6 +9087,16 @@ int BlueStore::expand_devices(ostream& out)
   return r;
 }
 
+bool BlueStore::get_db_sharding(std::string& res_sharding)
+{
+  bool ret = false;
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+  if (db) {
+    ret = rdb->get_sharding(res_sharding);
+  }
+  return ret;
+}
+
 int BlueStore::dump_bluefs_sizes(ostream& out)
 {
   int r = _open_db_and_around(true);
@@ -11910,6 +11920,10 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   (*pm)["bluestore_min_alloc_size"] = stringify(min_alloc_size);
   (*pm)["bluestore_allocation_from_file"] = stringify(fm && fm->is_null_manager());
   (*pm)["bluestore_allocator"] = alloc ? alloc->get_type() : "null";
+  std::string sharding;
+  if (get_db_sharding(sharding)) {
+    (*pm)["bluestore_db_sharding"] = sharding;
+  }
 }
 
 int BlueStore::get_numa_node(
