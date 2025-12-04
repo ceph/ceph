@@ -1095,7 +1095,7 @@ void Cache::check_full_extent_integrity(
   if (full_extent_integrity_check) {
     inconsistent = (pin_crc != ref_crc);
   } else { // !full_extent_integrity_check: remapped extent may be skipped
-    inconsistent = !(pin_crc == 0 ||
+    inconsistent = !(pin_crc == CRC_NULL ||
                      pin_crc == ref_crc);
   }
   if (unlikely(inconsistent)) {

@@ -506,7 +506,7 @@ public:
       );
     }
     return get_absent_extent<T>(t, offset, length, 0, length,
-      std::forward<Func>(extent_init_func), 0);
+      std::forward<Func>(extent_init_func), CRC_NULL);
   }
 
   CachedExtentRef peek_extent_viewable_by_trans(
@@ -804,7 +804,7 @@ private:
         extent->get_type(), extent->get_paddr(), extent->get_length(),
         partial_off, partial_len, *extent);
       return read_extent<T>(
-        std::move(extent), partial_off, partial_len, p_src, 0);
+        std::move(extent), partial_off, partial_len, p_src, CRC_NULL);
     }
   }
 
@@ -847,7 +847,7 @@ private:
       // required by add_extent()
       on_cache(*ret);
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src, 0);
+	std::move(ret), partial_off, partial_len, p_src, CRC_NULL);
     }
 
     // extent PRESENT in cache
@@ -874,7 +874,7 @@ private:
 
       cached->state = CachedExtent::extent_state_t::INVALID;
       return read_extent<T>(
-	std::move(ret), partial_off, partial_len, p_src, 0);
+	std::move(ret), partial_off, partial_len, p_src, CRC_NULL);
     }
 
     auto ret = TCachedExtentRef<T>(static_cast<T*>(cached.get()));
@@ -1093,7 +1093,7 @@ public:
     extent_len_t length
   ) {
     return get_absent_extent_by_type(
-      t, type, offset, laddr, length, [](CachedExtent &) {}, 0);
+      t, type, offset, laddr, length, [](CachedExtent &) {}, CRC_NULL);
   }
 
   void trim_backref_bufs(const journal_seq_t &trim_to) {
