@@ -56,7 +56,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   write1.omap_set_header(omap_header_bl);
   write1.omap_set(omap_map);
 
-  std::cout << "Writing object with OMap data..." << std::endl;
   int ret = ioctx.operate("my_object", &write1);
   EXPECT_EQ(ret, 0);
 
@@ -74,7 +73,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   read.omap_get_vals2(omap_key_1, 1, &returned_vals_1, nullptr, &err);
   read.omap_get_vals2("omap", 4, &returned_vals_2, nullptr, &err);
 
-  std::cout << "Getting OMap values..." << std::endl;
   ret = ioctx.operate("my_object", &read, nullptr);
   EXPECT_EQ(ret, 0);
 
@@ -82,9 +80,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_vals_1.size(), (unsigned)1);
   ASSERT_EQ(returned_vals_2.size(), (unsigned)4);
-
-  std::cout << "--- OMap Vals testing passed ---" << std::endl;
-
 
   // OMAP GET KEYS TESTING
 
@@ -97,8 +92,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys.size(), (unsigned)6);
-
-  std::cout << "--- OMap Keys testing passed ---" << std::endl;
 
   // OMAP GET HEADER TESTING
 
@@ -115,8 +108,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_header_str, omap_header);
 
-  std::cout << "--- OMap Header testing passed ---" << std::endl;
-
   // OMAP GET VALS BY KEYS TESTING
 
   std::set<std::string> key_filter = { omap_key_1, omap_key_3 };
@@ -129,8 +120,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_vals_by_keys.size(), (unsigned)2);
-
-  std::cout << "--- OMap Vals by Keys testing passed ---" << std::endl;
 
   // OMAP CMP TESTING
 
@@ -148,8 +137,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   ASSERT_EQ(0, err);
 
-  std::cout << "--- OMap Cmp testing passed ---" << std::endl;
-
   // OMAP REMOVE KEYS TESTING
 
   std::set<std::string> keys_to_remove;
@@ -159,20 +146,16 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
 
   write1.omap_rm_keys(keys_to_remove);
 
-  std::cout << "Removing key: omap_key_2_chestnut" << std::endl;
   ret = ioctx.operate("my_object", &write1);
   EXPECT_EQ(ret, 0);
 
   read.omap_get_keys2("", LONG_MAX, &returned_keys_with_removed, nullptr, &err);
 
-  std::cout << "Getting all keys after removal..." << std::endl;
   ret = ioctx.operate("my_object", &read, nullptr);
   EXPECT_EQ(ret, 0);
 
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys_with_removed.size(), (unsigned)5);
-
-  std::cout << "--- OMap Remove Keys testing passed ---" << std::endl;
 
   // OMAP REMOVE RANGE TESTING
 
@@ -191,8 +174,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys_with_removed_range.size(), (unsigned)3);
 
-  std::cout << "--- OMap Remove Range testing passed ---" << std::endl;
-
   // OMAP CLEAR TESTING
 
   write1.omap_clear();
@@ -208,7 +189,6 @@ TEST_P(LibRadosOmapECPP, OmapReads) {
   ASSERT_EQ(0, err);
   ASSERT_EQ(returned_keys.size(), (unsigned)0);
 
-  std::cout << "--- OMap Clear testing passed ---" << std::endl;
 }
 
 TEST_P(LibRadosOmapECPP, ErrorInject) {
@@ -626,7 +606,6 @@ TEST_P(LibRadosOmapECPP, FrozenJournalReads) {
   read_omap_keys("frozen_journal_reads", returned_keys);
 
   EXPECT_EQ(returned_keys, expected_keys);
-  std::cout << "Size of Returned Keys: " << returned_keys.size() << std::endl;
   
   // 3. Remove specific keys and remove a range
   ObjectWriteOperation write;

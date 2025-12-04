@@ -904,7 +904,6 @@ void ECCommon::RMWPipeline::cache_ready(Op &op) {
     * the trim/writes aren't committed. This allows the journal to
     * build up for testing purposes.
     */
-    // eversion_t pg_committed_for_send = omap_journal_frozen ? eversion_t() : op.pg_committed_to;    
 
     ECSubWrite sop(
       get_parent()->whoami_shard(),
@@ -1038,7 +1037,6 @@ void ECCommon::RMWPipeline::finish_rmw(OpRef const &op) {
       const auto nop = std::make_shared<ECDummyOp>();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
-      //nop->pg_committed_to = op->version;
       nop->pg_committed_to = pg_committed_for_send;
       nop->tid = tid;
       nop->reqid = op->reqid;
