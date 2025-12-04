@@ -2506,6 +2506,8 @@ void BlueFS::_envmode_index_file(
     }
   }
   file->envelopes_indexed = true;
+  file->fnode.content_size = env_ofs;
+  file->fnode.size = scan_ofs;
   delete h;
 }
 
