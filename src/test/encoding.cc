@@ -1,11 +1,14 @@
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/input_output_adapters.h"
 
 #include <fmt/format.h>
 #include "gtest/gtest.h"
 
 #include <iostream> // for std::cout
-
+#include <string>
+#include <set>
+#include <map>
 using namespace std;
 
 template < typename T >
@@ -542,4 +545,83 @@ TEST(small_encoding, lba) {
     ASSERT_EQ(v[i][0], u);
   }
 
+}
+
+TEST(input_output_adapters, input_strset_encoded) {
+  set<string> _in;
+  set<string> _out;
+  bufferlist bl;
+  {
+    _out.clear();
+    bl.clear();
+    encode(_in, bl);
+    InputStrSetEncodedImpl decoder(bl.cbegin());
+    bool has_entries = decoder.begin();
+    while (has_entries) {
+      _out.emplace(decoder.get_current());
+      has_entries = decoder.next();
+    }
+    ASSERT_EQ(_in, _out);
+  }
+  {
+    _out.clear();
+    bl.clear();
+    _in.emplace("");
+    _in.emplace("1111");
+    _in.emplace("222222222");
+    _in.emplace("3");
+    _in.emplace(std::string(4097, 'a'));
+    encode(_in, bl);
+    InputStrSetEncodedImpl decoder(bl.cbegin());
+    bool has_entries = decoder.begin();
+    while (has_entries) {
+      _out.emplace(decoder.get_current());
+      has_entries = decoder.next();
+    }
+    ASSERT_FALSE(decoder.had_decode_error());
+    ASSERT_EQ(_in, _out);
+  }
+}
+
+TEST(input_output_adapters, output_str2bl_map_encoded) {
+  map<string, bufferlist> _in;
+  map<string, bufferlist> _out;
+  bufferlist bl;
+  {
+    _out.clear();
+    bl.clear();
+    OutputStr2BListMapEncodedImpl encoder(&bl);
+    encoder.finalize();
+
+    auto bp = bl.cbegin();
+    decode(_out, bp);
+    ASSERT_EQ(_in, _out);
+  }
+  {
+    bufferlist tmp;
+    _out.clear();
+    bl.clear();
+    _in.emplace("", tmp);
+    _in.emplace("1111", tmp);
+
+    tmp.append("1234", 4);
+    _in.emplace("1111", tmp);
+
+    _in.emplace("222222222", tmp);
+
+    tmp.clear();
+    char buf[4096 * 2 + 1];
+    tmp.append(buf, sizeof(buf));
+    _in.emplace(std::string(4097, 'a'), tmp);
+
+    OutputStr2BListMapEncodedImpl encoder(&bl);
+    for (auto p : _in) {
+      encoder.emplace(p.first, p.second);
+    }
+    encoder.finalize();
+
+    auto bp = bl.cbegin();
+    decode(_out, bp);
+    ASSERT_EQ(_in, _out);
+  }
 }
