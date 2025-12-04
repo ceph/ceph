@@ -7359,7 +7359,8 @@ PeeringState::Deleting::Deleting(my_context ctx)
   // clear log
   PGLog::LogEntryHandlerRef rollbacker{pl->get_log_handler(t)};
   ps->pg_log.roll_forward(&ps->info, rollbacker.get());
-
+  // invalidate pwlc
+  ps->info.partial_writes_last_complete.clear();
   // adjust info to backfill
   ps->info.set_last_backfill(hobject_t());
   ps->pg_log.reset_backfill();
