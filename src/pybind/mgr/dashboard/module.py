@@ -82,6 +82,7 @@ class CherryPyConfig(object):
 
         self.cert_tmp = None
         self.pkey_tmp = None
+        self.root_ca_tmp = None
 
     def shutdown(self):
         self._stopping.set()
@@ -179,6 +180,17 @@ class CherryPyConfig(object):
             # Create custom SSL context to disable TLS 1.0 and 1.1.
             context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             context.load_cert_chain(cert_fname, pkey_fname)
+
+            root_ca = self.get_localized_store("root_ca")  # type: ignore
+            if root_ca is not None:
+                self.root_ca_tmp = tempfile.NamedTemporaryFile()
+                self.root_ca_tmp.write(root_ca.encode('utf-8'))
+                self.root_ca_tmp.flush()  # root_ca_tmp must not be gc'ed
+                root_ca_fname = self.root_ca_tmp.name
+                # enforce mTLS check
+                context.verify_mode = ssl.CERT_REQUIRED
+                context.load_verify_locations(root_ca_fname)
+
             if sys.version_info >= (3, 7):
                 context.minimum_version = ssl.TLSVersion.TLSv1_3
             else:
@@ -412,6 +424,10 @@ class Module(MgrModule, CherryPyConfig):
     @CLIWriteCommand("dashboard set-ssl-certificate-key")
     def set_ssl_certificate_key(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
         return self._set_ssl_item('certificate key', 'key', mgr_id, inbuf)
+
+    @CLIWriteCommand("dashboard set-ssl-root-ca-cert")
+    def set_ssl_root_ca_certificate(self, mgr_id: Optional[str] = None, inbuf: Optional[str] = None):
+        return self._set_ssl_item('root CA certificate', 'root_ca', mgr_id, inbuf)
 
     @CLIWriteCommand("dashboard create-self-signed-cert")
     def set_mgr_created_self_signed_cert(self):

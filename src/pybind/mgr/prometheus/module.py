@@ -10,6 +10,7 @@ import enum
 from collections import namedtuple
 from collections import OrderedDict
 from tempfile import NamedTemporaryFile
+import ssl
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -639,6 +640,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         super(Module, self).__init__(*args, **kwargs)
         self.key_file: IO[bytes]
         self.cert_file: IO[bytes]
+        self.root_ca_file: IO[bytes]
         self.metrics = self._setup_static_metrics()
         self.shutdown_event = threading.Event()
         self.collect_lock = threading.Lock()
@@ -1988,12 +1990,12 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.log.error('mon command to generate-certificates failed to generate certificates')
             return
 
-        cert_key = json.loads(out)
-        self.cert_file = NamedTemporaryFile()
-        self.cert_file.write(cert_key['cert'].encode('utf-8'))
+        tls_config = json.loads(out)
+        self.cert_file = tempfile.NamedTemporaryFile()
+        self.cert_file.write(tls_config['cert'].encode('utf-8'))
         self.cert_file.flush()  # cert_tmp must not be gc'ed
-        self.key_file = NamedTemporaryFile()
-        self.key_file.write(cert_key['key'].encode('utf-8'))
+        self.key_file = tempfile.NamedTemporaryFile()
+        self.key_file.write(tls_config['key'].encode('utf-8'))
         self.key_file.flush()  # pkey_tmp must not be gc'ed
 
         # Temporarily disabling the verify function due to issues:
@@ -2001,6 +2003,16 @@ class Module(MgrModule, OrchestratorClientMixin):
         # Re-enable once the issue is resolved.
         # verify_tls_files(self.cert_file.name, self.key_file.name)
         cert_file_path, key_file_path = self.cert_file.name, self.key_file.name
+
+        if 'mtls' in tls_config and tls_config['mtls']:
+            self.root_ca_file = tempfile.NamedTemporaryFile()
+            self.root_ca_file.write(tls_config['root_ca'].encode('utf-8'))
+            self.root_ca_file.flush()  # pkey_tmp must not be gc'ed
+            context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            context.load_cert_chain(certfile=cert_file_path, keyfile=key_file_path)
+            context.load_verify_locations(cafile=self.root_ca_file.name)
+            context.verify_mode = ssl.CERT_REQUIRED
+            cherrypy.server.ssl_context = context
 
         cherrypy.config.update({
             'server.socket_host': server_addr,
