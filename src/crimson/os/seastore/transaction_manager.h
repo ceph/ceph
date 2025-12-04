@@ -1480,21 +1480,15 @@ private:
           extent.set_laddr(laddr);
           maybe_init(extent);
           extent.set_seen_by_users();
-      })
+      }),
+      pin.get_checksum()
     );
 
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
 
-    if (ref->is_fully_loaded()) {
-      check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
-    }
-
     co_return std::move(ref);
   }
-
-  void check_full_extent_integrity(
-    Transaction &t, uint32_t ref_crc, uint32_t pin_crc);
 
   /**
    * pin_to_extent_by_type
@@ -1537,11 +1531,11 @@ private:
         // No change to extent::seen_by_user because this path is only
         // for background cleaning.
       }
-    ));
+    ),
+    pin.get_checksum());
     SUBDEBUGT(seastore_tm, "got extent -- {} fully_loaded: {}",
               t, *ref, ref->is_fully_loaded());
     assert(ref->is_fully_loaded());
-    check_full_extent_integrity(t, ref->calc_crc32c(), pin.get_checksum());
     co_return ref->template cast<LogicalChildNode>();
   }
 
