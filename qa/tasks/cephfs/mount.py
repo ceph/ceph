@@ -1713,4 +1713,7 @@ class CephFSMountBase(object):
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
 
+    def get_mount_point(self):
+        return self.hostfs_mntpt
+
 CephFSMount = CephFSMountBase
