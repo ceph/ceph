@@ -55,6 +55,7 @@ class RGWSI_Zone : public RGWServiceInstance
   std::map<rgw_zone_id, RGWZone> zone_by_id;
 
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
+  const rgw::SiteConfig* site{nullptr};
 
   void init(RGWSI_SysObj *_sysobj_svc,
 	    librados::Rados* rados_,
@@ -66,18 +67,8 @@ class RGWSI_Zone : public RGWServiceInstance
   int init_zg_from_period(const DoutPrefixProvider *dpp, optional_yield y);
   int init_zg_from_local(const DoutPrefixProvider *dpp, optional_yield y);
 
-  int create_default_zg(const DoutPrefixProvider *dpp, optional_yield y);
-  int init_default_zone(const DoutPrefixProvider *dpp, optional_yield y);
-
-  int search_realm_with_zone(const DoutPrefixProvider *dpp,
-                             const rgw_zone_id& zid,
-                             RGWRealm *prealm,
-                             RGWPeriod *pperiod,
-                             RGWZoneGroup *pzonegroup,
-                             bool *pfound,
-                             optional_yield y);
 public:
-  RGWSI_Zone(CephContext *cct);
+  RGWSI_Zone(CephContext *cct, const rgw::SiteConfig* _site);
   ~RGWSI_Zone();
 
   const RGWZoneParams& get_zone_params() const;
