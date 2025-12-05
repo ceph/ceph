@@ -941,7 +941,7 @@ template <typename I>
 void GroupReplayer<I>::handle_shut_down(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r == -ENOENT) { // group removed
+  if (r == -ENOENT || r == -ERESTART) {
     if (!m_resync_requested) {
       set_finished(true);
     }
