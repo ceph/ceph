@@ -344,7 +344,14 @@ public:
                const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const RGWAccessControlPolicy& acl) override { acls = acl; return 0; }
-  virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state, optional_yield y, bool follow_olh = true) override;
+
+  /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+  virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			 int max_parts, int marker, int* next_marker,
+			 bool* truncated, list_parts_each_t each_func,
+			 optional_yield y) override;
+
+  virtual int load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -398,7 +405,7 @@ public:
   void gen_temp_fname();
   /* TODO dang Escape the object name for file use */
   const std::string get_fname();
-  bool exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
+  bool check_exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
   int get_owner(const DoutPrefixProvider *dpp, optional_yield y, std::unique_ptr<User> *owner);
   int copy(const DoutPrefixProvider *dpp, optional_yield y, POSIXBucket *sb,
            POSIXBucket *db, POSIXObject *dobj);
@@ -484,19 +491,24 @@ struct POSIXUploadPartInfo {
   uint32_t num{0};
   std::string etag;
   ceph::real_time mtime;
+  std::optional<rgw::cksum::Cksum> cksum;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(num, bl);
     encode(etag, bl);
     encode(mtime, bl);
+    encode(cksum, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
     decode(num, bl);
     decode(etag, bl);
     decode(mtime, bl);
+    if (struct_v > 1) {
+      decode(cksum, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -519,8 +531,12 @@ public:
   virtual uint64_t get_size() { return shadow->get_obj_size(); }
   virtual const std::string& get_etag() { return info.etag; }
   virtual ceph::real_time& get_mtime() { return info.mtime; }
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+    return info.cksum;
+  }
 
-  int load(const DoutPrefixProvider* dpp, optional_yield y, POSIXDriver* driver, rgw_obj_key& key);
+  int load(const DoutPrefixProvider* dpp, optional_yield y, POSIXDriver* driver,
+	   rgw_obj_key& key);
 
   friend class POSIXMultipartUpload;
 };
@@ -616,6 +632,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
 		       std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
@@ -656,6 +673,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
 		       std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
 		       ceph::real_time delete_at,
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
