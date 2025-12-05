@@ -25,6 +25,7 @@ overrides:
     valgrind:
       mon: [--tool=memcheck, --leak-check=full, --show-reachable=yes]
       osd: [--tool=memcheck]
+    stop-daemons-timeout: 1200
 roles:
 - [mon.a, mon.b, mon.c, mgr.x, mgr.y, osd.0, osd.1, osd.2, client.0]
 tasks:
