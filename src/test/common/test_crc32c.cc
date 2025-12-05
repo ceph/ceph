@@ -14,6 +14,7 @@
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_aarch64.h"
+#include "common/crc32c_ppc.h"
 
 TEST(Crc32c, Small) {
   const char *a = "foo bar baz";
@@ -92,6 +93,17 @@ TEST(Crc32c, Performance) {
     utime_t end = ceph_clock_now();
     float rate = (float)len / (float)(1024*1024) / (float)(end - start);
     std::cout << "aarch64 = " << rate << " MB/sec" << std::endl;
+    ASSERT_EQ(261108528u, val);
+  }
+#endif
+#if defined(__PPC64__) || defined(__powerpc64__)
+  if (ceph_arch_ppc_crc32) // Skip if CRC32C instructions are not defined.
+  {
+    utime_t start = ceph_clock_now();
+    unsigned val = ceph_crc32c_ppc(0, (unsigned char *)a, len);
+    utime_t end = ceph_clock_now();
+    float rate = (float)len / (float)(1024*1024) / (float)(end - start);
+    std::cout << "ppc64le = " << rate << " MB/sec" << std::endl;
     ASSERT_EQ(261108528u, val);
   }
 #endif
