@@ -132,29 +132,84 @@ public:
 struct object_data_handler_test_t:
   public seastar_test_suite_t,
   TMTestState {
-  OnodeRef onode;
+  struct test_object_t {
+    OnodeRef onode;
+    bufferptr known_contents;
+    extent_len_t size = 0;
 
-  bufferptr known_contents;
-  extent_len_t size = 0;
+    void reset() {
+      onode = new TestOnode(
+	DEFAULT_OBJECT_DATA_RESERVATION,
+	DEFAULT_OBJECT_METADATA_RESERVATION);
+      size = 0;
+      known_contents = buffer::create(4<<20 /* 4MB */);
+    }
+
+    void clear() {
+      onode.reset();
+      size = 0;
+      known_contents = bufferptr();
+    }
+
+    void clone_from(const test_object_t &other) {
+      size = other.size;
+      known_contents = bufferptr(
+	other.known_contents.c_str(), other.known_contents.length()
+      );
+    }
+  };
+
+  test_object_t head;
+  std::map<snapid_t, test_object_t> snaps;
+  test_object_t &get_object(snapid_t snap) {
+    if (snap == CEPH_NOSNAP) {
+      return head;
+    }
+    auto iter = snaps.find(snap);
+    if (iter == snaps.end()) {
+      iter = snaps.emplace(std::make_pair(snap, test_object_t{})).first;
+      iter->second.reset();
+    }
+    return iter->second;
+  }
+
   std::random_device rd;
   std::mt19937 gen;
 
   object_data_handler_test_t() : gen(rd()) {}
 
-  void write(Transaction &t, objaddr_t offset, extent_len_t len, char fill) {
-    ceph_assert(offset + len <= known_contents.length());
-    size = std::max<extent_len_t>(size, offset + len);
+  void clone(Transaction &t, snapid_t target_snap) {
+    with_trans_intr(
+      t, seastar::coroutine::lambda([&](auto &t)
+				    -> ObjectDataHandler::clone_ret {
+	ObjectDataHandler objhandler(MAX_OBJECT_SIZE);
+	auto &target = get_object(target_snap);
+	target.clone_from(head);
+	head.onode->swap_layout(t, *(target.onode));
+	co_await objhandler.clone(
+	  ObjectDataHandler::context_t{
+	    *tm, t, *(target.onode), &*(head.onode)
+	  });
+      })).unsafe_get();
+  }
+
+  void write(
+    Transaction &t, objaddr_t offset, extent_len_t len,
+    char fill, snapid_t snap = CEPH_NOSNAP) {
+    auto &obj = get_object(snap);
+    ceph_assert(offset + len <= obj.known_contents.length());
+    obj.size = std::max<extent_len_t>(obj.size, offset + len);
     Option::size_t olen = crimson::common::local_conf().get_val<Option::size_t>(
       "seastore_data_delta_based_overwrite");
     ceph_assert(olen == 0 || len <= olen);
     memset(
-      known_contents.c_str() + offset,
+      obj.known_contents.c_str() + offset,
       fill,
       len);
     bufferlist bl;
     bl.append(
       bufferptr(
-	known_contents,
+	obj.known_contents,
 	offset,
 	len));
     with_trans_intr(t, [&](auto &t) {
@@ -166,25 +221,26 @@ struct object_data_handler_test_t:
 	    ObjectDataHandler::context_t{
 	      *tm,
 	      t,
-	      *onode,
+	      *obj.onode,
 	    },
 	    offset,
 	    bl);
 	});
     }).unsafe_get();
   }
-  void write(objaddr_t offset, extent_len_t len, char fill) {
+  void write(objaddr_t offset, extent_len_t len, char fill, snapid_t snap = CEPH_NOSNAP) {
     auto t = create_mutate_transaction();
-    write(*t, offset, len, fill);
+    write(*t, offset, len, fill, snap);
     return submit_transaction(std::move(t));
   }
 
-  void truncate(Transaction &t, objaddr_t offset) {
-    if (size > offset) {
+  void truncate(Transaction &t, objaddr_t offset, snapid_t snap = CEPH_NOSNAP) {
+    auto &obj = get_object(snap);
+    if (obj.size > offset) {
       memset(
-	known_contents.c_str() + offset,
+	obj.known_contents.c_str() + offset,
 	0,
-	size - offset);
+	obj.size - offset);
       with_trans_intr(t, [&](auto &t) {
       return seastar::do_with(
 	ObjectDataHandler(MAX_OBJECT_SIZE),
@@ -193,27 +249,30 @@ struct object_data_handler_test_t:
 	    ObjectDataHandler::context_t{
 	      *tm,
 	      t,
-	      *onode
+	      *obj.onode
 	    },
 	    offset);
 	});
       }).unsafe_get();
     }
-    size = offset;
+    obj.size = offset;
   }
-  void truncate(objaddr_t offset) {
+  void truncate(objaddr_t offset, snapid_t snap = CEPH_NOSNAP) {
     auto t = create_mutate_transaction();
-    truncate(*t, offset);
+    truncate(*t, offset, snap);
     return submit_transaction(std::move(t));
   }
 
-  void read(Transaction &t, objaddr_t offset, extent_len_t len) {
+  void read(
+    Transaction &t, objaddr_t offset, extent_len_t len,
+    snapid_t snap = CEPH_NOSNAP) {
+    auto &obj = get_object(snap);
     bufferlist bl = with_trans_intr(t, [&](auto &t) {
       return ObjectDataHandler(MAX_OBJECT_SIZE).read(
         ObjectDataHandler::context_t{
           *tm,
           t,
-          *onode
+          *obj.onode
         },
         offset,
         len);
@@ -221,21 +280,23 @@ struct object_data_handler_test_t:
     bufferlist known;
     known.append(
       bufferptr(
-	known_contents,
+	obj.known_contents,
 	offset,
 	len));
     EXPECT_EQ(bl.length(), known.length());
     EXPECT_EQ(bl, known);
   }
-  void read(objaddr_t offset, extent_len_t len) {
+  void read(objaddr_t offset, extent_len_t len, snapid_t snap = CEPH_NOSNAP) {
     auto t = create_read_transaction();
-    read(*t, offset, len);
+    read(*t, offset, len, snap);
   }
-  void read_near(objaddr_t offset, extent_len_t len, extent_len_t fuzz) {
+  void read_near(
+    objaddr_t offset, extent_len_t len, extent_len_t fuzz,
+    snapid_t snap = CEPH_NOSNAP) {
     auto fuzzes = std::vector<int32_t>{-1 * (int32_t)fuzz, 0, (int32_t)fuzz};
     for (auto left_fuzz : fuzzes) {
       for (auto right_fuzz : fuzzes) {
-	read(offset + left_fuzz, len - left_fuzz + right_fuzz);
+	read(offset + left_fuzz, len - left_fuzz + right_fuzz, snap);
       }
     }
   }
@@ -244,7 +305,7 @@ struct object_data_handler_test_t:
     objaddr_t offset,
     extent_len_t length) {
     auto ret = with_trans_intr(t, [&](auto &t) {
-      auto &layout = onode->get_layout();
+      auto &layout = head.onode->get_layout();
       auto odata = layout.object_data.get();
       auto obase = odata.get_reserved_data_base();
       return tm->get_pins(t, (obase + offset).checked_to_laddr(), length);
@@ -254,7 +315,7 @@ struct object_data_handler_test_t:
   std::list<LBAMapping> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
-      auto &layout = onode->get_layout();
+      auto &layout = head.onode->get_layout();
       auto odata = layout.object_data.get();
       auto obase = odata.get_reserved_data_base();
       return tm->get_pins(t, (obase + offset).checked_to_laddr(), length);
@@ -288,7 +349,7 @@ struct object_data_handler_test_t:
     Transaction &t,
     loffset_t addr,
     extent_len_t len) {
-    auto &layout = onode->get_layout();
+    auto &layout = head.onode->get_layout();
     auto odata = layout.object_data.get();
     auto obase = odata.get_reserved_data_base();
     auto maybe_indirect_ext = with_trans_intr(t, [&](auto& trans) {
@@ -303,18 +364,16 @@ struct object_data_handler_test_t:
   }
 
   seastar::future<> set_up_fut() final {
-    onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
-      DEFAULT_OBJECT_METADATA_RESERVATION);
-    known_contents = buffer::create(4<<20 /* 4MB */);
-    memset(known_contents.c_str(), 0, known_contents.length());
-    size = 0;
+    head.reset();
     return tm_setup();
   }
 
   seastar::future<> tear_down_fut() final {
-    onode.reset();
-    size = 0;
+    head.clear();
+    for (auto &[snap, obj]: snaps) {
+      obj.clear();
+    }
+    snaps.clear();
     return tm_teardown();
   }
 
@@ -874,7 +933,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
         ObjectDataHandler::context_t{
           *tm,
           t,
-          *onode
+          *head.onode
         },
         base + 4096,
         4096);
@@ -882,7 +941,7 @@ TEST_P(object_data_handler_test_t, overwrite_then_read_within_transaction) {
     bufferlist pending;
     pending.append(
       bufferptr(
-	known_contents,
+	head.known_contents,
 	base + 4096,
 	4096));
     EXPECT_EQ(committed.length(), pending.length());
