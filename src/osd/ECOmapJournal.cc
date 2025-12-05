@@ -11,6 +11,54 @@ bool ECOmapJournalEntry::operator==(const ECOmapJournalEntry& other) const {
   return this->version == other.version;
 }
 
+void ECOmapValue::update_value(eversion_t version, std::optional<ceph::buffer::list> value) {
+  this->version = version;
+  this->value = value;
+}
+
+void RemovedRanges::add_range(const std::optional<std::string>& start, const std::optional<std::string>& end) {
+  std::optional<std::string> new_start = start;
+  std::optional<std::string> new_end = end;
+  auto it = ranges.begin();
+  bool inserted = false;
+  while (it != ranges.end()) {
+    // Current range is to the left of new range
+    if (it->second && *it->second < *new_start) {
+      it++;
+      continue;
+    }
+    // Current range is to the right of new range
+    if (it->first && (!new_end || *new_end < *it->first)) {
+      ranges.insert(it, {new_start, new_end});
+      inserted = true;
+      break;
+    }
+    // Ranges overlap, merge them
+    if (!it->first || (new_start && *it->first < *new_start)) {
+      new_start = it->first;
+    }
+    if (!it->second) {
+      new_end = std::nullopt;
+    } else if (new_end && *it->second > *new_end) {
+      new_end = it->second;
+    }
+    it = ranges.erase(it);
+  }
+  if (!inserted) {
+    ranges.emplace_back(new_start, new_end);
+  }
+}
+
+void RemovedRanges::clear_omap() {
+  ranges.clear();
+  ranges.emplace_back(std::nullopt, std::nullopt);
+}
+
+void ECOmapHeader::update_header(eversion_t version, std::optional<ceph::buffer::list> header) {
+  this->version = version;
+  this->header = header;
+}
+
 
 void ECOmapJournal::add_entry(const hobject_t &hoid, const ECOmapJournalEntry &entry) {
   entries[hoid].push_back(entry);

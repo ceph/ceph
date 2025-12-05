@@ -24,13 +24,50 @@ class ECOmapJournalEntry {
   bool operator==(const ECOmapJournalEntry& other) const;
 };
 
+class ECOmapValue {
+ public:
+  eversion_t version;
+  std::optional<ceph::buffer::list> value;
+
+  ECOmapValue(eversion_t version, std::optional<ceph::buffer::list> value) : version(version), value(value) {}
+
+  void update_value(eversion_t version, std::optional<ceph::buffer::list> value);
+};
+
+class RemovedRanges {
+ public:
+  std::list<std::pair<std::optional<std::string>, std::optional<std::string>>> ranges;
+
+  RemovedRanges() = default;
+
+  void add_range(const std::optional<std::string>& start, const std::optional<std::string>& end);
+  void clear_omap();
+};
+
+class ECOmapHeader {
+ public:
+  eversion_t version = eversion_t();
+  std::optional<ceph::buffer::list> header = std::nullopt;
+
+  ECOmapHeader(eversion_t version, std::optional<ceph::buffer::list> header) 
+    : version(version), header(header) {}
+  ECOmapHeader() = default;
+
+  void update_header(eversion_t version, std::optional<ceph::buffer::list> header);
+};
+
 class ECOmapJournal {
  private:
+  // Intact journal entries 
   std::map<hobject_t, std::list<ECOmapJournalEntry>> entries;
+
+  // Split up journal entries
+  std::map<hobject_t, std::map<std::string, ECOmapValue>> key_map;
+  std::map<hobject_t, std::list<std::map<eversion_t, RemovedRanges>>> removed_ranges_map;
+  std::map<hobject_t, ECOmapHeader> header_map;
 
   // Function to get specific object's entries
   std::list<ECOmapJournalEntry>& get_entries(const hobject_t &hoid);
-
   std::list<ECOmapJournalEntry> snapshot_entries(const hobject_t &hoid) const;
 
  public:
