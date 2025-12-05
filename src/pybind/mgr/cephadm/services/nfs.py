@@ -95,11 +95,14 @@ class NFSService(CephService):
         # create the rados config object
         self.create_rados_config_obj(spec)
 
+        port = daemon_spec.ports[0] if daemon_spec.ports else 2049
+
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
         if spec.virtual_ip:
             bind_addr = spec.virtual_ip
+            daemon_spec.port_ips = {str(port): spec.virtual_ip}
         else:
             bind_addr = daemon_spec.ip if daemon_spec.ip else ''
         if not bind_addr:
@@ -117,7 +120,7 @@ class NFSService(CephService):
                 "rgw_user": rgw_user,
                 "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
-                "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
+                "port": port,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
                 "nfs_idmap_conf": nfs_idmap_conf,
