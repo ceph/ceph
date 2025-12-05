@@ -1448,6 +1448,24 @@ static int cloud_tier_check_object(RGWLCCloudTierCtx& tier_ctx, bool& already_ti
   return ret;
 }
 
+static int cloud_tier_bucket_exists(RGWLCCloudTierCtx& tier_ctx)
+{
+  bufferlist out_bl;
+  string resource = tier_ctx.target_bucket_name;
+
+  int ret = tier_ctx.conn.send_resource(tier_ctx.dpp, "HEAD", resource,
+                                        nullptr, nullptr, out_bl, nullptr,
+                                        nullptr, null_yield);
+  if (ret == -ERR_NO_SUCH_BUCKET || ret == -ENOENT) {
+    return -ENOENT;
+  }
+  if (ret < 0) {
+    ldpp_dout(tier_ctx.dpp, 0) << "HEAD target bucket " << resource
+                               << " returned ret=" << ret << dendl;
+  }
+  return ret;
+}
+
 static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
   bufferlist out_bl;
   int ret = 0;
@@ -1527,18 +1545,21 @@ static int cloud_tier_create_bucket(RGWLCCloudTierCtx& tier_ctx) {
 int rgw_cloud_tier_transfer_object(RGWLCCloudTierCtx& tier_ctx, std::set<std::string>& cloud_targets) {
   int ret = 0;
 
-  // check if target_path is already created
-  std::set<std::string>::iterator it;
-
-  it = cloud_targets.find(tier_ctx.target_bucket_name);
+  // check if target bucket is in local cache
+  auto it = cloud_targets.find(tier_ctx.target_bucket_name);
   tier_ctx.target_bucket_created = (it != cloud_targets.end());
 
-  /* If run first time attempt to create the target bucket */
   if (!tier_ctx.target_bucket_created) {
-    ret = cloud_tier_create_bucket(tier_ctx);
-
-    if (ret < 0) {
-      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+    // not in cache; check if bucket exists on remote
+    ret = cloud_tier_bucket_exists(tier_ctx);
+    if (ret == -ENOENT) {
+      ret = cloud_tier_create_bucket(tier_ctx);
+      if (ret < 0) {
+        ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to create target bucket on the cloud endpoint ret=" << ret << dendl;
+        return ret;
+      }
+    } else if (ret < 0) {
+      ldpp_dout(tier_ctx.dpp, 0) << "ERROR: failed to check target bucket on the cloud endpoint ret=" << ret << dendl;
       return ret;
     }
     tier_ctx.target_bucket_created = true;
