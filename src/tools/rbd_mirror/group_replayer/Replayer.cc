@@ -1619,8 +1619,6 @@ void Replayer<I>::mirror_group_snapshot_unlink_peer(const std::string &snap_id) 
       });
 
   if (remote_snap == m_remote_group_snaps.end()) {
-    derr << "remote group snapshot not found: "
-         << snap_id << dendl;
     return;
   }
 
