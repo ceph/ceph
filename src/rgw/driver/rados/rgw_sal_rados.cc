@@ -3072,30 +3072,21 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
                                   std::optional<uint64_t> days,
 				  bool& in_progress,
 				  uint64_t& size,
-                                  const DoutPrefixProvider* dpp, 
+                                  const DoutPrefixProvider* dpp,
                                   optional_yield y)
 {
   /* init */
   rgw::sal::RadosPlacementTier* rtier = static_cast<rgw::sal::RadosPlacementTier*>(tier);
   string id = "cloudid";
+  // connection params from current config (credentials may rotate)
   string endpoint = rtier->get_rt().t.s3.endpoint;
   RGWAccessKey key = rtier->get_rt().t.s3.key;
   string region = rtier->get_rt().t.s3.region;
   HostStyle host_style = rtier->get_rt().t.s3.host_style;
   const rgw::sal::ZoneGroup& zonegroup = store->get_zone()->get_zonegroup();
-  // extract owner (user_id or account_id depending on ownership type)
-  std::string owner;
-  if (const auto* acct = std::get_if<rgw_account_id>(&bucket->get_owner()); acct) {
-    owner = *acct;
-  } else if (const auto* user = std::get_if<rgw_user>(&bucket->get_owner()); user) {
-    owner = user->id;
-  }
-  string bucket_name = rtier->get_rt().t.s3.make_target_bucket_name(
-      zonegroup.get_name(),
-      tier->get_storage_class(), bucket->get_name(),
-      bucket->get_tenant(), owner);
   int ret = 0;
 
+  // read tier config from object manifest to find where object was transitioned
   auto& attrs = get_attrs();
   RGWObjTier tier_config;
 
@@ -3112,8 +3103,19 @@ int RadosObject::restore_obj_from_cloud(Bucket* bucket,
     }
   }
 
-  // update tier_config in case tier params are updated
-  tier_config.tier_placement = rtier->get_rt();
+  // use stored config to derive target bucket name
+  const auto& stored_s3 = tier_config.tier_placement.t.s3;
+  // extract owner (user_id or account_id depending on ownership type)
+  std::string owner;
+  if (const auto* acct = std::get_if<rgw_account_id>(&bucket->get_owner()); acct) {
+    owner = *acct;
+  } else if (const auto* user = std::get_if<rgw_user>(&bucket->get_owner()); user) {
+    owner = user->id;
+  }
+  string bucket_name = stored_s3.make_target_bucket_name(
+      zonegroup.get_name(),
+      tier->get_storage_class(), bucket->get_name(),
+      bucket->get_tenant(), owner);
 
   rgw_bucket_dir_entry ent;
   ent.key.name = get_key().name;
