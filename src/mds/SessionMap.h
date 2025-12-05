@@ -417,6 +417,10 @@ public:
   session_info_t info;                         ///< durable bits
   MDSAuthCaps auth_caps;
 
+  // True if the session is opened by the client.
+  // False if the session is forced to open, until it is opened again by the client.
+  bool client_opened = false;
+
   xlist<Session*>::item item_session_list;
 
   std::list<ceph::ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
