@@ -607,7 +607,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_no_wait',
             type='bool',
             default=True,
-            desc='Reject subvolume clone request when cloner threads are busy')
+            desc='Reject subvolume clone request when cloner threads are busy'),
+        Option(
+            'pause_purging',
+            type='bool',
+            default=False,
+            desc='Pause asynchronous subvolume purge threads'),
+        Option(
+            'pause_cloning',
+            type='bool',
+            default=False,
+            desc='Pause asynchronous cloner threads')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -617,6 +627,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.snapshot_clone_delay = None
         self.periodic_async_work = False
         self.snapshot_clone_no_wait = None
+        self.pause_purging = False
+        self.pause_cloning = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -653,6 +665,17 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                             self.vc.purge_queue.unset_wakeup_timeout()
                     elif opt['name'] == "snapshot_clone_no_wait":
                         self.vc.cloner.reconfigure_reject_clones(self.snapshot_clone_no_wait)
+                    elif opt['name'] == "pause_purging":
+                        if self.pause_purging:
+                            self.vc.purge_queue.pause()
+                        else:
+                            self.vc.purge_queue.resume()
+                    elif opt['name'] == "pause_cloning":
+                        if self.pause_cloning:
+                            self.vc.cloner.pause()
+                        else:
+                            self.vc.cloner.resume()
+
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
