@@ -184,7 +184,10 @@ int NVMeofGwMonitorClient::init()
 
   {
     std::lock_guard bl(beacon_lock);
-    tick();
+    // Initialize timer state for exact frequency timing
+    next_tick_time = ceph::mono_clock::now();
+    // Start the timer after full initialization is complete
+    schedule_next_tick();
   }
 
   dout(10) << "Complete." << dendl;
@@ -283,18 +286,54 @@ void NVMeofGwMonitorClient::connect_panic()
 void NVMeofGwMonitorClient::tick()
 {
   dout(10) << dendl;
-
+  auto start_time = ceph::mono_clock::now();
   connect_panic();
   disconnect_panic();
   send_beacon();
   first_beacon = false;
-  timer.add_event_after(
-      g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period").count(),
-      new LambdaContext([this](int r){
-          tick();
-      }
-  ));
+
+  // Log tick execution duration
+  log_tick_execution_duration(start_time);
+
+  // Schedule next tick with exact frequency timing
+  schedule_next_tick();
 }
+
+void NVMeofGwMonitorClient::schedule_next_tick()
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(beacon_lock));
+
+  // Calculate next tick time based on configured interval
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period");
+  next_tick_time += tick_period;
+
+  // Get current time to check for drift
+  auto now = ceph::mono_clock::now();
+
+  // If we're behind schedule, adjust next_tick_time to prevent drift accumulation
+  if (next_tick_time < now) {
+    dout(1) << "Timer drift detected, adjusting next_tick_time from "
+             << next_tick_time << " to " << now << dendl;
+    next_tick_time = now;
+  }
+
+  // Schedule the next tick
+  auto callback = new LambdaContext([this](int r) {
+    tick();
+  });
+
+  auto tick_time = next_tick_time;
+  if (!timer.add_event_at(tick_time, callback)) {
+    throw std::runtime_error("Failed to schedule timer event (timer shutting down)");
+  }
+
+  // Log scheduling information for frequency analysis
+  auto delay_ns = (next_tick_time - now).count();
+  dout(10) << "Scheduled next tick at " << next_tick_time
+          << " (delay: " << delay_ns << " ns, "
+          << (delay_ns / 1000000.0) << " ms)" << dendl;
+}
+
 
 void NVMeofGwMonitorClient::shutdown()
 {
@@ -474,4 +513,20 @@ int NVMeofGwMonitorClient::main(std::vector<const char *> args)
   shutdown_async_signal_handler();
 
   return 0;
+}
+
+void NVMeofGwMonitorClient::log_tick_execution_duration(const ceph::mono_clock::time_point& start_time)
+{
+  auto execution_time = ceph::mono_clock::now() - start_time;
+  auto tick_period = g_conf().get_val<std::chrono::seconds>("nvmeof_mon_client_tick_period");
+  auto max_allowed_time = tick_period * 0.1; // 10% of tick period
+
+  dout(10) << "Tick execution took " << execution_time.count() / 1000000.0
+          << "ms" << dendl;
+
+  if (execution_time > max_allowed_time) {
+    dout(1) << "WARNING: Tick execution took " << execution_time.count() / 1000000.0
+            << "ms, exceeding 10% of tick period (" << max_allowed_time.count() / 1000000.0
+            << "ms)" << dendl;
+  }
 }
