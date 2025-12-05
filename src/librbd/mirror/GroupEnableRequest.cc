@@ -510,7 +510,7 @@ void GroupEnableRequest<I>::create_primary_image_snapshots() {
   auto req = snapshot::GroupImageCreatePrimaryRequest<I>::create(
     m_cct, m_image_ctxs, m_global_image_ids, m_group_snap_create_flags,
     snapshot::CREATE_PRIMARY_FLAG_IGNORE_EMPTY_PEERS, m_group_snap.id,
-    &m_snap_ids, ctx);
+    &m_snap_ids, true, ctx);
   req->send();
 }
 
