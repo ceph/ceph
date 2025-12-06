@@ -269,14 +269,14 @@ ECTransaction::WritePlanObj::WritePlanObj(
      * for the partial stripe and update the parity. For the purposes of
      * parity, the truncated shards are all zero.
      */
-    extent_set truncate_write;
-
-    if (next_align != 0) {
-      truncate_write = truncate_read.at(shard_id_t(0));
-      truncate_write.align(EC_ALIGN_SIZE);
-    }
-
     if (!truncate_read.empty()) {
+      extent_set truncate_write;
+
+      if (next_align != 0) {
+        truncate_write = truncate_read.at(shard_id_t(0));
+        truncate_write.align(EC_ALIGN_SIZE);
+      }
+
       if (to_read) {
         to_read->insert(truncate_read);
       } else {
