@@ -1,0 +1,3 @@
+overrides:
+  s3tests:
+    addressing-style: path

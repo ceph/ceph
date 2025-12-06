@@ -123,8 +123,12 @@ def task(ctx, config):
         - dnsmasq:
             client.0: [dev., test.]
     """
+    assert config is None or isinstance(config, dict), \
+        "task dnsmasq requires a dictionary for configuration"
+    if config is None:
+        config = {}
     # apply overrides
-    overrides = config.get('overrides', {})
+    overrides = ctx.config.get('overrides', {})
     misc.deep_merge(config, overrides.get('dnsmasq', {}))
 
     # multiple roles may map to the same remote, so collect names by remote
