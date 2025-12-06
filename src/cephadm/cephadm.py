@@ -471,13 +471,14 @@ def get_log_dir(fsid, log_dir):
     return os.path.join(log_dir, fsid)
 
 
-def make_data_dir_base(fsid, data_dir, uid, gid):
-    # type: (str, str, int, int) -> str
+def make_data_dir_base(daemon_type, fsid, data_dir, uid, gid):
+    # type: (str, str, str, int, int) -> str
     data_dir_base = os.path.join(data_dir, fsid)
     makedirs(data_dir_base, uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
-    makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
-             DATA_DIR_MODE)
+    if daemon_type == 'crash':
+        makedirs(os.path.join(data_dir_base, 'crash'), uid, gid, DATA_DIR_MODE)
+        makedirs(os.path.join(data_dir_base, 'crash', 'posted'), uid, gid,
+                 DATA_DIR_MODE)
     return data_dir_base
 
 
@@ -489,7 +490,7 @@ def make_data_dir(
 ) -> str:
     if uid is None or gid is None:
         uid, gid = extract_uid_gid(ctx)
-    make_data_dir_base(ident.fsid, ctx.data_dir, uid, gid)
+    make_data_dir_base(ident.daemon_type, ident.fsid, ctx.data_dir, uid, gid)
     data_dir = ident.data_dir(ctx.data_dir)
     makedirs(data_dir, uid, gid, DATA_DIR_MODE)
     return data_dir
