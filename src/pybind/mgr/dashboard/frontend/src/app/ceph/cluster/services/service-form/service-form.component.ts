@@ -97,6 +97,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   smbFeaturesList = ['domain'];
   currentURL: string;
   port: number = 443;
+  secondary_port: number = 8080;
   sslProtocolsItems: Array<ListItem> = Object.values(SSL_PROTOCOLS).map((protocol) => ({
     content: protocol,
     selected: true
@@ -105,7 +106,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     content: cipher,
     selected: false
   }));
-  showMgmtGatewayMessage: boolean = false;
+  showMgmtGatewayMessage: boolean = false;  
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -280,6 +281,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       ],
       // RGW
       rgw_frontend_port: [null, [CdValidators.number(false)]],
+      rgw_frontend_secondary_port: [ null, [CdValidators.number(false)]],
       realm_name: [null],
       zonegroup_name: [null],
       zone_name: [null],
@@ -593,6 +595,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       https_address: [null, [CdValidators.oauthAddressTest()]],
       redirect_url: [null],
       allowlist_domains: [null]
+    },
+    {
+      validators: [CdValidators.donotmatch('rgw_frontend_port','rgw_frontend_secondary_port')]
     });
   }
 
@@ -706,6 +711,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.serviceForm
                 .get('rgw_frontend_port')
                 .setValue(response[0].spec?.rgw_frontend_port);
+              this.serviceForm
+                .get('rgw_frontend_secondary_port')
+                .setValue(response[0].spec?.rgw_frontend_secondary_port);
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
@@ -716,7 +724,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
                 this.serviceForm
                   .get('ssl_cert')
                   .setValue(response[0].spec?.rgw_frontend_ssl_certificate);
-              }
+              }              
               break;
             case 'ingress':
               const ingressSpecKeys = [
@@ -1076,7 +1084,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.getDefaultPlacementCount(selectedServiceType);
 
     if (selectedServiceType === 'rgw') {
-      this.setRgwFields();
+      this.setRgwFields();      
     }
     if (selectedServiceType === 'mgmt-gateway') {
       let hrefSplitted = window.location.href.split(':');
@@ -1256,6 +1264,9 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           if (_.isNumber(values['rgw_frontend_port']) && values['rgw_frontend_port'] > 0) {
             serviceSpec['rgw_frontend_port'] = values['rgw_frontend_port'];
           }
+          if (_.isNumber(values['rgw_frontend_secondary_port']) && values['rgw_frontend_secondary_port'] > 0) {
+            serviceSpec['rgw_frontend_secondary_port'] = values['rgw_frontend_secondary_port'];
+          }
           serviceSpec['ssl'] = values['ssl'];
           if (values['ssl']) {
             serviceSpec['rgw_frontend_ssl_certificate'] = values['ssl_cert']?.trim();
@@ -1368,5 +1379,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     modalComponent.submitAction.subscribe((item: RgwEntities) => {
       this.setRgwFields(item.realm_name, item.zonegroup_name, item.zone_name);
     });
-  }
+  } 
+
 }

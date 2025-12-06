@@ -1427,6 +1427,7 @@ class RGWSpec(ServiceSpec):
             rgw_zone: myzone
             ssl: true
             rgw_frontend_port: 1234
+            rgw_frontend_secondary_port: 4321
             rgw_frontend_type: beast
             rgw_frontend_ssl_certificate: ...
 
@@ -1448,6 +1449,7 @@ class RGWSpec(ServiceSpec):
                  rgw_zonegroup: Optional[str] = None,
                  rgw_zone: Optional[str] = None,
                  rgw_frontend_port: Optional[int] = None,
+                 rgw_frontend_secondary_port: Optional[int] = None,
                  rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] = None,
                  rgw_frontend_type: Optional[str] = None,
                  rgw_frontend_extra_args: Optional[List[str]] = None,
@@ -1512,6 +1514,8 @@ class RGWSpec(ServiceSpec):
         self.rgw_zone: Optional[str] = rgw_zone
         #: Port of the RGW daemons
         self.rgw_frontend_port: Optional[int] = rgw_frontend_port
+        #: Secondary port of the  RGW daemons, dedicated to attend HTTP traffic only.
+        self.rgw_frontend_secondary_port: Optional[int] = rgw_frontend_secondary_port
         #: List of SSL certificates
         self.rgw_frontend_ssl_certificate: Optional[Union[str, List[str]]] \
             = rgw_frontend_ssl_certificate
@@ -1556,7 +1560,19 @@ class RGWSpec(ServiceSpec):
         ports = []
         if self.rgw_frontend_port:
             ports.append(self.rgw_frontend_port)
+        
+        if self.rgw_frontend_secondary_port:
+            ports.append(self.rgw_frontend_secondary_port)
 
+        port = next(
+            (
+                int(arg.split('=')[1])
+                for arg in (self.rgw_frontend_extra_args or [])
+                if arg.startswith("port=")
+            ),
+            None,
+        )
+        
         ssl_port = next(
             (
                 int(arg.split('=')[1])
