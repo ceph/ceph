@@ -272,9 +272,21 @@
           'for': '5m',
           expr: |||
             abs(
-              ((ceph_osd_numpg > 0) - on (%(cluster)sjob) group_left avg(ceph_osd_numpg > 0) by (%(cluster)sjob)) /
-              on (job) group_left avg(ceph_osd_numpg > 0) by (job)
-            ) * on (%(cluster)sceph_daemon) group_left(hostname) ceph_osd_metadata > 0.30
+              (
+                (
+                  (ceph_osd_numpg > 0)
+                  * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+                )
+                - on (%(cluster)sjob, device_class) group_left avg(
+                  (ceph_osd_numpg > 0)
+                  * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+                ) by (%(cluster)sjob, device_class)
+              )
+              / on (%(cluster)sjob, device_class) group_left avg(
+                (ceph_osd_numpg > 0)
+                * on (%(cluster)sjob, %(cluster)sceph_daemon) group_left(hostname, device_class) ceph_osd_metadata
+              ) by (%(cluster)sjob, device_class)
+            ) > 0.30
           ||| % [$.MultiClusterQuery(), $.MultiClusterQuery(), $.MultiClusterQuery()],
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.5' },
           annotations: {
