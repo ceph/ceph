@@ -51,6 +51,9 @@ class RadosIo : public Model {
 
   ~RadosIo();
 
+  void set_primary_oid(const std::string& new_oid) override;
+  void set_secondary_oid(const std::string& new_oid) override;
+
   void allow_ec_overwrites(bool allow);
   void allow_ec_optimizations();
 
