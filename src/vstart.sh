@@ -194,7 +194,6 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
     with_mgr_dashboard=false
 fi
 
-kstore_path=
 declare -a block_devs
 declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
@@ -244,7 +243,6 @@ options:
 	--rgw_store storage backend: rados|dbstore|posix
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
-	-K, --kstore use kstore as the osd objectstore backend
 	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
 	--cache <pool>: enable cache tiering on pool
@@ -533,10 +531,6 @@ case $1 in
         rgw_store=$2
         shift
         ;;
-    --kstore_path)
-        kstore_path=$2
-        shift
-        ;;
     -m)
         [ -z "$2" ] && usage_exit
         MON_ADDR=$2
@@ -574,9 +568,6 @@ case $1 in
         ;;
     -b | --bluestore)
         objectstore="bluestore"
-        ;;
-    -K | --kstore)
-        objectstore="kstore"
         ;;
     --hitset)
         hitset="$hitset $2 $3"
@@ -1035,8 +1026,6 @@ $DAEMONOPTS
         
 $BLUESTORE_OPTS
 
-        ; kstore
-        kstore fsck on mount = true
         osd objectstore = $objectstore
 $SEASTORE_OPTS
 $COSDSHORT
@@ -1295,27 +1284,23 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            if [ -n "$kstore_path" ]; then
-                ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
-            else
-                mkdir -p $CEPH_DEV_DIR/osd$osd
-                if [ -n "${block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
-                    ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
-                fi
-                if [ -n "${bluestore_db_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
-                fi
-                if [ -n "${bluestore_wal_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
-                    ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
-                fi
-                if [ -n "${secondary_block_devs[$osd]}" ]; then
-                    dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
-                fi
+            mkdir -p $CEPH_DEV_DIR/osd$osd
+            if [ -n "${block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
+                ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
+            fi
+            if [ -n "${bluestore_db_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
+            fi
+            if [ -n "${bluestore_wal_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
+                ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
+            fi
+            if [ -n "${secondary_block_devs[$osd]}" ]; then
+                dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
