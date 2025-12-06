@@ -2055,6 +2055,74 @@ class TestCephadm(object):
 
         assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_pause_host_success(self, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        with with_host(cephadm_module, hostname):
+            result = wait(cephadm_module, cephadm_module.pause_host(hostname))
+            assert result == f'Host {hostname} paused. Orchestrator operations suspended on this host.'
+            assert cephadm_module.inventory._inventory[hostname]['status'] == 'paused'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_resume_host_success(self, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        with with_host(cephadm_module, hostname):
+            wait(cephadm_module, cephadm_module.pause_host(hostname))
+            assert cephadm_module.inventory._inventory[hostname]['status'] == 'paused'
+            result = wait(cephadm_module, cephadm_module.resume_host(hostname))
+            assert result == f'Host {hostname} resumed. Orchestrator operations resumed on this host.'
+            assert cephadm_module.inventory._inventory[hostname]['status'] == ''
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_paused_host_blocks_daemon_scheduling(self, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        with with_host(cephadm_module, hostname):
+            wait(cephadm_module, cephadm_module.pause_host(hostname))
+            assert cephadm_module.inventory._inventory[hostname]['status'] == 'paused'
+            spec = ServiceSpec('crash', placement=PlacementSpec(hosts=[hostname]))
+            with with_service(cephadm_module, spec):
+                assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 0
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_paused_host_existing_daemons_preserved(self, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        with with_host(cephadm_module, hostname):
+            spec = ServiceSpec('crash', placement=PlacementSpec(hosts=[hostname]))
+            with with_service(cephadm_module, spec, status_running=True):
+                assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
+                daemon_before = cephadm_module.cache.get_daemons_by_type('crash')[0]
+                assert daemon_before.status == DaemonDescriptionStatus.running
+
+                wait(cephadm_module, cephadm_module.pause_host(hostname))
+
+                CephadmServe(cephadm_module)._apply_all_services()
+
+                assert len(cephadm_module.cache.get_daemons_by_type('crash')) == 1
+
+                daemon_after = cephadm_module.cache.get_daemons_by_type('crash')[0]
+                assert daemon_before.name() == daemon_after.name()
+                assert daemon_after.status == DaemonDescriptionStatus.running
+                wait(cephadm_module, cephadm_module.resume_host(hostname))
+
+    @mock.patch("cephadm.services.osd.OSD.exists", True)
+    @mock.patch("cephadm.services.osd.RemoveUtil.get_weight")
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_paused_host_blocks_osd_removal(self, _run_cephadm, _get_weight, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        _get_weight.return_value = 1.0
+        hostname = 'host1'
+        with with_host(cephadm_module, hostname):
+            with with_osd_daemon(cephadm_module, _run_cephadm, hostname, 1):
+                wait(cephadm_module, cephadm_module.pause_host(hostname))
+                osd_1 = OSD(osd_id=1, replace=False, force=False, hostname=hostname,
+                            process_started_at=datetime_now(),
+                            remove_util=cephadm_module.to_remove_osds.rm_util)
+                cephadm_module.to_remove_osds.enqueue(osd_1)
+                cephadm_module.to_remove_osds.process_removal_queue()
+
+                assert len(cephadm_module.to_remove_osds.osds) == 1
+                assert not next(iter(cephadm_module.to_remove_osds.osds)).draining
+
     @mock.patch("cephadm.ssh.SSHManager._remote_connection")
     @mock.patch("cephadm.ssh.SSHManager._execute_command")
     @mock.patch("cephadm.ssh.SSHManager._check_execute_command")
