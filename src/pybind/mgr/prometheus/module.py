@@ -109,6 +109,7 @@ SMB_METADATA = ('smb_version', 'volume',
 
 CEPHADM_DAEMON_STATUS = ('service_type', 'daemon_name', 'hostname', 'service_name')
 
+
 alert_metric = namedtuple('alert_metric', 'name description')
 HEALTH_CHECKS = [
     alert_metric('SLOW_OPS', 'OSD or Monitor requests taking a long time to process'),
@@ -830,6 +831,12 @@ class Module(MgrModule, OrchestratorClientMixin):
             'Status of cephadm daemons (0=stopped, 1=running, 2=errored)',
             CEPHADM_DAEMON_STATUS
         )
+        metrics['cephadm_certificate_error'] = Metric(
+            'gauge',
+            'cephadm_certificate_error',
+            'Error status of cephadm certificate (1=error present, 0=no error)',
+            ('message',)
+        )
 
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
@@ -950,6 +957,35 @@ class Module(MgrModule, OrchestratorClientMixin):
         cherrypy.engine.start()
         self.log.info('Engine started.')
 
+    def _process_certificate_errors(self, cert_error_check: Dict[str, Any]) -> None:
+        """
+        Process certificate errors from CEPHADM_CERT_ERROR health check
+        and create metrics for each certificate error message.
+
+        Args:
+            cert_error_check: The CEPHADM_CERT_ERROR health check data containing
+                             summary and detail messages
+        """
+        # Get the detail messages
+        detail_messages = cert_error_check.get('detail', [])
+        if not detail_messages:
+            self.log.debug("No certificate error details found in CEPHADM_CERT_ERROR")
+            return
+
+        self.log.debug(f"Processing {len(detail_messages)} certificate error messages")
+
+        for detail_entry in detail_messages:
+            message = detail_entry.get('message', '')
+            if not message:
+                continue
+
+            try:
+                self.metrics['cephadm_certificate_error'].set(1, (message,))
+                self.log.debug(f"Certificate error: {message}")
+            except Exception as e:
+                self.log.error(f"Failed to process certificate error message '{message}': {e}")
+                continue
+
     @profile_method()
     def get_health(self) -> None:
 
@@ -998,6 +1034,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                 else:
                     # health check is not active, so give it a default of 0
                     self.metrics[path].set(0)
+
+        # Process individual certificate errors from CEPHADM_CERT_ERROR
+        if 'CEPHADM_CERT_ERROR' in active_names:
+            self._process_certificate_errors(active_healthchecks['CEPHADM_CERT_ERROR'])
 
         self.health_history.check(health)
         for name, info in self.health_history.healthcheck.items():
