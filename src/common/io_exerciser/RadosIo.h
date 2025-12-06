@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ObjectModel.h"
+#include "common/io_exerciser/IoSequence.h"
 #include "erasure-code/consistency/ConsistencyChecker.h"
 #include "librados/AioCompletionImpl.h"
 #include "common/ceph_mutex.h"
