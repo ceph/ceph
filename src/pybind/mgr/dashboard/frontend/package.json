@@ -6,7 +6,6 @@
     "locale": "en-US"
   },
   "scripts": {
-    "ng": "ng",
     "start": "npm run env_build && nx serve --host 0.0.0.0 --ssl",
     "build": "npm run env_build && nx build --skip-nx-cache --configuration=$npm_package_config_locale",
     "build:localize": "node cd --env --pre && nx build --localize",
