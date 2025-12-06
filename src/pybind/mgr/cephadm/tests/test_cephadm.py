@@ -225,8 +225,8 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
             assert wait(cephadm_module, c) == []
-            with with_service(cephadm_module, MDSSpec('mds', 'name', unmanaged=True)) as _, \
-                    with_daemon(cephadm_module, MDSSpec('mds', 'name'), 'test') as _:
+            with with_service(cephadm_module, MDSSpec('mds', service_id='name', unmanaged=True)) as _, \
+                    with_daemon(cephadm_module, MDSSpec('mds', service_id='name'), 'test') as _:
 
                 c = cephadm_module.list_daemons()
 
@@ -289,7 +289,7 @@ class TestCephadm(object):
             with with_host(cephadm_module, 'host2'):
                 with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)),
                                   CephadmOrchestrator.apply_mgr, '', status_running=True):
-                    with with_service(cephadm_module, MDSSpec('mds', 'test-id', placement=PlacementSpec(count=2)),
+                    with with_service(cephadm_module, MDSSpec('mds', service_id='test-id', placement=PlacementSpec(count=2)),
                                       CephadmOrchestrator.apply_mds, '', status_running=True):
 
                         # with no service-type. Should provide info fot both services
