@@ -27,8 +27,10 @@ public:
 
   void add_or_update_fs_attribute(fs_cluster_id_t fscid, std::string_view key,
                                   AttributeValue value);
+  void remove_fs_attribute(fs_cluster_id_t fscid, std::string_view key);
   void add_or_update_peer_attribute(fs_cluster_id_t fscid, const Peer &peer,
                                     std::string_view key, AttributeValue value);
+  void remove_peer_attribute(fs_cluster_id_t fscid, const Peer &peer, std::string_view key);
 
 private:
   struct Filesystem {
