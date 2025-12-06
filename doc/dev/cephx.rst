@@ -123,7 +123,7 @@ same ``global_id``. Otherwise, the monitors assign a new ``global_id``::
 plus (for Nautilus and later)::
 
     u32 connection_secret_len      # in bytes
-    connection_secret^session_key
+    connection_secret^session_key  # using CEPH_ENTITY_TYPE_AUTH session key
     u32 other_keys_len             # bytes of other keys (encoded)
     other_keys {
       u8 encoding_version = 1
@@ -212,7 +212,7 @@ where::
       u64 global_id
       u32 service_id    # CEPH_ENTITY_TYPE_*
       CephxTicketBlob auth_ticket
-      {CephxAuthorize msg}^session_key
+      {CephxAuthorize msg}^session_key  # using CEPH_ENTITY_TYPE_AUTH session key
     }
 
     CephxAuthorize msg {
@@ -246,7 +246,7 @@ Where, as above,::
       u32 service_id      # CEPH_ENTITY_TYPE_{OSD,MGR,MDS}
       u8 msg_version (1)
       {CephXServiceTicket service_ticket}^principal_secret
-      CephxTicketBlob ticket_blob
+      {CephxTicketBlob ticket_blob}^session_key # using **old** CEPH_ENTITY_TYPE_AUTH session key
     }
 
     CephxServiceTicket {
