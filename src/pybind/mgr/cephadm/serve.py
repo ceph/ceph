@@ -1136,6 +1136,8 @@ class CephadmServe:
             if last_deps is None:
                 last_deps = []
             action = self.mgr.cache.get_scheduled_daemon_action(dd.hostname, dd.name())
+            skip_restart_for_reconfig = False
+            send_signal_to_daemon = None
             if not last_config:
                 self.log.info('Reconfiguring %s (unknown last config time)...' % (
                     dd.name()))
@@ -1161,6 +1163,17 @@ class CephadmServe:
                     only_kmip_updated = all(s.startswith('kmip') for s in list(sym_diff))
                     if not only_kmip_updated:
                         action = 'redeploy'
+                elif dd.daemon_type == 'haproxy':
+                    if spec and hasattr(spec, 'backend_service'):
+                        backend_spec = self.mgr.spec_store[spec.backend_service].spec
+                        if backend_spec.service_type == 'nfs':
+                            if all(s.startswith(f'nfs.{backend_spec.service_id}') for s in list(sym_diff)):
+                                # this means only nfs daemons has changed and we don't need to
+                                # restart haproxy during redeploy
+                                self.log.debug(f'Reconfigure HAProxy daemon {dd.name()} with SIGHUP '
+                                               'due to change in NFS backend.')
+                                skip_restart_for_reconfig = True
+                                send_signal_to_daemon = 'SIGHUP'
             elif dd.daemon_type == 'haproxy':
                 if spec and hasattr(spec, 'backend_service'):
                     backend_spec = self.mgr.spec_store[spec.backend_service].spec
@@ -1197,7 +1210,9 @@ class CephadmServe:
                     action = 'redeploy'
                 try:
                     daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(dd)
-                    self.mgr._daemon_action(daemon_spec, action=action)
+                    self.mgr._daemon_action(daemon_spec, action=action,
+                                            skip_restart_for_reconfig=skip_restart_for_reconfig,
+                                            send_signal_to_daemon=send_signal_to_daemon)
                     if self.mgr.cache.rm_scheduled_daemon_action(dd.hostname, dd.name()):
                         self.mgr.cache.save_host(dd.hostname)
                 except OrchestratorError as e:
@@ -1377,6 +1392,8 @@ class CephadmServe:
                              daemon_spec: CephadmDaemonDeploySpec,
                              reconfig: bool = False,
                              osd_uuid_map: Optional[Dict[str, Any]] = None,
+                             skip_restart_for_reconfig: bool = False,
+                             send_signal_to_daemon: Optional[str] = None,
                              ) -> str:
 
         daemon_params: Dict[str, Any] = {}
@@ -1417,6 +1434,10 @@ class CephadmServe:
 
                 if reconfig:
                     daemon_params['reconfig'] = True
+                if skip_restart_for_reconfig:
+                    daemon_params['skip_restart_for_reconfig'] = True
+                if send_signal_to_daemon:
+                    daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
                 if self.mgr.allow_ptrace:
                     daemon_params['allow_ptrace'] = True
 
