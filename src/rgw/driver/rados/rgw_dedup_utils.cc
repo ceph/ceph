@@ -557,6 +557,7 @@ namespace rgw::dedup {
     this->skipped_purged_small    += other.skipped_purged_small;
     this->skipped_singleton       += other.skipped_singleton;
     this->skipped_singleton_bytes += other.skipped_singleton_bytes;
+    this->skipped_too_many_copies += other.skipped_too_many_copies;
     this->skipped_source_record   += other.skipped_source_record;
     this->duplicate_records       += other.duplicate_records;
     this->size_mismatch           += other.size_mismatch;
@@ -671,6 +672,9 @@ namespace rgw::dedup {
       if (this->skipped_singleton) {
         f->dump_unsigned("Skipped singleton Bytes", this->skipped_singleton_bytes);
       }
+      if (this->skipped_too_many_copies) {
+        f->dump_unsigned("Skipped Too Many Copies", this->skipped_too_many_copies);
+      }
       f->dump_unsigned("Skipped source record", this->skipped_source_record);
 
       if (this->ingress_skip_encrypted) {
@@ -755,6 +759,7 @@ namespace rgw::dedup {
     encode(m.skipped_purged_small, bl);
     encode(m.skipped_singleton, bl);
     encode(m.skipped_singleton_bytes, bl);
+    encode(m.skipped_too_many_copies, bl);
     encode(m.skipped_source_record, bl);
     encode(m.duplicate_records, bl);
     encode(m.size_mismatch, bl);
@@ -808,6 +813,7 @@ namespace rgw::dedup {
     decode(m.skipped_purged_small, bl);
     decode(m.skipped_singleton, bl);
     decode(m.skipped_singleton_bytes, bl);
+    decode(m.skipped_too_many_copies, bl);
     decode(m.skipped_source_record, bl);
     decode(m.duplicate_records, bl);
     decode(m.size_mismatch, bl);

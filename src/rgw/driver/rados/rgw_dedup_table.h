@@ -66,6 +66,7 @@ namespace rgw::dedup {
   public:
     // 8 Bytes Value
     struct value_t {
+      friend class dedup_table_t;
       value_t() {
         this->block_idx = 0xFFFFFFFF;
         this->count  = 0;
@@ -83,14 +84,20 @@ namespace rgw::dedup {
           flags.set_shared_manifest();
         }
       }
-
-      inline void clear_flags() { flags.clear(); }
       inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
+      inline uint16_t        get_count() { return this->count; }
+      inline disk_block_id_t get_src_block_id() { return this->block_idx; }
+      inline record_id_t     get_src_rec_id() { return this->rec_id; }
+    private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
+      inline void inc_count() { count ++; }
+      inline void reset_count() { count = 0; }
+      inline void clear_flags() { flags.clear(); }
       inline bool is_singleton() const { return (count == 1); }
       inline bool is_occupied() const { return flags.is_occupied(); }
       inline void set_occupied() { this->flags.set_occupied();  }
       inline void clear_occupied() { this->flags.clear_occupied(); }
+
 
       disk_block_id_t block_idx; // 32 bits
       uint16_t        count;     // 16 bits
@@ -103,20 +110,27 @@ namespace rgw::dedup {
                   uint32_t _head_object_size,
                   uint8_t *p_slab,
                   uint64_t slab_size);
-    int add_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
-                  bool shared_manifest);
+    int add_entry(key_t *p_key,
+                  disk_block_id_t block_id,
+                  record_id_t rec_id,
+                  bool shared_manifest,
+                  dedup_stats_t *p_small_objs_stat,
+                  dedup_stats_t *p_big_objs_stat,
+                  uint64_t *p_duplicate_head_bytes);
+
     void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
                       bool shared_manifest);
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
+
+    int inc_count(const key_t *p_key, disk_block_id_t block_id, record_id_t rec_id);
 
     int set_shared_manifest_src_mode(const key_t *p_key,
                                      disk_block_id_t block_id,
                                      record_id_t rec_id);
 
     void count_duplicates(dedup_stats_t *p_small_objs_stat,
-                          dedup_stats_t *p_big_objs_stat,
-                          uint64_t *p_duplicate_head_bytes);
+                          dedup_stats_t *p_big_objs_stat);
 
     void remove_singletons_and_redistribute_keys();
   private:
