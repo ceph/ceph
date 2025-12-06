@@ -8,7 +8,6 @@ import { NvmeofService } from '../../../shared/api/nvmeof.service';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { NvmeofTabsComponent } from '../nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsDetailsComponent } from '../nvmeof-subsystems-details/nvmeof-subsystems-details.component';
 import { NvmeofNamespacesListComponent } from './nvmeof-namespaces-list.component';
 
@@ -51,11 +50,7 @@ describe('NvmeofNamespacesListComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [
-        NvmeofNamespacesListComponent,
-        NvmeofTabsComponent,
-        NvmeofSubsystemsDetailsComponent
-      ],
+      declarations: [NvmeofNamespacesListComponent, NvmeofSubsystemsDetailsComponent],
       imports: [HttpClientModule, RouterTestingModule, SharedModule],
       providers: [
         { provide: NvmeofService, useClass: MockNvmeOfService },

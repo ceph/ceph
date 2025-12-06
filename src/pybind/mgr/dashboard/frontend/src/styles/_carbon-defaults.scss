@@ -140,6 +140,14 @@ Overflow menu
 }
 
 /******************************************
+Page Header
+******************************************/
+
+.header-04 {
+  @include type.type-style('heading-04');
+}
+
+/******************************************
 Forms
 ******************************************/
 .form-header,
@@ -244,6 +252,10 @@ Tabs
 ******************************************/
 .cds--tab-content {
   background: var(--cds-layer-01);
+}
+
+.cds-success-color {
+  fill: theme.$support-success;
 }
 
 .cds-danger-color {

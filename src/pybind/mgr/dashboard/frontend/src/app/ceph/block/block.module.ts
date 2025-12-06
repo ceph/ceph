@@ -40,7 +40,6 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
 import { NvmeofGatewayComponent } from './nvmeof-gateway/nvmeof-gateway.component';
 import { NvmeofSubsystemsComponent } from './nvmeof-subsystems/nvmeof-subsystems.component';
 import { NvmeofSubsystemsDetailsComponent } from './nvmeof-subsystems-details/nvmeof-subsystems-details.component';
-import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
 import { NvmeofSubsystemsFormComponent } from './nvmeof-subsystems-form/nvmeof-subsystems-form.component';
 import { NvmeofListenersFormComponent } from './nvmeof-listeners-form/nvmeof-listeners-form.component';
 import { NvmeofListenersListComponent } from './nvmeof-listeners-list/nvmeof-listeners-list.component';
@@ -76,6 +75,7 @@ import SubtractFilled from '@carbon/icons/es/subtract--filled/32';
 import Reset from '@carbon/icons/es/reset/32';
 import SubtractAlt from '@carbon/icons/es/subtract--alt/20';
 import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
+import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group/nvmeof-gateway-group.component';
 
 @NgModule({
   imports: [
@@ -133,7 +133,7 @@ import ProgressBarRound from '@carbon/icons/es/progress-bar--round/32';
     NvmeofGatewayComponent,
     NvmeofSubsystemsComponent,
     NvmeofSubsystemsDetailsComponent,
-    NvmeofTabsComponent,
+    NvmeofGatewayGroupComponent,
     NvmeofSubsystemsFormComponent,
     NvmeofListenersFormComponent,
     NvmeofListenersListComponent,
@@ -293,7 +293,8 @@ const routes: Routes = [
       }
     },
     children: [
-      { path: '', redirectTo: 'subsystems', pathMatch: 'full' },
+      { path: '', redirectTo: 'gateways', pathMatch: 'full' },
+      { path: '', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } },
       {
         path: 'subsystems',
         component: NvmeofSubsystemsComponent,
@@ -330,8 +331,7 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
-      },
-      { path: 'gateways', component: NvmeofGatewayComponent, data: { breadcrumbs: 'Gateways' } }
+      }
     ]
   }
 ];
