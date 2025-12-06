@@ -29,6 +29,9 @@ def setup():
     global default_zonegroup
     default_zonegroup = defaults.get("zonegroup")
 
+    global default_zonename
+    default_zonename = defaults.get("zonename")
+
     global default_cluster
     default_cluster = defaults.get("cluster")
 
@@ -60,6 +63,10 @@ def get_config_port():
 def get_config_zonegroup():
     global default_zonegroup
     return default_zonegroup
+
+def get_config_zonename():
+    global default_zonename
+    return default_zonename
 
 def get_config_cluster():
     global default_cluster
