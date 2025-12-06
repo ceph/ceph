@@ -316,8 +316,9 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
     this.hostService.getLabels().subscribe((resp: string[]) => {
       const host = this.selection.first();
       const labels = new Set(resp.concat(this.hostService.predefinedLabels));
+      const hostLabels = Array.isArray(host['labels']) ? [...host['labels']] : [];
       const allLabels = Array.from(labels).map((label) => {
-        return { content: label, selected: host['labels'].includes(label) };
+        return { content: label, selected: hostLabels.includes(label) };
       });
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
@@ -325,7 +326,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
           {
             type: 'select-badges',
             name: 'labels',
-            value: host['labels'],
+            value: hostLabels,
             label: $localize`Labels`,
             typeConfig: {
               customBadges: true,
