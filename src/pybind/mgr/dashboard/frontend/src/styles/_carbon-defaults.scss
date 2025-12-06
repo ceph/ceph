@@ -165,6 +165,10 @@ Forms
   padding-inline: 0;
 }
 
+.cds--col-lg-1 {
+  padding-inline: 0;
+}
+
 /******************************************
 Breadcrumbs
 ******************************************/
@@ -190,6 +194,11 @@ Modals
     &:active {
       background-color: transparent;
     }
+  }
+
+  .cds--modal-scroll-content {
+    max-height: 70vh;
+    overflow-y: auto;
   }
 }
 
