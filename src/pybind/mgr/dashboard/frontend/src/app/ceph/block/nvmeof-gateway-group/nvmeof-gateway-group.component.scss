@@ -1,0 +1,9 @@
+@use '@carbon/layout';
+
+.ml-3 {
+  margin-left: layout.$spacing-03;
+}
+
+::ng-deep .cds--modal-header__heading {
+  font-size: 12px;
+}
