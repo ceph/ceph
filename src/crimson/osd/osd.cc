@@ -582,6 +582,14 @@ seastar::future<> OSD::start()
   }).then([this] {
     return _add_device_class();
    }).then([this] {
+    if (is_rotational.has_value()) {
+      return shard_services.invoke_on_all([this](auto &local_service) {
+        local_service.local_state.initialize_scheduler(local_service.get_cct(), *is_rotational);
+      });
+    } else {
+      throw std::runtime_error("No device class is set");
+    }
+   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
     monc->sub_want("osdmap", 0, 0);
@@ -701,6 +709,7 @@ seastar::future<> OSD::_add_device_class()
 
   INFO("device_class is {} ", device_class);
 
+  is_rotational = (device_class != "ssd");
   std::string cmd = fmt::format(
     R"({{"prefix": "osd crush set-device-class", "class": "{}", "ids": ["{}"]}})",
     device_class, stringify(whoami)
