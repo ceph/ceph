@@ -200,6 +200,47 @@ Recovery from missing metadata objects
 Depending on which objects are missing or corrupt, you may need to run
 additional commands to regenerate default versions of the objects.
 
+Note the data scan tool can be time consuming. To enable progress updates
+during its operation, enable the cli_api tool.
+
+.. prompt:: bash #
+
+    ceph mgr module enable cli_api
+
+Track progress with ceph status command which will give an estimated completion
+time for long running tasks.
+
+.. prompt:: bash #
+
+    ceph -s
+
+The data scan tools (``scan_extents``, ``scan_inodes``, and ``scan_links``)
+will automatically report their progress to the Ceph manager if the ``cli_api``
+module is enabled. Progress updates include:
+
+- Number of objects processed and total objects
+- Completion percentage
+- Estimated time to completion (ETA)
+- Average processing rate
+
+Progress is updated approximately every 5 seconds and will appear in the output
+of ``ceph -s`` under the "Progress" section. Each scan operation creates a
+unique progress event identified by the operation name and process ID.
+
+.. note:: The ``ceph`` command must be in your system PATH for progress updates
+   to function. If progress updates are not appearing in ``ceph -s``, verify
+   that:
+
+   - The ``cli_api`` manager module is enabled
+   - The ``ceph`` command is available in your PATH
+   - Your ``CEPH_CONF`` environment variable (if set) points to a valid
+     configuration file
+
+Progress updates will be automatically disabled if the system cannot
+communicate with the Ceph manager or if the required module is not available.
+Console output will continue to show local progress information even if
+manager updates are disabled.
+
 If the root inode or MDS directory (``~mdsdir``) is missing or corrupt, run the following command: 
 
 Root inodes ("/" and MDS directory):
