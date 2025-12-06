@@ -89,7 +89,11 @@ struct AsyncOp : Invoker<Result> {
     auto p = std::unique_ptr<Completion>{static_cast<Completion*>(arg)};
     // move result out of Completion memory being freed
     auto op = std::move(p->user_data);
-    op.slot.clear(); // clear our cancellation handler
+
+    // clear the cancellation slot only if it's connected
+    if (op.slot.is_connected()) {
+      op.slot.clear(); // clear our cancellation handler
+    }
     // access AioCompletionImpl directly to avoid locking
     const librados::AioCompletionImpl* pc = op.aio_completion->pc;
     const int ret = pc->rval;
