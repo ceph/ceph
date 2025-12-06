@@ -5733,6 +5733,14 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     if (auto p = m.find("hostname"); p != m.end()) {
       f->dump_string("host", p->second);
     }
+
+    // try to find logical address
+    if (auto p = m.find("devices"); p != m.end()) {
+      f->dump_string("logical_address", p->second);
+    } else if (auto p = m.find("bluestore_bdev_devices"); p != m.end()) {
+      f->dump_string("logical_address", p->second);
+    }
+
     for (auto& k : {
 	"pod_name", "pod_namespace", // set by rook
 	"container_name"             // set by cephadm, ceph-ansible
