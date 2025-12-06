@@ -760,6 +760,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     if (this.userForm.getValue('account_id')) {
       _.merge(result, {
         account_id: this.userForm.getValue('account_id'),
+        tenant: this.accounts.find((account) => account.id === this.userForm.getValue('account_id'))
+          ?.tenant,
         account_root_user: this.userForm.getValue('account_root_user')
       });
     }
@@ -776,12 +778,15 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _getUpdateArgs() {
     const result: Record<string, any> = {};
-    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
+    const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended', 'tenant'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
     }
     if (this.userForm.getValue('account_id')) {
       result['account_id'] = this.userForm.getValue('account_id');
+      result['tenant'] = this.accounts.find(
+        (account) => account.id === this.userForm.getValue('account_id')
+      )?.tenant;
       result['account_root_user'] = this.userForm.getValue('account_root_user');
     }
     const maxBucketsMode = parseInt(this.userForm.getValue('max_buckets_mode'), 10);
