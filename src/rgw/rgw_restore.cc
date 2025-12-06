@@ -27,6 +27,7 @@
 #include "rgw_common.h"
 #include "rgw_bucket.h"
 #include "rgw_restore.h"
+#include "rgw_restore_waiter.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
@@ -151,6 +152,11 @@ int Restore::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
   cct = _cct;
   driver = _driver;
 
+  // Initialize waiter registry
+  if (!waiter_registry) {
+    waiter_registry = std::make_shared<RestoreWaiterRegistry>();
+  }
+
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": initializing Restore handle" << dendl;
   /* max_objs indicates the number of shards or objects
    * used to store Restore Entries */
@@ -187,6 +193,10 @@ void Restore::finalize()
 {
   sal_restore.reset(nullptr);
   obj_names.clear();
+  if (waiter_registry) {
+    waiter_registry->shutdown();
+    waiter_registry.reset();
+  }
   ldpp_dout(this, 20) << __PRETTY_FUNCTION__ << ": finalize Restore handle" << dendl;
 }
 
@@ -231,6 +241,14 @@ void Restore::stop_processor()
     worker->join();
   }
   worker.reset(nullptr);
+}
+
+void Restore::wake_worker()
+{
+  if (worker) {
+    std::lock_guard lock(worker->lock);
+    worker->cond.notify_one();
+  }
 }
 
 unsigned Restore::get_subsys() const
@@ -551,6 +569,18 @@ done:
     ldpp_dout(this, -1) << __PRETTY_FUNCTION__ << ": Restore of entry:'" << entry << "' failed" << ret << dendl;	  
     entry.status = rgw::sal::RGWRestoreStatus::RestoreFailed;
   }
+
+  // Notify any waiting GET requests
+  if (waiter_registry && !in_progress) {
+    bool success = (ret >= 0);
+    waiter_registry->notify_completion(
+      entry.bucket,
+      entry.obj_key,
+      success,
+      ret
+    );
+  }
+
   return ret;
 }
 
@@ -727,7 +757,14 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
     return ret;
   }
 
-  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;  
+  // For cloud-s3 tier (not glacier), wake the restore worker immediately
+  // to start the download instead of waiting for the next periodic cycle
+  if (tier && tier->get_tier_type() == "cloud-s3") {
+    ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Waking restore worker for immediate processing (cloud-s3 tier)" << dendl;
+    wake_worker();
+  }
+
+  ldpp_dout(this, 10) << __PRETTY_FUNCTION__ << ": Restore of object " << pobj->get_key() << " is in progress." << dendl;
 
   if (notify) {
     auto& attrs = pobj->get_attrs();
@@ -745,6 +782,7 @@ int Restore::restore_obj_from_cloud(rgw::sal::Bucket* pbucket,
                         << " for event_types: rgw::notify::ObjectRestoreInitiated" << dendl;
     }
   }
+
 
   return ret;
 }

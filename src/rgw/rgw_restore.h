@@ -20,6 +20,7 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_sal.h"
 #include "rgw_notify.h"
+#include "rgw_restore_waiter.h"
 
 #include <atomic>
 #include <tuple>
@@ -73,6 +74,7 @@ class Restore : public DoutPrefixProvider {
   int max_objs{0};
   std::vector<std::string> obj_names;
   std::atomic<bool> down_flag = { false };
+  std::shared_ptr<RestoreWaiterRegistry> waiter_registry;
 
   class RestoreWorker : public Thread
   {
@@ -95,6 +97,7 @@ class Restore : public DoutPrefixProvider {
     void *entry() override;
     void stop();
 
+    friend class Restore;
     friend class RGWRados;
   }; // RestoreWorker
 
@@ -116,6 +119,8 @@ public:
   bool going_down();
   void start_processor();
   void stop_processor();
+  void wake_worker();
+  std::shared_ptr<RestoreWaiterRegistry> get_waiter_registry() const { return waiter_registry; }
 
   CephContext *get_cct() const override { return cct; }
   rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
