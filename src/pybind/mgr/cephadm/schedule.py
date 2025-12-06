@@ -171,7 +171,7 @@ class DaemonPlacement(NamedTuple):
             if self.ports:
                 if self.ports != dd.ports and dd.ports:
                     return False
-                if self.ip != dd.ip and dd.ip:
+                if self.ip and dd.ip and self.ip != dd.ip:
                     return False
         return True
 
@@ -437,9 +437,25 @@ class HostAssignment(object):
             need = count - len(existing)
 
             # we don't need any additional placements
-            if need <= 0:
-                to_remove.extend(existing[count:])
-                del existing_slots[count:]
+            if need < 0:
+                # while removing skip the host on which dependent service is online
+                non_matching_daemons = []
+                if self.related_service_daemons:
+                    related_service_hosts = list(set(dd.hostname for dd in self.related_service_daemons))
+                    non_related = [dd for dd in existing if dd.hostname not in related_service_hosts]
+                    to_delete = non_related.copy()
+                    # If need to delete more daemons then delete from remaining pool
+                    if len(existing) - len(to_delete) > count:
+                        remaining = [dd for dd in existing if dd not in to_delete]
+                        excess = (len(existing) - len(to_delete)) - count
+                        to_delete.extend(remaining[:excess])
+                    non_matching_daemons = to_delete
+                else:
+                    non_matching_daemons = existing[count:]
+
+                to_remove.extend(non_matching_daemons)
+                # remove from  existing_slots
+                existing_slots = [slot for slot in existing_slots if slot.hostname not in [dd.hostname for dd in non_matching_daemons]]
                 return self.place_per_host_daemons(existing_slots, [], to_remove)
 
             if self.related_service_daemons:
