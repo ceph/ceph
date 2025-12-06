@@ -1584,7 +1584,7 @@ class CephadmServe:
             ic_params.append(ic.to_json(flatten_args=True))
         return ic_meta
 
-    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
+    def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False, force_delete_data: bool = False) -> str:
         """
         Remove a daemon
         """
@@ -1603,10 +1603,11 @@ class CephadmServe:
             service_registry.get_service(daemon_type_to_service(daemon_type)).pre_remove(daemon)
             # NOTE: we are passing the 'force' flag here, which means
             # we can delete a mon instances data.
+            args = ['--name', name, '--force']
+            if force_delete_data:
+                args.append('--force-delete-data')
             if dd.ports:
-                args = ['--name', name, '--force', '--tcp-ports', ' '.join(map(str, dd.ports))]
-            else:
-                args = ['--name', name, '--force']
+                args.extend(['--tcp-ports', ' '.join(map(str, dd.ports))])
 
             self.log.info('Removing daemon %s from %s -- ports %s' % (name, host, dd.ports))
             with self.mgr.async_timeout_handler(host, f'cephadm rm-daemon (daemon {name})'):

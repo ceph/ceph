@@ -1792,25 +1792,67 @@ Usage:
     @_cli_write_command('orch daemon rm')
     def _daemon_rm(self,
                    names: List[str],
-                   force: Optional[bool] = False) -> HandleCommandResult:
-        """Remove specific daemon(s)"""
+                   force: bool = False,
+                   force_delete_data: bool = False) -> HandleCommandResult:
+        """
+        Remove specific daemon(s).
+
+        When used with --force-delete-data, data for certain daemon types
+        (mon, osd, prometheus) will be deleted instead of being moved under
+        <fsid>/removed/.
+        """
         for name in names:
             if '.' not in name:
-                return HandleCommandResult(stderr=f"{name} is not a valid daemon name", retval=-errno.EINVAL)
-            (daemon_type) = name.split('.')[0]
+                return HandleCommandResult(
+                    stderr=f"{name} is not a valid daemon name",
+                    retval=-errno.EINVAL
+                )
+
+            daemon_type = name.split('.')[0]
+
             if not force and daemon_type in ['osd', 'mon', 'prometheus']:
-                return HandleCommandResult(stderr=f"must pass --force to REMOVE daemon with potentially PRECIOUS DATA for {name}", retval=-errno.EPERM)
-        completion = self.remove_daemons(names)
+                return HandleCommandResult(
+                    stderr=f"must pass --force to REMOVE daemon with potentially PRECIOUS DATA for {name}",
+                    retval=-errno.EPERM
+                )
+
+        if force_delete_data and not force:
+            # extra safety: don’t allow delete-data without force
+            return HandleCommandResult(
+                stderr="--force-delete-data requires --force",
+                retval=-errno.EPERM
+            )
+
+        completion = self.remove_daemons(
+            names,
+            force_delete_data=force_delete_data,
+        )
         return completion_to_result(completion)
 
     @_cli_write_command('orch rm')
     def _service_rm(self,
                     service_name: str,
-                    force: bool = False) -> HandleCommandResult:
-        """Remove a service"""
+                    force: bool = False,
+                    force_delete_data: bool = False) -> HandleCommandResult:
+        """
+        Remove a service.
+
+        When used with --force-delete-data, data for stateful daemons belonging
+        to this service (e.g. mon, osd, prometheus) will be deleted instead of
+        being moved under <fsid>/removed/.
+        """
         if service_name in ['mon', 'mgr'] and not force:
             raise OrchestratorError('The mon and mgr services cannot be removed')
-        completion = self.remove_service(service_name, force=force)
+
+        if force_delete_data and not force:
+            # same safety rule as for daemon rm
+            raise OrchestratorError('--force-delete-data requires --force')
+
+        completion = self.remove_service(
+            service_name,
+            force=force,
+            force_delete_data=force_delete_data,
+        )
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
