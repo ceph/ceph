@@ -34,6 +34,11 @@ public:
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
   void on_actingset_changed(bool same_primary) final;
+
+  PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
+    const hobject_t& soid,
+    std::string&& key) const final;
+
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
     _read(const hobject_t& hoid, uint64_t off,
