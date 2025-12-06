@@ -124,9 +124,9 @@ public:
   protected:
     void add_lock(LockOp op, int idx) {
       if (idx >= 0) {
-	emplace(cbegin() + idx, std::move(op));
+        emplace(cbegin() + idx, op);
       } else {
-	emplace_back(std::move(op));
+        emplace_back(op);
       }
     }
   };
