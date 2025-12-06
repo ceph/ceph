@@ -20,7 +20,6 @@ from . import(
     get_secret_key
     )
 
-
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
@@ -474,3 +473,35 @@ end
             result = admin(['script', 'rm', '--context', context])
             assert result[1] == 0
 
+
+@pytest.mark.example_test
+def test_interrupt_request():
+    script = '''
+        return RGW_ABORT_REQUEST
+    '''
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+    
+    result = put_script(script, "prerequest")
+    assert result[1] == 0
+    key = "hello"
+    
+    try:
+        conn.put_object(Body="this should be blocked".encode("ascii"), Bucket=bucket_name, Key=key)
+        pytest.fail("The put_object operation was not blocked by the Lua script.")
+    except Exception as e:
+        pass
+
+    out, err = admin(['script', 'rm', '--context', 'prerequest'])
+    assert err == 0
+
+    try:
+        conn.get_object(Bucket=bucket_name, Key=key)
+        pytest.fail("The object was written to the bucket despite the error.")
+    except Exception as e:
+        assert e.response['Error']['Code'] == 'NoSuchKey'
+        log.info("Successfully confirmed that the request was interrupted.")
+
+    conn.delete_bucket(Bucket=bucket_name)

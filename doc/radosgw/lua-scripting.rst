@@ -334,6 +334,23 @@ Tracing functions can be used only in the ``postrequest`` context.
   The function accepts one or two arguments: A string containing the event ``name`` should be the first argument, followed by the event ``attributes``, which is optional for events without attributes.
   An event's attributes must be a table of strings.
 
+Request Blocking and Error Handling
+-----------------------------------
+Script Execution Errors
+~~~~~~~~~~~~~~~~~~~~~~~
+If the Lua script fails with a syntax or runtime error, RGW will log the error. The request that triggered the script will still go through.
+
+Request Blocking and Return Values
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+The script's return value determines how RGW proceeds with the request:
+- To block the request: The script must return the value ``RGW_ABORT_REQUEST``. RGW interprets this as ``-EPERM`` and will stop processing the request.
+- To continue the request: No return value, or any other return value or type will be treated as success.
+
+Return Value Context
+~~~~~~~~~~~~~~~~~~~~
+The Lua script’s return value is evaluated only during the prerequest context and is ignored in any other RGW request-processing context.
+The HTTP response status code is 403 (Forbidden) by default when a request is blocked by Lua. The response code can be changed using ``Request.Response.HTTPStatusCode`` and ``Request.Response.HTTPStatus``.
+If a request is aborted this way, the ``data`` and ``postrequest`` context will also be aborted.
 Background Context
 --------------------
 The ``background`` context may be used for purposes that include analytics, monitoring, caching data for other context executions.

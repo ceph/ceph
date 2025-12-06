@@ -788,7 +788,8 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const std::string& script)
+    const std::string& script,
+    int& script_return_code )
 {
   lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
                          s->cct->_conf->rgw_lua_max_runtime_per_state, s);
@@ -808,6 +809,9 @@ int execute(
   
     create_top_metatable(L, s, const_cast<char*>(op_name));  
 
+    //Make special error code available to lua scripts
+    lua_pushinteger(L, -EPERM);
+    lua_setglobal(L, "RGW_ABORT_REQUEST");
     // add the ops log action
     pushstring(L, RequestLogAction);
     lua_pushlightuserdata(L, rest);
@@ -827,6 +831,12 @@ int execute(
       ldpp_dout(s, 1) << "Lua ERROR: " << err << dendl;
       rc = -1;
     }
+    if (lua_isinteger(L, -1)) {
+      script_return_code = static_cast<int>(lua_tointeger(L, -1));
+      ldpp_dout(s, 20) << "Lua script executed successfully and returned code: " << script_return_code << dendl;
+    } else {
+      ldpp_dout(s, 20) << "Lua script executed, but did not return an integer. Ignoring return code." << dendl;
+    }
   } catch (const std::runtime_error& e) {
     ldpp_dout(s, 1) << "Lua ERROR: " << e.what() << dendl;
     rc = -1;
@@ -836,6 +846,18 @@ int execute(
   }
 
   return rc;
+}
+
+int execute(
+    RGWREST* rest,
+    OpsLogSink* olog,
+    req_state* s, 
+    RGWOp* op,
+    const std::string& script
+)
+{
+  int dummy_script_return_code = 0;
+  return execute(rest, olog, s, op, script, dummy_script_return_code);
 }
 
 } // namespace rgw::lua::request
