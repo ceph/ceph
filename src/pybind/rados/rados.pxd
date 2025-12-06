@@ -4,16 +4,19 @@
 #
 # Copyright 2016 Mehdi Abaakouk <sileht@redhat.com>
 
-IF BUILD_DOC:
-    cdef:
-        ctypedef void* rados_t
-        ctypedef void* rados_config_t
-        ctypedef void* rados_ioctx_t
-ELSE:
-    cdef extern from "rados/librados.h" nogil:
-        ctypedef void* rados_t
-        ctypedef void* rados_config_t
-        ctypedef void* rados_ioctx_t
+cdef extern from *:
+    """
+    #ifndef BUILD_DOC
+    #include "rados/librados.h"
+    #else
+    typedef void* rados_t;
+    typedef void* rados_config_t;
+    typedef void* rados_ioctx_t;
+    #endif
+    """
+    ctypedef void* rados_t
+    ctypedef void* rados_config_t
+    ctypedef void* rados_ioctx_t
 
 
 cdef class Rados(object):
