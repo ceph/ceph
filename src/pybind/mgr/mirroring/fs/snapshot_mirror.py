@@ -563,7 +563,7 @@ class FSSnapshotMirror:
                                            'site_name': remote['cluster_name'],
                                            'fs_name': remote['fs_name']
                                            }
-                return 0, json.dumps(peer_res), ''
+                return 0, json.dumps(peer_res, indent=2), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
         except Exception as e:
@@ -798,6 +798,6 @@ class FSSnapshotMirror:
                                 fs['peers'].append(peer)
                             daemon['filesystems'].append(fs)
                         daemons.append(daemon)
-                return 0, json.dumps(daemons), ''
+                return 0, json.dumps(daemons, indent=2), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
