@@ -1728,7 +1728,6 @@ int RGWOp::read_bucket_cors()
   map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_CORS);
   if (aiter == s->bucket_attrs.end()) {
     ldpp_dout(this, 20) << "no CORS configuration attr found" << dendl;
-    cors_exist = false;
     return 0; /* no CORS configuration found */
   }
 
@@ -1747,6 +1746,42 @@ int RGWOp::read_bucket_cors()
     RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(&bucket_cors);
     ldpp_dout(this, 15) << "Read RGWCORSConfiguration";
     s3cors->to_xml(*_dout);
+    *_dout << dendl;
+  }
+  return 0;
+}
+
+int RGWOp::read_global_cors()
+{
+  string allow_origins, allow_headers, allow_methods, expose_headers;
+  int ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
+  if (ret < 0) {
+    return -EINVAL;
+  }
+  ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
+  if (ret < 0) {
+    return -EINVAL;
+  }
+  ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
+  if (ret < 0) {
+    return -EINVAL;
+  }
+  g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
+  std::optional<RGWCORSRule> optional_global_cors;
+  if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(), expose_headers.c_str(), allow_methods.c_str(),
+                               optional_global_cors) < 0) {
+    return -EINVAL;
+  }
+
+  global_cors_rule = optional_global_cors.value();
+  cors_exist = true;
+
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
+    XMLFormatter f;
+    RGWCORSRule_S3 *s3cors = static_cast<RGWCORSRule_S3 *>(&global_cors_rule);
+    ldpp_dout(this, 15) << "Read RGWCORSRule";
+    s3cors->to_xml(f);
+    f.flush(*_dout);
     *_dout << dendl;
   }
   return 0;
@@ -1788,9 +1823,12 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   }
 
   /* Custom: */
+  cors_exist = false;
   origin = orig;
-  int temp_op_ret = read_bucket_cors();
-  if (temp_op_ret < 0) {
+
+  const int read_global_cors_ret = read_global_cors();
+  const int temp_op_ret = read_bucket_cors();
+  if (temp_op_ret < 0 && read_global_cors_ret < 0) {
     op_ret = temp_op_ret;
     return false;
   }
@@ -1802,7 +1840,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
   /* CORS 6.2.2. */
   RGWCORSRule *rule = bucket_cors.host_name_rule(orig);
-  if (!rule)
+  if (!rule && !global_cors_rule.has_origin(orig))
     return false;
 
   /*
@@ -1814,7 +1852,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
    * thereby allowing any origin to access the resource.
    */
   const char *authorization = s->info.env->get("HTTP_AUTHORIZATION");
-  if (!authorization && rule->has_wildcard_origin())
+  if (!authorization && (rule->has_wildcard_origin() || global_cors_rule.has_wildcard_origin() /*is this possible*/))
     origin = "*";
 
   /* CORS 6.2.3. */
@@ -1826,7 +1864,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   if (req_meth) {
     method = req_meth;
     /* CORS 6.2.5. */
-    if (!validate_cors_rule_method(this, rule, req_meth)) {
+    if (!validate_cors_rule_method(this, rule, req_meth) || !validate_cors_rule_header(this, &global_cors_rule, req_meth)) {
      return false;
     }
   }
@@ -1836,6 +1874,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 
   /* CORS 6.2.6. */
   get_cors_response_headers(this, rule, req_hdrs, headers, exp_headers, max_age);
+  get_cors_response_headers(this, &global_cors_rule, req_hdrs, headers, exp_headers, max_age);
 
   return true;
 }
