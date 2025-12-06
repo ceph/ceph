@@ -1453,6 +1453,12 @@ COMMAND("nvme-gw show"
    " show nvmeof gateways within (pool, group)",
    "mon", "r")
 
+COMMAND("nvme-gw listeners"
+	" name=pool,type=CephString"
+	" name=group,type=CephString",
+	" show all nvmeof gateways listeners within (pool, group)",
+	"mon", "r")
+
 // these are tell commands that were implemented as CLI commands in
 // the broken pre-octopus way that we want to allow to work when a
 // monitor has upgraded to octopus+ but the monmap min_mon_release is
