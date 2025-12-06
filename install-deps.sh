@@ -11,7 +11,7 @@
 #  License as published by the Free Software Foundation; either
 #  version 2.1 of the License, or (at your option) any later version.
 #
-set -e
+set -ex
 
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -425,8 +425,15 @@ else
         echo "Using apt-get to install dependencies"
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
-        clean_boost_on_ubuntu
+        if [ $ARCH != "riscv64" ];then
+            clean_boost_on_ubuntu
+        else
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            . "$HOME/.cargo/env"
+            rustup set default-host riscv64gc-unknown-linux-gnu
 
+            apt-get install sudo libopenblas-dev libgoogle-perftools-dev libjemalloc-dev zip libicu-dev python3 python3-pip build-essential doxygen  -y
+        fi
         # update the local package index before installing any packages from the
         # official repo
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update \
