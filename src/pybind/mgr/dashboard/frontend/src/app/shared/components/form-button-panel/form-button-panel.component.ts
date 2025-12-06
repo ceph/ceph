@@ -42,6 +42,10 @@ export class FormButtonPanelComponent implements OnInit {
   modalForm = false;
   @Input()
   submitBtnType: 'primary' | 'danger';
+  @Input()
+  backBtnType = 'secondary';
+  @Input()
+  btnSize: 'sm' | 'md' | 'lg' | 'xl' | '2xl' = 'lg';
 
   hasModalOutlet = false;
 
