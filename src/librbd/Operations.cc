@@ -256,7 +256,7 @@ struct C_InvokeAsyncRequest : public Context {
     }
 
     if (image_ctx.exclusive_lock->is_lock_owner() &&
-        image_ctx.exclusive_lock->accept_request(request_type, nullptr)) {
+        image_ctx.exclusive_lock->accept_request(request_type)) {
       send_local_request();
       owner_lock.unlock_shared();
       return;
@@ -1849,7 +1849,7 @@ int Operations<I>::prepare_image_update(
     std::unique_lock owner_locker{m_image_ctx.owner_lock};
     if (m_image_ctx.exclusive_lock != nullptr &&
         (!m_image_ctx.exclusive_lock->is_lock_owner() ||
-         !m_image_ctx.exclusive_lock->accept_request(request_type, nullptr))) {
+         !m_image_ctx.exclusive_lock->accept_request(request_type))) {
 
       attempting_lock = true;
       m_image_ctx.exclusive_lock->block_requests(0);
