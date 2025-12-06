@@ -191,6 +191,7 @@ public:
   base_iertr::future<LBAMapping> next();
 
 private:
+  friend class LBAManager;
   friend lba::BtreeLBAManager;
   friend class TransactionManager;
   friend std::ostream &operator<<(std::ostream&, const LBAMapping&);
@@ -200,6 +201,13 @@ private:
       return *indirect_cursor;
     }
     return *direct_cursor;
+  }
+
+  LBACursorRef get_effective_cursor_ref() {
+    if (is_indirect()) {
+      return indirect_cursor;
+    }
+    return direct_cursor;
   }
 
   bool is_null() const {
