@@ -1,7 +1,8 @@
 # pylint: disable=unexpected-keyword-arg
-
 import functools
+import hashlib
 import logging
+from OpenSSL import crypto
 from typing import Annotated, Any, Callable, Dict, Generator, List, \
     NamedTuple, Optional, Type, get_args, get_origin
 
@@ -34,7 +35,7 @@ else:
         pb2 = pb2
 
         def __init__(self, gw_group: Optional[str] = None, traddr: Optional[str] = None):
-            logger.info("Initiating nvmeof gateway connection...")
+            logger.debug("Initiating nvmeof gateway connection...")
             try:
                 if not gw_group:
                     res = NvmeofGatewaysConfig.get_service_info()
@@ -69,7 +70,8 @@ else:
                 client_key = NvmeofGatewaysConfig.get_client_key(service_name)
                 client_cert = NvmeofGatewaysConfig.get_client_cert(service_name)
                 server_cert = NvmeofGatewaysConfig.get_server_cert(service_name)
-                logger.info('Securely connecting to: %s', self.gateway_addr)
+                log_tls_debug_info(f"Securely connecting to {self.gateway_addr}",
+                                   client_cert, client_key, server_cert)
                 credentials = grpc.ssl_channel_credentials(
                     root_certificates=server_cert,
                     private_key=client_key,
@@ -77,9 +79,51 @@ else:
                 )
                 self.channel = grpc.secure_channel(self.gateway_addr, credentials)
             else:
-                logger.info("Insecurely connecting to: %s", self.gateway_addr)
+                logger.debug("Insecurely connecting to: %s", self.gateway_addr)
                 self.channel = grpc.insecure_channel(self.gateway_addr)
             self.stub = pb2_grpc.GatewayStub(self.channel)
+
+    def log_tls_debug_info(prefix: str, client_cert_pem: bytes, client_key_pem: bytes,
+                           server_cert_pem: bytes):
+        """
+        Logs a single structured line with TLS debug info:
+        client cert fingerprint, key match status and server cert fingerprint.
+        Wrapped in try/except to avoid breaking execution.
+        Avoids calculations if logger is not in enabled for debug
+        """
+        try:
+            if not logger.isEnabledFor(logging.DEBUG):
+                return
+
+            # Load certificates and key
+            client_cert = crypto.load_certificate(crypto.FILETYPE_PEM, client_cert_pem)
+            server_cert = crypto.load_certificate(crypto.FILETYPE_PEM, server_cert_pem)
+            private_key = crypto.load_privatekey(crypto.FILETYPE_PEM, client_key_pem)
+
+            # Compute fingerprints (SHA256)
+            client_cert_fingerprint = hashlib.sha256(crypto.dump_certificate(
+                crypto.FILETYPE_ASN1, client_cert)).hexdigest()
+            server_cert_fingerprint = hashlib.sha256(crypto.dump_certificate(
+                crypto.FILETYPE_ASN1, server_cert)).hexdigest()
+
+            # Verify key matches cert
+            try:
+                # Sign and verify like before
+                message = b"verify-key-match"
+                signature = crypto.sign(private_key, message, "sha256")
+                crypto.verify(client_cert, signature, message, "sha256")
+                key_match = True
+            except Exception:  # pylint: disable=broad-except
+                key_match = False
+
+            logger.debug(
+                "%s | Client cert fingerprint: %s | Key match: %s | Server cert fingerprint: %s",
+                prefix, client_cert_fingerprint, key_match, server_cert_fingerprint
+            )
+
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning("%s | Failed to log TLS debug info: %s", prefix, e)
+
 
     Model = Dict[str, Any]
     Collection = List[Model]
