@@ -52,8 +52,29 @@ static int32_t libcephfsd_cbk_nonblocking_rw(proxy_async_t *async,
 	return 0;
 }
 
+static int32_t libcephfsd_cbk_nonblocking_fsync(proxy_async_t *async,
+						proxy_cbk_t *cbk, void *data,
+						uint32_t size)
+{
+	struct ceph_ll_io_info *info;
+	int32_t err;
+
+	err = ptr_check(&async->random, cbk->ll_nonblocking_fsync.info,
+			(void **)&info);
+	if (err < 0) {
+		return err;
+	}
+
+	info->result = cbk->ll_nonblocking_fsync.res;
+
+	info->callback(info);
+
+	return 0;
+}
+
 static proxy_cbk_handler_t libcephfsd_cbk_handlers[LIBCEPHFSD_CBK_TOTAL_OPS] = {
 	[LIBCEPHFSD_CBK_LL_NONBLOCKING_RW] = libcephfsd_cbk_nonblocking_rw,
+	[LIBCEPHFSD_CBK_LL_NONBLOCKING_FSYNC] = libcephfsd_cbk_nonblocking_fsync,
 };
 
 static void *
