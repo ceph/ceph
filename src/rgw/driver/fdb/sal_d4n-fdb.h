@@ -28,7 +28,10 @@
 
 namespace rgw::sal::d4n {
 
-struct FDB_FilterDriver : public rgw::sal::FilterDriver
+struct FDB_FilterDriver;
+struct FDB_FilterBucket;
+
+struct FDB_FilterDriver : rgw::sal::FilterDriver
 {
  CephContext  *cct = nullptr;
  const DoutPrefixProvider *dpp = nullptr;
@@ -88,14 +91,16 @@ struct FDB_FilterDriver : public rgw::sal::FilterDriver
     dout_fmt(0, "JFW: FDB_FilterDriver::finalize(): ok");
  }
 
+ std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override; 
+
+/*
+ int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                 std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+*/
 /*
  virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
 
  virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
- virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
-
- virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
-                         std::unique_ptr<Bucket>* bucket, optional_yield y) override;
 
  virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
@@ -105,6 +110,57 @@ struct FDB_FilterDriver : public rgw::sal::FilterDriver
 			  uint64_t olh_epoch,
 			  const std::string& unique_tag) override;
 */
+};
+
+struct FDB_FilterBucket : FilterBucket
+{
+ FDB_FilterDriver *owning_driver;
+
+ public:
+ FDB_FilterBucket(std::unique_ptr<Bucket> bucket, FDB_FilterDriver *owning_driver)
+  : FilterBucket(std::move(bucket)),
+    owning_driver(owning_driver)
+ {}
+
+ public:
+ virtual int create(const DoutPrefixProvider *dpp, const CreateParams& params, optional_yield y) override;
+
+
+ public:
+ virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
+
+ virtual int list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y) override;
+
+/*JFW:
+ public:
+ virtual std::unique_ptr<MultipartUpload> get_multipart_upload(const std::string& oid, 
+                                                               std::optional<std::string> upload_id = std::nullopt, 
+                                                               ACLOwner owner = {}, 
+                                                               ceph::real_time mtime = real_clock::now()) override;
+*/
+};
+
+struct FDB_FilterObject : FilterObject
+{
+ FDB_FilterDriver *owner_driver = nullptr;
+
+ FDB_FilterObject(std::unique_ptr<Object> next_object, FDB_FilterDriver *owner_driver_)
+  : FilterObject(std::move(next_object)),
+    owner_driver(owner_driver_)
+ {}
+
+ FDB_FilterObject(std::unique_ptr<Object> next_object, FDB_FilterDriver *owner_driver_, Bucket *bucket_ptr)
+  : FilterObject(std::move(next_object), bucket_ptr), 
+    owner_driver(owner_driver_)
+ {}
+
+ FDB_FilterObject(FDB_FilterObject& src, FDB_FilterDriver *owner_driver_)
+  : FilterObject(src),
+    owner_driver(owner_driver_)
+ {}
+
+ public:
+ 
 };
 
 } // namespace rgw::sal::d4n
