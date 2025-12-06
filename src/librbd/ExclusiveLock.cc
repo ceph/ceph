@@ -44,6 +44,12 @@ ExclusiveLock<I>::ExclusiveLock(I &image_ctx)
 }
 
 template <typename I>
+bool ExclusiveLock<I>::accept_request(OperationRequestType request_type) const {
+  int ret_val; // ignored
+  return accept_request(request_type, &ret_val);
+}
+
+template <typename I>
 bool ExclusiveLock<I>::accept_request(OperationRequestType request_type,
                                       int *ret_val) const {
   std::lock_guard locker{ML<I>::m_lock};
@@ -53,12 +59,10 @@ bool ExclusiveLock<I>::accept_request(OperationRequestType request_type,
      (m_request_blocked_count == 0 ||
       m_image_ctx.get_exclusive_lock_policy()->accept_blocked_request(
         request_type)));
-  if (ret_val != nullptr) {
-    *ret_val = accept_request ? 0 : m_request_blocked_ret_val;
-  }
+  *ret_val = accept_request ? 0 : m_request_blocked_ret_val;
 
-  ldout(m_image_ctx.cct, 20) << "=" << accept_request << " (request_type="
-                             << request_type << ")" << dendl;
+  ldout(m_image_ctx.cct, 20) << "=" << accept_request << " ret_val=" << *ret_val
+                             << " (request_type=" << request_type << ")" << dendl;
   return accept_request;
 }
 
