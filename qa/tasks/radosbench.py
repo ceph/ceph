@@ -134,12 +134,20 @@ def task(ctx, config):
             )
         radosbench[id_] = proc
 
+    watched_process: WatchedProcess = WatchedProcess(ctx, "radosbench", cluster, radosbench)
     try:
         yield
     finally:
         timeout = config.get('time', 360) * 30 + 300
         log.info('joining radosbench (timing out after %ss)', timeout)
-        run.wait(radosbench.values(), timeout=timeout)
+        try:
+            run.wait(radosbench.values(), timeout=timeout)
+        except Exception as e:
+            watched_process.try_set_exception(e)
+
+        # If test has failed then don't try to clean up
+        if watched_process.exception:
+            raise watched_process.exception
 
         if pool != 'data' and create_pool:
             manager.remove_pool(pool)
