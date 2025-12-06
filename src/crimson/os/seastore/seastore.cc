@@ -2941,11 +2941,8 @@ SeaStore::Shard::omaptree_rm_keyrange(
     [&t, &onode, FNAME]
     (auto &omap_manager, auto &root, auto &first, auto &last)
   {
-    auto config = OMapManager::omap_list_config_t()
-      .with_inclusive(true, false)
-      .without_max();
     return omap_manager.omap_rm_key_range(
-      root, t, first, last, config
+      root, t, first, last
     ).si_then([&t, &root, &onode, FNAME] {
       if (root.must_update()) {
         omaptree_update_root(t, root, onode);
