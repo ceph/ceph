@@ -392,6 +392,17 @@ target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
 target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
   ${rgw_libs} ${LMDB_LIBRARIES})
+
+# unittest_posix_system_user
+add_executable(unittest_posix_system_user
+	test_posix_system_user.cc)
+add_ceph_unittest(unittest_posix_system_user)
+target_compile_definitions(unittest_posix_system_user PUBLIC LMDB_SAFE_NO_CPP_UTILITIES)
+target_include_directories(unittest_posix_system_user
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
+target_link_libraries(unittest_posix_system_user ${UNITTEST_LIBS}
+  ${rgw_libs} ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
 if(WITH_RADOSGW_RADOS)
