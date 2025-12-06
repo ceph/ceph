@@ -35,7 +35,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Host } from '~/app/shared/models/host.interface';
-import { CephServiceSpec } from '~/app/shared/models/service.interface';
+import { CephServiceSpec, QatOptions, QatSepcs } from '~/app/shared/models/service.interface';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { TimerService } from '~/app/shared/services/timer.service';
@@ -89,6 +89,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   zonegroupList: RgwZonegroup[] = [];
   zoneList: RgwZone[] = [];
   defaultZonegroup: RgwZonegroup;
+  rgwQatList = ['compression'];
+  rgwQatOptions: string[] = [];
   showRealmCreationForm = false;
   defaultsInfo: { defaultRealmName: string; defaultZonegroupName: string; defaultZoneName: string };
   realmNames: string[];
@@ -106,6 +108,11 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     selected: false
   }));
   showMgmtGatewayMessage: boolean = false;
+  qatDisplayMap: Record<keyof typeof QatOptions, string> = {
+    hw: 'Hardware',
+    sw: 'Software',
+    none: 'None'
+  };
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -283,6 +290,12 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       realm_name: [null],
       zonegroup_name: [null],
       zone_name: [null],
+      qat: new CdFormGroup(
+        this.rgwQatList.reduce((acc: object, e) => {
+          acc[e] = new UntypedFormControl(false);
+          return acc;
+        }, {})
+      ),
       // iSCSI
       trusted_ip_list: [null],
       api_port: [null, [CdValidators.number(false)]],
@@ -616,6 +629,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit(): void {
+    this.rgwQatOptions = Object.keys(QatOptions) as (keyof typeof QatOptions)[];
+    // qatKeys = Object.keys(QatOptions) as (keyof typeof QatOptions)[];
     this.action = this.actionLabels.CREATE;
     this.resolveRoute();
 
@@ -709,7 +724,8 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               this.setRgwFields(
                 response[0].spec?.rgw_realm,
                 response[0].spec?.rgw_zonegroup,
-                response[0].spec?.rgw_zone
+                response[0].spec?.rgw_zone,
+                response[0].spec?.qat
               );
               this.serviceForm.get('ssl').setValue(response[0].spec?.ssl);
               if (response[0].spec?.ssl) {
@@ -944,7 +960,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     }
   }
 
-  setRgwFields(realm_name?: string, zonegroup_name?: string, zone_name?: string) {
+  setRgwFields(realm_name?: string, zonegroup_name?: string, zone_name?: string, qat?: QatSepcs) {
     const observables = [
       this.rgwRealmService.getAllRealmsInfo(),
       this.rgwZonegroupService.getAllZonegroupsInfo(),
@@ -1011,6 +1027,15 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           this.serviceForm.get('realm_name').setValue(realm_name);
           this.serviceForm.get('zonegroup_name').setValue(zonegroup_name);
           this.serviceForm.get('zone_name').setValue(zone_name);
+        }
+        if (qat) {
+          Object.keys(qat).forEach((prop) => {
+            this.serviceForm.get(`qat.${prop}`).setValue(qat[prop]);
+          });
+        } else if (qat == null) {
+          this.rgwQatList.forEach((prop) => {
+            this.serviceForm.get(`qat.${prop}`).setValue('none');
+          });
         }
         if (this.realmList.length === 0) {
           this.showRealmCreationForm = true;
@@ -1162,6 +1187,13 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       serviceSpec['rgw_zonegroup'] =
         values['zonegroup_name'] !== 'default' ? values['zonegroup_name'] : null;
       serviceSpec['rgw_zone'] = values['zone_name'] !== 'default' ? values['zone_name'] : null;
+      for (const property in values['qat']) {
+        if (values['qat'][property] && values['qat'][property] != QatOptions.none) {
+          serviceSpec['qat'] = values['qat'];
+        } else if (values['qat'][property] == 'none') {
+          delete serviceSpec['qat'];
+        }
+      }
     }
 
     const serviceId: string = values['service_id'];
