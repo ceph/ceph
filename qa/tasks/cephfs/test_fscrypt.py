@@ -106,6 +106,15 @@ class TestFSCryptRMW(FSCryptTestCase):
     CLIENTS_REQUIRED = 2
     def setUp(self):
         super().setUp()
+
+        self.get_ceph_cmd_result(
+                'auth', 'caps', "client.1",
+                'mds', 'allow *',
+                'mon', 'allow *',
+                'osd', 'allow *')
+
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait()
         self.mount_b.run_shell_payload(f"sudo fscrypt unlock --quiet --key=/tmp/key {self.path}")
 
     def test_fscrypt_overwrite_block_boundary(self):
