@@ -32,7 +32,7 @@ if(WITH_EC_ISA_PLUGIN)
   set(EC_ISA_LIB ec_isa)
 endif()
 
-add_library(erasure_code STATIC ErasureCodePlugin.cc)
+add_library(erasure_code OBJECT ErasureCodePlugin.cc)
 target_link_libraries(erasure_code $<$<PLATFORM_ID:Windows>:dlfcn_win32>
                       ${CMAKE_DL_LIBS})
 

@@ -567,9 +567,11 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:compressor_objs>
   $<TARGET_OBJECTS:common-objs>
   $<TARGET_OBJECTS:common_mountcephfs_objs>
-  $<TARGET_OBJECTS:crush_objs>)
+  $<TARGET_OBJECTS:crush_objs>
+  $<TARGET_OBJECTS:json_spirit>
+  $<TARGET_OBJECTS:erasure_code>)
 set(ceph_common_deps
-  json_spirit erasure_code extblkdev arch crc32
+  common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}
   Boost::thread
   Boost::system
