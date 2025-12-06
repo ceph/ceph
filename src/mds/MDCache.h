@@ -265,6 +265,9 @@ class MDCache {
 
   bool get_use_global_snaprealm_seq(void) const {
     return use_global_snaprealm_seq;
+
+  bool get_bal_export_pin(void) const {
+    return bal_export_pin;
   }
 
   /**
@@ -1573,6 +1576,7 @@ private:
   bool export_ephemeral_distributed_config;
   bool export_ephemeral_random_config;
   unsigned export_ephemeral_dist_frag_bits;
+  bool bal_export_pin;
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
