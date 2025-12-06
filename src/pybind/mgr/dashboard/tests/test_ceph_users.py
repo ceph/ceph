@@ -35,12 +35,12 @@ class CephUsersControllerTestCase(ControllerTestCase):
                       "mgr": "allow *",
                       "mon": "allow *",
                       "osd": "allow *"},
-             "key": "***********"
+             "key": "RANDOMFi7NwMARAA7RdGqdav+BEEFDEAD0x00g=="
              },
             {"entity": "client.bootstrap-mds",
              "caps": {"mds": "allow *",
                       "osd": "allow *"},
-             "key": "***********"
+             "key": "2RANDOMi7NwMARAA7RdGqdav+BEEFDEAD0x00g=="
              }
         ])
 
