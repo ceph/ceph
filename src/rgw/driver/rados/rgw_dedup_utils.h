@@ -357,14 +357,6 @@ namespace rgw::dedup {
                                 const DoutPrefixProvider* dpp);
 
   //---------------------------------------------------------------------------
-  static inline void build_oid(const std::string &bucket_id,
-                               const std::string &obj_name,
-                               std::string *oid)
-  {
-    *oid = bucket_id + "_" + obj_name;
-  }
-
-  //---------------------------------------------------------------------------
   static inline uint64_t calc_deduped_bytes(uint64_t head_obj_size,
                                             uint16_t num_parts,
                                             uint64_t size_bytes)
