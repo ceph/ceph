@@ -107,6 +107,12 @@ struct CollectionNode : LogicalChildNode {
   coll_map_t decoded;
   delta_buffer_t delta_buffer;
 
+  void do_on_state_commit() final {
+    auto &prior = static_cast<CollectionNode&>(*get_prior_instance());
+    prior.delta_buffer = std::move(delta_buffer);
+    prior.decoded = std::move(decoded);
+  }
+
   CachedExtentRef duplicate_for_write(Transaction&) final {
     assert(delta_buffer.empty());
     return CachedExtentRef(new CollectionNode(*this));

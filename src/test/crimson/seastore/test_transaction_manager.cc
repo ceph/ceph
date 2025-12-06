@@ -798,10 +798,24 @@ struct transaction_manager_test_t :
       }).unsafe_get();
   }
 
-  LBAMapping refresh_lba_mapping(test_transaction_t &t, LBAMapping mapping) {
-    return with_trans_intr(*t.t, [mapping=std::move(mapping)](auto &t) mutable {
-      return mapping.refresh();
-    }).unsafe_get();
+  std::optional<LBAMapping> refresh_lba_mapping(
+    test_transaction_t &t, LBAMapping mapping)
+  {
+    std::optional<LBAMapping> pin = with_trans_intr(
+      *t.t,
+      [mapping=std::move(mapping)](auto &t) mutable {
+        return mapping.refresh().si_then([](auto m) {
+          return std::make_optional<LBAMapping>(std::move(m));
+        });
+      }
+    ).handle_error(crimson::ct_error::eagain::handle([] {
+      return base_iertr::make_ready_future<
+	std::optional<LBAMapping>>();
+    }), crimson::ct_error::pass_further_all{}).unsafe_get();
+    if (t.t->is_conflicted()) {
+      return std::nullopt;
+    }
+    return pin;
   }
 
   bool try_submit_transaction(test_transaction_t t) {
@@ -1418,7 +1432,6 @@ struct transaction_manager_test_t :
       {
 	auto t = create_transaction();
         auto lpin = get_pin(t, l_offset);
-        auto rpin = get_pin(t, r_offset);
         //split left
         auto pin1 = remap_pin(t, std::move(lpin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
@@ -1432,6 +1445,7 @@ struct transaction_manager_test_t :
 	ASSERT_TRUE(mlext->is_exist_mutation_pending());
 	ASSERT_TRUE(mlext.get() == lext.get());
 
+        auto rpin = get_pin(t, r_offset);
         //split right
         auto pin4 = remap_pin(t, std::move(rpin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
@@ -1480,7 +1494,7 @@ struct transaction_manager_test_t :
 	auto l_clone_pin = clone_pin(
 	  t, std::move(l_clone_pos), std::move(lpin), l_clone_offset);
         //split left
-	l_clone_pin = refresh_lba_mapping(t, std::move(l_clone_pin));
+	l_clone_pin = *refresh_lba_mapping(t, std::move(l_clone_pin));
         auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
         ASSERT_TRUE(pin1);
         auto pin2 = remap_pin(t, std::move(*pin1), 0, 8 << 10);
@@ -1495,7 +1509,7 @@ struct transaction_manager_test_t :
 	auto r_clone_pin = clone_pin(
 	  t, std::move(r_clone_pos), std::move(rpin), r_clone_offset);
         //split right
-	r_clone_pin = refresh_lba_mapping(t, std::move(r_clone_pin));
+	r_clone_pin = *refresh_lba_mapping(t, std::move(r_clone_pin));
         auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
         ASSERT_TRUE(pin4);
         auto pin5 = remap_pin(t, std::move(*pin4), 8 << 10, 8 << 10);
@@ -1548,12 +1562,16 @@ struct transaction_manager_test_t :
         mbl3.append(ceph::bufferptr(ceph::buffer::create(12 << 10, 0)));
         auto [mlp1, mext1, mrp1] = overwrite_pin(
           t, std::move(mpin), 8 << 10 , 8 << 10, mbl1);
+	auto mlp1_key = mlp1->get_key();
+	auto mlp1_length = mlp1->get_length();
         auto [mlp2, mext2, mrp2] = overwrite_pin(
           t, std::move(*mrp1), 4 << 10 , 16 << 10, mbl2);
+	auto mlp2_key = mlp2->get_key();
+	auto mlp2_length = mlp2->get_length();
         auto [mlpin3, me3, mrpin3] = overwrite_pin(
           t, std::move(*mrp2), 4 << 10 , 12 << 10, mbl3);
-        auto mlext1 = get_extent(t, mlp1->get_key(), mlp1->get_length());
-        auto mlext2 = get_extent(t, mlp2->get_key(), mlp2->get_length());
+        auto mlext1 = get_extent(t, mlp1_key, mlp1_length);
+        auto mlext2 = get_extent(t, mlp2_key, mlp2_length);
         auto mlext3 = get_extent(t, mlpin3->get_key(), mlpin3->get_length());
         auto mrext3 = get_extent(t, mrpin3->get_key(), mrpin3->get_length());
         EXPECT_EQ('a', mlext1->get_bptr().c_str()[0]);
@@ -1575,6 +1593,7 @@ struct transaction_manager_test_t :
 
         bufferlist lbl1, rbl1;
         lbl1.append(ceph::bufferptr(ceph::buffer::create(32 << 10, 0)));
+	lpin = *refresh_lba_mapping(t, lpin);
         auto [llp1, lext1, lrp1] = overwrite_pin(
           t, std::move(lpin), 0 , 32 << 10, lbl1);
         EXPECT_FALSE(llp1);
@@ -1582,6 +1601,7 @@ struct transaction_manager_test_t :
         EXPECT_TRUE(lext1);
 
         rbl1.append(ceph::bufferptr(ceph::buffer::create(32 << 10, 0)));
+	rpin = *refresh_lba_mapping(t, rpin);
         auto [rlp1, rext1, rrp1] = overwrite_pin(
           t, std::move(rpin), 32 << 10 , 32 << 10, rbl1);
         EXPECT_TRUE(rlp1);
@@ -1720,6 +1740,11 @@ struct transaction_manager_test_t :
             auto last_rpin = *pin0;
 	    ASSERT_TRUE(!split_points.empty());
             while(!split_points.empty()) {
+	      pin0 = refresh_lba_mapping(t, *pin0);
+	      if (!pin0) {
+		conflicted++;
+		return;
+	      }
               // new overwrite area: start_off ~ end_off
               auto start_off = split_points.front() + 4 /*RootMetaBlock*/;
               split_points.pop_front();
@@ -2216,7 +2241,7 @@ TEST_P(tm_single_device_test_t, invalid_lba_mapping_detect)
       assert(pin.is_viewable());
       std::ignore = alloc_extent(t, get_laddr_hint((LEAF_NODE_CAPACITY + 1) * 4096), 4096, 'a');
       assert(!pin.is_viewable());
-      pin = refresh_lba_mapping(t, pin);
+      pin = *refresh_lba_mapping(t, pin);
       auto extent2 = with_trans_intr(*(t.t), [&pin](auto& trans) {
         auto v = pin.get_logical_extent(trans);
         assert(v.has_child());

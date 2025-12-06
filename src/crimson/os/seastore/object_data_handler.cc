@@ -324,10 +324,11 @@ ObjectDataHandler::write_ret do_zero(
 ObjectDataHandler::clone_ret do_clonerange(
   context_t ctx,
   LBAMapping write_pos,
-  const overwrite_range_t &overwrite_range,
+  overwrite_range_t &overwrite_range,
   data_t &data)
 {
   LOG_PREFIX(ObjectDataHandler::do_clonerange);
+  co_await overwrite_range.clonerange_info->refresh();
   DEBUGT("{} {} write_pos={}", ctx.t, overwrite_range, data, write_pos);
   ceph_assert(overwrite_range.clonerange_info.has_value());
   assert(write_pos.is_end() ||
@@ -362,6 +363,7 @@ ObjectDataHandler::clone_ret do_clonerange(
     );
   }
   // clone the src mappings
+  co_await overwrite_range.clonerange_info->refresh();
   auto src = overwrite_range.clonerange_info->first_src_mapping;
   auto offset = overwrite_range.clonerange_info->offset;
   auto len = overwrite_range.clonerange_info->len;
@@ -1496,7 +1498,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
             extent_len_t read_len =
               l_current_end.get_byte_distance<extent_len_t>(l_current);
 
-            if (pin.get_val().is_zero()) {
+            if (pin.is_zero_reserved()) {
               DEBUGT("got {}~0x{:x} from zero-pin {}~0x{:x}",
                 ctx.t,
                 l_current,
@@ -1598,7 +1600,7 @@ ObjectDataHandler::fiemap_ret ObjectDataHandler::fiemap(
 	ceph_assert(pins.size() >= 1);
         ceph_assert(pins.front().get_key() <= l_start);
 	for (auto &&i: pins) {
-	  if (!(i.get_val().is_zero())) {
+	  if (!i.is_zero_reserved()) {
 	    laddr_offset_t ret_left = std::max(laddr_offset_t(i.get_key(), 0), l_start);
 	    laddr_offset_t ret_right = std::min(
 	      i.get_key() + i.get_length(),
